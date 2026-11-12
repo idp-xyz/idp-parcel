@@ -170,6 +170,7 @@ test('确认口问题码：看不见、准入范围、坏载荷与没形成答�
 test('交付方参与方：取参与方目录，按标识排；停用与未生效的照列并标出，不替授权交付判断筛', () => {
   const party = (partyId: string, partyName: string, status: string): BusinessPartyRecord => ({
     tenantId: 'SYN-TENANT-01', partyId, partyName, status, revision: 1, basis: 'SYN-BASIS', effectiveFrom: '2026-01-01T00:00:00Z', registeredAt: '2026-01-01T00:00:00Z',
+    categories: ['NO_ROLE'], relationshipCounts: { asHolder: { live: 0, candidate: 0 }, asCounterparty: { live: 0, candidate: 0 } },
   });
   deepEqual(
     deliveringParticipantOptionsOf([

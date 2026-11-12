@@ -3,7 +3,7 @@
 // 传输与五格判读收敛在共享 catalogue-api,本文件只保留本上下文的类型与查询函数。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
-import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
+import { catalogueRequestPath, type CatalogueConditions, type CatalogueFacets, type CataloguePage } from '../catalogue-query';
 import type { RegistrationResponseBody } from '../../components/registration';
 import { afterPartyWrite } from './party-writes';
 
@@ -598,6 +598,8 @@ export interface PartyRelationshipListResponseBody {
   outcome: 'PARTY_RELATIONSHIPS_LISTED';
   relationships: PartyRelationshipRecord[];
   page: CataloguePage;
+  /** 分面计数（ADR-0378 决定六）：本册点名的是 `status`。 */
+  facets?: CatalogueFacets;
 }
 
 // 参与方身份本体册（票 admin-remainder-mechanism-batch/01 的补格裁定）。它与法人册、
@@ -625,6 +627,12 @@ export interface BusinessPartyIdentificationRecord {
   externalReferences?: ExternalReferenceRecord[];
 }
 
+/** 一家单位在关系册上某一侧的段数：`live` 是在用的（候选与已生效），`candidate` 是其中候选（待确认）的。 */
+export interface PartyRelationshipTallyRecord {
+  live: number;
+  candidate: number;
+}
+
 export interface BusinessPartyRecord extends BusinessPartyIdentificationRecord {
   tenantId: string;
   partyId: string;
@@ -636,12 +644,22 @@ export interface BusinessPartyRecord extends BusinessPartyIdentificationRecord {
   deactivatedAt?: string;
   deactivationBasis?: string;
   registeredAt: string;
+  /**
+   * 类别（ADR-0378 决定三）：它此刻持有的各个参与方角色，被未停用的责任法人钉着的另有 `OUR_COMPANY`，一项都不成立时只有
+   * `NO_ROLE`；永不为空。是装载时点的读数，与同一行的 `status` 同一口径。判定在后端一处，管理台只照着摆
+   * （business-party-list.ts 的 partyRolesOf、partyIsOurCompany）。
+   */
+  categories: string[];
+  /** 它名下的关系段数，作为持有方（它担任角色）与作为相对方各记；只是行数，不带判断。 */
+  relationshipCounts: { asHolder: PartyRelationshipTallyRecord; asCounterparty: PartyRelationshipTallyRecord };
 }
 
 export interface BusinessPartyListResponseBody {
   outcome: 'BUSINESS_PARTIES_LISTED';
   parties: BusinessPartyRecord[];
   page: CataloguePage;
+  /** 分面计数（ADR-0378 决定六）：本册点名的是 `categories` 与 `status`。 */
+  facets?: CatalogueFacets;
 }
 
 // 业务参与方修订链上的一笔（票 admin-web-group-legal-entities/12；后端 businessPartyRevisionBody）。与目录行

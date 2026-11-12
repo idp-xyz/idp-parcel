@@ -3,7 +3,7 @@ import { useMarkUnsavedInput } from '../../templates/unsaved-input';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { usePushedAddress } from '../../templates/use-pushed-address';
 import { useTabViewRef, useTabViewState } from '../../templates/workspace-view-state';
-import { AlertTriangle, ArrowLeft, Ban, Clock, Handshake, Info, MoreHorizontal, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Ban, Clock, Handshake, MoreHorizontal, Plus } from 'lucide-react';
 import { Button, ConfirmDialog, DropdownMenu, MenuItem, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
@@ -22,7 +22,6 @@ import { pastFirstPage } from '../shipment-request/cursor-pager';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import {
   listBusinessParties,
-  listCustomerAccounts,
   listGroupLegalEntities,
   listPartyRelationships,
   type BusinessPartyListResponseBody,
@@ -32,7 +31,7 @@ import {
 import { useBoundTenant } from '../use-operator-binding';
 import { useVisited } from './keep-alive-tabs';
 import { StatusPill } from '../../components/StatusPill';
-import { labelOf, partyRoleLabels, type RelationshipStatusCode } from './presentation';
+import { labelOf, partyRoleLabels } from './presentation';
 import { Instant, UnknownPartyName, filterSelectClass } from './detail-primitives';
 import { useRegisterList } from './register-list';
 import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
@@ -78,50 +77,36 @@ import { PartyRoster, PartyRosterStatus, partyRosterSelectClass } from './PartyR
 import { partyRosterTypeOf, rememberedPartyExpired, rememberedPartyOnReturn, selectedPartyRowOf, type RememberedParty } from './party-roster';
 import { PartyTile } from './party-role-visuals';
 import {
+  facetCountsOf,
+  facetOptionShown,
   formatCount,
-  partyAttentionCount,
   partyFilteredFooterCountText,
   partyFooterCountText,
   partyRelationshipCellOf,
   partyStatusOptionsOf,
-  partyTileKindOf,
+  partyTileKindOfRow,
+  partyTypeAllCount,
   partyTypeChipsFit,
   partyTypeChipsOf,
-  statusCountsUnderConditions,
-  tallyPartyRelationships,
-  type PartyRelationshipTallies,
-  type PartyTileKind,
+  statusCountsOf,
 } from './business-parties-workbench';
 import { EmptyState } from '../../components/states';
 import { CountryLabel } from '../refdata-labels';
 import { PartyRelationshipDetailPanel } from './PartyRelationshipDetailPanel';
 import {
-  businessPartyIsOfType,
   businessPartyListConditions,
   businessPartyNoMatchNote,
   businessPartyRegistrationCountry,
-  businessPartyTypeFilterOptionsOf,
-  businessPartyTypeFilterWords,
-  businessPartyTypeKpisWhenComplete,
-  businessPartyTypeNoMatchNote,
-  countBusinessParties,
   defaultBusinessPartySort,
-  effectiveBusinessPartyTypeFilter,
-  filterBusinessPartiesByType,
-  indexPartyRoles,
-  ourCompanyPartyIds,
+  ourCompanyCategory,
   partiesPinnedByLegalEntities,
+  partyIsOurCompany,
   partyRegistrationCountriesOf,
-  partyTypeSourcesComplete,
-  partyTypeUnreadNote,
-  rolesOfParty,
+  partyRolesOf,
   type BusinessPartyStatusFilter,
   type BusinessPartyTypeFilter,
-  type OurCompanyIndex,
-  type PartyRoleIndex,
 } from './business-party-list';
 import {
-  countPartyRelationships,
   defaultPartyRelationshipSort,
   partyRelationshipListConditions,
   partyRelationshipNeedsAttention,
@@ -138,7 +123,6 @@ import { OurCompanyNetworkPanel } from './OurCompanyNetworkPanel';
 import {
   matchesOurCompanySearch,
   ourCompanyNetworkRows,
-  ourCompanyRelationshipsReadOf,
   ourCompanyRosterLineOf,
   type OurCompanyNetworkRow,
   type RoleCount,
@@ -155,11 +139,9 @@ const info = moduleInfoById['business-parties'];
  */
 type Book = 'identities' | 'relationships' | 'network';
 
-// 视图签右端两项待办在册读不全时的来源：各发一问只带状态条件的读，取答复的总数（business-parties-workbench.ts 的
-// partyAttentionCount）。写成模块级函数：取数层按读函数本身认缓存（register-list.ts）。
-const listCandidateRelationships = () =>
-  listPartyRelationships(partyRelationshipListConditions('', 'ALL', 'CANDIDATE', defaultPartyRelationshipSort));
-const listRegisteredParties = () => listBusinessParties(businessPartyListConditions('', 'REGISTERED', defaultBusinessPartySort));
+// 「我方关联」的行从哪来：往来单位读口按类别「我方公司」筛出的那一问（our-company-network.ts 文件头）。写成模块级函数：取数层
+// 按读函数本身认缓存（register-list.ts）。
+const listOurCompanies = () => listBusinessParties({ filters: { categories: [ourCompanyCategory] } });
 
 // 关系状态的圆点：候选与已生效是在用的两格，三种终局一色——终局之间的分别由状态徽章说，圆点只说「还在不在用」。
 const relationshipStatusDotClass: Record<string, string> = {
@@ -179,31 +161,8 @@ const relationshipStatusDotClass: Record<string, string> = {
 // （两个时间列的门槛是摆出来的各列定宽之和：放得下就摆，行尾的箭头让给它；登记时间留得久，因为默认按它排——只剩生效时间
 // 可点的话，点过一次就回不到默认的次序），单位、类型、状态三列总在；右栏开着、三列也放不下时类型一列先收窄，名称那一列后让。时刻只显到日，完整时刻在悬停里。表头可排的只有生效时间与登记时间：排序下推到读口
 // （business-party-list.ts 的 businessPartySortColumns），读口不按名称排。
-// 类型与合作关系两列要关系册、客户账户册与法人册才算得出；它们没读全时（typeSourcesComplete 为假）表头旁带一个提示记号，
-// 推不出来的格显「—」而不是「暂无合作关系」（票 01）。
-function identityColumnsOf(
-  roles: PartyRoleIndex,
-  ours: OurCompanyIndex,
-  countries: ReadonlyMap<string, string>,
-  tallies: PartyRelationshipTallies,
-  typeSourcesComplete: boolean,
-): PartyWorkbenchColumn<BusinessPartyRecord>[] {
-  // 推不出来的格：册读全了是真没有，画一个弱色的「—」；没读全只是没读到，同一个记号、另带说明（票 01）。
-  const absent = typeSourcesComplete ? (
-    <span className="text-idpxyz-breadcrumb">—</span>
-  ) : (
-    <span className="text-idpxyz-breadcrumb" title={partyTypeUnreadNote}>
-      <span aria-hidden="true">—</span>
-      <span className="sr-only">{partyTypeUnreadNote}</span>
-    </span>
-  );
-  const unreadHint = typeSourcesComplete ? null : (
-    <>
-      {/* 警示色只落在图标上：图标是非文字，门槛 3:1；字仍是表头自己的颜色。 */}
-      <Info className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-hidden="true" />
-      <span className="sr-only">{partyTypeUnreadNote}</span>
-    </>
-  );
+// 类型与合作关系两列取读口在行上答的类别与关系段数（ADR-0378，票 business-party-redesign/09），不从别的册推。
+function identityColumnsOf(countries: ReadonlyMap<string, string>): PartyWorkbenchColumn<BusinessPartyRecord>[] {
   return [
     {
       key: 'party',
@@ -213,7 +172,7 @@ function identityColumnsOf(
         const country = businessPartyRegistrationCountry(row, countries);
         return (
           <div className="flex min-w-0 items-center gap-2.5">
-            <PartyTile kind={partyTileKindOf(ours.has(row.partyId), rolesOfParty(roles, row.partyId))} />
+            <PartyTile kind={partyTileKindOfRow(row)} />
             {/* 名称下一行是编码（对外对账、填单时认的那一串），登了注册地就跟在后面；没登的不占一格「—」。 */}
             <span className="flex min-w-0 flex-col">
               <span className="truncate type-section leading-5 text-idpxyz-textBright">{row.partyName}</span>
@@ -233,33 +192,21 @@ function identityColumnsOf(
     },
     {
       key: 'type',
-      header: (
-        <span className="inline-flex items-center gap-1" title={typeSourcesComplete ? undefined : partyTypeUnreadNote}>
-          类型
-          {unreadHint}
-        </span>
-      ),
+      header: '类型',
       width: 240,
       narrowWidth: 180,
       skeleton: 96,
-      render: (row) => (
-        <BusinessPartyTypeTags ours={ours.has(row.partyId)} roles={rolesOfParty(roles, row.partyId)} unread={!typeSourcesComplete} />
-      ),
+      render: (row) => <BusinessPartyTypeTags ours={partyIsOurCompany(row)} roles={partyRolesOf(row)} />,
     },
     {
       key: 'relationships',
-      header: (
-        <span className="inline-flex items-center gap-1" title={typeSourcesComplete ? undefined : partyTypeUnreadNote}>
-          合作关系
-          {unreadHint}
-        </span>
-      ),
+      header: '合作关系',
       width: 130,
       minListWidth: 900,
       skeleton: 44,
       render: (row) => {
-        const cell = partyRelationshipCellOf(tallies, row.partyId, ours.has(row.partyId));
-        if (cell === null) return absent;
+        const cell = partyRelationshipCellOf(row);
+        if (cell === null) return <span className="text-idpxyz-breadcrumb">—</span>;
         return (
           <span className="flex flex-col whitespace-nowrap">
             <span className="tabular-nums text-idpxyz-text">{formatCount(cell.count)} 段</span>
@@ -492,7 +439,6 @@ function RegisterForms({
   preset,
   reportUnsaved,
   onCancelPartyRegistration,
-  tileKindOf,
 }: {
   register: RegisterPageBook;
   /** 页面持有的参与方列表答案：停用表单参与方那一册取它，不另读（票 13 第 5 条）。 */
@@ -506,8 +452,6 @@ function RegisterForms({
   reportUnsaved: Record<BusinessPartyRegister, (unsaved: boolean) => void>;
   /** 新增往来单位那张表单动作条里的「取消」：与页头的返回钮同一件事，有没提交的输入时页面先问。 */
   onCancelPartyRegistration: () => void;
-  /** 一家单位的图标块（与名录的行同一个算法），新增表单旁「名录里相近的单位」一栏按它画。 */
-  tileKindOf: (partyId: string) => PartyTileKind;
 }) {
   const seen = useVisited(register);
   return (
@@ -519,7 +463,6 @@ function RegisterForms({
             onRegistered={onPartyRegistered}
             onUnsavedChange={reportUnsaved['business-party']}
             onCancel={onCancelPartyRegistration}
-            tileKindOf={tileKindOf}
           />
         </div>
       ) : null}
@@ -658,11 +601,9 @@ function registerTotalOf<Body extends { page: CataloguePage }>(answer: ApiResult
  * 两册的读口都在 ADR-0144 下（票 catalogue-read-pagination-rollout/11、14）：检索词、状态、角色与表头排序下推
  * （business-party-list.ts 的 businessPartyListConditions、party-relationship-list.ts 的 partyRelationshipListConditions），
  * 列表按游标翻页，换条件回第一页；游标只在列表视图里挂（CatalogueCursorScope），换视图、进登记视图或对象页再回来是重新挂上、
- * 回到第一页。类型与待查是页面从别的册推出来的，读口筛不了，在到手的那一页上筛。筛选项上的数只在整册一页装得下时摆
- * （complete-register.ts 的 completeRegisterRows）：那时按整册数的是真数，页内筛也是精确的；摆出来的数随别的条件走、不随
- * 这一项自己走（选了角色，各状态只数这个角色的），当前条件的那一问还没答出就先不摆，不拿 0 占位；装不下时一页里数出来的不是
- * 册上的数，数不摆，类型与待查改成标「只筛本页」的控件，当前条件下共几条由表底说。名录的类型另有一道：推类型用的那几本册要都
- * 读全，带数的类型芯片与「暂无合作关系」才作数，否则类型格推不出来的显「—」并标明（business-party-list.ts 文件头）。
+ * 回到第一页。类型由读口在行上答、按它筛（ADR-0378，business-party-list.ts 文件头）。筛选项上的数取读口答复里的分面：随别的
+ * 条件走、不随这一项自己走（选了角色，各状态只数这个角色的），册再大也是真数；当前条件的那一问还没答出就先不摆，不拿 0 占位。
+ * 只有「待查」仍是页面在到手的那一页上筛的（读口没有这一维）：合作关系册一页装得下时筛得准、带数，装不下就标「只筛本页」。
  *
  * 登记从页头进：「建立合作关系」「新增往来单位」两枚按钮位置固定、不随视图换，停用收进旁边的「更多」。「新增往来单位」与停用
  * 各占整页的登记视图；「建立合作关系」不换整页，落到合作关系视图、表单摆在表的上方——登一段关系时人要看得见已有的那些
@@ -678,10 +619,11 @@ function registerTotalOf<Body extends { page: CataloguePage }>(answer: ApiResult
 export function BusinessPartiesPage() {
   const parties = useRegisterList(listBusinessParties);
   const relationships = useRegisterList(listPartyRelationships);
-  // 法人册只为类型列的「我方公司」读（business-party-list.ts 文件头）；读不到就没有一行按我方公司显，列表照常。
+  // 法人册还读着，但不为推类型：对象页与右栏据它收起资料入口（partiesPinnedByLegalEntities），名录的「注册地」取公司主体登的那
+  // 一份，「我方关联」列出钉着每家公司的公司主体编号。读不到时这几处各自缺一格，列表照常。
   const entities = useRegisterList(listGroupLegalEntities);
-  // 客户账户册只为类型列的「客户」读（ADR-0367 决定四）：账户的所属客户持有客户角色，不要求先登客户关系；读不到就只按关系算。
-  const accounts = useRegisterList(listCustomerAccounts);
+  // 「我方关联」的行：往来单位读口按类别「我方公司」筛出的那一问（our-company-network.ts 文件头）。
+  const ourCompanyParties = useRegisterList(listOurCompanies);
   // 页名下的「集团」是 ADR-0003 三级边界的第一级，即本会话绑定的租户；答不出就不显，不拿列表行上的 tenantId 顶。
   const boundTenant = useBoundTenant();
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
@@ -992,44 +934,34 @@ export function BusinessPartiesPage() {
   // 列表没取到（加载中 / 未配置 / 出错）传 null：表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
   const knownParties = parties.answer?.kind === 'outcome' ? parties.answer.body.parties : null;
   const knownRelationships = relationships.answer?.kind === 'outcome' ? relationships.answer.body.relationships : null;
-  // 类型列按关系册、客户账户册与法人册算（business-party-list.ts 文件头）；哪一册没取到，那一册先不贡献，取到后自动补上。
   const knownEntities = entities.answer?.kind === 'outcome' ? entities.answer.body.entities : null;
-  const knownAccounts = accounts.answer?.kind === 'outcome' ? accounts.answer.body.accounts : null;
-  const roleIndex = useMemo(() => indexPartyRoles(knownRelationships, knownAccounts), [knownRelationships, knownAccounts]);
-  const ourCompanies = useMemo(() => ourCompanyPartyIds(knownEntities), [knownEntities]);
+  const knownOurCompanies = ourCompanyParties.answer?.kind === 'outcome' ? ourCompanyParties.answer.body.parties : null;
   const pinnedParties = useMemo(() => partiesPinnedByLegalEntities(knownEntities), [knownEntities]);
-  // 一家单位的图标块，与名录的行同一个算法：右栏的关系图与关系表里的对方按它画。
-  const tileKindOf = useCallback(
-    (partyId: string) => partyTileKindOf(ourCompanies.has(partyId), rolesOfParty(roleIndex, partyId)),
-    [ourCompanies, roleIndex],
+  // 一家单位的图标块，照读口在它那一行上答的类别取，与名录的行同一份：右栏的关系图与关系表里的对方按它画。只认得不带条件
+  // 那一页里的单位；不在那一页上的交 null，由图按这段关系里的角色画（PartyRelationshipGraph 的 tileKindOf）。
+  const tileKinds = useMemo(() => new Map((knownParties ?? []).map((party) => [party.partyId, partyTileKindOfRow(party)])), [knownParties]);
+  const tileKindOf = useCallback((partyId: string) => tileKinds.get(partyId) ?? null, [tileKinds]);
+  const networkRows = useMemo(
+    () => ourCompanyNetworkRows(knownOurCompanies, knownEntities, knownRelationships ?? []),
+    [knownOurCompanies, knownEntities, knownRelationships],
   );
-  const networkRows = useMemo(() => ourCompanyNetworkRows(knownEntities, knownRelationships ?? []), [knownEntities, knownRelationships]);
   const entityCountries = useMemo(() => partyRegistrationCountriesOf(knownEntities), [knownEntities]);
-  // 不带条件的那一页若已是整册就交出它的行（complete-register.ts）：筛选项上的数、视图签右端的待办都按它数；不是就 null。
-  const completeParties = completeRegisterRows(parties.answer?.kind === 'outcome' ? parties.answer.body : null, (body) => body.parties);
+  // 合作关系册不带条件的那一页若已是整册就交出它的行（complete-register.ts）：「待查」是页面在到手的行上筛的，整册到手才筛得准；
+  // 「我方关联」按角色分的段数也从这一页数，不是整册就在页上写明。
   const completeRelationships = completeRegisterRows(
     relationships.answer?.kind === 'outcome' ? relationships.answer.body : null,
     (body) => body.relationships,
   );
-  // 推类型用的那几本册读全了没有（business-party-list.ts 文件头）。没读全——多于一页、还没答出、没读成——类型一列就只是
-  // 读到的那一部分：推不出类型的格显「—」，按类型的数不摆，「暂无合作关系」这一项不给筛。
-  const typeSourcesComplete = partyTypeSourcesComplete([
-    completeRelationships,
-    completeRegisterRows(accounts.answer?.kind === 'outcome' ? accounts.answer.body : null, (body) => body.accounts),
-    completeRegisterRows(entities.answer?.kind === 'outcome' ? entities.answer.body : null, (body) => body.entities),
-  ]);
-  // 视图签右端两项待办的数，册读不全时才另问（读全了从手上的行数）；只在列表摆着时问。
-  const candidateRelationships = useRegisterList(listCandidateRelationships, {
-    enabled: listShown && knownRelationships !== null && completeRelationships === null,
-  });
-  const registeredParties = useRegisterList(listRegisteredParties, {
-    enabled: listShown && knownParties !== null && completeParties === null,
-  });
-  // 「我方关联」的行是法人册与关系册组合出来的，两册重读时旧答案照旧留着（register-list.ts），表本来就不闪；这里只定要不要照
+  // 不带条件那两问的分面（ADR-0378）：整册里各类别、各状态有几条。摆哪几枚筛选项、视图签右端的待办都看它。
+  const partyFacets = parties.answer?.kind === 'outcome' ? parties.answer.body.facets : null;
+  const wholeCategories = facetCountsOf(partyFacets, 'categories');
+  const wholePartyStatus = facetCountsOf(partyFacets, 'status');
+  const wholeRelationshipStatus = facetCountsOf(relationships.answer?.kind === 'outcome' ? relationships.answer.body.facets : null, 'status');
+  // 「我方关联」的行是往来单位读口（按类别筛出的我方公司）、法人册与关系册组合出来的，这几问重读时旧答案照旧留着（register-list.ts），表本来就不闪；这里只定要不要照
   // 另两个视图那样把「在重读」显出来（票 business-party-redesign/06）。本页挂上来之后的头一轮重读不显：那是取数层见答案过了
-  // 新鲜期自己发的，行还是刚才那些，这时把行按住，人一回到这张标签就点的那一下会落空。两册都静下来过一次之后的重读——刷新钮、
+  // 新鲜期自己发的，行还是刚才那些，这时把行按住，人一回到这张标签就点的那一下会落空。都静下来过一次之后的重读——刷新钮、
   // 登记之后——才显。
-  const networkPending = entities.pending || relationships.pending;
+  const networkPending = ourCompanyParties.pending || entities.pending || relationships.pending;
   const networkSettled = useRef(false);
   useEffect(() => {
     if (!networkPending) networkSettled.current = true;
@@ -1038,11 +970,7 @@ export function BusinessPartiesPage() {
   // 名录与关系两个视图的那一页游标挂在视图里面，页头的刷新钮经这两样够到它（CursorRefreshReport）。
   const cursorRetry = useRef<() => void>(() => {});
   const [cursorRefresh, setCursorRefresh] = useState<CursorRefreshState>({ pending: true, outcome: { ok: true } });
-  const relationshipTallies = useMemo(() => tallyPartyRelationships(knownRelationships), [knownRelationships]);
-  const identityColumns = useMemo(
-    () => identityColumnsOf(roleIndex, ourCompanies, entityCountries, relationshipTallies, typeSourcesComplete),
-    [roleIndex, ourCompanies, entityCountries, relationshipTallies, typeSourcesComplete],
-  );
+  const identityColumns = useMemo(() => identityColumnsOf(entityCountries), [entityCountries]);
 
   if (view.kind === 'object') {
     // 对象页的行从不带条件的那一页里认（BusinessPartyDetailPage 的 viewStateOf），与登记表单的候选同一份。
@@ -1067,7 +995,7 @@ export function BusinessPartiesPage() {
         onEnterProfileEdit={enterProfileEdit}
         onExitProfileEdit={exitProfileEdit}
         ours={entities.answer == null ? null : pinnedParties.has(view.partyId)}
-        roles={rolesOfParty(roleIndex, view.partyId)}
+        roles={row === null ? [] : partyRolesOf(row)}
       />
     );
   }
@@ -1110,7 +1038,6 @@ export function BusinessPartiesPage() {
           preset={preset}
           reportUnsaved={reportUnsaved}
           onCancelPartyRegistration={requestLeaveRegister}
-          tileKindOf={tileKindOf}
         />
         <ConfirmDialog
           renderFooter={confirmDialogFooter}
@@ -1211,16 +1138,13 @@ export function BusinessPartiesPage() {
   const viewTabs: ViewTab<Book>[] = [
     { id: 'identities', label: '单位名录', count: partyTotal },
     { id: 'relationships', label: '合作关系', count: relationshipTotal },
-    { id: 'network', label: '我方关联', count: knownEntities !== null ? networkRows.length : null },
+    { id: 'network', label: '我方关联', count: knownOurCompanies !== null ? networkRows.length : null },
   ];
 
   // 视图签右端的待办：为零或数不出就不出现；点了带着对应的状态筛选落到那个视图，别的筛选清掉——留着的话落过去可能一行都没有。
-  const candidateCount = partyAttentionCount(
-    completeRelationships,
-    (row) => row.status === 'CANDIDATE',
-    registerTotalOf(candidateRelationships.answer),
-  );
-  const registeredCount = partyAttentionCount(completeParties, (row) => row.status === 'REGISTERED', registerTotalOf(registeredParties.answer));
+  // 数取不带条件那两问的状态分面：读口答的是整册里各状态的条数，册再大也是真数。
+  const candidateCount = wholeRelationshipStatus?.get('CANDIDATE') ?? null;
+  const registeredCount = wholePartyStatus?.get('REGISTERED') ?? null;
   const showCandidateRelationships = () => {
     setBook('relationships');
     setRelationshipSearch('');
@@ -1280,7 +1204,7 @@ export function BusinessPartiesPage() {
           <div className="flex min-w-0 items-center gap-2.5">
             <PartyTile kind="OURS" />
             <span className="flex min-w-0 flex-col">
-              <span className="truncate type-section leading-5 text-idpxyz-textBright">{row.partyName ?? <UnknownPartyName />}</span>
+              <span className="truncate type-section leading-5 text-idpxyz-textBright">{row.partyName}</span>
               <span className="truncate font-mono type-caption leading-4 text-idpxyz-breadcrumb">{row.partyId}</span>
             </span>
           </div>
@@ -1324,19 +1248,20 @@ export function BusinessPartiesPage() {
         render: (row) => <span className="block truncate font-mono type-caption text-idpxyz-breadcrumb">{row.legalEntityIds.join('、')}</span>,
       },
     ];
-    const viewState = catalogueViewState(entities.answer, networkRows.length, entities.retry, {
+    const viewState = catalogueViewState(ourCompanyParties.answer, networkRows.length, ourCompanyParties.retry, {
       module: info,
-      endpoint: 'GET /commercial-group-legal-entities',
+      endpoint: 'GET /commercial-business-parties',
       emptyTitle: '还没有在用的我方公司',
       emptyDescription: '我方公司在「公司主体」页登记；登记之后，这里按公司列出各自的合作关系。',
       narrowed: networkSearch.trim() !== '',
     });
     refresh = {
       onRefresh: () => {
+        ourCompanyParties.retry();
         entities.retry();
         relationships.retry();
       },
-      refreshing: entities.pending || relationships.pending,
+      refreshing: networkPending,
       refreshOutcome: refreshOutcomeOf(viewState),
     };
     const networkNote = '以我方每家公司为主体：谁对它担任什么角色、它又对谁担任什么角色；选一家在右边看它的关系图';
@@ -1350,9 +1275,8 @@ export function BusinessPartiesPage() {
     if (networkDetailRow !== null) {
       // 选中了一家：主从分栏（PartyRoster.tsx，与名录同一个框）。左边一行两句——名称、在用几段与待确认几段——别的都在右边。
       const detailRow = networkDetailRow;
-      const relationshipsRead = ourCompanyRelationshipsReadOf(relationships.answer?.kind ?? null, completeRelationships !== null);
-      // 头区的状态取它在往来单位册上的那一行；只在不带条件的那一页里找，没有就不摆（OurCompanyNetworkPanel 的 party）。
-      const detailParty = knownParties?.find((party) => party.partyId === detailRow.partyId) ?? null;
+      // 头区的状态与类型取它在往来单位读口上的那一行：这一视图的行就是从那一问来的，所以总找得到。
+      const detailParty = knownOurCompanies?.find((party) => party.partyId === detailRow.partyId) ?? null;
       // 去单位名录看这一家：不带条件的那一页里有它，就清掉名录的筛选、直接选中，右栏当帧就有行可显；没有（往来单位册不止
       // 一页）就按它的编码检索——当前这一页上读得到它，名录才分得了栏（SelectedPartyMemory）。
       const showInRoster = () => {
@@ -1379,17 +1303,10 @@ export function BusinessPartiesPage() {
             <>
               <PartyTile kind="OURS" />
               <span className="flex min-w-0 flex-1 flex-col">
-                {row.partyName ? (
-                  <span className="truncate type-section leading-5 text-idpxyz-textBright" title={row.partyName}>
-                    {row.partyName}
-                  </span>
-                ) : (
-                  // 名称转写不到：拿编码认它，不留一行「名称查不到」而不说是谁。
-                  <span className="truncate font-mono type-value leading-5 text-idpxyz-textBright" title={row.partyId}>
-                    {row.partyId}
-                  </span>
-                )}
-                <span className="truncate type-body leading-4 text-idpxyz-breadcrumb">{ourCompanyRosterLineOf(row, relationshipsRead)}</span>
+                <span className="truncate type-section leading-5 text-idpxyz-textBright" title={row.partyName}>
+                  {row.partyName}
+                </span>
+                <span className="truncate type-body leading-4 text-idpxyz-breadcrumb">{ourCompanyRosterLineOf(row)}</span>
               </span>
             </>
           )}
@@ -1404,7 +1321,7 @@ export function BusinessPartiesPage() {
               key={detailRow.partyId}
               row={detailRow}
               party={detailParty}
-              roles={rolesOfParty(roleIndex, detailRow.partyId)}
+              roles={detailParty === null ? [] : partyRolesOf(detailParty)}
               relationships={relationships.answer}
               relationshipsComplete={completeRelationships !== null}
               retryRelationships={relationships.retry}
@@ -1452,20 +1369,9 @@ export function BusinessPartiesPage() {
       );
     }
   } else if (book === 'identities') {
-    const conditions = businessPartyListConditions(settledSearch, status, sort);
-    // 整册一页装得下时按整册计数（complete-register.ts）；装不下就 null，筛选项上不摆数。
-    const counts = completeParties === null ? null : countBusinessParties(completeParties, roleIndex, ourCompanies);
-    // 按类型的数还要推类型用的册都读全才作数（businessPartyTypeKpisWhenComplete，票 01）：作数时类型是一排带数的芯片，
-    // 运营问的「有几家客户、几家承运商」就在芯片上，一个筛选只留这一个入口；不作数时类型改由下拉筛，下拉自己写明原因
-    // （businessPartyTypeFilterWords）。
-    const typeCountsUsable = businessPartyTypeKpisWhenComplete(counts, typeSourcesComplete) !== null;
-    const typeWords = businessPartyTypeFilterWords(completeParties !== null, typeSourcesComplete);
-    // 没读全时「暂无合作关系」不给筛，记着的这一项当作没筛（effectiveBusinessPartyTypeFilter）。
-    const shownType = effectiveBusinessPartyTypeFilter(type, typeSourcesComplete);
-    // 类型这一件等名录与推类型的三本册都答过一次再摆：名录没答成时它筛不了任何东西；别的册还在途时摆出来的只会是「只筛本页」
-    // 的下拉，一两百毫秒后又换成芯片。答过之后重取在途照旧显上一份（register-list.ts），刷新时这一件不会消失再出现。
-    const typeControlReady = knownParties !== null && relationships.answer !== null && accounts.answer !== null && entities.answer !== null;
-    const narrowed = search.trim() !== '' || status !== 'ALL' || shownType !== 'ALL';
+    // 类型与状态一样下推给读口（ADR-0378 的 categories 维）：筛的是整册，不是到手的这一页。
+    const conditions = businessPartyListConditions(settledSearch, status, type, sort);
+    const narrowed = search.trim() !== '' || status !== 'ALL' || type !== 'ALL';
     const clearFilters = () => {
       setSearch('');
       setStatus('ALL');
@@ -1477,16 +1383,12 @@ export function BusinessPartiesPage() {
     body = (
       <CatalogueCursorScope key="identities" conditions={conditions} load={listBusinessParties}>
         {({ answer, previous, pagination, retry }) => {
-          // 这一问还在途而上一页有行可垫（票 06，heldCataloguePage）：旧行照摆，表不退回骨架。垫着的只是行——下面的计数
-          // （answeredRows）与空态仍只认此刻这一问的答复。按类型筛过之后一行都不剩的上一页不垫：那时摆出来的是「没有这一类
-          // 单位」那句话，说的却是上一组条件。
-          const held = heldCataloguePage(
-            answer,
-            previous,
-            (body) => filterBusinessPartiesByType(body.parties, shownType, roleIndex, ourCompanies).length > 0,
-          );
+          // 这一问还在途而上一页有行可垫（票 06，heldCataloguePage）：旧行照摆，表不退回骨架。垫着的只是行——下面的数与空态
+          // 仍只认此刻这一问的答复。一行都没有的上一页不垫：那时摆出来的是「筛空」那句话，说的却是上一组条件。
+          const held = heldCataloguePage(answer, previous, (body) => body.parties.length > 0);
           const pageRows = answer?.kind === 'outcome' ? answer.body.parties : held ? held.body.parties : [];
-          const visible = filterBusinessPartiesByType(pageRows, shownType, roleIndex, ourCompanies);
+          // 类型已由读口筛过：摆出来的就是答回的这一页。
+          const visible = pageRows;
           // 筛出为空不是空态（票 01 裁决 1）：带着下推条件或翻过页的零行报 ready，表格区另显 noMatchText。
           const viewState = held
             ? heldViewState
@@ -1497,38 +1399,33 @@ export function BusinessPartiesPage() {
                 emptyDescription,
                 narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
               });
-          // 当前条件下答回的行；这一问还没答出或没答成就是 null——筛选项上不拿 0 占位。
-          const answeredRows = answer?.kind === 'outcome' ? pageRows : null;
-          // 芯片上的数看当前条件下答回的行，摆哪几枚看整册（business-parties-workbench.ts 的 partyTypeChipsOf）。
+          // 当前条件那一问的分面；这一问还没答出或没答成就是 null——筛选项上不拿 0 占位。垫着的上一页不算：它的数说的是上一组条件。
+          const facets = answer?.kind === 'outcome' ? answer.body.facets : null;
+          // 类型芯片：摆哪几枚看不带条件那一问（整册里一家都没有的类型不摆），数看当前条件那一问
+          // （business-parties-workbench.ts 的 partyTypeChipsOf）。不带条件那一问还没答出时先不摆，免得先摆全、再收掉几枚。
           const typeChips =
-            typeCountsUsable && counts !== null
-              ? partyTypeChipsOf(counts, answeredRows && countBusinessParties(answeredRows, roleIndex, ourCompanies), shownType)
-              : null;
-          const statusOptions = partyStatusOptionsOf({
-            whole: completeParties,
-            conditioned: answeredRows,
-            keyword: settledSearch,
-            status,
-            ofType: (row) => businessPartyIsOfType(row, shownType, roleIndex, ourCompanies),
-          });
+            parties.answer === null
+              ? null
+              : partyTypeChipsOf({
+                  whole: wholeCategories,
+                  wholeTotal: partyTotal,
+                  conditioned: facetCountsOf(facets, 'categories'),
+                  allCount: partyTypeAllCount({
+                    type,
+                    keyword: settledSearch,
+                    status,
+                    conditionedTotal: answer?.kind === 'outcome' ? answer.body.page.total : null,
+                    wholeTotal: partyTotal,
+                    wholeStatus: wholePartyStatus,
+                  }),
+                  selected: type,
+                });
+          const statusOptions = partyStatusOptionsOf(facetCountsOf(facets, 'status'));
           const searchBox = { value: search, onChange: setSearch, placeholder: '搜索名称、编码、注册号或外部编码' };
-          const noMatchText =
-            shownType !== 'ALL' && pageRows.length > 0
-              ? businessPartyTypeNoMatchNote(completeParties !== null, typeSourcesComplete)
-              : businessPartyNoMatchNote;
+          const noMatchText = businessPartyNoMatchNote;
           // 垫着上一页时表底照那一页写（共几家、第几页），后面由列表件跟一句「正在读取…」，翻页钮按不动。
           const shownPagination = held ? held.pagination : pagination;
-          const footer = {
-            countText: partyFilteredFooterCountText({
-              exact: typeCountsUsable,
-              total: shownPagination?.total ?? null,
-              pageRows: pageRows.length,
-              shown: visible.length,
-              pageFiltered: shownType !== 'ALL',
-              unit: '家',
-            }),
-            pagination: shownPagination,
-          };
+          const footer = { countText: partyFooterCountText(shownPagination?.total ?? null, pageRows.length, '家'), pagination: shownPagination };
           // 点的、方向键走到的都是这一页上摆着的行：连行一起交给页面记下。
           const selectVisible = (key: string | null) => selectParty(key, visible.find((party) => party.partyId === key) ?? null);
           // 右栏显哪一行（party-roster.ts 的 selectedPartyRowOf）。分不分栏在页面那一层按不带条件的那一页与记着的那一行判
@@ -1537,7 +1434,7 @@ export function BusinessPartiesPage() {
           const report = (
             <>
               <CursorRefreshReport
-                // 刷新连法人册一起重取：刚在「公司主体」页登完的公司，回到这里按一下就该显成「我方公司」。
+                // 刷新连不带条件的那一问与法人册一起重取：筛选项摆哪几枚、注册地与收起资料入口的判断读着它们。
                 retry={() => {
                   retry();
                   parties.retry();
@@ -1558,10 +1455,10 @@ export function BusinessPartiesPage() {
           );
           if (detailRow !== null) {
             // 名录栏里类型与状态各是一个下拉：栏窄，摆不下一排芯片。项上的数与表的工具条是同一份。
-            const rosterTypeSelect = !typeControlReady ? null : typeChips !== null ? (
+            const rosterTypeSelect = typeChips === null ? null : (
               <select
-                className={partyRosterSelectClass(shownType !== 'ALL')}
-                value={shownType}
+                className={partyRosterSelectClass(type !== 'ALL')}
+                value={type}
                 aria-label="类型"
                 onChange={(event) => setType(event.target.value as BusinessPartyTypeFilter)}
               >
@@ -1571,21 +1468,7 @@ export function BusinessPartiesPage() {
                   </option>
                 ))}
               </select>
-            ) : typeWords !== null ? (
-              <select
-                className={partyRosterSelectClass(shownType !== 'ALL')}
-                value={shownType}
-                aria-label={typeWords.label}
-                title={typeWords.title}
-                onChange={(event) => setType(event.target.value as BusinessPartyTypeFilter)}
-              >
-                {businessPartyTypeFilterOptionsOf(typeSourcesComplete).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            ) : null;
+            );
             return (
               <>
                 {report}
@@ -1610,11 +1493,6 @@ export function BusinessPartiesPage() {
                           </option>
                         ))}
                       </select>
-                      {typeControlReady && typeChips === null && typeWords !== null ? (
-                        <span className="col-span-2 flex">
-                          <PageOnlyNote>{typeWords.note}</PageOnlyNote>
-                        </span>
-                      ) : null}
                     </>
                   }
                   rows={visible}
@@ -1622,18 +1500,15 @@ export function BusinessPartiesPage() {
                   selectedKey={selectedParty}
                   onSelect={selectVisible}
                   renderRow={(row) => {
-                    const rowOurs = ourCompanies.has(row.partyId);
-                    const rowRoles = rolesOfParty(roleIndex, row.partyId);
-                    const rowType = partyRosterTypeOf(rowOurs, rowRoles, typeSourcesComplete);
                     return (
                       <>
-                        <PartyTile kind={partyTileKindOf(rowOurs, rowRoles)} />
+                        <PartyTile kind={partyTileKindOfRow(row)} />
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="truncate type-section leading-5 text-idpxyz-textBright" title={row.partyName}>
                             {row.partyName}
                           </span>
-                          <span className="truncate type-body leading-4 text-idpxyz-breadcrumb" title={rowType.unread ? partyTypeUnreadNote : undefined}>
-                            {rowType.text}
+                          <span className="truncate type-body leading-4 text-idpxyz-breadcrumb">
+                            {partyRosterTypeOf(partyIsOurCompany(row), partyRolesOf(row))}
                           </span>
                         </span>
                         <PartyRosterStatus code={row.status} />
@@ -1648,9 +1523,8 @@ export function BusinessPartiesPage() {
                   detail={
                     <BusinessPartyDetailPanel
                       row={detailRow}
-                      roles={rolesOfParty(roleIndex, detailRow.partyId)}
-                      ours={ourCompanies.has(detailRow.partyId)}
-                      typeUnread={!typeSourcesComplete}
+                      roles={partyRolesOf(detailRow)}
+                      ours={partyIsOurCompany(detailRow)}
                       pinned={entities.answer == null ? null : pinnedParties.has(detailRow.partyId)}
                       relationships={relationships.answer}
                       retryRelationships={relationships.retry}
@@ -1695,14 +1569,14 @@ export function BusinessPartiesPage() {
                         </option>
                       ))}
                     </select>
-                    {!typeControlReady ? null : typeChips !== null ? (
+                    {typeChips === null ? null : (
                       // 放得下摆一排芯片，放不下收成下拉，不折成第二行（partyTypeChipsFit）。
                       partyTypeChipsFit(toolbarWidth, typeChips) ? (
-                        <PartyTypeChipRow chips={typeChips} onPick={(next) => setType(next === shownType ? 'ALL' : next)} />
+                        <PartyTypeChipRow chips={typeChips} onPick={(next) => setType(next === type ? 'ALL' : next)} />
                       ) : (
                         <select
                           className={`${filterSelectClass} shrink-0`}
-                          value={shownType}
+                          value={type}
                           aria-label="类型"
                           onChange={(event) => setType(event.target.value as BusinessPartyTypeFilter)}
                         >
@@ -1713,24 +1587,7 @@ export function BusinessPartiesPage() {
                           ))}
                         </select>
                       )
-                    ) : typeWords !== null ? (
-                      <>
-                        <select
-                          className={`${filterSelectClass} shrink-0`}
-                          value={shownType}
-                          aria-label={typeWords.label}
-                          title={typeWords.title}
-                          onChange={(event) => setType(event.target.value as BusinessPartyTypeFilter)}
-                        >
-                          {businessPartyTypeFilterOptionsOf(typeSourcesComplete).map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        <PageOnlyNote>{typeWords.note}</PageOnlyNote>
-                      </>
-                    ) : null}
+                    )}
                     {narrowed ? <ClearFiltersLink onClick={clearFilters} /> : null}
                   </>
                 )}
@@ -1778,16 +1635,12 @@ export function BusinessPartiesPage() {
     const relationshipConditions = partyRelationshipListConditions(settledRelationshipSearch, role, relationshipStatus, relationshipSort);
     const toggleRelationshipStatus = (code: PartyRelationshipStatusFilter) =>
       setRelationshipStatus(relationshipStatus === code ? 'ALL' : code);
-    // 判据同名录（complete-register.ts）：整册一页装得下时状态芯片与「待查」带数、待查筛得准；装不下就不摆数，待查标「只筛本页」。
-    const relationshipCounts = completeRelationships === null ? null : countPartyRelationships(completeRelationships);
-    // 状态与角色下推成读口的 status 与 role 维。摆哪几枚状态看整册：有数时整册里一段都没有的状态不摆，摆出来的不随角色与
-    // 检索词增减；没有数时全摆：筛空了也要能点回「全部」。每枚上的数另算，随角色与检索词走（下面的 statusCountOf）。
+    // 「待查」是页面在到手的行上筛的（读口没有这一维）：合作关系册一页装得下时筛得准、带数；装不下就标「只筛本页」、不摆数。
+    const attentionExact = completeRelationships !== null;
+    // 状态与角色下推成读口的 status 与 role 维。摆哪几枚状态看不带条件那一问的分面：整册里一段都没有的状态不摆，摆出来的不随
+    // 角色与检索词增减；没有分面可看时全摆：筛空了也要能点回「全部」。每枚上的数另算，随角色与检索词走（下面的 statusCountOf）。
     const statusChips = partyRelationshipStatusFilterOptions.filter(
-      (option) =>
-        relationshipCounts === null ||
-        option.value === 'ALL' ||
-        option.value === relationshipStatus ||
-        relationshipCounts.byStatus[option.value as RelationshipStatusCode] > 0,
+      (option) => option.value === 'ALL' || facetOptionShown(wholeRelationshipStatus, option.value, relationshipStatus),
     );
     const narrowed = relationshipSearch.trim() !== '' || role !== 'ALL' || relationshipStatus !== 'ALL' || attentionOnly;
     const clearFilters = () => {
@@ -1827,14 +1680,8 @@ export function BusinessPartiesPage() {
           const shownPagination = held ? held.pagination : pagination;
           // 当前条件下答回的行；这一问还没答出或没答成就是 null——筛选项上不拿 0 占位。
           const answeredRows = answer?.kind === 'outcome' ? pageRows : null;
-          // 状态芯片上的数随角色与检索词走、不随状态自己走，与名录的状态下拉同一条规矩（statusCountsUnderConditions）。
-          const statusCountOf = statusCountsUnderConditions({
-            whole: completeRelationships,
-            conditioned: answeredRows,
-            keyword: settledRelationshipSearch,
-            status: relationshipStatus,
-            matchesOthers: (row) => role === 'ALL' || row.role === role,
-          });
+          // 状态芯片上的数取当前条件那一问的状态分面：随角色与检索词走、不随状态自己走，与名录的状态下拉同一条规矩（statusCountsOf）。
+          const statusCountOf = statusCountsOf(facetCountsOf(answer?.kind === 'outcome' ? answer.body.facets : null, 'status'));
           // 待查的数看当前条件（检索词、角色、状态）下答回的行里有几段：整册一页装得下时，带条件答回的那一页也是全的。
           const attentionCount =
             completeRelationships === null || answeredRows === null ? null : answeredRows.filter(partyRelationshipNeedsAttention).length;
@@ -1887,12 +1734,12 @@ export function BusinessPartiesPage() {
                     <span className="mx-0.5 h-4 w-px shrink-0 bg-idpxyz-border" aria-hidden="true" />
                     {/* 待查由名称转写推出来（partyRelationshipNeedsAttention），读口没有这一维：整册装不下时只筛到手的这一页。 */}
                     <PartyFilterChip
-                      label={relationshipCounts ? '待查' : '待查（只筛本页）'}
+                      label={attentionExact ? '待查' : '待查（只筛本页）'}
                       count={attentionCount}
                       active={attentionOnly}
                       disabled={attentionCount === 0 && !attentionOnly}
                       title={
-                        relationshipCounts
+                        attentionExact
                           ? '双方有名称查不到的合作关系'
                           : '双方有名称查不到的合作关系。读口筛不了这一项，只在当前这一页上筛，翻页后照新的一页再筛。'
                       }
@@ -1910,14 +1757,14 @@ export function BusinessPartiesPage() {
                 sort={relationshipSort}
                 onSort={(key) => setRelationshipSort(toggleWorkbenchSort(relationshipSort, key))}
                 noMatchText={
-                  relationshipCounts === null && attentionOnly && pageRows.length > 0
+                  !attentionExact && attentionOnly && pageRows.length > 0
                     ? '这一页上没有待查的合作关系；待查只筛本页，不看其余几页，翻页看看'
                     : partyRelationshipNoMatchNote
                 }
                 onClearFilters={clearFilters}
                 footer={{
                   countText: partyFilteredFooterCountText({
-                    exact: relationshipCounts !== null,
+                    exact: attentionExact,
                     total: shownPagination?.total ?? null,
                     pageRows: pageRows.length,
                     shown: visible.length,

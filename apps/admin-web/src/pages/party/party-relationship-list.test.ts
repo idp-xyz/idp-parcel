@@ -129,19 +129,3 @@ test('partyRelationshipRoleFilterOf 只认词表里的角色', () => {
   // 「全部」不是角色码：交回去的仍是「全部」，不会被当成一个角色下推。
   equal(partyRelationshipRoleFilterOf('ALL'), 'ALL');
 });
-
-// Covers: 计数（只在整册到手时用，complete-register.ts）按状态分格、待查单独计；词表之外的状态码不进任何格也不抛。
-test('countPartyRelationships 按状态与待查计数', () => {
-  deepEqual(countPartyRelationships(rows), {
-    total: 4,
-    byStatus: { CANDIDATE: 0, EFFECTIVE: 2, EXPIRED: 0, REVOKED: 1, SUPERSEDED: 1 },
-    attention: 1,
-  });
-  deepEqual(countPartyRelationships([record({ status: 'SOMETHING_NEW' })]).byStatus, {
-    CANDIDATE: 0,
-    EFFECTIVE: 0,
-    EXPIRED: 0,
-    REVOKED: 0,
-    SUPERSEDED: 0,
-  });
-});

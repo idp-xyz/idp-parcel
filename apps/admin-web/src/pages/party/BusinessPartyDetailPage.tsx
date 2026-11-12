@@ -181,7 +181,7 @@ export function BusinessPartyDetailPage({
    * null 是法人册还没答出；没取到（未配置、出错）由调用方答 false，写口照旧在服务端判。
    */
   ours: boolean | null;
-  /** 这家单位此刻持有的角色（列表页的 rolesOfParty）；概要按它判要不要提示客户补联系人。 */
+  /** 这家单位此刻持有的角色（读口在这一行上答的类别）；概要按它判要不要提示客户补联系人。 */
   roles: readonly string[];
 }) {
   const ours = pinned === true;

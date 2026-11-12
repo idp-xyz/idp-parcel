@@ -4,7 +4,6 @@ import type { BusinessPartyRecord } from './api';
 import {
   partyRosterPageText,
   partyRosterTypeOf,
-  partyRosterTypeUnreadText,
   rememberedPartyExpired,
   rememberedPartyOnReturn,
   selectedPartyRowOf,
@@ -23,19 +22,17 @@ function party(partyId: string, over: Partial<BusinessPartyRecord> = {}): Busine
     basis: 'SYN-REG-BASIS-01',
     effectiveFrom: '2026-01-02T00:00:00Z',
     registeredAt: '2026-09-16T04:27:55Z',
+    categories: ['NO_ROLE'], relationshipCounts: { asHolder: { live: 0, candidate: 0 }, asCounterparty: { live: 0, candidate: 0 } },
     ...over,
   };
 }
 
-// Covers: 我方公司排在角色前面，用「 · 」连；一个都没有、册读全了是「暂无合作关系」，没读全是「类型没读到」并标出来；
-// 推得出类型的行不因册没读全而改口。
+// Covers: 我方公司排在角色前面，用「 · 」连；一个角色都没有、也不是我方公司的是「暂无合作关系」。
 test('partyRosterTypeOf 照类型列的判据写名录栏一行的类型', () => {
-  deepEqual(partyRosterTypeOf(false, ['CUSTOMER'], true), { text: '客户', unread: false });
-  deepEqual(partyRosterTypeOf(true, ['CUSTOMER', 'SUPPLIER'], true), { text: '我方公司 · 客户 · 供应商', unread: false });
-  deepEqual(partyRosterTypeOf(true, [], true), { text: '我方公司', unread: false });
-  deepEqual(partyRosterTypeOf(false, [], true), { text: '暂无合作关系', unread: false });
-  deepEqual(partyRosterTypeOf(false, [], false), { text: partyRosterTypeUnreadText, unread: true });
-  deepEqual(partyRosterTypeOf(false, ['CUSTOMER'], false), { text: '客户', unread: false });
+  equal(partyRosterTypeOf(false, ['CUSTOMER']), '客户');
+  equal(partyRosterTypeOf(true, ['CUSTOMER', 'SUPPLIER']), '我方公司 · 客户 · 供应商');
+  equal(partyRosterTypeOf(true, []), '我方公司');
+  equal(partyRosterTypeOf(false, []), '暂无合作关系');
 });
 
 // Covers: 有总数时「页 / 总页数」，读口不给总数时只有页码。

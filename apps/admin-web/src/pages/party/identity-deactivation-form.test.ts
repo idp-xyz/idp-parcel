@@ -41,6 +41,7 @@ const party = (partyId: string, revision: number): BusinessPartyRecord => ({
   basis: 'b',
   effectiveFrom: '2026-01-02T00:00:00Z',
   registeredAt: '2026-01-02T00:00:00Z',
+  categories: ['NO_ROLE'], relationshipCounts: { asHolder: { live: 0, candidate: 0 }, asCounterparty: { live: 0, candidate: 0 } },
 });
 
 const legalEntity = (legalEntityId: string, revision: number): GroupLegalEntityRecord => ({

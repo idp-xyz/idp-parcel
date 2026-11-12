@@ -30,7 +30,7 @@ export type PanelHint = { kind: 'pending' } | { kind: 'no-relationship' } | null
 
 /**
  * 「概要」签顶上的提示。`liveRelationships` 为 null 即关系册还没答出：不知道有没有关系，就不说「还没有」。`rolesHeld` 是头部标签
- * 认出的角色数（business-party-list.ts 的 indexPartyRoles，含未停用客户账户带来的「客户」，ADR-0367 决定四）：只凭客户账户
+ * 认出的角色数（读口在这一行上答的类别，含未停用客户账户带来的「客户」，ADR-0367 决定四）：只凭客户账户
  * 就是客户的单位不提「还没有合作关系」——账户不要求先登客户关系，提了就与头部的「客户」标签互相打架。客户账户册还没答出时
  * 它是 null，同样不说「还没有」：先说了再收回，会闪一下提示和「登记合作关系」主动作。
  */

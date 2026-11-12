@@ -69,15 +69,15 @@ test('参与方各列表读口不带参数即裸路径，带检索词与游标�
   }
 });
 
-// Covers: 身份三册的页面条件——状态、注册地、角色按参数名下推，排序只带读口点了名的维、键按字典序；页面缺省序与读口缺省序相同的
+// Covers: 身份三册的页面条件——状态、类别、注册地、角色按参数名下推，排序只带读口点了名的维、键按字典序；页面缺省序与读口缺省序相同的
 // 两册不带 sort，关系册的生效起倒序总带上。
 test('身份三册按页面条件拼出查询串', async () => {
   const urls = captureRequests();
-  await listBusinessParties(businessPartyListConditions('承运', 'EFFECTIVE', { key: 'effective-from', dir: -1 }), 'c1');
+  await listBusinessParties(businessPartyListConditions('承运', 'EFFECTIVE', 'CUSTOMER', { key: 'effective-from', dir: -1 }), 'c1');
   await listGroupLegalEntities(legalEntityListConditions('', 'REGISTERED', 'CN', { key: 'registered-at', dir: -1 }));
   await listPartyRelationships(partyRelationshipListConditions('', 'CUSTOMER', 'CANDIDATE', { key: 'effective-start', dir: -1 }));
   deepEqual(urls, [
-    '/commercial-business-parties?sort=-effectiveFrom&status=EFFECTIVE&q=%E6%89%BF%E8%BF%90&after=c1',
+    '/commercial-business-parties?sort=-effectiveFrom&categories=CUSTOMER&status=EFFECTIVE&q=%E6%89%BF%E8%BF%90&after=c1',
     '/commercial-group-legal-entities?registrationCountry=CN&status=REGISTERED',
     '/commercial-party-relationships?sort=-effectiveStartsAt&role=CUSTOMER&status=CANDIDATE',
   ]);

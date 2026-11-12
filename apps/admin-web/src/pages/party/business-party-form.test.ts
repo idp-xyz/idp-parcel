@@ -104,6 +104,7 @@ test('建议修订号取列表最新修订加一，不在册或列表未取到�
       basis: 'b',
       effectiveFrom: '2026-01-02T00:00:00Z',
       registeredAt: '2026-01-02T00:00:00Z',
+      categories: ['NO_ROLE'], relationshipCounts: { asHolder: { live: 0, candidate: 0 }, asCounterparty: { live: 0, candidate: 0 } },
     },
   ];
   equal(suggestedBusinessPartyRevision(rows, 'SYN-PARTY-SHIPPER-01'), 4);

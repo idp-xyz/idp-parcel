@@ -252,6 +252,7 @@ test('partyNameOfAnswer 只在册答到且有名时译名', () => {
           basis: 'SYN-BASIS',
           effectiveFrom: '2026-01-01T00:00:00Z',
           registeredAt: '2026-01-01T00:00:00Z',
+          categories: ['NO_ROLE'], relationshipCounts: { asHolder: { live: 0, candidate: 0 }, asCounterparty: { live: 0, candidate: 0 } },
         },
         {
           tenantId: 'SYN-TENANT-01',
@@ -262,6 +263,7 @@ test('partyNameOfAnswer 只在册答到且有名时译名', () => {
           basis: 'SYN-BASIS',
           effectiveFrom: '2026-01-01T00:00:00Z',
           registeredAt: '2026-01-01T00:00:00Z',
+          categories: ['NO_ROLE'], relationshipCounts: { asHolder: { live: 0, candidate: 0 }, asCounterparty: { live: 0, candidate: 0 } },
         },
       ],
       page: { size: 200, next: null, total: 2 },

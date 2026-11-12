@@ -97,7 +97,7 @@ export function OurCompanyNetworkPanel({
   relationshipsComplete: boolean;
   retryRelationships: () => void;
   /** 关系图上各家单位的图标块按它自己的类型取，与名录的行同一份。 */
-  tileKindOf?: (partyId: string) => PartyTileKind;
+  tileKindOf?: (partyId: string) => PartyTileKind | null;
   onClose: () => void;
   /** 去合作关系视图看这家公司名下的关系；给了角色就连角色一起带上。 */
   onShowRelationships: (role?: string) => void;

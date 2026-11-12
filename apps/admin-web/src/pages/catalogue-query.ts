@@ -12,6 +12,13 @@ export interface CataloguePage {
 }
 
 /**
+ * 答复在 `page` 之外可带的分面计数（ADR-0378 决定五）：各册点了名的筛选维，各答它词表里每个值的行数，零也答、按词表序。
+ * 条件取这一问的检索词与其余各维，**不含该维自己**——点下某一格会得到几行，那一格上就是几。多值维一行可以记进几格，各格
+ * 之和不是总行数。没点名的册答复里没有这一格。
+ */
+export type CatalogueFacets = Readonly<Record<string, readonly { readonly value: string; readonly count: number }[]>>;
+
+/**
  * 一问的条件（决定三、四）。游标不在其中：它只在造它的那组条件下成立，条件一变就作废（决定一）。键名照各册在读口里点名的维写——
  * 读口不认的键整个请求答 400（决定四），页面不发没点名的维。
  */

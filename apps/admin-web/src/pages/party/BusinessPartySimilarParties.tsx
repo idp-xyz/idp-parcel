@@ -4,7 +4,7 @@ import { StatusPill } from '../../components/StatusPill';
 import { useSettledKeyword } from '../use-catalogue-cursor';
 import { listBusinessParties } from './api';
 import { businessPartyObjectHash } from './business-parties-address';
-import type { PartyTileKind } from './business-parties-workbench';
+import { partyTileKindOfRow } from './business-parties-workbench';
 import { similarKeywordMinChars, similarPartiesOf, similarPartiesShown, similarPartyKeywords, type SimilarParties } from './business-party-similar';
 import { PartyTile } from './party-role-visuals';
 
@@ -21,14 +21,11 @@ import { PartyTile } from './party-role-visuals';
 export function BusinessPartySimilarParties({
   name,
   partyId,
-  tileKindOf,
   className = '',
 }: {
   /** 表单里此刻的名称与编码，原样传进来。 */
   name: string;
   partyId: string;
-  /** 一家单位的图标块，与名录的行同一个算法；不给就都按「没有角色」画。 */
-  tileKindOf?: (partyId: string) => PartyTileKind;
   className?: string;
 }) {
   const keywords = similarPartyKeywords(useSettledKeyword(name), useSettledKeyword(partyId));
@@ -89,7 +86,7 @@ export function BusinessPartySimilarParties({
                     title="打开这家单位看看是不是同一家；这张表单留着，填的内容不动"
                     className="flex items-center gap-2.5 px-4 py-2 hover:bg-idpxyz-hover focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-idpxyz-accent"
                   >
-                    <PartyTile small kind={tileKindOf?.(row.partyId) ?? 'NONE'} />
+                    <PartyTile small kind={partyTileKindOfRow(row)} />
                     {/* 名称与编码放不下就折行，不截断：这一栏就是给人认「是不是同一家」的，截掉的那半截可能正是分得出两家的地方。 */}
                     <span className="min-w-0 flex-1">
                       <span className="block break-words type-value text-idpxyz-text">{row.partyName}</span>

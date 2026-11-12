@@ -18,7 +18,6 @@ import {
   suggestedBusinessPartyRevision,
   type BusinessPartyDraft,
 } from './business-party-form';
-import type { PartyTileKind } from './business-parties-workbench';
 import { EditSectionCard } from './BusinessPartyEditShell';
 import { BusinessPartyIdentificationFields } from './BusinessPartyIdentificationFields';
 import { BusinessPartySimilarParties } from './BusinessPartySimilarParties';
@@ -51,8 +50,6 @@ export interface BusinessPartyRegistrationFormProps {
   onUnsavedChange?: (unsaved: boolean) => void;
   /** 动作条里的「取消」：离开登记视图。有没提交的输入时要不要先问由页面管，这里只报「人点了取消」。 */
   onCancel: () => void;
-  /** 一家单位的图标块，相近单位那一栏按它画；不给就都按「没有角色」画。 */
-  tileKindOf?: (partyId: string) => PartyTileKind;
 }
 
 const info = moduleInfoById['business-parties'];
@@ -64,7 +61,6 @@ export function BusinessPartyRegistrationForm({
   onRegistered,
   onUnsavedChange,
   onCancel,
-  tileKindOf,
 }: BusinessPartyRegistrationFormProps) {
   const form = useRegistrationForm<BusinessPartyDraft>({
     kind,
@@ -165,7 +161,6 @@ export function BusinessPartyRegistrationForm({
           <BusinessPartySimilarParties
             name={draft.name}
             partyId={draft.partyId}
-            tileKindOf={tileKindOf}
             className="business-party-create-similar"
           />
 

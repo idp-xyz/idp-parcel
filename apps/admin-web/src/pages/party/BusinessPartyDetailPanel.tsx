@@ -21,12 +21,12 @@ import { relationshipGraphDraftOf } from './party-relationship-graph';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { partyOverviewStatesOf, usePartyOverviewLists } from './PartyOverviewSection';
-import { liveRelationshipCountOf, panelHeaderActionsOf, panelHintOf } from './business-party-panel-first-screen';
+import { panelHeaderActionsOf, panelHintOf } from './business-party-panel-first-screen';
 import { panelProfileTabCountsOf, panelRelatedCountOf, type PanelRelatedTarget } from './business-party-panel-content';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
 import { DetailRow, Fact, Instant } from './detail-primitives';
-import { formatCount, partyTileKindOf, type PartyTileKind } from './business-parties-workbench';
+import { formatCount, partyLiveRelationshipsOf, partyTileKindOf, type PartyTileKind } from './business-parties-workbench';
 import { PartyTile } from './party-role-visuals';
 import { BusinessPartyIdentificationFacts } from './BusinessPartyIdentificationRows';
 import { CopyAside, RefText } from './copy-affordance';
@@ -80,7 +80,6 @@ export function BusinessPartyDetailPanel({
   row,
   roles,
   ours,
-  typeUnread = false,
   pinned,
   relationships,
   retryRelationships,
@@ -93,15 +92,10 @@ export function BusinessPartyDetailPanel({
   onChanged,
 }: {
   row: BusinessPartyRecord;
-  /** 这个参与方持有的角色（business-party-list.ts 的 indexPartyRoles：在用关系，加上未停用客户账户的所属客户），头部按它称呼；空即「暂无合作关系」。 */
+  /** 这个参与方持有的角色（读口在这一行上答的类别，business-party-list.ts 的 partyRolesOf），头部按它称呼；空即「暂无合作关系」。 */
   roles: readonly string[];
-  /** 是不是法人册上钉着的我方公司；与列表类型格同一判据（business-party-list.ts 的 businessPartyTypeLabel）。 */
+  /** 是不是我方公司（读口答的类别，business-party-list.ts 的 partyIsOurCompany）；与列表类型格同一份。 */
   ours: boolean;
-  /**
-   * 推类型用的册没读全（business-party-list.ts 的 partyTypeSourcesComplete 为假）。这时 `roles` 与 `ours` 只是读到的那一部分：
-   * 头部推不出类型就显「—」，也不说「还没有合作关系」、不把「登记合作关系」提成主动作——它的关系可能只是没读到。
-   */
-  typeUnread?: boolean;
   /**
    * 法人册上有没有公司主体钉着它，已停用的也算（business-party-list.ts 的 partiesPinnedByLegalEntities），与对象页收资料入口
    * 同一判据；null 是法人册还没答出。头部的「我方公司」只数在用的（ours），两者用途不同。
@@ -116,7 +110,7 @@ export function BusinessPartyDetailPanel({
    */
   relationshipsComplete: boolean;
   /** 关系图与关系表里对方的图标块按它自己的类型取，与名录的行同一份；页面手上有全册的角色索引。 */
-  tileKindOf?: (partyId: string) => PartyTileKind;
+  tileKindOf?: (partyId: string) => PartyTileKind | null;
   /** 去「合作关系」视图看这家单位名下的全部关系。 */
   onShowRelationships: () => void;
   onClose: () => void;
@@ -202,10 +196,9 @@ export function BusinessPartyDetailPanel({
   // 提示、头区动作（票 business-party-ux/08，判读在 business-party-panel-first-screen.ts）、签上的数、概要的卡与「关联」签读同一份缓存。
   const lists = usePartyOverviewLists();
   const overview = partyOverviewStatesOf(row.partyId, relationships, lists);
-  // 册没读全时两格都按「不知道」交给 panelHintOf：它对 null 的做法就是不说「还没有」。
-  const liveRelationships =
-    !typeUnread && overview.relationships.kind === 'answered' ? liveRelationshipCountOf(overview.relationships.rows) : null;
-  const hint = panelHintOf(row, ours, liveRelationships, !typeUnread && overview.accounts.kind === 'answered' ? roles.length : null);
+  // 在用的段数取读口在这一行上答的（两侧都算），不随合作关系册读到第几页而变；角色也在行上，不必等别的册答出。
+  const liveRelationships = partyLiveRelationshipsOf(row).live;
+  const hint = panelHintOf(row, ours, liveRelationships, roles.length);
   const actions = panelHeaderActionsOf(mayWrite, pinned, hint, row.status);
   // 「登记合作关系」就是「关联」签里那张内联表单：切到签、把表单打开、落到那一段，不另造一处写口。
   const openRelationshipForm = () => {
@@ -239,7 +232,7 @@ export function BusinessPartyDetailPanel({
             ) : null}
             {/* 类型与列表类型格同一份标签（BusinessPartyTypeTags）：我方公司排在角色前面；两样都没有时说「暂无合作关系」，册没读全时显「—」，不留空。 */}
             <div className="mt-1.5">
-              <BusinessPartyTypeTags ours={ours} roles={roles} unread={typeUnread} />
+              <BusinessPartyTypeTags ours={ours} roles={roles} />
             </div>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">

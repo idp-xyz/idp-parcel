@@ -1,55 +1,59 @@
 // 往来单位页新版式的列表纯逻辑（票 business-party-redesign/02）：类型芯片与状态下拉上的数、「合作关系」一格、行首图标块取哪一种、
-// 视图签右端待办的数、表底那两句。全部是纯函数，node:test 钉着；组件只照着摆。
+// 表底那两句。全部是纯函数，node:test 钉着；组件只照着摆。
 //
-// 数从哪来与此前一样：往来单位册与推类型用的册都读全时由页面数，读不全的降级在 business-party-list.ts 的
-// partyTypeSourcesComplete 一组函数里。这里新定的只有一条规矩：筛选项上的数随「别的条件」走、不随自己那一项走——点下去会得到
-// 几行，上面写的就是几。册读全时，读口按当前条件答回的那一页就是当前条件下的全部行（整册一页装得下，它的子集也装得下），
-// 所以芯片按它数。
+// 筛选项上的数取读口答复里的分面（ADR-0378 决定五，票 business-party-redesign/09）：读口按点了名的筛选维答各值的行数，条件取
+// 这一问的检索词与其余各维、不含该维自己——点下去会得到几行，那一格上就是几。「数随别的条件走、不随自己那一项走」这条规矩因此
+// 由读口保证，往来单位再多也数得出、筛得准。此前是页面在读全了的册上自己数，册一多就数不出，只能降级。
 
 import { cursorTotalPages } from '../../templates/cursor-pagination';
-import type { BusinessPartyRecord, PartyRelationshipRecord } from './api';
+import type { CatalogueFacets } from '../catalogue-query';
+import type { BusinessPartyRecord } from './api';
 import {
+  businessPartyCategoryOf,
   businessPartyStatusFilterOptions,
   ourCompanyLabel,
-  type BusinessPartyCounts,
+  partyIsOurCompany,
+  partyRolesOf,
   type BusinessPartyStatusFilter,
   type BusinessPartyTypeFilter,
 } from './business-party-list';
-import { liveRelationshipStatuses } from './party-overview';
 import { partyRoleLabels, partyTypeFallbackLabel, type PartyRoleCode } from './presentation';
 
-/** 一家单位名下在用的关系有几段：作为持有方的与作为相对方的分开记，其中候选（待确认）的另记。 */
-export interface PartyRelationshipTally {
-  held: number;
-  heldCandidates: number;
-  toward: number;
-  towardCandidates: number;
+/** 分面里一维各值的行数。 */
+export type FacetCounts = ReadonlyMap<string, number>;
+
+/** 从答复的分面里取一维。这一维没有答（答复还没到、读口没给这一格）交 null——不拿一张空表冒充「各值都是零」。 */
+export function facetCountsOf(facets: CatalogueFacets | null | undefined, dimension: string): FacetCounts | null {
+  const entries = facets?.[dimension];
+  return entries ? new Map(entries.map((entry) => [entry.value, entry.count])) : null;
 }
 
-export type PartyRelationshipTallies = ReadonlyMap<string, PartyRelationshipTally>;
+/**
+ * 单值维各值之和：一行只落在一个值上，和就是「这一维不筛时」当前别的条件下的行数，状态的「全部」那一项用它。多值维不能这么加
+ * ——一家单位可以落在几个类别里（partyTypeAllCount）。
+ */
+export function facetTotal(counts: FacetCounts | null): number | null {
+  if (counts === null) return null;
+  let total = 0;
+  for (const count of counts.values()) total += count;
+  return total;
+}
 
-/** 按关系册给每家单位记数；只数在用的（候选与已生效），判据同类型列。关系册没取到交空表。 */
-export function tallyPartyRelationships(relationships: readonly PartyRelationshipRecord[] | null): PartyRelationshipTallies {
-  const tallies = new Map<string, PartyRelationshipTally>();
-  const of = (partyId: string) => {
-    let tally = tallies.get(partyId);
-    if (!tally) {
-      tally = { held: 0, heldCandidates: 0, toward: 0, towardCandidates: 0 };
-      tallies.set(partyId, tally);
-    }
-    return tally;
-  };
-  for (const row of relationships ?? []) {
-    if (!liveRelationshipStatuses.has(row.status)) continue;
-    const candidate = row.status === 'CANDIDATE';
-    const holder = of(row.holderId);
-    holder.held += 1;
-    if (candidate) holder.heldCandidates += 1;
-    const counterparty = of(row.counterpartyId);
-    counterparty.toward += 1;
-    if (candidate) counterparty.towardCandidates += 1;
-  }
-  return tallies;
+/**
+ * 筛选项摆不摆：整册里一条都没有的值不摆（`whole` 是不带条件那一问的分面），摆出来的不随检索词与别的筛选增减，免得边筛边跳；
+ * 选中的那一项总在。没有分面可看（null）就都摆：不知道哪些是零，不替它收，筛空了也要能点回「全部」。
+ */
+export function facetOptionShown(whole: FacetCounts | null, value: string, selected: string): boolean {
+  return whole === null || value === selected || (whole.get(value) ?? 0) > 0;
+}
+
+/**
+ * 状态筛选项上的数，名录的状态下拉与合作关系的状态芯片同一条规矩：取当前条件那一问的状态分面；「全部」（'ALL'）是各状态之和。
+ * 那一问还没答出（null）一律不给数，只写词——不拿 0 占位。
+ */
+export function statusCountsOf(conditioned: FacetCounts | null): (value: string) => number | null {
+  const total = facetTotal(conditioned);
+  return (value) => (value === 'ALL' ? total : (conditioned?.get(value) ?? null));
 }
 
 export interface PartyRelationshipCell {
@@ -58,15 +62,24 @@ export interface PartyRelationshipCell {
 }
 
 /**
- * 列表「合作关系」一格。与类型列同一口径：只数它担任角色的在用关系——只当别人关系里相对方的单位，类型是「暂无合作关系」，
- * 这一格也空着，两格不打架。我方公司不靠角色定类型，两侧都数。一段都没有交 null。
+ * 列表「合作关系」一格，数取行上答回的关系段数（在用的，与其中待确认的）。与类型列同一口径：只数它担任角色的在用关系——只当
+ * 别人关系里相对方的单位，类型是「暂无合作关系」，这一格也空着，两格不打架。我方公司不靠角色定类型，两侧都数。一段都没有交 null。
  */
-export function partyRelationshipCellOf(tallies: PartyRelationshipTallies, partyId: string, ours: boolean): PartyRelationshipCell | null {
-  const tally = tallies.get(partyId);
-  if (!tally) return null;
-  const count = tally.held + (ours ? tally.toward : 0);
+export function partyRelationshipCellOf(row: Pick<BusinessPartyRecord, 'categories' | 'relationshipCounts'>): PartyRelationshipCell | null {
+  const ours = partyIsOurCompany(row);
+  const { asHolder, asCounterparty } = row.relationshipCounts;
+  const count = asHolder.live + (ours ? asCounterparty.live : 0);
   if (count === 0) return null;
-  return { count, candidates: tally.heldCandidates + (ours ? tally.towardCandidates : 0) };
+  return { count, candidates: asHolder.candidate + (ours ? asCounterparty.candidate : 0) };
+}
+
+/**
+ * 一家单位名下在用的合作关系共几段、其中待确认几段，两侧都算：右栏那句「还没有合作关系」、停用对话框的说明与「我方关联」名录栏
+ * 的那一句用它。数是读口在行上答的，不随合作关系册读到第几页而变。
+ */
+export function partyLiveRelationshipsOf(row: Pick<BusinessPartyRecord, 'relationshipCounts'>): { live: number; candidates: number } {
+  const { asHolder, asCounterparty } = row.relationshipCounts;
+  return { live: asHolder.live + asCounterparty.live, candidates: asHolder.candidate + asCounterparty.candidate };
 }
 
 /** 行首图标块有哪几种：每个角色一种，我方公司一种，都不是的一种。 */
@@ -79,10 +92,15 @@ export function partyTileKindOf(ours: boolean, roles: readonly string[]): PartyT
   return known ?? 'NONE';
 }
 
+/** 一行的图标块，照读口在这一行上答的类别取。 */
+export function partyTileKindOfRow(row: Pick<BusinessPartyRecord, 'categories'>): PartyTileKind {
+  return partyTileKindOf(partyIsOurCompany(row), partyRolesOf(row));
+}
+
 export interface PartyTypeChip {
   type: BusinessPartyTypeFilter;
   label: string;
-  /** 当前条件下有几家；null 即当前条件的那一问还没答出，不摆数——不拿 0 占位。 */
+  /** 当前条件下有几家；null 即此刻数不出（那一问还没答出，或「全部」凑不出来），不摆数——不拿 0 占位。 */
   count: number | null;
   /** 整册里这一类有几家。估芯片宽度用它：它不随检索词与状态变，芯片与下拉之间不会边筛边换。 */
   registerCount: number;
@@ -94,65 +112,55 @@ export interface PartyTypeChip {
 }
 
 /**
- * 类型芯片。摆哪几枚看整册（whole）：整册里一家都没有的类型不摆，摆出来的那几枚不随检索词与状态增减，免得边打字边跳；
- * 每枚上的数看当前条件下答回的行（conditioned），那一问还没答出（null）就不摆数。选中的那一枚总在。次序：全部、各角色按
- * 词表序、我方公司、暂无合作关系。
+ * 类型芯片。摆哪几枚看不带条件那一问的类别分面（whole，facetOptionShown）；每枚上的数看当前条件那一问的类别分面
+ * （conditioned），那一问还没答出就不摆数。次序：全部、各角色按词表序、我方公司、暂无合作关系。
+ *
+ * 「全部」上的数由调用方给（allCount，partyTypeAllCount）：分面只答各类的家数，而一家单位可以落在几类里，各类之和不是总家数。
  */
-export function partyTypeChipsOf(
-  whole: BusinessPartyCounts,
-  conditioned: BusinessPartyCounts | null,
-  selected: BusinessPartyTypeFilter,
-): PartyTypeChip[] {
-  const chip = (
-    type: Exclude<BusinessPartyTypeFilter, 'ALL'>,
-    label: string,
-    registerCount: number,
-    count: number | null,
-    group: 'role' | 'other',
-  ): PartyTypeChip[] =>
-    registerCount > 0 || selected === type
-      ? [{ type, label, count, registerCount, active: selected === type, disabled: count === 0 && selected !== type, group }]
-      : [];
+export function partyTypeChipsOf(input: {
+  whole: FacetCounts | null;
+  /** 整册共几家（不带条件那一问的总数），只用来估「全部」那一枚的宽度。 */
+  wholeTotal: number | null;
+  conditioned: FacetCounts | null;
+  allCount: number | null;
+  selected: BusinessPartyTypeFilter;
+}): PartyTypeChip[] {
+  const { whole, wholeTotal, conditioned, allCount, selected } = input;
+  const chip = (type: Exclude<BusinessPartyTypeFilter, 'ALL'>, label: string, group: 'role' | 'other'): PartyTypeChip[] => {
+    const category = businessPartyCategoryOf(type);
+    if (!facetOptionShown(whole, category, selected === type ? category : '')) return [];
+    const count = conditioned?.get(category) ?? null;
+    return [{ type, label, count, registerCount: whole?.get(category) ?? 0, active: selected === type, disabled: count === 0 && selected !== type, group }];
+  };
   return [
-    {
-      type: 'ALL',
-      label: '全部',
-      count: conditioned?.total ?? null,
-      registerCount: whole.total,
-      active: selected === 'ALL',
-      disabled: false,
-      group: 'all',
-    },
-    ...(Object.keys(partyRoleLabels) as PartyRoleCode[]).flatMap((role) =>
-      chip(role, partyRoleLabels[role], whole.byRole[role], conditioned?.byRole[role] ?? null, 'role'),
-    ),
-    ...chip('OURS', ourCompanyLabel, whole.ours, conditioned?.ours ?? null, 'other'),
-    ...chip('NONE', partyTypeFallbackLabel, whole.withoutRole, conditioned?.withoutRole ?? null, 'other'),
+    { type: 'ALL', label: '全部', count: allCount, registerCount: wholeTotal ?? 0, active: selected === 'ALL', disabled: false, group: 'all' },
+    ...(Object.keys(partyRoleLabels) as PartyRoleCode[]).flatMap((role) => chip(role, partyRoleLabels[role], 'role')),
+    ...chip('OURS', ourCompanyLabel, 'other'),
+    ...chip('NONE', partyTypeFallbackLabel, 'other'),
   ];
 }
 
 /**
- * 状态筛选项上的数，名录与合作关系两个视图同一条规矩：随检索词与别的筛选走、不随状态自己走。
- * - 没有检索词：按整册（whole）数，只数合别的筛选的（matchesOthers）；
- * - 有检索词、状态是「全部」：读口答回的就是这个检索词下各状态的行（conditioned），按它数；
- * - 有检索词、又选了某个状态：读口只答回那一个状态的行，别的状态此刻数不出，只给选中的那一项数。
- * 整册没读全（whole 为 null）一律不给数；要用到读口答回的行而那一问还没答出（conditioned 为 null）也不给。检索词的匹配
- * 只由读口做，这里不在整册上再写一份。交出的是「某个状态值 → 数」；「全部」的值是 'ALL'。
+ * 类型「全部」那一枚上的数：类型不筛时，当前检索词与状态下有几家。读口不直接答它，从手上的几样里凑：
+ * - 类型此刻就没筛：当前这一问的总数就是它；
+ * - 筛着类型、没有检索词：从不带条件那一问里取——状态也没筛是整册的总数，筛着状态是那个状态的家数；
+ * - 筛着类型、又有检索词：凑不出，交 null，那一枚只写词。为这一个数另发一问不值当。
  */
-export function statusCountsUnderConditions<Row extends { status: string }>(input: {
-  whole: readonly Row[] | null;
-  conditioned: readonly Row[] | null;
+export function partyTypeAllCount(input: {
+  type: BusinessPartyTypeFilter;
   keyword: string;
-  status: string;
-  matchesOthers: (row: Row) => boolean;
-}): (value: string) => number | null {
-  const { whole, conditioned, keyword, status, matchesOthers } = input;
-  const searching = keyword.trim() !== '';
-  const base = whole === null ? null : searching ? conditioned : whole;
-  if (base === null) return () => null;
-  const source = base.filter(matchesOthers);
-  if (searching && status !== 'ALL') return (value) => (value === status ? source.length : null);
-  return (value) => (value === 'ALL' ? source.length : source.filter((row) => row.status === value).length);
+  status: BusinessPartyStatusFilter;
+  /** 当前条件那一问的总数；还没答出为 null。 */
+  conditionedTotal: number | null;
+  wholeTotal: number | null;
+  /** 不带条件那一问的状态分面。 */
+  wholeStatus: FacetCounts | null;
+}): number | null {
+  const { type, keyword, status, conditionedTotal, wholeTotal, wholeStatus } = input;
+  if (type === 'ALL') return conditionedTotal;
+  if (keyword.trim() !== '') return null;
+  if (status === 'ALL') return wholeTotal;
+  return wholeStatus?.get(status) ?? null;
 }
 
 export interface PartyStatusOption {
@@ -162,15 +170,9 @@ export interface PartyStatusOption {
   count: number | null;
 }
 
-/** 名录状态下拉的各项与它们的数（statusCountsUnderConditions）；「别的筛选」是类型。 */
-export function partyStatusOptionsOf(input: {
-  whole: readonly BusinessPartyRecord[] | null;
-  conditioned: readonly BusinessPartyRecord[] | null;
-  keyword: string;
-  status: BusinessPartyStatusFilter;
-  ofType: (row: BusinessPartyRecord) => boolean;
-}): PartyStatusOption[] {
-  const countOf = statusCountsUnderConditions({ ...input, matchesOthers: input.ofType });
+/** 名录状态下拉的各项与它们的数（statusCountsOf）：随检索词与类型走、不随状态自己走。 */
+export function partyStatusOptionsOf(conditioned: FacetCounts | null): PartyStatusOption[] {
+  const countOf = statusCountsOf(conditioned);
   return businessPartyStatusFilterOptions.map((option) => ({ value: option.value, label: option.label, count: countOf(option.value) }));
 }
 
@@ -225,7 +227,7 @@ export function partyTypeChipsFit(toolbarWidth: number | null, chips: readonly P
 }
 
 /**
- * 表底左边那一句，给带着「页面上筛的那一项」的视图用——名录的类型、合作关系的待查，都是读口筛不了、页面在到手的行上筛的。
+ * 表底左边那一句，给带着「页面上筛的那一项」的视图用——合作关系的待查：读口筛不了、页面在到手的行上筛的。
  * 整册读得全时页面筛得准，说的是筛出来的条数；读不全时总数是读口答的（不含页面上筛的那一项），页面上筛了就另说一句本页
  * 筛出几条。
  */
@@ -246,18 +248,6 @@ export function partyFilteredFooterCountText(input: {
   if (exact) return partyFooterCountText(shown, shown, unit);
   const base = partyFooterCountText(total, pageRows, unit);
   return pageFiltered ? `${base}，本页筛出 ${formatCount(shown)} ${unit}` : base;
-}
-
-/**
- * 视图签右端一项待办的数（几段合作关系待确认、几家单位尚未生效）。册读全了从手上的行数；读不全时取那一问只带状态条件的读
- * 答的总数——状态是这两册读口的筛选维，总数精确。两样都没有交 null：不摆，不拿 0 冒充「没有」。
- */
-export function partyAttentionCount<Row>(
-  whole: readonly Row[] | null,
-  matches: (row: Row) => boolean,
-  statusTotal: number | null,
-): number | null {
-  return whole !== null ? whole.filter(matches).length : statusTotal;
 }
 
 /** 千位分节的数：往来单位册上万家是常事。 */

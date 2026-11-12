@@ -138,10 +138,10 @@ export function PartyRelationshipGraph({
   /** 中心那家的图标块；不给时我方公司按我方公司画，其余按「都不是」画。 */
   centerKind?: PartyTileKind;
   /**
-   * 邻居的图标块按它自己的类型取（与名录的行同一份）；调用方手上有全册的角色索引时给。不给就按这段关系猜：对中心担任角色的
+   * 邻居的图标块按它自己的类型取（与名录的行同一份）：调用方认得这家单位就交出来，认不得交 null。不给或交 null 就按这段关系猜：对中心担任角色的
    * 一侧按那个角色画，另一侧不知道它是什么，按「都不是」画。
    */
-  tileKindOf?: (partyId: string) => PartyTileKind;
+  tileKindOf?: (partyId: string) => PartyTileKind | null;
   /** 合成节点点了去哪看这一组的明细。 */
   onShowDetail: () => void;
   /** 「已结束」那句点了去哪看；不给就与合成节点同一处。 */
@@ -154,8 +154,7 @@ export function PartyRelationshipGraph({
   const fromStart = startOf(graph.fromIt.length);
   const tileOf = (node: RelationshipGraphNode, side: 'toward' | 'from'): PartyTileKind => {
     if (node.kind === 'group') return partyRoleTileKind(node.role);
-    if (tileKindOf) return tileKindOf(node.partyId);
-    return side === 'toward' ? partyRoleTileKind(node.role) : 'NONE';
+    return tileKindOf?.(node.partyId) ?? (side === 'toward' ? partyRoleTileKind(node.role) : 'NONE');
   };
   const hasDraft = [...graph.towardIt, ...graph.fromIt].some((node) => node.kind === 'draft');
 

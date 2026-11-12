@@ -1,111 +1,58 @@
 // 业务参与方页身份本体册的列表纯逻辑（票 admin-web-group-legal-entities/09 立，票 business-parties-uiux/01 改成工作台口径，与
 // legal-entity-list.ts 同形）。全部是纯函数，node:test 钉着；页面只负责摆。
 //
-// 检索、状态筛选与表头排序下推到目录读口（ADR-0144；读口的可排维与筛选维由后端 BusinessPartyPages 声明）：businessPartyListConditions
-// 编条件，页面按游标翻页。读口按参与方标识、名称、注册号与外部编码检索；状态词与类型词不在其内，要按状态看用状态胶囊。
+// 检索、状态与类型筛选、表头排序都下推到目录读口（ADR-0144；读口的可排维与筛选维由后端 BusinessPartyPages 声明）：
+// businessPartyListConditions 编条件，页面按游标翻页。读口按参与方标识、名称、注册号与外部编码检索；状态词与类型词不在其内，
+// 要按状态、类型看用各自的筛选。
 //
-// 「类型」一列不是册上的字段：参与方是客户还是承运商，由它在关系册上持有的角色说（CONTEXT：角色由关系表达，身份本体不带
-// 角色）。这里按关系册给每个参与方算出它持有的角色集合，列表按它称呼；一个角色都没有的显「暂无合作关系」。客户角色另认一处
-// 事实：未停用客户账户的所属客户也持有它（CONTEXT 参与方身份诸句，ADR-0367 决定四）——账户不要求先登客户关系。
-// 「我方公司」同理不是册上的字段（票 company-subject-ux/02）：法人册上钉着这个参与方的责任法人在，它就是我们自己的公司；
-// 按法人册算出参与方标识集合，类型列按它称呼，与角色并列显示。类型由这几本册算出，读口筛不了，所以类型筛选在到手的那一页上做
-// （filterBusinessPartiesByType）：整册一页装得下时它是精确的，否则只筛本页、控件上如实标出（complete-register.ts）。这几本册
-// 各只取不带条件的第一页，角色与我方公司也只按那一页算。所以哪一本没读全（多于一页、还没答出、没读成），推不出角色的行
-// 只说得出「没读到」，不说「暂无合作关系」；按类型的数与「暂无合作关系」这一项筛选也不摆（partyTypeSourcesComplete 起的几个
-// 函数）——它的关系或账户可能排在那一本的第一页之后，把没读到说成没有，操作者会照着去重登一段已有的关系。
+// 「类型」不是身份上的一格：参与方是客户还是承运商，由它在关系册上持有的角色说（CONTEXT：角色由关系表达，身份本体不带角色）；
+// 客户角色另认未停用客户账户的所属客户（ADR-0367 决定四）；被未停用的责任法人钉着的另算我方公司。这条规则的判定在后端一处
+// （ADR-0378）：读口在每一行上答 `categories`——它此刻持有的各个角色，加「我方公司」「无角色」两个词，永不为空——并可按它筛、
+// 按它给分面计数。管理台只照着摆，自己不推（票 business-party-redesign/09）：此前是按合作关系、客户账户、公司主体各册的第一页
+// 推的，往来单位一多就推不全，把没读到说成没有，操作者会照着去重登一段已有的关系。
 
 import type { WorkbenchSort } from '../../templates/workbench';
 import type { CatalogueConditions } from '../catalogue-query';
-import type { BusinessPartyRecord, CustomerAccountRecord, GroupLegalEntityRecord, PartyRelationshipRecord } from './api';
-import {
-  identityStatusLabels,
-  labelOf,
-  partyRoleLabels,
-  partyTypeFallbackLabel,
-  partyTypeLabel,
-  type IdentityStatusCode,
-  type PartyRoleCode,
-} from './presentation';
-import { catalogueSortOf, codeFilterOptions, type CatalogueSortColumns, type CodeFilter, type SelectOption } from './list-order';
-import { liveRelationshipStatuses } from './party-overview';
+import type { BusinessPartyRecord, GroupLegalEntityRecord } from './api';
+import { identityStatusLabels, labelOf, partyRoleLabels, partyTypeLabel, type IdentityStatusCode, type PartyRoleCode } from './presentation';
+import { catalogueSortOf, codeFilterOptions, type CatalogueSortColumns, type CodeFilter } from './list-order';
 
 /** 身份状态封闭三格（domain IdentityStatus 原名，从 identityStatusLabels 的键派生）加「全部」。 */
 export type BusinessPartyStatusFilter = CodeFilter<IdentityStatusCode>;
 
-/** 类型筛选：全部、某个角色、OURS——法人册上钉着的「我方公司」，或 NONE——既不是我方公司、一个角色也没有的（类型格显「暂无合作关系」）。 */
+/** 类型筛选：全部、某个角色、OURS——我方公司，或 NONE——既不是我方公司、一个角色也没有的（类型格显「暂无合作关系」）。 */
 export type BusinessPartyTypeFilter = CodeFilter<PartyRoleCode> | 'NONE' | 'OURS';
 
 // 胶囊的码与词都从 identityStatusLabels 派生——那份词表是 CONTEXT 原词在前端的唯一一处。
 export const businessPartyStatusFilterOptions = codeFilterOptions(identityStatusLabels, '全部');
 
-/** 参与方标识 → 它持有的角色（去重、按词表顺序）。 */
-export type PartyRoleIndex = ReadonlyMap<string, readonly PartyRoleCode[]>;
+/** 读口 `categories` 里不是角色的两个词（ADR-0378 决定三）：被未停用的责任法人钉着；前面各项都不成立。 */
+export const ourCompanyCategory = 'OUR_COMPANY';
+export const noRoleCategory = 'NO_ROLE';
 
-export const emptyPartyRoleIndex: PartyRoleIndex = new Map();
-
-// 在用的关系才算「持有」（party-overview.ts 的 liveRelationshipStatuses）：一家只剩过期合同的单位今天就不是客户。
-const roleBearingStatuses = liveRelationshipStatuses;
-
-// 未停用的客户账户才让所属客户持有客户角色：已登记待生效的算，与关系的「候选」同一条判据——登好了、等着用。
-const customerBearingAccountStatuses = new Set(['REGISTERED', 'EFFECTIVE']);
-
-/**
- * 按关系册给每个参与方算它持有的角色。只数持有方那一侧：角色由「哪一方对哪一方持有」表达，相对方是被持有的一方
- * （我们的公司主体、或授权交付时的客户），它不因此得到这个角色。词表之外的角色码不进索引——它没有中文可显，
- * 也不该冒充某个已知类型。客户账户册另给所属客户记一次客户角色（文件头）。哪一册没取到传 null，那一册不贡献角色。
- */
-export function indexPartyRoles(
-  relationships: readonly PartyRelationshipRecord[] | null,
-  accounts: readonly CustomerAccountRecord[] | null = null,
-): PartyRoleIndex {
-  if (relationships === null && accounts === null) return emptyPartyRoleIndex;
-  const index = new Map<string, Set<PartyRoleCode>>();
-  const hold = (partyId: string, role: PartyRoleCode) => {
-    const roles = index.get(partyId) ?? new Set<PartyRoleCode>();
-    roles.add(role);
-    index.set(partyId, roles);
-  };
-  for (const row of relationships ?? []) {
-    if (!roleBearingStatuses.has(row.status)) continue;
-    if (!(row.role in partyRoleLabels)) continue;
-    hold(row.holderId, row.role as PartyRoleCode);
-  }
-  for (const account of accounts ?? []) {
-    if (customerBearingAccountStatuses.has(account.status)) hold(account.customerPartyId, 'CUSTOMER');
-  }
-  const order = Object.keys(partyRoleLabels) as PartyRoleCode[];
-  return new Map([...index].map(([partyId, roles]) => [partyId, order.filter((role) => roles.has(role))]));
+/** 这一行是不是我方公司：读口答的类别里有那个词。 */
+export function partyIsOurCompany(row: Pick<BusinessPartyRecord, 'categories'>): boolean {
+  return row.categories.includes(ourCompanyCategory);
 }
 
-export function rolesOfParty(index: PartyRoleIndex, partyId: string): readonly PartyRoleCode[] {
-  return index.get(partyId) ?? [];
-}
-
-/** 法人册上钉着责任法人的参与方标识集合；法人册没取到即空集，所有行都不按「我方公司」显。 */
-export type OurCompanyIndex = ReadonlySet<string>;
-
-export const emptyOurCompanyIndex: OurCompanyIndex = new Set();
-
-// 在用的两格才算「钉着」：已停用的法人不再是我们签约、开票用的公司，与角色只数在用关系同一条判据；待生效的算——它是登记好、
-// 等着用的公司，列表上该让人看见它是我方的。
-const ourCompanyBearingStatuses = new Set(['REGISTERED', 'EFFECTIVE']);
-
 /**
- * 按法人册算哪些参与方是我方公司。法人钉的参与方就是行上的 partyId，不管名称转写到没到——转写不到是写入门失败的悬空，
- * 那一行仍钉着这个标识。法人册没取到传 null，集合为空。
+ * 这一行此刻持有的角色：读口答的类别里去掉不是角色的那两个词，按词表序排——类型标签、名录栏的那一句、图标块都照这个次序。
+ * 词表之外的词（服务端新增的角色）排在后面原样留着：它是读口说的事实，没有中文可显也不该藏起来。
  */
-export function ourCompanyPartyIds(entities: readonly GroupLegalEntityRecord[] | null): OurCompanyIndex {
-  if (entities === null) return emptyOurCompanyIndex;
-  return new Set(entities.filter((row) => ourCompanyBearingStatuses.has(row.status)).map((row) => row.partyId));
+export function partyRolesOf(row: Pick<BusinessPartyRecord, 'categories'>): string[] {
+  const held = row.categories.filter((category) => category !== ourCompanyCategory && category !== noRoleCategory);
+  const order = Object.keys(partyRoleLabels);
+  const rank = (role: string) => (order.includes(role) ? order.indexOf(role) : order.length);
+  return [...new Set(held)].sort((left, right) => rank(left) - rank(right));
 }
 
 /**
  * 法人册上有公司主体钉着的参与方，已停用的也算——与后端「我方公司不登号、不登参与方资料」那道门同一口径（ADR-0367 决定一、
- * ADR-0369 决定二）。对象页据它收起这两处写入口；列表类型格的「我方公司」只数在用的（ourCompanyPartyIds），两者用途不同。
+ * ADR-0369 决定二）。对象页据它收起这两处写入口。它与类别里的「我方公司」不是一回事：那一个只认未停用的责任法人，这一个连
+ * 已停用的也算，所以不能拿行上的类别顶。法人册没取到即空集。
  */
-export function partiesPinnedByLegalEntities(entities: readonly GroupLegalEntityRecord[] | null): OurCompanyIndex {
-  if (entities === null) return emptyOurCompanyIndex;
-  return new Set(entities.map((row) => row.partyId));
+export function partiesPinnedByLegalEntities(entities: readonly GroupLegalEntityRecord[] | null): ReadonlySet<string> {
+  return new Set((entities ?? []).map((row) => row.partyId));
 }
 
 /**
@@ -160,83 +107,11 @@ export function businessPartyTypeLabel(ours: boolean, roles: readonly string[]):
   return [ourCompanyLabel, ...roles.map((role) => labelOf(partyRoleLabels, role))].join(' / ');
 }
 
-/** 类型筛选的选项：我方公司在前、角色按词表序、「暂无合作关系」在最后，与类型列里的次序一样。 */
-export const businessPartyTypeFilterOptions: readonly SelectOption<BusinessPartyTypeFilter>[] = [
-  { value: 'ALL', label: '全部类型' },
-  { value: 'OURS', label: ourCompanyLabel },
-  ...(Object.keys(partyRoleLabels) as PartyRoleCode[]).map((role) => ({ value: role, label: partyRoleLabels[role] })),
-  { value: 'NONE', label: partyTypeFallbackLabel },
-];
-
-/**
- * 推类型用的那几本册——合作关系、客户账户、公司主体——是不是都读全了。传进来的是各册经 complete-register.ts 的
- * completeRegisterRows 判过的结果：读全了是行，没读全（多于一页、还没答出、没读成）是 null。
- */
-export function partyTypeSourcesComplete(sources: readonly (readonly unknown[] | null)[]): boolean {
-  return sources.every((rows) => rows !== null);
-}
-
-/** 推不出角色、又不是我方公司的一行缺的是什么：册读全了是真没有（none），没读全只是没读到（unread）。 */
-export type PartyTypeAbsence = 'none' | 'unread';
-
-/** 类型格在这一行上要不要说「缺」、说哪一种；是我方公司或推得出角色的交 null，照常摆标签。 */
-export function partyTypeAbsenceOf(ours: boolean, roles: readonly string[], sourcesComplete: boolean): PartyTypeAbsence | null {
-  if (ours || roles.length > 0) return null;
-  return sourcesComplete ? 'none' : 'unread';
-}
-
-/** 「没读到」在类型格里显的记号。 */
-export const partyTypeUnreadMark = '—';
-
-/** 「没读到」的那一句，格上的悬停、读屏与表头的提示都念它。 */
-export const partyTypeUnreadNote = '合作关系、客户账户或公司主体没有读全：类型一列可能不全，没读到的显示「—」，不等于没有';
-
-/** 类型筛选的选项。册没读全时不摆「暂无合作关系」：这时分不出没有与没读到，筛出来的会把没读到的也算进去。 */
-export function businessPartyTypeFilterOptionsOf(sourcesComplete: boolean): readonly SelectOption<BusinessPartyTypeFilter>[] {
-  return sourcesComplete ? businessPartyTypeFilterOptions : businessPartyTypeFilterOptions.filter((option) => option.value !== 'NONE');
-}
-
-/** 记着的类型筛选此刻作不作数：册没读全时「暂无合作关系」筛不了，当作没筛。记着的值不动，读全了它又作数。 */
-export function effectiveBusinessPartyTypeFilter(type: BusinessPartyTypeFilter, sourcesComplete: boolean): BusinessPartyTypeFilter {
-  return type === 'NONE' && !sourcesComplete ? 'ALL' : type;
-}
-
-export interface BusinessPartyTypeFilterWords {
-  /** 下拉的名字，读屏念它。 */
-  label: string;
-  /** 下拉旁的一句。 */
-  note: string;
-  /** 悬停的整句解释。 */
-  title: string;
-}
-
-/**
- * 类型给不出数、改由工具条上的下拉筛时，那个下拉怎么自称。给不出数有两种原因，各说各的，都有就都说：往来单位册不止一页
- * （partiesComplete 为假），类型只筛得了到手的这一页；推类型用的册没读全（sourcesComplete 为假），筛出的只是读到的那一部分。
- * 两样都读全了交 null——那时类型由指标格筛，不摆下拉。
- */
-export function businessPartyTypeFilterWords(partiesComplete: boolean, sourcesComplete: boolean): BusinessPartyTypeFilterWords | null {
-  if (partiesComplete && sourcesComplete) return null;
-  const derived = '类型由合作关系、客户账户与公司主体推出来';
-  if (sourcesComplete) {
-    return {
-      label: '类型（只筛本页）',
-      note: '类型只筛本页',
-      title: `${derived}，读口筛不了：只在当前这一页上筛，翻页后照新的一页再筛。`,
-    };
-  }
-  if (partiesComplete) {
-    return {
-      label: '类型（没有读全）',
-      note: '类型没有读全，筛出的可能不全',
-      title: `${derived}，这几本册没有读全：筛出的只是读到的那一部分。`,
-    };
-  }
-  return {
-    label: '类型（只筛本页，且没有读全）',
-    note: '类型只筛本页，且没有读全',
-    title: `${derived}，读口筛不了，这几本册也没有读全：只在当前这一页上筛，筛出的只是读到的那一部分。`,
-  };
+/** 类型筛选的值对应读口 `categories` 维的哪个词：角色原样，我方公司与「暂无合作关系」各是读口的那两个词。 */
+export function businessPartyCategoryOf(type: Exclude<BusinessPartyTypeFilter, 'ALL'>): string {
+  if (type === 'OURS') return ourCompanyCategory;
+  if (type === 'NONE') return noRoleCategory;
+  return type;
 }
 
 /** 表头可排的列 → 读口声明的可排维。名称列不可排：读口不按名称排。 */
@@ -248,121 +123,25 @@ export const businessPartySortColumns: CatalogueSortColumns = {
 /** 默认登记时间新→旧（票 09 裁决 1，判据同票 01 裁决 2：运营配置员最常看「刚登进去的那条」）。 */
 export const defaultBusinessPartySort: WorkbenchSort = { key: 'registered-at', dir: -1 };
 
-/** 身份本体册一问的条件：检索词、状态（「全部」即这一维缺席）与表头排序；登记时间新→旧是读口的缺省序，不写进查询串。 */
+/**
+ * 身份本体册一问的条件：检索词、状态与类型（「全部」即那一维缺席）与表头排序；登记时间新→旧是读口的缺省序，不写进查询串。
+ * 类型下推成读口的 `categories` 维。
+ */
 export function businessPartyListConditions(
   keyword: string,
   status: BusinessPartyStatusFilter,
+  type: BusinessPartyTypeFilter,
   sort: WorkbenchSort,
 ): CatalogueConditions {
   return {
     q: keyword,
-    filters: status === 'ALL' ? {} : { status: [status] },
+    filters: {
+      status: status === 'ALL' ? [] : [status],
+      categories: type === 'ALL' ? [] : [businessPartyCategoryOf(type)],
+    },
     sort: catalogueSortOf(sort, businessPartySortColumns, '-registeredAt'),
   };
 }
 
-/**
- * 类型筛选，只筛已取回的这一页：类型精确到角色码，OURS 只留我方公司，NONE 只留既不是我方公司、一个角色也没有的。
- */
-export function filterBusinessPartiesByType(
-  rows: readonly BusinessPartyRecord[],
-  type: BusinessPartyTypeFilter,
-  roles: PartyRoleIndex = emptyPartyRoleIndex,
-  ours: OurCompanyIndex = emptyOurCompanyIndex,
-): BusinessPartyRecord[] {
-  if (type === 'ALL') return [...rows];
-  return rows.filter((row) => businessPartyIsOfType(row, type, roles, ours));
-}
-
-/** 一行属不属于某个类型筛选值；判据就是 filterBusinessPartiesByType 逐行用的那一条，数状态下拉上的数时也用它。 */
-export function businessPartyIsOfType(
-  row: Pick<BusinessPartyRecord, 'partyId'>,
-  type: BusinessPartyTypeFilter,
-  roles: PartyRoleIndex = emptyPartyRoleIndex,
-  ours: OurCompanyIndex = emptyOurCompanyIndex,
-): boolean {
-  if (type === 'ALL') return true;
-  const held = rolesOfParty(roles, row.partyId);
-  const isOurs = ours.has(row.partyId);
-  if (type === 'OURS') return isOurs;
-  if (type === 'NONE') return held.length === 0 && !isOurs;
-  return held.includes(type);
-}
-
-export interface BusinessPartyCounts {
-  total: number;
-  byStatus: Record<IdentityStatusCode, number>;
-  /** 持有每个角色的参与方数；一个参与方持有两个角色时两格各记一次。 */
-  byRole: Record<PartyRoleCode, number>;
-  /** 法人册上钉着的「我方公司」数；同时持有角色的也各记一次。 */
-  ours: number;
-  /** 既不是我方公司、一个角色都没有的（「往来单位」）。 */
-  withoutRole: number;
-}
-
-/**
- * 命令头指标与状态胶囊的计数。只拿整册来数（complete-register.ts 的 completeRegisterRows 判过的那一份）：拿一页来数，数出来的
- * 不是册上的数。本册没有「待补」一格：参与方册是名称的来源，没有转写不到的格；身份层两格是法人册的事。所以按状态与角色分格。
- */
-export function countBusinessParties(
-  rows: readonly BusinessPartyRecord[],
-  roles: PartyRoleIndex = emptyPartyRoleIndex,
-  ours: OurCompanyIndex = emptyOurCompanyIndex,
-): BusinessPartyCounts {
-  const byStatus: Record<IdentityStatusCode, number> = { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 };
-  const byRole = Object.fromEntries(Object.keys(partyRoleLabels).map((role) => [role, 0])) as Record<PartyRoleCode, number>;
-  let oursCount = 0;
-  let withoutRole = 0;
-  for (const row of rows) {
-    if (row.status in byStatus) byStatus[row.status as IdentityStatusCode] += 1;
-    const held = rolesOfParty(roles, row.partyId);
-    const isOurs = ours.has(row.partyId);
-    if (isOurs) oursCount += 1;
-    if (held.length === 0 && !isOurs) withoutRole += 1;
-    for (const role of held) byRole[role] += 1;
-  }
-  return { total: rows.length, byStatus, byRole, ours: oursCount, withoutRole };
-}
-
-/** 命令头上按类型分的一格指标：筛选值、词与计数。 */
-export interface BusinessPartyTypeKpi {
-  type: Exclude<BusinessPartyTypeFilter, 'ALL'>;
-  label: string;
-  count: number;
-}
-
-/**
- * 命令头按类型分格的指标（票 business-party-ux/05）：我方公司在前、角色按词表序、「暂无合作关系」在最后，与类型列里的次序一样。
- * 计数为零的类型不出格——它筛出来必然为空。整册到手时类型筛选只有这一个入口，工具条不另放同义的类型下拉；待生效与已停用两格
- * 也不在这里——状态芯片已带计数、可筛，一个筛选器不开两个入口。
- */
-export function businessPartyTypeKpis(counts: BusinessPartyCounts): BusinessPartyTypeKpi[] {
-  const cells: BusinessPartyTypeKpi[] = [];
-  if (counts.ours > 0) cells.push({ type: 'OURS', label: ourCompanyLabel, count: counts.ours });
-  for (const role of Object.keys(partyRoleLabels) as PartyRoleCode[]) {
-    if (counts.byRole[role] > 0) cells.push({ type: role, label: partyRoleLabels[role], count: counts.byRole[role] });
-  }
-  if (counts.withoutRole > 0) cells.push({ type: 'NONE', label: partyTypeFallbackLabel, count: counts.withoutRole });
-  return cells;
-}
-
-/**
- * 按类型分格的指标摆不摆：要往来单位册读全（counts 不为 null），还要推类型用的册都读全。差一样就交 null，类型改由工具条上
- * 的下拉筛——按不全的关系数出来的「几家客户」不是册上的数。
- */
-export function businessPartyTypeKpisWhenComplete(counts: BusinessPartyCounts | null, sourcesComplete: boolean): BusinessPartyTypeKpi[] | null {
-  return counts !== null && sourcesComplete ? businessPartyTypeKpis(counts) : null;
-}
-
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
 export const businessPartyNoMatchNote = '当前筛选条件下没有匹配的单位';
-
-/**
- * 按类型筛空时表格区那一行的话：只筛得了本页时叫人翻页；本页就是整册、但推类型用的册没读全时，说明筛空不等于没有；
- * 两样都读全了就是普通的筛空。
- */
-export function businessPartyTypeNoMatchNote(partiesComplete: boolean, sourcesComplete: boolean): string {
-  if (!partiesComplete) return '这一页上没有这一类单位；类型只筛本页，不看其余几页，翻页看看';
-  if (!sourcesComplete) return '没有读到这一类单位；类型没有读全，不等于没有';
-  return businessPartyNoMatchNote;
-}

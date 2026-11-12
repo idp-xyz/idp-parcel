@@ -3,27 +3,16 @@
 
 import { cursorTotalPages } from '../../templates/cursor-pagination';
 import type { BusinessPartyRecord } from './api';
-import { ourCompanyLabel, partyTypeAbsenceOf } from './business-party-list';
+import { ourCompanyLabel } from './business-party-list';
 import { labelOf, partyRoleLabels, partyTypeFallbackLabel } from './presentation';
 
-export interface PartyRosterType {
-  text: string;
-  /** 这一句说的是「没读到」，不是类型：调用方给它配上说明。 */
-  unread: boolean;
-}
-
-/** 名录栏里「没读到」的那一句。栏里一行只有一句类型，单摆一个「—」认不出缺的是什么，所以写成字。 */
-export const partyRosterTypeUnreadText = '类型没读到';
-
 /**
- * 名录栏一行名称下的那一句类型：我方公司在前、角色照给的次序，用「 · 」连；一个都没有是「暂无合作关系」。推类型用的册没读全、
- * 这一行又推不出来时说「没读到」，不拿「暂无合作关系」冒充——判据与类型列是同一个（business-party-list.ts 的 partyTypeAbsenceOf）。
+ * 名录栏一行名称下的那一句类型：我方公司在前、角色照给的次序，用「 · 」连；一个都没有是「暂无合作关系」。两样都取自读口在这一行
+ * 上答的类别（business-party-list.ts 的 partyIsOurCompany、partyRolesOf），与类型列是同一份。
  */
-export function partyRosterTypeOf(ours: boolean, roles: readonly string[], sourcesComplete: boolean): PartyRosterType {
-  const absence = partyTypeAbsenceOf(ours, roles, sourcesComplete);
-  if (absence === 'unread') return { text: partyRosterTypeUnreadText, unread: true };
-  if (absence === 'none') return { text: partyTypeFallbackLabel, unread: false };
-  return { text: [...(ours ? [ourCompanyLabel] : []), ...roles.map((role) => labelOf(partyRoleLabels, role))].join(' · '), unread: false };
+export function partyRosterTypeOf(ours: boolean, roles: readonly string[]): string {
+  if (!ours && roles.length === 0) return partyTypeFallbackLabel;
+  return [...(ours ? [ourCompanyLabel] : []), ...roles.map((role) => labelOf(partyRoleLabels, role))].join(' · ');
 }
 
 /** 名录栏底翻页钮之间的页码：「2 / 7」；读口不给总数时只有「2」。栏窄，「第」「页」两个字由读屏的说明念。 */

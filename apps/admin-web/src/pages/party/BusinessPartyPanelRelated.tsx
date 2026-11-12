@@ -283,8 +283,8 @@ export function BusinessPartyPanelRelated({
   ours: boolean;
   /** 关系图中心那一枚图标块，与右栏头区、名录的行同一份。 */
   centerKind: PartyTileKind;
-  /** 对方的图标块按它自己的类型取；页面手上有全册的角色索引时给，不给就按这段关系里的角色画。 */
-  tileKindOf?: (partyId: string) => PartyTileKind;
+  /** 对方的图标块按它自己的类型取：页面认得这家单位就交出来，认不得交 null；不给或交 null 就按这段关系里的角色画。 */
+  tileKindOf?: (partyId: string) => PartyTileKind | null;
   overview: PartyOverviewStates;
   lists: PartyOverviewLists;
   /** 关系册答案：「结束…」要整行记录（修订号、依据），段状态里的只是这家单位看出去的那一面。 */
@@ -335,7 +335,7 @@ export function BusinessPartyPanelRelated({
   const relationshipState = overview.relationships;
   const records = relationships?.kind === 'outcome' ? relationships.body.relationships : [];
   const tileOf = (view: PartyRelationshipView): PartyTileKind =>
-    tileKindOf ? tileKindOf(view.otherPartyId) : view.side === 'COUNTERPARTY' ? partyRoleTileKind(view.role) : 'NONE';
+    tileKindOf?.(view.otherPartyId) ?? (view.side === 'COUNTERPARTY' ? partyRoleTileKind(view.role) : 'NONE');
   const registration = relationshipRegistration;
 
   return (
