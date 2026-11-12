@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +80,7 @@ func viewDetailRecord(t *testing.T) ports.ShipmentRequestDetailRecord {
 			LastAttemptedAt:             viewSubmittedAt.Add(30 * time.Minute),
 			LastAttemptSettlementReason: "ESTIMATE_PRICE_CARD_NOT_CONFIGURED",
 			LastAttemptServiceProduct:   "SYN-PROD-01",
+			LastAttemptEstimateGapCodes: []string{"MEASUREMENT", "POSTAL_ROUTE"},
 		},
 		HasDecision: true,
 		Decision: ports.AcceptanceDecisionViewRecord{
@@ -451,12 +453,13 @@ func TestViewsDetailReportsTheWholeView(t *testing.T) {
 			} `json:"declaredParcels"`
 			PriorVersionCount int `json:"priorVersionCount"`
 			AcceptanceTask    struct {
-				State                       string `json:"state"`
-				LastAttemptReason           string `json:"lastAttemptReason"`
-				LastAttemptResumePath       string `json:"lastAttemptResumePath"`
-				LastAttemptContinuation     string `json:"lastAttemptContinuation"`
-				LastAttemptSettlementReason string `json:"lastAttemptSettlementReason"`
-				LastAttemptServiceProduct   string `json:"lastAttemptServiceProduct"`
+				State                       string   `json:"state"`
+				LastAttemptReason           string   `json:"lastAttemptReason"`
+				LastAttemptResumePath       string   `json:"lastAttemptResumePath"`
+				LastAttemptContinuation     string   `json:"lastAttemptContinuation"`
+				LastAttemptSettlementReason string   `json:"lastAttemptSettlementReason"`
+				LastAttemptServiceProduct   string   `json:"lastAttemptServiceProduct"`
+				LastAttemptEstimateGapCodes []string `json:"lastAttemptEstimateGapCodes"`
 			} `json:"acceptanceTask"`
 			Decision *struct {
 				DecisionID string `json:"decisionId"`
@@ -492,12 +495,14 @@ func TestViewsDetailReportsTheWholeView(t *testing.T) {
 		t.Fatalf("prior versions = %d", view.PriorVersionCount)
 	}
 	// 这几格字段名与管理台票 declared-goods-lines/24 钉死（ADR-0380 决定三、四）：续办方交领域原词，结算原因不冠 SA-。
+	// lastAttemptEstimateGapCodes 与管理台票 declared-goods-lines/27 钉死（ADR-0381 决定四）：计价的缺项码原样。
 	if view.AcceptanceTask.State != "COMPLETE" ||
 		view.AcceptanceTask.LastAttemptReason != "FINANCIAL_CONTROL_NOT_CONFIGURED" ||
 		view.AcceptanceTask.LastAttemptResumePath != "OPERATOR_REGISTRATION" ||
 		view.AcceptanceTask.LastAttemptContinuation != "CONT-1" ||
 		view.AcceptanceTask.LastAttemptSettlementReason != "ESTIMATE_PRICE_CARD_NOT_CONFIGURED" ||
-		view.AcceptanceTask.LastAttemptServiceProduct != "SYN-PROD-01" {
+		view.AcceptanceTask.LastAttemptServiceProduct != "SYN-PROD-01" ||
+		!slices.Equal(view.AcceptanceTask.LastAttemptEstimateGapCodes, []string{"MEASUREMENT", "POSTAL_ROUTE"}) {
 		t.Fatalf("任务面变形：%+v", view.AcceptanceTask)
 	}
 	if view.Decision == nil || view.Decision.Kind != "ACCEPTED" ||

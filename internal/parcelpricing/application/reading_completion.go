@@ -21,6 +21,9 @@ type readingCompletion struct {
 	seriesVersions   ports.ReferenceSeriesRegister
 	catalogueInForce ports.ReferenceCatalogueInForceResolver
 	catalogues       ports.ReferenceCatalogueRegister
+	// catalogueVersions 只有试算两条编排装（随 EstimateReferenceCatalogues 一并交来）：输入完备性门要读在用
+	// 分区目录版本的始发维度声明（originPostalRequired）。正式评价不装，它不设这道门。
+	catalogueVersions ports.ReferenceCatalogueVersionLoader
 }
 
 // halfWired 报出只装了一半的那一对；序列那一对先查，与构造期拒法的先后一致。
@@ -48,6 +51,45 @@ func (completion readingCompletion) complete(
 		return domain.EvaluationRequest{}, nil, err
 	}
 	return request, append(notes, catalogueNotes...), nil
+}
+
+// originPostalRequired 判这份试算声明要不要点名缺始发邮编（ADR-0381 决定二）：卡绑的分区目录按始发邮编前缀分表，
+// 路线给了而始发邮编没报。按始发分表与否是目录版本上的声明（CatalogueOrigin），所以先按评价形成时刻解在用版本——
+// 时刻语义与补齐读数那一步同一条——再读整版的始发维度。没有在用版本不点名：该名哪一格说不准，照旧走解不出那一路；
+// 报了始发而目录不覆盖同理不归这里（ADR-0381 决定二「报了但解不出照旧」），这道门只问「没报」。依赖故障返回 error，
+// 调用方按补齐读数读不回同一格处置——「要不要点名」未知时点下去或放过去都在替权威作答。
+func (completion readingCompletion) originPostalRequired(
+	ctx context.Context,
+	command FormEstimateEvaluationsCommand,
+	plan domain.PricingPlanVersion,
+) (bool, error) {
+	if command.Route == nil || command.Route.Origin() != "" {
+		return false, nil
+	}
+	if completion.catalogueInForce == nil || completion.catalogueVersions == nil {
+		return false, nil
+	}
+	formedAt := completion.clock.Now()
+	for _, link := range plan.Structures().ReferenceCatalogues() {
+		if link.Kind() != domain.CatalogueKindZone {
+			continue
+		}
+		reference, outcome, err := completion.catalogueInForce.ResolveInForce(ctx, command.Tenant, link.Kind(), link.CatalogueID(), formedAt)
+		if err != nil {
+			return false, fmt.Errorf("resolve in-force catalogue version: %w", err)
+		}
+		if outcome != ports.CatalogueVersionInForce {
+			continue
+		}
+		registration, found, err := completion.catalogueVersions.LoadVersion(ctx, command.Tenant, reference.ID(), reference.Version())
+		if err != nil {
+			return false, fmt.Errorf("load catalogue version: %w", err)
+		}
+		if found && registration.Origin().Scope() == domain.CatalogueOriginPostalPrefixes {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // completeSeriesReadings 在形成评价前补齐输入快照里缺席的序列取值（ADR-0099 决定四）：

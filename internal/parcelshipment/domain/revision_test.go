@@ -47,6 +47,14 @@ func TestNoStateTransitionMovesTheAggregateRevision(t *testing.T) {
 		"AwaitOperatorRegistration": func(_ *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
 			return request.AwaitOperatorRegistration()
 		},
+		"AwaitCustomerSupplement": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+			gap, err := domain.NewSupplementGap(domain.PreAcceptanceFinancialControlCheck,
+				domain.DeclaredParcelID{}, checkReason(t, "ESTIMATE_RECIPIENT_POSTAL_MISSING"))
+			if err != nil {
+				t.Fatalf("supplement gap: %v", err)
+			}
+			return request.AwaitCustomerSupplement([]domain.SupplementGap{gap})
+		},
 		// 处置只对停在`等待授权处置`的委托开放，所以这一条要先经一轮 Decide 停到那里；中间那次
 		// Decide 同样不许动版本。
 		"DisposeUnderAuthority": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {

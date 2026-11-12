@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -195,6 +196,9 @@ type ProcessingAttemptSpec struct {
 	SettlementReason SettlementNotFormedReason
 	// ServiceProduct 是这一版申报的服务产品，取本上下文自己的提交版本，不经结算与计价转交。
 	ServiceProduct DeclaredServiceProduct
+	// EstimateGapCodes 是申报不全那一轮计价点名的缺项码原样、去重（ADR-0381 决定四），只在申报不全分出的
+	// 两路等待上有；其余停法缺席。照来时顺序，不排序——码面不承诺序。
+	EstimateGapCodes []string
 }
 
 // ProcessingAttempt 是接受判断任务上的一条处理记录。它记录本轮停在哪里、由谁来续、按哪个
@@ -209,12 +213,20 @@ type ProcessingAttempt struct {
 	attemptedAt      time.Time
 	settlementReason SettlementNotFormedReason
 	serviceProduct   DeclaredServiceProduct
+	estimateGapCodes []string
 }
 
 func NewProcessingAttempt(spec ProcessingAttemptSpec) (ProcessingAttempt, error) {
 	if !spec.Reason.valid() || !spec.ResumePath.valid() ||
 		!spec.Continuation.valid() || spec.AttemptedAt.IsZero() {
 		return ProcessingAttempt{}, ErrInvalidProcessingAttempt
+	}
+	for _, code := range spec.EstimateGapCodes {
+		// 空白码拒在构造门：缺项码出自计价的封闭集，空白只能是翻译坏了，落库会被列上的非空白约束拦下，
+		// 把整笔事务拖死（迁移 0038 头注量过同一幕）。
+		if strings.TrimSpace(code) == "" {
+			return ProcessingAttempt{}, ErrInvalidProcessingAttempt
+		}
 	}
 	return ProcessingAttempt{
 		reason:           spec.Reason,
@@ -223,6 +235,7 @@ func NewProcessingAttempt(spec ProcessingAttemptSpec) (ProcessingAttempt, error)
 		attemptedAt:      spec.AttemptedAt.UTC(),
 		settlementReason: spec.SettlementReason,
 		serviceProduct:   spec.ServiceProduct,
+		estimateGapCodes: append([]string(nil), spec.EstimateGapCodes...),
 	}, nil
 }
 
@@ -250,6 +263,11 @@ func (attempt ProcessingAttempt) SettlementReason() (SettlementNotFormedReason, 
 // ServiceProduct 交回这一版申报的服务产品；零值即没申报。
 func (attempt ProcessingAttempt) ServiceProduct() DeclaredServiceProduct {
 	return attempt.serviceProduct
+}
+
+// EstimateGapCodes 交回申报不全那一轮计价点名的缺项码；空即这一轮没有（不是申报不全，或缺项没点出名字）。
+func (attempt ProcessingAttempt) EstimateGapCodes() []string {
+	return append([]string(nil), attempt.estimateGapCodes...)
 }
 
 // WaitingOn 交回本任务当前停在哪个等待态上；本轮形成了决定或任务已完成时报告缺席。
@@ -280,5 +298,39 @@ func (request ShipmentRequest) AwaitOperatorRegistration() (ShipmentRequest, err
 		return ShipmentRequest{}, ErrAcceptanceTaskComplete
 	}
 	request.acceptanceTask.waitingOn = ResumeByOperatorRegistration
+	return request, nil
+}
+
+// AwaitCustomerSupplement 在**决定形成之前**把接受判断任务停在`等待受控补充`并记下缺口（ADR-0381 决定四）。
+//
+// Decide 写这一等待态的前提是校验到场，而申报不全停在接受前财务控制那一步——控制结果都没形成，没有校验可进
+// Decide，于是与 AwaitOperatorRegistration 同理需要一条不经校验的转移（ADR-0094 Decision 五那道「先落库再交回」
+// 的护栏由编排照 awaitOperatorRegistration 守）。缺口随等待态一起写：读面与受控补充入口都按「等待态 + 缺口」
+// 说话，只停不记缺口，查阅的人只看得到「在等补充」，看不到缺的是哪一条、哪几箱。
+//
+// 缺口不得为空也不得有坏项：计价答申报不全必点名缺项，一格都点不出的那一路照旧内部重试（ADR-0381 决定一），
+// 空缺口走到这里只能是调用方的翻译坏了——编程错误，不是一种可停的等待。
+//
+// 与 Decide 的两道门一致：已越过决定边界的委托说出真实原因，不再进入任何等待态。
+func (request ShipmentRequest) AwaitCustomerSupplement(gaps []SupplementGap) (ShipmentRequest, error) {
+	if len(gaps) == 0 {
+		return ShipmentRequest{}, ErrInvalidAcceptanceCheck
+	}
+	for _, gap := range gaps {
+		if !gap.group.valid() || !gap.reason.valid() {
+			return ShipmentRequest{}, ErrInvalidAcceptanceCheck
+		}
+	}
+	if request.decisionFormed {
+		return ShipmentRequest{}, ErrDecisionAlreadyFormed
+	}
+	if request.state != ShipmentRequestSubmitted {
+		return ShipmentRequest{}, ErrInvalidShipmentRequest
+	}
+	if !request.acceptanceTask.running() {
+		return ShipmentRequest{}, ErrAcceptanceTaskComplete
+	}
+	request.acceptanceTask.waitingOn = ResumeByCustomerSupplement
+	request.acceptanceTask.supplementGaps = append([]SupplementGap(nil), gaps...)
 	return request, nil
 }

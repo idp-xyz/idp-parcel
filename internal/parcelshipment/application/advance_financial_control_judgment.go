@@ -71,6 +71,9 @@ var controlStallReasons = map[ports.PreAcceptanceControlOutcome]JudgmentPendingR
 	ports.PreAcceptanceControlNotConfigured:      FinancialControlNotConfigured,
 	ports.PreAcceptanceControlRequestConflict:    FinancialControlRequestConflict,
 	ports.PreAcceptanceControlRequestNotAccepted: FinancialControlRequestNotAccepted,
+	// `等受控补充`交 Decide 那一路同一个原因（ADR-0381 决定四「待判原因与续办方用等待受控补充既有语言」）：
+	// 消费门按它的续办路径提交暂停，续办由新提交版本的信封驱动，与补件停在 Decide 的那一种同一条路。
+	ports.PreAcceptanceControlCustomerSupplementRequired: CustomerSupplementPending,
 }
 
 type AdvanceFinancialControlJudgmentHandler struct {
@@ -175,17 +178,32 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		if !ok {
 			return AdvanceFinancialControlJudgmentResult{}, ErrUnexpectedAssessmentOutcome
 		}
-		// 与时点那一支同一道护栏：只有续办路径为`等待运营登记`的那一格会在这里落等待态，其余原样交回。
-		reason, product, err := awaitOperatorRegistration(
-			ctx, handler.requests, command.Identity, command.SubmissionVersion, stall)
+		// 与时点那一支同一道护栏：只有续办路径为`等待运营登记`或`等待受控补充`的格会在这里落等待态
+		// （后者把适配器译好的缺口一并落，ADR-0381 决定四），其余原样交回。按续办路径挑哪条落库路，
+		// 不按端口格的名字挑——判据与 awaitOperatorRegistration 自己的护栏同一条。
+		var reason JudgmentPendingReason
+		var product domain.DeclaredServiceProduct
+		var err error
+		if stall.resumePath() == domain.ResumeByCustomerSupplement {
+			reason, product, err = awaitCustomerSupplement(
+				ctx, handler.requests, command.Identity, command.SubmissionVersion, stall, assessment.SupplementGaps)
+		} else {
+			reason, product, err = awaitOperatorRegistration(
+				ctx, handler.requests, command.Identity, command.SubmissionVersion, stall)
+		}
 		if err != nil {
 			return AdvanceFinancialControlJudgmentResult{}, err
 		}
 		// 提供方的原因引用进范围，与商业依据那一支带 resolution.Reason 同一纪律：作用域、金额、策略、
 		// 授信、价卡几种停在端口上可以同格，续办引用却各是各的，按引用查回来的就是那一种缺口。结算的原因码
-		// 另记在处理尝试上（ADR-0380 决定三）：那一格是给人读的「结算说了什么」，范围是续办派生的料。
+		// 与计价的缺项码另记在处理尝试上（ADR-0380 决定三；ADR-0381 决定四）：那两格是给人读的「提供方
+		// 说了什么」，范围是续办派生的料。
 		scope := []string{assessment.Reason.String()}
-		detail := attemptDetail{settlementReason: assessment.SettlementReason, serviceProduct: product}
+		detail := attemptDetail{
+			settlementReason: assessment.SettlementReason,
+			serviceProduct:   product,
+			estimateGaps:     assessment.EstimateGapCodes,
+		}
 		if reason != stall {
 			// 理由同时点那一支：原因换了，范围随之放下；结算原因说的是控制为何没形成，不是保存为何没落。
 			scope, detail = nil, attemptDetail{}

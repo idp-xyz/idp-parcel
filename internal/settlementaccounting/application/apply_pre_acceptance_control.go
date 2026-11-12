@@ -195,24 +195,25 @@ func (command ApplyPreAcceptanceControlCommand) minimumIdentityEstablished() boo
 }
 
 type ApplyPreAcceptanceControlResult struct {
-	outcome       ControlOutcome
-	estimate      domain.PreAcceptanceEstimate
-	hasEstimate   bool
-	freeze        domain.FundsFreeze
-	hasFreeze     bool
-	exposure      domain.CreditExposure
-	hasExposure   bool
-	executed      []ExecutedControl
-	jointPass     domain.JointPassCondition
-	controlPolicy domain.ControlPolicyReference
-	method        domain.SettlementMethod
-	adoptedPolicy domain.AdoptedPolicyReference
-	creditPolicy  domain.CreditPolicyReference
-	controlledAt  time.Time
-	asOf          domain.ControlAsOf
-	basis         domain.ControlBasisReference
-	reason        NotFormedReason
-	continuation  ContinuationReference
+	outcome         ControlOutcome
+	estimate        domain.PreAcceptanceEstimate
+	hasEstimate     bool
+	freeze          domain.FundsFreeze
+	hasFreeze       bool
+	exposure        domain.CreditExposure
+	hasExposure     bool
+	executed        []ExecutedControl
+	jointPass       domain.JointPassCondition
+	controlPolicy   domain.ControlPolicyReference
+	method          domain.SettlementMethod
+	adoptedPolicy   domain.AdoptedPolicyReference
+	creditPolicy    domain.CreditPolicyReference
+	controlledAt    time.Time
+	asOf            domain.ControlAsOf
+	basis           domain.ControlBasisReference
+	reason          NotFormedReason
+	declarationGaps []ports.PreAcceptanceTrialGap
+	continuation    ContinuationReference
 }
 
 // ExecutedControl 记策略正文里一项已经执行过的控制：哪一种、排第几、有没有形成`业务限制`。
@@ -311,6 +312,12 @@ func (result ApplyPreAcceptanceControlResult) ControlBasis() domain.ControlBasis
 
 func (result ApplyPreAcceptanceControlResult) NotFormedReason() NotFormedReason {
 	return result.reason
+}
+
+// DeclarationGaps 只在未形成原因为`申报不全`时有值：计价点名的逐件缺项原样转交（ADR-0381 决定三）。本上下文
+// 不拥有申报完备性的词汇，不折叠也不分流——缺的是哪件、该谁补，由调用方的消费侧适配器按它自己的封闭集译。
+func (result ApplyPreAcceptanceControlResult) DeclarationGaps() []ports.PreAcceptanceTrialGap {
+	return append([]ports.PreAcceptanceTrialGap(nil), result.declarationGaps...)
 }
 
 func (result ApplyPreAcceptanceControlResult) ContinuationReference() ContinuationReference {
@@ -561,7 +568,13 @@ func (handler *ApplyPreAcceptanceControlHandler) formEstimate(
 		return none, nil, err
 	}
 	if stopped {
-		return none, handler.haltNotFormed(command, reason), nil
+		halted := handler.haltNotFormed(command, reason)
+		if reason == EstimateDeclarationIncomplete {
+			// 申报不全把计价点名的逐件缺项原样随未形成转交（ADR-0381 决定三）：调用方按缺项分流等谁来补，
+			// 折掉它就只剩一个没人知道怎么续的原因码。其余停法没有缺项可交。
+			halted.declarationGaps = answer.Gaps
+		}
+		return none, halted, nil
 	}
 
 	estimate, gap, err := domain.FormPerParcelSellTrialSum(adoption, answer.PriceCard, command.Scope.Currency(), answer.Trials)

@@ -3,6 +3,7 @@ package parcelpricing_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +59,11 @@ func (double zoneRegisterDouble) Register(context.Context, ppdomain.ReferenceCat
 func (double zoneRegisterDouble) ResolveAt(_ context.Context, _ ppdomain.TenantID, _ ppdomain.VersionReference, asOf time.Time, route ppdomain.PostalRoute) (ppdomain.ResolvedCatalogueValue, bool, error) {
 	reading, applicable := double.registration.ResolveAt(asOf, route)
 	return reading, applicable, nil
+}
+
+// LoadVersion 补齐试算那两条编排宽一格的目录口（ppports.EstimateReferenceCatalogues）：替身只装一版，照交。
+func (double zoneRegisterDouble) LoadVersion(context.Context, ppdomain.TenantID, string, string) (ppdomain.ReferenceCatalogueRegistration, bool, error) {
+	return double.registration, true, nil
 }
 
 // zoneBoundCard 是一张 SELL·客户费用卡：Z1 一行、每件 rate 元，绑一份「目的前缀 902 → Z1」的分区目录。
@@ -259,6 +265,11 @@ func TestPricingCellsStaySeparateAndUndecidedIsUnavailable(t *testing.T) {
 		FormPreAcceptanceTrials(context.Background(), trialQuery(t))
 	if err != nil || incomplete.Outcome != saports.PreAcceptanceTrialsIncomplete || len(incomplete.Trials) != 0 {
 		t.Fatalf("缺件：%+v err = %v", incomplete, err)
+	}
+	// ADR-0381 决定三：计价点名的逐件缺项原样随答复带回，本适配器不折叠成一句「不全」。
+	if len(incomplete.Gaps) != 1 || incomplete.Gaps[0].Parcel != "P-2" ||
+		!slices.Equal(incomplete.Gaps[0].Missing, []string{"MEASUREMENT"}) {
+		t.Fatalf("gaps = %+v, 想要 P-2 缺 MEASUREMENT 原样带回", incomplete.Gaps)
 	}
 
 	unreachable, err := ppapplication.NewFormPreAcceptanceEstimatesHandler(ppapplication.FormPreAcceptanceEstimatesDeps{

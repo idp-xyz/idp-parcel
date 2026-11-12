@@ -90,6 +90,75 @@ func TestAwaitOperatorRegistrationParksARunningTaskWithoutDeciding(t *testing.T)
 	}
 }
 
+// estimateGaps 造「一件缺测量 + 委托级缺收件邮编」两条接受前财务控制判组的缺口。
+func estimateGaps(t *testing.T) []domain.SupplementGap {
+	t.Helper()
+	parcel, err := domain.NewDeclaredParcelID("P-1")
+	if err != nil {
+		t.Fatalf("parcel: %v", err)
+	}
+	perParcel, err := domain.NewSupplementGap(domain.PreAcceptanceFinancialControlCheck, parcel,
+		checkReason(t, "ESTIMATE_MEASUREMENT_MISSING"))
+	if err != nil {
+		t.Fatalf("per-parcel gap: %v", err)
+	}
+	requestLevel, err := domain.NewSupplementGap(domain.PreAcceptanceFinancialControlCheck, domain.DeclaredParcelID{},
+		checkReason(t, "ESTIMATE_RECIPIENT_POSTAL_MISSING"))
+	if err != nil {
+		t.Fatalf("request-level gap: %v", err)
+	}
+	return []domain.SupplementGap{perParcel, requestLevel}
+}
+
+// Covers: ADR-0381 决定四 + ADR-0094 Decision 五——申报不全停在控制结果形成之前，与等登记同理需要一条不经校验
+// 的转移：AwaitCustomerSupplement 只写等待态与缺口，不动状态、不形成决定、不动版本、不追加记录；缺口随等待态
+// 一起读得回。
+func TestAwaitCustomerSupplementParksARunningTaskWithItsGaps(t *testing.T) {
+	request := submitted(t)
+	gaps := estimateGaps(t)
+
+	waiting, err := request.AwaitCustomerSupplement(gaps)
+	if err != nil {
+		t.Fatalf("await customer supplement: %v", err)
+	}
+	if waiting.State() != domain.ShipmentRequestSubmitted {
+		t.Fatalf("state = %q, want SUBMITTED", waiting.State())
+	}
+	if _, present := waiting.AcceptanceDecision(); present {
+		t.Fatal("等待补充形成了一份决定")
+	}
+	if waiting.AcceptanceDecisionTask().IsComplete() {
+		t.Fatal("等待补充关闭了判断任务")
+	}
+	path, present := waiting.AcceptanceDecisionTask().WaitingOn()
+	if !present || path != domain.ResumeByCustomerSupplement {
+		t.Fatalf("waitingOn = %q (present=%v), want CUSTOMER_SUPPLEMENT", path, present)
+	}
+	stored := waiting.AcceptanceDecisionTask().SupplementGaps()
+	if len(stored) != len(gaps) || stored[0] != gaps[0] || stored[1] != gaps[1] {
+		t.Fatalf("gaps = %+v, want %+v 原样随等待态读回", stored, gaps)
+	}
+	if waiting.Revision() != request.Revision() {
+		t.Fatalf("revision moved from %d to %d; 转移一律不动版本", request.Revision(), waiting.Revision())
+	}
+}
+
+// Covers: AwaitCustomerSupplement 的几道门——空缺口是调用方翻译坏了（计价答申报不全必点名缺项），不是一种可停
+// 的等待；已越过决定边界的委托不再进入任何等待态。
+func TestAwaitCustomerSupplementRefusesEmptyGapsAndADecidedRequest(t *testing.T) {
+	if _, err := submitted(t).AwaitCustomerSupplement(nil); !errors.Is(err, domain.ErrInvalidAcceptanceCheck) {
+		t.Fatalf("空缺口 err = %v, want ErrInvalidAcceptanceCheck", err)
+	}
+
+	decided, err := submitted(t).Decide(decisionSpec(t, allGroupsPassing(t)))
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	if _, err := decided.AwaitCustomerSupplement(estimateGaps(t)); !errors.Is(err, domain.ErrDecisionAlreadyFormed) {
+		t.Fatalf("已决 err = %v, want ErrDecisionAlreadyFormed", err)
+	}
+}
+
 // Covers: 已越过决定边界的委托不再进入任何等待态——第二次尝试要说出真实原因。
 func TestAwaitOperatorRegistrationRefusesADecidedRequest(t *testing.T) {
 	decided, err := submitted(t).Decide(decisionSpec(t, allGroupsPassing(t)))

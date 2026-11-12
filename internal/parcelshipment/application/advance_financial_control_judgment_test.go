@@ -460,6 +460,10 @@ type financialControlDouble struct {
 	reason string
 	// settlementReason 是结算的未形成原因码原样，非空时随答复交回（ADR-0380 决定三）。
 	settlementReason string
+	// supplementGaps 与 estimateGapCodes 是申报不全分流那两格（ADR-0381 决定四）：译好的缺口与计价点名的
+	// 缺项码原样，非空时随非`已形成`的答复交回。
+	supplementGaps   []domain.SupplementGap
+	estimateGapCodes []string
 	err              error
 	record           func(string)
 	calls            int
@@ -494,6 +498,8 @@ func (double *financialControlDouble) ApplyPreAcceptanceFinancialControl(
 		if double.settlementReason != "" {
 			assessment.SettlementReason = mustValue(double.t, domain.NewSettlementNotFormedReason, double.settlementReason)
 		}
+		assessment.SupplementGaps = double.supplementGaps
+		assessment.EstimateGapCodes = double.estimateGapCodes
 		return assessment, nil
 	}
 

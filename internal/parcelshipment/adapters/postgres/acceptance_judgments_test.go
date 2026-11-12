@@ -605,9 +605,10 @@ func TestProcessingAttemptsAccumulateAcrossRounds(t *testing.T) {
 	}
 }
 
-// TestAProcessingAttemptLandsWithItsSettlementReasonProductAndVersion 证迁移 0038 加的那几列随处理尝试落库（ADR-0380 决定三、四）：
-// 结算的原因码原样、这一版申报的服务产品与被判的那一版；缺席的那几格落空，不落空串——空串与缺席读起来一样，读口会多一种
-// 「记了但没内容」要解释。在场却空白的结算原因被约束拒收。
+// TestAProcessingAttemptLandsWithItsSettlementReasonProductAndVersion 证迁移 0038 加的那几列与迁移 0039 加的缺项码列随
+// 处理尝试落库（ADR-0380 决定三、四；ADR-0381 决定四）：结算的原因码原样、这一版申报的服务产品、计价点名的缺项码原样
+// 与被判的那一版；缺席的那几格落空，不落空串或空数组——空串、空数组与缺席读起来一样，读口会多一种「记了但没内容」要
+// 解释。在场却空白的结算原因、在场却空的缺项码数组都被约束拒收。
 func TestAProcessingAttemptLandsWithItsSettlementReasonProductAndVersion(t *testing.T) {
 	judgments, transactor, pool := newAcceptanceJudgments(t)
 	ctx := t.Context()
@@ -624,6 +625,7 @@ func TestAProcessingAttemptLandsWithItsSettlementReasonProductAndVersion(t *test
 		AttemptedAt:      taskAttemptedAt,
 		SettlementReason: mustBuild(t, domain.NewSettlementNotFormedReason, "ESTIMATE_PRICE_CARD_NOT_CONFIGURED"),
 		ServiceProduct:   domain.RequestedServiceProductOf([]domain.CanonicalContentEntry{entry}),
+		EstimateGapCodes: []string{"MEASUREMENT", "POSTAL_ROUTE"},
 	})
 	if err != nil {
 		t.Fatalf("形成处理尝试：%v", err)
@@ -641,22 +643,30 @@ func TestAProcessingAttemptLandsWithItsSettlementReasonProductAndVersion(t *test
 		`SELECT count(*) FROM parcel_shipment.acceptance_processing_attempt
 		  WHERE tenant_id = $1 AND shipment_request_id = $2 AND continuation_ref = 'CONT-card'
 		    AND settlement_reason = 'ESTIMATE_PRICE_CARD_NOT_CONFIGURED' AND service_product = 'SYN-PROD-01'
+		    AND estimate_gap_codes = ARRAY['MEASUREMENT','POSTAL_ROUTE']::text[]
 		    AND submission_version = 'VER-1'`,
 		"tenant-1", "REQ-1"); rows != 1 {
-		t.Fatalf("带三格的那一条落了 %d 行, want 1", rows)
+		t.Fatalf("带那几格的那一条落了 %d 行, want 1", rows)
 	}
 	if rows := countTaskRows(t, pool,
 		`SELECT count(*) FROM parcel_shipment.acceptance_processing_attempt
 		  WHERE tenant_id = $1 AND shipment_request_id = $2 AND continuation_ref = 'CONT-bare'
-		    AND settlement_reason IS NULL AND service_product IS NULL AND submission_version = 'VER-2'`,
+		    AND settlement_reason IS NULL AND service_product IS NULL AND estimate_gap_codes IS NULL
+		    AND submission_version = 'VER-2'`,
 		"tenant-1", "REQ-1"); rows != 1 {
-		t.Fatalf("不带两格的那一条落了 %d 行, want 1（缺席的两格要落空）", rows)
+		t.Fatalf("不带那几格的那一条落了 %d 行, want 1（缺席的几格要落空）", rows)
 	}
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_processing_attempt
 			(tenant_id, shipment_request_id, continuation_ref, attempted_at, reason_ref, resume_path, settlement_reason)
 		 VALUES ('tenant-1', 'REQ-x', 'CONT-x', now(), 'SOME_REASON', 'INTERNAL_RETRY', '  ')`); err == nil {
 		t.Error("空白的结算原因溜进了处理尝试库")
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_processing_attempt
+			(tenant_id, shipment_request_id, continuation_ref, attempted_at, reason_ref, resume_path, estimate_gap_codes)
+		 VALUES ('tenant-1', 'REQ-x', 'CONT-x2', now(), 'SOME_REASON', 'INTERNAL_RETRY', ARRAY[]::text[])`); err == nil {
+		t.Error("空的缺项码数组溜进了处理尝试库——「点名了零项」与缺席分不开")
 	}
 }
 

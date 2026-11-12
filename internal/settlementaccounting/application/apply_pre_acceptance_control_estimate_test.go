@@ -436,6 +436,50 @@ func TestEveryEstimateCellStopsBeforeTouchingEitherLedger(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0381 决定三——`申报不全`时计价点名的逐件缺项原样随结果转交（DeclarationGaps）：本上下文不折叠、
+// 不翻译、不解析任何一个码，没见过的码也照样带（分流的词汇归小包托运侧）；缺项缺席时转交空集；别的未形成原因
+// 不带缺项。
+func TestADeclarationIncompleteResultCarriesTheGapsVerbatim(t *testing.T) {
+	gaps := []ports.PreAcceptanceTrialGap{
+		{Parcel: "P-1", Missing: []string{"MEASUREMENT", "A_CODE_THIS_CONTEXT_NEVER_HEARD_OF"}},
+		{Parcel: "P-2", Missing: []string{"POSTAL_ROUTE", "ORIGIN_POSTAL"}},
+	}
+	run := func(t *testing.T, trials *trialSourceDouble) application.ApplyPreAcceptanceControlResult {
+		t.Helper()
+		handler := mustHandler(t, estimateDeps(t, requiredPolicy(t), adopted(t), trials, &traceDouble{},
+			&balanceDouble{balance: balanceWith(t, 10_000)}, &ledgerDouble{ledger: domain.NewFreezeLedger()}))
+		result, err := handler.Handle(context.Background(), command(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		return result
+	}
+
+	incomplete := run(t, &trialSourceDouble{answer: ports.PreAcceptanceTrialAnswer{
+		Outcome: ports.PreAcceptanceTrialsIncomplete, PriceCard: estimatePriceCard, Gaps: gaps,
+	}})
+	if incomplete.Outcome() != application.ControlNotFormed || incomplete.NotFormedReason() != application.EstimateDeclarationIncomplete {
+		t.Fatalf("outcome/reason = %q/%q, want CONTROL_NOT_FORMED/申报不全", incomplete.Outcome(), incomplete.NotFormedReason())
+	}
+	if !reflect.DeepEqual(incomplete.DeclarationGaps(), gaps) {
+		t.Fatalf("gaps = %+v, want 原样 %+v", incomplete.DeclarationGaps(), gaps)
+	}
+
+	bare := run(t, &trialSourceDouble{answer: ports.PreAcceptanceTrialAnswer{
+		Outcome: ports.PreAcceptanceTrialsIncomplete, PriceCard: estimatePriceCard,
+	}})
+	if len(bare.DeclarationGaps()) != 0 {
+		t.Fatalf("缺项缺席却转交了 %+v", bare.DeclarationGaps())
+	}
+
+	other := run(t, &trialSourceDouble{answer: ports.PreAcceptanceTrialAnswer{
+		Outcome: ports.PreAcceptanceTrialPriceCardNotConfigured, PriceCard: estimatePriceCard, Gaps: gaps,
+	}})
+	if other.NotFormedReason() != application.EstimatePriceCardNotConfigured || len(other.DeclarationGaps()) != 0 {
+		t.Fatalf("reason = %q gaps = %+v, want 别的原因不带缺项", other.NotFormedReason(), other.DeclarationGaps())
+	}
+}
+
 // Covers: ADR-0179 决定六与两本账「同一请求身份携带不同内容形成冲突」同一条判据——同一次控制请求第二次来时估价换了一份（这里
 // 是换了一件的合计），留痕答冲突，编排停在`请求冲突`、不去碰两本账；同一份估价再来是重放，原冻结原样交回、不二次占用。
 func TestTheSameRequestWithAnotherEstimateIsAConflictBeforeEitherLedger(t *testing.T) {

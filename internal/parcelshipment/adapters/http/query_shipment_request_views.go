@@ -349,14 +349,17 @@ type parcelDimensionsBody struct {
 // （INTERNAL_RETRY、OPERATOR_REGISTRATION……，与 waitingOn 同一套）：谁来动手照记下的那一格读，不从原因名或 CONT- 引用推。
 // lastAttemptSettlementReason 是结算的未形成原因码原样（不冠 SA-），lastAttemptServiceProduct 是这一版申报的服务产品，
 // 两格都只在那一轮有时在场（ADR-0380 决定三）。字段名与管理台票 declared-goods-lines/24 钉死。
+// lastAttemptEstimateGapCodes 是申报不全那一轮计价点名的缺项码原样、去重（ADR-0381 决定四），只在申报不全分出的两路
+// 等待上在场；字段名钉死给管理台票 declared-goods-lines/27。
 type acceptanceTaskBody struct {
-	State                       string `json:"state"`
-	LastAttemptReason           string `json:"lastAttemptReason,omitempty"`
-	LastAttemptResumePath       string `json:"lastAttemptResumePath,omitempty"`
-	LastAttemptContinuation     string `json:"lastAttemptContinuation,omitempty"`
-	LastAttemptedAt             string `json:"lastAttemptedAt,omitempty"`
-	LastAttemptSettlementReason string `json:"lastAttemptSettlementReason,omitempty"`
-	LastAttemptServiceProduct   string `json:"lastAttemptServiceProduct,omitempty"`
+	State                       string   `json:"state"`
+	LastAttemptReason           string   `json:"lastAttemptReason,omitempty"`
+	LastAttemptResumePath       string   `json:"lastAttemptResumePath,omitempty"`
+	LastAttemptContinuation     string   `json:"lastAttemptContinuation,omitempty"`
+	LastAttemptedAt             string   `json:"lastAttemptedAt,omitempty"`
+	LastAttemptSettlementReason string   `json:"lastAttemptSettlementReason,omitempty"`
+	LastAttemptServiceProduct   string   `json:"lastAttemptServiceProduct,omitempty"`
+	LastAttemptEstimateGapCodes []string `json:"lastAttemptEstimateGapCodes,omitempty"`
 	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一）：查阅的人要知道缺的是哪一条、哪几箱，而不只是
 	// 「在等补充」。
 	SupplementGaps []supplementGapBody `json:"supplementGaps,omitempty"`
@@ -445,6 +448,7 @@ func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {
 		body.AcceptanceTask.LastAttemptedAt = record.Task.LastAttemptedAt.UTC().Format(time.RFC3339Nano)
 		body.AcceptanceTask.LastAttemptSettlementReason = record.Task.LastAttemptSettlementReason
 		body.AcceptanceTask.LastAttemptServiceProduct = record.Task.LastAttemptServiceProduct
+		body.AcceptanceTask.LastAttemptEstimateGapCodes = record.Task.LastAttemptEstimateGapCodes
 	}
 	if record.HasDecision {
 		kind := "REJECTED"

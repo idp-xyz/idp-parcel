@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -360,7 +361,7 @@ func TestFindVisibleReturnsTheWholeDetail(t *testing.T) {
 //   - 按发生时刻取最近，同一时刻按续办引用定先后，答案不随扫描顺序变；
 //   - 别的版本上的尝试不算（任务随版本重立，ADR-0045）；
 //   - 迁移 0038 之前落下、没有版本的旧行按任务建立时刻圈定：晚于它的算，早于它的属上一份任务；
-//   - 续办方、结算原因与服务产品照那一行交出（ADR-0380 决定三）。
+//   - 续办方、结算原因与服务产品照那一行交出（ADR-0380 决定三）；缺项码同理（迁移 0039，ADR-0381 决定四）。
 func TestTheDetailReadsTheLatestAttemptOfTheCurrentTask(t *testing.T) {
 	pool := pgtest.Pool(t)
 	views, repository, transactor := newShipmentRequestViewsOn(t, pool)
@@ -398,6 +399,7 @@ func TestTheDetailReadsTheLatestAttemptOfTheCurrentTask(t *testing.T) {
 		if settlement != "" {
 			spec.SettlementReason = mustBuild(t, domain.NewSettlementNotFormedReason, settlement)
 			spec.ServiceProduct = domain.RequestedServiceProductOf([]domain.CanonicalContentEntry{entry})
+			spec.EstimateGapCodes = []string{"MEASUREMENT", "POSTAL_ROUTE"}
 		}
 		built, err := domain.NewProcessingAttempt(spec)
 		if err != nil {
@@ -437,6 +439,9 @@ func TestTheDetailReadsTheLatestAttemptOfTheCurrentTask(t *testing.T) {
 		!task.LastAttemptedAt.Equal(submittedAtFixture.Add(2*time.Minute)) {
 		t.Fatalf("上次处理 = %+v, want 同一时刻续办引用在后的 CONT-b，别的版本上更晚的那条不算", task)
 	}
+	if !slices.Equal(task.LastAttemptEstimateGapCodes, []string{"MEASUREMENT", "POSTAL_ROUTE"}) {
+		t.Fatalf("上次处理的缺项码 = %v, want 迁移 0039 那一列照行交出（ADR-0381 决定四）", task.LastAttemptEstimateGapCodes)
+	}
 
 	// 旧行没有版本：早于任务建立的那条属上一份任务，不算；晚于它的那条算。
 	for _, legacy := range []struct {
@@ -456,8 +461,9 @@ func TestTheDetailReadsTheLatestAttemptOfTheCurrentTask(t *testing.T) {
 	}
 	task = lastAttempt()
 	if task.LastAttemptContinuation != "CONT-legacy-after" || task.LastAttemptResumePath != domain.ResumeByInternalRetry ||
-		task.LastAttemptSettlementReason != "" || task.LastAttemptServiceProduct != "" {
-		t.Fatalf("上次处理 = %+v, want 任务建立之后的那条旧行，两格缺席", task)
+		task.LastAttemptSettlementReason != "" || task.LastAttemptServiceProduct != "" ||
+		len(task.LastAttemptEstimateGapCodes) != 0 {
+		t.Fatalf("上次处理 = %+v, want 任务建立之后的那条旧行，几格都缺席", task)
 	}
 
 	// 只有一条早于任务建立的旧行：这份任务还没有处理尝试。
