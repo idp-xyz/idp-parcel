@@ -129,7 +129,7 @@
 - 改是否跟踪批号、效期与收货入账并发时按落册先后：修订先落，之后的收货照新修订判；收货先入账，修订答不可改的格。
 - 仓测按设备签发的事实身份认重放（ADR-0023），内容按这个口的规范化形状比（ADR-0149 决定四）：同一身份、内容相同的重复到达答已有结果，不追加第二版；同一身份、内容不同的答内容冲突，在册的那一版不变。查无所指的仓、仓不受理与仓测未受理的不落册，不占事实身份。
 - 当前那一版仓测按发生时间与设备序号定序，不按到达先后：迟到的旧仓测照记为一版，不顶掉更晚发生的那一版。
-- 商品修订自登记那一刻生效。按码识别商品取事实发生那一刻的指向（`WF-RULE`）：离线事实迟到时，识别码与别名按它发生那一刻的指向与有效区间解析，回看事实发生时刻的只有这一格。计量单位是不是已声明的包装层级、跟不跟踪批号与效期，按事实落册那一刻的当前修订判：收货是入账那一刻（[UC-WF-004](./UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md)「一致性、幂等与并发」），仓测登记所指的商品与包装层级同此。
+- 商品修订自登记那一刻生效。按码识别商品取事实发生那一刻的指向（`WF-RULE`）：离线事实迟到时，识别码与别名按它发生那一刻的指向与有效区间解析；对着商品修订判的各格里，回看事实发生时刻的只有这一格。计量单位是不是已声明的包装层级、跟不跟踪批号与效期，按事实落册那一刻的当前修订判：收货是入账那一刻（[UC-WF-004](./UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md)「一致性、幂等与并发」），仓测登记所指的商品与包装层级同此。
 
 ## 权限、隔离与审计
 
@@ -187,6 +187,7 @@
 | 已仓测的商品再测一版，对此前已形成的收费发生项的作用 | CONTEXT「收费发生项」只写了日后补测是对带着未测量的各份发生项的更正；已有一版仓测之后再测，要不要更正此前的发生项没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
 | 仓测的单位与仓登记的计量单位不同 | 仓测照测得的单位保存、不折算；发生项里重量与体积类计量按仓登记的单位给，两者不同时怎么给没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
 | 向一线作业端下发商品、别名与包装层级 | 没有写；`WF-RULE` 只定了服务端按事实发生那一刻的指向解析 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 按箱仓测，那一箱须在这个仓在库 | 按哪一刻判没有写。照「应用流程」是到达时核：离线测完、上传之前那一箱已经出库的，会答仓测未受理；要不要改按事实发生那一刻判，随一线作业端的离线边界一并定 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | `AT-WF-025`，部署开关关着时端点怎么答 | `ADR-OPT` 决定四留给第一张落仓配端点的实施票；两种做法都不得折成 404 | 第一张落仓配端点的实施票 |
 | `ADR-OPT` Consequences 给实施票的验收 | 「开关关着时其他上下文的答复不变」由 `AT-WF-025` 守；本用例不消费、也不交出任何信封，「开着时对不属于仓配的信封入账收工」在这里没有对应的路 | 随实现 |
 
