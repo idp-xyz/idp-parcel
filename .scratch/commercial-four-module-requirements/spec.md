@@ -1,7 +1,7 @@
 # 客户要求清单（Contract / Pricing / Rating / Quotation）：逐条对照、缺口与排序
 
 Category: enhancement
-Status: in-progress——2026-11-11 用户答「q6 全部激活」，子票 01 至 15 转 `ready-for-agent`；此前 needs-triage（子票全是 `draft`）。2026-11-12 进 `main`，见「进 main 记录」。
+Status: in-progress——2026-11-11 用户答「q6 全部激活」，子票 01 至 15 转 `ready-for-agent`；此前 needs-triage（子票全是 `draft`）。2026-11-12 进 `main`，见「进 main 记录」。同日用户另激活票 15 拆出的子票 16 至 21。
 出处：2026-11-11 用户在 Cursor 会话里贴出一张四个模块的清单，问「我们的现有实现是这样的吗」。对照之后用户说「我没有方向了，基于现在的实现，你的专家做法呢」；会话建议不追这张表、只点名解冻毛利，并说明这张表的来源会改变结论。用户随后选定「这张表是客户或招标的要求，按它重排优先级」，再答「都要做」：逐条对照表、报价的 ADR 草稿与范围文档改动、规格和票。这张表在仓库与历史会话里查不到出处。同日稍后，会话请用户向对方确认四处口径，用户答「没有可问的人，分析，参考行业头部软件的做法」；会话查了公开文档后作答，用户选定把调研笔记与结论写进本目录。同日更晚，用户问「你作为国际小包业务和系统设计专家， 你觉得现在你的这个设计科学，专业，合理吗」；会话自查后答不完全，其中一处是给错了结论，并列出五处要改的。用户选定「按上面五条改分支：更正 Q4、缩小报价、写明毛利范围，并推送」。随后用户答「q1-q3 确认， q4重开， q5 首发， q6 全部激活」。各次改了什么记在文末「Comments」。
 
 切片：合同与报价属 PN-02，主责 `party-commercial`；价卡、计费与毛利属 PN-07，主责 `parcel-pricing` 与 `settlement-accounting`。非关务专项。三类归属写在各实现票的「三类」一节；票 08、09、15 只出决定与文档，三类由它们产出的 ADR 与用例写。证据层级 `S`（演示租户）。
@@ -55,6 +55,8 @@ Q4 至 Q6 是用户自己的决定。
 | Q5 | 报价进首发试点范围，还是试点范围之外的产品能力 | 进首发试点范围 | `PILOT-SCOPE.md`「明确不包含」一节里讲不对客户形成价格承诺的那一句，在报价的 ADR 接受时收窄到逐票价格承诺与锁价（票 08）。现在没有改 |
 | Q6 | 激活哪几张票 | 全部激活 | 子票 01 至 15 转 `ready-for-agent`，本规格转 `in-progress`；冻结清单同笔改，见「与冻结清单的关系」。会话此前的建议是最多激活 01、02，没有被采纳 |
 
+2026-11-12 用户在问题卡上另选定「激活票 16 至 21（只改票面与 spec 并进 main）；实现另开会话逐票做」：票 15 拆出的子票 16 至 21 转 `ready-for-agent`。
+
 ## 排序
 
 全部激活之后，先后只由阻塞边定。
@@ -63,8 +65,8 @@ Q4 至 Q6 是用户自己的决定。
 |---|---|---|---|
 | 价卡流程 | 01、02 | 草稿编辑、发布冲突检测 | 能，互不依赖。01 也是报价「发出」的底座：对客价格表从价卡读回口导出 |
 | 签署 | 03 | 签署证据 | 能。随票立一篇 ADR |
-| 客户价 | 15 → 04 | 价卡授权 | 15 能：只出决定，一篇 ADR。04 等 15 |
-| 报价 | 15 → 08 → 09 → 10 → 11 → 12 → 13 | Quotation 一行 | 等 15。文档先行。11 另等 01；13 另等 15 拆出的实现票 |
+| 客户价 | 15 → 04；15 → 16 → 17 → 19 → 21，18 → 19，16 → 20 → 21 | 价卡授权 | 15 已做完（ADR-0380）。04、16、18 能，互不依赖。17、20 等 16；19 等 17、18；21 等 19、20 |
+| 报价 | 15 → 08 → 09 → 10 → 11 → 12 → 13 | Quotation 一行 | 08 能：15 已做完。文档先行。11 另等 01；13 另等 16、19 |
 | 毛利 | 05 | 毛利 | 能。先只对面单渠道服务的包裹；随票立一篇 ADR。它也是低毛利提示（[ADR-0366](../../docs/adr/0366-margin-is-neither-an-acceptance-nor-a-selection-gate-and-transit-time-is-an-eligibility-constraint-not-a-ranking-dimension.md) 决定三）的前置 |
 | 分票 | 06 → 07、14 | 分票 | 06 等一项用户决定（见下面建议里讲 06 的那一条）。07、14 等 06，各随票立一篇 ADR |
 
@@ -75,6 +77,8 @@ Q4 至 Q6 是用户自己的决定。
 3. **06 开工前先定一件事。** ADR-0364 的档位边界与总额上下限的基数两项，与它共用一次规范化版本换号（决定五），那两项还只是冻结清单上的记录。同批做只换一次号，这要用户定，记在票 06 的 `Blocked by`。「其余邮编」行换的是目录登记那条版本线，不在这一次里。
 4. **05 开工前先核一件事。** 面单渠道服务的包裹，成本今天是不是都能逐件形成。票面「要裁的」里写着没有走通。
 5. **03 随时可以做**，没有人在等它。
+
+**2026-11-12 补。** 讲先做 15 的那一条已办完：票 15 出了 ADR-0380，实现拆成 16 至 21，用户同日激活。现在能开工的多了 04、08、16、18；16 与 18 互不依赖，分属参与方与商业、计价两个上下文。
 
 这张要求清单的出处没有核实过，各条答案也没有经过任何一位真实客户。会话此前因此建议最多激活 01、02；用户选定全部激活。
 
@@ -97,12 +101,12 @@ Q4 至 Q6 是用户自己的决定。
 | 13 | [价格生效申请：接受之后发起现有的发布并记下依据](./issues/13-price-effectiveness-application.md) | 12、16、19 | ready-for-agent |
 | 14 | [采购一侧一票多件的运输收费发生项算不出成本](./issues/14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md) | 06；随票立 ADR | ready-for-agent |
 | 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | 无 | resolved（[ADR-0380](../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 2026-11-12 进 `main`，实现拆成 16 至 21） |
-| 16 | [客户合同版本的正文带销售价格约定](./issues/16-the-customer-contract-body-carries-the-sell-price-arrangement.md) | 无 | draft |
-| 17 | [销售价格来源随接受时固定的商业解析一起固定，结算有口读它](./issues/17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md) | 16 | draft |
-| 18 | [计价按请求带来的有序计价范围列表选卡，只在两种落空时转问下一个](./issues/18-pricing-selects-the-price-card-across-an-ordered-scope-list.md) | 无 | draft |
-| 19 | [结算两条发起路按合同声明的销售价格来源请计价，两本采用册不再说计价范围](./issues/19-settlement-requests-sell-evaluations-with-the-contract-declared-scope-list.md) | 17、18 | draft |
-| 20 | [管理台：合同页录入与显示销售价格来源](./issues/20-admin-web-contract-page-declares-sell-price-sources.md) | 16 | draft |
-| 21 | [演示租户的种子合同声明销售价格来源，演示动线走通](./issues/21-demo-seeds-and-walkthrough-for-contract-declared-sell-price-sources.md) | 19、20 | draft |
+| 16 | [客户合同版本的正文带销售价格约定](./issues/16-the-customer-contract-body-carries-the-sell-price-arrangement.md) | 无 | ready-for-agent |
+| 17 | [销售价格来源随接受时固定的商业解析一起固定，结算有口读它](./issues/17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md) | 16 | ready-for-agent |
+| 18 | [计价按请求带来的有序计价范围列表选卡，只在两种落空时转问下一个](./issues/18-pricing-selects-the-price-card-across-an-ordered-scope-list.md) | 无 | ready-for-agent |
+| 19 | [结算两条发起路按合同声明的销售价格来源请计价，两本采用册不再说计价范围](./issues/19-settlement-requests-sell-evaluations-with-the-contract-declared-scope-list.md) | 17、18 | ready-for-agent |
+| 20 | [管理台：合同页录入与显示销售价格来源](./issues/20-admin-web-contract-page-declares-sell-price-sources.md) | 16 | ready-for-agent |
+| 21 | [演示租户的种子合同声明销售价格来源，演示动线走通](./issues/21-demo-seeds-and-walkthrough-for-contract-declared-sell-price-sources.md) | 19、20 | ready-for-agent |
 
 ## 与冻结清单的关系
 
@@ -122,6 +126,13 @@ Q4 至 Q6 是用户自己的决定。
 - ADR-0364 另外三项的记录行。
 
 **这些改动 2026-11-12 已进 `main`。** 此前它们只在分支上，别的会话照 `main` 读到的仍是冻结；激活自进 `main` 起对它们生效。经过见「进 main 记录」。
+
+激活票 16 至 21 的那一笔（2026-11-12）另改了冻结清单两处：
+
+- 「记录」追加一行：用户点名，票 15 拆出的子票 16 至 21 已激活。
+- 「记录」里 2026-10-27 讲两本采用册登同一个范围的那一行：注明 ADR-0380 之后那一项只对旧规范化版本合同的账户还要核，代码由票 19 承接，它进 `main` 之前照原样核。
+
+`product-strategy-boundary/06`（解析键的锚点语义，票 17、21 提到）照旧冻结，解不解冻用户没有说。这一笔只改 `.scratch` 下的票面，推送方自审后进 `main`。
 
 ## 不在本 spec
 
@@ -188,3 +199,4 @@ Q4 至 Q6 是用户自己的决定。
 - 2026-11-12（票 15 用户接受之后）：用户看过草案结论后选定接受。草案编号为 [ADR-0380](../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)，移入 `docs/adr`，`.scratch` 里的草案删去；相关 `CONTEXT.md`、`GLOSSARY.md`、`CONTEXT-MAP.md`、`UC-PC-002`、`UC-SA-002` 与参数登记册 `PAR-COM-15` 同笔改成现行。实现拆成票 16 至 21，都是 `draft`，没有随「q6 全部激活」激活——那一句说的是当时的 01 至 15；也没有进冻结清单。票 04、08 解除对票 15 的阻塞，票 13 改指票 16。编号时发现本机在途分支 `docs/declared-goods-lines` 上的 ADR-0378（那条分支上的编号，不是 `main` 上后来的那篇 ADR-0378）与它有两句相抵，记在 ADR-0380 越权风险点 5 与票 15 的 Comments。非作者评审与进 `main` 待做。
 - 2026-11-12（票 15 非作者评审之后）：评审三次，SHA、结论与处置记在票 15 的 Comments。修订给 ADR-0380 的决定三、七、九加了细则，决定二改了一条（受理前估价读接受前财务控制所凭的那一份解析）；票 13 因此多等票 19。那条在途分支后来自己也立了一篇编号 ADR-0380 的记录，撞号；进 `main` 的先后待用户定。
 - 2026-11-12（票 15 进 main）：用户定 ADR-0380 先进 `main`、留这个号。重放到 `a9d8b27dd`，推到 `486a4e8fe`；SHA 对应、评审、生成物与 CI 记在票 15 的「进 main 记录」。重放时 `main` 上已有另一篇 ADR-0378，本目录里指在途分支那几篇的地方改成按分支编号加题目指。票 15 转 `resolved`。票 16 至 21 仍是 `draft`，等用户激活；在途分支 `docs/declared-goods-lines` 落地时要改号并合并重叠的句子，由用户转告那条会话。
+- 2026-11-12（激活票 16 至 21）：用户在问题卡上选定「激活票 16 至 21（只改票面与 spec 并进 main）；实现另开会话逐票做」。票 16 至 21 转 `ready-for-agent`，阻塞边不变；「排序」表与冻结清单同笔改，见「与冻结清单的关系」。只改 `.scratch` 下的票面，没有另请评审。实现没有在这条会话里开工。

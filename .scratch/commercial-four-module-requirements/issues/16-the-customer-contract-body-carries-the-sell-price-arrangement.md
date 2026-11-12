@@ -1,7 +1,7 @@
 # 16 客户合同版本的正文带销售价格约定：有序的销售价格来源，或显式不计销售价
 
 Category: enhancement
-Status: draft——由票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 拆出；[ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 进 `main` 之后由用户激活
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 无
 地盘：`internal/partycommercial`（领域、规范化、发布与受控批文）、`cmd/parcel-commercial`、`docs/application/party-commercial`
@@ -39,3 +39,4 @@ Blocked by: 无
 ## Comments
 
 - 2026-11-12：由票 15 拆出。
+- 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。

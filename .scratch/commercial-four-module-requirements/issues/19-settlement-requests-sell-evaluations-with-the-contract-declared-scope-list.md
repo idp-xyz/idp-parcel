@@ -1,7 +1,7 @@
 # 19 结算两条发起路按合同声明的销售价格来源请计价，两本采用册不再说计价范围
 
 Category: enhancement
-Status: draft——由票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 拆出；[ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 进 `main` 之后由用户激活
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [17](./17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md)、票 [18](./18-pricing-selects-the-price-card-across-an-ordered-scope-list.md)
 地盘：`internal/settlementaccounting`（两条发起路、评价请求、停因与续办、两本采用册的登记）、`internal/parcelpricing/adapters/settlementaccounting`（计价读结算评价请求记录的那只适配器，只动它把列表译给计价的那一段；计价的领域与应用归票 18）、`cmd/parcel-settlement-register`、`docs/application/settlement-accounting`
@@ -49,3 +49,4 @@ Blocked by: 票 [17](./17-sell-price-sources-are-fixed-with-the-acceptance-time-
 ## Comments
 
 - 2026-11-12：由票 15 拆出。
+- 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。仍等票 17、18。冻结清单「记录」里 2026-10-27 讲两本采用册登同一个范围的那一行，同笔注明：ADR-0380 之后那一项只对旧规范化版本合同的账户还要核，代码由本票承接。

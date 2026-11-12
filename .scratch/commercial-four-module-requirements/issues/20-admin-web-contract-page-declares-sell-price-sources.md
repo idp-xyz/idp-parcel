@@ -1,7 +1,7 @@
 # 20 管理台：合同页录入与显示销售价格来源，逐个来源标出此刻有没有在用的卡
 
 Category: enhancement
-Status: draft——由票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 拆出；[ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 进 `main` 之后由用户激活
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md)
 地盘：`apps/admin-web/**`。diff 全在这里时照 `docs/agents/workflow.md`「前端切片」一节，一人在 `main` 上直接做
@@ -33,3 +33,4 @@ Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arra
 ## Comments
 
 - 2026-11-12：由票 15 拆出。
+- 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。仍等票 16。

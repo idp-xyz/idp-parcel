@@ -1,7 +1,7 @@
 # 21 演示租户的种子合同声明销售价格来源，演示动线走通「专属价没谈到的线路落到标准价」
 
 Category: enhancement
-Status: draft——由票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 拆出；[ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 进 `main` 之后由用户激活
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [19](./19-settlement-requests-sell-evaluations-with-the-contract-declared-scope-list.md)、票 [20](./20-admin-web-contract-page-declares-sell-price-sources.md)
 地盘：`scripts/demo-seeds`
@@ -31,3 +31,4 @@ Blocked by: 票 [19](./19-settlement-requests-sell-evaluations-with-the-contract
 ## Comments
 
 - 2026-11-12：由票 15 拆出。
+- 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。仍等票 19、20。

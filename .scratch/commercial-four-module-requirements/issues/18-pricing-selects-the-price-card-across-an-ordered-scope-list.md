@@ -1,7 +1,7 @@
 # 18 计价按请求带来的有序计价范围列表选卡，只在两种落空时转问下一个
 
 Category: enhancement
-Status: draft——由票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 拆出；[ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 进 `main` 之后由用户激活
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 无
 地盘：`internal/parcelpricing`（领域、应用与受理前试算口）、`docs/application/parcel-pricing`。读结算评价请求记录的那只适配器怎样译出列表，随票 19 的请求记录形状做，不在本票
@@ -45,3 +45,4 @@ Blocked by: 无
 ## Comments
 
 - 2026-11-12：由票 15 拆出。
+- 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。

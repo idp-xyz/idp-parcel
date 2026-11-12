@@ -1,7 +1,7 @@
 # 17 销售价格来源随接受时固定的商业解析一起固定，结算有口读它
 
 Category: enhancement
-Status: draft——由票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 拆出；[ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 进 `main` 之后由用户激活
+Status: ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md)
 地盘：`internal/partycommercial`（闭包、快照与读口）、`internal/settlementaccounting/adapters/partycommercial`
@@ -32,3 +32,4 @@ Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arra
 ## Comments
 
 - 2026-11-12：由票 15 拆出。解析键上的锚点是登记行上的一个时刻（ADR-0380 越权风险点 2）：一位已登记的客户发了新一版合同，新委托能不能采用到它，取决于冻结着的 `product-strategy-boundary/06`，不在本票。
+- 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。仍等票 16。
