@@ -1,7 +1,7 @@
 # 14 从名录进编辑态，退出时把对象页那张标签一并关掉
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved——2026-11-12 进 main
 父票：[spec](../spec.md)
 Blocked by: 无
 
@@ -24,3 +24,28 @@ Blocked by: 无
 - 浏览器：从名录进编辑态、取消——回到名录，标签条上没有多出对象页那一张；先自己开着对象页的标签，再从名录进编辑态、取消——那张标签还在；在对象页自己点「更新资料」、取消——留在对象页。
 - 改的是共享面（`templates/*`、`Layout.tsx`）：要一份非作者评审，照 workflow「前端切片」里「评审只在碰共享面时要」那一条。
 - 只读核对，零写请求。
+
+## 完成记录（2026-11-12，直接推 `main`，代码在 `102dc7f32`）
+
+- **评审没有做**。用户 2026-11-12 裁定：这一串票不做评审与验收，作者自测通过即收口。下面都是作者自测。
+- 落点：
+  - 壳层：`templates/tab-return-context.tsx` 的 `TabReturnController` 多两个口——`isOpen`、`closeAndReturnTo`；`Layout.tsx` 接上；`shell/workspace-state.ts` 的 `closeAndReturn`（标签集上的那一步）。
+  - 页面：`business-party-edit-origin.ts` 来处那一笔多一格 `tabWasOpen`，判读是 `closesTabOnExit`；`business-parties-address.ts` 的 `businessPartyObjectTabId`；`BusinessPartyDetailPanel.tsx` 在改地址之前问壳层并记下；`BusinessPartyDetailPage.tsx` 与 `BusinessPartiesPage.tsx` 退出时照它走。
+- 票面留给本票定的两件：
+  - **「进来之前这张标签开没开着」怎么知道**：名录右栏在改地址之前拿对象页的标签标识问壳层（`isOpen`）。要在改地址之前问——地址一改壳层就把标签开了。
+  - **公司主体页没有一并用**。它退出编辑态后本来就留在对象页，没有「回名录」那一步；要关标签得先给它补来处的记法，这次不做。
+- 自己拿的主意：
+  - **先激活再关**。在标签集上先把要回的那张设成活动标签、再关这一张：先关的话活动标签会先落到被关那张的邻居上，再回去是两次换页。
+  - **关掉的进「最近关闭」**，重开的快捷键照旧找得回。
+  - 壳层没给标签标识（没有多标签的宿主）时只回去、不关。
+- ✅ 三道门退 0（tsc、node:test 1375/1375、vite build）。钉着的：该不该关（`business-party-edit-origin.test.ts`）、标签集上的那一步（`workspace-state.test.ts`）。
+- ✅ 浏览器（配置操作者，1734；都是点进去再「取消」，没有填）：
+  - 从名录进、对象页那张标签原来没开着（`SYN-PARTY-SHIPPER-05`，「更新资料」）：编辑时标签条上多一张它的标签；取消后回到名录，分栏与选中的那一家还在，那张标签没有了。从「更多 › 更正登记信息…」进同样。
+  - 对象页那张标签原来就开着（`SYN-PARTY-SHIPPER-03`）：从名录进、取消，回到名录，那张标签还在。
+  - 在对象页自己点「更新资料」、取消：留在对象页，标签还在。
+- ✅ 零写请求：这一段除登录的令牌交换外全是 GET。
+- 未核：
+  - 保存成功之后的那一条退出（与取消走的是同一个出口，没有造保存）。
+  - 表单有改动、点「取消」先问「放弃修改？」再退出的那一支。
+  - 编辑途中把名录那张标签关掉再退出（那时壳层会重开名录）：只由单测钉着标签集上的那一步。
+  - `main` 上的 CI：这台机器上查不到。
