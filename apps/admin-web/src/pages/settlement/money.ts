@@ -1,5 +1,4 @@
-// 金额的屏上写法。费用页的金额格（ops-ui 的 AmountCell）与运单详情的受理前估价共用这一份，所以从 ops-ui.tsx 挪成纯 .ts：
-// 测试链按 CommonJS 发射，引 tsx 就得把 React 带进 node:test。
+// 金额的屏上写法。放在纯 .ts 里是为了 node:test 能直接钉：测试链按 CommonJS 发射，引 tsx 就得把 React 带进来。
 
 /**
  * 金额串只加千分位，不换单位：传输用的是币种最小单位的十进制计数串，小数位属币种语义，页面不代判精度。

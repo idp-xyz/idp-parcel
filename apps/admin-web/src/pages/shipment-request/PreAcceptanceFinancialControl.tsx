@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@idpxyz/ui-primitives';
 import { StatusPill } from '../../components/StatusPill';
-import { TechnicalDetails } from '../../components/TechnicalDetails';
+import { OperatorRefusalNote, SectionError, TechnicalDetails } from '../../components/states';
+import { objectNouns } from '../../vocabulary/objects';
 import { formatInstant } from '../moment';
 import { RefLink } from '../party/RefLink';
 import type { ShipmentRequestDetail } from './api';
@@ -18,7 +19,11 @@ import { usePreAcceptanceEstimates } from './use-pre-acceptance-estimates';
 
 export function PreAcceptanceFinancialControl({ view }: { view: ShipmentRequestDetail }) {
   const { answer, retry } = usePreAcceptanceEstimates(view.shipmentRequestId);
-  const estimate = estimateBlockStateOf(answer, view.submissionVersionId, view.acceptanceTask.lastAttemptReason);
+  const estimate = estimateBlockStateOf(
+    answer,
+    { currentVersion: view.submissionVersionId, controlOutcome: view.financialControl?.outcome },
+    view.acceptanceTask.lastAttemptReason,
+  );
   return (
     <div className="flex flex-col gap-4 type-body">
       {/* 预估与实际分开记，这一句放在最前，免得把估价读成账。 */}
@@ -76,21 +81,25 @@ function ConclusionPart({ view }: { view: ShipmentRequestDetail }) {
 function EstimatePart({ state, retry }: { state: EstimateBlockState; retry: () => void }) {
   switch (state.kind) {
     case 'loading':
-      return <p className="text-idpxyz-textMuted">正在读受理前估价…</p>;
-    case 'failed':
       return (
-        <div className="flex flex-col gap-1">
+        <p role="status" className="text-idpxyz-textMuted">
+          正在读受理前估价…
+        </p>
+      );
+    case 'unconfigured':
+      // 重试不会改变结果，不给重试。
+      return <p className="text-idpxyz-textMuted">{state.text}</p>;
+    case 'refused':
+      return <OperatorRefusalNote kind={state.refusal} what={state.what} />;
+    case 'problem':
+      return (
+        <div className="text-idpxyz-textMuted">
           <p>{state.text}</p>
-          {state.retryable ? (
-            <div>
-              <Button variant="ghost" size="sm" onClick={retry}>
-                重试
-              </Button>
-            </div>
-          ) : null}
           <TechnicalDetails rows={state.technical} />
         </div>
       );
+    case 'unreachable':
+      return <SectionError title={state.title} description={state.description} technical={state.technical} onRetry={retry} />;
     case 'none':
       return <p>{state.note}</p>;
     case 'formed':
@@ -130,7 +139,7 @@ function EstimateSection({ section }: { section: EstimateSectionView }) {
         {section.occupationNote ? <FieldRow label="占用" value={section.occupationNote} /> : null}
         {section.occupations.map((occupation) => (
           <FieldRow
-            key={occupation.kind}
+            key={occupation.id}
             label="占用"
             value={
               <>
@@ -157,7 +166,7 @@ function ParcelEstimatesTable({ parcels, detailRecorded }: { parcels: ParcelEsti
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>包裹号</TableHead>
+            <TableHead>{objectNouns.parcelNumber}</TableHead>
             {detailRecorded && <TableHead>计价重量</TableHead>}
             {detailRecorded && <TableHead>费用行</TableHead>}
             <TableHead>小计</TableHead>

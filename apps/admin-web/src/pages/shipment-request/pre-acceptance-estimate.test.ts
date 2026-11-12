@@ -10,13 +10,16 @@ import {
   occupationViewOf,
 } from './pre-acceptance-estimate';
 
-// 本文件钉运单详情「受理前财务控制」一块里估价那一半（ADR-0379 决定二、四，票 declared-goods-lines/19 重钉的形状）：逐提交版本
-// 一段、补记之前的旧行没有逐件明细、占用按种类各一套状态、两种金额写法分开、没有留痕时把财务控制那一步的停因说出来。
+// 本文件钉运单详情「受理前财务控制」一块里估价那一半（ADR-0379 决定二、四，票 declared-goods-lines/19 的形状）：逐提交版本
+// 一段、新的在前、补记之前的旧行没有逐件明细、占用按种类各一套状态、两种金额写法分开、数组格是 null 也不炸，以及没有留痕时
+// 只说数据说得出的话（不适用、停因、还没有）。
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
 });
+
+const current = { currentVersion: 'SUBV-2' };
 
 const freeze = (overrides: Partial<PreAcceptanceOccupationRecord> = {}): PreAcceptanceOccupationRecord => ({
   kind: 'FUNDS_FREEZE',
@@ -26,6 +29,16 @@ const freeze = (overrides: Partial<PreAcceptanceOccupationRecord> = {}): PreAcce
   currency: 'CNY',
   formedAt: '2026-11-11T02:00:00Z',
   convertedAmount: '0',
+  ...overrides,
+});
+
+const credit = (overrides: Partial<PreAcceptanceOccupationRecord> = {}): PreAcceptanceOccupationRecord => ({
+  kind: 'CREDIT_EXPOSURE',
+  id: 'EXP-0001',
+  status: 'RECORDED',
+  amount: '153600',
+  currency: 'CNY',
+  formedAt: '2026-11-11T02:00:00Z',
   ...overrides,
 });
 
@@ -57,8 +70,10 @@ const estimate = (overrides: Partial<PreAcceptanceEstimateRecord> = {}): PreAcce
   ...overrides,
 });
 
+const listed = (estimates: unknown) => ({ kind: 'outcome' as const, status: 200, body: { estimates } as never });
+
 test('一版估价摊成一段：合计按最小币单位写，费用行照原样带小数与币种，价卡写成方案@版本', () => {
-  const section = estimateSectionOf(estimate(), 'SUBV-2');
+  const section = estimateSectionOf(estimate(), current);
   equal(section.isCurrent, true);
   equal(section.versionLabel, '当前版本');
   equal(section.total, '153,600 CNY');
@@ -85,17 +100,27 @@ test('一版估价摊成一段：合计按最小币单位写，费用行照原�
   );
 });
 
-test('两版估价按读口的次序逐版一段，只有当前版本标成当前', () => {
-  const sections = estimateSectionsOf(
-    [estimate({ submissionVersion: 'SUBV-1', trialAt: '2026-11-10T01:00:00Z' }), estimate({ submissionVersion: 'SUBV-2' })],
-    'SUBV-2',
-  );
+test('两版估价按试算时点新的在前，只有当前版本标成当前；时点读不出时退回读口次序的倒序', () => {
+  const older = estimate({ submissionVersion: 'SUBV-1', trialAt: '2026-11-10T01:00:00Z' });
+  const newer = estimate({ submissionVersion: 'SUBV-2', trialAt: '2026-11-11T01:59:00Z' });
+  for (const order of [
+    [older, newer],
+    [newer, older],
+  ]) {
+    deepEqual(
+      estimateSectionsOf(order, current).map((section) => [section.submissionVersion, section.versionLabel]),
+      [
+        ['SUBV-2', '当前版本'],
+        ['SUBV-1', '此前版本'],
+      ],
+    );
+  }
   deepEqual(
-    sections.map((section) => [section.submissionVersion, section.versionLabel]),
-    [
-      ['SUBV-1', '此前版本'],
-      ['SUBV-2', '当前版本'],
-    ],
+    estimateSectionsOf(
+      [estimate({ submissionVersion: 'SUBV-1', trialAt: 'x' }), estimate({ submissionVersion: 'SUBV-2', trialAt: 'y' })],
+      current,
+    ).map((section) => section.submissionVersion),
+    ['SUBV-2', 'SUBV-1'],
   );
 });
 
@@ -106,7 +131,7 @@ test('补记之前的旧行：写明没有逐件明细，逐件只剩小计；�
       serviceProduct: undefined,
       parcels: [{ parcel: 'DPCL-1', evaluation: 'EVAL-1', totalAmount: '38400', currency: 'CNY' }],
     }),
-    'SUBV-2',
+    current,
   );
   equal(section.detailRecorded, false);
   equal(section.detailNote, NOT_RECORDED_DETAIL_NOTE);
@@ -115,76 +140,62 @@ test('补记之前的旧行：写明没有逐件明细，逐件只剩小计；�
   deepEqual(section.parcels, [{ parcel: 'DPCL-1', subtotal: '38,400 CNY', weight: '未记', charges: null }]);
 });
 
-test('受限没有占用：空数组写成一句，不写占了零', () => {
-  const section = estimateSectionOf(estimate({ occupations: [] }), 'SUBV-2');
-  deepEqual(section.occupations, []);
-  equal(section.occupationNote, '没有占用：控制受限，没冻结资金也没占用信用');
+test('没有占用：只在当前版本且结论受限时说控制受限，其余只说没有占用', () => {
+  const none = estimate({ occupations: [] });
+  equal(estimateSectionOf(none, { currentVersion: 'SUBV-2', controlOutcome: 'RESTRICTED' }).occupationNote, '没有占用：控制受限');
+  equal(estimateSectionOf(none, { currentVersion: 'SUBV-2', controlOutcome: 'HELD' }).occupationNote, '没有占用');
+  equal(estimateSectionOf(none, { currentVersion: 'SUBV-2' }).occupationNote, '没有占用');
+  equal(estimateSectionOf(none, { currentVersion: 'SUBV-3', controlOutcome: 'RESTRICTED' }).occupationNote, '没有占用');
+  deepEqual(estimateSectionOf(none, current).occupations, []);
 });
 
-test('占用：冻结中、信用占用中、已释放、已扣费各按种类的说法与时刻', () => {
+test('占用：冻结中、信用占用中、已释放、已扣费各按种类的说法与时刻，带上占用标识', () => {
   deepEqual(occupationViewOf(freeze()), {
+    id: 'FRZ-0001',
     kind: '资金冻结',
     status: '资金冻结中',
     amount: '153,600 CNY',
     times: [{ label: '冻结时刻', at: '2026-11-11T02:00:00Z' }],
     summary: '资金冻结 · 资金冻结中 · 153,600 CNY',
   });
-  deepEqual(
-    occupationViewOf({
-      kind: 'CREDIT_EXPOSURE',
-      id: 'EXP-0001',
-      status: 'RECORDED',
-      amount: '153600',
-      currency: 'CNY',
-      formedAt: '2026-11-11T02:00:00Z',
-    }).summary,
-    '信用占用 · 信用占用中 · 153,600 CNY',
-  );
+  equal(occupationViewOf(credit()).summary, '信用占用 · 信用占用中 · 153,600 CNY');
   const released = occupationViewOf(freeze({ status: 'RELEASED', releasedAt: '2026-11-11T03:00:00Z' }));
   equal(released.status, '已释放');
   deepEqual(released.times, [
     { label: '冻结时刻', at: '2026-11-11T02:00:00Z' },
     { label: '释放时刻', at: '2026-11-11T03:00:00Z' },
   ]);
-  const converted = occupationViewOf(
-    freeze({ status: 'CONVERTED', convertedAmount: '153600', convertedAt: '2026-11-12T00:00:00Z' }),
-  );
+  const converted = occupationViewOf(freeze({ status: 'CONVERTED', convertedAmount: '153600', convertedAt: '2026-11-12T00:00:00Z' }));
   equal(converted.status, '已扣费');
   equal(converted.summary, '资金冻结 · 已扣费 · 153,600 CNY · 已扣 153,600 CNY');
   deepEqual(converted.times.map((time) => time.label), ['冻结时刻', '扣费时刻']);
 });
 
 test('部分转扣费：状态仍是占用中，加一句部分已扣费并写出已扣多少', () => {
-  const partial = occupationViewOf(
-    freeze({ status: 'HELD', convertedAmount: '50000', convertedAt: '2026-11-12T00:00:00Z' }),
-  );
+  const partial = occupationViewOf(freeze({ status: 'HELD', convertedAmount: '50000', convertedAt: '2026-11-12T00:00:00Z' }));
   equal(partial.status, '资金冻结中，部分已扣费');
   equal(partial.converted, '50,000 CNY');
-  const partialCredit = occupationViewOf({
-    kind: 'CREDIT_EXPOSURE',
-    id: 'EXP-0001',
-    status: 'RECORDED',
-    amount: '153600',
-    currency: 'CNY',
-    formedAt: '2026-11-11T02:00:00Z',
-    convertedAmount: '100',
-  });
-  equal(partialCredit.status, '信用占用中，部分已扣费');
+  equal(occupationViewOf(credit({ convertedAmount: '100' })).status, '信用占用中，部分已扣费');
 });
 
-test('组合策略：冻结与信用占用同时在场，各出一行', () => {
-  const section = estimateSectionOf(
-    estimate({
-      occupations: [
-        freeze(),
-        { kind: 'CREDIT_EXPOSURE', id: 'EXP-0002', status: 'RECORDED', amount: '20000', currency: 'CNY', formedAt: '2026-11-11T02:00:00Z' },
-      ],
-    }),
-    'SUBV-2',
+test('扣过一部分再放掉余下的：状态是已释放，不加部分已扣费，已扣多少照列', () => {
+  const view = occupationViewOf(
+    freeze({ status: 'RELEASED', convertedAmount: '50000', convertedAt: '2026-11-12T00:00:00Z', releasedAt: '2026-11-13T00:00:00Z' }),
   );
+  equal(view.status, '已释放');
+  equal(view.converted, '50,000 CNY');
+  equal(view.summary, '资金冻结 · 已释放 · 153,600 CNY · 已扣 50,000 CNY');
+  deepEqual(view.times.map((time) => time.label), ['冻结时刻', '释放时刻', '扣费时刻']);
+});
+
+test('组合策略：冻结与信用占用同时在场，各出一行、标识各自的', () => {
+  const section = estimateSectionOf(estimate({ occupations: [freeze(), credit({ id: 'EXP-0002', amount: '20000' })] }), current);
   deepEqual(
-    section.occupations.map((occupation) => occupation.kind),
-    ['资金冻结', '信用占用'],
+    section.occupations.map((occupation) => [occupation.id, occupation.kind]),
+    [
+      ['FRZ-0001', '资金冻结'],
+      ['EXP-0002', '信用占用'],
+    ],
   );
 });
 
@@ -204,16 +215,34 @@ test('认不得的形态、费用方向、占用种类与状态都照原码', ()
       ],
       occupations: [{ kind: 'NEW_KIND', id: 'X', status: 'NEW_STATUS', amount: '1', currency: 'CNY', formedAt: '2026-11-11T02:00:00Z' }],
     }),
-    'SUBV-2',
+    current,
   );
   equal(section.form, 'NEW_FORM');
   equal(section.parcels[0]?.charges?.[0]?.effect, 'NEW_EFFECT');
   equal(section.occupations[0]?.summary, 'NEW_KIND · NEW_STATUS · 1 CNY');
 });
 
+test('Go 的 nil 切片编成 null：估价、逐件、费用行、占用几格是 null 也照常摊开，不抛错', () => {
+  const nulls = {
+    ...estimate(),
+    parcels: [{ parcel: 'DPCL-1', evaluation: 'EVAL-1', totalAmount: '38400', currency: 'CNY', pricingWeight: null, chargeLines: null }],
+    occupations: null,
+  };
+  const state = estimateBlockStateOf(listed([nulls]), { currentVersion: 'SUBV-2', controlOutcome: 'RESTRICTED' }, undefined);
+  equal(state.kind, 'formed');
+  if (state.kind === 'formed') {
+    deepEqual(state.sections[0]?.parcels, [{ parcel: 'DPCL-1', subtotal: '38,400 CNY', weight: '未记', charges: null }]);
+    deepEqual(state.sections[0]?.occupations, []);
+    equal(state.sections[0]?.occupationNote, '没有占用：控制受限');
+  }
+  const noParcels = estimateBlockStateOf(listed([{ ...estimate(), parcels: null }]), current, undefined);
+  equal(noParcels.kind === 'formed' ? noParcels.sections[0]?.parcels.length : -1, 0);
+  deepEqual(estimateBlockStateOf(listed(null), current, undefined), { kind: 'none', note: '这张运单还没有受理前估价。' });
+});
+
 test('一块的状态：读回之前在读；读到了照版本列', () => {
-  deepEqual(estimateBlockStateOf(null, 'SUBV-2', undefined), { kind: 'loading' });
-  const formed = estimateBlockStateOf({ kind: 'outcome', status: 200, body: { estimates: [estimate()] } }, 'SUBV-2', undefined);
+  deepEqual(estimateBlockStateOf(null, current, undefined), { kind: 'loading' });
+  const formed = estimateBlockStateOf(listed([estimate()]), current, undefined);
   equal(formed.kind, 'formed');
   if (formed.kind === 'formed') {
     equal(formed.sections.length, 1);
@@ -221,44 +250,62 @@ test('一块的状态：读回之前在读；读到了照版本列', () => {
   }
 });
 
-test('没有留痕：停在财务控制时说出停因，`SA-` 与任务今天记的原因两种都认；停在别处或没停过只说还没有', () => {
-  const empty = { kind: 'outcome' as const, status: 200, body: { estimates: [] } };
-  deepEqual(estimateBlockStateOf(empty, 'SUBV-2', 'SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED'), {
+test('没有留痕：不适用说合同约定不做；停在财务控制时说停因，两族都认；停在别处或没停过只说还没有', () => {
+  const empty = listed([]);
+  deepEqual(estimateBlockStateOf(empty, { currentVersion: 'SUBV-2', controlOutcome: 'NOT_APPLICABLE' }, undefined), {
+    kind: 'none',
+    note: '合同约定无财务控制，不做估价。',
+  });
+  // 结论已判为不适用，任务上留着的旧停因不再作数。
+  deepEqual(
+    estimateBlockStateOf(empty, { currentVersion: 'SUBV-2', controlOutcome: 'NOT_APPLICABLE' }, 'FINANCIAL_CONTROL_NOT_FORMED'),
+    { kind: 'none', note: '合同约定无财务控制，不做估价。' },
+  );
+  deepEqual(estimateBlockStateOf(empty, current, 'SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED'), {
     kind: 'none',
     note: '估价没形成，停在：没有在用价卡。',
   });
-  deepEqual(estimateBlockStateOf(empty, 'SUBV-2', 'FINANCIAL_CONTROL_NOT_CONFIGURED'), {
+  deepEqual(estimateBlockStateOf(empty, current, 'FINANCIAL_CONTROL_NOT_CONFIGURED'), {
     kind: 'none',
     note: '估价没形成，停在：财务控制缺一项登记，等运营登记。',
   });
-  deepEqual(estimateBlockStateOf(empty, 'SUBV-2', 'SA-NEW_REASON'), { kind: 'none', note: '估价没形成，停在：SA-NEW_REASON。' });
-  deepEqual(estimateBlockStateOf(empty, 'SUBV-2', 'MANUAL_REVIEW_PENDING'), { kind: 'none', note: '这张运单还没有受理前估价。' });
-  deepEqual(estimateBlockStateOf(empty, 'SUBV-2', undefined), { kind: 'none', note: '这张运单还没有受理前估价。' });
+  deepEqual(estimateBlockStateOf(empty, current, 'SA-NEW_REASON'), { kind: 'none', note: '估价没形成，停在：SA-NEW_REASON。' });
+  deepEqual(estimateBlockStateOf(empty, current, 'MANUAL_REVIEW_PENDING'), { kind: 'none', note: '这张运单还没有受理前估价。' });
+  deepEqual(estimateBlockStateOf(empty, current, undefined), { kind: 'none', note: '这张运单还没有受理前估价。' });
 });
 
 test('有旧版本的估价而当前版本没有：说一句，别把旧版本读成现在的', () => {
-  const answer = { kind: 'outcome' as const, status: 200, body: { estimates: [estimate({ submissionVersion: 'SUBV-1' })] } };
-  const stalled = estimateBlockStateOf(answer, 'SUBV-2', 'SA-ESTIMATE_PRICE_CARD_CONFLICT');
-  equal(stalled.kind === 'formed' ? stalled.gapNote : '', '当前版本的估价没形成，停在：价卡适用冲突。下面是此前版本的估价。');
-  const pending = estimateBlockStateOf(answer, 'SUBV-2', undefined);
-  equal(pending.kind === 'formed' ? pending.gapNote : '', '当前版本还没有估价，下面是此前版本的估价。');
+  const answer = listed([estimate({ submissionVersion: 'SUBV-1' })]);
+  const gap = (context: { currentVersion: string; controlOutcome?: string }, reason?: string) => {
+    const state = estimateBlockStateOf(answer, context, reason);
+    return state.kind === 'formed' ? state.gapNote : '';
+  };
+  equal(gap(current, 'SA-ESTIMATE_PRICE_CARD_CONFLICT'), '当前版本的估价没形成，停在：价卡适用冲突。下面是此前版本的估价。');
+  equal(gap(current), '当前版本还没有估价，下面是此前版本的估价。');
+  equal(
+    gap({ currentVersion: 'SUBV-2', controlOutcome: 'NOT_APPLICABLE' }),
+    '当前版本合同约定无财务控制，不做估价；下面是此前版本的估价。',
+  );
 });
 
-test('结算那一口读不到：各格各说各的，可重试的只有没答与连不上', () => {
-  const unconfigured = estimateBlockStateOf({ kind: 'unconfigured' }, 'SUBV-2', undefined);
-  equal(unconfigured.kind === 'failed' && unconfigured.retryable, false);
-  const refused = estimateBlockStateOf({ kind: 'notGranted' }, 'SUBV-2', undefined);
-  equal(refused.kind === 'failed' && refused.text.startsWith('受理前估价没读到：'), true);
-  const problem = estimateBlockStateOf({ kind: 'callerProblem', status: 404, code: 'NOT_FOUND' }, 'SUBV-2', undefined);
-  equal(problem.kind === 'failed' && problem.retryable, false);
-  deepEqual(problem.kind === 'failed' ? problem.technical : [], [
-    { label: 'HTTP 状态', value: '404' },
-    { label: '问题码', value: 'NOT_FOUND' },
-  ]);
-  const noAnswer = estimateBlockStateOf({ kind: 'noAnswer', status: 503, code: 'NO_ANSWER_FORMED' }, 'SUBV-2', undefined);
-  equal(noAnswer.kind === 'failed' && noAnswer.retryable, true);
-  const transport = estimateBlockStateOf({ kind: 'transport', message: 'fetch failed' }, 'SUBV-2', undefined);
-  equal(transport.kind === 'failed' && transport.retryable, true);
+test('结算那一口读不到：未配置不给重试，拒绝交给登录提示，调用方问题只说不重试，没答与连不上给重试', () => {
+  equal(estimateBlockStateOf({ kind: 'unconfigured' }, current, undefined).kind, 'unconfigured');
+  deepEqual(estimateBlockStateOf({ kind: 'loginRequired' }, current, undefined), {
+    kind: 'refused',
+    refusal: 'loginRequired',
+    what: '受理前估价',
+  });
+  deepEqual(estimateBlockStateOf({ kind: 'callerProblem', status: 404, code: 'NOT_FOUND' }, current, undefined), {
+    kind: 'problem',
+    text: '受理前估价这次没有被受理，问题码见技术详情；运单其余部分不受影响。',
+    technical: [
+      { label: 'HTTP 状态', value: '404' },
+      { label: '问题码', value: 'NOT_FOUND' },
+    ],
+  });
+  equal(estimateBlockStateOf({ kind: 'noAnswer', status: 503, code: 'NO_ANSWER_FORMED' }, current, undefined).kind, 'unreachable');
+  const transport = estimateBlockStateOf({ kind: 'transport', message: 'fetch failed' }, current, undefined);
+  deepEqual(transport.kind === 'unreachable' ? transport.technical : [], [{ label: '错误', value: 'fetch failed' }]);
 });
 
 test('读口按委托标识取，标识经地址编码', async () => {

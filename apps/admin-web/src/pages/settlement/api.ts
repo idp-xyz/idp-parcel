@@ -628,9 +628,10 @@ export function getStatementLines(statement: string): Promise<ApiResult<Statemen
   return exchangeMasterData<StatementLinesResponseBody>(`/settlement-statement-lines?statement=${encodeURIComponent(statement)}`);
 }
 
-// —— 运单详情的受理前估价（GET /settlement-pre-acceptance-estimates；ADR-0379 决定二，形状照票 declared-goods-lines/19 评审后重钉的那一份）——
-// 后端与本端并行在做，这里先照钉死的形状镜像。金额分两种写法：合计、逐件小计与占用金额是最小币单位的整数串（与费用、对账读口
-// 同一写法）；费用行是试算当时算出的金额，主单位的十进制串带小数，币种逐行给。两种不能混用同一个格式化函数。
+// —— 运单详情的受理前估价（GET /settlement-pre-acceptance-estimates；ADR-0379 决定二，形状照票 declared-goods-lines/19）——
+// 金额分两种写法：合计、逐件小计与占用金额是最小币单位的整数串（与费用、对账读口同一写法）；费用行是试算当时算出的金额，
+// 主单位的十进制串带小数，币种逐行给。两种不能混用同一个格式化函数。数组格按形状不缺席，但 Go 的 nil 切片会编成 null，
+// 读的一侧先收成数组再用。
 
 /** 一行试算费用。effect 取 ADD / DEDUCT；amount 是主单位十进制串（例如 "384.00"），不是最小币单位。 */
 export interface PreAcceptanceChargeLineRecord {

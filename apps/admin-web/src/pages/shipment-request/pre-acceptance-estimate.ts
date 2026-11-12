@@ -1,5 +1,5 @@
 import type { TechnicalRow } from '../../components/TechnicalDetails';
-import { operatorRefusalMessage } from '../../auth/access-refusal';
+import type { OperatorRefusalKind } from '../../auth/access-refusal';
 import { chargeCodeLabel } from '../../vocabulary/status';
 import type { ApiResult } from '../catalogue-api';
 import type {
@@ -20,6 +20,8 @@ import { answerTechnicalRows } from './words';
 //
 // 金额两种写法分开处理：合计、逐件小计与占用金额是最小币单位整数串，走费用页同一个 formatMoney；费用行是试算当时算出的
 // 主单位十进制串，照原样带它自己的币种，不能再过一遍最小币单位的写法。
+//
+// 只说数据说得出的话：留痕在而账上没有占用，原因不止受限一种，所以只有当前版本、且结论确是受限时才说「控制受限」。
 
 export interface ChargeLineView {
   code: string;
@@ -31,13 +33,15 @@ export interface ChargeLineView {
 export interface ParcelEstimateView {
   parcel: string;
   subtotal: string;
-  /** 补记之前的旧行不出这一格；补记之后没记下来答「未记」。 */
+  /** 计价重量；没记下（补记之前的旧行，或补记之后这一件缺这一格）答「未记」。旧行整列不出由页面按 detailRecorded 定。 */
   weight: string;
   /** null 是没记下费用行（与「记了、零行」分开）。 */
   charges: ChargeLineView[] | null;
 }
 
 export interface OccupationView {
+  /** 占用在结算账本上的标识，一份估价里不重。 */
+  id: string;
   kind: string;
   status: string;
   amount: string;
@@ -68,9 +72,18 @@ export interface EstimateSectionView {
   technical: TechnicalRow[];
 }
 
+/** 一段估价要知道的上下文：哪一版是当前的，委托详情记下的结论是什么（没判过缺席）。 */
+export interface EstimateContext {
+  currentVersion: string;
+  controlOutcome?: string;
+}
+
 export type EstimateBlockState =
   | { kind: 'loading' }
-  | { kind: 'failed'; text: string; retryable: boolean; technical: TechnicalRow[] }
+  | { kind: 'unconfigured'; text: string }
+  | { kind: 'refused'; refusal: OperatorRefusalKind; what: string }
+  | { kind: 'problem'; text: string; technical: TechnicalRow[] }
+  | { kind: 'unreachable'; title: string; description: string; technical: TechnicalRow[] }
   | { kind: 'none'; note: string }
   | { kind: 'formed'; sections: EstimateSectionView[]; gapNote?: string };
 
@@ -107,7 +120,8 @@ export function occupationViewOf(occupation: PreAcceptanceOccupationRecord): Occ
   const converted = isPositiveMinorAmount(occupation.convertedAmount)
     ? formatMoney(occupation.convertedAmount, occupation.currency)
     : undefined;
-  // 部分转扣费的占用状态不变（还占着余下那部分），只靠已扣金额看得出来；整笔扣完是 CONVERTED，不再加这一句。
+  // 部分转扣费的占用状态不变（还占着余下那部分），只靠已扣金额看得出来；整笔扣完是 CONVERTED、扣过一部分再放掉余下的是
+  // RELEASED，这两种状态词已说清，只另列已扣多少。
   const stillHeld = occupation.status === 'HELD' || occupation.status === 'RECORDED';
   const baseStatus = statusWords[occupation.status] ?? occupation.status;
   const status = converted && stillHeld ? `${baseStatus}，部分已扣费` : baseStatus;
@@ -116,7 +130,7 @@ export function occupationViewOf(occupation: PreAcceptanceOccupationRecord): Occ
   if (occupation.releasedAt) times.push({ label: '释放时刻', at: occupation.releasedAt });
   if (occupation.convertedAt) times.push({ label: '扣费时刻', at: occupation.convertedAt });
   const summary = [kind, status, amount, ...(converted ? [`已扣 ${converted}`] : [])].join(' · ');
-  return { kind, status, amount, ...(converted ? { converted } : {}), times, summary };
+  return { id: occupation.id, kind, status, amount, ...(converted ? { converted } : {}), times, summary };
 }
 
 function parcelViewOf(parcel: PreAcceptanceParcelEstimateRecord): ParcelEstimateView {
@@ -149,9 +163,27 @@ function sectionTechnicalRows(estimate: PreAcceptanceEstimateRecord): TechnicalR
   return rows;
 }
 
-export function estimateSectionOf(estimate: PreAcceptanceEstimateRecord, currentVersion: string): EstimateSectionView {
-  const isCurrent = estimate.submissionVersion === currentVersion;
-  const occupations = (estimate.occupations ?? []).map(occupationViewOf);
+/**
+ * Go 的 nil 切片编成 null 而不是 []：几个数组格读进来先收成数组，后面的组装才不必处处设防——一处漏了，渲染抛错就会把整张
+ * 运单详情换成出错页。费用行收成缺席，与「没记下」同读，因为 null 分不出是没记还是零行。
+ */
+export function normalisedEstimateOf(raw: PreAcceptanceEstimateRecord): PreAcceptanceEstimateRecord {
+  return {
+    ...raw,
+    parcels: (raw.parcels ?? []).map((parcel) => ({
+      ...parcel,
+      pricingWeight: parcel.pricingWeight ?? undefined,
+      chargeLines: parcel.chargeLines ?? undefined,
+    })),
+    occupations: raw.occupations ?? [],
+  };
+}
+
+/** 一段估价。入参须已过 normalisedEstimateOf。 */
+export function estimateSectionOf(estimate: PreAcceptanceEstimateRecord, context: EstimateContext): EstimateSectionView {
+  const isCurrent = estimate.submissionVersion === context.currentVersion;
+  const occupations = estimate.occupations.map(occupationViewOf);
+  const restrictedNow = isCurrent && context.controlOutcome === 'RESTRICTED';
   return {
     submissionVersion: estimate.submissionVersion,
     isCurrent,
@@ -171,15 +203,23 @@ export function estimateSectionOf(estimate: PreAcceptanceEstimateRecord, current
     ...(estimate.detailRecorded ? {} : { detailNote: NOT_RECORDED_DETAIL_NOTE }),
     parcels: estimate.parcels.map(parcelViewOf),
     occupations,
-    // 空数组是控制受限、没有占用；不写「0」冒充占了零。
-    ...(occupations.length === 0 ? { occupationNote: '没有占用：控制受限，没冻结资金也没占用信用' } : {}),
+    ...(occupations.length === 0 ? { occupationNote: restrictedNow ? '没有占用：控制受限' : '没有占用' } : {}),
     technical: sectionTechnicalRows(estimate),
   };
 }
 
-/** 逐提交版本一段，次序照读口（按试算时点）。 */
-export function estimateSectionsOf(estimates: readonly PreAcceptanceEstimateRecord[], currentVersion: string): EstimateSectionView[] {
-  return estimates.map((estimate) => estimateSectionOf(estimate, currentVersion));
+/**
+ * 逐提交版本一段，按试算时点新的在前：当前版本多半是最后试算的那一份，排在最前，人不用往下翻就看到现在适用的那一份。
+ * 时点读不出时退回读口次序的倒序（读口按试算时点正序交）。入参须已过 normalisedEstimateOf。
+ */
+export function estimateSectionsOf(estimates: readonly PreAcceptanceEstimateRecord[], context: EstimateContext): EstimateSectionView[] {
+  return estimates
+    .map((estimate, index) => ({ estimate, index, at: Date.parse(estimate.trialAt) }))
+    .sort((left, right) => {
+      const byTime = Number.isFinite(left.at) && Number.isFinite(right.at) ? right.at - left.at : 0;
+      return byTime !== 0 ? byTime : right.index - left.index;
+    })
+    .map(({ estimate }) => estimateSectionOf(estimate, context));
 }
 
 /** 受理任务最近一次停在财务控制那一步时的中文停因；停在别处或没停过答 undefined。 */
@@ -189,42 +229,52 @@ function financialStallOf(lastAttemptReason: string | undefined): string | undef
   return stall.financialControl ? stall.text : undefined;
 }
 
-function failedStateOf(answer: Exclude<ApiResult<PreAcceptanceEstimatesResponseBody>, { kind: 'outcome' }>): EstimateBlockState {
-  const technical = answerTechnicalRows(answer);
-  switch (answer.kind) {
-    case 'unconfigured':
-      return { kind: 'failed', text: '结算读口的接入渠道还没配置，估价显示不了；这不是故障，重试不会改变结果。', retryable: false, technical };
-    case 'loginRequired':
-    case 'notGranted':
-      return { kind: 'failed', text: operatorRefusalMessage(answer.kind, '受理前估价没读到'), retryable: false, technical };
-    case 'callerProblem':
-      return { kind: 'failed', text: '受理前估价这次没有被受理，问题码见技术详情；运单其余部分不受影响。', retryable: false, technical };
-    case 'noAnswer':
-      return { kind: 'failed', text: '受理前估价这次没取到，可以重试。', retryable: true, technical };
-    case 'transport':
-      return { kind: 'failed', text: '连不上服务，受理前估价没取到；请确认网络与服务在运行后重试。', retryable: true, technical };
-  }
-}
+const NO_CONTROL_NOTE = '合同约定无财务控制，不做估价';
 
 /**
- * 估价那一半显什么。没有留痕时，若受理任务最近停在财务控制那一步，就把停因说出来——估价没形成的原因在受理任务上，结算不另存
- * （ADR-0379 决定三）。有留痕而没有当前版本的那一份（换了版本、新版本还停着），同样说一句，免得把旧版本的估价读成现在的。
+ * 估价那一半显什么。没有留痕时按能说的说：结论是不适用就说合同约定不做；受理任务最近停在财务控制那一步就把停因说出来——估价
+ * 没形成的原因在受理任务上，结算不另存（ADR-0379 决定三）。有留痕而没有当前版本的那一份（换了版本、新版本还停着），同样说
+ * 一句，免得把旧版本的估价读成现在的。
  */
 export function estimateBlockStateOf(
   answer: ApiResult<PreAcceptanceEstimatesResponseBody> | null,
-  currentVersion: string,
+  context: EstimateContext,
   lastAttemptReason: string | undefined,
 ): EstimateBlockState {
   if (answer === null) return { kind: 'loading' };
-  if (answer.kind !== 'outcome') return failedStateOf(answer);
+  switch (answer.kind) {
+    case 'outcome':
+      break;
+    case 'unconfigured':
+      return { kind: 'unconfigured', text: '暂时读不到受理前估价：接入渠道还没有配置。这不代表没有估价；配置好之后重新打开即可。' };
+    case 'loginRequired':
+    case 'notGranted':
+      return { kind: 'refused', refusal: answer.kind, what: '受理前估价' };
+    case 'callerProblem':
+      return { kind: 'problem', text: '受理前估价这次没有被受理，问题码见技术详情；运单其余部分不受影响。', technical: answerTechnicalRows(answer) };
+    case 'noAnswer':
+      return { kind: 'unreachable', title: '受理前估价这次没取到', description: '可以重试；运单其余部分不受影响。', technical: answerTechnicalRows(answer) };
+    case 'transport':
+      return {
+        kind: 'unreachable',
+        title: '连不上服务，受理前估价没取到',
+        description: '请确认网络与服务在运行后重试。',
+        technical: answerTechnicalRows(answer),
+      };
+  }
+  const estimates = (answer.body.estimates ?? []).map(normalisedEstimateOf);
+  const sections = estimateSectionsOf(estimates, context);
   const stall = financialStallOf(lastAttemptReason);
-  const sections = estimateSectionsOf(answer.body.estimates ?? [], currentVersion);
+  const notApplicable = context.controlOutcome === 'NOT_APPLICABLE';
   if (sections.length === 0) {
+    if (notApplicable) return { kind: 'none', note: `${NO_CONTROL_NOTE}。` };
     return { kind: 'none', note: stall ? `估价没形成，停在：${stall}。` : '这张运单还没有受理前估价。' };
   }
   if (sections.some((section) => section.isCurrent)) return { kind: 'formed', sections };
-  const gapNote = stall
-    ? `当前版本的估价没形成，停在：${stall}。下面是此前版本的估价。`
-    : '当前版本还没有估价，下面是此前版本的估价。';
+  const gapNote = notApplicable
+    ? `当前版本${NO_CONTROL_NOTE}；下面是此前版本的估价。`
+    : stall
+      ? `当前版本的估价没形成，停在：${stall}。下面是此前版本的估价。`
+      : '当前版本还没有估价，下面是此前版本的估价。';
   return { kind: 'formed', sections, gapNote };
 }

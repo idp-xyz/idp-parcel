@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import type { ApiResult } from '../catalogue-api';
 import { getPreAcceptanceEstimates, type PreAcceptanceEstimatesResponseBody } from '../settlement/api';
 
-// 运单详情向结算要这一票的受理前估价。与客户名称那一问同一种拼法：各问各的、各自的加载与出错，结算那一口读不到不让运单详情
-// 跟着空掉。不缓存：估价随受理推进会多出新版本，每次打开详情都重读。
+// 运单详情向结算要这一票的受理前估价。各问各的、各自的加载与出错：结算那一口读不到，不让运单详情跟着空掉。不缓存：估价随
+// 受理推进会多出新版本，每次打开详情都重读。
 
 export function usePreAcceptanceEstimates(shipmentRequestId: string): {
   answer: ApiResult<PreAcceptanceEstimatesResponseBody> | null;

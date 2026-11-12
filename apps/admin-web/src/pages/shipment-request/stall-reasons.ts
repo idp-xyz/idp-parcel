@@ -1,9 +1,9 @@
-// 受理任务「最近一次没能推进」的原因（lastAttemptReason）的屏上写法。运单详情的「受理进度」与「受理前财务控制」两块共用。
-// 纯函数，node:test 直接钉。
+// 受理任务「最近一次没能推进」的原因（lastAttemptReason）的屏上写法，一个码在各页读成同一句。纯函数，node:test 直接钉；
+// 词表跟不跟得上 Go 侧的取值，由 stall-reasons.contract.test.ts 对着 Go 源核。
 //
 // 任务上记的是小包托运编排给的未决原因原词（application 包的 JudgmentPendingReason），财务控制那一步停下时是
 // FINANCIAL_CONTROL_* 那一族。结算答的具体停因（`SA-` 加结算的未形成原因，例如没有在用价卡）今天只进续办引用的摘要，
-// 不进这一格；把它补到任务上另立一票。这里先把 `SA-` 那一族也译好，补上之后不用回来改。
+// 不进这一格；把它补到任务上另立一票。这里先把 `SA-` 那一族译好，补上之后这一族先认得；那张票若带来别的码族，到时再补。
 //
 // 认得的译成中文，认不得的照原码——页面落后于服务端时宁可露出原码，也不把它并进某个认得的说法。
 
@@ -50,7 +50,8 @@ const settlementStallWords: Record<string, StallWords> = {
 const shipmentStallWords: Record<string, StallWords> = {
   COMMERCIAL_BASIS_NOT_APPLICABLE: { text: '商务依据不适用这票运单' },
   COMMERCIAL_BASIS_UNDETERMINED: { text: '商务依据适不适用判不出' },
-  COMMERCIAL_BASIS_UNAVAILABLE: { text: '商务依据读不到' },
+  // 与用语词典里同一个码同一句。
+  COMMERCIAL_BASIS_UNAVAILABLE: { text: '商务依据暂不可用' },
   ADOPTED_COMMERCIAL_BASIS_NOT_RECORDED: { text: '采用的商务依据没记下' },
   COMMERCIAL_BASIS_SUPERSEDED: { text: '商务依据已换版，要按新版重判' },
   COMMERCIAL_REVALIDATION_BASIS_NOT_RESOLVED: { text: '受理前重校商务依据：依据未解析' },
@@ -106,7 +107,7 @@ const shipmentStallWords: Record<string, StallWords> = {
   REJECTION_AUTHORITY_RULES_NOT_CONFIGURED: { text: '拒绝授权规则未配置，等运营登记' },
   WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED: { text: '撤回授权规则未配置，等运营登记' },
   SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED: { text: '资料修订授权规则未配置，等运营登记' },
-  OPERATOR_REGISTRATION_WAIT_NOT_SAVED: { text: '等运营登记这一停没保存下来' },
+  OPERATOR_REGISTRATION_WAIT_NOT_SAVED: { text: '等待运营登记（这一停没能保存）' },
   SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED: { text: '资料修订阶段判不出' },
   SOURCE_DATA_AMENDMENT_STAGE_FACT_UNAVAILABLE: { text: '资料修订阶段的事实读不到' },
   AUTHORIZED_DISPOSITION_PENDING: { text: '等授权处置' },
@@ -117,6 +118,10 @@ const shipmentStallWords: Record<string, StallWords> = {
   SOURCE_DATA_AMENDMENT_AUTHORITY_APPLICABILITY_CONFLICT: { text: '资料修订授权适用冲突，等运营登记' },
   CONTROL_RELEASE_REFUSAL_NOT_RECORDED: { text: '释放被结算拒收，却没记进释放未受理册' },
 };
+
+/** 词表收录的码，给契约测试对着 Go 源核两边是否对得上。 */
+export const knownSettlementStallCodes: readonly string[] = Object.keys(settlementStallWords);
+export const knownShipmentStallCodes: readonly string[] = Object.keys(shipmentStallWords);
 
 export interface StallReason {
   code: string;
