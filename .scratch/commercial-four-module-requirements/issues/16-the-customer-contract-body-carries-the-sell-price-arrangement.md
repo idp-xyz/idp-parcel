@@ -1,7 +1,7 @@
 # 16 客户合同版本的正文带销售价格约定：有序的销售价格来源，或显式不计销售价
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-11-12 Cursor 会话认领，分支 `cursor/cfmr-16-contract-sell-price-arrangement-r2`（worktree `idp-parcel-cfmr16`），基线 `9bf6e8603`。它是 2026-11-13 重切的一版：原分支 `cursor/cfmr-16-contract-sell-price-arrangement` 从 `2130a37b2` 起，其间 `main` 进了票 declared-goods-lines/11 对客户合同正文的改动，重切时并进。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 无
 地盘：`internal/partycommercial`（领域、规范化、发布与受控批文）、`cmd/parcel-commercial`、`docs/application/party-commercial`
