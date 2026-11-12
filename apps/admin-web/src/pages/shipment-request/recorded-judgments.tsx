@@ -7,7 +7,7 @@ import { controlItemText } from './financial-control';
 
 // 已记录的权威判断三组,复核页与授权处置页共用一份呈现:两页审的都是判断表上这批行,
 // 分两处写就得在两处约定哪一份是准的。屏上按运营的问法分三段:能否送达、付款控制、采用的商务条款;
-// 判断标识、依据引用与时点语义进技术详情。控制项一行的写法与运单详情共用,在 financial-control.ts。
+// 判断标识、依据引用与时点语义进技术详情。控制项一行的写法在 financial-control.ts。
 
 function technicalRowsOf(recorded: RecordedJudgmentsRecord): TechnicalRow[] {
   const rows: TechnicalRow[] = [];

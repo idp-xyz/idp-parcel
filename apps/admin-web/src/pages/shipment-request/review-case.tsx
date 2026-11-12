@@ -2,11 +2,11 @@ import type { DetailField } from '../../templates';
 import type { TechnicalRow } from '../../components/TechnicalDetails';
 import { StatusPill } from '../../components/StatusPill';
 import { CodeRef } from '../../components/CodeRef';
-import { labelFor } from '../../vocabulary/status';
 import { accessRefusalHeadline } from '../../auth/access-refusal';
 import { formatInstant } from '../catalogue-view';
 import type { AcceptanceReviewCaseResponseBody, ApiResult, ShipmentRequestDetail } from './api';
 import { ShipmentNo } from './refs';
+import { stallReasonOf } from './stall-reasons';
 import { documentNumberAbsenceNoteOf } from './ref-no';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 
@@ -27,7 +27,8 @@ export function caseBusinessFields(request: ShipmentRequestDetail): DetailField[
     { label: '处理进度', value: <StatusPill code={task.state} /> },
   ];
   if (task.lastAttemptReason) {
-    fields.push({ label: '上次没推进', value: labelFor(task.lastAttemptReason) });
+    // 停因经 stall-reasons 译，一个码在各页读成同一句；原码留在技术详情「上次未推进原因」。
+    fields.push({ label: '上次没推进', value: stallReasonOf(task.lastAttemptReason).text });
   }
   if (request.decision) {
     fields.push({

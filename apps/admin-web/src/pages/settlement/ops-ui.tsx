@@ -51,5 +51,5 @@ export function AmountCell({
   );
 }
 
-// 写法本身在 money.ts；各页照旧从这里引。
+// 写法在 money.ts（纯 .ts，单测直接钉）。
 export { formatMoney };

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-/** 运单详情区块内的键值行，排版对齐 DetailPageTemplate 基本信息区。详情页与「受理前财务控制」一块共用。 */
+/** 运单详情区块内的键值行，排版对齐 DetailPageTemplate 基本信息区。 */
 export function FieldRow({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) {
   return (
     <div className="flex gap-3 type-body leading-5">
