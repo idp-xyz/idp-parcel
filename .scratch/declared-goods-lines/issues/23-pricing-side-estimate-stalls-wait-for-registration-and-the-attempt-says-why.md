@@ -1,7 +1,7 @@
 # 23 价卡一侧答不出的估价等运营登记、计价参数登记后续办；处理尝试记下原因与产品，委托详情从落处读
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 无
 
 依据：[ADR-0380](../../../docs/adr/0380-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md) 决定一至四；ADR-0094 决定三至五（等运营登记的落库、续办触发同笔落地、先存等待）；ADR-0229（计价「参数已登记」信封）。
@@ -42,4 +42,37 @@ Blocked by: 无
 
 ## 不做的
 
-申报不全改等客户补充（票 25）；按原因或计价范围收窄重驱（ADR-0380 越权风险点 2）。
+申报不全改等客户补充（票 25）；按原因或计价范围收窄重驱（ADR-0380 越权风险点「多唤醒」）。
+
+## 完成记录（作者一侧，2026-11-11）
+
+- 提交：分支 `feat/estimate-stall-waits`（工作树 `idp-parcel-goods-t23`，基线 `cf9fdb50a`）上的 `26ae187cc`，一笔，未推送、未进 main。按评审对 ADR-0380 的更正做（改归的原因只剩五个、`lastAttemptResumePath`、`taskViewRecord` 本身改、版本列、生效期覆盖判断时点、点名改的续办用例），票面已同步。
+- 落点：
+  - 结算消费侧适配器（`adapters/settlementaccounting/pre_acceptance_control.go`）：`notFormedOutcomeFor` 把 `ESTIMATE_PRICE_CARD_NOT_CONFIGURED`、`ESTIMATE_PRICE_CARD_CONFLICT`、`ESTIMATE_TRIAL_WITHOUT_TOTAL`、`ESTIMATE_NOT_POSITIVE`、`ESTIMATE_TRIAL_NEGATIVE` 改归`未配置`；`ESTIMATE_CURRENCY_MISMATCH` 单列、照旧`未形成`（只有缺陷走得到）；不可见、缺件、一件都没有、溢出照旧。`assessmentFor` 在未形成时把原因码原样交在新端口格 `PreAcceptanceControlAssessment.SettlementReason`（`Reason` 照旧冠 `SA-` 进续办派生）。
+  - 领域：新值 `SettlementNotFormedReason`；`ProcessingAttemptSpec` / `ProcessingAttempt` 加可缺的 `SettlementReason`、`ServiceProduct`。
+  - 应用：`awaitOperatorRegistration` 收被判的版本，等待落了库时交回这一版的 `RequestedServiceProduct()`；`recordAttempt` 收版本与 `attemptDetail`（结算原因、产品）。财务控制腿在端口那一停带两格，原因换成保存那一格时两格随范围放下；时点那一停（两条腿）只带产品。决定、拒绝、撤回那几处照旧不带两格，只多传版本。
+  - 端口 `AcceptanceJudgmentRecorder.RecordProcessingAttempt` 收提交版本；`AcceptanceTaskViewRecord` 加 `LastAttemptResumePath`、`LastAttemptSettlementReason`、`LastAttemptServiceProduct`。
+  - 迁移 `migrations/parcel_shipment/0038_processing_attempt_settlement_reason_product_and_version.sql`：`settlement_reason`（在场不许空白）、`service_product`（不加非空白约束：客户原话原样保全，约束拦下会让整笔事务作废）、`submission_version`（在场不许空白），都可空、不回填。
+  - 读面（`adapters/postgres/shipment_request_views.go`）：`taskViewRecord` 不再读文档，改由 `taskViewRecords` 一页一次从处理尝试表取各委托当前这一版任务最近一条——按 `submission_version` 认版本，无版本的旧行按任务建立时刻圈定；`attempted_at DESC, continuation_ref DESC` 定先后（与主键同列，并列也有确定答案）。委托详情与复核、授权处置、受控补充各队列一起走它（队列先读完关游标再读尝试，`scanQueueRows`）。
+  - HTTP（`query_shipment_request_views.go`）：`acceptanceTask` 另交 `lastAttemptResumePath`（`INTERNAL_RETRY`、`OPERATOR_REGISTRATION`……，与 `waitingOn` 同一套原词）、`lastAttemptSettlementReason`、`lastAttemptServiceProduct`，都可缺。各队列的答复形状不动。
+  - inbox（`adapters/inbox/pricing_parameter_registered_consumer.go`）：`NewPricingParameterRegisteredConsumer`，消费者名 `parcel-shipment/advance-acceptance-chain-on-pricing-parameter-registration`，类型串自写；SELL 重驱、BUY 入账不问队列、方向缺席或集外是毒丸；租户、种类同另几份门的核法，计价范围不读。`newRegistrationResumeConsumer` 改为按实例收译码函数，另几份门照旧用 `decodeOperatorRegistrationCompleted`。
+  - 装配：`cmd/parcel-dispatch/assemble.go` 的 `acceptanceChainGates.pricingParameterRegistration`；`routes_acceptance_chain.go` 登 PS 这一路（主名次、同一份未决哨兵）；`routes_evaluation_resumption.go` 把 SA 评价续办收同一类信封那一路挪到计费名次（同名次装配即拒），与「结算账户已登记」同一先后。
+  - 删除：聚合上那份处理尝试列表——`ShipmentRequest.RecordProcessingAttempt`、`AcceptanceDecisionTask.ProcessingAttempts`、`RehydrateAcceptanceTaskSpec.ProcessingAttempts` 与重建校验、快照文档的 `processingAttempts` 与 `attemptDocument`。委托详情与各队列都已改读处理尝试表，删前核过再无读者；生产从没写过它，旧快照里没有这一键。相应删改的测试：领域累加与已完成拒追加、重建带回与追加、零值尝试拒收、版本不动表里那一行、快照往返里那半，队列与详情用例改经生产写口记进处理尝试表。
+- 判据：
+  - 真库：没有在用价卡 → 停在等运营登记、提交门入账，处理尝试一行带 `ESTIMATE_PRICE_CARD_NOT_CONFIGURED`、申报产品与版本，委托详情「上次处理」带续办方与两格 ✅；`BUY` 信封入账、不重驱（试算没再被问、尝试不加）✅；登卡这一刻才生效的 `SELL` 卡（晚于这一版接收、早于重驱）叫醒委托、照旧停、多一条尝试 ✅；生效期覆盖提交接收时点的 `SELL` 卡登上 → 重驱、冻结占下、接受、队列出列 ✅。估价时点照「提交接收」折（生产 `SubmissionReceiptAsOf`），选卡走计价真价卡册的在用判断，金额由替身给；把时点换成重驱那一刻，用例当场红。
+  - 估价采用登记后重驱到「没有在用价卡」不再回滚：`estimate_adoption_registration_resume_loop_test.go` 改为本封入账、尝试两行、最近一条带 `ESTIMATE_PRICE_CARD_NOT_CONFIGURED`，取代 `CONTROL_AMOUNT_NOT_CONFIGURED` 那一条 ✅。
+  - 依赖读不回（试算 `ESTIMATE_TRIALS_UNAVAILABLE`）照旧未决哨兵、整笔回滚，等待态不落、尝试一行不留 ✅。
+  - 委托详情「上次处理」在等运营登记时有值并带两格；读面只认当前这一版、并列按续办引用定、旧行按建立时刻圈定 ✅。
+  - 组合根：登卡经计价真交接口铸的信封，类型与 PS、SA 两边自写的串对上，一拍扇出、两路各记一行 inbox ✅。
+  - 全量 `go test`（带 PG）与 `go vet` 通过 ✅。
+- 未做：
+  - 管理台（票 24）。
+  - 各队列的答复不加详情新增的那几格（读源已一起改，形状不动）。
+  - 决定、拒绝、撤回那几处落的尝试不记产品：ADR-0380 决定三说的是等待落库的尝试，这里只在等运营登记那一路取。
+  - 申报不全改等客户补充（票 25）；按原因或计价范围收窄重驱（越权风险点 2）。
+  - CONTEXT、UC 的文档改动（ADR-0380 那一笔的事）。
+- 与票面的细处：
+  - 读面按「当前这一版任务」圈定（ADR-0380 决定四原话），不是整份委托跨版本取最近：新版本立起新任务之后、还没有尝试时，「上次处理」缺席，不把上一版的停因挂到新任务上。
+  - 结算原因只在结算答未形成时记；作用域没形成（`CONTROL_SCOPE_NOT_CONFIGURED`）是本上下文适配器自己的停因，不记进这一格。
+- 验证（含 PG，`IDP_PARCEL_POSTGRES_DSN` 指 55432）：`gofmt -l` 无输出、`go vet ./internal/... ./cmd/...`、`go build ./...` 通过；`go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/... -count=1` 退 0（170 个包 ok）。
+- 评审：未做，等父会话安排非作者评审。
