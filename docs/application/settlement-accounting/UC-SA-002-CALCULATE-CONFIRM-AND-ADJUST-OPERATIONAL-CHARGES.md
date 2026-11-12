@@ -119,7 +119,7 @@
 ### 接受前财务控制
 
 - 合同要求估价时，本用例按结算账户的受理前估价采用登记，以逐件 SELL 试算合计形成估价；估价不引用、也不形成费用、预估费用或应收应付，没登记答未配置（[ADR-0179](../../adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一、二、五）。
-- 包裹的 `SELL` 客户费用按哪几个计价范围选卡，取自客户合同版本的销售价格约定：估价与包裹计费时点两条路从同一份商业解析读出同一份有序的销售价格来源，带在评价请求上；合同显式声明不计销售价时估价答`未配置`（[ADR-0380](../../adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 决定二、七）。正文没有销售价格约定的旧规范化版本合同照旧读估价采用与 SELL 计费时点采用两本登记上的计价范围，两本登记上同一结算账户都带计价范围时必须相同；登任一本时另一本已有这一户而范围不同，答冲突、不落行、不交那一本的登记信封（[ADR-0280](../../adr/0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)）。
+- 包裹的 `SELL` 客户费用按哪几个计价范围选卡，取自客户合同版本的销售价格约定：估价与包裹计费时点两条路各自顺着找结算账户时所凭的那一份商业解析，读出合同声明的有序销售价格来源，带在评价请求上，两份解析采用同一版合同时两条路按同一份列表选卡；合同显式声明不计销售价时估价答`未配置`（[ADR-0380](../../adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 决定二、七）。正文没有销售价格约定的旧规范化版本合同照旧读估价采用与 SELL 计费时点采用两本登记上的计价范围，两本登记上同一结算账户都带计价范围时必须相同；登任一本时另一本已有这一户而范围不同，答冲突、不落行、不交那一本的登记信封（[ADR-0280](../../adr/0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)）。
 - `可用余额 → 已冻结` 必须关联明确账户、金额、提交版本和控制策略；重复请求返回原冻结。
 - 接受失败、拒绝、放弃或冻结依据失效时形成 `已释放`；接受已经成立但响应或事件投递失败时保留合法冻结并等待查询/补偿。
 - `已冻结 → 已扣费` 只在费用确认和业务关联条件满足时发生；最终费用高于冻结时完整形成费用并留下差额，不截断金额。

@@ -4,7 +4,7 @@ Category: enhancement
 Status: draft——由票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) 拆出；[ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 进 `main` 之后由用户激活
 父票：[spec](../spec.md)
 Blocked by: 票 [17](./17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md)、票 [18](./18-pricing-selects-the-price-card-across-an-ordered-scope-list.md)
-地盘：`internal/settlementaccounting`（两条发起路、评价请求、停因与续办、两本采用册的登记）、`cmd/parcel-settlement-register`、`docs/application/settlement-accounting`
+地盘：`internal/settlementaccounting`（两条发起路、评价请求、停因与续办、两本采用册的登记）、`internal/parcelpricing/adapters/settlementaccounting`（计价读结算评价请求记录的那只适配器，只动它把列表译给计价的那一段；计价的领域与应用归票 18）、`cmd/parcel-settlement-register`、`docs/application/settlement-accounting`
 
 对应要求：Contract「价卡授权」落到金额上的那一半。规则在结算 `CONTEXT.md` 讲接受前财务控制的那一条，与 ADR-0380 决定二、三、七。
 
@@ -16,8 +16,8 @@ Blocked by: 票 [17](./17-sell-price-sources-are-fixed-with-the-acceptance-time-
 
 1. **两条路读合同的列表。** 合同版本带销售价格约定时，请求带合同声明的有序列表，不读采用册上的范围。
 2. **旧规范化版本的合同照旧。** 没有销售价格约定的合同，照旧读采用册上的范围，请求只带一个。
-3. **显式不计销售价。** 包裹计费时点不发起销售评价，这一拍入账、不记停办；受理前估价答`未配置`，不拿零顶。
-4. **请求的身份不动。** SELL 请求的自然键是（租户、包裹、计费时点）加代次，列表不进自然键；同一件包裹、同一计费时点只发起一次照旧。请求记录带整份列表，供计价回读。
+3. **显式不计销售价。** 包裹计费时点不发起销售评价，这一拍消费入账、不重投，不记发起停办；受理前估价答`未配置`，不拿零顶。
+4. **请求的身份不动。** SELL 请求的自然键是（租户、包裹、计费时点）加代次，列表不进自然键；同一件包裹、同一计费时点只发起一次照旧。请求记录带整份列表，供计价回读；计价那一侧读这份记录的适配器把列表原样译给计价（票 18 留给本票的那一段）。
 5. **停因与续办。** 请求停下时，停因照旧是答出来的那一格；另逐个记下问到过的每一个来源各自的那一格。带计价范围的「参数已登记」，其范围是问到过的来源之一、且这类登记解得开那个来源自己的那一格，即续办。续办出来的下一代照抄前一代的列表，不重走链。
 6. **两本采用册的登记面。** 受理前估价采用只必填形态，SELL 计费时点采用只必填计费时点；计价范围可缺。已登的行不删不改。两本册之间的那一核只对同一户两本都带计价范围的行做。旧规范化版本合同遇到不带计价范围的行：估价答`未配置`，包裹计费时点记发起停办「采用行没有计价范围」，这一格没有登记解得开。
 7. **留痕。** 估价的留痕从每份估价一个计价范围、一张卡，改成逐件带计价范围与价卡版本；预估客户费用带出用的是列表里的哪一个范围。
@@ -35,9 +35,13 @@ Blocked by: 票 [17](./17-sell-price-sources-are-fixed-with-the-acceptance-time-
 
 ## 完成判据
 
-- 同一件包裹：受理前估价与随后形成的预估客户费用出自同一份列表、同一个范围，金额相同。
+- 同一件包裹，估价所凭的解析与接受时固定的解析采用同一版合同：受理前估价与随后形成的预估客户费用出自同一份列表、同一个范围，金额相同。
 - 合同发了新一版、列表不同：已接受的委托下的包裹仍按旧列表计费。
 - 列表里前一个范围没有卡时停办不发生，落到后一个；全部落空时停办，任何一个范围登了新卡都续办。
+- 请求停在列表中间的一个范围上：问到过的范围上登了解得开它自己那一格的参数，续办；排在其后、没有问到的范围上登卡，不续办。
+- 旧规范化版本合同遇到不带计价范围的采用行：估价答`未配置`；包裹计费时点记发起停办「采用行没有计价范围」，任何登记都不续办它。
+- 受理前估价两件包裹落在不同范围：留痕逐件带计价范围与价卡版本。
+- 评价出自列表里的后一个范围：确认事实的主要计费范围是后一个，不是列表的第一项。
 - 旧规范化版本合同的包裹，行为与今天相同。
 - 合同声明不计销售价：计费时点不发起、不停办；要估价时答`未配置`。
 - `UC-SA-002`「给开发的交接」里对应的那一行随之删去或改成现状。

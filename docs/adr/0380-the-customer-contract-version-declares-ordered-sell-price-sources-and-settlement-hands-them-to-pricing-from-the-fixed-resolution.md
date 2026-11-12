@@ -1,6 +1,6 @@
 # ADR-0380：客户合同版本声明有序的销售价格来源，结算从接受时固定的商业解析读出交给计价，计价只在声明的顺序里回退
 
-Status: Accepted（2026-11-12，用户在 Cursor 会话里看过草案结论后选定「接受：合同版本声明有序来源。接着编号、改 CONTEXT 与 UC-PC-002、请非作者评审，再进 main」；此前 2026-11-11 用户答「q4重开」。Cursor 会话起草，票 [commercial-four-module-requirements/15](../../.scratch/commercial-four-module-requirements/issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)。用户接受的是核心决定（决定一、二）；决定三的落空清单、决定四至九由会话代 PC、SA、PP owner 定，越权风险点见文末，待 PC、SA、PP owner 复核。部分停用 [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定二、三、五、六各一句，[ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定三、决定四各一句，[ADR-0280](./0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md) 决定一两句、决定二一句；扩成 ADR-0190 决定三、[ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三、决定四各一句；按口解 ADR-0190 决定一、ADR-0229 决定一、决定五、[ADR-0336](./0336-confirmation-facts-land-with-the-estimated-charge-and-an-effective-delivery-final-is-the-built-in-confirmation-basis.md) 决定一各一句；回答 [ADR-0260](./0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 决定四的重启条件与越权风险点 1、ADR-0179「接受记录」第 4 条里换计价范围那一半，无条款停用。被停原句与适用场景见「对已接受记录的作用」，各记录正文不改，只在其 Status 行与 Links 加前向指针。实现随票 commercial-four-module-requirements/16 至 21，尚未做。）<!-- 索引注记 -->｜**权威**：包裹的 `SELL` 客户费用按哪几个计价范围、依什么顺序取价，只由客户合同版本正文的销售价格约定声明——一份有序的销售价格来源列表，或显式不计销售价并留依据；随合同版本走待批准发布。**读法**：列表是合同版本正文的一部分，一份商业解析采用了哪一版合同就是哪一版的列表，委托接受时固定；结算顺着找结算账户的那一份解析读出（受理前估价读接受前财务控制所凭的那一份，包裹计费时点读接受时固定的那一份）、带在请求上交给计价，计价不读参与方与商业。**回退**：计价按列表顺序逐个范围选卡，一份评价只出自一个来源；只有「该范围没有在用价卡」与「在用价卡的基础运费表没有这一格」两种落空转问下一个，附加费表缺档与其余结果都停在该来源；受理前估价里每一件声明包裹各自问；不立等级对象。**生效**：用哪份列表看接受时固定的合同版本，用哪版卡看计价基准时点。**过渡**：正文没有这一格的旧规范化版本合同照旧读两本采用册上的计价范围。**不动**：体积系数、金额取整与换算序列照旧从选出的卡读；折扣派生、仓储费、采购一侧与运营试算不在本记录
+Status: Accepted（2026-11-12，用户在 Cursor 会话里看过草案结论后选定「接受：合同版本声明有序来源。接着编号、改 CONTEXT 与 UC-PC-002、请非作者评审，再进 main」；此前 2026-11-11 用户答「q4重开」。Cursor 会话起草，票 [commercial-four-module-requirements/15](../../.scratch/commercial-four-module-requirements/issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)。用户接受的是核心决定（决定一、二）；决定三的落空清单、决定四至九由会话代 PC、SA、PP owner 定，越权风险点见文末，待 PC、SA、PP owner 复核。部分停用 [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定二、三、五、六各一句，[ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定三、决定四各一句，[ADR-0280](./0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md) 决定一两句、决定二一句；扩成 ADR-0190 决定三、[ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 决定三、决定四各一句；按口解 ADR-0179 决定三、ADR-0190 决定一、决定四、ADR-0229 决定一、决定五、[ADR-0336](./0336-confirmation-facts-land-with-the-estimated-charge-and-an-effective-delivery-final-is-the-built-in-confirmation-basis.md) 决定一各一句；回答 [ADR-0260](./0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md) 决定四的重启条件与越权风险点 1、ADR-0179「接受记录」第 4 条里换计价范围那一半，无条款停用。被停原句与适用场景见「对已接受记录的作用」，各记录正文不改，只在其 Status 行与 Links 加前向指针。实现随票 commercial-four-module-requirements/16 至 21，尚未做。）<!-- 索引注记 -->｜**权威**：包裹的 `SELL` 客户费用按哪几个计价范围、依什么顺序取价，只由客户合同版本正文的销售价格约定声明——一份有序的销售价格来源列表，或显式不计销售价并留依据；随合同版本走待批准发布。**读法**：列表是合同版本正文的一部分，一份商业解析采用了哪一版合同就是哪一版的列表，委托接受时固定；结算顺着找结算账户的那一份解析读出（受理前估价读接受前财务控制所凭的那一份，包裹计费时点读接受时固定的那一份）、带在请求上交给计价，计价不读参与方与商业。**回退**：计价按列表顺序逐个范围选卡，一份评价只出自一个来源；只有「该范围没有在用价卡」与「在用价卡的基础运费表没有这一格」两种落空转问下一个，附加费表缺档与其余结果都停在该来源；受理前估价里每一件声明包裹各自问；不立等级对象。**生效**：用哪份列表看接受时固定的合同版本，用哪版卡看计价基准时点。**过渡**：正文没有这一格的旧规范化版本合同照旧读两本采用册上的计价范围。**不动**：体积系数、金额取整与换算序列照旧从选出的卡读；折扣派生、仓储费、采购一侧与运营试算不在本记录
 
 Date: 2026-11-12
 
@@ -131,7 +131,7 @@ Date: 2026-11-12
 - **ADR-0179**：部分停用决定五「结算新开一册：键是（租户、结算账户），值是（形态、计价范围），不设修订」里值的「计价范围」一格——受理前估价按哪几个范围选卡，改取合同的销售价格来源。部分停用决定三「未配置与适用冲突各自停，不挑卡。」里「未配置」那一半——一个来源按决定三的两种情形落空而列表里还有下一个时，转问下一个，不停；适用冲突照旧停。部分停用决定二「对委托当前提交版本的每一件声明包裹，用同一张在用价卡各形成一份试算评价」里「同一张在用价卡」，与决定六「形态、计价范围、价卡版本引用、逐件试算评价的标识、版本清单与合计」里单数的「计价范围、价卡版本引用」——每件各自按列表问，各件可以出自不同来源的卡，留痕逐件带。决定三「按（租户、计价范围、`SELL`、客户费用、时点）经 `PriceCardInForceResolver` 解析唯一在用价卡。」里的「计价范围」按口解为列表里当前问到的那一个来源。回答「接受记录」第 4 条「给一户换形态或换计价范围也没有路」里换计价范围那一半（发新一版合同，见决定四）；同一条里的按产品分卡与换形态，本记录不答。它决定三末句「正式路径将来若改走商业价格政策的绑定，两处同一笔改」要的同一笔，本记录给了：两条路同时改读列表。
 - **ADR-0190**：部分停用决定三「结算新开一册「SELL 计费时点采用」：键是（租户、结算账户），值是（计费时点、计价范围），不设修订」里值的「计价范围」一格。部分停用决定四「唯一命中才形成，零命中是`未配置`，多于一版是`适用冲突`。」里「零命中是`未配置`」那一半，改法同上。决定一「计价范围、计费时点、来源事实引用（收寄采用键或终局键）、计价基准时点。」里请求所带的「计价范围」与决定四「计价按（租户、计价范围、SELL、客户费用、计价基准时点）解析在用价卡」里的「计价范围」按口解：请求带的是整份列表，选卡时是当前问到的那一个来源。决定三「册上没有这一户，或这一户采用的不是这次到来的时点，就不发起，消费入账、不重投。」扩成：固定下来的合同版本显式声明不计销售价时同样不发起（决定七）。
 - **ADR-0280**：部分停用决定一「一个结算账户的 SELL 客户费用只按一份计价范围选卡。」——一户可以按列表里不止一个范围选卡；这一句此前已由 ADR-0377 收窄到包裹，两条注记并排。部分停用决定一「同一（租户、结算账户）在受理前估价采用册与 SELL 计费时点采用册上登的计价范围必须相同。」与决定二「登记时核，后登的一本不同即冲突。」——两条路取的都是合同的列表，两本册上的范围不被读，没有要核的东西。登记时的那一核手里没有合同版本，所以它的适用场景单写：两本册上同一户都带计价范围时照核，任一本不带的无可核。
-- **ADR-0229**：按口解决定一「SELL 照抄包裹、结算账户与结算币种、计价范围、计费时点、来源事实、计价基准时点」里的「计价范围」——照抄的是整份列表；按口解决定五「计价范围只取问这个范围的请求（发起停办没有计价范围，整支不取）」——信封带的范围是请求问到过的来源之一、且这类登记解得开那个来源自己的那一格，即取（决定三）。扩成决定三「发起之前（SELL）：结算政策没采用、结算账户不在册、计费时点没采用、包裹没有商业解析」——多一格「采用行没有计价范围」；扩成决定四「不记的：`采用了别的时点`」那一句——合同显式声明不计销售价的那一拍同样不记（决定七）。它的适用场景是包裹的 SELL 客户费用请求。
+- **ADR-0229**：按口解决定一「SELL 照抄包裹、结算账户与结算币种、计价范围、计费时点、来源事实、计价基准时点」里的「计价范围」——照抄的是整份列表；按口解决定五续办门那一句里的「停因在这一类登记解得开的名单里」与「计价范围只取问这个范围的请求（发起停办没有计价范围，整支不取）」——信封带计价范围时，名单那一核对它命中的那个来源自己的那一格做，不对请求的停因做；信封带的范围是请求问到过的来源之一、且这类登记解得开那个来源自己的那一格，即取（决定三）。扩成决定三「发起之前（SELL）：结算政策没采用、结算账户不在册、计费时点没采用、包裹没有商业解析」——多一格「采用行没有计价范围」；扩成决定四「不记的：`采用了别的时点`」那一句——合同显式声明不计销售价的那一拍同样不记（决定七）。它的适用场景是包裹的 SELL 客户费用请求。
 - **ADR-0336**：按口解决定一「主要计费范围（取 SELL 请求的计价范围）」——请求带列表时取评价实际用上的那一个来源（决定九）。
 - **ADR-0260**：回答决定四留下的重启条件与越权风险点 1，无条款停用：选卡仍按范围，评价仍不读绑定，三项仍从卡读。
 - **ADR-0377**、**ADR-0034**、**ADR-0208**：不动。
@@ -142,7 +142,7 @@ Date: 2026-11-12
 
 - 合同成为给客户定价的唯一入口，带现成的独立审批。结算的两本册各只剩一件自己的事。
 - 一位客户可以只谈几条线路：专属范围的卡写这几条，其余落到列表里的下一个来源。
-- 受理前估价与正式费用用同一份列表，不再靠一道登记时的核对。
+- 受理前估价与正式费用所凭的两份解析采用同一版合同时，两条路用同一份列表，不再靠一道登记时的核对；两份是不是总采用同一版，见越权风险点 11。
 - 实现拆成票 commercial-four-module-requirements/16 至 21：参与方与商业的合同正文、规范化版本与发布面；闭包固定与读口；计价按列表选卡与评价解释；结算的两条发起路、请求形状、停因与续办收窄、两本采用册的登记面；管理台；种子与演示动线。
 - 报价那一组票（08 至 13）随之有了落点：价格内容仍是销售价卡草稿，发到客户自己的范围里；「价格生效申请」是下面两个现有发布之一——合同已经指名这个范围时是价卡的发布，还没有指名时是新一版合同的发布。「发布以接受为前提」的门设在哪一个发布上，归票 08。
 - 票 04（价卡登记核对它引的方向授权）不受本记录影响：卡上那条引用与销售方向的定价方案绑定，本记录都没有动。
@@ -157,7 +157,7 @@ Date: 2026-11-12
    - **与它的 ADR-0378 相抵的句子。** 它决定一写「结算账户照 ADR-0280 只采用一个 `SELL` 计价范围」「它是计价选卡里唯一的一处层次」。本记录之后，范围由合同的列表给、可以不止一个，范围之间的顺序是第二处层次；未配置在列表里还有下一个来源时也不停。它的 Status 判据、决定二与它写进 `CONTEXT-MAP.md` 的句子里，说结算账户仍只采用一个范围、未配置照旧停、选卡只有指名优先这一处层次的各句同此。
    - **两篇的选法可以叠加。** 逐个来源问；每个来源之内先照它的两层（指名委托所申报产品的卡，再看不声明的卡）选到底，选不出卡才算第 1 种落空、转问下一个来源。某个范围里只有指名别的产品的卡时，照它的规则答没有在用价卡，算落空。
    - **撞号。** 它在 `637480c7d` 之后也立了一篇编号 ADR-0380 的记录。只能有一篇留这个号，后进 `main` 的一方改号并改全部链接。
-   - **同一句上各挂指针、各给替换文字。** ADR-0179 决定三、ADR-0190 决定四、ADR-0229 与 ADR-0260 的 Status 行，`UC-PC-002` 的同一句，`UC-SA-002` 交接表的相邻行，`CONTEXT-MAP.md` 与计价 `CONTEXT.md` 的相邻句。后进的一方把两份注记并排写，把两份替换文字合成一句。
+   - **同一句上各挂指针、各给替换文字。** ADR-0179 决定三与决定六（后一句由它的 ADR-0379 停用）、ADR-0190 决定四、ADR-0229 与 ADR-0260 的 Status 行，`UC-PC-002` 的同一句，`UC-SA-002` 交接表的相邻行，`CONTEXT-MAP.md` 与计价 `CONTEXT.md` 的相邻句。后进的一方把两份注记并排写，把两份替换文字合成一句。
    - **它的 ADR-0379** 把估价留痕与运营读口定成每份估价一个计价范围、一张卡；本记录决定三让估价逐件各自问，留痕要逐件带。
    - 一位客户几个服务产品要不同的价，`main` 上今天整条链都表达不了（解析键一户一行、一行一个商业范围，计价输入里没有服务产品一维）；这件事由那一篇答，本记录不答。本会话不能与那条分支的会话通信，只写在这里并报告了用户。
 6. **仓储与包裹从此是两种形。** 仓储费的计价范围在结算的登记上，包裹的在合同上。ADR-0377 刚接受，理由对仓储成立；两种形并存的代价是「给这位客户定价」要去两个地方。
@@ -167,7 +167,7 @@ Date: 2026-11-12
 10. **旧合同照旧读采用册，是会话选的过渡办法。** 另一种是一刀切到合同：旧形状的合同一律答未声明，种子重发。演示租户按真实租户对待（[ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)），所以会话没有选后一种；代价是结算要留着两条读路，直到旧形状的合同都收尾。
 11. **受理前估价所凭的解析与接受时固定的是不是同一份，没有核。** 估价读的是接受前财务控制请求带的商业解析回指（`ApplyPreAcceptanceControlCommand` 的 `Resolution`）；包裹计费时点读的是接受时固定的那一份。决定二「按同一份列表选卡」只在两份采用的是同一版合同时成立。小包托运那一侧在控制之后、接受之前会不会重新解析，会话没有读。
 12. **自相矛盾的合同答`未配置`之后由什么续办，没有写。** 决定七里财务控制约定要估价而销售价格约定声明不计销售价的合同，改口要发新一版合同；委托怎样采用到新版，受风险点 2 的同一条限制。
-13. **逐来源记停因、多一格发起停因，是会话接在 ADR-0229 上的。** 请求册要多记每个来源各自的那一格，续办门要按命中的来源查名单；「采用行没有计价范围」没有续办路。SA owner 认为不值时，可以退回只记答出来的那一格，代价是靠前的来源上补的目录或序列推不动这份请求。
+13. **逐来源记停因、多一格发起停因，是会话接在 ADR-0229 上的。** 请求册要多记每个来源各自的那一格，续办门要按命中的来源查名单；「采用行没有计价范围」没有续办路。SA owner 认为不值时，可以退回只记答出来的那一格，代价是靠前的来源上补的目录或序列推不动这份请求。留着的代价：同一份分区目录或序列绑在列表里几个范围的卡上时，一次复核通过按面各交一封，同一份请求可能被续办不止一代。
 14. **主要计费范围取实际用上的来源，是会话代定的。** ADR-0336 越权风险点 1 已经写过两者在 `CONTEXT` 里是不同的词；一户有了不止一个计价范围之后，同一户的费用会带不同的主要计费范围，对账与信用按范围汇总时怎样读，待 SA owner 定。
 
 ## 起草能力边界
@@ -184,8 +184,8 @@ Date: 2026-11-12
 
 - 票 [commercial-four-module-requirements/15](../../.scratch/commercial-four-module-requirements/issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)、[spec](../../.scratch/commercial-four-module-requirements/spec.md)、[行业做法笔记](../../.scratch/commercial-four-module-requirements/industry-practice-notes.md)
 - [ADR-0260](./0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)：回答决定四的重启条件与越权风险点 1，无条款停用
-- [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：部分停用决定二、三、五、六各一句，回答「接受记录」第 4 条里换计价范围那一半
-- [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)：部分停用决定三、决定四各一句，按口解决定一一句，扩成决定三一句
+- [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：部分停用决定二、三、五、六各一句，按口解决定三一句，回答「接受记录」第 4 条里换计价范围那一半
+- [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)：部分停用决定三、决定四各一句，按口解决定一、决定四各一句，扩成决定三一句
 - [ADR-0280](./0280-a-settlement-account-registers-one-sell-pricing-scope-across-the-estimate-and-billing-moment-adoptions.md)：部分停用决定一两句、决定二一句
 - [ADR-0229](./0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md)：按口解决定一、决定五各一句，扩成决定三、决定四各一句
 - [ADR-0336](./0336-confirmation-facts-land-with-the-estimated-charge-and-an-effective-delivery-final-is-the-built-in-confirmation-basis.md)：按口解决定一一句
