@@ -2,8 +2,8 @@
 // 词表跟不跟得上 Go 侧的取值，由 stall-reasons.contract.test.ts 对着 Go 源核。
 //
 // 任务上记的是小包托运编排给的未决原因原词（application 包的 JudgmentPendingReason），财务控制那一步停下时是
-// FINANCIAL_CONTROL_* 那一族。结算答的具体停因（`SA-` 加结算的未形成原因，例如没有在用价卡）今天只进续办引用的摘要，
-// 不进这一格；把它补到任务上另立一票。这里先把 `SA-` 那一族译好，补上之后这一族先认得；那张票若带来别的码族，到时再补。
+// FINANCIAL_CONTROL_* 那一族。结算答的细原因另在一格（lastAttemptSettlementReason，不带前缀，ADR-0380 决定三）；它与适配器
+// 写进停因码时加了 `SA-` 的那一族是同一组码，查同一张表，免得两份词表各自漂。
 //
 // 认得的译成中文，认不得的照原码——页面落后于服务端时宁可露出原码，也不把它并进某个认得的说法。
 
@@ -11,9 +11,15 @@ interface StallWords {
   text: string;
   /** 停在受理前财务控制那一步：这时估价可能还没形成，「受理前财务控制」一块要把它说出来。 */
   financialControl?: true;
+  /** 停在结算估价那一口（采用册、试算、留痕与合计各格）：细原因前说「估价没形成」，不笼统说财务控制没形成。 */
+  estimate?: true;
+  /** 登一张价卡解得开（ADR-0380 决定一）：等运营登记时说清登什么，链到价格表。 */
+  priceCardSide?: true;
 }
 
 const financial = (text: string): StallWords => ({ text, financialControl: true });
+const estimate = (text: string): StallWords => ({ text, financialControl: true, estimate: true });
+const priceCardSide = (text: string): StallWords => ({ text, financialControl: true, estimate: true, priceCardSide: true });
 
 // 结算的未形成原因与两种拒收，前缀 `SA-` 是小包托运的结算适配器加的（结算一侧的原因码本身不带前缀）。
 const settlementStallWords: Record<string, StallWords> = {
@@ -28,20 +34,21 @@ const settlementStallWords: Record<string, StallWords> = {
   'SA-CREDIT_RATIO_BASE_UNDECIDED': financial('比例额度没有声明基数'),
   'SA-CREDIT_RATIO_BASE_UNAVAILABLE': financial('比例额度的基数读不到'),
   'SA-CREDIT_RATIO_BASE_NOT_ESTABLISHED': financial('比例额度的基数还没有事实（未登记运营余额或还没有有效对账单）'),
-  'SA-CONTROL_AMOUNT_NOT_CONFIGURED': financial('这户没有登记受理前估价采用'),
-  'SA-ESTIMATE_ADOPTION_UNAVAILABLE': financial('受理前估价采用读不到'),
-  'SA-ESTIMATE_TRIALS_UNAVAILABLE': financial('试算调不通'),
-  'SA-ESTIMATE_TRACE_UNAVAILABLE': financial('估价留痕读写不通'),
-  'SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED': financial('没有在用价卡'),
-  'SA-ESTIMATE_PRICE_CARD_CONFLICT': financial('价卡适用冲突'),
-  'SA-ESTIMATE_SUBMISSION_NOT_VISIBLE': financial('估价时读不到这一提交版本'),
-  'SA-ESTIMATE_DECLARATION_INCOMPLETE': financial('输入不可得：有包裹缺测量或缺价卡要的那一格'),
-  'SA-ESTIMATE_HAS_NO_TRIAL': financial('没有一件试算'),
-  'SA-ESTIMATE_TRIAL_WITHOUT_TOTAL': financial('有一件试算没有合计'),
-  'SA-ESTIMATE_CURRENCY_MISMATCH': financial('各件试算币种不一致'),
-  'SA-ESTIMATE_NOT_POSITIVE': financial('估价合计不是正数'),
-  'SA-ESTIMATE_TRIAL_NEGATIVE': financial('有一件试算为负'),
-  'SA-ESTIMATE_SUM_OVERFLOW': financial('估价合计超出可记范围'),
+  'SA-CONTROL_AMOUNT_NOT_CONFIGURED': estimate('这户没有登记受理前估价采用'),
+  'SA-ESTIMATE_ADOPTION_UNAVAILABLE': estimate('受理前估价采用读不到'),
+  'SA-ESTIMATE_TRIALS_UNAVAILABLE': estimate('试算调不通'),
+  'SA-ESTIMATE_TRACE_UNAVAILABLE': estimate('估价留痕读写不通'),
+  'SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED': priceCardSide('没有在用价卡'),
+  'SA-ESTIMATE_PRICE_CARD_CONFLICT': priceCardSide('价卡适用冲突'),
+  'SA-ESTIMATE_SUBMISSION_NOT_VISIBLE': estimate('估价时读不到这一提交版本'),
+  'SA-ESTIMATE_DECLARATION_INCOMPLETE': estimate('输入不可得：有包裹缺测量或缺价卡要的那一格'),
+  'SA-ESTIMATE_HAS_NO_TRIAL': estimate('没有一件试算'),
+  'SA-ESTIMATE_TRIAL_WITHOUT_TOTAL': priceCardSide('有一件试算没有合计'),
+  // 币种对不上不归价卡一侧：登一张卡解不开，结算一侧照旧内部重试，续办不指到价格表。
+  'SA-ESTIMATE_CURRENCY_MISMATCH': estimate('各件试算币种不一致'),
+  'SA-ESTIMATE_NOT_POSITIVE': priceCardSide('估价合计不是正数'),
+  'SA-ESTIMATE_TRIAL_NEGATIVE': priceCardSide('有一件试算为负'),
+  'SA-ESTIMATE_SUM_OVERFLOW': estimate('估价合计超出可记范围'),
   'SA-REQUEST_CONFLICT': financial('同一控制请求两次内容不一致'),
   'SA-REQUEST_NOT_ACCEPTED': financial('结算没受理这次控制请求'),
 };
@@ -136,4 +143,21 @@ export function stallReasonOf(code: string): StallReason {
   if (words) return { code, text: words.text, known: true, financialControl: words.financialControl === true };
   // 认不得的 `SA-` 码仍是结算在财务控制那一步答的：前缀是适配器加的出处，不是从名字猜意思。
   return { code, text: code, known: false, financialControl: code.startsWith('SA-') };
+}
+
+export interface SettlementReason {
+  /** 服务端交来的原码，不带前缀。 */
+  code: string;
+  /** 认不得时就是原码。 */
+  text: string;
+  known: boolean;
+  estimate: boolean;
+  priceCardSide: boolean;
+}
+
+/** 处理尝试上记的结算未形成原因（不带前缀）：补上前缀查 `SA-` 那张表。 */
+export function settlementReasonOf(code: string): SettlementReason {
+  const words = settlementStallWords[`SA-${code}`];
+  if (!words) return { code, text: code, known: false, estimate: false, priceCardSide: false };
+  return { code, text: words.text, known: true, estimate: words.estimate === true, priceCardSide: words.priceCardSide === true };
 }

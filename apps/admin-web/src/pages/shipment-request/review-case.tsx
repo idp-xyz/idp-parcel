@@ -6,7 +6,7 @@ import { accessRefusalHeadline } from '../../auth/access-refusal';
 import { formatInstant } from '../catalogue-view';
 import type { AcceptanceReviewCaseResponseBody, ApiResult, ShipmentRequestDetail } from './api';
 import { ShipmentNo } from './refs';
-import { stallReasonOf } from './stall-reasons';
+import { lastAttemptOf } from './last-attempt';
 import { documentNumberAbsenceNoteOf } from './ref-no';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 
@@ -26,9 +26,10 @@ export function caseBusinessFields(request: ShipmentRequestDetail): DetailField[
     { label: '提交时间', value: formatInstant(request.submittedAt) },
     { label: '处理进度', value: <StatusPill code={task.state} /> },
   ];
-  if (task.lastAttemptReason) {
-    // 停因经 stall-reasons 译，一个码在各页读成同一句；原码留在技术详情「上次未推进原因」。
-    fields.push({ label: '上次没推进', value: stallReasonOf(task.lastAttemptReason).text });
+  const lastAttempt = lastAttemptOf(task);
+  if (lastAttempt) {
+    // 与运单详情「受理进度」读同一句（带结算细原因与服务产品）；原码留在技术详情「上次未推进原因」。
+    fields.push({ label: '上次没推进', value: lastAttempt.text });
   }
   if (request.decision) {
     fields.push({

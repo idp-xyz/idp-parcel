@@ -9,8 +9,10 @@ import type { ShipmentRequestDetail } from './api';
 import { FieldRow } from './field-row';
 import { financialControlConclusionOf } from './financial-control';
 import { foldedRowsOf } from './goods-view';
+import { lastAttemptOf } from './last-attempt';
 import { estimateBlockStateOf, type EstimateBlockState, type EstimateSectionView, type ParcelEstimateView } from './pre-acceptance-estimate';
 import { ParcelNo } from './refs';
+import { ResumeNoteText } from './resume-note';
 import { usePreAcceptanceEstimates } from './use-pre-acceptance-estimates';
 
 // 运单详情的「受理前财务控制」一块（ADR-0379 决定四，票 declared-goods-lines/21）。结论来自委托详情（小包托运，不带金额），
@@ -22,7 +24,7 @@ export function PreAcceptanceFinancialControl({ view }: { view: ShipmentRequestD
   const estimate = estimateBlockStateOf(
     answer,
     { currentVersion: view.submissionVersionId, controlOutcome: view.financialControl?.outcome },
-    view.acceptanceTask.lastAttemptReason,
+    lastAttemptOf(view.acceptanceTask),
   );
   return (
     <div className="flex flex-col gap-4 type-body">
@@ -101,11 +103,25 @@ function EstimatePart({ state, retry }: { state: EstimateBlockState; retry: () =
     case 'unreachable':
       return <SectionError title={state.title} description={state.description} technical={state.technical} onRetry={retry} />;
     case 'none':
-      return <p>{state.note}</p>;
+      return (
+        <div className="flex flex-col gap-1">
+          <p>{state.note}</p>
+          {state.resume ? (
+            <p>
+              <ResumeNoteText note={state.resume} />
+            </p>
+          ) : null}
+        </div>
+      );
     case 'formed':
       return (
         <div className="flex flex-col gap-3">
           {state.gapNote ? <p>{state.gapNote}</p> : null}
+          {state.resume ? (
+            <p>
+              <ResumeNoteText note={state.resume} />
+            </p>
+          ) : null}
           {state.sections.map((section) => (
             <EstimateSection key={`${section.submissionVersion}:${section.trialAt}`} section={section} />
           ))}

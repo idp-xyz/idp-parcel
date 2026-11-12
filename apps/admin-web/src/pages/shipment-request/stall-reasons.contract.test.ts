@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import { deepEqual, ok } from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { knownRestrictionReasonCodes } from './financial-control';
+import { knownResumePaths } from './last-attempt';
 import { knownSettlementStallCodes, knownShipmentStallCodes } from './stall-reasons';
 
-// 停因与限制原因两张词表对着 Go 源核（做法同 pages/network/route-plans.contract.test.ts：读同一份源，不在前端树里抄第二份）。
+// 停因、续办方与限制原因的词表对着 Go 源核（做法同 pages/network/route-plans.contract.test.ts：读同一份源，不在前端树里抄第二份）。
 // Go 侧加了码、词表没跟上就红，红的那条点名漏了哪个码；词表里留着 Go 侧已经没有的码也红，免得改了名的旧码一直挂着。
 // 路径相对 apps/admin-web：scripts/run-tests.mjs 固定以它为 cwd 起 node --test。
 
@@ -38,6 +39,15 @@ test('小包托运的未决原因：Go 侧每个码都有译法，词表里没�
   );
   ok(goCodes.length > 0, '一个未决原因码都没读出来');
   deepEqual(sorted(knownShipmentStallCodes), sorted(goCodes));
+});
+
+test('续办方：领域 ResumePath 的每个词都认得，认得的词 Go 侧都还有', () => {
+  const goWords = stringMethodCodes(
+    goSource('internal/parcelshipment/domain/acceptance_task.go'),
+    'func (path ResumePath) String() string',
+  );
+  ok(goWords.length > 0, '一个续办方都没读出来');
+  deepEqual(sorted(knownResumePaths), sorted(goWords));
 });
 
 test('结算的 `SA-` 停因：未形成原因与两种拒收都有译法，词表里没有 Go 侧已经没有的码', () => {

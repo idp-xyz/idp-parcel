@@ -9,7 +9,7 @@ import type {
   PreAcceptanceParcelEstimateRecord,
 } from '../settlement/api';
 import { formatMoney, isPositiveMinorAmount } from '../settlement/money';
-import { stallReasonOf } from './stall-reasons';
+import type { LastAttemptView, ResumeNote } from './last-attempt';
 import { answerTechnicalRows } from './words';
 
 // 运单详情「受理前财务控制」一块里估价那一半的判读（ADR-0379 决定四，票 declared-goods-lines/21）。纯函数，node:test 直接钉；
@@ -84,8 +84,8 @@ export type EstimateBlockState =
   | { kind: 'refused'; refusal: OperatorRefusalKind; what: string }
   | { kind: 'problem'; text: string; technical: TechnicalRow[] }
   | { kind: 'unreachable'; title: string; description: string; technical: TechnicalRow[] }
-  | { kind: 'none'; note: string }
-  | { kind: 'formed'; sections: EstimateSectionView[]; gapNote?: string };
+  | { kind: 'none'; note: string; resume?: ResumeNote }
+  | { kind: 'formed'; sections: EstimateSectionView[]; gapNote?: string; resume?: ResumeNote };
 
 export const NOT_RECORDED_DETAIL_NOTE = '这份估价形成于补记之前，没有逐件明细';
 
@@ -222,24 +222,17 @@ export function estimateSectionsOf(estimates: readonly PreAcceptanceEstimateReco
     .map(({ estimate }) => estimateSectionOf(estimate, context));
 }
 
-/** 受理任务最近一次停在财务控制那一步时的中文停因；停在别处或没停过答 undefined。 */
-function financialStallOf(lastAttemptReason: string | undefined): string | undefined {
-  if (!lastAttemptReason) return undefined;
-  const stall = stallReasonOf(lastAttemptReason);
-  return stall.financialControl ? stall.text : undefined;
-}
-
 const NO_CONTROL_NOTE = '合同约定无财务控制，不做估价';
 
 /**
- * 估价那一半显什么。没有留痕时按能说的说：结论是不适用就说合同约定不做；受理任务最近停在财务控制那一步就把停因说出来——估价
- * 没形成的原因在受理任务上，结算不另存（ADR-0379 决定三）。有留痕而没有当前版本的那一份（换了版本、新版本还停着），同样说
- * 一句，免得把旧版本的估价读成现在的。
+ * 估价那一半显什么。没有留痕时按能说的说：结论是不适用就说合同约定不做；受理任务最近停在财务控制那一步就把停因与谁来续办说
+ * 出来——估价没形成的原因在受理任务的处理尝试上，结算不另存（ADR-0379 决定三、ADR-0380 决定三）。有留痕而没有当前版本的那一份
+ * （换了版本、新版本还停着），同样说一句，免得把旧版本的估价读成现在的。
  */
 export function estimateBlockStateOf(
   answer: ApiResult<PreAcceptanceEstimatesResponseBody> | null,
   context: EstimateContext,
-  lastAttemptReason: string | undefined,
+  lastAttempt: LastAttemptView | null,
 ): EstimateBlockState {
   if (answer === null) return { kind: 'loading' };
   switch (answer.kind) {
@@ -264,17 +257,17 @@ export function estimateBlockStateOf(
   }
   const estimates = (answer.body.estimates ?? []).map(normalisedEstimateOf);
   const sections = estimateSectionsOf(estimates, context);
-  const stall = financialStallOf(lastAttemptReason);
+  const stall = lastAttempt?.financialStall;
+  // 续办只跟着停因说：停因不显（不适用、停在别处），续办那句也就无所指。
+  const resume = stall && lastAttempt?.resume ? { resume: lastAttempt.resume } : {};
   const notApplicable = context.controlOutcome === 'NOT_APPLICABLE';
   if (sections.length === 0) {
     if (notApplicable) return { kind: 'none', note: `${NO_CONTROL_NOTE}。` };
-    return { kind: 'none', note: stall ? `估价没形成，停在：${stall}。` : '这张运单还没有受理前估价。' };
+    return stall ? { kind: 'none', note: `估价没形成，停在：${stall}。`, ...resume } : { kind: 'none', note: '这张运单还没有受理前估价。' };
   }
   if (sections.some((section) => section.isCurrent)) return { kind: 'formed', sections };
-  const gapNote = notApplicable
-    ? `当前版本${NO_CONTROL_NOTE}；下面是此前版本的估价。`
-    : stall
-      ? `当前版本的估价没形成，停在：${stall}。下面是此前版本的估价。`
-      : '当前版本还没有估价，下面是此前版本的估价。';
-  return { kind: 'formed', sections, gapNote };
+  if (notApplicable) return { kind: 'formed', sections, gapNote: `当前版本${NO_CONTROL_NOTE}；下面是此前版本的估价。` };
+  return stall
+    ? { kind: 'formed', sections, gapNote: `当前版本的估价没形成，停在：${stall}。下面是此前版本的估价。`, ...resume }
+    : { kind: 'formed', sections, gapNote: '当前版本还没有估价，下面是此前版本的估价。' };
 }
