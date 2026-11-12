@@ -1662,6 +1662,22 @@ Status: Confirmed
 - 所有者：商业授权归 `party-commercial`，可执行评价归 `parcel-pricing`。
 - 避免使用：承运商角色、客户角色、借贷方向。
 
+### 计价范围
+
+计价选卡键上的范围一格：评价按（租户、计价范围、价格方向、计算目的、计价基准时点）选在用的价卡。它由请求方给，不由计价从客户、合同或服务产品推导；各路由谁给见[小包计价上下文](./parcel-pricing/CONTEXT.md)「计价范围」词条。
+
+- 所有者：`parcel-pricing`（范围标识随价卡登记）。包裹的 `SELL` 客户费用用哪几个范围，由 `party-commercial` 的客户合同版本以[销售价格来源](#销售价格来源)指名。
+- 它不是 `party-commercial` 解析键上的商业范围；「商业价格政策版本」所规定的范围是该政策的商业适用范围，也不是它。
+- 避免使用：价格等级、客户等级、价格套餐。
+
+### 销售价格来源
+
+客户合同版本的销售价格约定里的一项，指名一个[计价范围](#计价范围)。一份合同声明一份有序的销售价格来源列表，或显式声明不计销售价并留依据；列表的顺序就是包裹的 `SELL` 客户费用取价时回退的顺序，回退只在声明的顺序里发生。
+
+- 所有者：`party-commercial`（声明）。`settlement-accounting` 从接受时固定的商业解析读出并带给 `parcel-pricing`，`parcel-pricing` 按它选卡，两者都不改写它。
+- 取舍见 [ADR-0380](../adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)。
+- 避免使用：价卡授权（要求清单里的说法，产品里由本词回答）、定价方案绑定（那是商业价格政策上的留痕，不决定选卡）。
+
 ### 计算目的
 
 一次价格评价所服务的业务用途。它与价格方向是两个轴：方向回答金额归属哪一侧经济关系，目的回答这次计算用来做什么。

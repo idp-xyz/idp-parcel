@@ -3,7 +3,7 @@
 Category: enhancement
 Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)。卡上这条引用与价格政策上的定价方案绑定，是方向相反的两个指针：卡指向授权，政策指向方案。票 15 定了哪一处说了算，这条引用是留着核、还是撤，才有答案
+Blocked by: 无。原来等票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md)；它的结论（[ADR-0380](../../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)）没有动卡上这条引用，也没有动价格政策上的定价方案绑定，本票按「引用留下来」的形态做
 地盘：`internal/parcelpricing`（新增消费侧适配器）、`internal/partycommercial`（新增只读口）、`apps/admin-web/src/pages/pricing` 与 `pages/party`
 
 对应要求：Contract「价卡授权」里卡上引用的那一半。合同授权哪套价的那一半归票 15。
@@ -49,3 +49,4 @@ Blocked by: 票 [15](./15-one-authority-for-which-price-a-customer-uses-and-the-
 ## Comments
 
 - 2026-11-11：本票原有第二道门「结算账户登记销售计价范围时核对合同」，同日撤回。ADR-0260 的「候选与反方」否决过同一类做法（两处都留、核两处相等），越权风险点 2 写明不加两侧一致性核对。合同授权哪套价由哪一处说了算，改由票 15 重开那篇留下的重启条件来定；本票只留卡上引用的核对，并排到票 15 之后。
+- 2026-11-12：票 15 的结论是 ADR-0380：哪位客户用哪套销售价由客户合同版本的销售价格来源声明，选卡仍按范围。卡上的价格方向授权引用与销售方向的定价方案绑定都没有动，绑定仍是留痕。本票解除对票 15 的阻塞，照「要做的」里引用留下来的形态做；「要裁的」里「授权被收尾之后在用价卡要不要离开新的选择」一问，ADR-0380 没有答，仍是开的。
