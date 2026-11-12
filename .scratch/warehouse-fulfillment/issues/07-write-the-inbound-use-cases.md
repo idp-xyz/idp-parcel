@@ -1,7 +1,7 @@
 # 07 写 `UC-WF`：主数据与入库
 
 Category: docs
-Status: ready-for-agent
+Status: in-progress（2026-11-12 认领，分支 `cursor/wf-inbound`，工作树 `idp-parcel-wf-inbound`）
 Blocked by: 05
 
 依据：ADR-0368 决定八「先写 `CONTEXT.md` 与 UC」；[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md) 的「货主、仓与商品」「入库与库内」词条、「入库与加工」规则与「入库预报」「收货与上架」两条生命周期；票 01 写明「不写 UC，UC 随实施切片写」。
