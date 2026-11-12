@@ -19,30 +19,33 @@ Blocked by: 无
 - **读口**：`GET /settlement-pre-acceptance-estimates?shipmentRequest=<委托标识>`。走结算的运营读面（同 `/settlement-statement-lines?statement=` 那种按键读），租户与权限同费用、账单读口。答复形状如下，字段名钉死，管理台票 21 照它写：
 
 ```json
-{"estimates":[{
+{"outcome":"<同 /settlement-statement-lines 那类按键读口的约定>",
+ "estimates":[{
   "submissionVersion":"SUBV-…","form":"…","pricingScope":"…",
   "priceCard":{"plan":"…","version":"…","fingerprint":"…"},
   "serviceProduct":"…",
   "detailRecorded":true,
-  "totalMinor":1536,"currency":"CNY","trialAt":"…","recordedAt":"…",
-  "parcels":[{"parcel":"DPCL-…","evaluation":"EVAL-…","totalMinor":384,
+  "totalAmount":"1536","currency":"CNY","trialAt":"…","recordedAt":"…",
+  "parcels":[{"parcel":"DPCL-…","evaluation":"EVAL-…","totalAmount":"384","currency":"CNY",
     "pricingWeight":{"value":"12.5","unit":"KG"},
-    "chargeLines":[{"code":"BASE_FREIGHT","effect":"ADD","amountMinor":38400}]}],
-  "occupation":{"kind":"FUNDS_FREEZE","id":"…","status":"HELD","amountMinor":1536,"currency":"CNY",
-    "formedAt":"…","releasedAt":"…","convertedMinor":0,"convertedAt":"…"}
+    "chargeLines":[{"code":"BASE_FREIGHT","effect":"ADD","amount":"384.00","currency":"CNY"}]}],
+  "occupations":[{"kind":"FUNDS_FREEZE","id":"…","status":"HELD","amount":"1536","currency":"CNY",
+    "formedAt":"…","releasedAt":"…","convertedAmount":"0","convertedAt":"…"}]
 }]}
 ```
 
   - `serviceProduct` 没申报或未记即不带。`detailRecorded` 为 `false` 是补记之前的旧行，那时 `pricingWeight` 与 `chargeLines` 都不带。
-  - `occupation.kind` 取 `FUNDS_FREEZE` 或 `CREDIT_EXPOSURE`，`status` 取 `HELD`、`RELEASED` 或 `CONVERTED`。没有占用（受限）即不带这一格；释放、转扣的时刻没有即不带。
-  - 次序按试算时点。没有留痕答 `{"estimates":[]}`，不是 404。
+  - 金额照结算读面：`totalAmount`、`amount`、`convertedAmount` 是最小币单位的整数串（`minorAmount`），配 `currency`。费用行的 `amount` 不同：是评价原样的小数串，币种是那一行自己的（价卡币种，费用行不换算、逐行取整可选）。
+  - `occupations` 是数组：组合策略在两本账上各占一笔。`kind` 取 `FUNDS_FREEZE` 或 `CREDIT_EXPOSURE`；`status` 冻结取 `HELD`、`RELEASED`、`CONVERTED`，信用暴露取 `RECORDED`、`RELEASED`、`CONVERTED`。部分扣费仍是 `HELD`/`RECORDED` 并带 `convertedAmount`，`convertedAt` 取最近一次。受限而没有占用即空数组；没发生的时刻不带。
+  - 次序按试算时点。没有留痕答空的 `estimates`，不是 404。
   - 价卡字面引用拆成方案、版本与指纹。
+  - 补记前记下、补记后重放的同一控制请求，按旧形状那几格比，不答冲突。补记不得挡住估价形成。
 - **装配**：`cmd/parcel-api` 端点表挂上它。
 
 ## 完成判据
 
 - 真库：补记几格写得进、读得回；旧形状的行读成 `detailRecorded:false`；同一控制请求重放答原结果，改了费用行答冲突。
-- 读口：一票两版估价按时点列；冻结、信用暴露、受限无占用三种都对；租户隔离。
+- 读口：一票两版估价按时点列；冻结、信用暴露、两者都有、受限无占用几种都对；部分扣费；租户隔离；补记前的旧行重放不冲突。
 - 全量 `go test`（带 PG）与 `go vet` 通过。
 
 ## 不做的

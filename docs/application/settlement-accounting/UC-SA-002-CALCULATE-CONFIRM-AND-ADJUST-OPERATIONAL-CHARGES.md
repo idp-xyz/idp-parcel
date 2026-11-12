@@ -236,6 +236,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
+| CONTEXT「接受前财务控制结果」：每项结果保存判断标识、判断时间、`asOf` 与采用策略 | 受限（业务限制）的结果本上下文不入账，只有估价留痕；结论只记在小包托运的受理判断里（ADR-0379 越权风险点 4） | 未立票 |
 | 接受前财务控制：估价留痕补记服务产品、计价重量与费用行，按委托的运营读口（[ADR-0379](../../adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md)） | 留痕只记价卡、评价标识、版本清单与合计；没有任何读口交出留痕、冻结或信用暴露 | 票 declared-goods-lines/19 |
 | 接受前财务控制：估价采用与 SELL 计费时点采用同户一份计价范围 | 两只登记编排各写各的册、互不读，同一户可以登两个范围 | [code/62](../../../.scratch/docs-consistency/code/62-the-estimate-and-billing-moment-adoptions-may-register-different-pricing-scopes.md) |
 | 已接受委托下某件包裹取消或失败时，释放它在接受前占用里的份额（CONTEXT「取消或失败时显式释放」的包裹粒度） | 转出册与账本已能表达部分转出、余额可放；但 `parcel-shipment` 在委托已接受之后不再请求释放占用，没有触发口，该份额一直占着 | [ADR-0343](../../adr/0343-a-confirmed-charge-converts-its-parcels-pre-acceptance-occupation-in-the-confirming-transaction.md) 决定八 |

@@ -8,7 +8,7 @@ Blocked by: 无
 
 ## 要做的
 
-- `/shipment-request-views` 的委托详情（`requestDetailBody`）加一格 `financialControl`：最近一次受理判断记下的接受前财务控制结论。形状与审核队列 `recordedJudgments.financialControl`（`reviewFinancialControlBody`）相同：outcome、resultId、basis、asOf 各格、jointPassCondition、occupationFormed、items（kind、order、conclusion、basis，以及受限项上的失败处置与责任）。
+- `/shipment-request-views` 的委托详情（`requestDetailBody`）加一格 `financialControl`：最近一次受理判断记下的接受前财务控制采用结果。形状与审核队列 `recordedJudgments.financialControl`（`reviewFinancialControlBody`）相同：outcome、resultId、basis、asOf 各格、jointPassCondition、occupationFormed、items（kind、order、conclusion、basis，以及受限项上的失败处置与责任）。
 - 没判过即不带这一格。
 - 列表行不带。
 - 不带任何金额。
@@ -16,7 +16,7 @@ Blocked by: 无
 
 ## 完成判据
 
-满足、受限（可用余额不足）、没判过三种在委托详情上各对；与审核队列同一形状（共用一个编码函数）；全量 `go test`（带 PG）通过。
+结论 `HELD`、`CREDIT_EXPOSED`、`RESTRICTED`（可用余额不足）、`NOT_APPLICABLE`（合同约定无控制，没有各项与条件）与没判过，在委托详情上各对；与审核队列同一形状（共用一个编码函数）；全量 `go test`（带 PG）通过。
 
 ## 不做的
 
