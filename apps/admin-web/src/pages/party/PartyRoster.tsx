@@ -8,7 +8,7 @@ import { StateSlot, type StateSlotProps, type TemplateViewState } from '../../te
 import { labelFor, toneFor, type StatusTone } from '../../vocabulary/status';
 import { partyFooterPageText } from './business-parties-workbench';
 import { partyRosterPageText } from './party-roster';
-import { PartySearchBox, type PartyWorkbenchFooter } from './PartyWorkbench';
+import { PartySearchBox, useBusyReveal, type PartyWorkbenchFooter } from './PartyWorkbench';
 import { usePartyListKeys } from './use-party-list-keys';
 
 // 往来单位页的主从分栏（票 business-party-redesign/03）：选中一家之后，左边是定宽的名录栏，右边整块是这一家的详情。
@@ -46,6 +46,8 @@ export interface PartyRosterProps<Row> {
   stateOverride?: StateSlotProps['override'];
   /** 右栏。 */
   detail: ReactNode;
+  /** 这一页正在重读、`rows` 是垫着看的上一页：与表同一种做法（PartyWorkbench.tsx 的 `busy`）。 */
+  busy?: boolean;
 }
 
 const SKELETON_ROWS = 12;
@@ -93,17 +95,20 @@ export function PartyRoster<Row>({
   viewState,
   stateOverride,
   detail,
+  busy = false,
 }: PartyRosterProps<Row>) {
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const ready = viewState.kind === 'ready';
+  const held = busy && ready;
+  const busyShown = useBusyReveal(held);
   usePartyListKeys({
     listRef,
     searchRef,
     keys: rows.map(rowKey),
     selectedKey,
     detailOpen: true,
-    ready,
+    ready: ready && !held,
     onSelect,
     centerFirstReveal: true,
     revealWhenReady: true,
@@ -135,7 +140,7 @@ export function PartyRoster<Row>({
         )}
       </div>
     ) : (
-      <ul>
+      <ul aria-busy={held || undefined} className={`${held ? 'pointer-events-none' : ''} ${busyShown ? 'opacity-50' : ''}`}>
         {rows.map((row) => {
           const key = rowKey(row);
           const selected = selectedKey === key;
@@ -145,7 +150,7 @@ export function PartyRoster<Row>({
                 type="button"
                 data-row-key={key}
                 aria-current={selected ? 'true' : undefined}
-                onClick={() => onSelect(key)}
+                onClick={() => (held ? undefined : onSelect(key))}
                 // 焦点框只画在未选中的行上：焦点与选中落在同一行时，底色加左竖线已经说明了「在这」。
                 className={`flex h-[60px] w-full items-center gap-3 border-b border-idpxyz-border px-4 text-left ${
                   selected
@@ -174,6 +179,7 @@ export function PartyRoster<Row>({
           {tools}
         </div>
         <div ref={listRef} data-pane="list" className={`min-h-0 flex-1 ${viewState.kind === 'loading' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          {busyShown ? <div className="party-list-progress" role="progressbar" aria-label="正在读取" /> : null}
           {ready ? (
             list
           ) : viewState.kind === 'loading' ? (
@@ -186,7 +192,7 @@ export function PartyRoster<Row>({
         </div>
         <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-t border-idpxyz-border pl-4 pr-2 type-caption text-idpxyz-breadcrumb">
           <span className="min-w-0 truncate tabular-nums" title={ready ? footer.countText ?? undefined : undefined}>
-            {viewState.kind === 'loading' ? '正在读取…' : ready ? footer.countText : null}
+            {viewState.kind === 'loading' ? '正在读取…' : ready ? [footer.countText, busyShown ? '正在读取…' : null].filter(Boolean).join(' · ') : null}
           </span>
           {ready && pagination && pager ? (
             <nav aria-label="翻页" className="flex shrink-0 items-center gap-0.5" data-cursor-pagination>
@@ -194,7 +200,7 @@ export function PartyRoster<Row>({
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6"
-                disabled={!pager.canPrevious}
+                disabled={held || !pager.canPrevious}
                 onClick={pagination.onPrevious}
                 aria-label="上一页"
                 title="上一页"
@@ -208,7 +214,7 @@ export function PartyRoster<Row>({
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6"
-                disabled={!pager.canNext}
+                disabled={held || !pager.canNext}
                 onClick={() => pagination.next !== null && pagination.onNext(pagination.next)}
                 aria-label="下一页"
                 title="下一页"

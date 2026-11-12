@@ -3,6 +3,7 @@ import { deepEqual, equal, ok } from 'node:assert/strict';
 import type { ApiResult } from './catalogue-api';
 import {
   catalogueCursorAnswer,
+  catalogueCursorPrevious,
   catalogueCursorReducer,
   catalogueCursorRequest,
   startCatalogueCursor,
@@ -24,6 +25,12 @@ function outcome(next: string | null): ApiResult<Body> {
 
 function apply(state: CatalogueCursorState<Body>, ...events: CatalogueCursorEvent<Body>[]): CatalogueCursorState<Body> {
   return events.reduce(catalogueCursorReducer<Body>, state);
+}
+
+/** 业务答案的正文；别的答复种类在这些用例里不该出现。 */
+function bodyOf(answer: ApiResult<Body>): Body {
+  if (answer.kind !== 'outcome') throw new Error(`期望业务答案，得到 ${answer.kind}`);
+  return answer.body;
 }
 
 /** 收下此刻这一问的答复。 */
@@ -104,4 +111,78 @@ test('重试回到加载中、游标不动，新答复到了才交出', () => {
 
   const recovered = outcome('c2');
   deepEqual(catalogueCursorAnswer(answered(retried, recovered)), recovered);
+});
+
+// 以下钉「在途时垫着看的上一页」（票 business-party-redesign/06）：什么时候有、是哪一份、什么时候撤下。
+
+// Covers: 首次——还没有任何答复，没有可垫的，页面照旧是骨架。
+test('首次加载没有可垫的上一页', () => {
+  const state = startCatalogueCursor<Body>(all);
+  equal(catalogueCursorAnswer(state), null);
+  equal(catalogueCursorPrevious(state), null);
+});
+
+// Covers: 换条件在途——手上那份答的是上一组条件：此刻这一问交 null，上一页交出来垫着；这一问答出之前它一直在。
+test('换条件在途时交出上一页', () => {
+  const first = outcome('c1');
+  const loaded = answered(startCatalogueCursor<Body>(all), first);
+  // 这一问答着的时候没有「上一页」：摆着的就是它自己。
+  equal(catalogueCursorPrevious(loaded), null);
+
+  const changed = apply(loaded, { kind: 'conditions', signature: narrowed });
+  equal(catalogueCursorAnswer(changed), null);
+  deepEqual(catalogueCursorPrevious(changed), { body: bodyOf(first), page: 1 });
+});
+
+// Covers: 在途中再换条件——垫着的仍是最后摆出来过的那一页；中间那一问的慢答复回来也不顶替它（它答的已不是此刻这一问）。
+test('在途中再换条件，垫着的仍是最后摆出来的那一页', () => {
+  const first = outcome('c1');
+  const loaded = answered(startCatalogueCursor<Body>(all), first);
+  const second = apply(loaded, { kind: 'conditions', signature: narrowed });
+  const secondKey = catalogueCursorRequest(second).key;
+  const third = apply(second, { kind: 'conditions', signature: catalogueConditionsQuery({ q: 'SZX' }) });
+
+  const afterSlow = apply(third, { kind: 'answered', key: secondKey, answer: outcome(null) });
+  equal(afterSlow, third);
+  equal(catalogueCursorAnswer(afterSlow), null);
+  deepEqual(catalogueCursorPrevious(afterSlow), { body: bodyOf(first), page: 1 });
+});
+
+// Covers: 失败——新的一问没答成：交出的是那份失败，垫着的旧页撤下；之后重试在途时也不拿失败垫（没有行可垫）。
+test('新的一问失败，旧页撤下', () => {
+  const failed: ApiResult<Body> = { kind: 'noAnswer', status: 502, code: 'NO_ANSWER_FORMED' };
+  const loaded = answered(startCatalogueCursor<Body>(all), outcome('c1'));
+  const changed = apply(loaded, { kind: 'conditions', signature: narrowed });
+  const broken = answered(changed, failed);
+  deepEqual(catalogueCursorAnswer(broken), failed);
+  equal(catalogueCursorPrevious(broken), null);
+
+  const retried = apply(broken, { kind: 'retry' });
+  equal(catalogueCursorAnswer(retried), null);
+  equal(catalogueCursorPrevious(retried), null);
+});
+
+// Covers: 成功——新的一问答出：交出新答复，垫着的旧页撤下。
+test('新的一问答出，旧页撤下', () => {
+  const loaded = answered(startCatalogueCursor<Body>(all), outcome('c1'));
+  const changed = apply(loaded, { kind: 'conditions', signature: narrowed });
+  const fresh = outcome(null);
+  const done = answered(changed, fresh);
+  deepEqual(catalogueCursorAnswer(done), fresh);
+  equal(catalogueCursorPrevious(done), null);
+});
+
+// Covers: 翻页与刷新同样垫着上一页，页号是那一页当时的页号——翻到第二页在途时垫着的是第一页；在第二页上刷新，垫着的是第二页。
+test('翻页与刷新在途时垫着的页号是那一页当时的', () => {
+  const pageOne = outcome('c1');
+  const first = answered(startCatalogueCursor<Body>(all), pageOne);
+  const turning = apply(first, { kind: 'next', next: 'c1' });
+  deepEqual(catalogueCursorPrevious(turning), { body: bodyOf(pageOne), page: 1 });
+
+  const pageTwo = outcome('c2');
+  const second = answered(turning, pageTwo);
+  equal(catalogueCursorPrevious(second), null);
+  const refreshing = apply(second, { kind: 'retry' });
+  equal(catalogueCursorAnswer(refreshing), null);
+  deepEqual(catalogueCursorPrevious(refreshing), { body: bodyOf(pageTwo), page: 2 });
 });

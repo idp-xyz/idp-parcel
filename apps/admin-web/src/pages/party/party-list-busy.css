@@ -1,0 +1,36 @@
+/* 列表重读时顶上的一条进度线（票 business-party-redesign/06）：两像素高，粘在滚动区的顶上与左缘，自己不占高度（负的下外边距
+   抵掉），一小段强调色来回走。它只说「在读」，不表示读到了几成。系统设了减少动效时不走，停成一小段静止的线。 */
+.party-list-progress {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  height: 2px;
+  margin-bottom: -2px;
+  overflow: hidden;
+}
+
+.party-list-progress::before {
+  content: '';
+  display: block;
+  width: 30%;
+  height: 100%;
+  background: var(--idpxyz-accent);
+  animation: party-list-progress 1.1s ease-in-out infinite;
+}
+
+@keyframes party-list-progress {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .party-list-progress::before {
+    animation: none;
+  }
+}

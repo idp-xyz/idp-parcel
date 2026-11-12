@@ -3,6 +3,7 @@ import { cursorPageNumber, type ListCursorPaginationProps } from '../templates';
 import type { ApiResult } from './catalogue-api';
 import {
   catalogueCursorAnswer,
+  catalogueCursorPrevious,
   catalogueCursorReducer,
   catalogueCursorRequest,
   startCatalogueCursor,
@@ -12,6 +13,12 @@ import { catalogueConditionsQuery, type CatalogueConditions, type CataloguePage 
 export interface CatalogueCursor<Body> {
   /** 此刻这一问的答复；还在途是 null（加载中）。 */
   answer: ApiResult<Body> | null;
+  /**
+   * 这一问还在途时可以垫着看的上一页（上一组条件、上一页或刷新之前的那一份业务答案），连同它当时在第几页；没有可垫的、或这一问
+   * 已经答出时是 null。它答的不是此刻这一问——页面可以拿它的行垫着（压淡、不可点），计数、空态与「筛空」仍只认 `answer`
+   * （catalogue-cursor.ts 的 catalogueCursorPrevious）。不读它的页面行为不变：在途时照旧只看到 `answer` 为 null。
+   */
+  previous: { body: Body; page: number } | null;
   /** 接 ListPageTemplate 的 pagination 槽（游标形）；只在拿到业务答案后给。 */
   pagination: ListCursorPaginationProps | undefined;
   retry: () => void;
@@ -48,6 +55,7 @@ export function useCatalogueCursor<C extends CatalogueConditions, Body extends {
   const page = answer?.kind === 'outcome' ? answer.body.page : null;
   return {
     answer,
+    previous: catalogueCursorPrevious(state),
     retry: () => dispatch({ kind: 'retry' }),
     pagination:
       page === null

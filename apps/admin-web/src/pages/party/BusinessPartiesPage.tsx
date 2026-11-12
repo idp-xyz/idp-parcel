@@ -71,6 +71,7 @@ import {
   type RefreshOutcome,
   type ViewTab,
 } from './BusinessPartiesChrome';
+import { heldCataloguePage } from './held-catalogue-page';
 import { PartyWorkbench, type PartyWorkbenchColumn } from './PartyWorkbench';
 import { PartyRoster, PartyRosterStatus, partyRosterSelectClass } from './PartyRoster';
 import { partyRosterTypeOf, rememberedPartyExpired, rememberedPartyOnReturn, selectedPartyRowOf, type RememberedParty } from './party-roster';
@@ -557,6 +558,9 @@ function CatalogueCursorScope<C extends CatalogueConditions, Body extends { page
   return <>{children(useCatalogueCursor(conditions, load))}</>;
 }
 
+// 垫着上一页重读时（held-catalogue-page.ts）表格区的页面态：摆着的是行，不是骨架，也不是空态。
+const heldViewState: TemplateViewState = { kind: 'ready' };
+
 /** 游标那一页此刻的样子，页头的刷新钮要的那两样：在不在途、答成了没有。 */
 interface CursorRefreshState {
   pending: boolean;
@@ -1018,6 +1022,16 @@ export function BusinessPartiesPage() {
   const registeredParties = useRegisterList(listRegisteredParties, {
     enabled: listShown && knownParties !== null && completeParties === null,
   });
+  // 「我方关联」的行是法人册与关系册组合出来的，两册重读时旧答案照旧留着（register-list.ts），表本来就不闪；这里只定要不要照
+  // 另两个视图那样把「在重读」显出来（票 business-party-redesign/06）。本页挂上来之后的头一轮重读不显：那是取数层见答案过了
+  // 新鲜期自己发的，行还是刚才那些，这时把行按住，人一回到这张标签就点的那一下会落空。两册都静下来过一次之后的重读——刷新钮、
+  // 登记之后——才显。
+  const networkPending = entities.pending || relationships.pending;
+  const networkSettled = useRef(false);
+  useEffect(() => {
+    if (!networkPending) networkSettled.current = true;
+  }, [networkPending]);
+  const networkBusy = networkPending && networkSettled.current;
   // 名录与关系两个视图的那一页游标挂在视图里面，页头的刷新钮经这两样够到它（CursorRefreshReport）。
   const cursorRetry = useRef<() => void>(() => {});
   const [cursorRefresh, setCursorRefresh] = useState<CursorRefreshState>({ pending: true, outcome: { ok: true } });
@@ -1376,6 +1390,7 @@ export function BusinessPartiesPage() {
           onClearFilters={clearNetworkSearch}
           footer={footer}
           viewState={viewState}
+          busy={networkBusy}
           detail={
             // 按公司重挂：换一家时正文从头看，不停在上一家滚到的位置。
             <OurCompanyNetworkPanel
@@ -1425,6 +1440,7 @@ export function BusinessPartiesPage() {
           onClearFilters={clearNetworkSearch}
           footer={footer}
           viewState={viewState}
+          busy={networkBusy}
         />
       );
     }
@@ -1453,17 +1469,27 @@ export function BusinessPartiesPage() {
     refresh = cursorPageRefresh;
     body = (
       <CatalogueCursorScope key="identities" conditions={conditions} load={listBusinessParties}>
-        {({ answer, pagination, retry }) => {
-          const pageRows = answer?.kind === 'outcome' ? answer.body.parties : [];
+        {({ answer, previous, pagination, retry }) => {
+          // 这一问还在途而上一页有行可垫（票 06，heldCataloguePage）：旧行照摆，表不退回骨架。垫着的只是行——下面的计数
+          // （answeredRows）与空态仍只认此刻这一问的答复。按类型筛过之后一行都不剩的上一页不垫：那时摆出来的是「没有这一类
+          // 单位」那句话，说的却是上一组条件。
+          const held = heldCataloguePage(
+            answer,
+            previous,
+            (body) => filterBusinessPartiesByType(body.parties, shownType, roleIndex, ourCompanies).length > 0,
+          );
+          const pageRows = answer?.kind === 'outcome' ? answer.body.parties : held ? held.body.parties : [];
           const visible = filterBusinessPartiesByType(pageRows, shownType, roleIndex, ourCompanies);
           // 筛出为空不是空态（票 01 裁决 1）：带着下推条件或翻过页的零行报 ready，表格区另显 noMatchText。
-          const viewState = catalogueViewState(answer, pageRows.length, retry, {
-            module: info,
-            endpoint: 'GET /commercial-business-parties',
-            emptyTitle,
-            emptyDescription,
-            narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
-          });
+          const viewState = held
+            ? heldViewState
+            : catalogueViewState(answer, pageRows.length, retry, {
+                module: info,
+                endpoint: 'GET /commercial-business-parties',
+                emptyTitle,
+                emptyDescription,
+                narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
+              });
           // 当前条件下答回的行；这一问还没答出或没答成就是 null——筛选项上不拿 0 占位。
           const answeredRows = answer?.kind === 'outcome' ? pageRows : null;
           // 芯片上的数看当前条件下答回的行，摆哪几枚看整册（business-parties-workbench.ts 的 partyTypeChipsOf）。
@@ -1483,16 +1509,18 @@ export function BusinessPartiesPage() {
             shownType !== 'ALL' && pageRows.length > 0
               ? businessPartyTypeNoMatchNote(completeParties !== null, typeSourcesComplete)
               : businessPartyNoMatchNote;
+          // 垫着上一页时表底照那一页写（共几家、第几页），后面由列表件跟一句「正在读取…」，翻页钮按不动。
+          const shownPagination = held ? held.pagination : pagination;
           const footer = {
             countText: partyFilteredFooterCountText({
               exact: typeCountsUsable,
-              total: pagination?.total ?? null,
+              total: shownPagination?.total ?? null,
               pageRows: pageRows.length,
               shown: visible.length,
               pageFiltered: shownType !== 'ALL',
               unit: '家',
             }),
-            pagination,
+            pagination: shownPagination,
           };
           // 点的、方向键走到的都是这一页上摆着的行：连行一起交给页面记下。
           const selectVisible = (key: string | null) => selectParty(key, visible.find((party) => party.partyId === key) ?? null);
@@ -1609,6 +1637,7 @@ export function BusinessPartiesPage() {
                   onClearFilters={clearFilters}
                   footer={footer}
                   viewState={viewState}
+                  busy={held !== null}
                   detail={
                     <BusinessPartyDetailPanel
                       row={detailRow}
@@ -1712,6 +1741,7 @@ export function BusinessPartiesPage() {
                 onClearFilters={clearFilters}
                 footer={footer}
                 viewState={viewState}
+                busy={held !== null}
                 // 空册不是死胡同：有登记权限时说明下面另给一枚「新增往来单位」，主按钮仍只有页头那一枚。
                 stateOverride={
                   mayWrite
@@ -1768,17 +1798,26 @@ export function BusinessPartiesPage() {
     refresh = cursorPageRefresh;
     body = (
       <CatalogueCursorScope key="relationships" conditions={relationshipConditions} load={listPartyRelationships}>
-        {({ answer, pagination, retry }) => {
-          const pageRows = answer?.kind === 'outcome' ? answer.body.relationships : [];
+        {({ answer, previous, pagination, retry }) => {
+          // 这一问还在途而上一页有行可垫（票 06）：做法与名录同；「只看待查」筛完一行不剩的上一页不垫。
+          const held = heldCataloguePage(
+            answer,
+            previous,
+            (body) => !attentionOnly || body.relationships.some(partyRelationshipNeedsAttention),
+          );
+          const pageRows = answer?.kind === 'outcome' ? answer.body.relationships : held ? held.body.relationships : [];
           const visible = attentionOnly ? pageRows.filter(partyRelationshipNeedsAttention) : pageRows;
           // 筛出为空不是空态（票 01 裁决 1）：带着下推条件或翻过页的零行报 ready，表格区另显 noMatchText。
-          const viewState = catalogueViewState(answer, pageRows.length, retry, {
-            module: info,
-            endpoint: 'GET /commercial-party-relationships',
-            emptyTitle,
-            emptyDescription,
-            narrowed: catalogueConditionsNarrow(relationshipConditions) || pastFirstPage(pagination),
-          });
+          const viewState = held
+            ? heldViewState
+            : catalogueViewState(answer, pageRows.length, retry, {
+                module: info,
+                endpoint: 'GET /commercial-party-relationships',
+                emptyTitle,
+                emptyDescription,
+                narrowed: catalogueConditionsNarrow(relationshipConditions) || pastFirstPage(pagination),
+              });
+          const shownPagination = held ? held.pagination : pagination;
           // 当前条件下答回的行；这一问还没答出或没答成就是 null——筛选项上不拿 0 占位。
           const answeredRows = answer?.kind === 'outcome' ? pageRows : null;
           // 状态芯片上的数随角色与检索词走、不随状态自己走，与名录的状态下拉同一条规矩（statusCountsUnderConditions）。
@@ -1872,14 +1911,15 @@ export function BusinessPartiesPage() {
                 footer={{
                   countText: partyFilteredFooterCountText({
                     exact: relationshipCounts !== null,
-                    total: pagination?.total ?? null,
+                    total: shownPagination?.total ?? null,
                     pageRows: pageRows.length,
                     shown: visible.length,
                     pageFiltered: attentionOnly,
                     unit: '段',
                   }),
-                  pagination,
+                  pagination: shownPagination,
                 }}
+                busy={held !== null}
                 renderDetail={(key) => {
                   const row = visible.find((relationship) => relationship.relationshipId === key);
                   return row ? (

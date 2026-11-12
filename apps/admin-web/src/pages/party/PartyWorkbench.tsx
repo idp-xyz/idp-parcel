@@ -11,7 +11,7 @@ import {
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Inbox, Search } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { useSplitResize } from '@idpxyz/ui-workspace';
-import { revealClass, useDelayedReveal } from '../../components/use-delayed-reveal';
+import { loadingRevealDelayMs, revealClass, useDelayedReveal } from '../../components/use-delayed-reveal';
 import { cursorPagerControls } from '../../templates/cursor-pagination';
 import type { ListCursorPaginationProps } from '../../templates/ListPageTemplate';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from '../../templates/state-slot';
@@ -19,6 +19,7 @@ import type { WorkbenchSort } from '../../templates/workbench';
 import { useTabViewRef } from '../../templates/workspace-view-state';
 import { partyColumnLayoutOf, partyFooterPageText } from './business-parties-workbench';
 import { usePartyListKeys } from './use-party-list-keys';
+import './party-list-busy.css';
 
 // 往来单位页新版式的列表区（票 business-party-redesign/02）：工具条一行、定宽列的表、表底翻页条，页面态只换表格那一块。
 // 本页自己的布局，不改 WorkbenchPageTemplate——那张模板别的页还在用，这套版式先在这一页试，验收后再收进共用模板。
@@ -28,6 +29,25 @@ import { usePartyListKeys } from './use-party-list-keys';
 // - 翻页在表底，不在工具条右端：工具条那一行留给筛选。
 // - 首次加载的骨架照将要出现的列来排，行高与真表一样，答案到了行不跳。
 // 行上没有悬停底色（用户 2026-11-03 裁定：浅色主题里悬停与选中两种底色太像），与模板同。
+// - 换条件、翻页、刷新时不退回骨架（票 06）：调用方把上一页的行照给、并说一声在重读（`busy`），旧行留在原处、压淡、点不动，
+//   顶上走一条进度线，表底那一句后面跟「正在读取…」；行高与滚动位置都不丢。骨架只在第一次加载时出。
+
+/**
+ * 「在重读」持续过了占位延迟露出的那一段才交 true（components/use-delayed-reveal.ts）：答得快时压淡与进度线都不露，新的一页
+ * 直接换上来；一答出立刻收回。表与名录栏共用。
+ */
+export function useBusyReveal(busy: boolean): boolean {
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    if (!busy) {
+      setRevealed(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setRevealed(true), loadingRevealDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [busy]);
+  return busy && revealed;
+}
 
 export interface PartyWorkbenchColumn<Row> {
   key: string;
@@ -83,6 +103,11 @@ export interface PartyWorkbenchProps<Row> {
    * 定高的区里只能再套一层滚动，人得在两层之间找「保存」。页面态不是 ready 时也照摆——空册正是要登第一段的时候。
    */
   aboveRows?: ReactNode;
+  /**
+   * 这一页正在重读，`rows` 是上一份答案里的行、垫着看的（换条件、翻页、刷新）：行压淡、点不动、方向键不换行，顶上走一条进度线，
+   * 表底那一句后面跟「正在读取…」，翻页钮按不动。只在 ready 态下起作用；第一次加载照旧是骨架。
+   */
+  busy?: boolean;
 }
 
 /** 检索框：放大镜、输入、`/` 键位提示。表的工具条与名录栏共用；宽度由调用方经 className 给。 */
@@ -145,6 +170,7 @@ export function PartyWorkbench<Row>({
   stateOverride,
   initialFocusKey = null,
   aboveRows,
+  busy = false,
 }: PartyWorkbenchProps<Row>) {
   const searchRef = useRef<HTMLInputElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -153,6 +179,9 @@ export function PartyWorkbench<Row>({
   const [listWidth, setListWidth] = useState<number | null>(null);
   const split = useSplitResize('horizontal');
   const ready = viewState.kind === 'ready';
+  // 垫着旧行重读：不可点不可选是立刻的（点了也只是选中一行马上要换掉的旧行），压淡与进度线晚一点才露（useBusyReveal）。
+  const held = busy && ready;
+  const busyShown = useBusyReveal(held);
   const detailOpen = ready && selectedKey !== null && rows.some((row) => rowKey(row) === selectedKey);
 
   useLayoutEffect(() => {
@@ -198,7 +227,7 @@ export function PartyWorkbench<Row>({
     if (hasAboveRows && listRef.current) listRef.current.scrollTop = 0;
   }, [hasAboveRows]);
 
-  usePartyListKeys({ listRef, searchRef, keys: rows.map(rowKey), selectedKey, detailOpen, ready, onSelect });
+  usePartyListKeys({ listRef, searchRef, keys: rows.map(rowKey), selectedKey, detailOpen, ready: ready && !held, onSelect });
 
   // 只在挂上来的那一刻看一次（initialFocusKey 的说明），所以不把它作依赖：之后焦点去哪由人定。
   useEffect(() => {
@@ -259,7 +288,7 @@ export function PartyWorkbench<Row>({
   );
 
   const onRowKeyDown = (event: ReactKeyboardEvent<HTMLTableRowElement>, key: string) => {
-    if (event.target !== event.currentTarget || event.key !== 'Enter') return;
+    if (event.target !== event.currentTarget || event.key !== 'Enter' || held) return;
     event.preventDefault();
     onSelect(selectedKey === key ? null : key);
   };
@@ -276,10 +305,10 @@ export function PartyWorkbench<Row>({
         )}
       </div>
     ) : (
-      <table className="w-full table-fixed type-body" style={tableStyle}>
+      <table className="w-full table-fixed type-body" style={tableStyle} aria-busy={held || undefined}>
         {colgroup}
         {head}
-        <tbody>
+        <tbody className={`${held ? 'pointer-events-none' : ''} ${busyShown ? 'opacity-50' : ''}`}>
           {rows.map((row) => {
             const key = rowKey(row);
             const selected = selectedKey === key;
@@ -289,7 +318,7 @@ export function PartyWorkbench<Row>({
                 data-row-key={key}
                 tabIndex={0}
                 aria-selected={selected}
-                onClick={() => onSelect(selected ? null : key)}
+                onClick={() => (held ? undefined : onSelect(selected ? null : key))}
                 onKeyDown={(event) => onRowKeyDown(event, key)}
                 // 焦点框只画在未选中的行上：焦点与选中落在同一行时，底色加左竖线已经说明了「在这」。
                 className={`h-12 cursor-pointer border-b border-idpxyz-border ${
@@ -349,6 +378,7 @@ export function PartyWorkbench<Row>({
           >
             {/* 表比这一栏宽、横向滚的时候，这一块贴着左缘不跟着走：它与栏同宽，不与表同宽。方向键在这一块里不归列表
                 （use-party-list-keys.ts 的 ARROW_OWNER_SELECTOR）。 */}
+            {busyShown ? <div className="party-list-progress" role="progressbar" aria-label="正在读取" /> : null}
             {hasAboveRows ? (
               <div data-above-rows data-own-arrow-keys className="sticky left-0 border-b border-idpxyz-border">
                 {aboveRows}
@@ -366,15 +396,17 @@ export function PartyWorkbench<Row>({
             )}
           </div>
           <div className="flex h-9 shrink-0 items-center justify-between border-t border-idpxyz-border pl-6 pr-3 type-caption text-idpxyz-breadcrumb">
-            <span className="tabular-nums">{viewState.kind === 'loading' ? '正在读取…' : ready ? footer.countText : null}</span>
+            <span className="tabular-nums">
+              {viewState.kind === 'loading' ? '正在读取…' : ready ? [footer.countText, busyShown ? '正在读取…' : null].filter(Boolean).join(' · ') : null}
+            </span>
             {ready && pagination && pager ? (
               <nav aria-label="翻页" className="flex items-center gap-1" data-cursor-pagination>
-                <Button variant="ghost" size="sm" disabled={!pager.canPrevious} onClick={pagination.onPrevious}>
+                <Button variant="ghost" size="sm" disabled={held || !pager.canPrevious} onClick={pagination.onPrevious}>
                   <ChevronLeft className="h-3 w-3" aria-hidden="true" />
                   上一页
                 </Button>
                 <span className="px-1 tabular-nums">{partyFooterPageText(pagination.page, pagination.size, pagination.total)}</span>
-                <Button variant="ghost" size="sm" disabled={!pager.canNext} onClick={() => pagination.next !== null && pagination.onNext(pagination.next)}>
+                <Button variant="ghost" size="sm" disabled={held || !pager.canNext} onClick={() => pagination.next !== null && pagination.onNext(pagination.next)}>
                   下一页
                   <ChevronRight className="h-3 w-3" aria-hidden="true" />
                 </Button>
