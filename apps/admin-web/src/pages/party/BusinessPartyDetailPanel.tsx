@@ -93,7 +93,7 @@ export function BusinessPartyDetailPanel({
   onChanged,
 }: {
   row: BusinessPartyRecord;
-  /** 这个参与方持有的角色（读口在这一行上答的类别，business-party-list.ts 的 partyRolesOf），头部按它称呼；空即「暂无合作关系」。 */
+  /** 这个参与方持有的角色（读口在这一行上答的类别，business-party-list.ts 的 partyRolesOf），头部按它称呼；空即「未担任角色」。 */
   roles: readonly string[];
   /** 是不是我方公司（读口答的类别，business-party-list.ts 的 partyIsOurCompany）；与列表类型格同一份。 */
   ours: boolean;
@@ -238,7 +238,7 @@ export function BusinessPartyDetailPanel({
                 </CopyAside>
               </p>
             ) : null}
-            {/* 类型与列表类型格同一份标签（BusinessPartyTypeTags）：我方公司排在角色前面；两样都没有时说「暂无合作关系」，册没读全时显「—」，不留空。 */}
+            {/* 类型与列表类型格同一份标签（BusinessPartyTypeTags）：我方公司排在角色前面；两样都没有时说「未担任角色」，册没读全时显「—」，不留空。 */}
             <div className="mt-1.5">
               <BusinessPartyTypeTags ours={ours} roles={roles} />
             </div>

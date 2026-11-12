@@ -21,7 +21,7 @@ import { identityMayBeDeactivated } from './identity-deactivation-form';
 /**
  * 类型标签，列表类型格与右栏头部同一份（票 business-party-ux/04），说法同 business-party-list.ts 的 businessPartyTypeLabel：
  * 我方公司一枚、排在前面，用提示语气的淡底与描边好与角色分开——强调色作字在画布上不足 4.5:1，所以字仍是正文色；各角色各一枚，
- * 中性灰底；两样都没有时是弱色字「暂无合作关系」，不做成标签——它说的是「没有」，不该和有的东西一样醒目。
+ * 中性灰底；两样都没有时是弱色字「未担任角色」，不做成标签——它说的是「没有」，不该和有的东西一样醒目。
  * `ours` 与 `roles` 取自读口在这一行上答的类别（business-party-list.ts 的 partyIsOurCompany、partyRolesOf）。
  */
 export function BusinessPartyTypeTags({ ours, roles }: { ours: boolean; roles: readonly string[] }) {

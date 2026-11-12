@@ -64,15 +64,15 @@ test('facetOptionShown 看整册的分面', () => {
   equal(facetOptionShown(null, 'EXPIRED', 'ALL'), true);
 });
 
-// Covers: 「合作关系」一格取行上答的段数，与类型列同一口径——只数它担任角色的；只当相对方的单位这一格空着；我方公司两侧都数；
-// 待确认另数；只凭客户账户是客户的（没有关系）同样空着。
-test('合作关系一格取行上的段数，与类型列同一口径', () => {
+// Covers: 「合作关系」一格取行上答的段数，两侧都算——只当相对方的单位照样有数（它名下确有在用的关系）；待确认另数；
+// 一段都没有（只凭客户账户是客户的、刚登记的）交 null。
+test('合作关系一格取行上的段数，两侧都算', () => {
   deepEqual(partyRelationshipCellOf(row(['CUSTOMER'], [2, 1])), { count: 2, candidates: 1 });
-  equal(partyRelationshipCellOf(row(['NO_ROLE'], [0, 0], [3, 1])), null);
+  deepEqual(partyRelationshipCellOf(row(['NO_ROLE'], [0, 0], [3, 1])), { count: 3, candidates: 1 });
+  deepEqual(partyRelationshipCellOf(row(['CUSTOMER'], [3, 0], [1, 1])), { count: 4, candidates: 1 });
   deepEqual(partyRelationshipCellOf(row(['OUR_COMPANY', 'ACCOUNT_HOLDER'], [1, 0], [3, 1])), { count: 4, candidates: 1 });
-  deepEqual(partyRelationshipCellOf(row(['OUR_COMPANY'], [0, 0], [2, 0])), { count: 2, candidates: 0 });
   equal(partyRelationshipCellOf(row(['CUSTOMER'])), null);
-  equal(partyRelationshipCellOf(row(['OUR_COMPANY'])), null);
+  equal(partyRelationshipCellOf(row(['NO_ROLE'])), null);
 });
 
 // Covers: 一家单位名下在用的段数两侧都算——右栏的「还没有合作关系」与停用对话框说的是「名下还有没有」，不分它站哪一侧。
@@ -148,7 +148,7 @@ test('partyTileKindOfRow 照行上的类别', () => {
 // 整册：客户 9、供应商 2、承运商代理 3、我方公司 5、无角色 3；转售一家都没有。
 const wholeCategories = counts({ CUSTOMER: 9, SUPPLIER: 2, CARRIER_AGENT: 3, RESELLER: 0, ACCOUNT_HOLDER: 0, AUTHORIZED_DELIVERING_PARTY: 0, OUR_COMPANY: 5, NO_ROLE: 3 });
 
-// Covers: 类型芯片——摆哪几枚看整册的分面（一家都没有的不摆，选中的总在），次序是全部、各角色按词表序、我方公司、暂无合作关系；
+// Covers: 类型芯片——摆哪几枚看整册的分面（一家都没有的不摆，选中的总在），次序是全部、各角色按词表序、我方公司、未担任角色；
 // 数看当前条件的分面，那一问没答出不摆数；当前条件下为零又没选中的点不动；「全部」上的数照调用方给的。
 test('partyTypeChipsOf 摆哪几枚看整册的分面，数看当前条件的分面', () => {
   const conditioned = counts({ CUSTOMER: 4, SUPPLIER: 0, CARRIER_AGENT: 1, RESELLER: 0, OUR_COMPANY: 2, NO_ROLE: 0 });
@@ -161,7 +161,7 @@ test('partyTypeChipsOf 摆哪几枚看整册的分面，数看当前条件的分
       ['SUPPLIER', '供应商', 0, 2, false, true, 'role'],
       ['CARRIER_AGENT', '承运商代理', 1, 3, false, false, 'role'],
       ['OURS', '我方公司', 2, 5, false, false, 'other'],
-      ['NONE', '暂无合作关系', 0, 3, false, true, 'other'],
+      ['NONE', '未担任角色', 0, 3, false, true, 'other'],
     ],
   );
   // 选中的那一枚整册里是零也摆，而且点得动（要能点回去）。

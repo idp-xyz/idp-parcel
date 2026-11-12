@@ -62,20 +62,20 @@ export interface PartyRelationshipCell {
 }
 
 /**
- * 列表「合作关系」一格，数取行上答回的关系段数（在用的，与其中待确认的）。与类型列同一口径：只数它担任角色的在用关系——只当
- * 别人关系里相对方的单位，类型是「暂无合作关系」，这一格也空着，两格不打架。我方公司不靠角色定类型，两侧都数。一段都没有交 null。
+ * 列表「合作关系」一格：这家单位名下在用的合作关系共几段、其中待确认几段，两侧都算（partyLiveRelationshipsOf），数取行上
+ * 答回的。一段都没有交 null。与右栏「关联」签、停用对话框里的「名下还有几段」是同一个数。
+ *
+ * 此前不是我方公司的只数它担任角色的那一侧（票 business-party-redesign/15 改）：那是为了迁就类型列的旧词「暂无合作关系」——
+ * 只当相对方的单位类型写着「暂无」，这一格就也得空着。类型列改说「未担任角色」之后两格各说各的，不必再少数一侧。
  */
-export function partyRelationshipCellOf(row: Pick<BusinessPartyRecord, 'categories' | 'relationshipCounts'>): PartyRelationshipCell | null {
-  const ours = partyIsOurCompany(row);
-  const { asHolder, asCounterparty } = row.relationshipCounts;
-  const count = asHolder.live + (ours ? asCounterparty.live : 0);
-  if (count === 0) return null;
-  return { count, candidates: asHolder.candidate + (ours ? asCounterparty.candidate : 0) };
+export function partyRelationshipCellOf(row: Pick<BusinessPartyRecord, 'relationshipCounts'>): PartyRelationshipCell | null {
+  const { live, candidates } = partyLiveRelationshipsOf(row);
+  return live === 0 ? null : { count: live, candidates };
 }
 
 /**
- * 一家单位名下在用的合作关系共几段、其中待确认几段，两侧都算：右栏那句「还没有合作关系」、停用对话框的说明与「我方关联」名录栏
- * 的那一句用它。数是读口在行上答的，不随合作关系册读到第几页而变。
+ * 一家单位名下在用的合作关系共几段、其中待确认几段，两侧都算：列表「合作关系」一格、右栏那句「还没有合作关系」、停用对话框的
+ * 说明与「我方关联」名录栏的那一句用它。数是读口在行上答的，不随合作关系册读到第几页而变。
  */
 export function partyLiveRelationshipsOf(row: Pick<BusinessPartyRecord, 'relationshipCounts'>): { live: number; candidates: number } {
   const { asHolder, asCounterparty } = row.relationshipCounts;
@@ -107,13 +107,13 @@ export interface PartyTypeChip {
   active: boolean;
   /** 当前条件下一家都没有、又不是选中的那一枚：留在原位，点不动。 */
   disabled: boolean;
-  /** 摆的时候角色一组、我方公司与「暂无合作关系」一组，中间隔一道。 */
+  /** 摆的时候角色一组、我方公司与「未担任角色」一组，中间隔一道。 */
   group: 'all' | 'role' | 'other';
 }
 
 /**
  * 类型芯片。摆哪几枚看不带条件那一问的类别分面（whole，facetOptionShown）；每枚上的数看当前条件那一问的类别分面
- * （conditioned），那一问还没答出就不摆数。次序：全部、各角色按词表序、我方公司、暂无合作关系。
+ * （conditioned），那一问还没答出就不摆数。次序：全部、各角色按词表序、我方公司、未担任角色。
  *
  * 「全部」上的数由调用方给（allCount，partyTypeAllCount）：分面只答各类的家数，而一家单位可以落在几类里，各类之和不是总家数。
  */

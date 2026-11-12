@@ -7,7 +7,7 @@ import { ourCompanyLabel } from './business-party-list';
 import { labelOf, partyRoleLabels, partyTypeFallbackLabel } from './presentation';
 
 /**
- * 名录栏一行名称下的那一句类型：我方公司在前、角色照给的次序，用「 · 」连；一个都没有是「暂无合作关系」。两样都取自读口在这一行
+ * 名录栏一行名称下的那一句类型：我方公司在前、角色照给的次序，用「 · 」连；一个都没有是「未担任角色」。两样都取自读口在这一行
  * 上答的类别（business-party-list.ts 的 partyIsOurCompany、partyRolesOf），与类型列是同一份。
  */
 export function partyRosterTypeOf(ours: boolean, roles: readonly string[]): string {

@@ -199,10 +199,13 @@ export const externalReferencePurposeLabels = {
 
 /**
  * 参与方按它持有的角色称呼（客户、供应商、承运商代理……），角色词取关系册的封闭集，不另造一套「类型」。一个角色都没有（候选与
- * 已生效的关系都算角色）、又不是我方公司时，说「暂无合作关系」——它在册、有名称，只是还没登记与谁的合作关系（票
- * business-parties-object-page/04）。原来叫「往来单位」，与模块名同词读不出意思；这个词同时是类型筛选的一个选项，所以用一句短话而不是「—」。
+ * 已生效的关系都算角色）、又不是我方公司时，说「未担任角色」。这个词同时是类型筛选的一个选项，所以用一句短话而不是「—」。
+ *
+ * 原来叫「暂无合作关系」（票 business-parties-object-page/04），改掉是因为它对一种单位是假话（票 business-party-redesign/15）：
+ * 只当别人关系里相对方的单位——比如我方对它持有渠道账号的承运方——自己不担任角色，名下却有在用的关系。类型说的是它担任什么
+ * 角色，没有就照实说没担任；它名下有没有关系由「合作关系」一列说。
  */
-export const partyTypeFallbackLabel = '暂无合作关系';
+export const partyTypeFallbackLabel = '未担任角色';
 
 export function partyTypeLabel(roles: readonly string[]): string {
   if (roles.length === 0) return partyTypeFallbackLabel;

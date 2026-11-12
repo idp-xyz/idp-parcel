@@ -27,12 +27,12 @@ function party(partyId: string, over: Partial<BusinessPartyRecord> = {}): Busine
   };
 }
 
-// Covers: 我方公司排在角色前面，用「 · 」连；一个角色都没有、也不是我方公司的是「暂无合作关系」。
+// Covers: 我方公司排在角色前面，用「 · 」连；一个角色都没有、也不是我方公司的是「未担任角色」。
 test('partyRosterTypeOf 照类型列的判据写名录栏一行的类型', () => {
   equal(partyRosterTypeOf(false, ['CUSTOMER']), '客户');
   equal(partyRosterTypeOf(true, ['CUSTOMER', 'SUPPLIER']), '我方公司 · 客户 · 供应商');
   equal(partyRosterTypeOf(true, []), '我方公司');
-  equal(partyRosterTypeOf(false, []), '暂无合作关系');
+  equal(partyRosterTypeOf(false, []), '未担任角色');
 });
 
 // Covers: 有总数时「页 / 总页数」，读口不给总数时只有页码。

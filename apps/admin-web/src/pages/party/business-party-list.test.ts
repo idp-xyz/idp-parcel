@@ -42,7 +42,7 @@ test('businessPartyListConditions 按读口声明的维下推', () => {
   equal(businessPartyNoMatchNote, '当前筛选条件下没有匹配的单位');
 });
 
-// Covers: 类型下推成读口的 categories 维——角色原样，我方公司与「暂无合作关系」各换成读口的词；与状态、检索词可以一起带。
+// Covers: 类型下推成读口的 categories 维——角色原样，我方公司与「未担任角色」各换成读口的词；与状态、检索词可以一起带。
 test('类型筛选下推成 categories 维', () => {
   equal(catalogueConditionsQuery(businessPartyListConditions('', 'ALL', 'SUPPLIER', defaultBusinessPartySort)), 'categories=SUPPLIER');
   equal(catalogueConditionsQuery(businessPartyListConditions('', 'ALL', 'OURS', defaultBusinessPartySort)), 'categories=OUR_COMPANY');
@@ -100,12 +100,12 @@ function legalEntity(over: Partial<GroupLegalEntityRecord>): GroupLegalEntityRec
   };
 }
 
-// Covers: 类型列的文字——我方公司排在角色前面；不是我方公司就照角色，没角色叫「暂无合作关系」。
+// Covers: 类型列的文字——我方公司排在角色前面；不是我方公司就照角色，没角色叫「未担任角色」。
 test('businessPartyTypeLabel 把我方公司排在角色前面', () => {
   equal(businessPartyTypeLabel(true, []), '我方公司');
   equal(businessPartyTypeLabel(true, ['CUSTOMER']), '我方公司 / 客户');
   equal(businessPartyTypeLabel(false, ['CUSTOMER', 'SUPPLIER']), '客户 / 供应商');
-  equal(businessPartyTypeLabel(false, []), '暂无合作关系');
+  equal(businessPartyTypeLabel(false, []), '未担任角色');
 });
 
 // Covers: 对象页收起写入口用的口径——已停用的公司主体钉着的参与方也算（与类别里的「我方公司」不同，那个只认未停用的）；

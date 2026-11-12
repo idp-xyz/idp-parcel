@@ -20,7 +20,7 @@ import { catalogueSortOf, codeFilterOptions, type CatalogueSortColumns, type Cod
 /** 身份状态封闭三格（domain IdentityStatus 原名，从 identityStatusLabels 的键派生）加「全部」。 */
 export type BusinessPartyStatusFilter = CodeFilter<IdentityStatusCode>;
 
-/** 类型筛选：全部、某个角色、OURS——我方公司，或 NONE——既不是我方公司、一个角色也没有的（类型格显「暂无合作关系」）。 */
+/** 类型筛选：全部、某个角色、OURS——我方公司，或 NONE——既不是我方公司、一个角色也没有的（类型格显「未担任角色」）。 */
 export type BusinessPartyTypeFilter = CodeFilter<PartyRoleCode> | 'NONE' | 'OURS';
 
 // 胶囊的码与词都从 identityStatusLabels 派生——那份词表是 CONTEXT 原词在前端的唯一一处。
@@ -107,7 +107,7 @@ export function businessPartyTypeLabel(ours: boolean, roles: readonly string[]):
   return [ourCompanyLabel, ...roles.map((role) => labelOf(partyRoleLabels, role))].join(' / ');
 }
 
-/** 类型筛选的值对应读口 `categories` 维的哪个词：角色原样，我方公司与「暂无合作关系」各是读口的那两个词。 */
+/** 类型筛选的值对应读口 `categories` 维的哪个词：角色原样，我方公司与「未担任角色」各是读口的那两个词。 */
 export function businessPartyCategoryOf(type: Exclude<BusinessPartyTypeFilter, 'ALL'>): string {
   if (type === 'OURS') return ourCompanyCategory;
   if (type === 'NONE') return noRoleCategory;
