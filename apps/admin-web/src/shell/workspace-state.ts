@@ -227,6 +227,16 @@ export function closeTab(state: WorkspaceState, id: string): WorkspaceState {
   return { ...state, tabs, activeTabId, closedTabs: pushClosed(state.closedTabs, [closed]) };
 }
 
+/**
+ * 关掉一张、回到另一张（票 business-party-redesign/14，页面经 templates/tab-return-context 的 closeAndReturnTo 用它）：先让
+ * `returnTab` 成为活动标签（没开着就开一张），再关 `closeId`。次序要紧——先关的话，活动标签会先落到被关那张的邻居上，再回去
+ * 就是两次换页。两张是同一张时只激活、不关；`closeId` 没开着就只是回去。
+ */
+export function closeAndReturn(state: WorkspaceState, closeId: string, returnTab: WorkspaceTab): WorkspaceState {
+  const returned = openTab(state, returnTab);
+  return closeId === returnTab.id ? returned : closeTab(returned, closeId);
+}
+
 /** 固定 / 取消固定；固定的排到前面（稳定排序，固定标签之间保持原序）。 */
 export function togglePinned(state: WorkspaceState, id: string): WorkspaceState {
   if (!state.tabs.some((t) => t.id === id)) return state;

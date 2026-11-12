@@ -45,6 +45,7 @@ import {
   activateTab,
   addressForTab,
   closeAll,
+  closeAndReturn,
   closeOthers,
   closeTab,
   closeToRight,
@@ -285,10 +286,22 @@ export function Layout() {
     setInspectorContent(null);
   }, [workspace.activeTabId]);
   // 页面「回到某标签」的口：与点标签同一条回程，落回那张标签上次停的地址。
+  // 关一张再回去（票 business-party-redesign/14）要先在标签集上算，所以走 applyWorkspace：活动标签换成要回的那一张之后，它把
+  // 那张标签上次停的地址写回 hash，与关标签落到邻居是同一条路。applyWorkspace 每次渲染是一份新闭包，这个口只造一次，经 ref
+  // 取最新的那一份。
+  const applyWorkspaceRef = useRef(applyWorkspace);
+  applyWorkspaceRef.current = applyWorkspace;
   const tabReturn = useMemo<TabReturnController>(
     () => ({
       returnTo: (tabId) => {
         window.location.hash = addressForTab(tabAddresses.current, tabId);
+      },
+      isOpen: (tabId) => workspaceRef.current.tabs.some((tab) => tab.id === tabId),
+      closeAndReturnTo: (closeTabId, returnTabId) => {
+        const returnTab = tabForHash(`#/${returnTabId}`, pageTitleById);
+        // 词表里没有的模块造不出标签：不关也不动，免得把人关在一张没有去处的页外面。
+        if (returnTab === null) return;
+        applyWorkspaceRef.current((state) => closeAndReturn(state, closeTabId, returnTab));
       },
     }),
     [],

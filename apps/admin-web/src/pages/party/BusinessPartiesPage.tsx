@@ -6,6 +6,7 @@ import { useTabViewRef, useTabViewState } from '../../templates/workspace-view-s
 import { AlertTriangle, ArrowLeft, Ban, Clock, Handshake, Info, MoreHorizontal, Plus } from 'lucide-react';
 import { Button, ConfirmDialog, DropdownMenu, MenuItem, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
+import { useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
 import { toggleWorkbenchSort, useTabReturn, type WorkbenchSort } from '../../templates';
 import type { TemplateViewState } from '../../templates/state-slot';
 import { moduleInfoById } from '../../navigation';
@@ -687,6 +688,8 @@ export function BusinessPartiesPage() {
   const mayWrite = useMayWriteRegistry();
   const { addToast } = useToast();
   const tabReturn = useTabReturn();
+  // 本页所在的那张壳层标签：对象页退出从名录进来的编辑态时，要把自己这一张关掉（票 business-party-redesign/14）。
+  const ownTabId = useWorkspaceTabPanel()?.tabId ?? null;
   // 渲列表、登记视图还是对象页由地址定：对象地址在壳层是自己的一张标签，本组件在那张标签里渲对象页。
   const [hash, setHash] = useState(() => window.location.hash);
   const view = businessPartiesViewOf(hash);
@@ -1053,6 +1056,10 @@ export function BusinessPartiesPage() {
         relationships={relationships.answer}
         retryRelationships={relationships.retry}
         onBack={() => tabReturn.returnTo('business-parties')}
+        // 回名录并把这张对象页的标签关掉（票 14）；壳层没给这张标签的标识（没有多标签的宿主）就只是回去。
+        onBackClosingTab={() =>
+          ownTabId === null ? tabReturn.returnTo('business-parties') : tabReturn.closeAndReturnTo(ownTabId, 'business-parties')
+        }
         identityEditing={identityEditRequested(hash)}
         onEnterIdentityEdit={enterIdentityEdit}
         onExitIdentityEdit={exitIdentityEdit}

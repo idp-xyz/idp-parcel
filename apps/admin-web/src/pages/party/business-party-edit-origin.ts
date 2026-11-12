@@ -30,6 +30,11 @@ export interface EditOrigin {
   partyId: string;
   /** 进来时要落到哪一段（卡头的「编辑」）；页头的「更新资料」不指定，落在表单开头。 */
   section: ProfileEditSectionId | null;
+  /**
+   * 进来之前对象页那张标签开没开着（票 business-party-redesign/14）。没开着，这张标签就是壳层为这一次编辑才开的，退出回名录
+   * 时一并关掉；开着的是人自己开过的，留着。
+   */
+  tabWasOpen: boolean;
 }
 
 // 编辑态住在对象页的地址上，对象页在壳层是另一张标签；地址键不带「从哪儿来」（本票不改地址键）。右栏在改地址之前把这一笔
@@ -37,9 +42,20 @@ export interface EditOrigin {
 // 之后本来就该按地址走。
 let pending: EditOrigin | null = null;
 
-/** 名录右栏要进某一家的编辑态：记下是哪一家、落到哪一段。后一次覆盖前一次——人只会停在最后点的那一家上。 */
-export function markEditFromRoster(partyId: string, section: ProfileEditSectionId | null = null): void {
-  pending = { partyId, section };
+/**
+ * 名录右栏要进某一家的编辑态：记下是哪一家、落到哪一段、它的对象页那张标签此刻开没开着（要在改地址之前问壳层——地址一改，
+ * 标签就开了）。后一次覆盖前一次——人只会停在最后点的那一家上。
+ */
+export function markEditFromRoster(partyId: string, section: ProfileEditSectionId | null, tabWasOpen: boolean): void {
+  pending = { partyId, section, tabWasOpen };
+}
+
+/**
+ * 退出编辑态回名录时，对象页那张标签关不关：这一次编辑是从名录进来的（有来处那一笔），而且那张标签是为这一次编辑才开的。
+ * 在对象页自己点的、刷新或深链进来的没有来处，退出后本来就留在对象页，谈不上关。
+ */
+export function closesTabOnExit(origin: EditOrigin | null): boolean {
+  return origin !== null && !origin.tabWasOpen;
 }
 
 /**

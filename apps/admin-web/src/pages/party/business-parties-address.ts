@@ -93,6 +93,14 @@ export function businessPartyObjectHash(partyId: string): string {
 }
 
 /**
+ * 参与方对象页在壳层的标签标识：对象地址的前两段，与壳层从地址认标签是同一个口径（shell/workspace-state.ts 的 tabIdFromHash）。
+ * 名录右栏在去对象页之前拿它问壳层「这张标签开没开着」（票 business-party-redesign/14）。
+ */
+export function businessPartyObjectTabId(partyId: string): string {
+  return businessPartyObjectHash(partyId).slice(2);
+}
+
+/**
  * 对象页「更正名称」的编辑态在查询串里的键（票 business-party-edit-mode/02）：值为 `identity` 即编辑态。与公司主体的
  * `?edit=profile` 同一做法——编辑态住在地址上，刷新、后退都按地址走。
  */

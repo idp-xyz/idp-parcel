@@ -7,7 +7,7 @@ import { primaryActionClass } from '../../components/primary-action';
 import { BusinessPartyEditShell, type EditSlots } from './BusinessPartyEditShell';
 import { BusinessPartyIdentityEditMode } from './BusinessPartyIdentityEditMode';
 import { partyTileKindOf } from './business-parties-workbench';
-import { peekEditOrigin, takeEditOrigin, type EditOrigin } from './business-party-edit-origin';
+import { closesTabOnExit, peekEditOrigin, takeEditOrigin, type EditOrigin } from './business-party-edit-origin';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import { DetailPageTemplate, type DetailMeta, type TemplateViewState, type WorkspaceTabId } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -146,6 +146,7 @@ export function BusinessPartyDetailPage({
   relationships,
   retryRelationships,
   onBack,
+  onBackClosingTab,
   identityEditing,
   onEnterIdentityEdit,
   onExitIdentityEdit,
@@ -163,6 +164,8 @@ export function BusinessPartyDetailPage({
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
   retryRelationships: () => void;
   onBack: () => void;
+  /** 回名录那张标签，并把这张对象页的标签关掉：从名录进来的编辑态退出时用（这张标签是为那一次编辑才开的）。 */
+  onBackClosingTab: () => void;
   /** 「更正名称」的编辑态：由地址判出（business-parties-address.ts 的 identityEditRequested）。 */
   identityEditing: boolean;
   /** 进编辑态：调用方改地址。 */
@@ -221,7 +224,9 @@ export function BusinessPartyDetailPage({
     if (taken !== null) setTakenOrigin(taken);
   }, [editRequested, partyId]);
   const origin = takenOrigin ?? (editRequested ? peekEditOrigin(partyId) : null);
-  const leaveTo = origin !== null ? onBack : undefined;
+  // 回名录时这张标签关不关（票 business-party-redesign/14，closesTabOnExit）：壳层为这一次编辑才开的那一张一并关掉，人自己
+  // 开着的留着——编辑几家，标签条上不该多出几张人没开过的标签。
+  const leaveTo = origin === null ? undefined : closesTabOnExit(origin) ? onBackClosingTab : onBack;
   // `then` 是退出后还要去的地方（表单里的站内链接）；没给就按来处走。
   const exitEditing = (then?: () => void) => (editingProfile ? onExitProfileEdit(then ?? leaveTo) : onExitIdentityEdit(then ?? leaveTo));
   // 外壳留给表单的三个槽位：页头右端的标记、锚点列、底部的动作条。

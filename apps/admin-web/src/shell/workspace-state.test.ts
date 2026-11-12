@@ -12,6 +12,7 @@ import {
   activateTab,
   addressForTab,
   closeAll,
+  closeAndReturn,
   closeOthers,
   closeTab,
   closeToRight,
@@ -246,6 +247,28 @@ test('closeTab：关掉的进已关闭栈、去掉固定标记、最近的在前
 });
 
 // —— 固定与批量关闭 ——
+
+test('closeAndReturn：回到另一张并关掉这一张，活动标签直接落在要回的那张上', () => {
+  // 被关的是活动标签、右边还有邻居：单关它会落到右邻，这里要落的是指名的那一张。
+  const state = closeAndReturn(stateWith([tab('a'), tab('b'), tab('c')], 'b'), 'b', tab('a'));
+  deepEqual(ids(state), ['a', 'c']);
+  equal(state.activeTabId, 'a');
+  equal(state.closedTabs[0].id, 'b');
+});
+
+test('closeAndReturn：要回的那张没开着就开一张；被关的没开着就只是回去；两张是同一张只激活', () => {
+  const opened = closeAndReturn(stateWith([tab('b')], 'b'), 'b', tab('a'));
+  deepEqual(ids(opened), ['a']);
+  equal(opened.activeTabId, 'a');
+
+  const onlyReturn = closeAndReturn(stateWith([tab('a'), tab('c')], 'c'), 'zzz', tab('a'));
+  deepEqual(ids(onlyReturn), ['a', 'c']);
+  equal(onlyReturn.activeTabId, 'a');
+
+  const same = closeAndReturn(stateWith([tab('a'), tab('b')], 'b'), 'a', tab('a'));
+  deepEqual(ids(same), ['a', 'b']);
+  equal(same.activeTabId, 'a');
+});
 
 test('togglePinned：固定的排到前面，再切一次取消；不认识的 id 原样返回', () => {
   let state = stateWith([tab('a'), tab('b'), tab('c')]);

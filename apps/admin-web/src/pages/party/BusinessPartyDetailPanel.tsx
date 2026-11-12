@@ -7,7 +7,8 @@ import { useTabViewState } from '../../templates/workspace-view-state';
 import type { ApiResult } from '../catalogue-api';
 import type { BusinessPartyRecord, PartyRelationshipListResponseBody, BusinessPartyListResponseBody } from './api';
 import { businessPartyPanelTabsOf, shownBusinessPartyPanelTab, type BusinessPartyPanelTab } from './business-party-list';
-import { businessPartyObjectHash, identityEditHash, profileEditHash } from './business-parties-address';
+import { useTabReturn } from '../../templates/tab-return-context';
+import { businessPartyObjectHash, businessPartyObjectTabId, identityEditHash, profileEditHash } from './business-parties-address';
 import { markEditFromRoster, type ProfileEditSectionId } from './business-party-edit-origin';
 import { effectiveProfileOf, useBusinessPartyProfiles } from './BusinessPartyProfileSection';
 import { businessPartyProfileVersionFact, otherLanguageNameOf } from './business-party-profile';
@@ -184,14 +185,18 @@ export function BusinessPartyDetailPanel({
     setRelatedTarget(target);
   };
   // 整份「更新资料」是对象页的编辑态，照公司主体栏：带编辑键去对象页，栏里不开表单。去之前记一笔「从名录来、落到哪一段」
-  // （business-party-edit-origin.ts）：地址键不带来处，对象页退出编辑态时凭这一笔回到名录这张标签。
+  // （business-party-edit-origin.ts）：地址键不带来处，对象页退出编辑态时凭这一笔回到名录这张标签。这一笔里连对象页那张标签
+  // 此刻开没开着也记下（票 business-party-redesign/14）——要在改地址之前问，地址一改壳层就把标签开了；没开着的是为这一次
+  // 编辑才开的，退出时一并关掉。
+  const tabReturn = useTabReturn();
+  const objectTabWasOpen = () => tabReturn.isOpen(businessPartyObjectTabId(row.partyId));
   const openProfileForm = (section: ProfileEditSectionId | null = null) => {
-    markEditFromRoster(row.partyId, section);
+    markEditFromRoster(row.partyId, section, objectTabWasOpen());
     window.location.hash = profileEditHash(businessPartyObjectHash(row.partyId), true);
   };
   // 「更正登记信息」是同一个容器里的另一张表单（「更多」菜单里的那一项），去处与来处的记法同上。
   const openIdentityForm = () => {
-    markEditFromRoster(row.partyId);
+    markEditFromRoster(row.partyId, null, objectTabWasOpen());
     window.location.hash = identityEditHash(businessPartyObjectHash(row.partyId), true);
   };
   // 提示、头区动作（票 business-party-ux/08，判读在 business-party-panel-first-screen.ts）、签上的数、概要的卡与「关联」签读同一份缓存。
