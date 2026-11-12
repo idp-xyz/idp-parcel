@@ -87,18 +87,14 @@ func (adapter *PreAcceptanceTrials) FormPreAcceptanceTrials(
 		}
 		trials = append(trials, trial)
 	}
-	product, err := serviceProductOf(result.Estimates)
-	if err != nil {
-		return none, err
-	}
 	return saports.PreAcceptanceTrialAnswer{
-		Outcome: saports.PreAcceptanceTrialsFormed, PriceCard: priceCard, ServiceProduct: product, Trials: trials,
+		Outcome: saports.PreAcceptanceTrialsFormed, PriceCard: priceCard, ServiceProduct: serviceProductOf(result.Estimates), Trials: trials,
 	}, nil
 }
 
-// serviceProductOf 取选卡用的服务产品（ADR-0379 决定一）：每件评价的输入快照都记着它（ADR-0378 决定三）。一份估价只选一张卡、按一个
-// 产品选，各件不同就是计价那一侧把两次选卡的评价并进了一份答复——译不了，上抛，不挑一个顶。
-func serviceProductOf(estimates []ppapplication.PreAcceptanceParcelEstimate) (string, error) {
+// serviceProductOf 取选卡用的服务产品（ADR-0379 决定一）：每件评价的输入快照都记着它（ADR-0378 决定三），一份估价只选一张卡、按一个
+// 产品选，各件本该相同。各件不同时不记——不挑一个顶，也不报错：产品只作留痕，补记不得挡住一份已经形成的估价。
+func serviceProductOf(estimates []ppapplication.PreAcceptanceParcelEstimate) string {
 	product := ""
 	for index, estimate := range estimates {
 		declared, present := estimate.Evaluation.Input().ServiceProduct()
@@ -107,12 +103,11 @@ func serviceProductOf(estimates []ppapplication.PreAcceptanceParcelEstimate) (st
 			text = declared.String()
 		}
 		if index > 0 && text != product {
-			return "", fmt.Errorf("%w: parcels %s and %s were priced for different service products",
-				ErrUntranslatablePreAcceptanceTrial, estimates[0].Parcel, estimate.Parcel)
+			return ""
 		}
 		product = text
 	}
-	return product, nil
+	return product
 }
 
 // trialOf 把一份试算评价译成本上下文的试算：评价标识、冻结的版本清单原样带上；合计按币种的 ISO 4217 最小币单位位数

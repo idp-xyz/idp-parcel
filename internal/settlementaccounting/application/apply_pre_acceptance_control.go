@@ -577,9 +577,10 @@ func (handler *ApplyPreAcceptanceControlHandler) formEstimate(
 		return none, handler.haltNotFormed(command, reason), nil
 	}
 	if answer.ServiceProduct != "" {
-		// 选卡用的产品随估价留痕（ADR-0379 决定一）；它不进合计，所以在合计成形之后才记。
-		if estimate, err = estimate.WithServiceProduct(answer.ServiceProduct); err != nil {
-			return none, nil, fmt.Errorf("form pre-acceptance estimate: %w", err)
+		// 选卡用的产品随估价留痕（ADR-0379 决定一）；它不进合计，所以在合计成形之后才记。记不上就不记：补记只作留痕，不得挡住
+		// 一份已经形成的估价。
+		if withProduct, err := estimate.WithServiceProduct(answer.ServiceProduct); err == nil {
+			estimate = withProduct
 		}
 	}
 

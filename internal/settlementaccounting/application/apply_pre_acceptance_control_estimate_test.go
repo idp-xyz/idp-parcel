@@ -287,6 +287,27 @@ func TestTheServiceProductTheCardWasSelectedForIsTraced(t *testing.T) {
 	}
 }
 
+// Covers: 票 declared-goods-lines/19 评审、ADR-0379 决定一「补记不得挡住估价形成」——试算答复带来的产品记不上（空白）时不记，控制照常
+// 执行、冻结照常占用，留痕里没有产品。
+func TestAServiceProductThatCannotBeRecordedDoesNotStopTheEstimate(t *testing.T) {
+	trials := estimating(t, 1_250, 800)
+	trials.answer.ServiceProduct = "   "
+	traces := &traceDouble{}
+	handler := mustHandler(t, estimateDeps(t, requiredPolicy(t), adopted(t), trials, traces,
+		&balanceDouble{balance: balanceWith(t, 10_000)}, &ledgerDouble{ledger: domain.NewFreezeLedger()}))
+
+	result, err := handler.Handle(context.Background(), command(t))
+	if err != nil || result.Outcome() != application.ControlApplied {
+		t.Fatalf("outcome = %q/%q err = %v, want CONTROL_APPLIED", result.Outcome(), result.NotFormedReason(), err)
+	}
+	if freeze, held := result.Freeze(); !held || freeze.AmountMinor() != 2_050 {
+		t.Fatalf("freeze = %#v held = %t", freeze, held)
+	}
+	if _, declared := traces.only(t).Estimate.ServiceProduct(); declared {
+		t.Fatal("记不上的产品进了留痕")
+	}
+}
+
 // Covers: ADR-0179 决定五 / 票 product-strategy-boundary/25 完成判据一的 SA 半边——采用册上没有这一户时停在金额未配置：不默认形态、
 // 不拿零顶，带续办引用；试算不问、余额不读、两本账与留痕都不碰。它与采用册读不回分两格：一个等登记，一个等重试。
 func TestAnUnadoptedAccountStopsAtAmountNotConfiguredBeforeAnyLedger(t *testing.T) {

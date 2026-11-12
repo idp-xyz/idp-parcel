@@ -150,6 +150,9 @@ func serveReviewCase(
 	}
 
 	body := detailBodyOf(record)
+	// 复核页读 recordedJudgments 那一格。request 上那一格出自 FindVisibleByID 另一条语句，两读之间记下一次判断就会两格不同，
+	// 复核对着哪一格拍板说不清——这里只留一处。
+	body.FinancialControl = nil
 	writeJSON(response, http.StatusOK, reviewCaseResponse{
 		Outcome:   outcomeReviewCase,
 		Request:   &body,
@@ -169,8 +172,8 @@ type reviewCaseResponse struct {
 	Request *requestDetailBody `json:"request"`
 	// review 与 recordedJudgments 不折进 request：前者是任务文档上的等待与留痕，
 	// 后者是判断表上的另一批行——两样都是复核语境特有的面，委托查阅详情不背它们。
-	// 例外是财务控制结论：委托详情自 ADR-0379 决定三起也交它，所以 request.financialControl 与
-	// recordedJudgments.financialControl 在这里同在，读的是同一版、同一个编码函数，两格逐字相同。
+	// 委托详情自 ADR-0379 决定三起也交财务控制结论，复核详情上它只在 recordedJudgments 里，request 不带
+	// （serveReviewCase 清掉）：与其余判断同一次读出，才是复核据以拍板的那一份。
 	Review    reviewStatusBody      `json:"review"`
 	Judgments recordedJudgmentsBody `json:"recordedJudgments"`
 }
