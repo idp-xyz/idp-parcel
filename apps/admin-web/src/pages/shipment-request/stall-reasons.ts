@@ -41,7 +41,8 @@ const settlementStallWords: Record<string, StallWords> = {
   'SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED': priceCardSide('没有在用价卡'),
   'SA-ESTIMATE_PRICE_CARD_CONFLICT': priceCardSide('价卡适用冲突'),
   'SA-ESTIMATE_SUBMISSION_NOT_VISIBLE': estimate('估价时读不到这一提交版本'),
-  'SA-ESTIMATE_DECLARATION_INCOMPLETE': estimate('输入不可得：有包裹缺测量或缺价卡要的那一格'),
+  // 申报不全（ADR-0381）：缺什么、谁来补由 last-attempt.ts 按缺项码与任务缺口再说细；这里是没有那两格时的底句。
+  'SA-ESTIMATE_DECLARATION_INCOMPLETE': estimate('申报缺了计价要的资料'),
   'SA-ESTIMATE_HAS_NO_TRIAL': estimate('没有一件试算'),
   'SA-ESTIMATE_TRIAL_WITHOUT_TOTAL': priceCardSide('有一件试算没有合计'),
   // 币种对不上不归价卡一侧：登一张卡解不开，结算一侧照旧内部重试，续办不指到价格表。
@@ -115,6 +116,7 @@ const shipmentStallWords: Record<string, StallWords> = {
   WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED: { text: '撤回授权规则未配置，等运营登记' },
   SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED: { text: '资料修订授权规则未配置，等运营登记' },
   OPERATOR_REGISTRATION_WAIT_NOT_SAVED: { text: '等待运营登记（这一停没能保存）' },
+  CUSTOMER_SUPPLEMENT_WAIT_NOT_SAVED: { text: '等待受控补充（这一停没能保存）' },
   SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED: { text: '资料修订阶段判不出' },
   SOURCE_DATA_AMENDMENT_STAGE_FACT_UNAVAILABLE: { text: '资料修订阶段的事实读不到' },
   AUTHORIZED_DISPOSITION_PENDING: { text: '等授权处置' },
@@ -154,6 +156,17 @@ export interface SettlementReason {
   estimate: boolean;
   priceCardSide: boolean;
 }
+
+/**
+ * 申报不全而缺项在价卡一侧（ADR-0381 决定一，票 declared-goods-lines/27）：ZONE 是卡要发起方直接给分区、ADDRESS_NATURE 是卡按
+ * 收件地址性质判价——两样受理前估价都给不出，客户补不了，归等运营登记。wants 接在「在用的卡」后面说这张卡为什么做不了，
+ * registration 接在「登记一张」后面说该登什么样的售价卡；叫法与计价缺项的运营译法（pages/pricing/presentation.ts 的
+ * estimateMissingLabels）同词。封闭集里其余四码客户可补，不在这张表。
+ */
+export const estimateGapCardSideWords: Record<string, { wants: string; registration: string }> = {
+  ZONE: { wants: '要直接给分区', registration: '带分区目录' },
+  ADDRESS_NATURE: { wants: '要收件地址性质', registration: '不按收件地址性质判价' },
+};
 
 /** 处理尝试上记的结算未形成原因（不带前缀）：补上前缀查 `SA-` 那张表。 */
 export function settlementReasonOf(code: string): SettlementReason {
