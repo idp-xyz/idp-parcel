@@ -1890,6 +1890,87 @@
 | `AT-VE-163` | 一个维度存在无法裁决的事实冲突 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-164` | `UC-VE-006` 已批准当前客户可见异常 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-235` | C1 委托中的一件包裹被真实拆分为两件后按单据号查询（等包裹身份谱系落模型） | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
+| `AT-WF-001` | 仓、库区、库位类型、库位与包材的首次登记、重放、内容冲突、修订错位与并发同修订 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-002` | 改登记后不改的格（自营仓代理仓之分、库区用途、库位所属库区）答未受理 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-003` | 所指的仓、库区或库位类型查无、已停用，别的租户的仓与不存在同答 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-004` | 国家、单位、数值不合与坏载荷都不落册、不取默认值 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-005` | 仓指名同址物流节点只逐字保存，不向网络与路由核对 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-006` | 仓的业务时区不带即没登记、不取默认，补登只作用于此后 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-007` | 停用仓不动在库库存与已受理的预报，挡新的入库预报与建账导入，再启用照常 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-008` | 停用库位与库区不动库存，迟到的已发生作业事实照记 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-009` | 一个仓都没登记的租户各读口答空列表，不出现默认行 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-010` | 登记口的信封各格作答，全程不判准入范围 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-011` | 受控批量口逐行作答，整份重投不多登 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-012` | 部署开关关着时登记口、查阅口与受控批量口不提供业务答复，其他上下文答复不变 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-013` | 货主的客户系统只读得到仓 | UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md |
+| `AT-WF-014` | 货主首次登记商品、重放、来源冲突、未授予与自带身份格 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-015` | 商品修订按基准修订判，基准过期与并发只成立一笔 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-016` | 改基本单位、删包装层级、改折合数、改组合属性与有库存时改跟踪属性答不可改的格 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-017` | 商品编码与别名同在一个识别空间：同时刻撞码答识别码冲突，区间不重叠与跨货主不撞 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-018` | 组合商品的组件须是本货主的非组合商品，组成版本即商品修订 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-019` | 包装层级、目录码与有效区间不成立答资料内容不合 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-020` | 运营代录商品：依据引用必带，货主客户账户查不到与读不动各答其格 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-021` | 仓测登记按事实身份认重放，再测追加一版，当前版按发生次序取 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-022` | 仓测对象查不到或数值不成立答仓测未受理，仓没登记答查无所指的仓、代理仓答仓不受理，设备与授予在信封一层作答 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-023` | 没仓测的商品读口答未测量并附货主声明值 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-024` | 一个仓都没登记的租户商品写口答未配置、仓测答查无所指的仓、读口答空 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-025` | 部署开关关着时商品维护、代录、仓测与读口不提供业务答复，其他上下文答复不变 | UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md |
+| `AT-WF-026` | 货主提交商品入库预报：重放与并发重投只落一份、只取一个号，换内容答来源冲突 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-027` | 整箱入库预报的箱号重复、箱单为空或列了没登记的商品整份不受理 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-028` | 商品入库明细里商品没登记、计量单位没声明、数量为零与多带批号整份不受理 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-029` | 入库预报指名的仓没登记答查无所指的仓，停用或代理仓答仓不受理，没登记仓的租户撤回答未配置 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-030` | 入库预报单据号的日期按仓的业务时区、租户单据编号时区，都没有照常受理不带号，撞号不落预报 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-031` | 收货之前撤回预报、再撤、同一标识撤另一份答来源冲突、收货中撤回与没有修改口 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-032` | 撤回与第一次收货确认并发只成立一个 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-033` | 运营代录入库预报的提交与撤回 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-034` | 货主与运营查阅入库预报，按单据号检索，没号的带出无号原因 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-035` | 入库预报提交与撤回的授予、自带身份格与准入范围 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-036` | 部署开关关着时预报提交、撤回、代录与读口不提供业务答复，其他上下文答复不变 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
+| `AT-WF-037` | 第一次收货确认入账到收货暂存库位并形成入库批次，同一事实身份重投不再入账 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-038` | 分次收货各成入库批次，累计实收超过预报记多收，并发的两条串行入账 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-039` | 多收折成基本单位比 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-040` | 跟踪批号效期的商品收货须带批号效期，不同批号各成入库批次 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-041` | 一次收货里良品、次品与待检各自入账，次品记破损 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-042` | 商品入库里预报没列的已登记商品照收记错货，认不出的货不入账记错货 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-043` | 收货按实点记贴标别名，只收此刻有效的平台商品码别名 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-044` | 整箱入库按箱收：预报没列或已收过的箱记错货，箱号与在库重复的不入账或另编箱号 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-045` | 收货行的库位须在收货暂存库区，没登记库位读口答空，事后停用的库位照记 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-046` | 收货行的形态与入库方式不符、预报在另一个仓答收货内容不合，预报查不到答查无此预报，仓没登记答查无所指的仓 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-047` | 收货事实到达时预报已取消或已完结转成待认领到货，先后按到达本上下文定 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-048` | 收到还没仓测的商品与箱照常入账并列出提示 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-049` | 运营完结收货中的预报记少收，已预报的不能完结，完结之后的收货转待认领到货 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-050` | 货主对收货差异作结论：重交、改口、同一标识对另一份答来源冲突、别的货主的差异与运营代录，结论不改账 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-051` | 货主查阅累计实收与收货差异，待货主确认的差异不挡收货与完结 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-052` | 一个仓都没登记的租户收货答查无所指的仓、完结与差异结论答未配置、读口答空 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-053` | 收货、完结与差异结论的设备、授予与准入范围 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-054` | 部署开关关着时收货确认、完结、差异结论与读口不提供业务答复，其他上下文答复不变 | UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md |
+| `AT-WF-055` | 设备登记待认领到货（入库到货或退件），不进任何货主的库存账，重投不多登 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-056` | 预报已取消的收货事实转成待认领到货，原预报与货主只作线索 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-057` | 入库到货认给货主并指名可收货的预报：决定标识重放、来源冲突与已有认领 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-058` | 认领没指名预报、预报不属于该货主、不在这个仓或已不能收货答认领不成立 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-059` | 认领之后的收货确认引用到货入账，引用对不上的收货事实答收货内容不合 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-060` | 没有入账引用的认领可以撤销并再认，已有入账引用的答撤销不成立 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-061` | 退件的认领只指名货主，入账归退货入库 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-062` | 处置规则按仓登记：登记结果、处置方式逐字保存、不判准入范围 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-063` | 按处置规则处置：期限没到或方式不在规则里答处置不成立，已认领与再处置的答法 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-064` | 仓没登记处置规则时处置答未配置、到货留在待认领，别的仓的规则不借用 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-065` | 认领期限按经过的时间算，不依赖仓的业务时区，转来的到货自原收货事实的发生时间起算 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-066` | 待认领到货只在操作者面查阅，没登记仓的租户读口答空、到货登记答查无所指的仓、认领与处置答未配置 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-067` | 待认领到货各口的设备、授予、代理仓与准入范围 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-068` | 部署开关关着时到货登记、认领、撤销、处置、处置规则登记与读口不提供业务答复，其他上下文答复不变 | UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md |
+| `AT-WF-069` | 运营提交建账导入进入待批准、库存账不变，导入标识重放与来源冲突 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-070` | 建账导入指名的仓没登记答查无所指的仓，停用或代理仓答仓不受理 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-071` | 建账导入指名的货主客户账户查不到与越权探针同答，读不动不形成答案 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-072` | 建账导入的商品行不成立（商品、计量单位、数量、批号效期、贴标别名、声明的入库时间）整份不落 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-073` | 建账导入的库位须在这个仓、在用且与库存状态相容，没登记库位不建默认库位 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-074` | 建账导入的箱号在导入内、与同货主同仓在库的箱之间不重复 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-075` | 建账导入经批准后各行同笔直接入账到指名的库位，不经收货暂存、不形成收货差异 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-076` | 建账导入按声明的入库时间分入库批次，没声明的取入账那一刻 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-077` | 批准时有行已不成立的建账导入整份不入账、留在待批准，提交之后仓被停用的照常入账 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-078` | 被驳回的建账导入不改账，同一导入标识重投不复活 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-079` | 建账导入只在操作者面查阅，货主经库存读口看到入账结果 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-080` | 建账导入提交的授予、自带身份格与准入范围 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
+| `AT-WF-081` | 部署开关关着时建账导入的提交口与读口不提供业务答复，其他上下文答复不变 | UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md |
 
 ## 重盘变化摘要（0cddbba）
 
@@ -2190,3 +2271,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-11-02 追记（票 document-numbering/14，ADR-0358）：UC-SA-004 新立 `AT-SA-236`（预期成本形成时记下所依协议的供应商，匹配门核账单的供应商、不同答供应商不符）、`AT-SA-237`（没记供应商的旧行答供应商未记，经补记口按协议补记），入①。
 
 2026-11-03 追记（票 company-subject-ux/05，ADR-0359）：UC-PC-001 新立 `AT-PC-078`（法人资料的监管登记号、收款账户与多语言开票抬头：登记 / 重放 / 同修订改明细冲突、（币种，账号）与语言重复拒收、目录外币种在接入拒、旧修订读作缺席不回填、`资料不全`判据不变、快照 LEP-4 与旧形状字节不变、0044 在有数据的库上可施加），领域、真库快照与登记册、在线口译装与受控 CLI 用例点名，入①，PC 加 1，②③④不变。总览计数未重算，由推送方重算。
+
+2026-11-12 追记（票 warehouse-fulfillment/07，ADR-0375）：`warehouse-fulfillment` 此前没有 UC，新立 UC-WF-001 至 UC-WF-006（主数据与入库），`AT-WF-001`–`081`。`internal/` 下还没有仓配履约的包，都未实现、没有测试点名，入④，等 PN-09 的实施票。总览计数未重算，由推送方重算。

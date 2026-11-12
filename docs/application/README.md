@@ -1,12 +1,14 @@
 # IDP Parcel 应用用例
 
-状态：PN-02 商业权威/接单/撤回、PN-03 初始路由/真实收寄/节点作业、PN-04 常规运输履约/逐包裹取消与终局、PN-06 通用追踪/客户视图/异常和 PN-07 通用运营结算用例已形成，关务控制域用例已有专项闭环；真实参数、联合验证和代码实现仍待按产品主线推进
+状态：PN-02 商业权威/接单/撤回、PN-03 初始路由/真实收寄/节点作业、PN-04 常规运输履约/逐包裹取消与终局、PN-06 通用追踪/客户视图/异常和 PN-07 通用运营结算用例已形成，关务控制域用例已有专项闭环，PN-09 仓配履约（首发之外的可选能力）的主数据与入库用例已写成、待实现；真实参数、联合验证和代码实现仍待按产品主线推进
 
 本目录把已经确认的产品与领域规则组织成开发可执行的应用用例。应用用例描述参与者如何触发业务、各限界上下文如何协作、应用必须返回什么业务结果，以及如何验证实现；它不重新定义领域对象、业务规则或生命周期。
 
 产品总体首发主线见[国际小包网络运营首发产品基线与开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)。关务 `UC-CC-001..012` 的整体完整性和控制域专项工作顺序见[关务与贸易合规专项开发基线](../product/CUSTOMS-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)。
 
 当前用例数量不能代表产品核心优先级。`UC-NO-001`、`UC-TF-001`、`UC-VE-001` 和 `UC-SA-001` 分别只覆盖关务触发的节点、运输、异常和代垫协作；它们不能替代正常运营主链。PN-02 的 `UC-PC-001/002` 与 `UC-PS-001/002/005` 已补齐商业权威、唯一解析、接单和决定前撤回，PN-04 的 `UC-TF-003..007` 与 `UC-PS-004/006` 已补齐常规运输、收费发生事实、逐包裹取消/收寄后处置和包裹终局，PN-06 的 `UC-VE-002..008` 已补齐内部投影、普通客户追踪、ETA/缺口、异常案件、客户通知和证据索赔编排，PN-07 的 `UC-SA-002..007` 已补齐价格评价采用、调整所有权、对账纳入、供应商账单、真实收付映射、核销、经营结果和金额结算编排。`collection-remittance` 的 `UC-CR-001` 收拢代收指令、代收事实、分户账记账、差异事项与回汇批次的登记编排；它不属任何一个 PN 切片，COD 首发不在试点范围。
+
+`warehouse-fulfillment` 的 `UC-WF-*` 属 PN-09，是首发之外的可选能力（[ADR-0375](../adr/0375-warehouse-fulfillment-is-an-optional-capability-on-its-own-pn-09-slice-off-per-deployment-unless-switched-on-and-unconfigured-per-tenant-until-registered.md)），不进首发主链，也不是其他上下文用例的前提。已写成的是主数据与入库：仓、库区、库位与包材的登记，货主商品与仓测尺寸重量，入库预报，收货、收货差异与完结，待认领到货，建账导入；这些用例都还没有实现。
 
 `parcel-pricing` 当前作为 PN-07 的内部纯计价前置能力，由 `UC-SA-002` 编排输入和消费评价；它不单独建立报价、合同或账务用例。后续只有在确认独立报价接受、锁价或外部计价服务责任后，才新增相应 `UC-PP-*` 用例。运营发起的试算不在此列：它不形成承诺、不进结算、不锁价，由 `UC-PP-001` 承担（[ADR-0152](../adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md) 决定一收窄本句的适用场景）。
 
@@ -104,3 +106,9 @@ PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-
 | `UC-SA-006` | [分摊成本并派生经营结果](./settlement-accounting/UC-SA-006-ALLOCATE-COSTS-AND-DERIVE-OPERATING-RESULTS.md) | `settlement-accounting` | 共享成本、未分摊余额、法人间结算和版本化经营结果边界已形成，真实分摊/毛利口径待提供 |
 | `UC-SA-007` | [形成索赔、赔付与追偿金额](./settlement-accounting/UC-SA-007-SETTLE-CLAIMS-AND-RECOVERY-AMOUNTS.md) | `settlement-accounting` | 客户赔付义务、应追偿、对方认可和追加调整已分层；真实到账与核销只由 `UC-SA-005` 形成，真实金额规则待提供 |
 | `UC-CR-001` | [登记代收义务与事实、记代收分户账并形成回汇批次](./collection-remittance/UC-CR-001-REGISTER-COLLECTION-AND-POST-THE-SUBLEDGER.md) | `collection-remittance` | 登记与记账编排已实现，经受控 CLI 落库；入账判重、按指令移位、短款溢款来源位置、更正回指与真实到账凭采用引用登记未落；COD 首发不在试点范围 |
+| `UC-WF-001` | [登记仓、库区、库位与包材](./warehouse-fulfillment/UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09，首发之外的可选能力）；登记代数、登记后不改的格、停用的作用范围与没登记时的答法已形成，各仓、库区、库位、库位类型与包材待租户提供 |
+| `UC-WF-002` | [维护货主商品并登记仓测尺寸重量](./warehouse-fulfillment/UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；商品修订序列、识别码、组合商品、运营代录与仓测留版已形成，各货主的商品资料与代录授予待租户提供 |
+| `UC-WF-003` | [受理入库预报](./warehouse-fulfillment/UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；受理校验、同事务取单据号、收货前撤回与运营代录已形成，单据号的类型代码与默认模板未定，仓的业务时区、编号规则与代录授予待租户提供 |
+| `UC-WF-004` | [确认收货并了结入库预报](./warehouse-fulfillment/UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；收货确认即入账、不入账的货、收货差异的成份与货主结论、完结已形成，上架与入库作业收费发生项归后续用例，各仓的收货暂存库位与授予待租户提供 |
+| `UC-WF-005` | [登记、认领与处置待认领到货](./warehouse-fulfillment/UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；到货保全、认领与撤销、入账对到货的引用、按规则处置已形成，退件的入账归退货的用例，各仓的处置规则待租户提供 |
+| `UC-WF-006` | [建账导入](./warehouse-fulfillment/UC-WF-006-TAKE-ON-EXISTING-STOCK-BY-IMPORT.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；提交校验、批准时重判与同笔入账已形成，批准与驳回的口归库存调整的用例，批准权限待租户提供 |
