@@ -206,13 +206,17 @@ export function BusinessPartyDetailPage({
   useEffect(() => {
     if (profileEditing && grant.settled && !grant.mayWrite) onExitProfileEdit();
   }, [profileEditing, grant.settled, grant.mayWrite, onExitProfileEdit]);
-  // 登过停用的身份不再收新修订（identity-write-entries.ts 的 identityTakesRevisions）：「更正登记信息」的编辑态不开，页头那一枚
-  // 也不摆。拿着编辑态地址进来的，与上面查看者那一种同样处理——行读到了、确知不收，就清掉编辑键；行还没读到时不动。
+  // 登过停用的身份不再收新修订，往来单位也不再收新的一版资料（identity-write-entries.ts 的 identityTakesRevisions）：「更正登记
+  // 信息」与「更新资料」两个编辑态都不开，页头那两枚与各处的「更新资料」也不摆。拿着编辑态地址进来的，与上面查看者那一种
+  // 同样处理——行读到了、确知不收，就清掉编辑键；行还没读到时不动。
   const takesRevisions = row !== null && identityTakesRevisions(row);
   const refusesRevisions = row !== null && !takesRevisions;
   useEffect(() => {
     if (identityEditing && refusesRevisions) onExitIdentityEdit();
   }, [identityEditing, refusesRevisions, onExitIdentityEdit]);
+  useEffect(() => {
+    if (profileEditing && refusesRevisions) onExitProfileEdit();
+  }, [profileEditing, refusesRevisions, onExitProfileEdit]);
   // 往来单位资料（ADR-0369）：概要、联系人与资料版本几处读同一份修订链。我方公司的资料在公司主体上，不读；法人册答出之前
   // 也先不读，免得先发一笔再认出是我方公司。
   const profiles = useBusinessPartyProfiles(partyId, false, pinned === false);
@@ -220,7 +224,7 @@ export function BusinessPartyDetailPage({
   // 外壳（BusinessPartyEditShell）——页头、分段的表单、底部固定的动作条，只读时的各分区都不摆。不是模态，离开前有没提交的
   // 输入先问一句。
   const editing = identityEditing && mayWrite && takesRevisions;
-  const editingProfile = profileEditing && !identityEditing && mayWrite && row !== null && !ours;
+  const editingProfile = profileEditing && !identityEditing && mayWrite && takesRevisions && !ours;
   const anyEditing = editing || editingProfile;
   // 这一次编辑是不是从名录右栏进来的（business-party-edit-origin.ts）：是，退出后回名录那张标签——它一直挂着，进来之前的分栏
   // 与选中行都还在；不是（在本页自己点的、刷新或深链进来的），照旧留在本页。渲染时只看不取，取走放在提交之后。
@@ -258,8 +262,8 @@ export function BusinessPartyDetailPage({
     setRegisteringRelationship(false);
     onEnterProfileEdit();
   };
-  // 资料空状态与客户提示里的「更新资料」与页头那一枚同一个去处；查看者、我方公司与编辑态中不摆。
-  const profileUpdate = mayWrite && !ours && !anyEditing ? startProfileEdit : undefined;
+  // 资料空状态与客户提示里的「更新资料」与页头那一枚同一个去处；查看者、我方公司、登过停用的单位与编辑态中不摆。
+  const profileUpdate = mayWrite && !ours && !anyEditing && takesRevisions ? startProfileEdit : undefined;
   const relationshipRegistration =
     mayWrite && row && !anyEditing
       ? {
@@ -367,7 +371,7 @@ export function BusinessPartyDetailPage({
         <>
           {row && !anyEditing ? (
             <>
-              {mayWrite && !ours ? (
+              {mayWrite && !ours && takesRevisions ? (
                 <Button size="sm" variant="default" className={`${primaryActionClass} type-body`} onClick={startProfileEdit}>
                   更新资料
                 </Button>
@@ -440,6 +444,7 @@ export function BusinessPartyDetailPage({
                               query={profiles}
                               registrationCountry={row.identityLayerRegistered ? row.registrationCountry : undefined}
                               roles={roles}
+                              takesRevisions={takesRevisions}
                               onUpdate={profileUpdate}
                             />
                           )}
@@ -455,7 +460,7 @@ export function BusinessPartyDetailPage({
                       id: 'contacts' as const,
                       content: (
                         <section className="bg-idpxyz-bg p-5">
-                          <BusinessPartyContactsReadout partyId={row.partyId} query={profiles} onUpdate={profileUpdate} />
+                          <BusinessPartyContactsReadout partyId={row.partyId} query={profiles} takesRevisions={takesRevisions} onUpdate={profileUpdate} />
                         </section>
                       ),
                     },
@@ -469,7 +474,7 @@ export function BusinessPartyDetailPage({
                       summary: profileVersionsSummary(profiles, row.partyId),
                       content: (
                         <section className="bg-idpxyz-bg p-5">
-                          <BusinessPartyProfileVersions partyId={row.partyId} query={profiles} onUpdate={profileUpdate} />
+                          <BusinessPartyProfileVersions partyId={row.partyId} query={profiles} takesRevisions={takesRevisions} onUpdate={profileUpdate} />
                         </section>
                       ),
                     },

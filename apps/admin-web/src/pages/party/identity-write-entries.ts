@@ -5,7 +5,8 @@
 // 拒不拒的（给登过停用的单位登一段起始更早的合作关系、新增一个生效更早的客户账户）不在此列，入口照摆。
 //
 // 判据是「登过停用没有」，不是状态：行上带着停用时点即登过，不论那个时点到没到。到没到只决定状态是不是「已停用」；登记册
-// 看的是最新一笔修订上有没有停用（后端 application 包的 deactivationReplay、checkRevisionSlot）。
+// 看的是最新一笔修订上有没有停用（后端 application 包的 deactivationReplay、checkRevisionSlot，以及往来单位资料登记那一道门
+// RegisterBusinessPartyProfileHandler 的 checkSuccessor）。
 
 /** 三本身份册的行都带这一格：登过停用才有。 */
 type DeactivationCarrier = { deactivatedAt?: string };
@@ -24,8 +25,9 @@ export function identityMayBeDeactivated(row: DeactivationCarrier): boolean {
 }
 
 /**
- * 这个身份还收不收新的一笔修订（更正登记信息）。登过停用的不再收——身份是稳定的，停用不是中场休息；已有的各笔修订照旧
- * 看得到。与 identityMayBeDeactivated 此刻是同一个判据，分开写是因为它们照的是登记册的两条规则，哪一条改了只动自己这一个。
+ * 这个身份还收不收新的一笔修订——更正登记信息，以及往来单位新的一版资料（「更新资料」）。登过停用的都不再收——身份是
+ * 稳定的，停用不是中场休息；已有的各笔修订、各版资料照旧看得到。与 identityMayBeDeactivated 此刻是同一个判据，分开写是因为
+ * 它们照的是登记册的不同规则，哪一条改了只动自己这一个。
  */
 export function identityTakesRevisions(row: DeactivationCarrier): boolean {
   return !deactivationRegistered(row);

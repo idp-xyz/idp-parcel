@@ -12,7 +12,7 @@ test('identityMayBeDeactivated 登过停用的不再摆停用入口', () => {
   equal(identityMayBeDeactivated({ deactivatedAt: '2099-01-01T00:00:00Z' }), false);
 });
 
-// Covers: 更正登记信息的入口——登过停用的身份不再收新修订，停用时点到没到都一样。
+// Covers: 更正登记信息与更新资料的入口——登过停用的身份不再收新修订、也不再收新的一版资料，停用时点到没到都一样。
 test('identityTakesRevisions 登过停用的不再收新修订', () => {
   equal(identityTakesRevisions({}), true);
   equal(identityTakesRevisions({ deactivatedAt: '2026-06-01T00:00:00Z' }), false);

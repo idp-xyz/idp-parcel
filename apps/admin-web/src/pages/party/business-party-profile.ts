@@ -171,10 +171,21 @@ export interface ProfileEmptyNote {
 /** 客户有资料却没有联系人时的那句提示（判据 customerLacksContacts）。 */
 export const customerWithoutContactsLine = '这家单位是客户，资料里还没有联系人；建议登记一位，下单和对账时找得到人。';
 
-/** 「概要」里资料空着：没登过与登过却都在未来生效分开说；是客户再补一句建议。 */
-export function profileSummaryEmptyNoteOf(scheduled: boolean, roles: readonly string[]): ProfileEmptyNote {
+/**
+ * 登过停用的往来单位资料空着时说的那一句：登记册不再收它新的一版资料（identity-write-entries.ts 的 identityTakesRevisions 为假），
+ * 「在『更新资料』里登记」对它是假话，入口也不摆。说「已登记停用」而不说「已停用」：停用时点还没到的同样不收。
+ */
+export const profileClosedLine = '这家单位已登记停用，不再收新的资料。';
+
+/**
+ * 「概要」里资料空着：没登过与登过却都在未来生效分开说；是客户再补一句建议。`takesRevisions` 为假（登过停用）时去处换成
+ * profileClosedLine，建议也不提——登不了的事不建议。
+ */
+export function profileSummaryEmptyNoteOf(scheduled: boolean, roles: readonly string[], takesRevisions: boolean): ProfileEmptyNote {
+  const title = scheduled ? '还没有生效的资料' : '还没有登记资料';
+  if (!takesRevisions) return { title, lines: scheduled ? ['已登记的版本都在未来生效。', profileClosedLine] : [profileClosedLine] };
   return {
-    title: scheduled ? '还没有生效的资料' : '还没有登记资料',
+    title,
     lines: [
       scheduled ? '已登记的版本都在未来生效。' : '联系人、地址、税号与收款账户都在「更新资料」里登记。',
       ...(customerLacksContacts(roles, null) ? ['这家单位是客户，建议登记一位联系人，下单和对账时找得到人。'] : []),
@@ -182,19 +193,24 @@ export function profileSummaryEmptyNoteOf(scheduled: boolean, roles: readonly st
   };
 }
 
-/** 「联系人」里一位都没有：资料在而没有联系人、登过却没有生效的资料、没登过资料各一个标题。 */
-export function profileContactsEmptyNoteOf(state: Exclude<BusinessPartyProfileState, { kind: 'note' }>): ProfileEmptyNote {
+/**
+ * 「联系人」里一位都没有：资料在而没有联系人、登过却没有生效的资料、没登过资料各一个标题；下面一句说去处，登过停用的
+ * （`takesRevisions` 为假）换成 profileClosedLine。
+ */
+export function profileContactsEmptyNoteOf(
+  state: Exclude<BusinessPartyProfileState, { kind: 'note' }>,
+  takesRevisions: boolean,
+): ProfileEmptyNote {
   return {
     title: state.kind === 'present' ? '还没有登记联系人' : state.scheduled ? '还没有生效的资料' : '还没有登记资料',
-    lines: ['联系人与地址、税号一起在「更新资料」里登记。'],
+    lines: [takesRevisions ? '联系人与地址、税号一起在「更新资料」里登记。' : profileClosedLine],
   };
 }
 
-/** 「资料版本」里一版都没有。 */
-export const profileVersionsEmptyNote: ProfileEmptyNote = {
-  title: '还没有登记资料',
-  lines: ['登记后每一版都列在这里，旧版本不会被覆盖。'],
-};
+/** 「资料版本」里一版都没有；登过停用的不再说「登记后」。 */
+export function profileVersionsEmptyNoteOf(takesRevisions: boolean): ProfileEmptyNote {
+  return { title: '还没有登记资料', lines: [takesRevisions ? '登记后每一版都列在这里，旧版本不会被覆盖。' : profileClosedLine] };
+}
 
 /** 往来单位的修订折成法人资料内容的形状，好借法人资料的预填折算与保存前的比较：注册地址缺席折成空的。 */
 export function businessPartyProfileContentOf(record: BusinessPartyProfileRevisionRecord): LegalEntityProfileContent {

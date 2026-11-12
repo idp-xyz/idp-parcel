@@ -30,7 +30,7 @@ import {
   profileContactsEmptyNoteOf,
   profileEditTagText,
   profileSummaryEmptyNoteOf,
-  profileVersionsEmptyNote,
+  profileVersionsEmptyNoteOf,
   suggestedBusinessPartyProfileRevision,
   type BusinessPartyProfileDraft,
 } from './business-party-profile';
@@ -106,7 +106,7 @@ export const ourCompanyProfileNote = `${ourCompanyProfileNoteParts.title}：${ou
 
 /**
  * 资料空着时的那一块：说清空在哪、下一步去哪。有写授予的给「更新资料」——描边按钮：页头已有一枚实心的主动作，两枚实心会抢；
- * 查看者只看到话。
+ * 查看者只看到话。登过停用的单位也只有话，而且那句话由调用方换过（business-party-profile.ts 的 profileClosedLine）。
  */
 function ProfileEmptyState({ title, lines, onUpdate }: { title: string; lines: readonly string[]; onUpdate?: () => void }) {
   return (
@@ -135,6 +135,7 @@ export function BusinessPartyProfileReadout({
   query,
   registrationCountry,
   roles = [],
+  takesRevisions,
   onUpdate,
 }: {
   partyId: string;
@@ -143,19 +144,24 @@ export function BusinessPartyProfileReadout({
   registrationCountry?: string;
   /** 这家单位此刻持有的角色；是客户而缺联系人时提示一句（customerLacksContacts）。 */
   roles?: readonly string[];
-  /** 空状态与提示里的「更新资料」；不给就不摆按钮（查看者）。 */
+  /**
+   * 这家单位还收不收新的一版资料（identity-write-entries.ts 的 identityTakesRevisions）。不收时空状态的去处换一句说明，客户缺
+   * 联系人的那句建议也不提——登不了的事不建议。
+   */
+  takesRevisions: boolean;
+  /** 空状态与提示里的「更新资料」；不给就不摆按钮（查看者、登过停用的单位）。 */
   onUpdate?: () => void;
 }) {
   const state = businessPartyProfileStateOf(query.answer, partyId);
   if (state.kind === 'note') return <p className="type-value leading-6 text-idpxyz-breadcrumb">{state.text}</p>;
   if (state.kind === 'empty') {
-    return <ProfileEmptyState {...profileSummaryEmptyNoteOf(state.scheduled, roles)} onUpdate={onUpdate} />;
+    return <ProfileEmptyState {...profileSummaryEmptyNoteOf(state.scheduled, roles, takesRevisions)} onUpdate={onUpdate} />;
   }
   const record = state.record;
   const bankAccounts = record.bankAccounts ?? [];
   return (
     <div className="legal-entity-profile-readout mt-3 flex flex-col gap-3">
-      {customerLacksContacts(roles, record) ? (
+      {takesRevisions && customerLacksContacts(roles, record) ? (
         <div className={`flex items-center gap-2 rounded border px-3 py-2 type-body ${statusToneBanner.info}`}>
           <UserPlus className={`h-3.5 w-3.5 shrink-0 ${statusToneText.info}`} aria-hidden="true" />
           <span className="min-w-0 flex-1 leading-5">{customerWithoutContactsLine}</span>
@@ -288,16 +294,19 @@ export function BusinessPartyTaxAndInvoicing({
 export function BusinessPartyContactsReadout({
   partyId,
   query,
+  takesRevisions,
   onUpdate,
 }: {
   partyId: string;
   query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
+  /** 同 BusinessPartyProfileReadout 的那一格：不收新的一版资料时，空状态的去处换一句说明。 */
+  takesRevisions: boolean;
   onUpdate?: () => void;
 }) {
   const state = businessPartyProfileStateOf(query.answer, partyId);
   if (state.kind === 'note') return <p className="type-value leading-6 text-idpxyz-breadcrumb">{state.text}</p>;
   const contacts = state.kind === 'present' ? state.record.contacts : [];
-  if (contacts.length === 0) return <ProfileEmptyState {...profileContactsEmptyNoteOf(state)} onUpdate={onUpdate} />;
+  if (contacts.length === 0) return <ProfileEmptyState {...profileContactsEmptyNoteOf(state, takesRevisions)} onUpdate={onUpdate} />;
   return <LegalEntityContactCards contacts={contacts} />;
 }
 
@@ -305,16 +314,19 @@ export function BusinessPartyContactsReadout({
 export function BusinessPartyProfileVersions({
   partyId,
   query,
+  takesRevisions,
   onUpdate,
 }: {
   partyId: string;
   query: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
+  /** 同 BusinessPartyProfileReadout 的那一格：不收新的一版资料时，空状态的去处换一句说明。 */
+  takesRevisions: boolean;
   onUpdate?: () => void;
 }) {
   const state = businessPartyProfileStateOf(query.answer, partyId);
   if (state.kind === 'note') return <p className="type-value leading-6 text-idpxyz-breadcrumb">{state.text}</p>;
   const body = state.body;
-  if (body.revisions.length === 0) return <ProfileEmptyState {...profileVersionsEmptyNote} onUpdate={onUpdate} />;
+  if (body.revisions.length === 0) return <ProfileEmptyState {...profileVersionsEmptyNoteOf(takesRevisions)} onUpdate={onUpdate} />;
   const now = Date.now();
   const rows = [...body.revisions].sort((left, right) => right.revision - left.revision);
   return (
