@@ -73,7 +73,7 @@ Status: in-progress
 | [01](./issues/01-type-reads-unknown-when-the-source-registers-are-incomplete.md) | 止血（bug）：推类型用的册不止一页时，没读到的显示「—」并标明，不再显示「暂无合作关系」，也不摆按类型的数 | 前端切片 | resolved（2026-11-10 进 main） |
 | [02](./issues/02-identity-list-and-page-states.md) | 单位名录的整页列表态与各页面态 | 前端切片 | resolved（2026-11-11 进 main） |
 | [03](./issues/03-master-detail-split.md) | 主从分栏：名录栏与右栏头区（阻塞于 02） | 前端切片 | resolved（2026-11-11 进 main） |
-| [04](./issues/04-relationships-and-our-companies-views.md) | 合作关系、我方关联两个视图换同一套（两个视图的列表区已随 02 换过，剩右栏外框与我方关联的主从分栏） | 前端切片 | ready-for-agent |
+| [04](./issues/04-relationships-and-our-companies-views.md) | 合作关系、我方关联两个视图换同一套（两个视图的列表区已随 02 换过，剩右栏外框与我方关联的主从分栏） | 前端切片 | resolved（2026-11-12 进 main） |
 | [05](./issues/05-detail-tabs-content.md) | 右栏各签内容重排（阻塞于 03） | 前端切片 | resolved（2026-11-11 进 main） |
 | [06](./issues/06-keep-the-previous-page-while-refetching.md) | 换条件、翻页、刷新时留着旧的一页（阻塞于 02；共用取数件，需非作者评审） | 前端切片 | ready-for-agent |
 | [07](./issues/07-adr-party-categories-on-the-read.md) | ADR 草案的非作者评审、编号与接受 | 文档票 | ready-for-agent |
