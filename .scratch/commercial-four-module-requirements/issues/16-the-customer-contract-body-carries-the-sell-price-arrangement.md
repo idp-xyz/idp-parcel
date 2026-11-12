@@ -40,3 +40,26 @@ Blocked by: 无
 
 - 2026-11-12：由票 15 拆出。
 - 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。
+- 2026-11-12（完工，待评审）：Cursor 会话在分支 `cursor/cfmr-16-contract-sell-price-arrangement` 上做完，基线 `2130a37b2`，代码 tip `819b28e59`（其后只改票面）。照 `/implement` › `/tdd` 逐片先红后绿。
+  1. **落点。**
+     - 领域：`ContractSellPriceArrangement` 与构造门 `DeclareContractSellPrice`（来源列表与不计销售价的依据两格恰一），`PricingScopeReference`、`NoSellPriceBasis`。
+     - 规范化：带销售价格约定的客户合同文档写成 `PCC-3`，不带的仍是 `PCC-1`、逐字节不变。测试里那份期望串取自加这一格之前的构建。
+     - 发布：声明通道 `CONTRACT_SELL_PRICE`。受控批文、录入载荷与载体快照三条路同键 `sellPriceArrangement`：`sources` 里每项一个 `pricingScope`、按顺序，或 `noSellPriceBasis`。
+     - 持久化：迁移 `0049` 父子两表，来源按声明的位置保存；写口按位置比对，同一组范围换了顺序答`内容冲突`。
+     - 读面：客户合同目录行与按身份读回带出这一格，没有这一层的合同答没有、不补默认。
+     - 文档：`UC-PC-001`、`UC-PC-002`「给开发的交接」改成现状。
+  2. **完成判据逐条。**
+     - 领域构造门的拒收 ✅ `TestASellPriceArrangementDeclaresExactlyOneOfSourcesOrNoSellPrice`。「不计销售价而没有依据」与「两种都没声明」是同一格输入。
+     - 经录入、批准、发布后读回顺序相同，摘要随内容与顺序变 ✅ 编排 `TestACustomerContractDraftCarriesItsSellPriceArrangementThroughApprovalAndPublication`；真库 `TestCustomerContractCatalogueReadsSellPriceSourcesBackInTheDeclaredOrder`、`TestAContractDraftWithSellPriceSourcesRoundTripsThroughTheRehydrationGate`；摘要 `TestAContractWithASellPriceArrangementIsCanonicalizedAsPCC3`。各段分别有测试，没有在起着的服务上从头到尾实走一遍。
+     - 旧规范化版本的合同读回不变、摘要不变 ✅ `TestAContractWithoutASellPriceArrangementStaysByteIdenticalUnderPCC1`。
+     - `UC-PC-001` 交接段改成现状 ✅。
+  3. **「要裁的」两条怎样办的。**
+     - 部署开关：核下来参与方与商业没有同类的门，`PCC-2` 也没有。本票没有加：加它是一项新的运维机制，要像 ADR-0352 那样另立记录。要不要加，留给 PC owner 与运维定。
+     - 显式不计销售价：照 ADR-0380 做了。
+  4. **票面之外定的三处。**
+     - 迁移取号 0049，跳过 0048。0048 在未进 `main` 的分支上已被占用（`0048_customer_contract_rule_package_optional.sql`）。
+     - 没有另立领域级的点读端口。票 17 的地盘写明读口；未接线的构造函数也过不了 `internal/architecture` 的生产接线棘轮。
+     - 受控批文的翻译层自己判两个键恰一，判据同信用额度的两格。
+  5. **与在途分支的重叠。** 另一会话未合入的分支（如 `feat/goods-details-admin`）带着「客户合同不必指名接单规则包」的改动，动的是客户合同正文、它的规范化、受控批文、合同载荷与合同目录查询这一批文件。本票把新代码尽量放进新文件；后进 `main` 的一方重放时合并。
+  6. **自验。** 受影响范围，含真库：`internal/partycommercial/...`、`cmd/parcel-commercial`、`cmd/parcel-api`、`migrations`、`internal/platform/migrate`、`internal/architecture`，以及结算、小包托运、计价三处读参与方与商业的适配器，全部通过；`go build ./...` 与 `go vet` 退 0。全量真库测试与种子未跑，属进 `main` 的步骤。
+  7. **还没有做的。** 非作者评审已派出两轴隔离子代理，未回；进 `main`。
