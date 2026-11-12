@@ -405,9 +405,20 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if len(request.plan.structures.surchargeRules) > 0 || len(request.plan.structures.exclusions) > 0 {
 		derived, featuresErr := request.input.Features()
 		if featuresErr != nil {
-			// 缺了尺寸，基于尺寸的判定条件既不能确认也不能排除：这是证据不足，
-			// 不是请求不合法。
-			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("PACKAGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
+			if !errors.Is(featuresErr, ErrMissingDimensions) || request.plan.RequiresDeclaredDimensions() {
+				// 缺了尺寸而方案真要读按尺寸派生的量，基于尺寸的判定条件既不能确认也不能排除：
+				// 这是证据不足，不是请求不合法。
+				return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("PACKAGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
+			}
+			// 方案不读任何按尺寸派生的量（RequiresDeclaredDimensions 为假，与试算点名缺项 DIMENSIONS 的
+			// 分流同一判据，ADR-0381 决定二）：尺寸没申报也照聚合主体同一形状给只带重量的特征，评价不停
+			// ——一张只按实重判附加费或拒收的卡，缺一件它用不上的资料不该等运营登记（票 declared-goods-lines/28）。
+			derived, featuresErr = request.input.weightOnlyFeatures()
+			if featuresErr != nil {
+				return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("PACKAGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
+			}
+			evaluation.explanation = append(evaluation.explanation,
+				"dimensions undeclared; plan reads no dimension-derived feature, judged on weight-only features")
 		}
 		// 类别量随解析结果填进特征：分区一定有；偏远档位只在卡绑了档位目录时有，没绑的卡该格缺席，
 		// 地址类型条件读到缺席照旧报特征不可用。

@@ -461,6 +461,16 @@ func (input PricingInputSnapshot) Features() (PackageFeatures, error) {
 	return NewPackageFeatures(sides, input.actualWeight)
 }
 
+// weightOnlyFeatures 派生只带重量的特征，形状与聚合主体的相同：几何量缺席，读它们的条件报特征不可用。
+// 只给「方案不读任何按尺寸派生的量」的评价用（RequiresDeclaredDimensions 为假，与试算分流同一判据）——
+// 单件输入没申报尺寸时，一张只按实重判的卡不该停在特征不可用上（票 declared-goods-lines/28）。
+func (input PricingInputSnapshot) weightOnlyFeatures() (PackageFeatures, error) {
+	if !input.valid() {
+		return PackageFeatures{}, ErrPricingInputInvalid
+	}
+	return PackageFeatures{actualWeight: input.actualWeight}, nil
+}
+
 func (input PricingInputSnapshot) valid() bool {
 	if !input.tenantID.valid() || !input.scope.valid() || !input.subject.valid() || strings.TrimSpace(input.zone) != input.zone || !input.actualWeight.valid() || !validBusinessTime(input.businessAt) {
 		return false
