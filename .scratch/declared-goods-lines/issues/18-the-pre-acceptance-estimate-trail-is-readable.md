@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: in-progress
-Blocked by: 19、20、21（「要定的」两项已由 [ADR-0379](../../../docs/adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 定下，实现拆成这三张）
+Blocked by: 无（19–21 均已提交，未进 main；「要定的」两项已由 [ADR-0379](../../../docs/adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 定下，实现拆成这三张）
 
 依据：ADR-0179 决定六（估价连同价卡版本、逐件评价标识与版本清单随控制结果留痕）；[ADR-0378](../../../docs/adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定三（选卡按申报的服务产品）；票 17 评审。
 
@@ -29,3 +29,11 @@ Blocked by: 19、20、21（「要定的」两项已由 [ADR-0379](../../../docs/
 - 结算按委托交出运营读口：逐提交版本的估价与它的冻结或信用暴露。
 - 受理判断的财务控制结论由小包托运在委托详情上交出，不带金额。
 - 管理台运单详情显示「受理前财务控制」一块，两侧各交各的、页面拼。只对运营，不对客户。
+
+## 完成记录（2026-11-11）
+
+- 决定：ADR-0379（文档分支上的 `634e0ce12` 与评审修订 `6b5f63bc8`）。非作者评审一轮：ADR 与 CONTEXT 无阻断；票 19 钉的读口形状四处与代码不符，已改钉——占用可两笔（组合策略）、信用暴露的状态词不同、费用行记评价原样的小数、金额照结算读面写成最小币单位的整数串；另补 PP CONTEXT 的留痕例外句、用词改为计价重量、四种结论。
+- 实现：票 19、20、21 均已提交在 `feat/goods-details-admin`，各经非作者评审并修订，提交见各票记录。演示段 `55` 经新读口逐版断言估价用的卡、产品、逐件明细与两笔占用（`3708373ba`）。
+- 最终分支头 `cf9fdb50a`：带 PG 全量 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/...` 退 0，`go vet` 干净；管理台 `tsc`、`run-tests` 1391 过 0 败、`vite build` 退 0。演示三段在 `4fc4cd758`（票 19、20 评审修订之前）上各退 0；修订只动产品不一致时不记、复核详情去掉重复一份、重放按数比，演示没有重跑。
+- 衍生：票 22（估价没形成的结算细原因读不回）。
+- 证据记 `S`，参数登记册未动；管理台没在浏览器里点过。
