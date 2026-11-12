@@ -35,7 +35,12 @@ const pageOf: Record<RefKind, () => string> = {
 
 /** 引用的去处：对象所在的页，带上它的标识作检索词。 */
 export function refHash(kind: RefKind, id: string): string {
-  return hashWithQueryValue(pageOf[kind](), ADDRESS_KEYWORD_PARAM, id);
+  return hashWithQueryValue(refPageHash(kind), ADDRESS_KEYWORD_PARAM, id);
+}
+
+/** 那一类对象所在的页本身，不带检索词：要指人去那里新登一条、还没有某一条可筛时用。 */
+export function refPageHash(kind: RefKind): string {
+  return pageOf[kind]();
 }
 
 /** 行模型里一格引用的原值：格里显示的字可能拼了版本号（`合同@v1`），链接要的是对象标识本身。 */
