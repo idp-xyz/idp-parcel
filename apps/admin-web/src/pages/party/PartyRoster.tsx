@@ -109,12 +109,16 @@ export function PartyRoster<Row>({
     revealWhenReady: true,
   });
 
-  // 栏是点了表里的一行才挂上来的，那一行随表卸掉，焦点没了着落：落到栏里选中的那一行上，↑/↓ 接着走。只在挂上来时看一次，
-  // 也只在焦点确实没有着落时落，不从别处抢。
+  // 栏是点了表里的一行才挂上来的，那一行随表卸掉，焦点没了着落：落到栏里选中的那一行上，↑/↓ 接着走。只看一次，也只在
+  // 焦点确实没有着落时落，不从别处抢。看的时机是行第一次摆出来：多数时候就是挂上来的那一刻；从别的视图带着选中的那一家过来时
+  // （「我方关联」右栏的「在单位名录里看」）这一页还在读，等行到了再看——挂上来那一刻栏里还没有行可落。
+  const focusChecked = useRef(false);
   useEffect(() => {
+    if (focusChecked.current || !ready) return;
+    focusChecked.current = true;
     if (selectedKey === null || document.activeElement !== document.body) return;
     listRef.current?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(selectedKey)}"]`)?.focus({ preventScroll: true });
-  }, []);
+  }, [ready]);
 
   const pagination = footer.pagination;
   const pager = pagination ? cursorPagerControls(pagination.page, pagination.next) : null;
