@@ -96,7 +96,7 @@ Q4 至 Q6 是用户自己的决定。
 | 12 | [报价答复：运营代录客户的接受或拒绝](./issues/12-customer-acceptance-of-a-quotation.md) | 11 | ready-for-agent |
 | 13 | [价格生效申请：接受之后发起现有的发布并记下依据](./issues/13-price-effectiveness-application.md) | 12、15 | ready-for-agent |
 | 14 | [采购一侧一票多件的运输收费发生项算不出成本](./issues/14-buy-side-multi-piece-charge-occurrences-cannot-be-priced.md) | 06；随票立 ADR | ready-for-agent |
-| 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | 无 | ready-for-agent |
+| 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | 无 | in-progress（[ADR 草案第一稿](./adr-draft-the-customer-contract-declares-ordered-sell-price-sources.md)已出，等用户看结论） |
 
 ## 与冻结清单的关系
 
@@ -178,3 +178,4 @@ Q4 至 Q6 是用户自己的决定。
   4. **ADR 草案决定六与票 13 的「没登记不设门」。** 与红线里租户取值拒绝默认值相抵，也与草案自己「三类」一段不一致；票 03 把同一处写进了「要裁的」，这两处没写。补上读面答未配置，并记进草案的越权风险点与票 13「要裁的」。这一条没有裁，只是写明了。
   5. **票 07 引的 ADR-0190 决定一那一句已被 ADR-0229 部分停用。** 补注自然键另加代次。
   6. **本规格写「三类归属写在各票」，票 08、09、15 没有这一节。** 改成如实的说法。
+- 2026-11-12（票 15 开工）：用户选定开工票 15，只出决定。分支 `cursor/cfmr-15-customer-price-authority`，从 `54b32c1b8` 起，没有进 `main`。出了 [ADR 草案第一稿](./adr-draft-the-customer-contract-declares-ordered-sell-price-sources.md)，行业做法笔记补 R20 至 R29。取证推翻了会话写在票 15 上的倾向，票面已更正，经过记在票 15 的 Comments。草案未编号、未经非作者评审，用户还没有看过结论；它之外的文档一处未改。
