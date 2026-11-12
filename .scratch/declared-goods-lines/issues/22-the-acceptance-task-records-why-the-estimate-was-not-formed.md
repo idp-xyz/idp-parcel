@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: in-progress
-Blocked by: 23、24（「要定的」两项已由 [ADR-0380](../../../docs/adr/0380-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md) 定下）
+Blocked by: 无（23、24 均已提交，未进 main；「要定的」两项已由 [ADR-0380](../../../docs/adr/0380-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md) 定下）
 
 依据：ADR-0379 决定三与越权风险点 6；票 21 实现时发现。
 
@@ -29,3 +29,11 @@ Blocked by: 23、24（「要定的」两项已由 [ADR-0380](../../../docs/adr/0
 - 价卡一侧答不出的（没有在用价卡、价卡适用冲突、试算没有合计、合计不为正、某件为负）改等运营登记，计价「参数已登记」后按租户重驱；解得开的是生效期覆盖提交时点的卡。币种对不上只有缺陷走得到，照旧内部重试（评审改）。
 - 等待落库的处理尝试另记结算原因与这一版申报的服务产品；委托详情从处理尝试落处读。
 - 申报不全该等客户补充，另立票 25。
+
+## 完成记录（2026-11-11）
+
+- 决定：ADR-0380（文档分支上的 `8ea6a930c`、评审修订 `88673671c` 与 `1cc0f4a2a`）。非作者评审一轮：阻断一处已改——PS CONTEXT「接受判断任务」等运营登记一格放宽到「登了却答不出」；另把币种对不上挪回内部重试（只有缺陷走得到）、写明解得开的是生效期覆盖提交时点的卡、给 ADR-0229 决定五补读法、续办方单独交出、几个队列与委托详情读同一个任务读面一起改。
+- 实现：票 23、24 均已提交在 `feat/goods-details-admin`，各经非作者评审并修订。票 23 评审另发现续办口没有游标、被唤醒后照旧停着的委托会让重驱停在同一页，已改为按位置翻页；最近一次尝试的读法走新索引。
+- 最终分支头 `7947bdad3`：带 PG 全量 `go test ./internal/... ./cmd/... ./referenceconfig/... ./migrations/...` 退 0，`go vet` 干净；管理台 `tsc`、`run-tests` 1406 过 0 败、`vite build` 退 0。
+- 衍生：票 25（申报不全的估价改等客户补充，needs-triage）。上线时对此前被放弃的这一类委托做一次重驱（ADR-0380 Consequences）。
+- 证据记 `S`，参数登记册未动；管理台没在浏览器里点过；演示段没有加这一路（演示租户的卡都覆盖，走不到没有在用价卡）。
