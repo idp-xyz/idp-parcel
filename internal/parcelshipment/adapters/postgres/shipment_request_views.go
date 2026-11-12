@@ -516,6 +516,7 @@ type lastAttemptRecord struct {
 	attemptedAt      time.Time
 	settlementReason string
 	serviceProduct   string
+	estimateGapCodes []string
 }
 
 // taskViewRecords 是委托详情与各委托队列（人工复核、授权处置、受控补充）取任务视图的唯一入口：处理尝试从它实际
@@ -572,11 +573,11 @@ func lastAttempts(
 	}
 	rows, err := querier.Query(ctx,
 		`SELECT task.shipment_request_id, latest.reason_ref, latest.resume_path, latest.continuation_ref,
-		        latest.attempted_at, latest.settlement_reason, latest.service_product
+		        latest.attempted_at, latest.settlement_reason, latest.service_product, latest.estimate_gap_codes
 		   FROM unnest($2::text[], $3::text[], $4::timestamptz[]) AS task(shipment_request_id, submission_version, established_at)
 		  CROSS JOIN LATERAL (
 		        SELECT candidate.*
-		          FROM ((SELECT reason_ref, resume_path, continuation_ref, attempted_at, settlement_reason, service_product
+		          FROM ((SELECT reason_ref, resume_path, continuation_ref, attempted_at, settlement_reason, service_product, estimate_gap_codes
 		                   FROM parcel_shipment.acceptance_processing_attempt
 		                  WHERE tenant_id = $1
 		                    AND shipment_request_id = task.shipment_request_id
@@ -584,7 +585,7 @@ func lastAttempts(
 		                  ORDER BY attempted_at DESC, continuation_ref DESC
 		                  LIMIT 1)
 		                UNION ALL
-		                (SELECT reason_ref, resume_path, continuation_ref, attempted_at, settlement_reason, service_product
+		                (SELECT reason_ref, resume_path, continuation_ref, attempted_at, settlement_reason, service_product, estimate_gap_codes
 		                   FROM parcel_shipment.acceptance_processing_attempt
 		                  WHERE tenant_id = $1
 		                    AND shipment_request_id = task.shipment_request_id
@@ -608,7 +609,7 @@ func lastAttempts(
 			settlementReason, product *string
 		)
 		if err := rows.Scan(&request, &attempt.reason, &path, &attempt.continuation,
-			&attempt.attemptedAt, &settlementReason, &product); err != nil {
+			&attempt.attemptedAt, &settlementReason, &product, &attempt.estimateGapCodes); err != nil {
 			return nil, fmt.Errorf("last processing attempts: %w", err)
 		}
 		if attempt.resumePath, err = resumePathNamed(path); err != nil {
@@ -653,6 +654,7 @@ func taskViewRecord(document taskDocument, attempt lastAttemptRecord, attempted 
 		record.LastAttemptedAt = attempt.attemptedAt
 		record.LastAttemptSettlementReason = attempt.settlementReason
 		record.LastAttemptServiceProduct = attempt.serviceProduct
+		record.LastAttemptEstimateGapCodes = attempt.estimateGapCodes
 	}
 	// 等待态值域在读面也查一道（判据同重建侧）：越界值不校会被读成缺席——「这任务
 	// 不等任何人」——而不是被拒成一行坏数据。零值即缺席，照实留零。

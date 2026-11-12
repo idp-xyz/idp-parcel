@@ -61,6 +61,28 @@ func (structures PricingPlanStructures) ReadsFeature(source FeatureSource) bool 
 	return false
 }
 
+// RequiresDeclaredDimensions 报出这张卡的评价要不要读包裹尺寸：任一判定条件读按尺寸派生的量（三种几何量、
+// 体积、体积重），或重量策略取实重与体积重较大者——那条派生路非算体积重不可（CalculatePricingWeight），而它
+// 不经判定条件，ReadsFeature 看不见。试算编排据此在造输入之前点名缺项 DIMENSIONS（ADR-0381 决定二），而不是
+// 等评价落`待判断`：缺口是客户补得上的事实，要在输入门上说出来。只按方案自己的声明判，不看输入。
+func (plan PricingPlanVersion) RequiresDeclaredDimensions() bool {
+	if plan.weight.method == PricingWeightMax {
+		return true
+	}
+	for _, source := range []FeatureSource{
+		FeatureLongestSide,
+		FeatureSecondLongestSide,
+		FeatureLengthAndGirth,
+		FeatureVolume,
+		FeatureVolumetricWeight,
+	} {
+		if plan.structures.ReadsFeature(source) {
+			return true
+		}
+	}
+	return false
+}
+
 // packageWeightPredicates 收齐方案里读体积重或自身计价重量的判定条件。
 func (structures PricingPlanStructures) packageWeightPredicates() []FeatureCondition {
 	var predicates []FeatureCondition

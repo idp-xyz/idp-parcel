@@ -50,14 +50,23 @@ func (outcome PreAcceptanceTrialOutcome) String() string {
 	}
 }
 
+// PreAcceptanceTrialGap 是申报不全时一件申报包裹缺的各格：包裹按申报标识指名，缺项码照计价的封闭码原样
+// （MEASUREMENT、DIMENSIONS、POSTAL_ROUTE、ORIGIN_POSTAL……，ADR-0381 决定三）。本上下文不拥有申报完备性的
+// 词汇：不折叠、不改写、不在这里分「谁来补」——分流语义属调用方（小包托运）的消费侧适配器。
+type PreAcceptanceTrialGap struct {
+	Parcel  string
+	Missing []string
+}
+
 // PreAcceptanceTrialAnswer 是一次试算的答复。PriceCard 是所用价卡版本引用的字面（domain.VersionReferenceLiteral），选到卡之后的各格
 // 都有值；Trials 只在已形成时有值。ServiceProduct 是选卡用的服务产品，取自评价的输入快照（ADR-0378 决定三），只在已形成时可能有值，
-// 空即没申报。
+// 空即没申报。Gaps 只在`缺件`时有值：缺的那几件逐件点名，齐的件不占一行。
 type PreAcceptanceTrialAnswer struct {
 	Outcome        PreAcceptanceTrialOutcome
 	PriceCard      string
 	ServiceProduct string
 	Trials         []domain.PreAcceptanceTrial
+	Gaps           []PreAcceptanceTrialGap
 }
 
 // ErrPreAcceptanceTrialsUnavailable 表示试算那一侧读不回、形成与否未知。施加编排据此停在待判断等重试，不读成未配置。

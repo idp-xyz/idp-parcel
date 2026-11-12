@@ -99,7 +99,9 @@ type FormPlanGivenEstimateEvaluationsDeps struct {
 	SeriesInForce    ports.ReferenceSeriesInForceResolver
 	SeriesVersions   ports.ReferenceSeriesRegister
 	CatalogueInForce ports.ReferenceCatalogueInForceResolver
-	Catalogues       ports.ReferenceCatalogueRegister
+	// Catalogues 比正式评价那一侧宽一格（整版读回），理由同 FormEstimateEvaluationsDeps：输入完备性门要读在用
+	// 分区目录版本的始发维度声明（ADR-0381 决定二）。
+	Catalogues ports.EstimateReferenceCatalogues
 }
 
 // FormPlanGivenEstimateEvaluationsHandler 是本入口的编排。
@@ -113,11 +115,12 @@ func NewFormPlanGivenEstimateEvaluationsHandler(deps FormPlanGivenEstimateEvalua
 		return nil, fmt.Errorf("%w: clock", ErrNilDependency)
 	}
 	completion := readingCompletion{
-		clock:            deps.Clock,
-		inForce:          deps.SeriesInForce,
-		seriesVersions:   deps.SeriesVersions,
-		catalogueInForce: deps.CatalogueInForce,
-		catalogues:       deps.Catalogues,
+		clock:             deps.Clock,
+		inForce:           deps.SeriesInForce,
+		seriesVersions:    deps.SeriesVersions,
+		catalogueInForce:  deps.CatalogueInForce,
+		catalogues:        deps.Catalogues,
+		catalogueVersions: deps.Catalogues,
 	}
 	if err := completion.halfWired(); err != nil {
 		return nil, err
@@ -160,7 +163,12 @@ func (handler *FormPlanGivenEstimateEvaluationsHandler) estimate(
 	if err != nil {
 		return PlanGivenEstimate{}, false, fmt.Errorf("plan-given estimate subject: %w", err)
 	}
-	input, missing, err := estimateInput(translated, command.Plan, subject, declaration.Facts...)
+	originSplit, err := handler.completion.originPostalRequired(ctx, translated, command.Plan)
+	if err != nil {
+		// 与补齐读数读不回同一格：形成与否未知，整份未决（文件头「任一件读不回即整份未决」那条）。
+		return PlanGivenEstimate{}, true, nil
+	}
+	input, missing, err := estimateInput(translated, command.Plan, subject, originSplit, declaration.Facts...)
 	if err != nil {
 		return PlanGivenEstimate{}, false, fmt.Errorf("plan-given estimate input: %w", err)
 	}

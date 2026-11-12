@@ -64,7 +64,11 @@ func (adapter *PreAcceptanceTrials) FormPreAcceptanceTrials(
 	switch result.Outcome {
 	case ppapplication.PreAcceptanceEstimatesFormed:
 	case ppapplication.PreAcceptanceDeclarationIncomplete:
-		return saports.PreAcceptanceTrialAnswer{Outcome: saports.PreAcceptanceTrialsIncomplete, PriceCard: priceCard}, nil
+		return saports.PreAcceptanceTrialAnswer{
+			Outcome:   saports.PreAcceptanceTrialsIncomplete,
+			PriceCard: priceCard,
+			Gaps:      trialGapsOf(result.Estimates),
+		}, nil
 	case ppapplication.PreAcceptancePriceCardNotConfigured:
 		return saports.PreAcceptanceTrialAnswer{Outcome: saports.PreAcceptanceTrialPriceCardNotConfigured}, nil
 	case ppapplication.PreAcceptancePriceCardApplicabilityConflict:
@@ -90,6 +94,22 @@ func (adapter *PreAcceptanceTrials) FormPreAcceptanceTrials(
 	return saports.PreAcceptanceTrialAnswer{
 		Outcome: saports.PreAcceptanceTrialsFormed, PriceCard: priceCard, ServiceProduct: serviceProductOf(result.Estimates), Trials: trials,
 	}, nil
+}
+
+// trialGapsOf 摘出缺件答复里缺的那几件：包裹按申报标识指名、缺项码原样逐件带回（ADR-0381 决定三）。只摘不译：
+// 码是计价的封闭集，本上下文原样转交，分流在小包托运那一侧。
+func trialGapsOf(estimates []ppapplication.PreAcceptanceParcelEstimate) []saports.PreAcceptanceTrialGap {
+	var gaps []saports.PreAcceptanceTrialGap
+	for _, estimate := range estimates {
+		if estimate.Answer != ppapplication.EstimateCandidateInputIncomplete {
+			continue
+		}
+		gaps = append(gaps, saports.PreAcceptanceTrialGap{
+			Parcel:  estimate.Parcel,
+			Missing: append([]string(nil), estimate.Missing...),
+		})
+	}
+	return gaps
 }
 
 // serviceProductOf 取选卡用的服务产品（ADR-0379 决定一）：每件评价的输入快照都记着它（ADR-0378 决定三），一份估价只选一张卡、按一个

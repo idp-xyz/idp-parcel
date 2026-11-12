@@ -1151,6 +1151,11 @@ type FinancialControlRequest struct {
 // 前者只有运营做一次登记推得动、且那次登记会发信封来重驱，后者等依赖自己回来。哪几个原因落
 // 前一格由消费侧适配器判——它认得提供方的原因集合，编排不解析原因串；触发还没到位的未配置
 // 原因留在`未形成`，挪过来只会把烧完预算换成一次没人来推的等待（ADR-0094 决定四）。
+//
+// `等受控补充`是同一判据下的第三格（ADR-0381 决定一）：申报不全且缺项全是客户补得上的那几样时，只有客户
+// 补一次申报推得动，续办由新提交版本的信封驱动。缺项里混着登记才解得开的（分区、地址性质）落`未配置`——
+// 两类同场先走运营登记，登记解开后下一轮若还缺客户那几样再停等补充；一格缺项都点不出的申报不全留在
+// `未形成`照旧内部重试。分流照样在消费侧适配器：编排一个缺项码都不解析。
 type PreAcceptanceControlOutcome uint8
 
 const (
@@ -1160,6 +1165,7 @@ const (
 	PreAcceptanceControlRequestConflict
 	PreAcceptanceControlRequestNotAccepted
 	PreAcceptanceControlNotConfigured
+	PreAcceptanceControlCustomerSupplementRequired
 )
 
 func (outcome PreAcceptanceControlOutcome) String() string {
@@ -1174,6 +1180,8 @@ func (outcome PreAcceptanceControlOutcome) String() string {
 		return "REQUEST_NOT_ACCEPTED"
 	case PreAcceptanceControlNotConfigured:
 		return "NOT_CONFIGURED"
+	case PreAcceptanceControlCustomerSupplementRequired:
+		return "CUSTOMER_SUPPLEMENT_REQUIRED"
 	default:
 		return ""
 	}
@@ -1188,11 +1196,18 @@ func (outcome PreAcceptanceControlOutcome) String() string {
 // SettlementReason 只在提供方答未形成时在场，是它的原因码原样（ADR-0380 决定三）。它与 Reason 分开：Reason 是续办
 // 派生用的引用，消费侧适配器自己形成的停因（作用域没形成）也在那一格；编排不解析 Reason 的字面，要记下「结算说了
 // 什么」只能另交一格。
+//
+// SupplementGaps 只在`等受控补充`时在场：申报不全的缺项已由适配器按本上下文的封闭码译好、按缺的是哪件指名
+// （ADR-0381 决定四），编排把它原样落到等待态上，不再分流。EstimateGapCodes 是计价点名的缺项码原样、先见先记去重：
+// 申报不全分出的两路等待（受控补充与运营登记）都要把它记上处理尝试，而登记那一路不交译后缺口，所以它与
+// SupplementGaps 各是一格、不从彼此推。
 type PreAcceptanceControlAssessment struct {
 	Outcome          PreAcceptanceControlOutcome
 	Result           domain.FinancialControlResult
 	Reason           domain.CheckReason
 	SettlementReason domain.SettlementNotFormedReason
+	SupplementGaps   []domain.SupplementGap
+	EstimateGapCodes []string
 }
 
 // ErrUntranslatableProviderAnswer 是消费侧适配器把提供方的答复译不进本上下文端口封闭集合时交回的错误所包的
@@ -1744,6 +1759,9 @@ type AcceptanceTaskViewRecord struct {
 	LastAttemptedAt             time.Time
 	LastAttemptSettlementReason string
 	LastAttemptServiceProduct   string
+	// LastAttemptEstimateGapCodes 是那一轮计价点名的缺项码原样、去重（ADR-0381 决定四），只在申报不全分出的
+	// 两路等待上有，缺即那一轮没有。
+	LastAttemptEstimateGapCodes []string
 	WaitingOn                   domain.ResumePath
 	ReviewCompleted             bool
 	ReviewAuthority             string

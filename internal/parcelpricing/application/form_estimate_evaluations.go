@@ -112,6 +112,13 @@ const (
 	EstimateMissingMeasurement = "MEASUREMENT"
 	// EstimateMissingAddressNature：这张卡有规则按收件地址性质判定，而声明没有给（ADR-0347 决定四）。
 	EstimateMissingAddressNature = "ADDRESS_NATURE"
+	// EstimateMissingOriginPostal：卡绑的分区目录按始发邮编前缀分表，路线给了而始发邮编没报（ADR-0381 决定二）。
+	// 它与 POSTAL_ROUTE 分格：那一格是整条路线没给，这一格是路线在、始发那半没报——补的都是客户，点名要点得准。
+	// 报了始发而目录不覆盖不在此格，照旧评到 ZONE_UNRESOLVED（报了但解不出不是缺项）。
+	EstimateMissingOriginPostal = "ORIGIN_POSTAL"
+	// EstimateMissingDimensions：这张卡的评价要读包裹尺寸（判定条件读按尺寸派生的量，或重量策略走体积重那一路，
+	// 两处判据见 domain.RequiresDeclaredDimensions），而尺寸没报（ADR-0381 决定二）。
+	EstimateMissingDimensions = "DIMENSIONS"
 )
 
 // EstimateCandidate 是一张适用价卡的结果。
@@ -163,7 +170,9 @@ type FormEstimateEvaluationsDeps struct {
 	SeriesInForce    ports.ReferenceSeriesInForceResolver
 	SeriesVersions   ports.ReferenceSeriesRegister
 	CatalogueInForce ports.ReferenceCatalogueInForceResolver
-	Catalogues       ports.ReferenceCatalogueRegister
+	// Catalogues 比正式评价那一侧宽一格（整版读回）：输入完备性门要读在用分区目录版本的始发维度声明
+	// （ADR-0381 决定二）。postgres 的目录登记册本就两口都实现，装配不另接线。
+	Catalogues ports.EstimateReferenceCatalogues
 }
 
 // FormEstimateEvaluationsHandler 是试算编排。
@@ -187,11 +196,12 @@ func NewFormEstimateEvaluationsHandler(deps FormEstimateEvaluationsDeps) (*FormE
 		}
 	}
 	completion := readingCompletion{
-		clock:            deps.Clock,
-		inForce:          deps.SeriesInForce,
-		seriesVersions:   deps.SeriesVersions,
-		catalogueInForce: deps.CatalogueInForce,
-		catalogues:       deps.Catalogues,
+		clock:             deps.Clock,
+		inForce:           deps.SeriesInForce,
+		seriesVersions:    deps.SeriesVersions,
+		catalogueInForce:  deps.CatalogueInForce,
+		catalogues:        deps.Catalogues,
+		catalogueVersions: deps.Catalogues,
 	}
 	if err := completion.halfWired(); err != nil {
 		return nil, err
@@ -277,7 +287,13 @@ func (handler *FormEstimateEvaluationsHandler) estimate(
 	if err != nil {
 		return EstimateCandidate{}, nil, fmt.Errorf("estimate subject: %w", err)
 	}
-	input, missing, err := estimateInput(command, plan, subject)
+	originSplit, err := handler.completion.originPostalRequired(ctx, command, plan)
+	if err != nil {
+		// 「要不要点名缺始发邮编」读不回与补齐读数读不回同一格：形成与否未知，不替权威作答。
+		stopped := undecidedEstimate(EstimateReadingCompletionUnavailable)
+		return EstimateCandidate{}, &stopped, nil
+	}
+	input, missing, err := estimateInput(command, plan, subject, originSplit)
 	if err != nil {
 		return EstimateCandidate{}, nil, fmt.Errorf("estimate input: %w", err)
 	}
@@ -306,11 +322,14 @@ func (handler *FormEstimateEvaluationsHandler) estimate(
 
 // estimateInput 按卡的目录绑定选分区给法（ADR-0152 决定五）：绑了分区目录的卡用邮编路线、分区由目录解析；没绑的卡用
 // 发起方给的分区，另绑了偏远档位目录时还要邮编路线。该给的没给交回缺项、不造输入——不拿另一种给法顶替，也不给默认分区。
+// originSplitByPrefix 是调用方先问出的「在用分区目录按始发邮编前缀分表」（readingCompletion.originPostalRequired）：
+// 真而始发没报即缺 ORIGIN_POSTAL（ADR-0381 决定二）。它作参数交进来而不在这里问，是让缺项点名全留在一个纯函数里。
 // facts 是这份输入出自哪几份事实，只有声明取自真实委托的调用方才给；假设包裹没有事实可引。
 func estimateInput(
 	command FormEstimateEvaluationsCommand,
 	plan domain.PricingPlanVersion,
 	subject domain.EvaluationSubject,
+	originSplitByPrefix bool,
 	facts ...domain.VersionedFactReference,
 ) (domain.PricingInputSnapshot, []string, error) {
 	zoneBound, tierBound := false, false
@@ -324,11 +343,14 @@ func estimateInput(
 	}
 
 	// 该给的没给一并点名，不拿另一种给法顶替，也不给默认。地址性质与分区、邮编路线同一种缺项：卡有规则按它判定而声明
-	// 没给（ADR-0347 决定四）。
+	// 没给（ADR-0347 决定四）；尺寸与始发邮编同理（ADR-0381 决定二）——都是发起方补得上的事实，在输入门上说出来，
+	// 不等评价落待判断。
 	var missing []string
 	if zoneBound {
 		if command.Route == nil {
 			missing = append(missing, EstimateMissingPostalRoute)
+		} else if originSplitByPrefix && command.Route.Origin() == "" {
+			missing = append(missing, EstimateMissingOriginPostal)
 		}
 	} else {
 		if command.Zone == "" {
@@ -337,6 +359,9 @@ func estimateInput(
 		if tierBound && command.Route == nil {
 			missing = append(missing, EstimateMissingPostalRoute)
 		}
+	}
+	if command.Dimensions == nil && plan.RequiresDeclaredDimensions() {
+		missing = append(missing, EstimateMissingDimensions)
 	}
 	if command.AddressNature == nil && plan.Structures().ReadsFeature(domain.FeatureAddressNature) {
 		missing = append(missing, EstimateMissingAddressNature)

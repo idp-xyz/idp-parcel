@@ -459,6 +459,33 @@ func TestAPlanThatDoesNotReadTheDerivedWeightsPaysNothingForThem(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0381 决定二的判据半边——RequiresDeclaredDimensions 只看方案自己的声明：重量策略取实重与体积重
+// 较大者，或任一判定条件读按尺寸派生的量（几何量、体积、体积重）；只读实重一侧特征的卡不要尺寸。抬高条款的
+// 触发条件也算判定条件——它读最长边时这张卡同样非尺寸不可。
+func TestRequiresDeclaredDimensionsReadsOnlyThePlansOwnDeclaration(t *testing.T) {
+	long := weightSurcharge(t, "long", "LONG_SURCHARGE",
+		leafTrigger(t, mustLengthCondition(t, domain.FeatureLongestSide, "100")), "7")
+	heavy := weightSurcharge(t, "heavy", "HEAVY_SURCHARGE",
+		ownWeightTrigger(t, domain.FeatureActualWeight, domain.ComparisonGreaterThan, "20", domain.WeightUnitKilogram), "7")
+	for name, tc := range map[string]struct {
+		spec ownWeightSpec
+		want bool
+	}{
+		"取较大者的重量策略要尺寸": {ownWeightSpec{method: domain.PricingWeightMax}, true},
+		"条件读最长边要尺寸":    {ownWeightSpec{method: domain.PricingWeightActualOnly, structures: structuresOf(t, long)}, true},
+		"抬高条款读最长边要尺寸": {ownWeightSpec{method: domain.PricingWeightActualOnly,
+			structures: structuresOf(t, conditionalMinimumOnLongestSide(t, "oversize-minimum", "100", "30"))}, true},
+		"只读实重的条件不要尺寸": {ownWeightSpec{method: domain.PricingWeightActualOnly, structures: structuresOf(t, heavy)}, false},
+		"无规则的实重卡不要尺寸": {ownWeightSpec{method: domain.PricingWeightActualOnly}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := mustOwnWeightPlan(t, tc.spec).RequiresDeclaredDimensions(); got != tc.want {
+				t.Fatalf("RequiresDeclaredDimensions = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func mustLengthCondition(t testing.TB, source domain.FeatureSource, threshold string) domain.FeatureCondition {
 	t.Helper()
 	condition, err := domain.NewLengthFeatureCondition(source, domain.ComparisonGreaterThan, length(t, threshold, domain.LengthUnitCentimeter))

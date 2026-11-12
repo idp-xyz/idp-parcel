@@ -12,6 +12,7 @@ import (
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // ErrUntranslatableAnswer 表示某一侧交出了本适配器词汇表之外的内容——编程错误而不是业务
@@ -337,7 +338,7 @@ func assessmentFor(
 	case saapplication.ControlRequestNotAccepted:
 		return refusedAssessment(psports.PreAcceptanceControlRequestNotAccepted, "SA-REQUEST_NOT_ACCEPTED")
 	case saapplication.ControlNotFormed:
-		outcome, err := notFormedOutcomeFor(answer.NotFormedReason())
+		outcome, gaps, gapCodes, err := notFormedLanding(answer)
 		if err != nil {
 			return psports.PreAcceptanceControlAssessment{}, err
 		}
@@ -345,6 +346,7 @@ func assessmentFor(
 		if err != nil {
 			return psports.PreAcceptanceControlAssessment{}, err
 		}
+		assessment.SupplementGaps, assessment.EstimateGapCodes = gaps, gapCodes
 		// 原因码原样另交一格（ADR-0380 决定三）：编排要把它记到处理尝试上，而它不解析 Reason 的字面。
 		if assessment.SettlementReason, err = psdomain.NewSettlementNotFormedReason(
 			answer.NotFormedReason().String()); err != nil {
@@ -356,6 +358,113 @@ func assessmentFor(
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control outcome %d",
 			ErrUntranslatableAnswer, answer.Outcome())
 	}
+}
+
+// 受控补充缺口在本上下文的封闭码（ADR-0381 决定四）。计价的缺项码说的是试算输入缺哪一格，受控补充的缺口说的是
+// 客户要补的申报格——两套各自封闭，在 declarationIncompleteLanding 里全函数互译，这里不借计价的原词：借了，计价
+// 改口一次，本上下文已登在任务上的缺口就换了名字。
+const (
+	gapMeasurementMissing     = "ESTIMATE_MEASUREMENT_MISSING"
+	gapDimensionsMissing      = "ESTIMATE_DIMENSIONS_MISSING"
+	gapRecipientPostalMissing = "ESTIMATE_RECIPIENT_POSTAL_MISSING"
+	gapOriginPostalMissing    = "ESTIMATE_ORIGIN_POSTAL_MISSING"
+)
+
+// notFormedLanding 把一次`未形成`落到端口的格上：`申报不全`按逐件缺项分流（ADR-0381 决定一），其余原因照
+// notFormedOutcomeFor 的两格走、不带缺口。
+func notFormedLanding(
+	answer saapplication.ApplyPreAcceptanceControlResult,
+) (psports.PreAcceptanceControlOutcome, []psdomain.SupplementGap, []string, error) {
+	if answer.NotFormedReason() == saapplication.EstimateDeclarationIncomplete {
+		return declarationIncompleteLanding(answer.DeclarationGaps())
+	}
+	outcome, err := notFormedOutcomeFor(answer.NotFormedReason())
+	return outcome, nil, nil, err
+}
+
+// declarationIncompleteLanding 按缺项该谁补把`申报不全`分到端口的三格（ADR-0381 决定一、四）：
+//
+//   - 缺项缺席：照旧`未形成`内部重试——没名字的缺口不知道催谁，交给下一轮重新问出名字；
+//   - 含登记才解得开的缺项（分区、地址性质）：落`未配置`，等运营登记，两类同场登记优先——补齐客户那几样
+//     也评不动一张没有分区的卡，先催客户只会让这份委托停两次；
+//   - 其余都是客户补得上的：落`等受控补充`，缺口按本上下文的封闭码译出（按件的指名件；邮编两格是委托级，
+//     计价逐件点名只是逐件读到了同一格申报，去重并成一条）。
+//
+// 缺项码逐取值列出、default 报错（ADR-0025，判据同 notFormedOutcomeFor）：计价多点一种缺项时这里先炸，而不是
+// 让它静默归进某一路——这一格决定的是催客户、催运营还是烧失败预算。原样码先见先记去重随两路等待都交回：处理
+// 尝试要留「计价当时点名了什么」，而登记那一路没有译后缺口可推。
+func declarationIncompleteLanding(
+	gaps []saports.PreAcceptanceTrialGap,
+) (psports.PreAcceptanceControlOutcome, []psdomain.SupplementGap, []string, error) {
+	if len(gaps) == 0 {
+		return psports.PreAcceptanceControlNotFormed, nil, nil, nil
+	}
+	var codes []string
+	seen := make(map[string]bool)
+	registration := false
+	var supplement []psdomain.SupplementGap
+	requestLevel := make(map[string]bool)
+	for _, gap := range gaps {
+		for _, code := range gap.Missing {
+			if !seen[code] {
+				seen[code] = true
+				codes = append(codes, code)
+			}
+			switch code {
+			case "ZONE", "ADDRESS_NATURE":
+				registration = true
+			case "MEASUREMENT", "DIMENSIONS":
+				translated := gapMeasurementMissing
+				if code == "DIMENSIONS" {
+					translated = gapDimensionsMissing
+				}
+				parcel, err := psdomain.NewDeclaredParcelID(gap.Parcel)
+				if err != nil {
+					return psports.PreAcceptanceControlOutcomeInvalid, nil, nil,
+						fmt.Errorf("%w: declaration gap names no parcel: %v", ErrUntranslatableAnswer, err)
+				}
+				entry, err := supplementGapFor(translated, parcel)
+				if err != nil {
+					return psports.PreAcceptanceControlOutcomeInvalid, nil, nil, err
+				}
+				supplement = append(supplement, entry)
+			case "POSTAL_ROUTE", "ORIGIN_POSTAL":
+				translated := gapRecipientPostalMissing
+				if code == "ORIGIN_POSTAL" {
+					translated = gapOriginPostalMissing
+				}
+				if requestLevel[translated] {
+					continue
+				}
+				requestLevel[translated] = true
+				entry, err := supplementGapFor(translated, psdomain.DeclaredParcelID{})
+				if err != nil {
+					return psports.PreAcceptanceControlOutcomeInvalid, nil, nil, err
+				}
+				supplement = append(supplement, entry)
+			default:
+				return psports.PreAcceptanceControlOutcomeInvalid, nil, nil,
+					fmt.Errorf("%w: estimate gap code %q", ErrUntranslatableAnswer, code)
+			}
+		}
+	}
+	if registration {
+		return psports.PreAcceptanceControlNotConfigured, nil, codes, nil
+	}
+	return psports.PreAcceptanceControlCustomerSupplementRequired, supplement, codes, nil
+}
+
+// supplementGapFor 立一条接受前财务控制判组的缺口；译出的码在上面的封闭集里，立不起来是编程错误。
+func supplementGapFor(reason string, parcel psdomain.DeclaredParcelID) (psdomain.SupplementGap, error) {
+	checkReason, err := psdomain.NewCheckReason(reason)
+	if err != nil {
+		return psdomain.SupplementGap{}, fmt.Errorf("%w: supplement gap reason: %v", ErrUntranslatableAnswer, err)
+	}
+	gap, err := psdomain.NewSupplementGap(psdomain.PreAcceptanceFinancialControlCheck, parcel, checkReason)
+	if err != nil {
+		return psdomain.SupplementGap{}, fmt.Errorf("%w: supplement gap: %v", ErrUntranslatableAnswer, err)
+	}
+	return gap, nil
 }
 
 // notFormedOutcomeFor 按恢复动作把提供方的未形成原因分到端口的两格（ADR-0094 决定一、二）：只有运营登记
@@ -409,12 +518,15 @@ func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAccep
 		// 缺陷，登记推不动它。
 		return psports.PreAcceptanceControlNotFormed, nil
 	case saapplication.EstimateSubmissionNotVisible,
-		saapplication.EstimateDeclarationIncomplete,
 		saapplication.EstimateHasNoTrial,
 		saapplication.EstimateSumOverflow:
-		// 提交版本看不见、一件试算都没有、合计溢出是数据或缺陷，不是登记解得开的。申报不全要等客户补，那一路另立
-		// （ADR-0380 决定一）；在那之前照旧内部重试。
+		// 提交版本看不见、一件试算都没有、合计溢出是数据或缺陷，不是登记解得开的。
 		return psports.PreAcceptanceControlNotFormed, nil
+	case saapplication.EstimateDeclarationIncomplete:
+		// 申报不全不折成单一格：按逐件缺项分流（declarationIncompleteLanding，ADR-0381 决定一），拦在
+		// notFormedLanding 里。走到这里说明有调用点绕开了那道拦截——编程错误，不是一种落点。
+		return psports.PreAcceptanceControlOutcomeInvalid, fmt.Errorf(
+			"%w: declaration-incomplete must land by its gaps", ErrUntranslatableAnswer)
 	default:
 		return psports.PreAcceptanceControlOutcomeInvalid, fmt.Errorf("%w: not-formed reason %d",
 			ErrUntranslatableAnswer, uint8(reason))
