@@ -60,7 +60,56 @@ func (read catalogueRead[Row]) page(
 	if err != nil {
 		return fail(err)
 	}
+	facets, err := read.facets(ctx, querier, query, args)
+	if err != nil {
+		return fail(err)
+	}
+	page.Facets = facets
 	return page, nil
+}
+
+// facets 数本册点名的各分面维（ADR-0378 决定五）：每维一句，条件取本次的 q 与其余各维、不含该维自己。没点名的册一句
+// 都不发，交回 nil——答复里就没有 facets 这一格。与总数、取页一样各是一条语句，不保证同一快照（理由见 page 头注）。
+func (read catalogueRead[Row]) facets(
+	ctx context.Context,
+	querier bentopg.Querier,
+	query cataloguepage.Query,
+	args []any,
+) (cataloguepage.Facets, error) {
+	plans, err := read.binding.FacetPlans(query, "", args)
+	if err != nil || len(plans) == 0 {
+		return nil, err
+	}
+	facets := make(cataloguepage.Facets, len(plans))
+	for _, plan := range plans {
+		found, err := facetCounts(ctx, querier, read.listed+" "+plan.SQL("listed"), plan.Args)
+		if err != nil {
+			return nil, err
+		}
+		facets[plan.Dimension] = plan.Counts(found)
+	}
+	return facets, nil
+}
+
+func facetCounts(ctx context.Context, querier bentopg.Querier, statement string, args []any) (map[string]int64, error) {
+	rows, err := querier.Query(ctx, statement, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	found := make(map[string]int64)
+	for rows.Next() {
+		var value string
+		var count int64
+		if err := rows.Scan(&value, &count); err != nil {
+			return nil, err
+		}
+		found[value] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return found, nil
 }
 
 // find 按身份读回一行（ADR-0361）：与取页同一段 listed、同一份列与扫描，只多 key 那两格键过滤——另写一条语句就会长出

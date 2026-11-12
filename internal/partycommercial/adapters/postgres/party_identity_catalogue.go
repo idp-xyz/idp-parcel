@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -28,14 +29,62 @@ func identityNumbersText(alias string) string {
 		          FROM jsonb_array_elements(` + alias + `.lifetime_registration_numbers) AS entry(value))`
 }
 
-// businessPartyListed 是业务参与方总数与取页共用的前半句。它不左连接任何东西：名称就在本册行上。status 的导出与法人册、
+// businessPartyListed 是业务参与方总数与取页共用的前半句。名称就在本册行上，不必连过来。status 的导出与法人册、
 // 客户账户册逐字相同（停用判断在先，其次生效时点），因为它们用的是同一个 domain.IdentityLifecycle。外部编码照管理台的
 // 检索口径每项抽成「系统 编码」一段，q 写系统名加编码也命中；项与项之间用 chr(31) 隔开（理由同 identityNumbersText）。
+//
+// 类别与关系段数（ADR-0378 决定二、三）是 domain.PartyCategoriesAt 的 SQL 镜像：把参与方关系、客户账户、责任法人三本册
+// 各折叠到最新修订，按所指的参与方标识聚成「有没有那样一行」，再左连接到本册——
+//   - held：它作为持有方的在用（候选或已生效）关系，聚出担任的角色与段数；
+//   - faced：它作为相对方的在用关系，只聚段数（别人对它担任角色，不给它角色）；
+//   - billed：它是某个未停用客户账户的所属客户参与方（客户角色的另一条）；
+//   - pinned：它被某个未停用的责任法人钉着（我方公司）。
+//
+// 「未停用」与 status 那一格同一句判据取反，时点同为 now()。先聚后连而不是逐行去探：探要对每个参与方扫一遍折叠出来的
+// 册，聚一遍之后是按标识的散列连接。类别照词表次序排，一项都没有时是只含无角色的一格，永不为空。
 var businessPartyListed = `WITH party AS (
         SELECT DISTINCT ON (party_id) *
           FROM party_commercial.business_party_registration
          WHERE tenant_id = $1
          ORDER BY party_id, revision DESC
+     ), relation AS (
+        SELECT DISTINCT ON (relationship_id) holder_party_id, counterparty_party_id, role, status
+          FROM party_commercial.party_relationship_registration
+         WHERE tenant_id = $1
+         ORDER BY relationship_id, revision DESC
+     ), held AS (
+        SELECT holder_party_id AS party_id,
+               array_agg(DISTINCT role) AS roles,
+               count(*) AS live,
+               count(*) FILTER (WHERE status = 'CANDIDATE') AS candidate
+          FROM relation
+         WHERE status IN ('CANDIDATE', 'EFFECTIVE')
+         GROUP BY holder_party_id
+     ), faced AS (
+        SELECT counterparty_party_id AS party_id,
+               count(*) AS live,
+               count(*) FILTER (WHERE status = 'CANDIDATE') AS candidate
+          FROM relation
+         WHERE status IN ('CANDIDATE', 'EFFECTIVE')
+         GROUP BY counterparty_party_id
+     ), account AS (
+        SELECT DISTINCT ON (account_id) customer_party_id, deactivated_at
+          FROM party_commercial.customer_account_registration
+         WHERE tenant_id = $1
+         ORDER BY account_id, revision DESC
+     ), billed AS (
+        SELECT DISTINCT customer_party_id AS party_id
+          FROM account
+         WHERE NOT (deactivated_at IS NOT NULL AND deactivated_at <= now())
+     ), entity AS (
+        SELECT DISTINCT ON (legal_entity_id) party_id, deactivated_at
+          FROM party_commercial.legal_entity_registration
+         WHERE tenant_id = $1
+         ORDER BY legal_entity_id, revision DESC
+     ), pinned AS (
+        SELECT DISTINCT party_id
+          FROM entity
+         WHERE NOT (deactivated_at IS NOT NULL AND deactivated_at <= now())
      ), listed AS (
         SELECT party.tenant_id, party.party_id, party.party_name,
                party.revision, party.basis_ref, party.effective_from,
@@ -50,24 +99,47 @@ var businessPartyListed = `WITH party AS (
                END AS status,
                ` + identityNumbersText("party") + ` AS registration_numbers,
                (SELECT string_agg(concat_ws(' ', entry.value ->> 'system', entry.value ->> 'code'), chr(31))
-                  FROM jsonb_array_elements(party.external_references) AS entry(value)) AS external_codes
+                  FROM jsonb_array_elements(party.external_references) AS entry(value)) AS external_codes,
+               COALESCE((
+                   SELECT array_agg(found.word ORDER BY array_position(` + partyCategoryWordsSQL + `, found.word))
+                     FROM (
+                           SELECT unnest(held.roles) AS word
+                           UNION
+                           SELECT '` + string(domain.RoleCategory(domain.CustomerRole)) + `' WHERE billed.party_id IS NOT NULL
+                           UNION
+                           SELECT '` + string(domain.OurCompanyCategory) + `' WHERE pinned.party_id IS NOT NULL
+                          ) AS found
+               ), ARRAY['` + string(domain.NoRoleCategory) + `']) AS categories,
+               COALESCE(held.live, 0) AS held_live, COALESCE(held.candidate, 0) AS held_candidate,
+               COALESCE(faced.live, 0) AS faced_live, COALESCE(faced.candidate, 0) AS faced_candidate
           FROM party
+          LEFT JOIN held ON held.party_id = party.party_id
+          LEFT JOIN faced ON faced.party_id = party.party_id
+          LEFT JOIN billed ON billed.party_id = party.party_id
+          LEFT JOIN pinned ON pinned.party_id = party.party_id
      )`
+
+// partyCategoryWordsSQL 是类别词表写成的 SQL 文本数组字面量，只给上面那一句按词表次序排类别用。词取自领域的
+// domain.PartyCategoryWords——全大写加下划线的常量，不含引号，直接拼进语句。
+var partyCategoryWordsSQL = "ARRAY['" + strings.Join(domain.PartyCategoryWords(), "','") + "']"
 
 // businessPartyRead：q 覆盖参与方号、名称与行上的识别信息（终身注册号、外部编码），即管理台检索的那几格。
 var businessPartyRead = catalogueRead[ports.BusinessPartyRow]{
 	binding: ports.BusinessPartyPages.MustBind(cataloguepage.Columns{
 		Sorts:    map[string]string{"registeredAt": "recorded_at", "effectiveFrom": "effective_from", "partyId": "party_id"},
 		Identity: []string{"party_id"},
-		Filters:  map[string]string{"status": "status"},
-		Keyword:  []string{"party_id", "party_name", "registration_numbers", "external_codes"},
+		Filters:  map[string]string{"status": "status", "categories": "categories"},
+		// 类别是多值维：一行的类别里有所给的任一个值即匹配（ADR-0378 决定四）。
+		MultiValued: []string{"categories"},
+		Keyword:     []string{"party_id", "party_name", "registration_numbers", "external_codes"},
 	}),
 	listed: businessPartyListed,
 	selection: `tenant_id, party_id, party_name,
 		        revision, basis_ref, effective_from,
 		        deactivated_at, deactivation_basis, recorded_at,
 		        registration_country, lifetime_registration_numbers,
-		        identity_correction_basis, external_references, status`,
+		        identity_correction_basis, external_references, status,
+		        categories, held_live, held_candidate, faced_live, faced_candidate`,
 	scan:     scanBusinessParty,
 	position: businessPartyPosition,
 }
@@ -94,6 +166,9 @@ func scanBusinessParty(rows pgx.Rows) (ports.BusinessPartyRow, error) {
 		&identification.country, &identification.numbers,
 		&identification.correction, &identification.references,
 		&row.Status,
+		&row.Categories,
+		&row.RelationshipCounts.AsHolder.Live, &row.RelationshipCounts.AsHolder.Candidate,
+		&row.RelationshipCounts.AsCounterparty.Live, &row.RelationshipCounts.AsCounterparty.Candidate,
 	); err != nil {
 		return row, err
 	}
@@ -270,7 +345,10 @@ var partyRelationshipRead = catalogueRead[ports.PartyRelationshipRow]{
 			"registeredAt": "recorded_at", "effectiveStartsAt": "effective_starts_at", "relationshipId": "relationship_id",
 		},
 		Identity: []string{"relationship_id"},
-		Filters:  map[string]string{"status": "status", "role": "role"},
+		Filters: map[string]string{
+			"status": "status", "role": "role",
+			"holderId": "holder_party_id", "counterpartyId": "counterparty_party_id",
+		},
 		Keyword: []string{
 			"relationship_id", "holder_party_id", "holder_name", "counterparty_party_id", "counterparty_name",
 		},

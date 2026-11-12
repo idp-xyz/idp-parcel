@@ -98,14 +98,17 @@ func NewQueryBusinessPartiesEndpoint(
 			Outcome: outcomeBusinessPartiesListed,
 			Parties: bodies,
 			Page:    page.Page(query.Limit),
+			Facets:  page.Facets,
 		})
 	})
 }
 
+// Facets 是 status 与 categories 两维的分面计数（ADR-0378 决定五、六）：各值在本次的 q 与另一维之下各有几家。
 type businessPartyListResponse struct {
-	Outcome string              `json:"outcome"`
-	Parties []businessPartyBody `json:"parties"`
-	Page    cataloguepage.Page  `json:"page"`
+	Outcome string               `json:"outcome"`
+	Parties []businessPartyBody  `json:"parties"`
+	Page    cataloguepage.Page   `json:"page"`
+	Facets  cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 // businessPartyBody 逐字段透出参与方身份本体的最新修订。这里没有 partyNameKnown：
@@ -122,7 +125,21 @@ type businessPartyBody struct {
 	DeactivatedAt     string `json:"deactivatedAt,omitempty"`
 	DeactivationBasis string `json:"deactivationBasis,omitempty"`
 	RegisteredAt      string `json:"registeredAt"`
+	// Categories 与 RelationshipCounts 是装载时点由登记的事实读出的（ADR-0378 决定三），与 status 同一口径：类别永不
+	// 为空、照词表次序；段数只是行数。
+	Categories         []string               `json:"categories"`
+	RelationshipCounts relationshipCountsBody `json:"relationshipCounts"`
 	businessPartyIdentificationBody
+}
+
+type relationshipCountsBody struct {
+	AsHolder       relationshipTallyBody `json:"asHolder"`
+	AsCounterparty relationshipTallyBody `json:"asCounterparty"`
+}
+
+type relationshipTallyBody struct {
+	Live      int `json:"live"`
+	Candidate int `json:"candidate"`
 }
 
 func businessPartyBodyOf(row ports.BusinessPartyRow) businessPartyBody {
@@ -135,6 +152,16 @@ func businessPartyBodyOf(row ports.BusinessPartyRow) businessPartyBody {
 		Basis:         row.Basis,
 		EffectiveFrom: rfc3339(row.EffectiveFrom),
 		RegisteredAt:  rfc3339(row.RegisteredAt),
+		// 读面保证类别不为空；这里仍给一个非 nil 的切片，答复里这一格总是数组，不会编成 null。
+		Categories: append([]string{}, row.Categories...),
+		RelationshipCounts: relationshipCountsBody{
+			AsHolder: relationshipTallyBody{
+				Live: row.RelationshipCounts.AsHolder.Live, Candidate: row.RelationshipCounts.AsHolder.Candidate,
+			},
+			AsCounterparty: relationshipTallyBody{
+				Live: row.RelationshipCounts.AsCounterparty.Live, Candidate: row.RelationshipCounts.AsCounterparty.Candidate,
+			},
+		},
 	}
 	if row.HasDeactivation {
 		body.DeactivatedAt = rfc3339(row.DeactivatedAt)
@@ -256,6 +283,7 @@ func NewQueryPartyRelationshipsEndpoint(
 			Outcome:       outcomePartyRelationshipsListed,
 			Relationships: bodies,
 			Page:          page.Page(query.Limit),
+			Facets:        page.Facets,
 		})
 	})
 }
@@ -357,10 +385,12 @@ func groupLegalEntityBodyOf(row ports.GroupLegalEntityRow) groupLegalEntityBody 
 	return body
 }
 
+// Facets 是 status 一维的分面计数（ADR-0378 决定五、六）：各状态在本次的 q 与其余各维之下各有几段。
 type partyRelationshipListResponse struct {
 	Outcome       string                  `json:"outcome"`
 	Relationships []partyRelationshipBody `json:"relationships"`
 	Page          cataloguepage.Page      `json:"page"`
+	Facets        cataloguepage.Facets    `json:"facets,omitempty"`
 }
 
 // partyRelationshipBody 逐字段透出关系最新修订。方向由持有方→相对方的字段次序表达

@@ -1049,19 +1049,38 @@ type PartyIdentityRegistry interface {
 //
 // Status 与停用两件的判据同 GroupLegalEntityRow：装载时点导出，零时刻不兼作「没停用」。
 // 名称就在本册行上，不必左连接——法人与关系两册才需要连过来取名。
+//
+// Categories 是装载时点的类别（ADR-0378 决定三），与 Status 同一口径：domain.PartyCategoriesAt 的 SQL 镜像，词取
+// domain.PartyCategoryWords，照词表次序，永不为空。RelationshipCounts 是它名下在用关系的段数，只是行数、不带判断。
+// 行上不带导出它们的那几本册的事实，要别的时点的调用方自己去读。
 type BusinessPartyRow struct {
-	TenantID          string
-	PartyID           string
-	PartyName         string
-	Status            string
-	Revision          int
-	Basis             string
-	EffectiveFrom     time.Time
-	DeactivatedAt     time.Time
-	DeactivationBasis string
-	HasDeactivation   bool
-	RegisteredAt      time.Time
+	TenantID           string
+	PartyID            string
+	PartyName          string
+	Status             string
+	Revision           int
+	Basis              string
+	EffectiveFrom      time.Time
+	DeactivatedAt      time.Time
+	DeactivationBasis  string
+	HasDeactivation    bool
+	RegisteredAt       time.Time
+	Categories         []string
+	RelationshipCounts PartyRelationshipCounts
 	BusinessPartyIdentificationRow
+}
+
+// PartyRelationshipCounts 是一个业务参与方名下在用（候选或已生效）关系的段数，按它站在哪一侧分：作为持有方（它对别人
+// 担任角色）与作为相对方（别人对它担任角色）。
+type PartyRelationshipCounts struct {
+	AsHolder       RelationshipTally
+	AsCounterparty RelationshipTally
+}
+
+// RelationshipTally 是一侧的段数：Live 是在用的，Candidate 是其中候选（待确认）的。
+type RelationshipTally struct {
+	Live      int
+	Candidate int
 }
 
 // GroupLegalEntityRow 是集团与法人目录上列的一行：一个责任法人的最新登记修订，连同

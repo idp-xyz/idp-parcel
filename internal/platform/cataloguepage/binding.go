@@ -21,6 +21,9 @@ type Columns struct {
 	// Codes 按筛选维给「词 → 列里存的整数代码」的换算，可缺；缺席的维按原词比较。状态这类维在登记表里常存成代码，
 	// 有了它不必为了筛选在读面里另导一列文本。
 	Codes map[string]func(string) (int64, error)
+	// MultiValued 点名多值的筛选维（ADR-0378 决定四）：这一维落到的列是文本数组，一行可以同时属于几个值，所给的值里有
+	// 一个在数组里即匹配；分面时一行记进它属于的每一格。多值维不带代码换算。
+	MultiValued []string
 	// Keyword 是 q 覆盖的文本列，至少一列：q 是保留键、Decode 总会收下，没落列的话检索词就被静默忽略了——
 	// 正是决定四拒收未知键要防的那种「屏上的条件与答出的列表对不上」。
 	Keyword []string
@@ -72,6 +75,20 @@ func (catalogue *Catalogue) Bind(columns Columns) (*Binding, error) {
 		}
 		if columns.Codes[name] == nil {
 			return fail("筛选维 %s 的代码换算为空", name)
+		}
+	}
+	for _, name := range columns.MultiValued {
+		if _, declared := catalogue.filters[name]; !declared {
+			return fail("多值的筛选维 %s 不在声明里", name)
+		}
+		if columns.Codes[name] != nil {
+			return fail("多值的筛选维 %s 不能带代码换算", name)
+		}
+	}
+	// 分面按列里存的词分组：存成代码的列分出来的是代码，对不上词表。要给这样的维分面，先在读面里导出一列词。
+	for _, name := range catalogue.facets {
+		if columns.Codes[name] != nil {
+			return fail("给分面的筛选维 %s 不能带代码换算", name)
 		}
 	}
 	if len(columns.Keyword) == 0 {
@@ -137,49 +154,16 @@ func (binding *Binding) Plan(query Query, base string, args []any, limit int) (P
 		return Plan{}, fmt.Errorf("cataloguepage: 册 %s 的排序维 %q 没有落到列上", name, query.Sort.Field)
 	}
 
-	bound := append([]any(nil), args...)
+	where, bound, err := binding.conditions(query, base, args, "")
+	if err != nil {
+		return Plan{}, err
+	}
 	placeholder := func(value any) string {
 		bound = append(bound, value)
 		return fmt.Sprintf("$%d", len(bound))
 	}
 
-	var conditions []string
-	if strings.TrimSpace(base) != "" {
-		// 括起来：base 里若有 OR，与后面各条 AND 在一起时优先级会把它拆开。
-		conditions = append(conditions, "("+base+")")
-	}
-	// 按维名顺序拼，同一组条件每次拼出同一句，参数编号也稳定。
-	for _, dimension := range sortedKeys(query.Filters) {
-		column := binding.columns.Filters[dimension]
-		values := query.Filters[dimension]
-		code := binding.columns.Codes[dimension]
-		if code == nil {
-			conditions = append(conditions, fmt.Sprintf("%s = ANY(%s)", column, placeholder(append([]string(nil), values...))))
-			continue
-		}
-		codes := make([]int64, 0, len(values))
-		for _, value := range values {
-			converted, err := code(value)
-			if err != nil {
-				return Plan{}, fmt.Errorf("cataloguepage: 册 %s 筛选维 %s 的取值 %q 换不成代码：%w", name, dimension, value, err)
-			}
-			codes = append(codes, converted)
-		}
-		conditions = append(conditions, fmt.Sprintf("%s = ANY(%s)", column, placeholder(codes)))
-	}
-	if query.Keyword != "" {
-		keyword := placeholder("%" + likeLiteral.Replace(query.Keyword) + "%")
-		matches := make([]string, len(binding.columns.Keyword))
-		for index, column := range binding.columns.Keyword {
-			matches[index] = column + " ILIKE " + keyword
-		}
-		conditions = append(conditions, "("+strings.Join(matches, " OR ")+")")
-	}
-
-	plan := Plan{Where: "TRUE"}
-	if len(conditions) > 0 {
-		plan.Where = strings.Join(conditions, " AND ")
-	}
+	plan := Plan{Where: where}
 	plan.Args = append([]any(nil), bound...)
 
 	keys := append([]string{sortColumn}, binding.columns.Identity...)
@@ -217,6 +201,130 @@ func (binding *Binding) Plan(query Query, base string, args []any, limit int) (P
 	return plan, nil
 }
 
+// conditions 把读面的固定条件、各筛选维与 q 拼成一句 WHERE（没有任何条件时是 TRUE），连同参数交回；不含键集。
+// except 非空时跳过那一维——分面数某一维各值的行数时，条件不含该维自己。
+func (binding *Binding) conditions(query Query, base string, args []any, except string) (string, []any, error) {
+	name := binding.catalogue.name
+	bound := append([]any(nil), args...)
+	placeholder := func(value any) string {
+		bound = append(bound, value)
+		return fmt.Sprintf("$%d", len(bound))
+	}
+
+	var conditions []string
+	if strings.TrimSpace(base) != "" {
+		// 括起来：base 里若有 OR，与后面各条 AND 在一起时优先级会把它拆开。
+		conditions = append(conditions, "("+base+")")
+	}
+	// 按维名顺序拼，同一组条件每次拼出同一句，参数编号也稳定。
+	for _, dimension := range sortedKeys(query.Filters) {
+		if dimension == except {
+			continue
+		}
+		column := binding.columns.Filters[dimension]
+		values := query.Filters[dimension]
+		if binding.multiValued(dimension) {
+			// 数组有交集即匹配：维内为或（ADR-0144 决定四），一行的数组里有所给的任一个值就算。
+			conditions = append(conditions, fmt.Sprintf("%s && %s", column, placeholder(append([]string(nil), values...))))
+			continue
+		}
+		code := binding.columns.Codes[dimension]
+		if code == nil {
+			conditions = append(conditions, fmt.Sprintf("%s = ANY(%s)", column, placeholder(append([]string(nil), values...))))
+			continue
+		}
+		codes := make([]int64, 0, len(values))
+		for _, value := range values {
+			converted, err := code(value)
+			if err != nil {
+				return "", nil, fmt.Errorf("cataloguepage: 册 %s 筛选维 %s 的取值 %q 换不成代码：%w", name, dimension, value, err)
+			}
+			codes = append(codes, converted)
+		}
+		conditions = append(conditions, fmt.Sprintf("%s = ANY(%s)", column, placeholder(codes)))
+	}
+	if query.Keyword != "" {
+		keyword := placeholder("%" + likeLiteral.Replace(query.Keyword) + "%")
+		matches := make([]string, len(binding.columns.Keyword))
+		for index, column := range binding.columns.Keyword {
+			matches[index] = column + " ILIKE " + keyword
+		}
+		conditions = append(conditions, "("+strings.Join(matches, " OR ")+")")
+	}
+	if len(conditions) == 0 {
+		return "TRUE", bound, nil
+	}
+	return strings.Join(conditions, " AND "), bound, nil
+}
+
+func (binding *Binding) multiValued(dimension string) bool {
+	for _, name := range binding.columns.MultiValued {
+		if name == dimension {
+			return true
+		}
+	}
+	return false
+}
+
+// FacetPlan 是数一个分面维要的那一句与参数（ADR-0378 决定五），由 Binding.FacetPlans 拼出。
+type FacetPlan struct {
+	// Dimension 是筛选维的名字，也是答复里 facets 下的键。
+	Dimension string
+	// Args 与 SQL 配套：读面已占用的参数在前，其余各维与 q 的参数接在后面。
+	Args []any
+
+	column      string
+	where       string
+	multiValued bool
+	words       []string
+}
+
+// SQL 是数各值行数的那一句，答两列：值与行数。source 是 FROM 之后的取数来源（同 Plan.CountSQL）；要 WITH 前半句的，
+// 读面接在前面。列里没出现的值不在结果里，由 Counts 补零。
+func (plan FacetPlan) SQL(source string) string {
+	if plan.multiValued {
+		// 多值维按数组里的每个值各记一次：一行属于几个值，就数进几格。
+		return "SELECT facet_value, count(*) FROM " + source + ", unnest(" + plan.column + ") AS facet_value WHERE " +
+			plan.where + " GROUP BY facet_value"
+	}
+	return "SELECT " + plan.column + " AS facet_value, count(*) FROM " + source + " WHERE " + plan.where +
+		" GROUP BY facet_value"
+}
+
+// Counts 把取回的「值 → 行数」排成答复里的那一格：照词表次序列出词表上的每个值，没取到的记零。词表之外的值不列——
+// 分面答的是筛选维的词表，列里多出来的东西不是这一维能筛的。
+func (plan FacetPlan) Counts(found map[string]int64) []FacetCount {
+	counts := make([]FacetCount, 0, len(plan.words))
+	for _, word := range plan.words {
+		counts = append(counts, FacetCount{Value: word, Count: found[word]})
+	}
+	return counts
+}
+
+// FacetPlans 按一次查询给本册点名的各分面维各拼一句：条件取本次的 q 与其余各筛选维，不含该维自己——点下某一格会得到
+// 几行，那一格上就是几（ADR-0378 决定五）。没点名分面的册交回空切片。base 与 args 同 Plan。
+func (binding *Binding) FacetPlans(query Query, base string, args []any) ([]FacetPlan, error) {
+	if query.catalogue != binding.catalogue {
+		return nil, fmt.Errorf("cataloguepage: 查询对象不是册 %s 的 Decode 解出来的", binding.catalogue.name)
+	}
+	plans := make([]FacetPlan, 0, len(binding.catalogue.facets))
+	for _, dimension := range binding.catalogue.facets {
+		where, bound, err := binding.conditions(query, base, args, dimension)
+		if err != nil {
+			return nil, err
+		}
+		plans = append(plans, FacetPlan{
+			Dimension:   dimension,
+			Args:        bound,
+			column:      binding.columns.Filters[dimension],
+			where:       where,
+			multiValued: binding.multiValued(dimension),
+			words:       binding.catalogue.words[dimension],
+		})
+	}
+	return plans, nil
+}
+
 // likeLiteral 让 q 在 ILIKE 里只做字面包含：% 与 _ 是通配符，反斜杠是 LIKE 的缺省转义符。
 var likeLiteral = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
@@ -251,6 +359,7 @@ func copyColumns(columns Columns) Columns {
 		Codes:    make(map[string]func(string) (int64, error), len(columns.Codes)),
 		Keyword:  append([]string(nil), columns.Keyword...),
 	}
+	copied.MultiValued = append([]string(nil), columns.MultiValued...)
 	for key, value := range columns.Sorts {
 		copied.Sorts[key] = value
 	}

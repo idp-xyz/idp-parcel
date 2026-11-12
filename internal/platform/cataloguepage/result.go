@@ -9,7 +9,19 @@ type Result[Row any] struct {
 	Next string
 	// Total 是与本页同一组条件下的精确总数。
 	Total int64
+	// Facets 是本册点名的各筛选维的分面计数（ADR-0378 决定五）；没点名的册为 nil，答复里没有这一格。
+	Facets Facets
 }
+
+// FacetCount 是分面里的一格：筛选维词表上的一个值，与它在「本次的 q 与其余各维、不含这一维自己」之下的行数。
+type FacetCount struct {
+	Value string `json:"value"`
+	Count int64  `json:"count"`
+}
+
+// Facets 是答复体在 page 之外多出的 facets 一格：按筛选维名给各值的行数，每一维照词表次序列出词表上的每个值、为零的
+// 也列。各册的答复体把它标成 omitempty：没点名分面的册答复里没有这一格，不认识它的调用方不受影响。
+type Facets map[string][]FacetCount
 
 // Page 拼出答复里的 page 一格；size 是本次使用的页大小，不是本页实际行数。
 func (result Result[Row]) Page(size int) Page {

@@ -24,6 +24,9 @@ import (
 var identityStatuses = cataloguepage.Words[domain.PartyIdentityStatus]()
 
 // BusinessPartyPages 是 /commercial-business-parties 的查询声明。
+//
+// categories 是类别（ADR-0378 决定四）：多值维，词表取 domain.PartyCategoryWords，读面按本上下文几本登记册上「有没有那样
+// 一行」导出。status 与 categories 都给分面：管理台的状态下拉与类型芯片上摆着各值的家数（决定六）。
 var BusinessPartyPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "commercial-business-parties",
 	Sorts: []cataloguepage.SortDimension{
@@ -33,7 +36,10 @@ var BusinessPartyPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	},
 	DefaultSort: cataloguepage.Sort{Field: "registeredAt", Descending: true},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
-	Filters:     []cataloguepage.FilterDimension{{Name: "status", Vocabulary: identityStatuses}},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "status", Vocabulary: identityStatuses, Facet: true},
+		{Name: "categories", Vocabulary: domain.PartyCategoryWords(), Facet: true},
+	},
 })
 
 // GroupLegalEntityPages 是 /commercial-group-legal-entities 的查询声明。registrationCountry 是开放码（ISO 3166 两位字母形状，
@@ -56,6 +62,10 @@ var GroupLegalEntityPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // PartyRelationshipPages 是 /commercial-party-relationships 的查询声明。status 是登记的关系状态事实，不随时钟走（与身份
 // 两册的时点导出不同，理由在 postgres 读面 ListPartyRelationships 的头注），词表取自 domain.RelationshipStatus；role 取自
 // domain.PartyRole。
+//
+// status 给分面（ADR-0378 决定六）：管理台合作关系视图的状态芯片上摆着各状态的段数。holderId 与 counterpartyId 是按
+// 一家单位读全它名下关系用的两维（同一决定）：开放标识，不设词表，按整个标识相等比——q 是包含匹配，会把标识互为前缀的
+// 别家也带出来。
 var PartyRelationshipPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "commercial-party-relationships",
 	Sorts: []cataloguepage.SortDimension{
@@ -66,8 +76,10 @@ var PartyRelationshipPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	DefaultSort: cataloguepage.Sort{Field: "registeredAt", Descending: true},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
-		{Name: "status", Vocabulary: cataloguepage.Words[domain.RelationshipStatus]()},
+		{Name: "status", Vocabulary: cataloguepage.Words[domain.RelationshipStatus](), Facet: true},
 		{Name: "role", Vocabulary: cataloguepage.Words[domain.PartyRole]()},
+		{Name: "holderId"},
+		{Name: "counterpartyId"},
 	},
 })
 

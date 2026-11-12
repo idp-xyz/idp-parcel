@@ -43,9 +43,14 @@ type SortDimension struct {
 
 // FilterDimension 是一个筛选维。Name 取答复体里的 JSON 字段名（ADR-0144 决定四）；Vocabulary 非空即
 // 封闭词表，值不在其中即拒，为空表示这一维不设词表（如按某个标识筛）。
+//
+// Facet 为真即点名这一维给分面计数（ADR-0378 决定五）：答复里多答词表上每个值在「本次的 q 与其余各维、不含这一维
+// 自己」之下各有几行。只有设了词表的维可以点名——没有词表就没有「每个值」可列。只为页面确实摆出来的数点名：每点名
+// 一维，每一问多一次聚合。
 type FilterDimension struct {
 	Name       string
 	Vocabulary []string
+	Facet      bool
 }
 
 // BooleanVocabulary 是布尔筛选维的词表。落列时把布尔列或 EXISTS 读成 Postgres 的 boolean::text，那只会是 true 与 false；
@@ -90,6 +95,9 @@ type Catalogue struct {
 	// filters 按维给封闭词表；值为 nil 的维不设词表。
 	filters   map[string]map[string]bool
 	selectors map[string]bool
+	// facets 是点名给分面的维，照声明的次序；words 是这些维的词表，照声明的次序——分面按它列值。
+	facets []string
+	words  map[string][]string
 }
 
 // NewCatalogue 校验一册声明。声明是各册写死的常量，这里报错即编程错误，应在装配时就暴露。
@@ -102,6 +110,7 @@ func NewCatalogue(spec Spec) (*Catalogue, error) {
 		sorts:     make(map[string]ValueKind, len(spec.Sorts)),
 		filters:   make(map[string]map[string]bool, len(spec.Filters)),
 		selectors: make(map[string]bool, len(spec.Selectors)),
+		words:     make(map[string][]string),
 	}
 
 	if len(spec.Sorts) == 0 {
@@ -161,6 +170,17 @@ func NewCatalogue(spec Spec) (*Catalogue, error) {
 			}
 		}
 		catalogue.filters[dimension.Name] = vocabulary
+		if dimension.Facet {
+			if vocabulary == nil {
+				return nil, fmt.Errorf("cataloguepage: 册 %s 的筛选维 %s 没有词表，不能点名给分面", spec.Name, dimension.Name)
+			}
+			// 分面照词表逐值列：词表里重了一个值，答复里那一格就会列两遍。
+			if len(vocabulary) != len(dimension.Vocabulary) {
+				return nil, fmt.Errorf("cataloguepage: 册 %s 给分面的筛选维 %s 词表里有重复的值", spec.Name, dimension.Name)
+			}
+			catalogue.facets = append(catalogue.facets, dimension.Name)
+			catalogue.words[dimension.Name] = append([]string(nil), dimension.Vocabulary...)
+		}
 	}
 	for _, selector := range spec.Selectors {
 		if err := claim("选择器", selector); err != nil {

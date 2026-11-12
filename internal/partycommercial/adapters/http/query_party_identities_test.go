@@ -24,13 +24,17 @@ type partyIdentityReaderDouble struct {
 	parties       []ports.BusinessPartyRow
 	entities      []ports.GroupLegalEntityRow
 	relationships []ports.PartyRelationshipRow
-	err           error
+	// facets 非空时随业务参与方与参与方关系两册的答复带出（ADR-0378 决定六点名的两册）。
+	facets cataloguepage.Facets
+	err    error
 }
 
 func (double *partyIdentityReaderDouble) ListBusinessParties(
 	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
 ) (cataloguepage.Result[ports.BusinessPartyRow], error) {
-	return tenantPage(double.err, tenant == double.tenant, double.parties)
+	page, err := tenantPage(double.err, tenant == double.tenant, double.parties)
+	page.Facets = double.facets
+	return page, err
 }
 
 func (double *partyIdentityReaderDouble) ListGroupLegalEntities(
@@ -42,7 +46,9 @@ func (double *partyIdentityReaderDouble) ListGroupLegalEntities(
 func (double *partyIdentityReaderDouble) ListPartyRelationships(
 	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
 ) (cataloguepage.Result[ports.PartyRelationshipRow], error) {
-	return tenantPage(double.err, tenant == double.tenant, double.relationships)
+	page, err := tenantPage(double.err, tenant == double.tenant, double.relationships)
+	page.Facets = double.facets
+	return page, err
 }
 
 // 两册的修订历史读口随 PartyIdentityCatalogueReader 嵌入进来；本文件的用例不经它们，替身只补形状。
@@ -128,6 +134,89 @@ func TestBusinessPartiesEndpointTranscribesTheLifecycleCells(t *testing.T) {
 		got.DeactivationBasis != "basis-deact" ||
 		got.DeactivatedAt != identityListedAt.Add(time.Hour).Format(time.RFC3339Nano) {
 		t.Fatalf("已停用那一行 = %+v", got)
+	}
+}
+
+// Covers: ADR-0378 决定三、五——行上的类别与关系段数逐字段转写，类别一格总是数组（读面没给也不编成 null）；读端口
+// 答了分面就原样带出 facets，没答就没有这一格（不认识它的调用方不受影响）。
+func TestBusinessPartiesEndpointCarriesCategoriesCountsAndFacets(t *testing.T) {
+	tenant := catValue(t, domain.NewTenantID, "tenant-1")
+	reader := &partyIdentityReaderDouble{
+		tenant: tenant,
+		parties: []ports.BusinessPartyRow{
+			{
+				TenantID: "tenant-1", PartyID: "party-ours", PartyName: "我方公司", Status: "EFFECTIVE", Revision: 1,
+				Basis: "basis-ours", EffectiveFrom: identityListedAt, RegisteredAt: identityListedAt,
+				Categories: []string{"ACCOUNT_HOLDER", "OUR_COMPANY"},
+				RelationshipCounts: ports.PartyRelationshipCounts{
+					AsHolder:       ports.RelationshipTally{Live: 1, Candidate: 0},
+					AsCounterparty: ports.RelationshipTally{Live: 6, Candidate: 3},
+				},
+			},
+			{
+				TenantID: "tenant-1", PartyID: "party-bare", PartyName: "没带类别的行", Status: "EFFECTIVE", Revision: 1,
+				Basis: "basis-bare", EffectiveFrom: identityListedAt, RegisteredAt: identityListedAt,
+			},
+		},
+		facets: cataloguepage.Facets{
+			"status":     {{Value: "REGISTERED", Count: 0}, {Value: "EFFECTIVE", Count: 2}},
+			"categories": {{Value: "ACCOUNT_HOLDER", Count: 1}, {Value: "OUR_COMPANY", Count: 1}},
+		},
+	}
+	recorder := httptest.NewRecorder()
+	commercialhttp.NewQueryBusinessPartiesEndpoint(intakeDouble{query: catalogueQuery(t)}, reader).
+		ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/commercial-business-parties", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &fields); err != nil {
+		t.Fatalf("decode %s: %v", recorder.Body.Bytes(), err)
+	}
+	var parties []map[string]json.RawMessage
+	if err := json.Unmarshal(fields["parties"], &parties); err != nil || len(parties) != 2 {
+		t.Fatalf("parties = %s (%v)", fields["parties"], err)
+	}
+	if got := string(parties[0]["categories"]); got != `["ACCOUNT_HOLDER","OUR_COMPANY"]` {
+		t.Fatalf("categories = %s", got)
+	}
+	if got, want := string(parties[0]["relationshipCounts"]),
+		`{"asHolder":{"live":1,"candidate":0},"asCounterparty":{"live":6,"candidate":3}}`; got != want {
+		t.Fatalf("relationshipCounts = %s, want %s", got, want)
+	}
+	if got := string(parties[1]["categories"]); got != `[]` {
+		t.Fatalf("读面没给类别的行 categories = %s, want []（数组，不是 null）", got)
+	}
+	if got, want := string(fields["facets"]),
+		`{"categories":[{"value":"ACCOUNT_HOLDER","count":1},{"value":"OUR_COMPANY","count":1}],`+
+			`"status":[{"value":"REGISTERED","count":0},{"value":"EFFECTIVE","count":2}]}`; got != want {
+		t.Fatalf("facets = %s, want %s", got, want)
+	}
+
+	// 参与方关系那一册同样把 facets 带出来。
+	relations := httptest.NewRecorder()
+	commercialhttp.NewQueryPartyRelationshipsEndpoint(intakeDouble{query: catalogueQuery(t)}, reader).
+		ServeHTTP(relations, httptest.NewRequest(http.MethodGet, "/commercial-party-relationships", nil))
+	var relationFields map[string]json.RawMessage
+	if err := json.Unmarshal(relations.Body.Bytes(), &relationFields); err != nil || relationFields["facets"] == nil {
+		t.Fatalf("参与方关系的答复没有 facets：%s (%v)", relations.Body.Bytes(), err)
+	}
+
+	// 读端口没答分面：答复里没有 facets 这一格。集团法人那一册没点名分面，替身答了它也不往外带。
+	for name, endpoint := range map[string]http.Handler{
+		"业务参与方（没答分面）": commercialhttp.NewQueryBusinessPartiesEndpoint(
+			intakeDouble{query: catalogueQuery(t)}, &partyIdentityReaderDouble{tenant: tenant}),
+		"集团法人": commercialhttp.NewQueryGroupLegalEntitiesEndpoint(intakeDouble{query: catalogueQuery(t)}, reader),
+	} {
+		plain := httptest.NewRecorder()
+		endpoint.ServeHTTP(plain, httptest.NewRequest(http.MethodGet, "/", nil))
+		var plainFields map[string]json.RawMessage
+		if err := json.Unmarshal(plain.Body.Bytes(), &plainFields); err != nil {
+			t.Fatalf("%s decode %s: %v", name, plain.Body.Bytes(), err)
+		}
+		if _, present := plainFields["facets"]; present {
+			t.Fatalf("%s 的答复带了 facets：%s", name, plain.Body.Bytes())
+		}
 	}
 }
 
