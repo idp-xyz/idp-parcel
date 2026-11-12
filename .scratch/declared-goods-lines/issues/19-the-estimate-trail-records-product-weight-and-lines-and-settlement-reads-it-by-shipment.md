@@ -4,7 +4,7 @@ Category: enhancement
 Status: in-progress
 Blocked by: 无（已提交，未进 main；分支 `feat/goods-details-admin`）
 
-依据：[ADR-0379](../../../docs/adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 决定一、二；ADR-0179 决定六（被部分停用的那一句）；ADR-0378 决定三（试算评价的输入快照记服务产品）。
+依据：[ADR-0379](../../../docs/adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 决定一、二；ADR-0179 决定六（被部分停用的那一句）；ADR-0382 决定三（试算评价的输入快照记服务产品）。
 
 ## 要做的
 

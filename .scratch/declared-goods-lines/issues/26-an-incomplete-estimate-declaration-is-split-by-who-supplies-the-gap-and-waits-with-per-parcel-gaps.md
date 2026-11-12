@@ -4,7 +4,7 @@ Category: enhancement
 Status: in-progress
 Blocked by: 无（依赖的票 23 代码已在 `feat/goods-details-admin`，未进 main；本票接着它做）
 
-依据：[ADR-0381](../../../docs/adr/0381-an-incomplete-estimate-declaration-waits-for-customer-supplement-or-operator-registration-by-who-supplies-the-gap.md) 决定一至四；ADR-0094 决定三、五（先存等待、处理尝试同笔落库）；ADR-0380 决定一、三（等运营登记那一路与尝试两格的既有落点）。
+依据：[ADR-0381](../../../docs/adr/0381-an-incomplete-estimate-declaration-waits-for-customer-supplement-or-operator-registration-by-who-supplies-the-gap.md) 决定一至四；ADR-0094 决定三、五（先存等待、处理尝试同笔落库）；ADR-0383 决定一、三（等运营登记那一路与尝试两格的既有落点）。
 
 ## 要做的
 
@@ -42,7 +42,7 @@ Blocked by: 无（依赖的票 23 代码已在 `feat/goods-details-admin`，未�
 - 「委托待受控补充」信封（ADR-0371 决定三）：整条路今天都不交，已记在 UC-PS-001 交接表、仓配切片承接，本票不扩。
 - 补充届满处置（租户取值，PS CONTEXT 既有那句）。
 - 演示种子不加这条路（演示租户种子都带齐资料；要演示补件动线另立）。
-- 按原因或计价范围收窄重驱（ADR-0380 越权风险点「多唤醒」）。
+- 按原因或计价范围收窄重驱（ADR-0383 越权风险点「多唤醒」）。
 
 ## 完成记录（作者一侧，2026-11-12）
 

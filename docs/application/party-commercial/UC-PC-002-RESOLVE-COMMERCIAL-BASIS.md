@@ -76,7 +76,7 @@
 ## 一致性、缓存与并发
 
 - 解析键至少包含租户、客户账户、责任法人候选、服务范围、商业选择锚点及适用对象类型；请求结算依据时还必须包含能够区分合同、服务/费用或控制范围的业务维度。必需依据含服务产品且委托声明了服务产品时，还包含该产品的对象身份（不是版本，[ADR-0153](../../adr/0153-declared-service-product-identity-narrows-commercial-resolution.md)）；未声明时这一维缺席，不得补默认产品。缓存不得省略这些维度，也不得缓存一个客户级预付/账期默认值。
-- 请求计价依据时，解析键的解析目的取 `PRICING` 并必须包含价格方向；同一范围的 BUY、SELL 与 INTERNAL 解析和缓存不能互相复用。解析目的是本上下文自己的轴，不是 `parcel-pricing` 的计算目的。计价目的的解析带回价格政策及其定价方案绑定（[ADR-0034](../../adr/0034-pricing-closure-adopts-via-price-policy.md)），但 `parcel-pricing` 按范围选卡、评价不读它（[ADR-0260](../../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)）；首发同一计价范围、同一服务产品只有一张在用 `SELL` 卡（不声明产品的卡接其余产品，[ADR-0378](../../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md)），同一范围里客户差异化的销售价表达不了（ADR-0260 越权风险点 1）。
+- 请求计价依据时，解析键的解析目的取 `PRICING` 并必须包含价格方向；同一范围的 BUY、SELL 与 INTERNAL 解析和缓存不能互相复用。解析目的是本上下文自己的轴，不是 `parcel-pricing` 的计算目的。计价目的的解析带回价格政策及其定价方案绑定（[ADR-0034](../../adr/0034-pricing-closure-adopts-via-price-policy.md)），但 `parcel-pricing` 按范围选卡、评价不读它（[ADR-0260](../../adr/0260-an-evaluation-selects-its-price-card-by-scope-and-reads-its-pricing-terms-only-from-the-card.md)）；首发同一计价范围、同一服务产品只有一张在用 `SELL` 卡（不声明产品的卡接其余产品，[ADR-0382](../../adr/0382-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md)），同一范围里客户差异化的销售价表达不了（ADR-0260 越权风险点 1）。
 - 当前修订标识只用于检测权威视图变化，不代替对象版本。相同解析输入与相同修订可以返回原结果；新修订必须重新检查是否仍相容。
 - 发布、截止、退役和解析并发时，已提交的历史业务决定保留原快照；尚未提交的新决定必须使用当前有效解析或保持未决。收尾推进该范围的视图修订，提交前重校据此答已失效（[ADR-0233](../../adr/0233-an-older-commercial-version-is-closed-for-a-named-successor-by-a-cut-or-a-same-start-retirement.md) 决定五）。
 - 依赖调用超时与权威确认“无适用依据”是不同结果。缓存过期、读取失败或修订无法确认只能形成解析未决。

@@ -32,7 +32,7 @@ Status: in-progress
 | [10](./issues/10-controlled-supplement-carries-platform-identifiers-before-acceptance.md) | 受控补充收平台号，受理前补报或更正 | — | 后端 |
 | [11](./issues/11-customer-contract-need-not-name-an-acceptance-rule-package.md) | 客户合同不必指名接单规则包 | — | 后端 + 管理台 |
 | [12](./issues/12-demo-fba-product-stops-for-missing-box-labels-and-resumes-on-supplement.md) | 演示：FBA 产品缺箱标号停下，补齐后受理 | 09、10、11 | 种子与脚本 |
-| [13](./issues/13-one-account-prices-each-service-product-on-its-own-card.md) | 同一账户的不同服务产品各用各的售价卡：决定（ADR-0378） | 14–17 | 文档票 |
+| [13](./issues/13-one-account-prices-each-service-product-on-its-own-card.md) | 同一账户的不同服务产品各用各的售价卡：决定（ADR-0382） | 14–17 | 文档票 |
 | [14](./issues/14-a-sell-price-card-names-its-service-products-and-selection-has-two-tiers.md) | 售价卡声明适用服务产品，选卡分两层 | — | 后端 |
 | [15](./issues/15-the-declared-service-product-reaches-sell-card-selection.md) | 申报的服务产品进售价卡选卡：估价、正式评价与试算 | 14 | 后端 |
 | [16](./issues/16-admin-web-price-cards-show-and-take-service-products.md) | 管理台：价卡录入与查阅带适用产品，试算可选产品 | 14（模板一格；可并行写） | 前端 |
@@ -41,7 +41,7 @@ Status: in-progress
 | [19](./issues/19-the-estimate-trail-records-product-weight-and-lines-and-settlement-reads-it-by-shipment.md) | 估价留痕补记产品、计价重量与费用行，结算按委托交出读口 | — | 后端 |
 | [20](./issues/20-shipment-detail-shows-the-recorded-financial-control-conclusion.md) | 委托详情交出受理判断记下的财务控制结论 | — | 后端 |
 | [21](./issues/21-admin-shipment-detail-shows-pre-acceptance-financial-control.md) | 管理台运单详情显示「受理前财务控制」 | —（联调等 19、20） | 前端 |
-| [22](./issues/22-the-acceptance-task-records-why-the-estimate-was-not-formed.md) | 受理任务记下估价没形成的结算原因：决定（ADR-0380） | 23、24 | 文档票 |
+| [22](./issues/22-the-acceptance-task-records-why-the-estimate-was-not-formed.md) | 受理任务记下估价没形成的结算原因：决定（ADR-0383） | 23、24 | 文档票 |
 | [23](./issues/23-pricing-side-estimate-stalls-wait-for-registration-and-the-attempt-says-why.md) | 价卡一侧答不出的估价等运营登记、参数登记后续办；处理尝试记原因与产品，详情从落处读 | — | 后端 |
 | [24](./issues/24-admin-shows-the-settlement-reason-and-who-resumes-a-stalled-estimate.md) | 管理台：估价停因带结算原因与产品，写明谁来续办 | —（联调等 23） | 前端 |
 | [25](./issues/25-an-incomplete-declaration-for-the-estimate-waits-for-customer-supplement.md) | 估价因申报不全没形成时等客户补充（needs-triage） | — | 小包托运 + 结算 + 计价 |
