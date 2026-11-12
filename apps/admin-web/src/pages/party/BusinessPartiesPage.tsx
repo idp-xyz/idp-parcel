@@ -1752,6 +1752,12 @@ export function BusinessPartiesPage() {
       setRelationshipStatus('ALL');
       setAttentionOnly(false);
     };
+    // 空册的话。一家往来单位都没有时关系无从建起——页头的「建立合作关系」这时点不动——下一步是先去「单位名录」登记：说明照此
+    // 指路，下面另给一枚去那里的按钮。往来单位册的总数还没答出时不这么说，照常指向页头的入口。
+    const emptyTitle = '还没有登记任何合作关系';
+    const emptyDescription = noParties
+      ? '谁是我们的客户、谁是承运商，都由合作关系说。先在「单位名录」登记往来单位，才有双方可选。'
+      : `谁是我们的客户、谁是承运商，都由合作关系说。${entryHint(mayWrite, '用页头的「建立合作关系」登记第一段。')}`;
     refresh = cursorPageRefresh;
     body = (
       <CatalogueCursorScope key="relationships" conditions={relationshipConditions} load={listPartyRelationships}>
@@ -1762,8 +1768,8 @@ export function BusinessPartiesPage() {
           const viewState = catalogueViewState(answer, pageRows.length, retry, {
             module: info,
             endpoint: 'GET /commercial-party-relationships',
-            emptyTitle: '还没有登记任何合作关系',
-            emptyDescription: `谁是我们的客户、谁是承运商，都由合作关系说。${entryHint(mayWrite, '用页头的「建立合作关系」登记第一段。')}`,
+            emptyTitle,
+            emptyDescription,
             narrowed: catalogueConditionsNarrow(relationshipConditions) || pastFirstPage(pagination),
           });
           // 当前条件下答回的行；这一问还没答出或没答成就是 null——筛选项上不拿 0 占位。
@@ -1882,6 +1888,24 @@ export function BusinessPartiesPage() {
                   ) : null;
                 }}
                 viewState={viewState}
+                // 一家往来单位都没有时的空册：说明下面给一枚去「单位名录」的按钮（看册不是写入，有没有登记权限都摆）。
+                stateOverride={
+                  noParties
+                    ? {
+                        empty: () => (
+                          <EmptyState
+                            title={emptyTitle}
+                            description={emptyDescription}
+                            action={
+                              <Button variant="outline" onClick={() => changeBook('identities')}>
+                                去「单位名录」
+                              </Button>
+                            }
+                          />
+                        ),
+                      }
+                    : undefined
+                }
                 // 「建立合作关系」的表单摆在这里：表的上方、同一个滚动区里。没有本方，两方都选；JSON 快照的折叠区随它带着。
                 // 表单开头的那段说明摆在段头上、跟在标题后面：表单每矮一行，下面的表就多露一行。
                 aboveRows={
