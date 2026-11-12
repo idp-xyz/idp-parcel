@@ -15,6 +15,7 @@ import {
   isIdentityKind,
   suggestedDeactivationRevision,
   type IdentityDeactivationDraft,
+  identityMayBeDeactivated,
 } from './identity-deactivation-form';
 
 // 本文件钉的是停用表单只做编码层的事：修订号编成整数、停用时刻换成 RFC 3339、留空缺席；种类词只从
@@ -226,4 +227,12 @@ test('deactivationLandedActions 按锁定与送出的种类分派重取', () => 
   deepEqual(deactivationLandedActions(false, 'LEGAL_ENTITY'), { notifyPage: false, reloadOwnRegister: true });
   deepEqual(deactivationLandedActions(false, 'CUSTOMER_ACCOUNT'), { notifyPage: false, reloadOwnRegister: true });
   deepEqual(deactivationLandedActions(false, null), { notifyPage: true, reloadOwnRegister: true });
+});
+
+// Covers: 停用入口摆不摆——登记册对同一个身份只收一笔停用：行上带着停用时点（到没到都算）就登不了第二笔。
+test('identityMayBeDeactivated 登过停用的不再摆入口', () => {
+  equal(identityMayBeDeactivated({}), true);
+  equal(identityMayBeDeactivated({ deactivatedAt: '2026-06-01T00:00:00Z' }), false);
+  // 停用时点还没到（状态仍是已生效）：那一笔已经登了，同样登不了第二笔。
+  equal(identityMayBeDeactivated({ deactivatedAt: '2099-01-01T00:00:00Z' }), false);
 });

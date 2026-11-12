@@ -126,6 +126,15 @@ export interface RevisionedIdentity {
 }
 
 /** 种类串是不是词表里的一格。词表是封闭集（identityKindLabels），集外的串不是「另一种」，是未选或坏值。 */
+/**
+ * 一个身份还登不登得了停用。登记册对同一个身份只收一笔停用（后端 domain 的 IdentityLifecycle.Deactivate 拒二次停用），所以
+ * 已经登过的——不论停用时点到没到——入口不摆：摆着只会让人填完一张必被拒的表。行上带着停用时点即登过。往来单位与公司主体
+ * 两处「更多」菜单都照它（票 business-party-redesign/15）。
+ */
+export function identityMayBeDeactivated(row: { deactivatedAt?: string }): boolean {
+  return row.deactivatedAt === undefined;
+}
+
 export function isIdentityKind(kind: string): kind is IdentityKind {
   return kind in identityKindLabels;
 }

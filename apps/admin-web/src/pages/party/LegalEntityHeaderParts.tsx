@@ -4,6 +4,7 @@ import { Button, DropdownMenu, MenuItem, MenuSeparator } from '@idpxyz/ui-primit
 import { statusToneBanner, statusToneText } from '../../components/status-tone';
 import type { GroupLegalEntityRecord } from './api';
 import { LegalEntityDeactivationDialog } from './LegalEntityDeactivationDialog';
+import { identityMayBeDeactivated } from './identity-deactivation-form';
 import { identityLayerAbsentNote, partyNameUnknownNote, profileRevisionLabel } from './presentation';
 import { Instant, useCopyToClipboard } from './detail-primitives';
 import { useMayWriteRegistry } from '../use-operator-grants';
@@ -115,6 +116,8 @@ export function LegalEntityMoreMenu({
   // 没有登记册配置写授予的操作者不摆登记与发布入口（ADR-0315）；摆不摆只是呈现，写口照旧在服务端判授予。
   const mayWrite = useMayWriteRegistry();
   const [deactivating, setDeactivating] = useState(false);
+  // 已经登过停用的不摆这一项（identity-deactivation-form.ts 的 identityMayBeDeactivated）；分隔线只为它画，一并不摆。
+  const canDeactivate = mayWrite && identityMayBeDeactivated(row);
   return (
     <>
       <DropdownMenu
@@ -135,16 +138,16 @@ export function LegalEntityMoreMenu({
           <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
           复制编码
         </MenuItem>
-        {mayWrite ? <MenuSeparator /> : null}
+        {canDeactivate ? <MenuSeparator /> : null}
         {/* 菜单上点名的是这家公司本身，不是它所钉的业务参与方——后者是另一个身份，停错了收不回；对话框把种类与对象锁死。 */}
-        {mayWrite ? (
+        {canDeactivate ? (
           <MenuItem onSelect={() => setDeactivating(true)}>
             <Ban className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
             停用这个公司主体…
           </MenuItem>
         ) : null}
       </DropdownMenu>
-      {mayWrite ? (
+      {canDeactivate ? (
         <LegalEntityDeactivationDialog
           row={row}
           open={deactivating}
