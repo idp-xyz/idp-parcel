@@ -9,6 +9,8 @@ import {
   NOT_RECORDED_DETAIL_NOTE,
   occupationViewOf,
 } from './pre-acceptance-estimate';
+import { lastAttemptOf } from './last-attempt';
+import type { AcceptanceTaskRecord } from './api';
 
 // 本文件钉运单详情「受理前财务控制」一块里估价那一半（ADR-0379 决定二、四，票 declared-goods-lines/19 的形状）：逐提交版本
 // 一段、新的在前、补记之前的旧行没有逐件明细、占用按种类各一套状态、两种金额写法分开、数组格是 null 也不炸，以及没有留痕时
@@ -20,6 +22,10 @@ afterEach(() => {
 });
 
 const current = { currentVersion: 'SUBV-2' };
+
+/** 受理任务在运行、最近一次停在这个原因上（可另带续办方、结算细原因与服务产品），组装成页面交进来的那一份。 */
+const stalledOn = (reason: string, extra: Partial<AcceptanceTaskRecord> = {}) =>
+  lastAttemptOf({ state: 'RUNNING', lastAttemptReason: reason, ...extra });
 
 const freeze = (overrides: Partial<PreAcceptanceOccupationRecord> = {}): PreAcceptanceOccupationRecord => ({
   kind: 'FUNDS_FREEZE',
@@ -228,21 +234,21 @@ test('Go 的 nil 切片编成 null：估价、逐件、费用行、占用几格�
     parcels: [{ parcel: 'DPCL-1', evaluation: 'EVAL-1', totalAmount: '38400', currency: 'CNY', pricingWeight: null, chargeLines: null }],
     occupations: null,
   };
-  const state = estimateBlockStateOf(listed([nulls]), { currentVersion: 'SUBV-2', controlOutcome: 'RESTRICTED' }, undefined);
+  const state = estimateBlockStateOf(listed([nulls]), { currentVersion: 'SUBV-2', controlOutcome: 'RESTRICTED' }, null);
   equal(state.kind, 'formed');
   if (state.kind === 'formed') {
     deepEqual(state.sections[0]?.parcels, [{ parcel: 'DPCL-1', subtotal: '38,400 CNY', weight: '未记', charges: null }]);
     deepEqual(state.sections[0]?.occupations, []);
     equal(state.sections[0]?.occupationNote, '没有占用：控制受限');
   }
-  const noParcels = estimateBlockStateOf(listed([{ ...estimate(), parcels: null }]), current, undefined);
+  const noParcels = estimateBlockStateOf(listed([{ ...estimate(), parcels: null }]), current, null);
   equal(noParcels.kind === 'formed' ? noParcels.sections[0]?.parcels.length : -1, 0);
-  deepEqual(estimateBlockStateOf(listed(null), current, undefined), { kind: 'none', note: '这张运单还没有受理前估价。' });
+  deepEqual(estimateBlockStateOf(listed(null), current, null), { kind: 'none', note: '这张运单还没有受理前估价。' });
 });
 
 test('一块的状态：读回之前在读；读到了照版本列', () => {
-  deepEqual(estimateBlockStateOf(null, current, undefined), { kind: 'loading' });
-  const formed = estimateBlockStateOf(listed([estimate()]), current, undefined);
+  deepEqual(estimateBlockStateOf(null, current, null), { kind: 'loading' });
+  const formed = estimateBlockStateOf(listed([estimate()]), current, null);
   equal(formed.kind, 'formed');
   if (formed.kind === 'formed') {
     equal(formed.sections.length, 1);
@@ -252,32 +258,63 @@ test('一块的状态：读回之前在读；读到了照版本列', () => {
 
 test('没有留痕：不适用说合同约定不做；停在财务控制时说停因，两族都认；停在别处或没停过只说还没有', () => {
   const empty = listed([]);
-  deepEqual(estimateBlockStateOf(empty, { currentVersion: 'SUBV-2', controlOutcome: 'NOT_APPLICABLE' }, undefined), {
+  deepEqual(estimateBlockStateOf(empty, { currentVersion: 'SUBV-2', controlOutcome: 'NOT_APPLICABLE' }, null), {
     kind: 'none',
     note: '合同约定无财务控制，不做估价。',
   });
   // 结论已判为不适用，任务上留着的旧停因不再作数。
   deepEqual(
-    estimateBlockStateOf(empty, { currentVersion: 'SUBV-2', controlOutcome: 'NOT_APPLICABLE' }, 'FINANCIAL_CONTROL_NOT_FORMED'),
+    estimateBlockStateOf(empty, { currentVersion: 'SUBV-2', controlOutcome: 'NOT_APPLICABLE' }, stalledOn('FINANCIAL_CONTROL_NOT_FORMED')),
     { kind: 'none', note: '合同约定无财务控制，不做估价。' },
   );
-  deepEqual(estimateBlockStateOf(empty, current, 'SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED'), {
+  deepEqual(estimateBlockStateOf(empty, current, stalledOn('SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED')), {
     kind: 'none',
     note: '估价没形成，停在：没有在用价卡。',
   });
-  deepEqual(estimateBlockStateOf(empty, current, 'FINANCIAL_CONTROL_NOT_CONFIGURED'), {
+  deepEqual(estimateBlockStateOf(empty, current, stalledOn('FINANCIAL_CONTROL_NOT_CONFIGURED')), {
     kind: 'none',
     note: '估价没形成，停在：财务控制缺一项登记，等运营登记。',
   });
-  deepEqual(estimateBlockStateOf(empty, current, 'SA-NEW_REASON'), { kind: 'none', note: '估价没形成，停在：SA-NEW_REASON。' });
-  deepEqual(estimateBlockStateOf(empty, current, 'MANUAL_REVIEW_PENDING'), { kind: 'none', note: '这张运单还没有受理前估价。' });
-  deepEqual(estimateBlockStateOf(empty, current, undefined), { kind: 'none', note: '这张运单还没有受理前估价。' });
+  deepEqual(estimateBlockStateOf(empty, current, stalledOn('SA-NEW_REASON')), { kind: 'none', note: '估价没形成，停在：SA-NEW_REASON。' });
+  deepEqual(estimateBlockStateOf(empty, current, stalledOn('MANUAL_REVIEW_PENDING')), { kind: 'none', note: '这张运单还没有受理前估价。' });
+  deepEqual(estimateBlockStateOf(empty, current, null), { kind: 'none', note: '这张运单还没有受理前估价。' });
+});
+
+test('结算细原因在场：停因说到细原因与服务产品，并说谁来续办；价卡一侧的链到价格表', () => {
+  const empty = listed([]);
+  const priceCardMissing = stalledOn('FINANCIAL_CONTROL_NOT_CONFIGURED', {
+    lastAttemptResumePath: 'OPERATOR_REGISTRATION',
+    lastAttemptSettlementReason: 'ESTIMATE_PRICE_CARD_NOT_CONFIGURED',
+    lastAttemptServiceProduct: 'SYN-PROD-FBA-01',
+  });
+  deepEqual(estimateBlockStateOf(empty, current, priceCardMissing), {
+    kind: 'none',
+    note: '估价没形成，停在：没有在用价卡（服务产品 SYN-PROD-FBA-01）。',
+    resume: {
+      path: 'OPERATOR_REGISTRATION',
+      text: '登记一张生效期覆盖提交时点的价卡后自动续办',
+      link: { href: '#/price-card-catalog', label: '去价格表' },
+    },
+  });
+  // 换了版本、新版本还停着：旧版本的估价照列，停因与续办跟在那一句上。
+  const older = estimateBlockStateOf(listed([estimate({ submissionVersion: 'SUBV-1' })]), current, priceCardMissing);
+  equal(older.kind, 'formed');
+  if (older.kind === 'formed') {
+    equal(older.gapNote, '当前版本的估价没形成，停在：没有在用价卡（服务产品 SYN-PROD-FBA-01）。下面是此前版本的估价。');
+    equal(older.resume?.text, '登记一张生效期覆盖提交时点的价卡后自动续办');
+  }
+  // 当前版本已有估价、或结论不适用：不再说停因，续办也不跟着出。
+  deepEqual(estimateBlockStateOf(listed([estimate()]), current, priceCardMissing), estimateBlockStateOf(listed([estimate()]), current, null));
+  deepEqual(estimateBlockStateOf(empty, { currentVersion: 'SUBV-2', controlOutcome: 'NOT_APPLICABLE' }, priceCardMissing), {
+    kind: 'none',
+    note: '合同约定无财务控制，不做估价。',
+  });
 });
 
 test('有旧版本的估价而当前版本没有：说一句，别把旧版本读成现在的', () => {
   const answer = listed([estimate({ submissionVersion: 'SUBV-1' })]);
   const gap = (context: { currentVersion: string; controlOutcome?: string }, reason?: string) => {
-    const state = estimateBlockStateOf(answer, context, reason);
+    const state = estimateBlockStateOf(answer, context, reason === undefined ? null : stalledOn(reason));
     return state.kind === 'formed' ? state.gapNote : '';
   };
   equal(gap(current, 'SA-ESTIMATE_PRICE_CARD_CONFLICT'), '当前版本的估价没形成，停在：价卡适用冲突。下面是此前版本的估价。');
@@ -289,13 +326,13 @@ test('有旧版本的估价而当前版本没有：说一句，别把旧版本�
 });
 
 test('结算那一口读不到：未配置不给重试，拒绝交给登录提示，调用方问题只说不重试，没答与连不上给重试', () => {
-  equal(estimateBlockStateOf({ kind: 'unconfigured' }, current, undefined).kind, 'unconfigured');
-  deepEqual(estimateBlockStateOf({ kind: 'loginRequired' }, current, undefined), {
+  equal(estimateBlockStateOf({ kind: 'unconfigured' }, current, null).kind, 'unconfigured');
+  deepEqual(estimateBlockStateOf({ kind: 'loginRequired' }, current, null), {
     kind: 'refused',
     refusal: 'loginRequired',
     what: '受理前估价',
   });
-  deepEqual(estimateBlockStateOf({ kind: 'callerProblem', status: 404, code: 'NOT_FOUND' }, current, undefined), {
+  deepEqual(estimateBlockStateOf({ kind: 'callerProblem', status: 404, code: 'NOT_FOUND' }, current, null), {
     kind: 'problem',
     text: '受理前估价这次没有被受理，问题码见技术详情；运单其余部分不受影响。',
     technical: [
@@ -303,8 +340,8 @@ test('结算那一口读不到：未配置不给重试，拒绝交给登录提�
       { label: '问题码', value: 'NOT_FOUND' },
     ],
   });
-  equal(estimateBlockStateOf({ kind: 'noAnswer', status: 503, code: 'NO_ANSWER_FORMED' }, current, undefined).kind, 'unreachable');
-  const transport = estimateBlockStateOf({ kind: 'transport', message: 'fetch failed' }, current, undefined);
+  equal(estimateBlockStateOf({ kind: 'noAnswer', status: 503, code: 'NO_ANSWER_FORMED' }, current, null).kind, 'unreachable');
+  const transport = estimateBlockStateOf({ kind: 'transport', message: 'fetch failed' }, current, null);
   deepEqual(transport.kind === 'unreachable' ? transport.technical : [], [{ label: '错误', value: 'fetch failed' }]);
 });
 

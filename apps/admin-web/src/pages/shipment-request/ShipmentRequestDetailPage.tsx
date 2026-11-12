@@ -30,7 +30,8 @@ import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf, shipmentRequestIdsOfD
 import { documentTypeWords } from '../../vocabulary/document-numbering';
 import { FieldRow } from './field-row';
 import { PreAcceptanceFinancialControl } from './PreAcceptanceFinancialControl';
-import { stallReasonOf } from './stall-reasons';
+import { lastAttemptOf } from './last-attempt';
+import { ResumeNoteText } from './resume-note';
 
 // 运单详情（领域：委托查阅），对 GET /shipment-request-views?shipmentRequestId=… 真实端点取数。地址第二段是屏上那个号——有运单号
 // 是运单号、老运单是去前缀的委托标识，壳层的标签、状态栏与最近打开照地址写字；打开时按运单号与这个号可能对应的委托标识一起
@@ -88,6 +89,8 @@ function technicalRowsOf(view: ShipmentRequestDetail): TechnicalRow[] {
     { label: '当前提交版本', value: view.submissionVersionId },
     // 「受理进度」上的停因译成中文，原码留在这里对日志。
     { label: '最近处理原因码', value: view.acceptanceTask.lastAttemptReason ?? '' },
+    { label: '结算未形成原因码', value: view.acceptanceTask.lastAttemptSettlementReason ?? '' },
+    { label: '最近处理续办方', value: view.acceptanceTask.lastAttemptResumePath ?? '' },
     { label: '续办引用', value: view.acceptanceTask.lastAttemptContinuation ?? '' },
     { label: '决定标识', value: view.decision?.decisionId ?? '' },
   ];
@@ -205,6 +208,7 @@ function goodsSectionsOf(view: ShipmentRequestDetail): DetailSection[] {
 }
 
 function buildSections(view: ShipmentRequestDetail): DetailSection[] {
+  const lastAttempt = lastAttemptOf(view.acceptanceTask);
   const sections: DetailSection[] = [
     {
       id: 'declared-parcels',
@@ -221,9 +225,8 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
       content: (
         <dl className="space-y-1">
           <FieldRow label="进度" value={<StatusPill code={view.acceptanceTask.state} />} />
-          {view.acceptanceTask.lastAttemptReason !== undefined && (
-            <FieldRow label="最近处理结果" value={stallReasonOf(view.acceptanceTask.lastAttemptReason).text} />
-          )}
+          {lastAttempt && <FieldRow label="最近处理结果" value={lastAttempt.text} />}
+          {lastAttempt?.resume && <FieldRow label="谁来续办" value={<ResumeNoteText note={lastAttempt.resume} />} />}
           {view.acceptanceTask.lastAttemptedAt !== undefined && (
             <FieldRow label="最近处理时间" value={formatInstant(view.acceptanceTask.lastAttemptedAt)} mono />
           )}

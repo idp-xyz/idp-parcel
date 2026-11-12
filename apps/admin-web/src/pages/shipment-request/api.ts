@@ -227,6 +227,18 @@ export interface AcceptanceTaskRecord {
   lastAttemptReason?: string;
   lastAttemptContinuation?: string;
   lastAttemptedAt?: string;
+  /**
+   * 同一次尝试落库的续办方,取领域 ResumePath 原词(OPERATOR_REGISTRATION 等)。lastAttemptContinuation 是续办引用(派生出的
+   * `CONT-…` 串),说不出续办方,谁来续办只读这一格。
+   */
+  lastAttemptResumePath?: string;
+  /**
+   * 最近一次处理尝试上记的结算未形成原因(ADR-0380 决定三,票 declared-goods-lines/23):结算的 NotFormedReason 原词,不带
+   * `SA-` 前缀。只在财务控制那一步停下、且这次尝试落了库时在场。
+   */
+  lastAttemptSettlementReason?: string;
+  /** 同一次尝试判的那一版申报的服务产品;没申报不带。 */
+  lastAttemptServiceProduct?: string;
   /** 受理停在等客户补充时缺的各项(ADR-0376 决定一);不在等补充时缺席。 */
   supplementGaps?: SupplementGapRecord[];
 }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual } from 'node:assert/strict';
 import { statusVocabulary } from '../../vocabulary/status';
-import { knownSettlementStallCodes, knownShipmentStallCodes, stallReasonOf } from './stall-reasons';
+import { knownSettlementStallCodes, knownShipmentStallCodes, settlementReasonOf, stallReasonOf } from './stall-reasons';
 
 // 本文件钉受理任务停因的屏上写法：今天任务上记的财务控制未决原因（FINANCIAL_CONTROL_*）与结算的 `SA-` 停因都译成中文并标明停在
 // 财务控制那一步；别的未决原因照样译；认不得的码照原样，`SA-` 前缀的仍算财务控制那一步。
@@ -54,4 +54,20 @@ test('用语词典里也收了的码，停因读成同一句', () => {
     both.map((code) => [code, stallReasonOf(code).text]),
     both.map((code) => [code, statusVocabulary[code]!.label]),
   );
+});
+
+test('处理尝试上的结算细原因（不带前缀）查同一张 `SA-` 表；认不得的照原码，不补前缀', () => {
+  deepEqual(settlementReasonOf('ESTIMATE_PRICE_CARD_NOT_CONFIGURED'), {
+    code: 'ESTIMATE_PRICE_CARD_NOT_CONFIGURED',
+    text: stallReasonOf('SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED').text,
+    known: true,
+    estimate: true,
+    priceCardSide: true,
+  });
+  deepEqual(settlementReasonOf('ESTIMATE_DECLARATION_INCOMPLETE').priceCardSide, false);
+  deepEqual(settlementReasonOf('ESTIMATE_DECLARATION_INCOMPLETE').estimate, true);
+  deepEqual(settlementReasonOf('CONTROL_POLICY_NOT_CONFIGURED').estimate, false);
+  // 币种对不上登一张卡解不开，不归价卡一侧。
+  deepEqual(settlementReasonOf('ESTIMATE_CURRENCY_MISMATCH').priceCardSide, false);
+  deepEqual(settlementReasonOf('SOMETHING_NEW'), { code: 'SOMETHING_NEW', text: 'SOMETHING_NEW', known: false, estimate: false, priceCardSide: false });
 });
