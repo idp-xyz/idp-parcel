@@ -12,11 +12,10 @@ Blocked by: 无
   - `ESTIMATE_PRICE_CARD_NOT_CONFIGURED`
   - `ESTIMATE_PRICE_CARD_CONFLICT`
   - `ESTIMATE_TRIAL_WITHOUT_TOTAL`
-  - `ESTIMATE_CURRENCY_MISMATCH`
   - `ESTIMATE_NOT_POSITIVE`
   - `ESTIMATE_TRIAL_NEGATIVE`
 
-  其余原因照旧。受理判断沿既有的等运营登记那一路先存等待、处理尝试同笔落库。
+  其余原因照旧，`ESTIMATE_CURRENCY_MISMATCH` 也照旧内部重试（只有缺陷走得到）。受理判断沿既有的等运营登记那一路先存等待、处理尝试同笔落库。改 `TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction`。
 - **续办**：
   - 新 inbox 消费门接收 `parcel-pricing.pricing-parameter.registered`。消费方自己写这个串，组合根的对照用例钉住两串。
   - 只认 `SELL` 方向；按租户重驱停在等运营登记的委托，走与结算账户、估价采用登记续办同一个重驱口。
@@ -24,19 +23,19 @@ Blocked by: 无
 - **处理尝试另记两格**：
   - 结算的未形成原因码（如 `ESTIMATE_PRICE_CARD_NOT_CONFIGURED`，不加 `SA-` 前缀，另一格就是「来自结算」）；
   - 这一版申报的服务产品（取小包托运自己的提交版本，没申报不记）。
-  - 迁移给 `parcel_shipment.acceptance_processing_attempt` 加两列（可空），旧行不回填。
+  - 迁移给 `parcel_shipment.acceptance_processing_attempt` 加这两列与 `submission_version`（判的是哪一版），都可空，旧行不回填。
 - **委托详情**：
-  - `acceptanceTask` 的 `lastAttemptReason`、`lastAttemptContinuation`、`lastAttemptedAt` 改从 `acceptance_processing_attempt` 读这份委托当前任务最近一条。
-  - 另交 `lastAttemptSettlementReason` 与 `lastAttemptServiceProduct`（可缺）。字段名钉死，管理台票 24 照它写。
-  - 聚合文档里的处理尝试列表不再当读源。它没有生产写入；能删就删，删不动的说明为何留着。
+  - `taskViewRecord` 本身改从 `acceptance_processing_attempt` 读这份委托最近一条（按尝试时刻，确定的次序）：委托详情与审核、处置、补件几个队列读的都是它，一起改。
+  - `acceptanceTask` 的 `lastAttemptReason`、`lastAttemptContinuation`、`lastAttemptedAt` 照旧，另交 `lastAttemptResumePath`（续办方，取尝试上记的那一格）、`lastAttemptSettlementReason` 与 `lastAttemptServiceProduct`（可缺）。字段名钉死，管理台票 24 照它写。
+  - 聚合文档里的处理尝试列表不再当读源。它没有生产写入；还有读面靠它就留着并说明。
 
 ## 完成判据
 
 - 真库：
   - 没有在用价卡的估价 → 委托停在等运营登记，处理尝试落库、带原因码与服务产品；
-  - 登一张售价卡（交「参数已登记」）→ 委托被重驱、解开后接受；
+  - 登一张生效期覆盖提交时点的售价卡（交「参数已登记」）→ 委托被重驱、解开后接受；只从此刻起生效的卡唤醒它、照旧停、多一条尝试；
   - `BUY` 方向的信封不重驱。
-- 估价采用登记后重驱到「没有在用价卡」的那一路不再回滚：新的等待落库，上一次「未配置」的尝试被新的一条取代为最近一条。
+- 估价采用登记后重驱到「没有在用价卡」的那一路不再回滚（`cmd/parcel-dispatch/estimate_adoption_registration_resume_loop_test.go` 跟着改）：新的等待落库，上一次 `CONTROL_AMOUNT_NOT_CONFIGURED` 那一条被新的一条取代为最近一条。
 - 依赖读不回照旧内部重试、不落库。
 - 委托详情的「上次处理」在等运营登记时有值，并带两格。
 - 全量 `go test`（带 PG）与 `go vet` 通过。
