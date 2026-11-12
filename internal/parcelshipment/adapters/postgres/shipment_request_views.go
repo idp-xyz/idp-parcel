@@ -247,6 +247,12 @@ func (views *ShipmentRequestViews) FindVisibleByID(
 	if err := attachTrackingNumbers(ctx, querier, scope.TenantID(), detail.DeclaredParcels); err != nil {
 		return ports.ShipmentRequestDetailRecord{}, false, fmt.Errorf("find shipment request view: %w", err)
 	}
+	// 财务控制结论按当前提交版本取，用的是 LoadRecordedJudgments 那一个 loadFinancialControl（ADR-0379 决定三）：复核详情与
+	// 委托详情读同一张表同一条 SQL，另写一条迟早一边取最近、一边取最早。作用域已在上面的 WHERE 上过了，这里按租户与委托取。
+	detail.FinancialControl, err = loadFinancialControl(ctx, querier, scope.TenantID(), detail.ShipmentRequestID, detail.SubmissionVersionID)
+	if err != nil {
+		return ports.ShipmentRequestDetailRecord{}, false, fmt.Errorf("find shipment request view: %w", err)
+	}
 	return detail, true, nil
 }
 

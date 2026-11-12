@@ -321,6 +321,9 @@ type requestDetailBody struct {
 	// GoodsStanding 说 goods 出自哪里：ON_SUBMISSION（提交时报的）、ON_ADOPTED_VERSION（资料修订后的那一版）或
 	// UNDETERMINED（两条修订分叉待复核，不交 goods）。查阅的人要分得清「没报」与「说不出该按哪一版」。
 	GoodsStanding string `json:"goodsStanding,omitempty"`
+	// FinancialControl 是受理判断记下的接受前财务控制结论（ADR-0379 决定三），形状与复核详情的 recordedJudgments.financialControl
+	// 同一份（financialControlBodyOf）；没判过即整键缺席。不带金额：估价与占用由页面另向结算的读口取。
+	FinancialControl *financialControlBody `json:"financialControl,omitempty"`
 }
 
 type declaredParcelBody struct {
@@ -427,6 +430,7 @@ func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {
 		body.GoodsStanding = record.GoodsStanding.String()
 	}
 	body.PlatformShipment = platformShipmentViewBodyOf(record.PlatformShipment)
+	body.FinancialControl = financialControlBodyOf(record.FinancialControl)
 	if record.Task.HasAttempt {
 		body.AcceptanceTask.LastAttemptReason = record.Task.LastAttemptReason
 		body.AcceptanceTask.LastAttemptContinuation = record.Task.LastAttemptContinuation
