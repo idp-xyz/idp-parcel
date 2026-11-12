@@ -55,7 +55,7 @@ type estimateTrialChargeLineRow struct {
 }
 
 // RecordEstimate 插一行；键撞上即在库里逐列比内容，分重放与冲突，不覆盖。比较放在 SQL 里做：时点按同一种编码落库与比较，
-// trials 按 jsonb 的相等比，Go 侧不必再猜库里那份截到了哪一位。trial_at 在比较之列、recorded_at 不在：跨重驱是重放靠的是判断时点
+// trials 按 jsonb 的相等比（补记的十进制两格按数比，见 comparableTrials），Go 侧不必再猜库里那份截到了哪一位。trial_at 在比较之列、recorded_at 不在：跨重驱是重放靠的是判断时点
 // 不动（端口 PreAcceptanceEstimateTraces 的头注写了这个前提）。
 //
 // 已落的是补记之前的旧行时，只比它当时有的那几格：服务产品不比，trials 拿去掉补记两键的那一份比。旧行不回填（ADR-0379 决定一），
@@ -124,7 +124,8 @@ func (repository *PreAcceptanceEstimateTraces) RecordEstimate(
 		`SELECT shipment_request_ref = $6 AND submission_version_ref = $7 AND trial_at = $8
 		        AND form = $9 AND pricing_scope_id = $10 AND price_card = $11 AND total_minor = $12
 		        AND CASE WHEN detail_recorded
-		                 THEN trials = $13::jsonb AND service_product IS NOT DISTINCT FROM $14::text
+		                 THEN `+comparableTrials("trials")+` IS NOT DISTINCT FROM `+comparableTrials("$13::jsonb")+`
+		                      AND service_product IS NOT DISTINCT FROM $14::text
 		                 ELSE trials = $15::jsonb
 		            END
 		   FROM settlement_accounting.pre_acceptance_estimate_trace
@@ -171,6 +172,29 @@ func estimateTrialRows(estimate domain.PreAcceptanceEstimate) ([]estimateTrialRo
 		rows = append(rows, row)
 	}
 	return rows, nil
+}
+
+// comparableTrials 交回一段 SQL：把 trials 换成判重放用的形——每条费用行的金额与每件计价重量的值换成 jsonb 数值，其余各键照原样。
+// 两者是计价交来的十进制原文，同一个数跨一次部署可能换了写法（「12.50」与「12.5」），按文本比，一次待续办的重驱就成了
+// `请求冲突`；jsonb 的数值按 numeric 比，写法不同的同一个数相等。件序与行序照旧算数：WITH ORDINALITY 按原序收回。不是十进制写法
+// 的原文照原文比，不做转换——写口不该写出那种值，转换失败也不该让一次写留痕报错。
+func comparableTrials(trials string) string {
+	const decimal = `'^-?[0-9]+(\.[0-9]+)?$'`
+	asNumber := func(text, original string) string {
+		return `CASE WHEN ` + text + ` ~ ` + decimal + ` THEN to_jsonb((` + text + `)::numeric) ELSE ` + original + ` END`
+	}
+	return `(SELECT jsonb_agg(trial
+	            || CASE WHEN trial ? 'chargeLines' THEN jsonb_build_object('chargeLines',
+	                   (SELECT jsonb_agg(line || jsonb_build_object('amount', ` + asNumber(`line->>'amount'`, `line->'amount'`) + `)
+	                                     ORDER BY line_position)
+	                      FROM jsonb_array_elements(trial->'chargeLines') WITH ORDINALITY AS line_rows(line, line_position)))
+	               ELSE '{}'::jsonb END
+	            || CASE WHEN trial ? 'pricingWeight' THEN jsonb_build_object('pricingWeight',
+	                   (trial->'pricingWeight') || jsonb_build_object('value',
+	                       ` + asNumber(`trial->'pricingWeight'->>'value'`, `trial->'pricingWeight'->'value'`) + `))
+	               ELSE '{}'::jsonb END
+	            ORDER BY trial_position)
+	   FROM jsonb_array_elements(` + trials + `) WITH ORDINALITY AS trial_rows(trial, trial_position))`
 }
 
 // withoutDetail 是同一份估价在补记之前会落成的 trials：拿它与旧行比。

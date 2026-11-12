@@ -67,9 +67,23 @@ func (rig estimateRig) list(tenant, shipmentRequest string) []ports.PreAcceptanc
 // baseAmount 换掉第一件基础运费那一行的金额，用来造「同合计、改了费用行」的那一份。
 func detailedEstimate(t *testing.T, product, baseAmount string) domain.PreAcceptanceEstimate {
 	t.Helper()
-	cny := mustAccountRef(t, domain.NewCurrencyCode, "CNY")
-	line := func(code string, effect domain.ChargeLineEffect, amount string) domain.PreAcceptanceTrialChargeLine {
-		built, err := domain.NewPreAcceptanceTrialChargeLine(mustAccountRef(t, domain.NewPricingChargeCode, code), effect, amount, cny)
+	return detailedEstimateOf(t, "CNY", product, "12.5",
+		lineSpec{"BASE_FREIGHT", domain.ChargeLineAdd, baseAmount},
+		lineSpec{"FUEL_SURCHARGE", domain.ChargeLineDeduct, "0.505"})
+}
+
+type lineSpec struct {
+	code   string
+	effect domain.ChargeLineEffect
+	amount string
+}
+
+// detailedEstimateOf 同 detailedEstimate，币种、第一件的计价重量与费用行（照给定次序）由调用方给。
+func detailedEstimateOf(t *testing.T, currencyCode, product, firstWeight string, firstLines ...lineSpec) domain.PreAcceptanceEstimate {
+	t.Helper()
+	currency := mustAccountRef(t, domain.NewCurrencyCode, currencyCode)
+	line := func(spec lineSpec) domain.PreAcceptanceTrialChargeLine {
+		built, err := domain.NewPreAcceptanceTrialChargeLine(mustAccountRef(t, domain.NewPricingChargeCode, spec.code), spec.effect, spec.amount, currency)
 		if err != nil {
 			t.Fatalf("charge line: %v", err)
 		}
@@ -82,28 +96,29 @@ func detailedEstimate(t *testing.T, product, baseAmount string) domain.PreAccept
 		}
 		return built
 	}
-	first, err := domain.NewPreAcceptanceTrial("DPCL-1", "EVAL-1", []string{estimateCard}, 1152, cny)
+	lines := make([]domain.PreAcceptanceTrialChargeLine, 0, len(firstLines))
+	for _, spec := range firstLines {
+		lines = append(lines, line(spec))
+	}
+	first, err := domain.NewPreAcceptanceTrial("DPCL-1", "EVAL-1", []string{estimateCard}, 1152, currency)
 	if err != nil {
 		t.Fatalf("trial: %v", err)
 	}
-	first, err = first.WithPricingWeight(weight("12.5")).WithChargeLines([]domain.PreAcceptanceTrialChargeLine{
-		line("BASE_FREIGHT", domain.ChargeLineAdd, baseAmount),
-		line("FUEL_SURCHARGE", domain.ChargeLineDeduct, "0.505"),
-	})
+	first, err = first.WithPricingWeight(weight(firstWeight)).WithChargeLines(lines)
 	if err != nil {
 		t.Fatalf("lines: %v", err)
 	}
-	second, err := domain.NewPreAcceptanceTrial("DPCL-2", "EVAL-2", []string{estimateCard}, 384, cny)
+	second, err := domain.NewPreAcceptanceTrial("DPCL-2", "EVAL-2", []string{estimateCard}, 384, currency)
 	if err != nil {
 		t.Fatalf("trial: %v", err)
 	}
 	second, err = second.WithPricingWeight(weight("4")).WithChargeLines([]domain.PreAcceptanceTrialChargeLine{
-		line("BASE_FREIGHT", domain.ChargeLineAdd, "3.84"),
+		line(lineSpec{"BASE_FREIGHT", domain.ChargeLineAdd, "3.84"}),
 	})
 	if err != nil {
 		t.Fatalf("lines: %v", err)
 	}
-	estimate, gap, err := domain.FormPerParcelSellTrialSum(estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1"), estimateCard, cny,
+	estimate, gap, err := domain.FormPerParcelSellTrialSum(estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1"), estimateCard, currency,
 		[]domain.PreAcceptanceTrial{first, second})
 	if err != nil || gap != domain.PreAcceptanceEstimateFormed {
 		t.Fatalf("estimate: gap = %s err = %v", gap, err)
@@ -321,5 +336,73 @@ func TestEstimatesAreReadByShipmentRequestWithTheirOccupations(t *testing.T) {
 	}
 	if none := rig.list("tenant-a", "SHR-NONE"); none == nil || len(none) != 0 {
 		t.Fatalf("没有留痕 = %#v, 想要空列表", none)
+	}
+}
+
+// Covers: 票 declared-goods-lines/19 评审——重放判等按数比费用行金额与计价重量：同一个数换了十进制写法（「12.50」与「12.5」、
+// 「12.5」与「12.50」千克）是重放，跨一次部署的待续办重驱不成冲突；行序照旧算数，两行换了次序是冲突；数变了仍是冲突。已落的行
+// 保留首写那一份原文。
+func TestAReplayComparesChargeLineAmountsAsNumbersAndKeepsLineOrder(t *testing.T) {
+	rig := newEstimateRig(t)
+	trialAt := time.Date(2026, 11, 11, 8, 0, 0, 0, time.UTC)
+	base := func(amount string) lineSpec { return lineSpec{"BASE_FREIGHT", domain.ChargeLineAdd, amount} }
+	fuel := lineSpec{"FUEL_SURCHARGE", domain.ChargeLineDeduct, "0.505"}
+	for _, step := range []struct {
+		name     string
+		estimate domain.PreAcceptanceEstimate
+		effect   ports.PreAcceptanceEstimateTraceEffect
+	}{
+		{"首写", detailedEstimateOf(t, "CNY", "SYN-PRODUCT-FBA", "12.5", base("12.50"), fuel), ports.PreAcceptanceEstimateTraceRecorded},
+		{"金额换了写法", detailedEstimateOf(t, "CNY", "SYN-PRODUCT-FBA", "12.5", base("12.5"), fuel), ports.PreAcceptanceEstimateTraceReplay},
+		{"重量换了写法", detailedEstimateOf(t, "CNY", "SYN-PRODUCT-FBA", "12.50", base("12.500"), fuel), ports.PreAcceptanceEstimateTraceReplay},
+		{"两行换了次序", detailedEstimateOf(t, "CNY", "SYN-PRODUCT-FBA", "12.5", fuel, base("12.50")), ports.PreAcceptanceEstimateTraceConflict},
+		{"金额变了", detailedEstimateOf(t, "CNY", "SYN-PRODUCT-FBA", "12.5", base("12.51"), fuel), ports.PreAcceptanceEstimateTraceConflict},
+		{"重量变了", detailedEstimateOf(t, "CNY", "SYN-PRODUCT-FBA", "12.6", base("12.50"), fuel), ports.PreAcceptanceEstimateTraceConflict},
+	} {
+		if effect := rig.record(traceFor(t, "SHR-1", "SUBV-1", step.estimate, trialAt)); effect != step.effect {
+			t.Fatalf("%s：effect = %d, 想要 %d", step.name, effect, step.effect)
+		}
+	}
+	first := rig.list("tenant-a", "SHR-1")[0].Parcels[0]
+	if first.ChargeLines[0].Amount != "12.50" || first.PricingWeight.Value != "12.5" {
+		t.Fatalf("已落的行 = %+v / %+v, 想要首写原文", first.ChargeLines, first.PricingWeight)
+	}
+}
+
+// Covers: 票 declared-goods-lines/19 评审——同一委托同一提交版本在两个结算作用域（这里是同一账户的两个币种）各有一份留痕时两份都读回，
+// 按试算时点排、凭币种分得开；各自的占用只接自己作用域的那一本账。
+func TestOneSubmissionVersionUnderTwoSettlementScopesReadsBack(t *testing.T) {
+	rig := newEstimateRig(t)
+	first := time.Date(2026, 11, 11, 8, 0, 0, 0, time.UTC)
+	second := first.Add(time.Hour)
+
+	usdScope, err := domain.NewSettlementScope(
+		mustAccountRef(t, domain.NewLegalEntityReference, "LE-1"),
+		mustAccountRef(t, domain.NewSettlementAccountID, "ACCT-1"),
+		mustAccountRef(t, domain.NewCurrencyCode, "USD"),
+	)
+	if err != nil {
+		t.Fatalf("scope: %v", err)
+	}
+	usd := traceFor(t, "SHR-1", "SUBV-1", detailedEstimateOf(t, "USD", "", "12.5", lineSpec{"BASE_FREIGHT", domain.ChargeLineAdd, "1.52"}), second)
+	usd.Scope = usdScope
+	rig.record(usd)
+	rig.record(traceFor(t, "SHR-1", "SUBV-1", detailedEstimate(t, "", "11.52"), first))
+	rig.seedOccupation(ports.OccupationFundsFreeze, "tenant-a", "SHR-1/SUBV-1", "FRZ-CNY", uint8(domain.FreezeHeld),
+		1536, first, nil, 0, nil)
+
+	entries := rig.list("tenant-a", "SHR-1")
+	if len(entries) != 2 {
+		t.Fatalf("读回 %d 份, 想要两个作用域各一份", len(entries))
+	}
+	if entries[0].SubmissionVersion != "SUBV-1" || entries[0].Currency != "CNY" || !entries[0].TrialAt.Equal(first) ||
+		entries[1].SubmissionVersion != "SUBV-1" || entries[1].Currency != "USD" || !entries[1].TrialAt.Equal(second) {
+		t.Fatalf("两份 = %s %s / %s %s", entries[0].Currency, entries[0].TrialAt, entries[1].Currency, entries[1].TrialAt)
+	}
+	if len(entries[0].Occupations) != 1 || entries[0].Occupations[0].ID != "FRZ-CNY" || len(entries[1].Occupations) != 0 {
+		t.Fatalf("占用 = %+v / %+v, 想要冻结只接在 CNY 那一份上", entries[0].Occupations, entries[1].Occupations)
+	}
+	if entries[1].Parcels[0].ChargeLines[0].Currency != "USD" {
+		t.Fatalf("USD 那一份的费用行 = %+v", entries[1].Parcels[0].ChargeLines)
 	}
 }

@@ -95,7 +95,8 @@ func rawAt(t *testing.T, body []byte, path ...string) json.RawMessage {
 }
 
 // Covers: 票 declared-goods-lines/20、ADR-0379 决定三——委托详情的 financialControl：已冻结、已占信用、受限（可用余额不足）、明确无控制
-// 四种各照登记透出，与复核详情 recordedJudgments.financialControl 逐字节相同（同一个编码函数）；不带任何金额。没判过即整键缺席。
+// 四种各照登记透出，与复核详情 recordedJudgments.financialControl 逐字节相同（同一个编码函数）；复核详情的 request 不再带第二份；
+// 不带任何金额。没判过即整键缺席。
 func TestTheShipmentDetailShowsTheRecordedFinancialControlConclusion(t *testing.T) {
 	for outcome, result := range recordedControlsByOutcome(t) {
 		t.Run(outcome, func(t *testing.T) {
@@ -148,12 +149,18 @@ func TestTheShipmentDetailShowsTheRecordedFinancialControlConclusion(t *testing.
 				}
 			}
 
+			// 复核详情的 request 复用委托详情，读模型上带着结论也不交：复核只看 recordedJudgments 那一份。
+			reviewDetail := reviewCaseDetail(t)
+			reviewDetail.FinancialControl = result
 			review := getReviewQueue(t, &viewsIntakeDouble{scope: viewsScope(t)},
-				&reviewQueueReaderDouble{detail: reviewCaseDetail(t), found: true},
+				&reviewQueueReaderDouble{detail: reviewDetail, found: true},
 				&judgmentsReaderDouble{recorded: ports.RecordedJudgments{FinancialControl: result}},
 				http.MethodGet, "/acceptance-review-queue?shipmentRequestId=REQ-1")
 			if judged := rawAt(t, review.Body.Bytes(), "recordedJudgments", "financialControl"); string(judged) != string(shown) {
 				t.Fatalf("两处形状不同：\n委托详情 %s\n复核详情 %s", shown, judged)
+			}
+			if duplicate := rawAt(t, review.Body.Bytes(), "request", "financialControl"); duplicate != nil {
+				t.Fatalf("复核详情的 request 又带了一份：%s", duplicate)
 			}
 		})
 	}
