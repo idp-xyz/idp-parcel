@@ -60,7 +60,7 @@ Status: in-progress
 - 「谁算客户」是 CONTEXT 里的一条规则（「一个业务参与方持有客户角色，当且仅当……」），服务端没有它的实现：`git grep -c 客户角色 -- 'internal/*.go'` 没有结果，唯一的实现在管理台。
 - 小包网络的往来单位册很不对称：货主客户成百上千到上万家，供应商、承运代理加起来几十家，我方公司几家。运营日常要的正是「把供应商挑出来」「有几家客户」，这两件事在多页时现在都做不到。
 
-所以方向是读口随行答类别、能按类别筛、给各类别的家数，管理台删掉自己那一份推导。这要动 ADR-0144 的读契约（答复加分面计数），并且要对上 ADR-0372 的判据（它前一天刚把「领域规则在多行之上求出的结论」排除在状态筛选维之外），所以先有一篇 ADR：草案在 [adr-draft-party-categories-on-the-read.md](./adr-draft-party-categories-on-the-read.md)，评审与接受是票 07。
+所以方向是读口随行答类别、能按类别筛、给各类别的家数，管理台删掉自己那一份推导。这要动 ADR-0144 的读契约（答复加分面计数），并且要对上 ADR-0372 的判据（它前一天刚把「领域规则在多行之上求出的结论」排除在状态筛选维之外），所以先有一篇 ADR：[ADR-0378](../../docs/adr/0378-business-party-reads-answer-categories-read-from-the-existence-of-rows-and-catalogue-reads-may-carry-facet-counts.md)（2026-11-12 接受，没有做评审；经过见票 07）。
 
 ## 字号
 
@@ -76,7 +76,7 @@ Status: in-progress
 | [04](./issues/04-relationships-and-our-companies-views.md) | 合作关系、我方关联两个视图换同一套（两个视图的列表区已随 02 换过，剩右栏外框与我方关联的主从分栏） | 前端切片 | resolved（2026-11-12 进 main） |
 | [05](./issues/05-detail-tabs-content.md) | 右栏各签内容重排（阻塞于 03） | 前端切片 | resolved（2026-11-11 进 main） |
 | [06](./issues/06-keep-the-previous-page-while-refetching.md) | 换条件、翻页、刷新时留着旧的一页（阻塞于 02；共用取数件，需非作者评审） | 前端切片 | resolved（2026-11-12 进 main；评审按用户当日裁定没有做） |
-| [07](./issues/07-adr-party-categories-on-the-read.md) | ADR 草案的非作者评审、编号与接受 | 文档票 | ready-for-agent |
+| [07](./issues/07-adr-party-categories-on-the-read.md) | ADR 草案的非作者评审、编号与接受 | 文档票 | resolved（2026-11-12 进 main，ADR-0378；评审按用户当日裁定没有做） |
 | [08](./issues/08-read-answers-categories-filter-and-facets.md) | 读口随行答类别与关系段数、按类别筛、分面计数（阻塞于 07） | 后端票 | ready-for-agent |
 | [09](./issues/09-admin-web-takes-categories-from-the-read.md) | 管理台改取读口的类别，删掉自己的推导（阻塞于 02、08） | 前端切片 | ready-for-agent |
 | [10](./issues/10-acceptance.md) | 验收：浏览器全流程、深浅主题、非作者评审（阻塞于 02–06、11） | 前端切片 | wontfix（用户 2026-11-12 裁定不做验收与评审；没补上的几样列在票里） |

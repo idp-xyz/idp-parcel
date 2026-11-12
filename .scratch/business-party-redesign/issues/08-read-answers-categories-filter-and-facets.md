@@ -3,7 +3,7 @@
 Category: enhancement
 Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 07（一篇待接受的 ADR；草案在 [adr-draft-party-categories-on-the-read.md](../adr-draft-party-categories-on-the-read.md)）
+Blocked by: 07（已解除：[ADR-0378](../../../docs/adr/0378-business-party-reads-answer-categories-read-from-the-existence-of-rows-and-catalogue-reads-may-carry-facet-counts.md) 2026-11-12 接受）
 
 范围以接受后的 ADR 为准；下面按草案写，接受时有出入的以 ADR 为准并回改本票。后端票，走 `docs/agents/workflow.md`「进 main 的步骤」。
 
