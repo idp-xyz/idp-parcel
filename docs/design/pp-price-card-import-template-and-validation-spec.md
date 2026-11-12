@@ -1,11 +1,12 @@
 # 价卡导入模板与校验规范（parcel-pricing）
 
-- **模板版本**：`PPT-2`（最新，本构建写出的版本）；`PPT-1` 的文件仍然接受，见第二节
-- **对应规范化版本**：不是一对一——按内容取能表达它的最低一版：用到最低 / 最高收费或按偏远档位查表的方案写 `PPC-6`，其余写 `PPC-5`（[ADR-0014](../adr/0014-versioned-canonicalization-shape-for-content-digest.md)、[ADR-0348](../adr/0348-a-price-card-may-declare-total-charge-bounds-and-key-a-surcharge-table-by-remote-tier-and-plans-using-them-are-written-as-ppc-6.md) 决定四）
-- **状态**：生效，2026-09-25，票 `.scratch/price-card-import/issues/01`；2026-10-29 进位 `PPT-2`，票 `.scratch/price-card-import/issues/08`
+- **模板版本**：`PPT-3`（最新，本构建写出的版本）；`PPT-1`、`PPT-2` 的文件仍然接受，见第二节
+- **对应规范化版本**：不是一对一——按内容取能表达它的最低一版：声明了适用服务产品的方案写 `PPC-7`，用到最低 / 最高收费或按偏远档位查表的方案写 `PPC-6`，其余写 `PPC-5`（[ADR-0014](../adr/0014-versioned-canonicalization-shape-for-content-digest.md)、[ADR-0348](../adr/0348-a-price-card-may-declare-total-charge-bounds-and-key-a-surcharge-table-by-remote-tier-and-plans-using-them-are-written-as-ppc-6.md) 决定四、[ADR-0382](../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定四）
+- **状态**：生效，2026-09-25，票 `.scratch/price-card-import/issues/01`；2026-10-29 进位 `PPT-2`，票 `.scratch/price-card-import/issues/08`；2026-11-11 进位 `PPT-3`，票 `.scratch/declared-goods-lines/issues/14`
 - **依据**：
   - [ADR-0101](../adr/0101-operator-facing-registration-payload-shape-is-product-defined.md) 决定二至四；
   - [ADR-0349](../adr/0349-the-price-card-import-template-advances-to-ppt-2-and-its-structured-workbook-is-a-second-carrier-read-through-the-same-path.md)：`PPT-2`、结构化工作簿载体、模板规格口；
+  - [ADR-0382](../adr/0378-a-sell-price-card-may-name-the-service-products-it-prices-and-an-unnamed-card-prices-the-rest.md) 决定一：`PPT-3` 的 `card.serviceProducts`，售价卡的适用服务产品；
   - [ADR-0015](../adr/0015-closed-grammar-open-vocabulary-for-multi-carrier-rating.md) 封闭文法；
   - parcel-pricing [`CONTEXT.md`](../domain/parcel-pricing/CONTEXT.md)「定价方案与价表版本」生命周期与「金额保真度：不可默认成立」。
 
@@ -27,6 +28,7 @@
 - 规范化版本进位而表与列不变时，模板版本不动，只在下表加一行。
 - **一个版本只在「只增不改」时才与旧版并存。** `PPT-2` 相对 `PPT-1` 只新增了一张表（`total_bounds`）和 `calculations.method` 的一个取值（`TABLE_LOOKUP_BY_REMOTE_TIER`），既有的表、列、取值与读法一个没动，所以本构建同时认 `PPT-1` 与 `PPT-2`：文件声明哪一版，就按哪一版的表集合与取值读，读出的方案、摘要与问题清单与进位之前逐位相同。
   - `PPT-1` 文件里出现 `PPT-2` 才有的表或取值，答明确的问题（自哪一版起才有、请换用哪一版的模板），不是笼统的「未知表」「不是可取值」；它的可取值清单也不列后来才有的取值。
+  - `PPT-3` 相对 `PPT-2` 只在 `card` 表新增一个可缺的字段 `serviceProducts`（见 4.1）。`PPT-1`、`PPT-2` 文件没有这一行，读法不变；旧版文件里这一行填了值，同样答「自模板 `PPT-3` 起才可用」，留空的一行不算。
   - 日后进位若不是只增不改（删列、改列语义、收窄取值），旧版缺的或语义变了的东西无从补——补任何值都是替租户填卡——那一版起不再认旧版，整份不收，答复里点名本构建认的版本。
 - 别的版本整份不收，答复里列出本构建认的全部版本。
 
@@ -34,6 +36,7 @@
 |---|---|---|
 | `PPT-1` | `PPC-5` | 2026-09-25 |
 | `PPT-2` | `PPC-5`；用到新结构的方案 `PPC-6` | 2026-10-29 |
+| `PPT-3` | 同 `PPT-2`；声明了适用服务产品的方案 `PPC-7` | 2026-11-11 |
 
 ## 三、物理格式
 
@@ -81,7 +84,7 @@
 - 列键集合封闭、顺序不限。缺列、未知列、重复列各报一格。
 - 整行空白的数据行跳过：电子表格常留下带格式的空行，不该长出幻影规则。
 
-**`card` 表是键值表**，只有 `field` 与 `value` 两列，每个字段一行。字段集合同样封闭：缺字段、未知字段、重复字段各报一格。
+**`card` 表是键值表**，只有 `field` 与 `value` 两列，每个字段一行。字段集合同样封闭：缺字段、未知字段、重复字段各报一格。唯一可以整行不写的是 `serviceProducts`：不写与留空同一个意思，都是不声明。
 
 **行号**一律按电子表格里看到的写：列键行是第 1 行。
 
@@ -89,7 +92,7 @@
 
 | 字段 | 必填 | 交给 |
 |---|---|---|
-| `templateVersion` | 是 | 须是本构建认的版本（`PPT-1` 或 `PPT-2`，见第二节），否则整份不收；它同时决定这份文件按哪一版的表集合与取值读 |
+| `templateVersion` | 是 | 须是本构建认的版本（`PPT-1`、`PPT-2` 或 `PPT-3`，见第二节），否则整份不收；它同时决定这份文件按哪一版的表集合与取值读 |
 | `planId`、`planVersion` | 是 | `NewVersionReferenceIdentity(ArtifactPricingPlan, …)`，即方案版本引用；读不出即整份不收 |
 | `scope` | 是 | `NewPricingScopeID` |
 | `direction` | 是 | `PricingDirection`：`BUY`、`SELL`、`INTERNAL` |
@@ -104,6 +107,7 @@
 | `volumetricDivisor`、`volumetricLengthUnit` | 成对 | `NewVolumetricFactor` 的除数（`ParseDecimal`）与长度单位（`CM`、`IN`）；进位段见 `weight_rounding` 的 `VOLUMETRIC` 行。计重方法与体积重因子怎么搭配交构造门 |
 | `amountRoundingMode`、`amountRoundingIncrement`、`amountRoundingPoints` | 三格同有同无 | `NewAmountRoundingPolicy`：模式（`NONE`、`CEILING`、`HALF_UP`）、进位单位（按主价表币种，`NewMoneyFromString`）、应用点列表（`PER_LINE`、`AFTER_CONVERSION`、`TOTAL`） |
 | `directionAuthorizationId`、`directionAuthorizationVersion` | 是 | `NewVersionReferenceIdentity(ArtifactCommercialAuthorization, …)`，即 `NewPriceCardRegistration` 的方向授权引用 |
+| `serviceProducts`（`PPT-3` 起） | 否，整行可不写 | 列表，逐个交 `NewServiceProductReference`（参与方与商业的服务产品对象标识，不带版本），方案立住之后交 `WithServiceProducts`。只有 `direction` 为 `SELL` 的卡能填，别的方向填了报 `CELL_NOT_APPLICABLE`；不写或留空即不声明，这张卡接其余产品（ADR-0382 决定一） |
 
 **不进模板的**：
 - 租户、录入者、批准者：取自操作者信封，ADR-0101 决定三、五。
@@ -289,7 +293,7 @@
 - **金额、小数、重量**：`ParseDecimal` 的写法，十进制、可带正负号、不收科学计数法。单位与币种由列或表头给出，不写在格里。
 - **时刻**：RFC 3339，必须带时区，如 `2026-01-01T00:00:00Z` 或 `2026-01-01T08:00:00+08:00`。
   - 日期类型的格与不带时区的文本都不收：电子表格的日期序列号没有时区，替它选一个时区就是替租户定生效时刻。
-- **列表**（`amountRoundingPoints`、`includes`、`excludes`）：元素以英文分号 `;` 分隔，逐个去首尾空白。空元素、重复元素报 `CELL_INVALID`。元素都是封闭代码或费用代码，费用代码只由大写字母、数字与下划线组成，分号不会有歧义。
+- **列表**（`amountRoundingPoints`、`includes`、`excludes`、`serviceProducts`）：元素以英文分号 `;` 分隔，逐个去首尾空白。空元素、重复元素报 `CELL_INVALID`。`amountRoundingPoints`、`includes`、`excludes` 的元素是封闭代码或费用代码，费用代码只由大写字母、数字与下划线组成；`serviceProducts` 的元素是服务产品对象标识，标识里不许有分号（`NewServiceProductReference` 拒收，快照、试算载荷等别处解码同一道门）。所以分号不会有歧义。
 - **封闭代码**（方向、目的、方法、单位……）：与领域代码逐字相同，不做大小写折叠。多数是大写，版本清单依赖的工件种类是小写连字符（如 `commercial-policy`）。写错报 `CELL_INVALID`，并列出可取值。
 
 ## 六、问题清单
@@ -346,7 +350,7 @@
 ## 七、模板文件
 
 - **解析与模板同源。** 表集合、列键、必填性、`说明` 表里每列的中文解释，都来自实现里同一张列定义。模板文件由它生成，不手工维护，所以模板与解析器不会漂开。
-- **生成与存放。** 由命令 `cmd/parcel-pricing-template` 写出（写出的永远是最新一版），入库在管理台静态资源目录 `apps/admin-web/public/templates/`，文件名带模板版本，供「导入价卡」签下载（票 `.scratch/price-card-import/issues/05`）。进位后旧版的文件留在目录里、仍可下载（旧版文件仍被接受），但不再由生成器重算。一个测试用生成器重算一遍、与入库文件逐字节比对，不等即失败并提示重新生成。为此生成器的输出必须确定：压缩包内的时间戳固定、部件顺序固定。
+- **生成与存放。** 由命令 `cmd/parcel-pricing-template` 写出（写出的永远是最新一版），入库在管理台静态资源目录 `apps/admin-web/public/templates/`，文件名带模板版本，供「导入价卡」签下载（票 `.scratch/price-card-import/issues/05`）。进位后旧版的文件留在目录里、仍可下载（旧版文件仍被接受），但不再由生成器重算。一个测试用生成器重算一遍、与入库文件逐字节比对，不等即失败并提示重新生成。为此生成器的输出必须确定：压缩包内的时间戳固定、部件顺序固定。当前最新的一份是 `price-card-import-template-PPT-3.xlsx`。
 - **文本格。** 生成的模板把所有金额、小数、重量与标识列预设为文本格，正常填写就不会碰到第五节的浮点问题。
 - **不带示例值。** 模板里不预填任何业务值，同 ADR-0089「模板属机制半边，模板里的取值属实例半边」。样例单独成文件，只用合成 `SYN-` 值，见下节。
 
@@ -434,7 +438,7 @@
 {"templateVersion":"PPT-2","sheets":{"<表名>":[{"<列键>":<字符串|数字|null>, ...}, ...], ...}}
 ```
 
-- 表名与列键逐字等于模板；一行一个对象；`card` 表照电子表格里 `card` 表的写法，每个字段一行，写成 `{"field":"planId","value":"…"}`，且字段要列全（值可为 `null`）——缺字段仍报 `FIELD_MISSING`。
+- 表名与列键逐字等于模板；一行一个对象；`card` 表照电子表格里 `card` 表的写法，每个字段一行，写成 `{"field":"planId","value":"…"}`，且字段要列全（值可为 `null`）——缺字段仍报 `FIELD_MISSING`；`serviceProducts` 例外，可以不写（4.1）。
 - 格的值：字符串；数字（取书写的十进制字面量，不经浮点，与同样字面量的字符串读成同一格；`1e3` 这样的写法同电子表格里的文本一样答「不是十进制数」）；`null` 与缺键都是空格；布尔按「格类型不对」报 `CELL_NOT_TEXT`。嵌套的对象或数组不是合法的工作簿，整份不收。
 - **没有出现的表按只有列键行的空表算**，不报 `SHEET_MISSING`：电子表格里删掉一张表是要拦的失误，JSON 里没有「删」这回事。出现了模板里没有的表或列，照样报 `SHEET_UNKNOWN` / `COLUMN_UNKNOWN`。
 - **外层的 `templateVersion`** 在 `card` 表没有这个字段（或值为空）时补进 `card` 表；两处都写了而不同则整份不收（`TEMPLATE_VERSION_UNSUPPORTED`，话里说明两处须一致）。外层版本为 `PPT-1` 时不补 `total_bounds`，与 `PPT-1` 文件一致。
@@ -463,7 +467,7 @@
 
 ## 十一、模板规格只读口（`PPT-2` 起）
 
-`GET /pricing-price-card-template/spec`（挂主数据与运营查阅读，租户取认证信封，内容租户无关）答：本构建写出的模板版本与接受的全部版本；表清单（`name`、中文 `title`、一句话 `purpose`、`layout`、`repeatable`、`since`）；每张表的列（`key`、中文 `title`、`requirement`：`always` / `conditional` / `optional`，`description`，封闭取值的列另有 `allowedValues`，列表型的格另有 `multiValued`，平时开放、满足条件才封闭的列另有 `allowedValuesWhen`）。`card` 表的 `layout` 是 `FIELDS`——它的「列」是字段，工作簿里写成 `{field, value}` 行；别的表是 `ROWS`。
+`GET /pricing-price-card-template/spec`（挂主数据与运营查阅读，租户取认证信封，内容租户无关）答：本构建写出的模板版本与接受的全部版本；表清单（`name`、中文 `title`、一句话 `purpose`、`layout`、`repeatable`、`since`）；每张表的列（`key`、中文 `title`、`requirement`：`always` / `conditional` / `optional`，`description`，封闭取值的列另有 `allowedValues`，列表型的格另有 `multiValued`，平时开放、满足条件才封闭的列另有 `allowedValuesWhen`，自较晚版本才有的列或字段另有 `since`，如 `card.serviceProducts` 的 `"since":"PPT-3"`）。`card` 表的 `layout` 是 `FIELDS`——它的「列」是字段，工作簿里写成 `{field, value}` 行；别的表是 `ROWS`。
 
 规格整个由实现里的表集合、字段集合与封闭取值登记处生成（第七节「解析与模板同源」的同一张列定义），读取实际收的取值与规格口答的取值是同一份；增删一列，规格自动跟着变。`conditions.unit` 的 `allowedValues` 是重量单位与长度单位的并集——哪一类由 `source` 定。规格只答最新一版。
 

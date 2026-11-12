@@ -75,19 +75,25 @@ func (repository *ShipmentRequests) FindBySourceIdentity(
 		return domain.ShipmentRequest{}, false, fmt.Errorf("find shipment request: %w", err)
 	}
 
-	var document requestDocument
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return domain.ShipmentRequest{}, false, fmt.Errorf("find shipment request: 快照不是本适配器写下的形状：%w", err)
-	}
-	spec, err := document.rehydrationSpec(revision, domain.ShipmentRequestState(state), numbering)
-	if err != nil {
-		return domain.ShipmentRequest{}, false, fmt.Errorf("find shipment request: %w", err)
-	}
-	request, err := domain.RehydrateShipmentRequest(spec)
+	request, err := rehydratedRequest(raw, revision, state, numbering)
 	if err != nil {
 		return domain.ShipmentRequest{}, false, fmt.Errorf("find shipment request: %w", err)
 	}
 	return request, true, nil
+}
+
+// rehydratedRequest 把读到的一行（快照、修订号、状态、单据号两列）重建成聚合，过重建门。各条取行的路共用这一段：
+// 解析、拼规格、重建任何一步拒绝，都说明这一行不是本适配器写下的形状，错误如实上抛，由调用方加自己的前缀。
+func rehydratedRequest(raw []byte, revision int64, state uint8, numbering documentNumberingColumns) (domain.ShipmentRequest, error) {
+	var document requestDocument
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return domain.ShipmentRequest{}, fmt.Errorf("快照不是本适配器写下的形状：%w", err)
+	}
+	spec, err := document.rehydrationSpec(revision, domain.ShipmentRequestState(state), numbering)
+	if err != nil {
+		return domain.ShipmentRequest{}, err
+	}
+	return domain.RehydrateShipmentRequest(spec)
 }
 
 // Insert 建单只发生一次：revision 从 1 起写入，主键冲突译成`已存在`——那是业务答案
@@ -144,8 +150,9 @@ func (repository *ShipmentRequests) Insert(
 // 版本，转移一律不动它），UPDATE 的 WHERE 带上它并加一：零行命中即`版本冲突`——抢先
 // 那一方已经落库，本方要重读再重放。
 //
-// 同一条语句交回预期版本那一行原来的状态：委托由`已提交`转出而未接受时要交声明撤除门铃（ADR-0211 决定三），判的是这一次
-// 保存前后两个状态。原状态取自预期版本那一行，版本每存一次加一，那一行的状态因此就是这次转移的起点；另读一次也行，只是多一趟。
+// 同一条语句交回预期版本那一行原来的状态与原来的平台箱标号：委托由`已提交`转出而未接受时要交声明撤除门铃（ADR-0211 决定三），
+// 受理前的补充换下箱标号时同样要交（ADR-0376 决定二），判的都是这一次保存前后两份。原状态与原箱标号取自预期版本那一行，版本
+// 每存一次加一，那一行因此就是这次转移的起点；另读一次也行，只是多一趟。
 func (repository *ShipmentRequests) Save(
 	ctx context.Context,
 	identity domain.SourceIdentity,
@@ -162,6 +169,7 @@ func (repository *ShipmentRequests) Save(
 	}
 	versionID, parcels := currentParcelProjection(request)
 	var prior uint8
+	var priorLabels []byte
 	var savedAt time.Time
 	err = executor.QueryRow(ctx,
 		`UPDATE parcel_shipment.shipment_request AS saved
@@ -172,7 +180,7 @@ func (repository *ShipmentRequests) Save(
 		        current_submission_version_id = $8,
 		        declared_parcel_ids = $9,
 		        task_waiting_on = $10
-		   FROM (SELECT state
+		   FROM (SELECT state, snapshot -> 'platformBoxLabels' AS box_labels
 		           FROM parcel_shipment.shipment_request
 		          WHERE tenant_id = $1
 		            AND customer_account_id = $2
@@ -184,7 +192,7 @@ func (repository *ShipmentRequests) Save(
 		    AND saved.source = $3
 		    AND saved.source_request_key = $4
 		    AND saved.revision = $5
-		RETURNING prior.state, saved.saved_at`,
+		RETURNING prior.state, prior.box_labels, saved.saved_at`,
 		identity.TenantID().String(),
 		identity.CustomerAccountID().String(),
 		identity.Source().String(),
@@ -195,7 +203,7 @@ func (repository *ShipmentRequests) Save(
 		versionID,
 		parcels,
 		taskWaitingOnProjection(request),
-	).Scan(&prior, &savedAt)
+	).Scan(&prior, &priorLabels, &savedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ShipmentRequestRevisionConflict, nil
 	}
@@ -217,6 +225,14 @@ func (repository *ShipmentRequests) Save(
 	// 客户撤回；补充期满的确定性拒绝若有单独的编排，同样只能经这里——门铃因此只挂这一处。
 	retired := declarationsRetiredBy(domain.ShipmentRequestState(prior), request)
 	if err := repository.doorbell.RingDeclarationsRetired(ctx, identity.TenantID(), request, retired, savedAt); err != nil {
+		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
+	}
+	// 受理前的补充换下了箱标号：被换下的号从此不再算歧义信号（读口读的就是这份快照），同一笔交撤除门铃，理由同上。
+	withdrawn, err := boxLabelsWithdrawnBySupplement(domain.ShipmentRequestState(prior), priorLabels, request)
+	if err != nil {
+		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
+	}
+	if err := repository.doorbell.RingBoxLabelsWithdrawn(ctx, identity.TenantID(), request, withdrawn, savedAt); err != nil {
 		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
 	}
 	return ports.ShipmentRequestSaved, nil
@@ -261,6 +277,10 @@ type requestDocument struct {
 	SourceDataVersions []sourceDataVersionDocument `json:"sourceDataVersions,omitempty"`
 	// CustomerParcelNumbers 是委托上的客户包裹件号（ADR-0184 决定四）。未给号即 omitempty 不写，旧形快照读回为空。
 	CustomerParcelNumbers []customerParcelNumberDocument `json:"customerParcelNumbers,omitempty"`
+	// PlatformShipment 与 PlatformBoxLabels 是委托上的平台声明（ADR-0374 决定四），落法照 CustomerParcelNumbers：没报即
+	// omitempty 不写，旧形快照读回为空。零迁移。
+	PlatformShipment  *platformShipmentDocument  `json:"platformShipment,omitempty"`
+	PlatformBoxLabels []platformBoxLabelDocument `json:"platformBoxLabels,omitempty"`
 	// Withdrawal 是撤回决定（ADR-0286），只有`已撤回`委托写它。没有这一格时撤回决定在落库那一刻就丢了，只剩状态列
 	// 一个数字：重复撤回答不出原撤回，PS CONTEXT 要求保留的撤回决定标识、授权、请求方与原因事后补不回来。
 	Withdrawal *withdrawalDocument `json:"withdrawal,omitempty"`
@@ -327,6 +347,8 @@ type commercialBasisDocument struct {
 	ManualReview   uint8                    `json:"manualReview"`
 	PendingRouting string                   `json:"pendingRouting,omitempty"`
 	Settlement     *settlementTermsDocument `json:"settlementTerms,omitempty"`
+	// SubmissionConditions 是提交条件码（ADR-0376 决定一），按条件码的定义次序；没有即整键缺席，早于本票的快照读回即零值。
+	SubmissionConditions []string `json:"submissionConditions,omitempty"`
 }
 
 type declaredAsOfDocument struct {
@@ -358,8 +380,11 @@ type versionDocument struct {
 	Elements *elementsDocument `json:"elements,omitempty"`
 	// RequestedProduct 是随本版本声明的服务产品（票 psb/17），落法照 Elements：未声明即 omitempty 不写，早于本票的
 	// 快照读回即未声明。值原样落，不去空白。零迁移。
-	RequestedProduct string    `json:"requestedProduct,omitempty"`
-	EstablishedAt    time.Time `json:"establishedAt"`
+	RequestedProduct string `json:"requestedProduct,omitempty"`
+	// Goods 是随本版本声明的货物明细（ADR-0373 决定五），落法照 Elements：没报即 omitempty 整段不写，早于本票的快照
+	// 读回即没报。零迁移。
+	Goods         *goodsDocument `json:"goods,omitempty"`
+	EstablishedAt time.Time      `json:"establishedAt"`
 }
 
 // elementsDocument 按资料范围分两段；哪一段缺席就不写哪一段。
@@ -404,22 +429,22 @@ type dimensionsDocument struct {
 }
 
 type taskDocument struct {
-	TaskID              string            `json:"taskId"`
-	SubmissionVersionID string            `json:"submissionVersionId"`
-	EstablishedAt       time.Time         `json:"establishedAt"`
-	State               uint8             `json:"state"`
-	WaitingOn           uint8             `json:"waitingOn,omitempty"`
-	ProcessingAttempts  []attemptDocument `json:"processingAttempts,omitempty"`
-	ReviewCompletion    *reviewDocument   `json:"reviewCompletion,omitempty"`
+	TaskID              string          `json:"taskId"`
+	SubmissionVersionID string          `json:"submissionVersionId"`
+	EstablishedAt       time.Time       `json:"establishedAt"`
+	State               uint8           `json:"state"`
+	WaitingOn           uint8           `json:"waitingOn,omitempty"`
+	ReviewCompletion    *reviewDocument `json:"reviewCompletion,omitempty"`
 	// AuthorizedDisposition 是本版本上已记录的授权处置（ADR-0132），落法照 ReviewCompletion：缺席即没处置过。
 	AuthorizedDisposition *dispositionDocument `json:"authorizedDisposition,omitempty"`
+	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一）；不在等补充时整键缺席，早于本票的快照读回即零值。
+	SupplementGaps []supplementGapDocument `json:"supplementGaps,omitempty"`
 }
 
-type attemptDocument struct {
-	Reason       string    `json:"reason"`
-	ResumePath   uint8     `json:"resumePath"`
-	Continuation string    `json:"continuation"`
-	AttemptedAt  time.Time `json:"attemptedAt"`
+type supplementGapDocument struct {
+	Group  uint8  `json:"group"`
+	Parcel string `json:"parcel,omitempty"`
+	Reason string `json:"reason"`
 }
 
 type reviewDocument struct {
@@ -493,6 +518,13 @@ func documentOf(request domain.ShipmentRequest) requestDocument {
 			Number: declaration.Number().String(),
 		})
 	}
+	document.PlatformShipment = platformShipmentDocumentOf(request)
+	for _, label := range request.PlatformBoxLabels() {
+		document.PlatformBoxLabels = append(document.PlatformBoxLabels, platformBoxLabelDocument{
+			Parcel: label.Parcel().String(),
+			Number: label.Number().String(),
+		})
+	}
 	return document
 }
 
@@ -525,6 +557,7 @@ func versionDocumentOf(version domain.SubmissionVersion) versionDocument {
 	}
 	document.Elements = elementsDocumentOf(version.DeclaredElements())
 	document.RequestedProduct = version.RequestedServiceProduct().String()
+	document.Goods = goodsDocumentOf(version.Goods())
 	return document
 }
 
@@ -603,12 +636,10 @@ func taskDocumentOf(task domain.AcceptanceDecisionTask) taskDocument {
 	if waiting, present := task.WaitingOn(); present {
 		document.WaitingOn = uint8(waiting)
 	}
-	for _, attempt := range task.ProcessingAttempts() {
-		document.ProcessingAttempts = append(document.ProcessingAttempts, attemptDocument{
-			Reason:       attempt.Reason().String(),
-			ResumePath:   uint8(attempt.ResumePath()),
-			Continuation: attempt.ContinuationReference().String(),
-			AttemptedAt:  attempt.AttemptedAt().UTC(),
+	for _, gap := range task.SupplementGaps() {
+		parcel, _ := gap.Parcel()
+		document.SupplementGaps = append(document.SupplementGaps, supplementGapDocument{
+			Group: uint8(gap.Group()), Parcel: parcel.String(), Reason: gap.Reason().String(),
 		})
 	}
 	if completion, done := task.ManualReviewCompletion(); done {
@@ -743,6 +774,18 @@ func (document requestDocument) rehydrationSpec(
 		}
 		spec.CustomerParcelNumbers = append(spec.CustomerParcelNumbers, declaration)
 	}
+	shipment, err := document.PlatformShipment.declaration()
+	if err != nil {
+		return domain.RehydrateShipmentRequestSpec{}, fmt.Errorf("%w：平台货件：%v", domain.ErrInvalidRehydratedShipmentRequest, err)
+	}
+	spec.PlatformShipment = shipment
+	for _, raw := range document.PlatformBoxLabels {
+		label, err := raw.declaration()
+		if err != nil {
+			return domain.RehydrateShipmentRequestSpec{}, fmt.Errorf("%w：平台箱标号：%v", domain.ErrInvalidRehydratedShipmentRequest, err)
+		}
+		spec.PlatformBoxLabels = append(spec.PlatformBoxLabels, label)
+	}
 	if document.Withdrawal != nil {
 		withdrawal, err := document.Withdrawal.spec()
 		if err != nil {
@@ -836,6 +879,11 @@ func (document versionDocument) spec() (domain.RehydrateSubmissionVersionSpec, e
 		}
 		spec.RequestedProduct = domain.RequestedServiceProductOf([]domain.CanonicalContentEntry{entry})
 	}
+	goods, err := document.Goods.goods()
+	if err != nil {
+		return domain.RehydrateSubmissionVersionSpec{}, fmt.Errorf("%w：货物明细：%v", domain.ErrInvalidRehydratedShipmentRequest, err)
+	}
+	spec.Goods = goods
 	return spec, nil
 }
 
@@ -952,25 +1000,22 @@ func (document taskDocument) spec() (domain.RehydrateAcceptanceTaskSpec, error) 
 		State:               domain.AcceptanceTaskState(document.State),
 		WaitingOn:           domain.ResumePath(document.WaitingOn),
 	}
-	for _, attemptDoc := range document.ProcessingAttempts {
-		reason, err := domain.NewProcessingAttemptReason(attemptDoc.Reason)
+	for _, gapDoc := range document.SupplementGaps {
+		var parcel domain.DeclaredParcelID
+		if gapDoc.Parcel != "" {
+			if parcel, err = domain.NewDeclaredParcelID(gapDoc.Parcel); err != nil {
+				return domain.RehydrateAcceptanceTaskSpec{}, err
+			}
+		}
+		reason, err := domain.NewCheckReason(gapDoc.Reason)
 		if err != nil {
 			return domain.RehydrateAcceptanceTaskSpec{}, err
 		}
-		continuation, err := domain.NewOwnershipContinuationReference(attemptDoc.Continuation)
+		gap, err := domain.NewSupplementGap(domain.AcceptanceCheckGroup(gapDoc.Group), parcel, reason)
 		if err != nil {
 			return domain.RehydrateAcceptanceTaskSpec{}, err
 		}
-		attempt, err := domain.NewProcessingAttempt(domain.ProcessingAttemptSpec{
-			Reason:       reason,
-			ResumePath:   domain.ResumePath(attemptDoc.ResumePath),
-			Continuation: continuation,
-			AttemptedAt:  attemptDoc.AttemptedAt,
-		})
-		if err != nil {
-			return domain.RehydrateAcceptanceTaskSpec{}, err
-		}
-		spec.ProcessingAttempts = append(spec.ProcessingAttempts, attempt)
+		spec.SupplementGaps = append(spec.SupplementGaps, gap)
 	}
 	if document.ReviewCompletion != nil {
 		authority, err := domain.NewReviewAuthorityReference(document.ReviewCompletion.Authority)
@@ -1120,6 +1165,9 @@ func commercialBasisDocumentOf(snapshot domain.CommercialBasisSnapshot) commerci
 	}
 	if allowance := snapshot.PendingRoutingAllowance(); allowance.Allowed() {
 		document.PendingRouting = allowance.Basis().String()
+	}
+	for _, condition := range snapshot.SubmissionConditions().Conditions() {
+		document.SubmissionConditions = append(document.SubmissionConditions, condition.String())
 	}
 	if terms, present := snapshot.SettlementTerms(); present {
 		document.Settlement = &settlementTermsDocument{
@@ -1359,5 +1407,18 @@ func (document commercialBasisDocument) snapshot() (domain.CommercialBasisSnapsh
 		}
 		spec.SettlementTerms = terms
 	}
+	conditions := make([]domain.SubmissionCondition, 0, len(document.SubmissionConditions))
+	for _, word := range document.SubmissionConditions {
+		condition, ok := domain.ParseSubmissionCondition(word)
+		if !ok {
+			return domain.CommercialBasisSnapshot{}, fmt.Errorf("提交条件 %q 不在封闭集合里", word)
+		}
+		conditions = append(conditions, condition)
+	}
+	submissionConditions, err := domain.NewSubmissionConditions(conditions...)
+	if err != nil {
+		return domain.CommercialBasisSnapshot{}, err
+	}
+	spec.SubmissionConditions = submissionConditions
 	return domain.NewCommercialBasisSnapshot(spec)
 }

@@ -80,11 +80,15 @@ export const estimateAnswerLabels: Record<string, string> = {
   INPUT_INCOMPLETE: '信息不够',
 };
 
-// 缺项按卡的目录绑定定：绑了分区目录的卡要邮编路线、没绑的卡要分区（ADR-0152 决定五）。
+// 缺项按卡的目录绑定定：绑了分区目录的卡要邮编路线、没绑的卡要分区（ADR-0152 决定五）；计价在估价口把「卡要而申报没给」
+// 一律点名为缺项，封闭集另有寄件邮编与尺寸两码（ADR-0381 决定二）。
 export const estimateMissingLabels: Record<string, string> = {
   ZONE: '分区（这张价卡不按邮编查分区，要直接填分区）',
   POSTAL_ROUTE: '始发与目的邮编（这张价卡按邮编查分区或偏远地区）',
   ADDRESS_NATURE: '收件地址性质（这张价卡对商业 / 住宅地址收费不同，要选一个，系统不替你假定）',
+  ORIGIN_POSTAL: '寄件邮编（这张价卡的分区目录按始发邮编前缀分区）',
+  DIMENSIONS: '尺寸（这张价卡按尺寸或体积重判价，要逐件给长宽高）',
+  MEASUREMENT: '重量或量纲（这一件的重量或重量单位读不出，计价只取申报的测量，不替你补）',
 };
 
 // 收件地址性质（ADR-0347 决定四）：封闭词，声明由发起方给，计价不推断。

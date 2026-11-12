@@ -115,6 +115,24 @@ func TestEachUnformableSellOutcomeHandsOffUnformedAndWaitingOnesStayUndecided(t 
 			cause:    ppports.UnformedPriceCardApplicabilityConflict,
 			mentions: "SYN-SELL-PLAN-B@v1",
 		},
+		// 按申报产品选卡时，说明点名是哪个产品没有卡、哪个产品上撞了几张（ADR-0382 决定二）。
+		"申报产品未配置": {
+			result: ppapplication.FormEvaluationFromRequestResult{
+				Outcome:        ppapplication.RequestPriceCardNotConfigured,
+				ServiceProduct: pptest.Value(t, ppdomain.NewServiceProductReference, "SYN-PROD-CN-SG-FBA"),
+			},
+			cause:    ppports.UnformedPriceCardNotConfigured,
+			mentions: "for declared service product SYN-PROD-CN-SG-FBA",
+		},
+		"申报产品冲突": {
+			result: ppapplication.FormEvaluationFromRequestResult{
+				Outcome:        ppapplication.RequestPriceCardApplicabilityConflict,
+				Candidates:     []ppdomain.VersionReference{candidate},
+				ServiceProduct: pptest.Value(t, ppdomain.NewServiceProductReference, "SYN-PROD-CN-SG-FBA"),
+			},
+			cause:    ppports.UnformedPriceCardApplicabilityConflict,
+			mentions: "SYN-SELL-PLAN-B@v1 for declared service product SYN-PROD-CN-SG-FBA",
+		},
 		"输入不可得": {
 			result: ppapplication.FormEvaluationFromRequestResult{
 				Outcome: ppapplication.RequestPricingInputUnavailable,

@@ -314,6 +314,16 @@ type requestDetailBody struct {
 	PriorVersionCount int                  `json:"priorVersionCount"`
 	AcceptanceTask    acceptanceTaskBody   `json:"acceptanceTask"`
 	Decision          *decisionBody        `json:"decision,omitempty"`
+	// Goods 是此刻在用的货物明细（有已采用的资料修订就是那一版），PlatformShipment 是委托上的平台货件（ADR-0373、ADR-0374），
+	// 没报即整键缺席。
+	Goods            *goodsViewBody            `json:"goods,omitempty"`
+	PlatformShipment *platformShipmentViewBody `json:"platformShipment,omitempty"`
+	// GoodsStanding 说 goods 出自哪里：ON_SUBMISSION（提交时报的）、ON_ADOPTED_VERSION（资料修订后的那一版）或
+	// UNDETERMINED（两条修订分叉待复核，不交 goods）。查阅的人要分得清「没报」与「说不出该按哪一版」。
+	GoodsStanding string `json:"goodsStanding,omitempty"`
+	// FinancialControl 是受理判断记下的接受前财务控制结论（ADR-0379 决定三），形状与复核详情的 recordedJudgments.financialControl
+	// 同一份（financialControlBodyOf）；没判过即整键缺席。不带金额：估价与占用由页面另向结算的读口取。
+	FinancialControl *financialControlBody `json:"financialControl,omitempty"`
 }
 
 type declaredParcelBody struct {
@@ -321,6 +331,11 @@ type declaredParcelBody struct {
 	DeclaredWeightValue string                `json:"declaredWeightValue,omitempty"`
 	DeclaredWeightUnit  string                `json:"declaredWeightUnit,omitempty"`
 	Dimensions          *parcelDimensionsBody `json:"dimensions,omitempty"`
+	// 这一件的客户件号、平台箱标号与装箱分配，形状与提交口的包裹草案对应；跟踪号是渠道签发的，不在提交口。没有即整键缺席。
+	CustomerParcelNumber string            `json:"customerParcelNumber,omitempty"`
+	PlatformBoxLabel     string            `json:"platformBoxLabel,omitempty"`
+	TrackingNumbers      []string          `json:"trackingNumbers,omitempty"`
+	Packing              []packingViewBody `json:"packing,omitempty"`
 }
 
 type parcelDimensionsBody struct {
@@ -330,11 +345,30 @@ type parcelDimensionsBody struct {
 	Unit   string `json:"unit"`
 }
 
+// acceptanceTaskBody 的「上次处理」几格读自处理尝试实际落库的那一处（ADR-0383 决定四）。lastAttemptResumePath 交续办方原词
+// （INTERNAL_RETRY、OPERATOR_REGISTRATION……，与 waitingOn 同一套）：谁来动手照记下的那一格读，不从原因名或 CONT- 引用推。
+// lastAttemptSettlementReason 是结算的未形成原因码原样（不冠 SA-），lastAttemptServiceProduct 是这一版申报的服务产品，
+// 两格都只在那一轮有时在场（ADR-0383 决定三）。字段名与管理台票 declared-goods-lines/24 钉死。
+// lastAttemptEstimateGapCodes 是申报不全那一轮计价点名的缺项码原样、去重（ADR-0381 决定四），只在申报不全分出的两路
+// 等待上在场；字段名钉死给管理台票 declared-goods-lines/27。
 type acceptanceTaskBody struct {
-	State                   string `json:"state"`
-	LastAttemptReason       string `json:"lastAttemptReason,omitempty"`
-	LastAttemptContinuation string `json:"lastAttemptContinuation,omitempty"`
-	LastAttemptedAt         string `json:"lastAttemptedAt,omitempty"`
+	State                       string   `json:"state"`
+	LastAttemptReason           string   `json:"lastAttemptReason,omitempty"`
+	LastAttemptResumePath       string   `json:"lastAttemptResumePath,omitempty"`
+	LastAttemptContinuation     string   `json:"lastAttemptContinuation,omitempty"`
+	LastAttemptedAt             string   `json:"lastAttemptedAt,omitempty"`
+	LastAttemptSettlementReason string   `json:"lastAttemptSettlementReason,omitempty"`
+	LastAttemptServiceProduct   string   `json:"lastAttemptServiceProduct,omitempty"`
+	LastAttemptEstimateGapCodes []string `json:"lastAttemptEstimateGapCodes,omitempty"`
+	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一）：查阅的人要知道缺的是哪一条、哪几箱，而不只是
+	// 「在等补充」。
+	SupplementGaps []supplementGapBody `json:"supplementGaps,omitempty"`
+}
+
+type supplementGapBody struct {
+	Group    string `json:"group"`
+	ParcelID string `json:"parcelId,omitempty"`
+	Reason   string `json:"reason"`
 }
 
 // decisionBody 的 kind 词汇与撤回端点的 decisionKind 同一套（ACCEPTED/REJECTED），
@@ -375,11 +409,20 @@ func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {
 		PriorVersionCount:  record.PriorVersionCount,
 		AcceptanceTask:     acceptanceTaskBody{State: record.Task.State.String()},
 	}
+	for _, gap := range record.Task.SupplementGaps {
+		body.AcceptanceTask.SupplementGaps = append(body.AcceptanceTask.SupplementGaps,
+			supplementGapBody{Group: gap.Group.String(), ParcelID: gap.Parcel, Reason: gap.Reason})
+	}
+	packing := packingViewBodiesByParcel(record.Goods)
 	for _, parcel := range record.DeclaredParcels {
 		parcelBody := declaredParcelBody{
-			ParcelID:            parcel.Parcel.String(),
-			DeclaredWeightValue: parcel.WeightValue,
-			DeclaredWeightUnit:  parcel.WeightUnit,
+			ParcelID:             parcel.Parcel.String(),
+			DeclaredWeightValue:  parcel.WeightValue,
+			DeclaredWeightUnit:   parcel.WeightUnit,
+			CustomerParcelNumber: parcel.CustomerParcelNumber,
+			PlatformBoxLabel:     parcel.PlatformBoxLabel,
+			TrackingNumbers:      parcel.TrackingNumbers,
+			Packing:              packing[parcel.Parcel],
 		}
 		if parcel.HasDimensions {
 			parcelBody.Dimensions = &parcelDimensionsBody{
@@ -391,10 +434,21 @@ func detailBodyOf(record ports.ShipmentRequestDetailRecord) requestDetailBody {
 		}
 		body.DeclaredParcels = append(body.DeclaredParcels, parcelBody)
 	}
+	body.Goods = goodsViewBodyOf(record.Goods)
+	// 提交时没报、也没修订过的委托不带这一格：那是绝大多数委托，交一个「出自提交」却没有 goods 只是噪声。
+	if record.Goods.Declared() || record.GoodsStanding != domain.GoodsDetailsOnSubmission {
+		body.GoodsStanding = record.GoodsStanding.String()
+	}
+	body.PlatformShipment = platformShipmentViewBodyOf(record.PlatformShipment)
+	body.FinancialControl = financialControlBodyOf(record.FinancialControl)
 	if record.Task.HasAttempt {
 		body.AcceptanceTask.LastAttemptReason = record.Task.LastAttemptReason
+		body.AcceptanceTask.LastAttemptResumePath = record.Task.LastAttemptResumePath.String()
 		body.AcceptanceTask.LastAttemptContinuation = record.Task.LastAttemptContinuation
 		body.AcceptanceTask.LastAttemptedAt = record.Task.LastAttemptedAt.UTC().Format(time.RFC3339Nano)
+		body.AcceptanceTask.LastAttemptSettlementReason = record.Task.LastAttemptSettlementReason
+		body.AcceptanceTask.LastAttemptServiceProduct = record.Task.LastAttemptServiceProduct
+		body.AcceptanceTask.LastAttemptEstimateGapCodes = record.Task.LastAttemptEstimateGapCodes
 	}
 	if record.HasDecision {
 		kind := "REJECTED"

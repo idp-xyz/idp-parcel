@@ -12,8 +12,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/inboxconsume"
 )
 
-// CustomerParcelNumberDeclarationRetiredEventType 是 PS 在一份委托由`已提交`转为`已拒绝`或`已撤回`时，按它声明的每个客户包裹件号
-// 交出的门铃（ADR-0211 决定三）。消费方自己写出这个字符串，不导入提供方 outbox 适配器的常量，同关联已形成那一个；两串由组合根
+// CustomerParcelNumberDeclarationRetiredEventType 是 PS 撤下一个号的歧义信号时交出的门铃：一份委托由`已提交`转为`已拒绝`或
+// `已撤回`，按它声明的每个客户包裹件号与平台箱标号各交一封（ADR-0211 决定三）；受理前的补充换下平台箱标号，按换下的每个号
+// 各交一封（ADR-0376 决定二）。两种来由同一个形状，本门不分。消费方自己写出这个字符串，不导入提供方 outbox 适配器的常量，同关联已形成那一个；两串由组合根
 // 的一条对照用例钉住。
 const CustomerParcelNumberDeclarationRetiredEventType eventing.EventType = "parcel-shipment.customer-parcel-number-declaration.retired"
 

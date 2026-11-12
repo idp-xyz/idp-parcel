@@ -84,6 +84,9 @@ type priceCardContentBody struct {
 	Surcharges             int                 `json:"surcharges"`
 	Manifest               []manifestEntryBody `json:"manifest"`
 	DirectionAuthorization planReferenceBody   `json:"directionAuthorization"`
+	// ServiceProducts 与价卡目录列出的同名同形：卡声明的适用服务产品（ADR-0382 决定一），不声明即缺键。预览与草稿都经这一份
+	// 概要交出，缺了它，页面会把指名了产品的售价卡显示成接其余产品的那一张。
+	ServiceProducts []string `json:"serviceProducts,omitempty"`
 }
 
 type priceCardTableBody struct {
@@ -164,7 +167,20 @@ func priceCardContentBodyOf(plan domain.PricingPlanVersion) priceCardContentBody
 	for _, reference := range plan.Manifest().References() {
 		body.Manifest = append(body.Manifest, manifestEntryBody{Kind: string(reference.Kind()), ID: reference.ID(), Version: reference.Version()})
 	}
+	body.ServiceProducts = serviceProductTexts(plan.ServiceProducts())
 	return body
+}
+
+// serviceProductTexts 是适用服务产品在各答复体里的写法：标识原样、按卡上保存的次序；不声明即 nil，键随之缺席。
+func serviceProductTexts(products []domain.ServiceProductReference) []string {
+	if len(products) == 0 {
+		return nil
+	}
+	texts := make([]string, 0, len(products))
+	for _, product := range products {
+		texts = append(texts, product.String())
+	}
+	return texts
 }
 
 // isWorkbookJSON 答这个请求带的是不是页面表单提交的结构化工作簿（Content-Type: application/json）。别的类型一律走原有的

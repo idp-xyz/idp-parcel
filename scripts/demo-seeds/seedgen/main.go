@@ -69,6 +69,9 @@ func main() {
 	// 第三张完整价卡（范围 SYN-SCOPE-04，见 full_card_03.go）：偏远一条规则按档位查价表，加单票合计最低收费。绑 FULL-01 那一节（steps/160）
 	// 已登记的同一批目录与燃油序列，不另登。
 	write(outDir, "price-card-cn-sg-full-03.json", fullSellCard03Snapshot())
+	// FBA 头程售价卡（范围 SYN-SCOPE-01，见 fba_card.go）：指名 SYN-PROD-CN-SG-FBA，与上面那张不声明产品的售价卡同范围并存，
+	// 各计各的产品（ADR-0382）。与上面各份互不改动，重跑 seedgen 时上面各份逐字节不变。
+	write(outDir, "price-card-cn-sg-fba.json", fbaSellCardSnapshot())
 }
 
 // reviewDutyRuleDocument 产出 parcel-pricing-register -kind reference-review-duty-rule 吃的规则文档：演示租户要求复核者

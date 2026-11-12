@@ -28,6 +28,9 @@ func (Reader) PriceCardTemplateSpec() ports.PriceCardTemplateSpec {
 			column := ports.PriceCardTemplateColumnSpec{
 				Key: entry.key, Title: entry.title, Requirement: entry.requirement.code(), Description: entry.note,
 			}
+			if sheet.name == sheetCard {
+				column.Since = cardFieldSince[entry.key]
+			}
 			if vocab, closed := closedVocabulary[sheet.name][entry.key]; closed {
 				column.AllowedValues = append([]string(nil), vocab.valuesFor(TemplateVersion)...)
 				column.MultiValued = vocab.multi

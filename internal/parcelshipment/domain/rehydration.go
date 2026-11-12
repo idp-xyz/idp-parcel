@@ -50,6 +50,9 @@ type RehydrateShipmentRequestSpec struct {
 	// CustomerParcelNumbers 是委托上的客户包裹件号（ADR-0184 决定四），收成品类型：包外只能经
 	// DeclareCustomerParcelNumber 造它。它在`已提交`下就有值；漏带回，接受时就形成不出外部标识关联。
 	CustomerParcelNumbers []CustomerParcelNumberDeclaration
+	// PlatformShipment 与 PlatformBoxLabels 是委托上的平台声明（ADR-0374 决定四），收成品类型；旧形快照没有，读回即没报。
+	PlatformShipment  PlatformShipmentDeclaration
+	PlatformBoxLabels []PlatformBoxLabelDeclaration
 	// 以下四项在`已提交`下必然缺席；`已接受`下决定、基线、承诺必须在场，资料版本可空；`已拒绝`下只有
 	// 决定在场，其余三项必然缺席（ADR-0188 对账表）；`已撤回`下四项都缺席，决定边界由 DecisionFormed 与
 	// Withdrawal 表达。
@@ -141,7 +144,7 @@ type RehydrateSubmissionVersionSpec struct {
 	SourceSubmission  SourceSubmissionFingerprint
 	DeclaredParcelIDs []DeclaredParcelID
 	// Profiles 收成品类型，不另造 Rehydrate*Spec：画像有公开构造函数、字段未导出，
-	// 包外造不出半截的一张——理由与 ProcessingAttempts 一字不差。有画像而不带回，
+	// 包外造不出半截的一张——理由与 ReviewCompletion 一字不差。有画像而不带回，
 	// 一份申报过测量的版本重建后看起来像没申报过，估价装配从此永远停在缺输入。
 	Profiles []DeclaredParcelProfile
 	// Elements 同理收成品（pp-seams/05）：子段是值、字段未导出，包外只能经 AddressElementsOf 或零值造它；旧形快照
@@ -150,7 +153,9 @@ type RehydrateSubmissionVersionSpec struct {
 	// RequestedProduct 同理收成品（票 psb/17）：包外只能经 RequestedServiceProductOf 或零值造它；旧形快照没有这一格，
 	// 读回即未声明——不回填、不猜。
 	RequestedProduct DeclaredServiceProduct
-	EstablishedAt    time.Time
+	// Goods 同理收成品（ADR-0373）：包外只能经 NewGoodsDetails 造它；旧形快照没有这一段，读回即没报——不回填、不猜。
+	Goods         GoodsDetails
+	EstablishedAt time.Time
 }
 
 // RehydrateAcceptanceTaskSpec 是接受判断任务在库里的样子。
@@ -160,15 +165,16 @@ type RehydrateAcceptanceTaskSpec struct {
 	EstablishedAt       time.Time
 	State               AcceptanceTaskState
 	WaitingOn           ResumePath
-	// ProcessingAttempts 与 ReviewCompletion 收成品类型，不另造 Rehydrate*Spec：两者是判断的
-	// **输入**而非产物，本就有公开构造函数，字段又未导出，包外造不出半截的一份。多一个 Spec
-	// 就多一格「相信输入」，而 ADR-0028 要这个面尽可能小。
+	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一）；漏了它，重建后查阅面就说不出缺的是哪一条、哪几箱。
+	SupplementGaps []SupplementGap
+	// ReviewCompletion 收成品类型，不另造 Rehydrate*Spec：它是判断的**输入**而非产物，本就有公开
+	// 构造函数，字段又未导出，包外造不出半截的一份。多一个 Spec 就多一格「相信输入」，而 ADR-0028
+	// 要这个面尽可能小。
 	//
-	// 漏掉它们不只是少两个字段：复核完成度是 Decide 复核那道门的一半，漏了，一次已经做完的
-	// 人工复核会被再要求一次，而 CompleteManualReview 的重复闸门也会放行第二次补签；处理记录
-	// 漏了，用例要的「未决按原因分类统计」在重建之后从头数起。
-	ProcessingAttempts []ProcessingAttempt
-	ReviewCompletion   ManualReviewCompletion
+	// 漏掉它不只是少一个字段：复核完成度是 Decide 复核那道门的一半，漏了，一次已经做完的人工复核
+	// 会被再要求一次，而 CompleteManualReview 的重复闸门也会放行第二次补签。处理尝试不在任务上：它们
+	// 落在自己的表里（ProcessingAttempt 类型注释），重建不带它们。
+	ReviewCompletion ManualReviewCompletion
 	// AuthorizedDisposition 同理收成品（ADR-0132）。漏了它，DisposeUnderAuthority 的一版一次闸门会放行
 	// 第二次处置，而`交客户补充`之后的一轮 Decide 会把等待态退回等处置——同一版本被要求处置两次。
 	AuthorizedDisposition AuthorizedDisposition
@@ -192,8 +198,12 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			profiles:          append([]DeclaredParcelProfile(nil), prior.Profiles...),
 			elements:          prior.Elements,
 			requestedProduct:  prior.RequestedProduct,
+			goods:             prior.Goods,
 			establishedAt:     prior.EstablishedAt,
 		})
+		if err := goodsFitMembers(prior.Goods, prior.DeclaredParcelIDs); err != nil {
+			return ShipmentRequest{}, rehydrationRefusal(fmt.Sprintf("历史版本的货物明细与成员对不上：%v", err))
+		}
 	}
 	priorTasks := make([]AcceptanceDecisionTask, 0, len(snapshot.PriorTasks))
 	for _, prior := range snapshot.PriorTasks {
@@ -203,10 +213,18 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			establishedAt:         prior.EstablishedAt,
 			state:                 prior.State,
 			waitingOn:             prior.WaitingOn,
-			processingAttempts:    append([]ProcessingAttempt(nil), prior.ProcessingAttempts...),
+			supplementGaps:        append([]SupplementGap(nil), prior.SupplementGaps...),
 			reviewCompletion:      prior.ReviewCompletion,
 			authorizedDisposition: prior.AuthorizedDisposition,
 		})
+	}
+	// 快照立不起来是库里那一行或适配器的问题，不是客户输入的问题（ADR-0029 按恢复动作分格）：一律包成重建拒绝。
+	if err := goodsFitMembers(snapshot.CurrentVersion.Goods, snapshot.CurrentVersion.DeclaredParcelIDs); err != nil {
+		return ShipmentRequest{}, rehydrationRefusal(fmt.Sprintf("当前版本的货物明细与成员对不上：%v", err))
+	}
+	boxLabels, err := platformBoxLabelsFor(snapshot.PlatformBoxLabels, snapshot.PlatformShipment, snapshot.CurrentVersion.DeclaredParcelIDs)
+	if err != nil {
+		return ShipmentRequest{}, rehydrationRefusal(fmt.Sprintf("平台箱标号与成员或平台货件对不上：%v", err))
 	}
 	request := ShipmentRequest{
 		revision:          snapshot.Revision,
@@ -221,17 +239,16 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			profiles:          append([]DeclaredParcelProfile(nil), snapshot.CurrentVersion.Profiles...),
 			elements:          snapshot.CurrentVersion.Elements,
 			requestedProduct:  snapshot.CurrentVersion.RequestedProduct,
+			goods:             snapshot.CurrentVersion.Goods,
 			establishedAt:     snapshot.CurrentVersion.EstablishedAt,
 		},
 		acceptanceTask: AcceptanceDecisionTask{
-			taskID:              snapshot.AcceptanceTask.TaskID,
-			submissionVersionID: snapshot.AcceptanceTask.SubmissionVersionID,
-			establishedAt:       snapshot.AcceptanceTask.EstablishedAt,
-			state:               snapshot.AcceptanceTask.State,
-			waitingOn:           snapshot.AcceptanceTask.WaitingOn,
-			processingAttempts: append(
-				[]ProcessingAttempt(nil), snapshot.AcceptanceTask.ProcessingAttempts...,
-			),
+			taskID:                snapshot.AcceptanceTask.TaskID,
+			submissionVersionID:   snapshot.AcceptanceTask.SubmissionVersionID,
+			establishedAt:         snapshot.AcceptanceTask.EstablishedAt,
+			state:                 snapshot.AcceptanceTask.State,
+			waitingOn:             snapshot.AcceptanceTask.WaitingOn,
+			supplementGaps:        append([]SupplementGap(nil), snapshot.AcceptanceTask.SupplementGaps...),
 			reviewCompletion:      snapshot.AcceptanceTask.ReviewCompletion,
 			authorizedDisposition: snapshot.AcceptanceTask.AuthorizedDisposition,
 		},
@@ -242,6 +259,8 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			kind:  snapshot.PriorLink.Kind,
 		},
 		customerParcelNumbers: append([]CustomerParcelNumberDeclaration(nil), snapshot.CustomerParcelNumbers...),
+		platformShipment:      snapshot.PlatformShipment,
+		platformBoxLabels:     boxLabels,
 		decision: AcceptanceDecision{
 			decisionID:   snapshot.Decision.DecisionID,
 			accepted:     snapshot.Decision.Accepted,
@@ -705,8 +724,7 @@ func (version SubmissionVersion) validForRehydration() error {
 	// `acceptance_decision.go` 又写明基线「恒覆盖该提交版本的完整声明成员」——一份错的基线
 	// 此后与真的无从分辨，而 `SourceDataScopeOutsideAcceptanceBaseline` 会照它拒掉更正。
 	//
-	// 「半截的一条包外造不出来，但一批零值造得出」这句本文件已经为 processingAttempts 写过，
-	// 它对声明成员一字不差地成立：`make([]DeclaredParcelID, 3)` 忘了填就是。
+	// 半截的一个包外造不出来，但一批零值造得出：`make([]DeclaredParcelID, 3)` 忘了填就是。
 	seen := make(map[DeclaredParcelID]struct{}, len(version.declaredParcelIDs))
 	for _, parcelID := range version.declaredParcelIDs {
 		if !parcelID.valid() {
@@ -742,22 +760,11 @@ func (task AcceptanceDecisionTask) validForRehydration() error {
 	// 等待态要么缺席（零值），要么落在三个等待态之内。完全不校的话，库里一个越界值会被
 	// `WaitingOn()` 报成**缺席**——即「这任务不等任何人」，而不是被拒成一行坏数据；产出是一份
 	// 不等人、也永远不会有人来续办的运行中任务。
-	//
-	// 同一个 `ResumePath` 作为 `ProcessingAttempt.resumePath` 时经 `attempt.valid()` 查的是
-	// 同一个值域，两处口径因此一致。
 	if task.waitingOn != ResumePathInvalid && !task.waitingOn.valid() {
 		return rehydrationRefusal(fmt.Sprintf("接受判断任务的等待态不是本上下文的取值：%d", uint8(task.waitingOn)))
 	}
-	// 处理记录逐条校验。半截的一条包外造不出来——字段未导出，构造器全校验——但一批零值造得
-	// 出：`make([]ProcessingAttempt, n)` 忘了填就是，而那会让「这份委托卡过几轮」多数出几轮
-	// 不存在的。复核完成度不必同样逐项查：它是单个值，零值即缺席，非零只可能来自那个全校验
-	// 的构造器，凑不出批量那条路。
-	for _, attempt := range task.processingAttempts {
-		if !attempt.valid() {
-			return rehydrationRefusal("接受判断任务上有一条不完整的处理记录")
-		}
-	}
-	// 处置记录同复核完成度只判在场，不逐项查。但它与等待态有一条命题：处置转移把等待态从`等待授权处置`
+	// 复核完成度不逐项查：它是单个值，零值即缺席，非零只可能来自那个全校验的构造器，凑不出
+	// 批量零值那条路。处置记录同此只判在场，不逐项查。但它与等待态有一条命题：处置转移把等待态从`等待授权处置`
 	// 带走（`拒绝`清零、`交客户补充`转到`等待受控补充`），所以「已处置却仍停在等处置」不可能由本上下文
 	// 写出——放它进门，队列会把一份已处置的委托再列给处置角色。`拒绝`去向另有一条：它越过决定边界收了
 	// 任务的工，一条处置为`拒绝`的运行中任务同样是拼出来的。

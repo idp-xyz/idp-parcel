@@ -73,6 +73,15 @@ type FormNewSubmissionVersionCommand struct {
 	DeclaredElements domain.DeclaredAddressElements
 	// RequestedServiceProduct 随新版本重报的服务产品声明（票 psb/17），同 DeclaredElements 纪律不继承。
 	RequestedServiceProduct domain.DeclaredServiceProduct
+	// DeclaredGoods 随新版本重报的货物明细（ADR-0373 决定四），同 DeclaredElements 纪律不继承，允许缺席；装箱分配挂在
+	// DeclaredParcelIDs（回执里的成员）上。聚合对着成员再核的那一道在这里没有专门的答复格：接单入口的摘要那一遍与命令
+	// 这一遍出自同一份草案、同一个包裹次序，前一遍过了这一遍必过；成员集合变了先撞 ErrSubmissionBoundaryChanged。走到它
+	// 只能是装配错误，照技术失败上抛。
+	DeclaredGoods domain.GoodsDetails
+	// PlatformShipment 与 PlatformBoxLabels 是这一版起委托的平台声明（ADR-0376 决定二），补充整份重报、可缺席；箱标号挂在
+	// DeclaredParcelIDs 上。聚合再核那一道同 DeclaredGoods：接单入口对着客户包裹参考已核过同一份草案，走到聚合拒只能是装配错误。
+	PlatformShipment  domain.PlatformShipmentDeclaration
+	PlatformBoxLabels []domain.PlatformBoxLabelDeclaration
 }
 
 type FormNewSubmissionVersionResult struct {
@@ -199,6 +208,9 @@ func (handler *FormNewSubmissionVersionHandler) Handle(
 		Profiles:          command.DeclaredProfiles,
 		Elements:          command.DeclaredElements,
 		RequestedProduct:  command.RequestedServiceProduct,
+		Goods:             command.DeclaredGoods,
+		PlatformShipment:  command.PlatformShipment,
+		PlatformBoxLabels: command.PlatformBoxLabels,
 		EstablishedAt:     handler.deps.Clock.Now(),
 	})
 	if err != nil {

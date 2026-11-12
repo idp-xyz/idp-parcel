@@ -171,8 +171,8 @@ func decodePriceCardRegistrationSnapshot(raw []byte) (priceCardRegistrationSnaps
 		return priceCardRegistrationSnapshot{}, fmt.Errorf("%w: %v", ErrPriceCardRegistrationSnapshotInvalid, err)
 	}
 	if !supportedCanonicalization(document.Plan.Canonicalization) {
-		return priceCardRegistrationSnapshot{}, fmt.Errorf("%w: snapshot records %q, this build canonicalizes %q and %q",
-			ErrCanonicalizationVersionUnsupported, document.Plan.Canonicalization, canonicalizationVersion, canonicalizationVersionTotalBounds)
+		return priceCardRegistrationSnapshot{}, fmt.Errorf("%w: snapshot records %q, this build canonicalizes %s",
+			ErrCanonicalizationVersionUnsupported, document.Plan.Canonicalization, supportedCanonicalizationsText())
 	}
 	return document, nil
 }

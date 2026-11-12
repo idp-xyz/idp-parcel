@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -56,27 +55,17 @@ func (views *ShipmentRequestViews) ListAwaitingAuthorizedDisposition(
 	if err != nil {
 		return fail(err)
 	}
-	defer rows.Close()
-
-	var records []ports.AuthorizedDispositionQueueRecord
-	for rows.Next() {
-		var row summaryRow
-		var rawTask []byte
-		if err := rows.Scan(append(row.targets(), &rawTask)...); err != nil {
-			return fail(err)
-		}
-		summary, err := row.record()
-		if err != nil {
-			return fail(err)
-		}
-		var task taskDocument
-		if err := json.Unmarshal(rawTask, &task); err != nil {
-			return fail(fmt.Errorf("快照不是本适配器写下的形状：%w", err))
-		}
-		taskView, err := taskViewRecord(task)
-		if err != nil {
-			return fail(err)
-		}
+	summaries, sources, err := scanQueueRows(rows)
+	if err != nil {
+		return fail(err)
+	}
+	taskViews, err := taskViewRecords(ctx, querier, scope.TenantID(), sources)
+	if err != nil {
+		return fail(err)
+	}
+	records := make([]ports.AuthorizedDispositionQueueRecord, 0, len(summaries))
+	for index, summary := range summaries {
+		taskView := taskViews[index]
 		records = append(records, ports.AuthorizedDispositionQueueRecord{
 			ShipmentRequestSummaryRecord: summary,
 			HasAttempt:                   taskView.HasAttempt,
@@ -85,10 +74,6 @@ func (views *ShipmentRequestViews) ListAwaitingAuthorizedDisposition(
 			LastAttemptedAt:              taskView.LastAttemptedAt,
 		})
 	}
-	if err := rows.Err(); err != nil {
-		return fail(err)
-	}
-	rows.Close()
 	page, err := cataloguepage.Finish(query, records, limit, total,
 		func(record ports.AuthorizedDispositionQueueRecord, sortField string) cataloguepage.Position {
 			return summaryPosition(record.ShipmentRequestSummaryRecord, sortField)

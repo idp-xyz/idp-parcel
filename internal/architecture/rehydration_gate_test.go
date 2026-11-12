@@ -22,6 +22,10 @@ var rehydrationEntryIdentifiers = map[string]bool{
 	"RehydrateAcceptanceTaskSpec":     true,
 	"RehydratePriorRequestLinkSpec":   true,
 	"RehydrateAcceptanceDecisionSpec": true,
+	// 货物明细与平台声明读回不再过接入的门（ADR-0373、ADR-0374）：门日后收紧，已存的委托照样读得回来。
+	"RehydrateGoodsDetails":           true,
+	"RehydratePlatformShipment":       true,
+	"RehydratePlatformBoxLabel":       true,
 	"RehydrateAcceptanceBaselineSpec": true,
 	"RehydrateExpectedCommitmentSpec": true,
 	// 主动拒绝留痕（票 operator-channel/33）。同类：留痕是授权角色拍板的产物，没有公开构造器；对其余

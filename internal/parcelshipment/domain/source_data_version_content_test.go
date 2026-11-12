@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -316,7 +317,7 @@ func TestASourceDataVersionOnlyCarriesTheContentShapeOfItsOwnGroup(t *testing.T)
 			if !errors.Is(err, item.want) {
 				t.Fatalf("err = %v, want %v", err, item.want)
 			}
-			if err == nil && version.Content() != item.content {
+			if err == nil && !reflect.DeepEqual(version.Content(), item.content) {
 				t.Fatalf("content = %#v, want %#v（版本要把内容原样带走）", version.Content(), item.content)
 			}
 			if fits := item.content.FitsAmendment(item.scope, item.intent); fits != (item.want == nil) {
@@ -341,7 +342,7 @@ func TestSourceDataVersionContentIsOneShapeOrAbsent(t *testing.T) {
 	if _, present := measured.AddressElements(); present || measured.Empty() {
 		t.Fatal("测量内容长出了要素，或被判成缺席")
 	}
-	if domain.NewAddressElementsContent(domain.AddressElements{}) != (domain.SourceDataVersionContent{}) {
+	if !reflect.DeepEqual(domain.NewAddressElementsContent(domain.AddressElements{}), domain.SourceDataVersionContent{}) {
 		t.Fatal("两格都缺的要素内容不是零值")
 	}
 	elements := deliveryElementsContent(t, "SYN-100115")

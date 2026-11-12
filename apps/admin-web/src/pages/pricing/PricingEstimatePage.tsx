@@ -15,7 +15,18 @@ import {
   type EstimateEvaluationRecord,
   type EstimateResponseBody,
 } from './api';
-import { ADDRESS_NATURE_CODES, emptyEstimateDraft, estimateLocalProblems, estimatePayloadOf, type EstimateDraft } from './estimate-form';
+import { listServiceProducts } from '../party/api';
+import { declaresServiceProducts } from './service-products';
+import { serviceProductObjectOptions } from '../party/picker-options';
+import { SearchableSelect, useLoaded } from '../party/PublicationFormFields';
+import {
+  ADDRESS_NATURE_CODES,
+  emptyEstimateDraft,
+  estimateLocalProblems,
+  estimatePayloadOf,
+  estimateServiceProductNote,
+  type EstimateDraft,
+} from './estimate-form';
 import {
   addressNatureLabels,
   chargeLineName,
@@ -58,6 +69,9 @@ export function PricingEstimatePage() {
   const [answer, setAnswer] = useState<ApiResult<EstimateResponseBody> | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [scopes, setScopes] = useState<string[]>([]);
+  // 服务产品从产品册选，只在售价方向出现（采购与内部价卡不分产品）；册读不到时退回手填，标识对不对由服务端在试算时答。
+  const products = useLoaded(listServiceProducts);
+  const productOptions = products?.kind === 'outcome' ? serviceProductObjectOptions(products.body) : null;
   const timeZone = currentDisplayTimeZone();
   const problems = estimateLocalProblems(draft, timeZone);
   const patch = (next: Partial<EstimateDraft>) => {
@@ -101,7 +115,7 @@ export function PricingEstimatePage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Field label="适用范围 *" hint="按范围、方向与时间找出当时有效的价卡">
+            <Field label="适用范围 *" hint="按范围、方向、服务产品与时间找出当时有效的价卡">
               <Input
                 list="pricing-estimate-scopes"
                 className="font-mono"
@@ -125,6 +139,32 @@ export function PricingEstimatePage() {
                 ))}
               </select>
             </Field>
+            {declaresServiceProducts(draft.direction) ? (
+              <Field
+                label="服务产品（可不选）"
+                hint={
+                  productOptions === null && products !== null
+                    ? `${estimateServiceProductNote(draft)}；服务产品册暂时读不到，可直接填标识`
+                    : estimateServiceProductNote(draft)
+                }
+              >
+                {productOptions !== null ? (
+                  <SearchableSelect
+                    options={productOptions}
+                    value={draft.serviceProduct}
+                    unknownNote="手填，不在服务产品册上"
+                    onChange={(serviceProduct) => patch({ serviceProduct })}
+                  />
+                ) : (
+                  <Input
+                    className="font-mono"
+                    value={draft.serviceProduct}
+                    placeholder="服务产品标识"
+                    onChange={(event) => patch({ serviceProduct: event.target.value })}
+                  />
+                )}
+              </Field>
+            ) : null}
             <Field label="按哪个时间计价 *" hint={`按当地时间（${timeZone}）填`} problem={problems.basisAt}>
               <Input type="datetime-local" value={draft.basisAt} onChange={(event) => patch({ basisAt: event.target.value })} />
             </Field>

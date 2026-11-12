@@ -145,7 +145,8 @@ type sourceDataVersionDocument struct {
 	EffectiveAt       *time.Time     `json:"effectiveAt,omitempty"`
 	FormedAt          time.Time      `json:"formedAt"`
 	// Content 是这一版在其资料范围上留下的封闭要素内容（pp-seams/05 裁决 2）：按 DataGroup 只带一种——测量范围带与
-	// profileDocument 同形的测量、寄 / 收范围带要素 name/value；缺席即 omitempty 整段不写，早于本票的快照读回即零值。
+	// profileDocument 同形的测量、寄 / 收范围带要素 name/value、货物明细范围带与提交版本同形的货物明细；缺席即 omitempty
+	// 整段不写，早于本票的快照读回即零值。
 	Content *sourceDataContentDocument `json:"content,omitempty"`
 }
 
@@ -153,6 +154,7 @@ type sourceDataVersionDocument struct {
 type sourceDataContentDocument struct {
 	Measurement *measurementContentDocument `json:"measurement,omitempty"`
 	Elements    *addressElementsDocument    `json:"elements,omitempty"`
+	Goods       *goodsDocument              `json:"goods,omitempty"`
 }
 
 // measurementContentDocument 是 profileDocument 去掉成员那一格的形：成员已在版本的范围里指名，内容不再重复它。
@@ -170,6 +172,9 @@ func sourceDataContentDocumentOf(content domain.SourceDataVersionContent) *sourc
 	if elements, present := content.AddressElements(); present {
 		return &sourceDataContentDocument{Elements: addressElementsDocumentOf(elements)}
 	}
+	if goods, declared := content.Goods(); declared {
+		return &sourceDataContentDocument{Goods: goodsDocumentOf(goods)}
+	}
 	return nil
 }
 
@@ -185,6 +190,14 @@ func (document *sourceDataContentDocument) content(group domain.SourceDataGroupR
 			return domain.SourceDataVersionContent{}, err
 		}
 		return domain.NewMeasurementContent(measurement)
+	}
+	if document.Goods != nil {
+		// 读回经还原构造器（goodsDocument.goods），不再过接入的门：存进去的那一份当初已经核过，与提交版本的货物明细同一条。
+		goods, err := document.Goods.goods()
+		if err != nil {
+			return domain.SourceDataVersionContent{}, err
+		}
+		return domain.NewGoodsDetailsContent(goods)
 	}
 	elements, err := document.Elements.addressElements(group)
 	if err != nil {

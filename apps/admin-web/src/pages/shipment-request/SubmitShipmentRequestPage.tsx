@@ -1,12 +1,22 @@
 import { useState } from 'react';
 import { pendingText } from '../../components/action-feedback';
-import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { submitShipmentRequest, type ApiResult, type DeclaredParcelDraft, type ShipmentRequestDraft, type SubmitResponseBody } from './api';
-import { admissionControlLabels, authorityLabels, submitOutcomeViews, type OutcomeView } from './presentation';
-import { DetailRow, Field, inputClass, NoticeCard, Section } from './controls';
-import { ShipmentNo } from './refs';
-import { documentNumberAbsenceNoteOf } from './ref-no';
-import { documentTypeWords } from '../../vocabulary/document-numbering';
+import { emptyGoodsLine, goodsDraftOfLines, validateGoodsLines, type GoodsLineForm } from './goods-form';
+import {
+  packingDraftsOf,
+  packingErrorsOf,
+  withoutBlankGoodsLines,
+  withoutPackingBox,
+  withoutPackingLine,
+  type PackingMatrix,
+} from './packing-form';
+import { duplicatedAt, positiveDecimal, requestEffectiveAtOf } from './form-shapes';
+import { objectNouns } from '../../vocabulary/objects';
+import { currentDisplayTimeZone, zoneLabel } from '../moment';
+import { Field, inputClass, Section } from './controls';
+import { GoodsLinesEditor } from './GoodsLinesEditor';
+import { PackingMatrixEditor } from './PackingMatrixEditor';
+import { SubmitOutcomeCard } from './SubmitOutcomeCard';
 import { ResultPanel } from './ResultPanel';
 
 // 新建运单(UC-PS-001 提交表单页)。字段只覆盖输入语义契约里「客户可声明」的各组;来源信封
@@ -36,11 +46,6 @@ interface ParcelFormState {
   declaredWidth: string;
   declaredHeight: string;
   declaredDimensionsUnit: string;
-  goodsDescription: string;
-  quantity: string;
-  declaredValue: string;
-  currency: string;
-  originCountry: string;
   serviceNotes: string;
 }
 
@@ -63,27 +68,34 @@ const emptyParcel: ParcelFormState = {
   declaredWidth: '',
   declaredHeight: '',
   declaredDimensionsUnit: '',
-  goodsDescription: '',
-  quantity: '',
-  declaredValue: '',
-  currency: '',
-  originCountry: '',
   serviceNotes: '',
 };
 
-// 镜像领域 MeasurementValue 的保真纪律:正十进制、点两侧都要有数字、不收指数与
-// 符号;"0"/"0.00" 不是正数。页面先按同一形状拦,免得一来一回才学到同一句话。
-function positiveDecimal(raw: string): boolean {
-  return /^\d+(\.\d+)?$/.test(raw) && /[1-9]/.test(raw);
+/** 货物明细是委托级的(ADR-0373):几件包裹共用一份货物行;多件时可选报每件装了哪几行。 */
+interface GoodsFormState {
+  lines: GoodsLineForm[];
+  contentCategory: string;
+  contentCategoryNote: string;
+  /** 多件委托报不报装箱分配;单件委托不出现这一项,一件就是全部。 */
+  reportPacking: boolean;
+  packing: PackingMatrix;
 }
 
-function positiveInteger(raw: string): boolean {
-  return /^[1-9]\d*$/.test(raw);
+const emptyGoods: GoodsFormState = {
+  lines: [{ ...emptyGoodsLine }],
+  contentCategory: '',
+  contentCategoryNote: '',
+  reportPacking: false,
+  packing: [],
+};
+
+function packingReported(goods: GoodsFormState, parcels: ParcelFormState[]): boolean {
+  return goods.reportPacking && parcels.length > 1;
 }
 
 const required = '请填写';
 
-function validate(head: HeadFormState, parcels: ParcelFormState[]): Record<string, string> {
+function validate(head: HeadFormState, parcels: ParcelFormState[], goods: GoodsFormState): Record<string, string> {
   const errors: Record<string, string> = {};
   const requireText = (key: string, value: string) => {
     if (!value.trim()) errors[key] = required;
@@ -96,6 +108,7 @@ function validate(head: HeadFormState, parcels: ParcelFormState[]): Record<strin
   requireText('recipientRelation', head.recipientRelation);
   requireText('recipientAddress', head.recipientAddress);
   requireText('destinationServiceScope', head.destinationServiceScope);
+  if (requestEffectiveAtOf(head.requestEffectiveAt) === null) errors.requestEffectiveAt = '日期和时刻要填全';
 
   parcels.forEach((parcel, index) => {
     const key = (field: string) => `p${index}.${field}`;
@@ -128,38 +141,36 @@ function validate(head: HeadFormState, parcels: ParcelFormState[]): Record<strin
         errors[key(field)] = '请填大于 0 的数';
       }
     }
-
-    if (parcel.quantity.trim() && !positiveInteger(parcel.quantity.trim())) {
-      errors[key('quantity')] = '请填大于 0 的整数';
-    }
-    if (parcel.declaredValue.trim() && !positiveDecimal(parcel.declaredValue.trim())) {
-      errors[key('declaredValue')] = '请填大于 0 的数';
-    }
-    if (parcel.currency.trim() && !/^[A-Za-z]{3}$/.test(parcel.currency.trim())) {
-      errors[key('currency')] = '币种填 3 个字母,如 USD';
-    }
   });
 
+  // 客户包裹号在一票里要各不相同:服务端按它认件,两件同号必拒。
+  for (const index of duplicatedAt(parcels.map((parcel) => parcel.customerParcelReference))) {
+    errors[`p${index}.customerParcelReference`] = '与另一件的客户包裹号重了';
+  }
+
+  Object.assign(errors, validateGoodsLines(goods.lines, goods.contentCategory));
+  if (packingReported(goods, parcels)) Object.assign(errors, packingErrorsOf(goods.lines, goods.packing, parcels.length));
   return errors;
 }
 
-function buildDraft(head: HeadFormState, parcels: ParcelFormState[]): ShipmentRequestDraft {
+function buildDraft(head: HeadFormState, parcels: ParcelFormState[], goods: GoodsFormState): ShipmentRequestDraft {
   const optional = (value: string) => {
     const trimmed = value.trim();
     return trimmed === '' ? undefined : trimmed;
   };
+  const packing = packingReported(goods, parcels) ? packingDraftsOf(goods.lines, goods.packing, parcels.length) : undefined;
   return {
     customerShipmentReference: head.customerShipmentReference.trim(),
     requestedServiceProduct: head.requestedServiceProduct.trim(),
     // 留空即键缺席:requestEffectiveAt 的缺失/显式存在本身进入内容摘要,
-    // 送空串会把「没说」变成「说了个空话」。
-    requestEffectiveAt: optional(head.requestEffectiveAt),
+    // 送空串会把「没说」变成「说了个空话」。服务端按 RFC 3339 读,墙钟按显示时区折过去。
+    requestEffectiveAt: requestEffectiveAtOf(head.requestEffectiveAt) ?? undefined,
     senderRelation: head.senderRelation.trim(),
     senderAddress: head.senderAddress.trim(),
     recipientRelation: head.recipientRelation.trim(),
     recipientAddress: head.recipientAddress.trim(),
     destinationServiceScope: head.destinationServiceScope.trim(),
-    parcels: parcels.map<DeclaredParcelDraft>((parcel) => ({
+    parcels: parcels.map<DeclaredParcelDraft>((parcel, index) => ({
       customerParcelReference: parcel.customerParcelReference.trim(),
       declaredWeightValue: parcel.declaredWeightValue.trim(),
       declaredWeightUnit: parcel.declaredWeightUnit.trim(),
@@ -167,38 +178,54 @@ function buildDraft(head: HeadFormState, parcels: ParcelFormState[]): ShipmentRe
       declaredWidth: optional(parcel.declaredWidth),
       declaredHeight: optional(parcel.declaredHeight),
       declaredDimensionsUnit: optional(parcel.declaredDimensionsUnit),
-      goodsDescription: optional(parcel.goodsDescription),
-      quantity: optional(parcel.quantity),
-      declaredValue: optional(parcel.declaredValue),
-      currency: optional(parcel.currency),
-      originCountry: optional(parcel.originCountry),
       serviceNotes: optional(parcel.serviceNotes),
+      ...(packing ? { packing: packing[index] } : {}),
     })),
+    goods: goodsDraftOfLines(goods.lines, goods.contentCategory, goods.contentCategoryNote),
   };
 }
 
 export function SubmitShipmentRequestPage() {
   const [head, setHead] = useState<HeadFormState>(emptyHead);
   const [parcels, setParcels] = useState<ParcelFormState[]>([{ ...emptyParcel }]);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [goods, setGoods] = useState<GoodsFormState>(emptyGoods);
+  // 错误在第一次提交之后随表单现算,不存快照:包裹与货物行都按位置编键,去掉一件后存下的快照会把错挂到别的件上。
+  const [attempted, setAttempted] = useState(false);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<ApiResult<SubmitResponseBody> | null>(null);
+  const errors = attempted ? validate(head, parcels, goods) : {};
 
   const setHeadField = (field: keyof HeadFormState) => (value: string) => setHead((current) => ({ ...current, [field]: value }));
 
   const setParcelField = (index: number, field: keyof ParcelFormState) => (value: string) =>
     setParcels((current) => current.map((parcel, at) => (at === index ? { ...parcel, [field]: value } : parcel)));
 
+  const removeParcel = (index: number) => {
+    setParcels((current) => current.filter((_, at) => at !== index));
+    setGoods((current) => ({ ...current, packing: withoutPackingBox(current.packing, index) }));
+  };
+  const setGoodsLine = (index: number, field: keyof GoodsLineForm, value: string) =>
+    setGoods((current) => ({ ...current, lines: current.lines.map((line, at) => (at === index ? { ...line, [field]: value } : line)) }));
+  const removeGoodsLine = (index: number) =>
+    setGoods((current) => ({
+      ...current,
+      lines: current.lines.filter((_, at) => at !== index),
+      packing: withoutPackingLine(current.packing, index),
+    }));
+
   async function handleSubmit() {
-    const found = validate(head, parcels);
-    setErrors(found);
-    if (Object.keys(found).length > 0) {
+    // 先收掉空行:服务端的行号只数非空行,收掉之后屏上的「第几行」与答复里的才是同一行。
+    const compacted = withoutBlankGoodsLines(goods.lines, goods.packing);
+    const nextGoods = { ...goods, lines: compacted.lines, packing: compacted.matrix };
+    setGoods(nextGoods);
+    setAttempted(true);
+    if (Object.keys(validate(head, parcels, nextGoods)).length > 0) {
       setResult(null);
       return;
     }
     setPending(true);
     try {
-      setResult(await submitShipmentRequest(buildDraft(head, parcels)));
+      setResult(await submitShipmentRequest(buildDraft(head, parcels, nextGoods)));
     } finally {
       setPending(false);
     }
@@ -232,7 +259,11 @@ export function SubmitShipmentRequestPage() {
                 onChange={(event) => setHeadField('requestedServiceProduct')(event.target.value)}
               />
             </Field>
-            <Field label="客户要求的开始时间" hint="客户没说就留空,不要填现在。">
+            <Field
+              label="客户要求的开始时间"
+              error={errors.requestEffectiveAt}
+              hint={`客户没说就留空,不要填现在;按 ${zoneLabel(currentDisplayTimeZone(), new Date())} 读。`}
+            >
               <input
                 type="datetime-local"
                 className={inputClass}
@@ -273,7 +304,7 @@ export function SubmitShipmentRequestPage() {
                 parcel={parcel}
                 errors={errors}
                 onChange={setParcelField}
-                onRemove={() => setParcels((current) => current.filter((_, at) => at !== index))}
+                onRemove={() => removeParcel(index)}
                 removable={parcels.length > 1}
               />
             ))}
@@ -286,6 +317,43 @@ export function SubmitShipmentRequestPage() {
             再加一件
           </button>
           <p className="type-caption leading-4 text-idpxyz-textMuted mt-2">一票运单至少一件包裹;整票一起受理或拒绝,不会只收一部分。</p>
+        </Section>
+
+        <Section title={objectNouns.goodsDetails}>
+          <GoodsLinesEditor
+            lines={goods.lines}
+            contentCategory={goods.contentCategory}
+            contentCategoryNote={goods.contentCategoryNote}
+            errors={errors}
+            onChangeLine={setGoodsLine}
+            onAddLine={() => setGoods((current) => ({ ...current, lines: [...current.lines, { ...emptyGoodsLine }] }))}
+            onRemoveLine={removeGoodsLine}
+            onChangeCategory={(value) => setGoods((current) => ({ ...current, contentCategory: value }))}
+            onChangeCategoryNote={(value) => setGoods((current) => ({ ...current, contentCategoryNote: value }))}
+          />
+          {parcels.length > 1 ? (
+            <div className="mt-4 space-y-3">
+              <label className="flex items-center gap-2 type-body text-idpxyz-text">
+                <input
+                  type="checkbox"
+                  checked={goods.reportPacking}
+                  onChange={(event) => setGoods((current) => ({ ...current, reportPacking: event.target.checked }))}
+                />
+                报每件装了哪几行
+              </label>
+              <p className="type-caption leading-4 text-idpxyz-textMuted">
+                不报就是整票一份清单,只有发票没有箱单时就这样交。报就每件都报、每行各件加起来等于这一行的数量。
+              </p>
+              {goods.reportPacking ? (
+                <PackingMatrixEditor
+                  lines={goods.lines}
+                  boxNames={parcels.map((parcel, index) => parcel.customerParcelReference.trim() || `第 ${index + 1} 件`)}
+                  matrix={goods.packing}
+                  onChange={(packing) => setGoods((current) => ({ ...current, packing }))}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </Section>
 
         <div className="flex items-center gap-3">
@@ -337,6 +405,7 @@ function ParcelCard({
           disabled={!removable}
           onClick={onRemove}
           title={removable ? undefined : '至少要有一件包裹'}
+          aria-label={`去掉第 ${index + 1} 件`}
           className="rounded border border-idpxyz-border px-2 py-1 type-caption text-idpxyz-textMuted hover:bg-idpxyz-hover disabled:opacity-40"
         >
           去掉这件
@@ -374,87 +443,11 @@ function ParcelCard({
       </div>
       <p className="type-caption leading-4 text-idpxyz-textMuted mt-1">尺寸可以不填;填就长、宽、高和单位一起填。</p>
 
-      <p className="type-body text-idpxyz-textMuted mt-3 mb-2">申报资料</p>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="品名" error={error('goodsDescription')}>
-          <input {...bind('goodsDescription')} />
-        </Field>
-        <Field label="数量" error={error('quantity')}>
-          <input {...bind('quantity')} inputMode="numeric" />
-        </Field>
-        <Field label="申报价值" error={error('declaredValue')}>
-          <input {...bind('declaredValue')} inputMode="decimal" />
-        </Field>
-        <Field label="币种" error={error('currency')}>
-          <input {...bind('currency')} placeholder="如 USD" />
-        </Field>
-        <Field label="原产地" error={error('originCountry')}>
-          <input {...bind('originCountry')} />
-        </Field>
+      <div className="grid grid-cols-2 gap-3 mt-3">
         <Field label="备注" error={error('serviceNotes')}>
           <input {...bind('serviceNotes')} />
         </Field>
       </div>
     </div>
-  );
-}
-
-// 未收录的 outcome 如实报「不认识」,不译不并:词汇表是封闭的,页面落后于服务端时
-// 比错并进某个认识的格要安全;原词在技术详情里。
-const unknownOutcome: OutcomeView = {
-  label: '结果未收录',
-  note: '系统交回了本页还不认识的结果,请按技术详情里的结果码核对记录。',
-};
-
-function SubmitOutcomeCard({ body, status }: { body: SubmitResponseBody; status: number }) {
-  const view = submitOutcomeViews[body.outcome] ?? unknownOutcome;
-  const ownership = body.productionOwnership;
-  return (
-    <NoticeCard title={view.label} titleClass={view.affirmative ? 'text-idpxyz-accent' : 'text-idpxyz-textBright'}>
-      <p className="type-body leading-5 text-idpxyz-textMuted mt-2">{view.note}</p>
-
-      <dl className="mt-3 space-y-1">
-        {body.shipmentRequestId ? (
-          <div className="flex gap-2 type-body leading-5">
-            <dt className="text-idpxyz-textMuted shrink-0 w-[104px]">{documentTypeWords.SHIPMENT.numberName}</dt>
-            <dd>
-              <ShipmentNo shipmentRequestId={body.shipmentRequestId} documentNumber={body.documentNumber} />
-            </dd>
-          </div>
-        ) : null}
-        {ownership ? <DetailRow label="由谁承运" value={authorityLabels[ownership.authority] ?? ownership.authority} /> : null}
-        {ownership && ownership.admissionControl !== 'OPEN' ? (
-          <DetailRow label="接单状态" value={admissionControlLabels[ownership.admissionControl] ?? ownership.admissionControl} />
-        ) : null}
-      </dl>
-
-      {body.gateBlockReasons && body.gateBlockReasons.length > 0 ? (
-        <p className="type-caption leading-4 text-idpxyz-textMuted mt-2">之后再提交会被拦住,原因见技术详情。</p>
-      ) : null}
-
-      <TechnicalDetails
-        rows={[
-          { label: 'HTTP 状态', value: String(status) },
-          { label: '结果码', value: body.outcome },
-          // 指名了委托却没有单据号时注明是哪一种情形;没指名委托(没建单)就没有这一行。
-          ...(body.shipmentRequestId
-            ? [{ label: documentTypeWords.SHIPMENT.numberName, value: documentNumberAbsenceNoteOf(body) ?? body.documentNumber ?? '' }]
-            : []),
-          { label: '委托标识', value: body.shipmentRequestId ?? '' },
-          { label: '生产归属判断', value: ownership?.decisionId ?? '' },
-          { label: '权威身份', value: ownership?.authority ?? '' },
-          { label: '准入控制', value: ownership?.admissionControl ?? '' },
-          { label: '规则版本', value: ownership?.ruleVersion ?? '' },
-          { label: '修订', value: ownership?.revision ?? '' },
-          { label: '当前权威方', value: ownership?.otherAuthority ?? '' },
-          { label: '交接引用', value: ownership?.handoffReference ?? '' },
-          { label: '未决原因', value: ownership?.unresolvedReason ?? '' },
-          { label: '续办引用', value: ownership?.continuationReference ?? '' },
-          { label: '交接确认引用', value: ownership?.handoffConfirmationReference ?? '' },
-          { label: '暂停引用', value: ownership?.suspensionReference ?? '' },
-          { label: '闸门阻断原因', value: (body.gateBlockReasons ?? []).join(' · ') },
-        ]}
-      />
-    </NoticeCard>
   );
 }

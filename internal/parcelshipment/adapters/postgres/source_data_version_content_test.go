@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -332,7 +333,7 @@ func TestASourceDataVersionRegistryRoundTripsTheContent(t *testing.T) {
 	if err != nil || !present {
 		t.Fatalf("读回：present = %v err = %v", present, err)
 	}
-	if found.Content() != version.Content() {
+	if !reflect.DeepEqual(found.Content(), version.Content()) {
 		t.Fatalf("content = %#v, want %#v（登记册往返丢了内容）", found.Content(), version.Content())
 	}
 }

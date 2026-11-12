@@ -43,6 +43,22 @@ func decodeWorkbook(book spreadsheet.Workbook) ports.PriceCardTemplateReading {
 	version := values["templateVersion"].text
 	d.version = version
 
+	// card 字段集合同样按文件声明的版本算：自更晚版本才有的字段在旧版文件里填了值，说清是版本问题，按没写处理。只认填了值的：
+	// 留空的一行什么都没说，与可缺字段没写同一个意思，而按最新字段集合逐行写出的旧版文件（整份表单生成器就是这么写的）
+	// 不该因此多一条问题——取舍同封闭取值的版本门，那一道也只在格里有值时才说话。
+	for key, since := range cardFieldSince {
+		f, written := values[key]
+		if !written || availableIn(since, version) {
+			continue
+		}
+		if f.state == fieldPresent {
+			d.report(sheetCard, f.row, key, ports.TemplateFieldUnknown,
+				"字段 %s 自模板 %s 起才可用，这份文件的模板版本是 %s；要用它，请换用 %s 模板，并把 card 表的 templateVersion 改成 %s",
+				key, since, version, since, since)
+		}
+		delete(values, key)
+	}
+
 	// 表集合按文件声明的版本算：自更晚版本才有的表出现在旧版文件里，是未知表，且要说清是版本问题。
 	for _, sheet := range book.Sheets {
 		if sheet.Name == sheetReadme {
@@ -164,6 +180,9 @@ func (d *decoder) cardValues(sheet spreadsheet.Sheet) map[string]field {
 	}
 	for _, expected := range cardFields {
 		if _, seen := firstRow[expected.key]; !seen {
+			if omittableCardFields[expected.key] {
+				continue
+			}
 			if _, marked := values[expected.key]; !marked {
 				d.report(sheetCard, 0, expected.key, ports.TemplateFieldMissing, "缺字段 %s", expected.key)
 				values[expected.key] = field{sheet: sheetCard, column: expected.key, state: fieldBad}
@@ -274,10 +293,12 @@ type translation struct {
 	manifest       []domain.VersionReference
 	manifestOK     bool
 
-	amountRounding   *domain.AmountRoundingPolicy
-	amountRoundingOK bool
-	authorization    domain.VersionReference
-	authorizationOK  bool
+	amountRounding    *domain.AmountRoundingPolicy
+	amountRoundingOK  bool
+	serviceProducts   []domain.ServiceProductReference
+	serviceProductsOK bool
+	authorization     domain.VersionReference
+	authorizationOK   bool
 
 	plan *domain.PricingPlanVersion
 }
@@ -312,6 +333,7 @@ func (t *translation) run(present map[string]spreadsheet.Sheet) {
 	t.readManifest()
 	t.reportUnused()
 	t.readAmountRounding()
+	t.readServiceProducts()
 	t.readAuthorization()
 	t.buildPlan()
 }
@@ -1618,6 +1640,36 @@ func (t *translation) readAmountRounding() {
 	t.amountRounding, t.amountRoundingOK = &policy, true
 }
 
+// readServiceProducts 读 card 表的适用服务产品：没写或留空即不声明。写了就只在 SELL 卡上收（ADR-0382 决定一），方向本身读不出
+// 时不再多报一条——那一格已经报过。每个元素交领域的产品引用构造门；同一个写两遍按列表读法报重复，不替运营去重。
+func (t *translation) readServiceProducts() {
+	d := t.d
+	f, written := t.card[cardFieldServiceProducts]
+	if !written || f.state == fieldAbsent {
+		t.serviceProductsOK = true
+		return
+	}
+	if f.state != fieldPresent {
+		return
+	}
+	if t.direction != "" && t.direction != domain.PricingDirectionSell {
+		d.at(f, ports.TemplateCellNotApplicable, "适用服务产品只在价格方向为 SELL 的卡上声明，这张卡的方向是 %s；不声明就留空", t.direction)
+		return
+	}
+	items, ok := d.list(f, func(item string) error {
+		_, err := domain.NewServiceProductReference(item)
+		return err
+	})
+	if !ok {
+		return
+	}
+	for _, item := range items {
+		product, _ := domain.NewServiceProductReference(item)
+		t.serviceProducts = append(t.serviceProducts, product)
+	}
+	t.serviceProductsOK = true
+}
+
 func (t *translation) readAuthorization() {
 	id, version := t.card["directionAuthorizationId"], t.card["directionAuthorizationVersion"]
 	if !t.d.required(id) || !t.d.required(version) {
@@ -1720,7 +1772,7 @@ func (t *translation) buildPlan() {
 	if t.main == nil || !t.main.built {
 		return
 	}
-	if !all(t.headerOK, t.weightOK, t.dependencyOK, t.rulesOK, t.surchargesOK, t.seriesOK, t.exclusionsOK, t.cataloguesOK, t.manifestOK, t.amountRoundingOK, t.authorizationOK, t.totalBoundsOK) {
+	if !all(t.headerOK, t.weightOK, t.dependencyOK, t.rulesOK, t.surchargesOK, t.seriesOK, t.exclusionsOK, t.cataloguesOK, t.manifestOK, t.amountRoundingOK, t.authorizationOK, t.totalBoundsOK, t.serviceProductsOK) {
 		return
 	}
 	planLevel := field{sheet: sheetCard}
@@ -1758,6 +1810,13 @@ func (t *translation) buildPlan() {
 		}
 		t.d.rejected(planLevel, "定价方案", err)
 		return
+	}
+	if len(t.serviceProducts) > 0 {
+		plan, err = plan.WithServiceProducts(t.serviceProducts...)
+		if err != nil {
+			t.d.rejected(t.card[cardFieldServiceProducts], "适用服务产品", err)
+			return
+		}
 	}
 	t.plan = &plan
 }

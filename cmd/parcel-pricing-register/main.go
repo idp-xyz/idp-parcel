@@ -24,7 +24,7 @@
 //
 // 本工具假设业务 schema 已由迁移作业施加，不自行迁移。
 //
-// 价卡的方案若记着基础版（PPC-5）之外的规范化版本（今天是 PPC-6），登记要部署开关：环境变量
+// 价卡的方案若记着基础版（PPC-5）之外的规范化版本（今天是 PPC-6 与 PPC-7），登记要部署开关：环境变量
 // IDP_PARCEL_PRICING_REGISTER_NEWER_CANONICALIZATION=true 才登，缺省或别的值一律答
 // NEWER_CANONICALIZATION_NOT_ENABLED、什么都不写（ADR-0352）。先把所有读价卡的进程升级到认这一版的构建，
 // 再在跑本工具的那一次设上它；与 parcel-api 的同名开关各读各的。

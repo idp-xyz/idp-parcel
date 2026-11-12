@@ -17,9 +17,10 @@ import (
 // 输入、与正式评价共用补齐读数、纯函数形成评价；不入册、不交付、不择优。
 
 type applicablePriceCardsDouble struct {
-	plans []domain.PricingPlanVersion
-	err   error
-	calls int
+	plans    []domain.PricingPlanVersion
+	err      error
+	calls    int
+	products []domain.ServiceProductReference
 }
 
 func (double *applicablePriceCardsDouble) LoadApplicable(
@@ -28,8 +29,10 @@ func (double *applicablePriceCardsDouble) LoadApplicable(
 	_ domain.PricingDirection,
 	_ domain.PricingScopeID,
 	_ time.Time,
+	product domain.ServiceProductReference,
 ) ([]domain.PricingPlanVersion, error) {
 	double.calls++
+	double.products = append(double.products, product)
 	if double.err != nil {
 		return nil, double.err
 	}

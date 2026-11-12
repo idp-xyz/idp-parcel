@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
 // SourceDataAmendmentIntake 把一次已认证的接入请求翻译成一条资料修订命令（UC-PS-002 的编排半边，
@@ -67,6 +68,10 @@ type amendmentResponse struct {
 	AdoptedVersionID      string `json:"adoptedVersionId,omitempty"`
 	PendingReason         string `json:"pendingReason,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
+	// GoodsLineCount 与 PackingAllocationCount 回显货物明细范围上这一版的行数与装箱分配条数（ADR-0373 决定四）：整组替换下，
+	// 客户系统按行打补丁、只交了改动的那一行，新版本就只剩那一行——回显让它看得见，不等下游缺货了才发现。
+	GoodsLineCount         *int `json:"goodsLineCount,omitempty"`
+	PackingAllocationCount *int `json:"packingAllocationCount,omitempty"`
 }
 
 func writeAmendmentOutcome(response http.ResponseWriter, problem problemWriter, result application.AmendCustomerSourceDataResult) {
@@ -79,6 +84,12 @@ func writeAmendmentOutcome(response http.ResponseWriter, problem problemWriter, 
 	body := amendmentResponse{Outcome: outcome}
 	if version, present := result.Version(); present {
 		body.SourceDataVersionID = version.VersionID().String()
+		// 显式清空也回显 0 / 0：清掉整组与误删到一行不剩是要分得开的两件事，客户系统都得看得见。
+		if version.Scope().DataGroup() == domain.GoodsDetailsDataGroup() {
+			goods, _ := version.Content().Goods()
+			lines, allocations := len(goods.Lines()), len(goods.Packing())
+			body.GoodsLineCount, body.PackingAllocationCount = &lines, &allocations
+		}
 	}
 	if adoption, present := result.Adoption(); present {
 		body.AdoptionOutcome = adoption.Outcome().String()

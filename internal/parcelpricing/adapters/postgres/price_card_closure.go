@@ -35,10 +35,7 @@ type selectablePriceCardRow struct {
 
 func scanSelectablePriceCardRow(scanner interface{ Scan(dest ...any) error }) (selectablePriceCardRow, error) {
 	var row selectablePriceCardRow
-	err := scanner.Scan(&row.planID, &row.planVersion, &row.direction, &row.purpose, &row.scope,
-		&row.tableID, &row.tableVersion, &row.effectiveFrom, &row.effectiveTo,
-		&row.canonicalization, &row.digest, &row.sourceSHA, &row.snapshot,
-		&row.latestCutEnd, &row.retired)
+	err := scanner.Scan(append(row.scanTargets(), &row.latestCutEnd, &row.retired)...)
 	return row, err
 }
 

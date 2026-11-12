@@ -45,7 +45,7 @@ import {
   customerWithoutContactsLine,
   profileContactsEmptyNoteOf,
   profileSummaryEmptyNoteOf,
-  profileVersionsEmptyNote,
+  profileVersionsEmptyNoteOf,
   type BusinessPartyProfileState,
 } from './business-party-profile';
 import { BusinessPartyDeactivationNote } from './BusinessPartyHeaderParts';
@@ -199,18 +199,23 @@ function SummaryContactRow({ card }: { card: ContactCard }) {
 function ContactsCard({
   state,
   roles,
-  mayWrite,
+  mayUpdateProfile,
+  takesRevisions,
   onOpenContacts,
   onUpdateProfile,
 }: {
   state: Extract<BusinessPartyProfileState, { kind: 'present' }>;
   roles: readonly string[];
-  mayWrite: boolean;
+  /** 「更新资料」的入口摆不摆：有写授予、这家单位还收新的一版资料。 */
+  mayUpdateProfile: boolean;
+  /** 这家单位还收不收新的一版资料（identity-write-entries.ts 的 identityTakesRevisions）：不收时空着的资料换一句说明。 */
+  takesRevisions: boolean;
   onOpenContacts: () => void;
   onUpdateProfile: (section?: ProfileEditSectionId) => void;
 }) {
   const cards = state.record.contacts.map(contactCardOf);
-  const hinted = customerLacksContacts(roles, state.record);
+  // 登过停用的不提「建议登记一位」：登记册不再收它新的资料，登不了的事不建议。
+  const hinted = takesRevisions && customerLacksContacts(roles, state.record);
   return (
     <PanelCard
       flush
@@ -225,8 +230,8 @@ function ContactsCard({
       }
     >
       {cards.length === 0 ? (
-        <PanelCardEmpty title={profileContactsEmptyNoteOf(state).title} lines={hinted ? [customerWithoutContactsLine] : []}>
-          {hinted && mayWrite ? (
+        <PanelCardEmpty title={profileContactsEmptyNoteOf(state, takesRevisions).title} lines={hinted ? [customerWithoutContactsLine] : []}>
+          {hinted && mayUpdateProfile ? (
             <Button size="sm" variant="outline" className="type-body" onClick={() => onUpdateProfile('contacts')}>
               更新资料
             </Button>
@@ -407,7 +412,8 @@ function ProfileColumn({
   roles,
   state,
   entities,
-  mayWrite,
+  mayUpdateProfile,
+  takesRevisions,
   onUpdateProfile,
 }: {
   row: BusinessPartyRecord;
@@ -415,7 +421,10 @@ function ProfileColumn({
   /** null 即法人册上有公司主体钉着它：不读也不摆往来单位资料。 */
   state: BusinessPartyProfileState | null;
   entities: OverviewSectionState<GroupLegalEntityRecord>;
-  mayWrite: boolean;
+  /** 「更新资料」的入口摆不摆：有写授予、这家单位还收新的一版资料。 */
+  mayUpdateProfile: boolean;
+  /** 这家单位还收不收新的一版资料（identity-write-entries.ts 的 identityTakesRevisions）：不收时空着的资料换一句说明。 */
+  takesRevisions: boolean;
   onUpdateProfile: (section?: ProfileEditSectionId) => void;
 }) {
   if (state === null) {
@@ -436,8 +445,8 @@ function ProfileColumn({
   if (state.kind === 'note') return <PanelNoteCard lines={[state.text]} />;
   if (state.kind === 'empty') {
     return (
-      <PanelNoteCard {...profileSummaryEmptyNoteOf(state.scheduled, roles)}>
-        {mayWrite ? (
+      <PanelNoteCard {...profileSummaryEmptyNoteOf(state.scheduled, roles, takesRevisions)}>
+        {mayUpdateProfile ? (
           <Button size="sm" variant="outline" className="type-body" onClick={() => onUpdateProfile()}>
             更新资料
           </Button>
@@ -449,7 +458,7 @@ function ProfileColumn({
   const bankAccounts = record.bankAccounts ?? [];
   // 三张卡的「编辑」进的是同一个编辑态（对象页的「更新资料」），各落到表单里自己那一段。
   const editOf = (section: ProfileEditSectionId) =>
-    mayWrite ? (
+    mayUpdateProfile ? (
       <button type="button" className={panelLinkClass} onClick={() => onUpdateProfile(section)}>
         编辑
       </button>
@@ -483,6 +492,7 @@ export function BusinessPartyPanelSummary({
   relationshipsComplete,
   hint,
   mayWrite,
+  takesRevisions,
   relationshipFormOpen,
   onUpdateProfile,
   onRegisterRelationship,
@@ -499,6 +509,11 @@ export function BusinessPartyPanelSummary({
   relationshipsComplete: boolean;
   hint: PanelHint;
   mayWrite: boolean;
+  /**
+   * 这家单位还收不收新的一版资料（identity-write-entries.ts 的 identityTakesRevisions）。不收时「更新资料」「编辑」都不摆、空着的
+   * 资料换一句说明；提示条上的「登记合作关系」不归它管，照旧只看写授予。
+   */
+  takesRevisions: boolean;
   /** 「关联」签里登记合作关系的表单开着：提示条上的入口先收起。 */
   relationshipFormOpen: boolean;
   onUpdateProfile: (section?: ProfileEditSectionId) => void;
@@ -509,6 +524,7 @@ export function BusinessPartyPanelSummary({
   onShowRelationships: () => void;
 }) {
   const profile = pinned === true ? null : businessPartyProfileStateOf(profiles.answer, row.partyId);
+  const mayUpdateProfile = mayWrite && takesRevisions;
   return (
     <>
       <StatusBanners
@@ -520,11 +536,26 @@ export function BusinessPartyPanelSummary({
       />
       <div className="business-party-panel-columns">
         <div className="business-party-panel-column">
-          <ProfileColumn row={row} roles={roles} state={profile} entities={overview.entities} mayWrite={mayWrite} onUpdateProfile={onUpdateProfile} />
+          <ProfileColumn
+            row={row}
+            roles={roles}
+            state={profile}
+            entities={overview.entities}
+            mayUpdateProfile={mayUpdateProfile}
+            takesRevisions={takesRevisions}
+            onUpdateProfile={onUpdateProfile}
+          />
         </div>
         <div className="business-party-panel-column">
           {profile?.kind === 'present' ? (
-            <ContactsCard state={profile} roles={roles} mayWrite={mayWrite} onOpenContacts={onOpenContacts} onUpdateProfile={onUpdateProfile} />
+            <ContactsCard
+              state={profile}
+              roles={roles}
+              mayUpdateProfile={mayUpdateProfile}
+              takesRevisions={takesRevisions}
+              onOpenContacts={onOpenContacts}
+              onUpdateProfile={onUpdateProfile}
+            />
           ) : null}
           <RelationshipsCard
             state={overview.relationships}
@@ -623,12 +654,16 @@ function ContactCardView({ card }: { card: ContactCard }) {
 export function BusinessPartyPanelContacts({
   partyId,
   profiles,
-  mayWrite,
+  mayUpdateProfile,
+  takesRevisions,
   onUpdateProfile,
 }: {
   partyId: string;
   profiles: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
-  mayWrite: boolean;
+  /** 「更新资料」的入口摆不摆：有写授予、这家单位还收新的一版资料。 */
+  mayUpdateProfile: boolean;
+  /** 这家单位还收不收新的一版资料（identity-write-entries.ts 的 identityTakesRevisions）：不收时空着的资料换一句说明。 */
+  takesRevisions: boolean;
   onUpdateProfile: (section?: ProfileEditSectionId) => void;
 }) {
   const state = businessPartyProfileStateOf(profiles.answer, partyId);
@@ -636,8 +671,8 @@ export function BusinessPartyPanelContacts({
   const contacts = state.kind === 'present' ? state.record.contacts : [];
   if (contacts.length === 0) {
     return (
-      <PanelNoteCard {...profileContactsEmptyNoteOf(state)}>
-        {mayWrite ? (
+      <PanelNoteCard {...profileContactsEmptyNoteOf(state, takesRevisions)}>
+        {mayUpdateProfile ? (
           <Button size="sm" variant="outline" className="type-body" onClick={() => onUpdateProfile('contacts')}>
             更新资料
           </Button>
@@ -649,7 +684,7 @@ export function BusinessPartyPanelContacts({
     <>
       <div className="mb-3 flex min-h-7 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <p className="type-body leading-5 text-idpxyz-breadcrumb">{formatCount(contacts.length)} 位联系人 · 电话、邮箱与账号点一下就复制</p>
-        {mayWrite ? (
+        {mayUpdateProfile ? (
           <Button size="sm" variant="outline" className="h-7 shrink-0 type-body" onClick={() => onUpdateProfile('contacts')}>
             编辑联系人
           </Button>
@@ -668,20 +703,24 @@ export function BusinessPartyPanelContacts({
 export function BusinessPartyPanelVersions({
   partyId,
   profiles,
-  mayWrite,
+  mayUpdateProfile,
+  takesRevisions,
   onUpdateProfile,
 }: {
   partyId: string;
   profiles: AnswerQuery<BusinessPartyProfileRevisionListResponseBody>;
-  mayWrite: boolean;
+  /** 「更新资料」的入口摆不摆：有写授予、这家单位还收新的一版资料。 */
+  mayUpdateProfile: boolean;
+  /** 这家单位还收不收新的一版资料（identity-write-entries.ts 的 identityTakesRevisions）：不收时空着的资料换一句说明。 */
+  takesRevisions: boolean;
   onUpdateProfile: (section?: ProfileEditSectionId) => void;
 }) {
   const state = businessPartyProfileStateOf(profiles.answer, partyId);
   if (state.kind === 'note') return <PanelNoteCard lines={[state.text]} />;
   if (state.body.revisions.length === 0) {
     return (
-      <PanelNoteCard {...profileVersionsEmptyNote}>
-        {mayWrite ? (
+      <PanelNoteCard {...profileVersionsEmptyNoteOf(takesRevisions)}>
+        {mayUpdateProfile ? (
           <Button size="sm" variant="outline" className="type-body" onClick={() => onUpdateProfile()}>
             更新资料
           </Button>
@@ -691,7 +730,7 @@ export function BusinessPartyPanelVersions({
   }
   return (
     <div className="rounded-md bg-idpxyz-bg">
-      <BusinessPartyProfileVersions partyId={partyId} query={profiles} />
+      <BusinessPartyProfileVersions partyId={partyId} query={profiles} takesRevisions={takesRevisions} />
     </div>
   );
 }

@@ -38,16 +38,12 @@ func submittedSnapshot(t *testing.T) domain.RehydrateShipmentRequestSpec {
 	}
 }
 
-// reviewedSnapshot 是一份卡在人工复核上、复核已经做完的`已提交`委托在库里的样子：任务上
-// 累了两轮处理记录，复核完成度已经写下，下一次 Decide 就该越过复核那道门。
+// reviewedSnapshot 是一份卡在人工复核上、复核已经做完的`已提交`委托在库里的样子：复核完成度
+// 已经写下，下一次 Decide 就该越过复核那道门。
 func reviewedSnapshot(t *testing.T) domain.RehydrateShipmentRequestSpec {
 	t.Helper()
 	snapshot := submittedSnapshot(t)
 	snapshot.AcceptanceTask.WaitingOn = domain.ResumeByManualReview
-	snapshot.AcceptanceTask.ProcessingAttempts = []domain.ProcessingAttempt{
-		internalAttempt(t, "COMMERCIAL_BASIS_UNAVAILABLE", firstAttemptAt),
-		internalAttempt(t, "RECORDED_JUDGMENTS_UNAVAILABLE", firstAttemptAt.Add(time.Hour)),
-	}
 	snapshot.AcceptanceTask.ReviewCompletion = reviewCompletion(t)
 	return snapshot
 }
@@ -181,24 +177,14 @@ func TestRehydrationRefusesStatesThatTheJudgmentPathCannotProduce(t *testing.T) 
 	}
 }
 
-// Covers: ADR-0030「今天只开`已提交`」— 任务那一层的两个字段是`已提交`可达的，因此它们在
-// 快照里，且必须原样带进聚合。
-//
-// 处理记录漏了，用例要的「未决按原因分类统计」在重建之后从头数起；复核完成度漏了，后面两条
-// 测的两处业务结果就会变。
-func TestRehydrationCarriesTheProcessingAttemptsAndCompletedReview(t *testing.T) {
+// Covers: ADR-0030「今天只开`已提交`」— 复核完成度是`已提交`可达的，因此它在快照里，且必须
+// 原样带进聚合；漏了，后面两条测的两处业务结果就会变。
+func TestRehydrationCarriesTheCompletedReview(t *testing.T) {
 	request, err := domain.RehydrateShipmentRequest(reviewedSnapshot(t))
 	if err != nil {
 		t.Fatalf("rehydrate: %v", err)
 	}
 
-	attempts := request.AcceptanceDecisionTask().ProcessingAttempts()
-	if len(attempts) != 2 {
-		t.Fatalf("attempts = %d, want 2；重建把这份委托卡过的轮次丢了", len(attempts))
-	}
-	if attempts[0].Reason().String() != "COMMERCIAL_BASIS_UNAVAILABLE" {
-		t.Fatalf("first attempt = %q, want COMMERCIAL_BASIS_UNAVAILABLE", attempts[0].Reason())
-	}
 	completion, done := request.AcceptanceDecisionTask().ManualReviewCompletion()
 	if !done {
 		t.Fatal("重建把一次已经完成的人工复核丢了")
@@ -252,30 +238,6 @@ func TestARehydratedCompletedReviewSatisfiesTheReviewGate(t *testing.T) {
 	}
 	if decided.State() != domain.ShipmentRequestAccepted {
 		t.Fatalf("state = %q, want ACCEPTED", decided.State())
-	}
-}
-
-// Covers: UC-PS-001「追加判断与处理尝试」— 重建读回来的记录与此后新追加的记录属同一条历史。
-// 重建丢掉旧记录时，下一次追加会从一条开始，而委托实际已经卡过三轮。
-func TestAttemptsRecordedAfterRehydrationAppendToTheRehydratedOnes(t *testing.T) {
-	request, err := domain.RehydrateShipmentRequest(reviewedSnapshot(t))
-	if err != nil {
-		t.Fatalf("rehydrate: %v", err)
-	}
-
-	continued, err := request.RecordProcessingAttempt(
-		internalAttempt(t, "MANUAL_REVIEW_PENDING", firstAttemptAt.Add(2*time.Hour)),
-	)
-	if err != nil {
-		t.Fatalf("record processing attempt: %v", err)
-	}
-
-	attempts := continued.AcceptanceDecisionTask().ProcessingAttempts()
-	if len(attempts) != 3 {
-		t.Fatalf("attempts = %d, want 3", len(attempts))
-	}
-	if attempts[2].Reason().String() != "MANUAL_REVIEW_PENDING" {
-		t.Fatalf("last attempt = %q, want MANUAL_REVIEW_PENDING", attempts[2].Reason())
 	}
 }
 
@@ -859,9 +821,6 @@ func withdrawnSnapshot(t *testing.T) domain.RehydrateShipmentRequestSpec {
 func TestRehydratingAWithdrawnRequestKeepsItsWithdrawal(t *testing.T) {
 	supplemented := withdrawnSnapshot(t)
 	supplemented.AcceptanceTask.AuthorizedDisposition = authorizedDisposition(t, domain.DisposeByCustomerSupplement)
-	supplemented.AcceptanceTask.ProcessingAttempts = []domain.ProcessingAttempt{
-		internalAttempt(t, "COMMERCIAL_BASIS_UNAVAILABLE", firstAttemptAt),
-	}
 	cases := map[string]domain.RehydrateShipmentRequestSpec{
 		"待决期间撤回":     withdrawnSnapshot(t),
 		"处置交客户补充后撤回": supplemented,
@@ -1108,24 +1067,6 @@ func TestRehydrationRefusesATaskStateOnItsOwnValueDomain(t *testing.T) {
 	if !strings.Contains(err.Error(), "99") {
 		t.Fatalf("error = %v；拒绝没说出是哪个值，说明拦住它的是「已提交配已收工的任务」那条，"+
 			"而那条的前件是`已提交`，门一开到别的状态就没了", err)
-	}
-}
-
-// Covers: ADR-0028「校验拦一行坏数据、或适配器自己的 bug 变成一个看起来合法的聚合」。
-//
-// 半截的一条处理记录包外造不出来（字段未导出、构造器全校验），一批零值却造得出：
-// `make([]ProcessingAttempt, n)` 忘了填就是。放过去会让「这份委托卡过几轮」多数出几轮
-// 不存在的。
-func TestRehydrationRefusesAnEmptyProcessingAttempt(t *testing.T) {
-	snapshot := reviewedSnapshot(t)
-	snapshot.AcceptanceTask.ProcessingAttempts = append(
-		snapshot.AcceptanceTask.ProcessingAttempts, domain.ProcessingAttempt{},
-	)
-
-	if _, err := domain.RehydrateShipmentRequest(snapshot); !errors.Is(
-		err, domain.ErrInvalidRehydratedShipmentRequest,
-	) {
-		t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
 	}
 }
 

@@ -48,6 +48,7 @@ import { useRegisterList } from './register-list';
 import { PartyRelationshipEndActions } from './PartyRelationshipEndActions';
 import { CustomerAccountRegistrationForm } from './CustomerAccountRegistrationForm';
 import { IdentityDeactivationForm } from './IdentityDeactivationForm';
+import { identityMayBeDeactivated } from './identity-write-entries';
 import { businessPartyObjectHash } from './business-parties-address';
 import { PartyRelationshipGraph } from './PartyRelationshipGraph';
 import { relationshipGraphOf } from './party-relationship-graph';
@@ -291,9 +292,6 @@ function RelationshipRows({
   );
 }
 
-// 还能停用的账户：已生效与待生效（CONTEXT「参与方身份」：未到生效时点的登记也可以停用，那是撤下一笔还没生效的登记）。
-const deactivatableAccountStatuses: ReadonlySet<string> = new Set(['REGISTERED', 'EFFECTIVE']);
-
 export type CustomerAccountsRead = { answer: ApiResult<{ accounts: CustomerAccountRecord[] }> | null; retry: () => void };
 export type CustomerAccountWrites = { parties: ApiResult<BusinessPartyListResponseBody> | null };
 
@@ -380,8 +378,11 @@ export function useCustomerAccountWrites(partyId: string, accounts: CustomerAcco
     openForm: () => setRegistering(true),
     /** 开着的登记表单；没开或只读是 null。 */
     form,
-    /** 这个账户摆不摆「停用…」。 */
-    canDeactivate: (row: CustomerAccountRecord) => writes !== undefined && deactivatableAccountStatuses.has(row.status),
+    /**
+     * 这个账户摆不摆「停用…」：有写授予、还没登过停用（identity-write-entries.ts 的 identityMayBeDeactivated）。不按状态判——
+     * 停用时点在将来的账户状态仍是已生效，那一笔停用却已经登了，再登一笔登记册不收；待生效的账户没登过停用，照摆。
+     */
+    canDeactivate: (row: CustomerAccountRecord) => writes !== undefined && identityMayBeDeactivated(row),
     startDeactivation: (row: CustomerAccountRecord) => setDeactivating(row),
     /** 停用对话框与「放弃修改？」；调用方摆在块外。 */
     dialogs,

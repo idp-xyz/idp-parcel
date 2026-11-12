@@ -44,13 +44,16 @@ func TestNoStateTransitionMovesTheAggregateRevision(t *testing.T) {
 		"CompleteManualReview": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
 			return request.CompleteManualReview(reviewCompletion(t))
 		},
-		"RecordProcessingAttempt": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
-			return request.RecordProcessingAttempt(
-				internalAttempt(t, "COMMERCIAL_BASIS_UNAVAILABLE", firstAttemptAt),
-			)
-		},
 		"AwaitOperatorRegistration": func(_ *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
 			return request.AwaitOperatorRegistration()
+		},
+		"AwaitCustomerSupplement": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+			gap, err := domain.NewSupplementGap(domain.PreAcceptanceFinancialControlCheck,
+				domain.DeclaredParcelID{}, checkReason(t, "ESTIMATE_RECIPIENT_POSTAL_MISSING"))
+			if err != nil {
+				t.Fatalf("supplement gap: %v", err)
+			}
+			return request.AwaitCustomerSupplement([]domain.SupplementGap{gap})
 		},
 		// 处置只对停在`等待授权处置`的委托开放，所以这一条要先经一轮 Decide 停到那里；中间那次
 		// Decide 同样不许动版本。
@@ -396,6 +399,9 @@ func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
 		"priorLink": true,
 		// 客户包裹件号首次提交时固定（ADR-0184 决定四），`已提交`下就有值，接受时据它形成外部标识关联。
 		"customerParcelNumbers": true,
+		// 平台货件与箱标号随首次提交声明在委托上、受理前可经补充换（ADR-0376 决定二），`已提交`下就有值。
+		"platformShipment":  true,
+		"platformBoxLabels": true,
 		// 已接受产物：门开到 ACCEPTED 后必须随快照往返，已提交下由 validForRehydration 拒绝携带。
 		"decision":           true,
 		"decisionFormed":     true,

@@ -57,7 +57,7 @@ func TestAPriceCardWithTotalBoundsIsRegisteredAndLoadedBackAsPPC6(t *testing.T) 
 	}
 
 	loaded, err := catalog.LoadApplicable(ctx, evaluationValue(t, domain.NewTenantID, "tenant-a"), domain.PricingDirectionSell,
-		evaluationValue(t, domain.NewPricingScopeID, "scope-1"), catalogAsOf)
+		evaluationValue(t, domain.NewPricingScopeID, "scope-1"), catalogAsOf, domain.ServiceProductReference{})
 	if err != nil || len(loaded) != 1 {
 		t.Fatalf("装载适用价卡 = %d 张，err = %v", len(loaded), err)
 	}

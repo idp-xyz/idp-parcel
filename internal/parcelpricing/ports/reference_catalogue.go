@@ -44,6 +44,14 @@ type ReferenceCatalogueVersionLoader interface {
 	LoadVersion(ctx context.Context, tenant domain.TenantID, catalogueID, catalogueVersion string) (domain.ReferenceCatalogueRegistration, bool, error)
 }
 
+// EstimateReferenceCatalogues 是试算两条编排（UC-PP-001 与定价卡入口）对目录登记册的要求：补齐读数那一步的解析，
+// 加按版本读回整版——输入完备性门要读在用分区目录版本的始发维度声明（ADR-0381 决定二），而解析口只交读数不交声明。
+// 组合而不拓宽 ReferenceCatalogueRegister：拓宽会拆正式评价那一侧的全部替身（文件头那条纪律），正式评价不设这道门。
+type EstimateReferenceCatalogues interface {
+	ReferenceCatalogueRegister
+	ReferenceCatalogueVersionLoader
+}
+
 // ReferenceCatalogueReviewOutcome 是记录一条目录复核的封闭结果，四格与序列复核同义。
 type ReferenceCatalogueReviewOutcome uint8
 

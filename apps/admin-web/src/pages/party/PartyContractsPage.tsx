@@ -77,6 +77,14 @@ const info = moduleInfoById['party-contracts'];
 
 // 合同读面带出正文里指名的货主客户账户（customerAccountId）；责任法人合同自己没有，随接单规则包（规则包行上有）。账户的客户
 // 名称取自客户账户册的第一页，读不到就只显账户标识，不猜名字。账户册自己在本页「客户账户」签。
+// 正文登记了而不指名规则包是多产品合同的常态（ADR-0376 决定三）：规则包随服务产品选，不是缺项。写成「—」或空白会读成漏登。
+const unnamedRulePackage = '不指名（规则包随服务产品选）';
+
+function rulePackageFactOf(record: CustomerContractRecord): string {
+  if (record.rulePackageId) return record.rulePackageId;
+  return record.contentRegistered ? unnamedRulePackage : '';
+}
+
 // 主列只留运营要看的：合同与版本、客户、状态、规则与约定、有效期；适用范围、各标识进右栏详情的「技术详情」。
 // 右栏打开时收起次要列（hideWhenDetailOpen），窄栏里仍读得清主身份与状态。
 const columns: WorkbenchColumn<CustomerContractRecord>[] = [
@@ -98,11 +106,14 @@ const columns: WorkbenchColumn<CustomerContractRecord>[] = [
   {
     key: 'rule-package',
     header: '接单规则包',
-    // 正文未登记时不显示空白：空白读起来像「没引用规则包」，而合同正文一旦登记
-    // 规则包必存（库上 NOT NULL），两者是不同的事实。
+    // 正文未登记与正文登记了但不指名规则包是两件事，各写各的字，不共用空白。
     render: (row) =>
       row.contentRegistered ? (
-        row.rulePackageId ? <RefLink kind="rule-package" id={row.rulePackageId} /> : '—'
+        row.rulePackageId ? (
+          <RefLink kind="rule-package" id={row.rulePackageId} />
+        ) : (
+          <span className="font-sans text-idpxyz-textMuted">{unnamedRulePackage}</span>
+        )
       ) : (
         <span className="font-sans text-idpxyz-textMuted">正文未登记</span>
       ),
@@ -244,7 +255,7 @@ function CustomerContractObjectPage({ objectId, version }: VersionObjectAddress)
           { label: '版本号', value: record.version },
           { label: '适用范围', value: record.scope },
           { label: '客户账户标识', value: record.customerAccountId ?? '' },
-          { label: '接单规则包标识', value: record.rulePackageId ?? '' },
+          { label: '接单规则包标识', value: rulePackageFactOf(record) },
           { label: '正文登记时间', value: record.declaredAt ?? '' },
         ]}
         history={row ? versionHistoryOf(historyPool, row) : []}
@@ -356,7 +367,7 @@ function CustomerContractsWorkbench({
                 { label: '版本号', value: record.version },
                 { label: '适用范围', value: record.scope },
                 { label: '客户账户标识', value: record.customerAccountId ?? '' },
-                { label: '接单规则包标识', value: record.rulePackageId ?? '' },
+                { label: '接单规则包标识', value: rulePackageFactOf(record) },
                 { label: '正文登记时间', value: record.declaredAt ?? '' },
               ]}
               status={(record) => record.status}

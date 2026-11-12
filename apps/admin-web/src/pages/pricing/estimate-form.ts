@@ -7,6 +7,7 @@
 
 import { wallTimeToRfc3339 } from '../moment';
 import type { EstimatePayload } from './api';
+import { declaresServiceProducts, estimateWithoutProductNote, estimateWithProductNote } from './service-products';
 
 export interface EstimateDraft {
   scope: string;
@@ -25,6 +26,8 @@ export interface EstimateDraft {
   settlementCurrency: string;
   /** 收件地址性质：空即不选（未声明，读它的卡点名缺项，不套默认）；否则是 ADDRESS_NATURE_CODES 里的原词。 */
   addressNature: string;
+  /** 服务产品对象标识：空即不选，选卡只看不声明产品的卡（ADR-0382 决定二）。 */
+  serviceProduct: string;
 }
 
 /** 收件地址性质的封闭词（传输层 domain.NewAddressNature 同一张表）；页面不自造取值。 */
@@ -47,6 +50,7 @@ export function emptyEstimateDraft(): EstimateDraft {
     destination: '',
     settlementCurrency: '',
     addressNature: '',
+    serviceProduct: '',
   };
 }
 
@@ -70,7 +74,14 @@ export function estimatePayloadOf(draft: EstimateDraft, timeZone: string): Estim
   }
   if (filled(draft.settlementCurrency)) payload.settlementCurrency = draft.settlementCurrency;
   if (filled(draft.addressNature)) payload.addressNature = draft.addressNature;
+  // 只有售价卡分产品选卡（ADR-0382 决定一）；方向不是售价时这一格不出现，草稿里留着的旧值也不发。手填的标识去掉首尾空白。
+  if (declaresServiceProducts(draft.direction) && filled(draft.serviceProduct)) payload.serviceProduct = draft.serviceProduct.trim();
   return payload;
+}
+
+/** 服务产品一格下的说明：没选不是「不限产品」，是只看不声明产品的那一层卡，指名了产品的卡一张都不会算。 */
+export function estimateServiceProductNote(draft: EstimateDraft): string {
+  return filled(draft.serviceProduct) ? estimateWithProductNote : estimateWithoutProductNote;
 }
 
 export type EstimateProblemKey = 'basisAt' | 'dimensions' | 'postalRoute';

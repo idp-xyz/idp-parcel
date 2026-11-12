@@ -130,8 +130,8 @@ section "起进程"
   export IDP_PARCEL_OPERATOR_OIDC_JWKS_URL='http://127.0.0.1:5556/dex/keys'
   export IDP_PARCEL_OPERATOR_OIDC_AUDIENCE='idp-parcel-admin-web'
   export IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY='SYN-AUTH/idp-parcel-pilot'
-  # 允许登记 PPC-6 价卡（ADR-0352）：本脚本起的进程出自上面同一次编译，没有旧构建在读价卡，开关在这里成立；
-  # 不设的话，管理台导入编辑器做出的 PPC-6 卡发布会答「尚未允许登记」。
+  # 允许登记较新规范化版本（基础版之后的各版）的价卡（ADR-0352）：本脚本起的进程出自上面同一次编译，没有旧构建在读价卡，
+  # 开关在这里成立；不设的话，管理台导入编辑器做出的这类卡发布会答「尚未允许登记」。
   export IDP_PARCEL_PRICING_REGISTER_NEWER_CANONICALIZATION=true
   # 集成客户端渠道（ADR-0149）与首方客户渠道（ADR-0139）：iss 串逐字比，JWKS 取实际可达的那只
   export IDP_PARCEL_INTEGRATION_CLIENT_OIDC_ISSUER='http://127.0.0.1:5558/dex'

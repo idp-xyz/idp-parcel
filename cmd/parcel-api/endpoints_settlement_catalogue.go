@@ -13,6 +13,7 @@ type settlementCatalogueWiring struct {
 	settlementStatements        settlementhttp.StatementCatalogueReader
 	settlementDisputed          settlementhttp.DisputedStatementReader
 	settlementStatementLines    settlementhttp.StatementLineReader
+	preAcceptanceEstimates      settlementhttp.PreAcceptanceEstimateReader
 	supplierBillLines           settlementhttp.SupplierBillLineReader
 	auditedPayables             settlementhttp.AuditedPayableCatalogueReader
 	settlementFundsApplications settlementhttp.FundsApplicationCatalogueReader
@@ -22,14 +23,15 @@ type settlementCatalogueWiring struct {
 func init() {
 	registerEndpoints(endpointFeature[settlementCatalogueWiring]{
 		lines: map[string]endpointLine{
-			"/settlement-charges":             {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-charges?registry=customer-charge"},
-			"/settlement-statements":          {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-statements?registry=customer-statement"},
-			"/settlement-disputed-statements": {method: http.MethodGet, face: operationsReadFace()},
-			"/settlement-statement-lines":     {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-statement-lines?statement=SYN-PROBE"},
-			"/settlement-funds-applications":  {method: http.MethodGet, face: operationsReadFace()},
-			"/settlement-operating-results":   {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-operating-results?registry=operating-result"},
-			"/settlement-supplier-bill-lines": {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-supplier-bill-lines?claim=SYN-PROBE&version=v1"},
-			"/settlement-audited-payables":    {method: http.MethodGet, face: operationsReadFace()},
+			"/settlement-charges":                  {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-charges?registry=customer-charge"},
+			"/settlement-statements":               {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-statements?registry=customer-statement"},
+			"/settlement-disputed-statements":      {method: http.MethodGet, face: operationsReadFace()},
+			"/settlement-statement-lines":          {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-statement-lines?statement=SYN-PROBE"},
+			"/settlement-pre-acceptance-estimates": {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-pre-acceptance-estimates?shipmentRequest=SYN-PROBE"},
+			"/settlement-funds-applications":       {method: http.MethodGet, face: operationsReadFace()},
+			"/settlement-operating-results":        {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-operating-results?registry=operating-result"},
+			"/settlement-supplier-bill-lines":      {method: http.MethodGet, face: operationsReadFace(), probe: "/settlement-supplier-bill-lines?claim=SYN-PROBE&version=v1"},
+			"/settlement-audited-payables":         {method: http.MethodGet, face: operationsReadFace()},
 		},
 		build: func(sources endpointSources) (settlementCatalogueWiring, error) {
 			none := settlementCatalogueWiring{}
@@ -51,12 +53,18 @@ func init() {
 			if err != nil {
 				return none, err
 			}
+			// 受理前估价读的是留痕册，与施加编排写它的是同一个适配器（读写共用一份行模型）。
+			preAcceptanceEstimates, err := sapostgres.NewPreAcceptanceEstimateTraces(sources.db)
+			if err != nil {
+				return none, err
+			}
 			return settlementCatalogueWiring{
 				settlementCharges:    settlementCharges,
 				settlementStatements: settlementStatements,
 				// 存在争议的单读的是对账单册同一张表、同一套列，同一个适配器两口共用。
 				settlementDisputed:          settlementStatements,
 				settlementStatementLines:    settlementStatements,
+				preAcceptanceEstimates:      preAcceptanceEstimates,
 				settlementFundsApplications: settlementFundsApplications,
 				settlementOperatingResults:  settlementOperatingResults,
 				// 供应商账单各行与审核应付册读的是接收册与应付册两张表，同一个适配器（票 document-numbering/11）。
@@ -76,6 +84,8 @@ func init() {
 				{Pattern: "/settlement-disputed-statements", Handler: settlementhttp.NewQueryDisputedCustomerStatementsEndpoint(settlementCatalogueIntake, wiring.settlementDisputed)},
 				// 一张单自己的费用行：管理台登记争议时从这里选费用（ADR-0354）。
 				{Pattern: "/settlement-statement-lines", Handler: settlementhttp.NewQueryStatementLinesEndpoint(settlementCatalogueIntake, wiring.settlementStatementLines)},
+				// 一份委托逐版的受理前估价与占用（ADR-0379 决定二）：管理台运单详情的「受理前财务控制」一块读它。
+				{Pattern: "/settlement-pre-acceptance-estimates", Handler: settlementhttp.NewQueryPreAcceptanceEstimatesEndpoint(settlementCatalogueIntake, wiring.preAcceptanceEstimates)},
 				{Pattern: "/settlement-funds-applications", Handler: settlementhttp.NewQuerySettlementFundsApplicationsEndpoint(settlementCatalogueIntake, wiring.settlementFundsApplications)},
 				{Pattern: "/settlement-operating-results", Handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementCatalogueIntake, wiring.settlementOperatingResults)},
 				// 供应商账单与应付页（票 document-numbering/11）：一份账单的各行连同匹配与审核去向，与审核应付册。

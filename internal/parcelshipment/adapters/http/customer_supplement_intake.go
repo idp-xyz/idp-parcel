@@ -78,6 +78,11 @@ type supplementDraft struct {
 	RecipientCountryCode      string                  `json:"recipientCountryCode"`
 	DestinationServiceScope   string                  `json:"destinationServiceScope"`
 	Parcels                   []supplementParcelDraft `json:"parcels"`
+	// Goods 是新版本的货物明细，补充整份重报（ADR-0373 决定四）。
+	Goods *goodsDraft `json:"goods"`
+	// PlatformShipment 与逐件的 platformBoxLabel 是这一版起委托的平台声明：受理前可经补充补报或更正（ADR-0376 决定二），
+	// 同样整份重报——没带即这一版不报，委托上原来的平台声明随之撤下。
+	PlatformShipment *platformShipmentDraft `json:"platformShipment"`
 }
 
 // supplementParcelDraft 是提交的包裹草案加回执里的 parcelId：补充不现签成员标识，成员就是回执里那几件。
@@ -107,6 +112,8 @@ func (draft supplementDraft) content() submissionDraft {
 		RecipientCountryCode:      draft.RecipientCountryCode,
 		DestinationServiceScope:   draft.DestinationServiceScope,
 		Parcels:                   parcels,
+		Goods:                     draft.Goods,
+		PlatformShipment:          draft.PlatformShipment,
 	}
 }
 
@@ -162,6 +169,16 @@ func (intake *CustomerSupplementIntake) IntakeSupplement(
 	if err != nil {
 		return application.FormNewSubmissionVersionCommand{}, err
 	}
+	// 货物明细与平台声明照提交口的做法各译两次：对着客户包裹参考译一次进摘要，对着回执里的成员再译一次进命令（goods_intake.go
+	// 头注）。形状规则因此与提交口同一处，补充不另说一套。
+	goodsForDigest, err := declaredGoods(content, customerParcels)
+	if err != nil {
+		return application.FormNewSubmissionVersionCommand{}, err
+	}
+	shipmentForDigest, labelsForDigest, err := declaredPlatform(content, customerParcels)
+	if err != nil {
+		return application.FormNewSubmissionVersionCommand{}, err
+	}
 	canonical, err := domain.CanonicalizeCustomerSupplement(domain.SubmissionPayloadSpec{
 		RequestReference:  customerReference,
 		BasisVersion:      basis,
@@ -169,11 +186,22 @@ func (intake *CustomerSupplementIntake) IntakeSupplement(
 		DeclaredParcelIDs: customerParcels,
 		Scope:             append(scopeEntries(content), supplementNamingEntries(draft, shipmentRequestID, members)...),
 		Service:           serviceEntries(content),
+		Goods:             goodsForDigest,
+		PlatformShipment:  shipmentForDigest,
+		PlatformBoxLabels: labelsForDigest,
 	})
 	if err != nil {
 		return application.FormNewSubmissionVersionCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
 	profiles, err := declaredProfiles(content, members)
+	if err != nil {
+		return application.FormNewSubmissionVersionCommand{}, err
+	}
+	goods, err := goodsOnMembers(goodsForDigest, customerParcels, members)
+	if err != nil {
+		return application.FormNewSubmissionVersionCommand{}, err
+	}
+	shipment, boxLabels, err := declaredPlatform(content, members)
 	if err != nil {
 		return application.FormNewSubmissionVersionCommand{}, err
 	}
@@ -191,6 +219,9 @@ func (intake *CustomerSupplementIntake) IntakeSupplement(
 		DeclaredProfiles:        profiles,
 		DeclaredElements:        canonical.DeclaredElements(),
 		RequestedServiceProduct: canonical.RequestedServiceProduct(),
+		DeclaredGoods:           goods,
+		PlatformShipment:        shipment,
+		PlatformBoxLabels:       boxLabels,
 	}, nil
 }
 

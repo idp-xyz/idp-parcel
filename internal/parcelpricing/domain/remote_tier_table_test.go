@@ -339,11 +339,17 @@ func TestATPP039PlansWithTheNewStructuresAreWrittenAsPPC6AndOthersStayPPC5(t *te
 		})); err == nil {
 			t.Fatalf("%s：记着 PPC-5 却带了 PPC-6 的内容，应被读回门拒绝", name)
 		}
-		// 本构建不认的版本：结构上算不出来，不是内容冲突。
+		// 本构建认得、却不是这份内容该写的较新版本：版本与内容对不上，读回门拒，不是「不认这一版」。
 		if _, err := domain.RehydratePriceCardRegistration(tamperedDocument(t, raw, func(document map[string]any) {
 			document["plan"].(map[string]any)["canonicalization"] = "PPC-7"
+		})); err == nil || errors.Is(err, domain.ErrCanonicalizationVersionUnsupported) {
+			t.Fatalf("%s：记着 PPC-7 却不带适用服务产品：%v，应被读回门拒为数据对不上", name, err)
+		}
+		// 本构建不认的版本：结构上算不出来，不是内容冲突。
+		if _, err := domain.RehydratePriceCardRegistration(tamperedDocument(t, raw, func(document map[string]any) {
+			document["plan"].(map[string]any)["canonicalization"] = "PPC-8"
 		})); !errors.Is(err, domain.ErrCanonicalizationVersionUnsupported) {
-			t.Fatalf("%s：PPC-7：%v，应拒为 ErrCanonicalizationVersionUnsupported", name, err)
+			t.Fatalf("%s：PPC-8：%v，应拒为 ErrCanonicalizationVersionUnsupported", name, err)
 		}
 	}
 	// 反过来：不带新内容却记着 PPC-6。

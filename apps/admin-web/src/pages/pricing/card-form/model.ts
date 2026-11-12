@@ -6,6 +6,8 @@
 // 全部取值都是用户在页面上输入的文本，租户取值不带默认（ADR-0146）：只有「机制」层的初值——计价对象不预选、基础运费代码
 // 用产品固定的 BASE_FREIGHT、币种与单位留空等用户选。
 
+import { declaresServiceProducts } from '../service-products';
+
 export type StepId = 'basics' | 'base' | 'weight' | 'fees' | 'bounds' | 'refs' | 'preview';
 
 export const stepOrder: readonly StepId[] = ['basics', 'base', 'weight', 'fees', 'bounds', 'refs', 'preview'];
@@ -33,6 +35,11 @@ export interface BasicsState {
   scope: string;
   direction: string;
   purpose: string;
+  /**
+   * 适用服务产品：服务产品对象标识，不带版本（ADR-0382 决定一）。空即不声明、接其余产品；只有售价卡有这一格，方向一离开
+   * 售价就清空（basicsWithDirection）。
+   */
+  serviceProducts: string[];
   aggregation: string;
   baseChargeCode: string;
   currency: string;
@@ -139,6 +146,29 @@ export interface CardFormState {
   idHints: Record<string, string>;
 }
 
+// 方向与用途一一对应（领域里首发就是这三对）；选了方向顺手带出用途，运营仍可改，配对对不对由服务端判。
+const pairedPurpose: Readonly<Record<string, string>> = {
+  SELL: 'CUSTOMER_CHARGE',
+  BUY: 'SUPPLIER_COST',
+  INTERNAL: 'INTERNAL_PRICE',
+};
+
+/**
+ * 换价格方向。用途还空着、或还是旧方向配的那个，就换成新方向配的那个（规格口收它才换）；运营改过的用途不动。
+ * 方向离开售价时丢掉已选的适用服务产品：采购与内部价卡不能声明产品（ADR-0382 决定一），留着它，切回售价时会冒出一组
+ * 运营已经看不见、也没再确认过的选择。
+ */
+export function basicsWithDirection(basics: BasicsState, direction: string, purposes: readonly string[]): BasicsState {
+  const paired = pairedPurpose[direction];
+  const purposeFollows = basics.purpose === '' || basics.purpose === pairedPurpose[basics.direction];
+  return {
+    ...basics,
+    direction,
+    purpose: paired !== undefined && purposes.includes(paired) && purposeFollows ? paired : basics.purpose,
+    serviceProducts: declaresServiceProducts(direction) ? basics.serviceProducts : [],
+  };
+}
+
 /** 基础运费代码是产品固定的计价代码（基础运费行的名字），页面上不让运营改。 */
 export const defaultBaseChargeCode = 'BASE_FREIGHT';
 
@@ -162,6 +192,7 @@ export function emptyState(): CardFormState {
       scope: '',
       direction: '',
       purpose: '',
+      serviceProducts: [],
       aggregation: '',
       baseChargeCode: defaultBaseChargeCode,
       currency: '',

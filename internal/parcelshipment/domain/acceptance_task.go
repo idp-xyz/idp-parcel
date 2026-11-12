@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -174,20 +175,45 @@ func (path ResumePath) String() string {
 	}
 }
 
+// SettlementNotFormedReason 是 settlement-accounting 答接受前财务控制`未形成`时交回的原因码原样（如
+// ESTIMATE_PRICE_CARD_NOT_CONFIGURED）。它与 ProcessingAttemptReason 分开记：后者是本上下文的待判原因，同一个
+// `财务控制未配置`下压着作用域、策略、金额、价卡几种缺口，运营要知道该去登哪一样，只能看提供方那一格（ADR-0383
+// 决定三）。本上下文不解释、不复制结算的原因集合，只原样留下；零值即结算没答未形成。
+type SettlementNotFormedReason struct{ requiredValue }
+
+func NewSettlementNotFormedReason(value string) (SettlementNotFormedReason, error) {
+	required, err := newRequiredValue("settlement not-formed reason", value)
+	return SettlementNotFormedReason{required}, err
+}
+
+// ProcessingAttemptSpec 的 SettlementReason 与 ServiceProduct 可缺（ADR-0383 决定三）：结算没答未形成、这一版没申报服务产品时都不记，不代拟。
 type ProcessingAttemptSpec struct {
 	Reason       ProcessingAttemptReason
 	ResumePath   ResumePath
 	Continuation OwnershipContinuationReference
 	AttemptedAt  time.Time
+	// SettlementReason 只在结算答未形成时在场。
+	SettlementReason SettlementNotFormedReason
+	// ServiceProduct 是这一版申报的服务产品，取本上下文自己的提交版本，不经结算与计价转交。
+	ServiceProduct DeclaredServiceProduct
+	// EstimateGapCodes 是申报不全那一轮计价点名的缺项码原样、去重（ADR-0381 决定四），只在申报不全分出的
+	// 两路等待上有；其余停法缺席。照来时顺序，不排序——码面不承诺序。
+	EstimateGapCodes []string
 }
 
 // ProcessingAttempt 是接受判断任务上的一条处理记录。它记录本轮停在哪里、由谁来续、按哪个
 // 引用续办，以及发生时间；它不是业务决定，因此累积多少条都不改变委托状态。
+//
+// 它不挂在聚合上：处理尝试经 AcceptanceJudgmentRecorder 落进自己的表，委托详情的「上次处理」从那里读
+// （ADR-0383 决定四）。聚合上曾有一份处理尝试列表，生产从没写过它，读面却拿它当读源，于是「上次处理」恒空。
 type ProcessingAttempt struct {
-	reason       ProcessingAttemptReason
-	resumePath   ResumePath
-	continuation OwnershipContinuationReference
-	attemptedAt  time.Time
+	reason           ProcessingAttemptReason
+	resumePath       ResumePath
+	continuation     OwnershipContinuationReference
+	attemptedAt      time.Time
+	settlementReason SettlementNotFormedReason
+	serviceProduct   DeclaredServiceProduct
+	estimateGapCodes []string
 }
 
 func NewProcessingAttempt(spec ProcessingAttemptSpec) (ProcessingAttempt, error) {
@@ -195,11 +221,21 @@ func NewProcessingAttempt(spec ProcessingAttemptSpec) (ProcessingAttempt, error)
 		!spec.Continuation.valid() || spec.AttemptedAt.IsZero() {
 		return ProcessingAttempt{}, ErrInvalidProcessingAttempt
 	}
+	for _, code := range spec.EstimateGapCodes {
+		// 空白码拒在构造门：缺项码出自计价的封闭集，空白只能是翻译坏了，落库会被列上的非空白约束拦下，
+		// 把整笔事务拖死（迁移 0038 头注量过同一幕）。
+		if strings.TrimSpace(code) == "" {
+			return ProcessingAttempt{}, ErrInvalidProcessingAttempt
+		}
+	}
 	return ProcessingAttempt{
-		reason:       spec.Reason,
-		resumePath:   spec.ResumePath,
-		continuation: spec.Continuation,
-		attemptedAt:  spec.AttemptedAt.UTC(),
+		reason:           spec.Reason,
+		resumePath:       spec.ResumePath,
+		continuation:     spec.Continuation,
+		attemptedAt:      spec.AttemptedAt.UTC(),
+		settlementReason: spec.SettlementReason,
+		serviceProduct:   spec.ServiceProduct,
+		estimateGapCodes: append([]string(nil), spec.EstimateGapCodes...),
 	}, nil
 }
 
@@ -219,6 +255,21 @@ func (attempt ProcessingAttempt) AttemptedAt() time.Time {
 	return attempt.attemptedAt
 }
 
+// SettlementReason 交回结算答未形成时的原因码；结算没答未形成时报告缺席。
+func (attempt ProcessingAttempt) SettlementReason() (SettlementNotFormedReason, bool) {
+	return attempt.settlementReason, attempt.settlementReason.valid()
+}
+
+// ServiceProduct 交回这一版申报的服务产品；零值即没申报。
+func (attempt ProcessingAttempt) ServiceProduct() DeclaredServiceProduct {
+	return attempt.serviceProduct
+}
+
+// EstimateGapCodes 交回申报不全那一轮计价点名的缺项码；空即这一轮没有（不是申报不全，或缺项没点出名字）。
+func (attempt ProcessingAttempt) EstimateGapCodes() []string {
+	return append([]string(nil), attempt.estimateGapCodes...)
+}
+
 // WaitingOn 交回本任务当前停在哪个等待态上；本轮形成了决定或任务已完成时报告缺席。
 //
 // 它由 Decide 在看过全部校验之后写下，而不是由编排回头推断：哪一类缺口该由谁来续是接受语言
@@ -227,44 +278,13 @@ func (task AcceptanceDecisionTask) WaitingOn() (ResumePath, bool) {
 	return task.waitingOn, task.waitingOn.valid()
 }
 
-// ProcessingAttempts 交回本任务累积的全部处理记录，按发生顺序。返回副本：追加是聚合的
-// 事，调用方拿到的切片改不动历史。
-func (task AcceptanceDecisionTask) ProcessingAttempts() []ProcessingAttempt {
-	return append([]ProcessingAttempt(nil), task.processingAttempts...)
-}
-
-// RecordProcessingAttempt 在接受判断任务上追加一条处理记录。
-//
-// 追加而不替换：用例要求未决按原因分类统计，只留最近一条就说不出这份委托卡过几轮、各卡在
-// 哪里。已完成的任务拒绝追加——决定已经越过提交边界，再累积记录会让一份已决委托看起来还
-// 在处理中。
-func (request ShipmentRequest) RecordProcessingAttempt(attempt ProcessingAttempt) (ShipmentRequest, error) {
-	if !attempt.valid() {
-		return ShipmentRequest{}, ErrInvalidProcessingAttempt
-	}
-	// 已完成与已停止都不再接受追加：前者决定已经越过提交边界，后者撤回已经成立，两种情况
-	// 下继续累积记录都会让一份不再判断的委托看起来还在处理中。
-	if !request.acceptanceTask.running() {
-		return ShipmentRequest{}, ErrAcceptanceTaskComplete
-	}
-
-	appended := append([]ProcessingAttempt(nil), request.acceptanceTask.processingAttempts...)
-	request.acceptanceTask.processingAttempts = append(appended, attempt)
-	return request, nil
-}
-
-func (attempt ProcessingAttempt) valid() bool {
-	return attempt.reason.valid() && attempt.resumePath.valid() &&
-		attempt.continuation.valid() && !attempt.attemptedAt.IsZero()
-}
-
 // AwaitOperatorRegistration 在**决定形成之前**把接受判断任务停在`等待运营登记`上。
 //
 // Decide 写等待态的前提是校验已经到场，而`判断时点未配置`那一族停在校验之前——时点都还没
 // 形成，没有任何一条校验可以进 Decide。ADR-0094 Decision 五要求落此格前先把带等待态的聚合
 // Save 落库（暂停没落库就不得交回该原因，否则等待态随本轮回滚蒸发而投递已被记为完毕，队列
 // 从此列不出这份委托），于是这一格需要一条不经校验的转移。它只写等待态：不动状态、不形成
-// 决定、不动版本，也不追加处理记录——那是 RecordProcessingAttempt 的事，两者由编排各调一次。
+// 决定、不动版本，也不记处理尝试——那由编排经 AcceptanceJudgmentRecorder 另记，两者由编排各调一次。
 //
 // 与 Decide 的两道门一致：已越过决定边界的委托说出真实原因，不再进入任何等待态。
 func (request ShipmentRequest) AwaitOperatorRegistration() (ShipmentRequest, error) {
@@ -278,5 +298,39 @@ func (request ShipmentRequest) AwaitOperatorRegistration() (ShipmentRequest, err
 		return ShipmentRequest{}, ErrAcceptanceTaskComplete
 	}
 	request.acceptanceTask.waitingOn = ResumeByOperatorRegistration
+	return request, nil
+}
+
+// AwaitCustomerSupplement 在**决定形成之前**把接受判断任务停在`等待受控补充`并记下缺口（ADR-0381 决定四）。
+//
+// Decide 写这一等待态的前提是校验到场，而申报不全停在接受前财务控制那一步——控制结果都没形成，没有校验可进
+// Decide，于是与 AwaitOperatorRegistration 同理需要一条不经校验的转移（ADR-0094 Decision 五那道「先落库再交回」
+// 的护栏由编排照 awaitOperatorRegistration 守）。缺口随等待态一起写：读面与受控补充入口都按「等待态 + 缺口」
+// 说话，只停不记缺口，查阅的人只看得到「在等补充」，看不到缺的是哪一条、哪几箱。
+//
+// 缺口不得为空也不得有坏项：计价答申报不全必点名缺项，一格都点不出的那一路照旧内部重试（ADR-0381 决定一），
+// 空缺口走到这里只能是调用方的翻译坏了——编程错误，不是一种可停的等待。
+//
+// 与 Decide 的两道门一致：已越过决定边界的委托说出真实原因，不再进入任何等待态。
+func (request ShipmentRequest) AwaitCustomerSupplement(gaps []SupplementGap) (ShipmentRequest, error) {
+	if len(gaps) == 0 {
+		return ShipmentRequest{}, ErrInvalidAcceptanceCheck
+	}
+	for _, gap := range gaps {
+		if !gap.group.valid() || !gap.reason.valid() {
+			return ShipmentRequest{}, ErrInvalidAcceptanceCheck
+		}
+	}
+	if request.decisionFormed {
+		return ShipmentRequest{}, ErrDecisionAlreadyFormed
+	}
+	if request.state != ShipmentRequestSubmitted {
+		return ShipmentRequest{}, ErrInvalidShipmentRequest
+	}
+	if !request.acceptanceTask.running() {
+		return ShipmentRequest{}, ErrAcceptanceTaskComplete
+	}
+	request.acceptanceTask.waitingOn = ResumeByCustomerSupplement
+	request.acceptanceTask.supplementGaps = append([]SupplementGap(nil), gaps...)
 	return request, nil
 }

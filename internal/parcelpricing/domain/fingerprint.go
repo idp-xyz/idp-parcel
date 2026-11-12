@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -435,19 +436,36 @@ func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalRefe
 // PPC-6 新增的都是可缺键（ADR-0348，照 ADR-0267 决定一换号并取能表达内容的最低一版）：方案级的总额上下限，与
 // 查表型附加费计算的查档维度。不带这些键的方案仍写 PPC-5、字节一个不动，本构建 PPC-5 与 PPC-6 都认、都能折回；
 // 带的写 PPC-6。canonicalizationVersion 是其中基础的那一版 PPC-5。
+// PPC-7 同一做法再加一个可缺键：售价卡声明的适用服务产品（ADR-0382 决定四）。它是 PPC-6 的超集——带产品的卡同时带
+// 总额上下限也写 PPC-7；不带产品的卡照旧取 PPC-5 或 PPC-6，字节不动。
 const canonicalizationVersion = "PPC-5"
 
 // canonicalizationVersionTotalBounds 是 PPC-6：带总额上下限或按偏远档位查档价表的方案写它。
 const canonicalizationVersionTotalBounds = "PPC-6"
 
-// CurrentCanonicalizationVersion 报出本构建写下的基础规范化版本 PPC-5：不带总额上下限与偏远档位查档价表的方案
-// 按它写。带那些结构的方案写 PPC-6，本构建同样认得（supportedCanonicalization）；按 PPC-5 与 PPC-6 之外记录的
-// 工件，在这里无法重新算出其摘要。
+// canonicalizationVersionServiceProducts 是 PPC-7：声明了适用服务产品的方案写它。
+const canonicalizationVersionServiceProducts = "PPC-7"
+
+// supportedCanonicalizations 是本构建能重新规范化的全部版本，基础版在前。
+var supportedCanonicalizations = []string{canonicalizationVersion, canonicalizationVersionTotalBounds, canonicalizationVersionServiceProducts}
+
+// CurrentCanonicalizationVersion 报出本构建写下的基础规范化版本 PPC-5：不带较新内容的方案按它写。带较新内容的方案写
+// PPC-6 或 PPC-7，本构建同样认得（supportedCanonicalization）；按这几版之外记录的工件，在这里无法重新算出其摘要。
 func CurrentCanonicalizationVersion() string { return canonicalizationVersion }
 
 // supportedCanonicalization 报出本构建能不能按某个规范化版本重新规范化。
 func supportedCanonicalization(version string) bool {
-	return version == canonicalizationVersion || version == canonicalizationVersionTotalBounds
+	for _, supported := range supportedCanonicalizations {
+		if version == supported {
+			return true
+		}
+	}
+	return false
+}
+
+// supportedCanonicalizationsText 是拒收话里列出的本构建认得的版本。
+func supportedCanonicalizationsText() string {
+	return strings.Join(supportedCanonicalizations, ", ")
 }
 
 // requiredCanonicalization 取能表达这组结构的最低一版（ADR-0267 决定一「换号之后按内容取能表达它的最低一版」，
@@ -487,6 +505,9 @@ type canonicalPricingPlan struct {
 	ReferenceCatalogues []canonicalReferenceCatalogueDocument `json:"reference_catalogues,omitempty"`
 	// 总额上下限（ADR-0348）：只有声明了的方案有这一键，写 PPC-6；没声明的方案省略，PPC-5 字节不变。
 	TotalBounds *canonicalTotalBoundsDocument `json:"total_bounds,omitempty"`
+	// 适用服务产品（ADR-0382 决定四）：进内容摘要——两张只差适用产品的卡是不同的内容，与计价范围同理。只有声明了的
+	// 方案有这一键，写 PPC-7；不声明的方案省略，PPC-5 / PPC-6 字节不变。
+	ServiceProducts []string `json:"service_products,omitempty"`
 }
 
 type canonicalTotalBoundsDocument struct {
@@ -603,8 +624,9 @@ func calculatePricingPlanContentDigest(plan PricingPlanVersion) string {
 		totalBounds = &bounds
 	}
 	document := canonicalPricingPlan{
-		Canonicalization:    plan.structures.requiredCanonicalization(),
+		Canonicalization:    plan.requiredCanonicalization(),
 		TotalBounds:         totalBounds,
+		ServiceProducts:     serviceProductTexts(plan.serviceProducts),
 		Exclusions:          exclusions,
 		AmountRounding:      amountRounding,
 		ReferenceCatalogues: catalogues,
@@ -903,7 +925,7 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 	sort.SliceStable(manifest, func(left, right int) bool {
 		return compareCanonicalReferences(manifest[left], manifest[right]) < 0
 	})
-	// 评价的规范化版本随它所评的方案走：PPC-5 的方案评出的评价摘要与此前逐字相同，PPC-6 的方案评出的写 PPC-6。
+	// 评价的规范化版本随它所评的方案走：PPC-5 的方案评出的评价摘要与此前逐字相同，较新版本的方案评出的写那一版。
 	// 评价的 planCanonicalization 取自它所评的方案，而方案重验只放行本构建认得的版本，所以这条退回在生产路径上走不到：
 	// 它只给手工拼出的评价值一个确定的答案，不替任何不认的版本算摘要。退回时走 CurrentCanonicalizationVersion 而不直接用
 	// 常量，是为了让这个导出函数有一个生产调用点——接线棘轮（internal/architecture）要求导出的领域工厂不能无人调用。

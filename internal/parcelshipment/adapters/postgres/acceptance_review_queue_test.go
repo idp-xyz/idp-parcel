@@ -101,18 +101,16 @@ func seedAdvanced(
 // 没起判断的、停等内部续办的、他租户停等复核的都不出现；先来先审老的在前；最近处理
 // 记录与复核完成留痕照登记转写（复核已录完成但未续办的行照列并标示，不折成出队）。
 func TestListAwaitingManualReviewFiltersOrdersAndTranscribes(t *testing.T) {
-	views, repository, transactor := newShipmentRequestViews(t)
+	views, repository, judgments, transactor := newShipmentRequestViewsWithJudgments(t)
 	ctx := t.Context()
 
 	// 老的等待行：带一条处理记录，复核未录完成。
 	seedAdvanced(t, repository, transactor, "tenant-1", "customer-1", "arq-a", "REQ-RVW-A",
 		submittedAtFixture, func(request domain.ShipmentRequest) domain.ShipmentRequest {
-			appended, err := request.RecordProcessingAttempt(processingAttempt(t))
-			if err != nil {
-				t.Fatalf("记处理尝试：%v", err)
-			}
-			return awaitReview(t, appended, "review-a")
+			return awaitReview(t, request, "review-a")
 		})
+	recordAttemptOnCurrentVersion(t, repository, judgments, transactor,
+		requestScopedIdentity(t, "tenant-1", "customer-1", "arq-a"), processingAttempt(t))
 	// 新的等待行：复核已录完成、等下一轮判断续办。
 	seedAdvanced(t, repository, transactor, "tenant-1", "customer-2", "arq-b", "REQ-RVW-B",
 		submittedAtFixture.Add(time.Hour), func(request domain.ShipmentRequest) domain.ShipmentRequest {

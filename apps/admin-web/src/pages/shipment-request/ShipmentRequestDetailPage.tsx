@@ -7,7 +7,7 @@ import {
   type DetailSummaryStat,
   type TemplateViewState,
 } from '../../templates';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@idpxyz/ui-primitives';
+import { Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@idpxyz/ui-primitives';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails, type TechnicalRow } from '../../components/TechnicalDetails';
 import { objectNouns } from '../../vocabulary/objects';
@@ -24,8 +24,14 @@ import { shipmentDetailSourceOf, type ShipmentRef } from './shipment-ref';
 import { customerDisplayOf, type CustomerNameIndex } from './shipment-request-list';
 import { useCustomerNames } from './use-customer-names';
 import { formatInstant } from '../moment';
+import { contentCategoryDisplayOf, foldedRowsOf, goodsLineRowsOf, packingSummaryOf } from './goods-view';
+import { supplementGapLinesOf } from './supplement-gaps';
 import { documentNumberAbsenceNoteOf, shipmentDisplayNoOf, shipmentRequestIdsOfDisplay } from './ref-no';
 import { documentTypeWords } from '../../vocabulary/document-numbering';
+import { FieldRow } from './field-row';
+import { PreAcceptanceFinancialControl } from './PreAcceptanceFinancialControl';
+import { lastAttemptOf } from './last-attempt';
+import { ResumeNoteText } from './resume-note';
 
 // 运单详情（领域：委托查阅），对 GET /shipment-request-views?shipmentRequestId=… 真实端点取数。地址第二段是屏上那个号——有运单号
 // 是运单号、老运单是去前缀的委托标识，壳层的标签、状态栏与最近打开照地址写字；打开时按运单号与这个号可能对应的委托标识一起
@@ -81,46 +87,137 @@ function technicalRowsOf(view: ShipmentRequestDetail): TechnicalRow[] {
     { label: '提交主体', value: view.source },
     { label: '来源请求键', value: view.sourceRequestKey },
     { label: '当前提交版本', value: view.submissionVersionId },
+    // 「受理进度」上的停因译成中文，原码留在这里对日志。
+    { label: '最近处理原因码', value: view.acceptanceTask.lastAttemptReason ?? '' },
+    { label: '结算未形成原因码', value: view.acceptanceTask.lastAttemptSettlementReason ?? '' },
+    { label: '最近处理续办方', value: view.acceptanceTask.lastAttemptResumePath ?? '' },
     { label: '续办引用', value: view.acceptanceTask.lastAttemptContinuation ?? '' },
     { label: '决定标识', value: view.decision?.decisionId ?? '' },
   ];
 }
 
+// 货物明细与平台货件两个区块（ADR-0373、ADR-0374，票 declared-goods-lines/04）。没报就不出区块，不显一个空表。
+function goodsSectionsOf(view: ShipmentRequestDetail): DetailSection[] {
+  const sections: DetailSection[] = [];
+  if (view.platformShipment) {
+    sections.push({
+      id: 'platform-shipment',
+      title: objectNouns.platformShipment,
+      description: '客户报的平台货件：一个平台货件一张运单，每箱的平台箱标号在上面的包裹表里。号由客户交来，本系统不向平台核对。',
+      content: (
+        <dl className="space-y-1">
+          <FieldRow label={objectNouns.platform} value={view.platformShipment.platform} />
+          <FieldRow label={objectNouns.platformShipmentNumber} value={view.platformShipment.shipmentId} mono />
+          <FieldRow label={objectNouns.platformReferenceNumber} value={view.platformShipment.referenceId ?? '—'} mono />
+        </dl>
+      ),
+    });
+  }
+  // 服务端不交 goods 的两种情形各说一句,不显空表:分叉待复核时说不出该按哪一版,页面也不挑一版;客户经资料修订清空了整组,
+  // 与「从没报过」要分得开。
+  if (view.goodsStanding === 'UNDETERMINED') {
+    sections.push({
+      id: 'goods-details',
+      title: objectNouns.goodsDetails,
+      description: '这票的货物明细有资料修订对着过期或不认识的基础版本改,待复核并掉之后才说得出在用的是哪一版。',
+      content: <p className="type-body text-idpxyz-textMuted">待复核</p>,
+    });
+  }
+  if (view.goodsStanding === 'ON_ADOPTED_VERSION' && !view.goods) {
+    sections.push({
+      id: 'goods-details',
+      title: objectNouns.goodsDetails,
+      description: '客户经资料修订清空了这票的货物明细;提交时报的那一份仍留在历史版本里,不再在用。',
+      content: <p className="type-body text-idpxyz-textMuted">已清空</p>,
+    });
+  }
+  if (view.goods) {
+    const goods = view.goods;
+    const amended = view.goodsStanding === 'ON_ADOPTED_VERSION';
+    const rows = goodsLineRowsOf(goods);
+    const category = contentCategoryDisplayOf(goods);
+    sections.push({
+      id: 'goods-details',
+      title: objectNouns.goodsDetails,
+      description: `客户申报的货物，每行一种货，值按客户给的原样显示、不换算；取自箱单或商品申报资料的格在行下注明。${
+        amended ? '按客户资料修订后采用的那一版显示，行号随那一版重编。' : ''
+      }`,
+      content: (
+        <div className="space-y-2">
+          {category.text && (
+            <dl className="space-y-1">
+              <FieldRow
+                label={objectNouns.contentCategory}
+                value={
+                  <>
+                    <div>{category.text}</div>
+                    {category.sourceNotes.length > 0 && (
+                      <div className="type-caption text-idpxyz-textMuted">{category.sourceNotes.join('；')}</div>
+                    )}
+                  </>
+                }
+              />
+            </dl>
+          )}
+          {rows.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>行</TableHead>
+                  <TableHead>品名</TableHead>
+                  <TableHead>数量</TableHead>
+                  <TableHead>单价</TableHead>
+                  <TableHead>行总价</TableHead>
+                  <TableHead>币种</TableHead>
+                  <TableHead>净重</TableHead>
+                  <TableHead>编码</TableHead>
+                  <TableHead>原产国</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>销售订单</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row.line}>
+                    <TableCell>{row.line}</TableCell>
+                    <TableCell>
+                      <div>{row.description}</div>
+                      {row.sourceNotes.length > 0 && (
+                        <div className="type-caption text-idpxyz-textMuted">{row.sourceNotes.join('；')}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>{row.quantity}</TableCell>
+                    <TableCell className="font-mono">{row.unitValue}</TableCell>
+                    <TableCell className="font-mono">{row.lineValue}</TableCell>
+                    <TableCell>{row.currency}</TableCell>
+                    <TableCell>{row.netWeight}</TableCell>
+                    <TableCell className="font-mono">{row.commodityCodes}</TableCell>
+                    <TableCell>{row.originCountry}</TableCell>
+                    <TableCell className="font-mono">{row.sku}</TableCell>
+                    <TableCell className="font-mono">{row.salesOrder}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      ),
+    });
+  }
+  return sections;
+}
+
 function buildSections(view: ShipmentRequestDetail): DetailSection[] {
+  const lastAttempt = lastAttemptOf(view.acceptanceTask);
   const sections: DetailSection[] = [
     {
       id: 'declared-parcels',
       title: objectNouns.parcel,
-      description: '客户申报的每一件：重量与尺寸按客户填的原样显示；受理后件数固定，增减要走取消或新建关联运单。',
-      content: (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>包裹号</TableHead>
-              <TableHead>申报重量</TableHead>
-              <TableHead>申报尺寸</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {view.declaredParcels.map((parcel) => (
-              <TableRow key={parcel.parcelId}>
-                <TableCell>
-                  <span className="font-mono type-body">{parcel.parcelId}</span>
-                </TableCell>
-                <TableCell>
-                  {parcel.declaredWeightValue ? `${parcel.declaredWeightValue} ${parcel.declaredWeightUnit ?? ''}` : '未填'}
-                </TableCell>
-                <TableCell>
-                  {parcel.dimensions
-                    ? `${parcel.dimensions.length} × ${parcel.dimensions.width} × ${parcel.dimensions.height} ${parcel.dimensions.unit}`
-                    : '未填'}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ),
+      description:
+        '客户申报的每一件：重量与尺寸按客户填的原样显示；受理后件数固定，增减要走取消或新建关联运单。「装箱」一列是这一箱装了货物明细的哪几行，没报即整票清单。',
+      content: <DeclaredParcelsTable parcels={view.declaredParcels} />,
     },
+    ...goodsSectionsOf(view),
     {
       id: 'acceptance-task',
       title: '受理进度',
@@ -128,14 +225,27 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
       content: (
         <dl className="space-y-1">
           <FieldRow label="进度" value={<StatusPill code={view.acceptanceTask.state} />} />
-          {view.acceptanceTask.lastAttemptReason !== undefined && (
-            <FieldRow label="最近处理结果" value={view.acceptanceTask.lastAttemptReason} />
-          )}
+          {lastAttempt && <FieldRow label="最近处理结果" value={lastAttempt.text} />}
+          {lastAttempt?.resume && <FieldRow label="谁来续办" value={<ResumeNoteText note={lastAttempt.resume} />} />}
           {view.acceptanceTask.lastAttemptedAt !== undefined && (
             <FieldRow label="最近处理时间" value={formatInstant(view.acceptanceTask.lastAttemptedAt)} mono />
           )}
+          {supplementGapLinesOf(view.acceptanceTask.supplementGaps).map((line) => (
+            <FieldRow
+              key={line.parcelId || 'shipment'}
+              label={line.parcelId ? `等客户补 · ${line.parcelId}` : '等客户补 · 整票'}
+              value={`缺${line.missing}`}
+            />
+          ))}
         </dl>
       ),
+    },
+    {
+      id: 'pre-acceptance-financial-control',
+      title: '受理前财务控制',
+      description:
+        '受理前按估价冻结资金或占用信用，结论与限制原因、逐版本的估价与占用都在这里。结论来自运单，估价与占用来自结算，各读各的：一边读不到不影响另一边。',
+      content: <PreAcceptanceFinancialControl view={view} />,
     },
   ];
 
@@ -163,12 +273,74 @@ function buildSections(view: ShipmentRequestDetail): DetailSection[] {
   return sections;
 }
 
-/** 区块内的键值行，排版对齐 DetailPageTemplate 基本信息区。 */
-function FieldRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
+/**
+ * 包裹表：逐件列包裹号与跟踪号（ADR-0374 决定六，运单号指整张委托，不当跟踪号）。客户件号、平台箱标号与装箱三列只在有件报了时出：
+ * 一件小包整列「—」只是噪声。件数多时折起（foldedRowsOf），FBA 几十箱不把下面的区块推出屏。
+ */
+function DeclaredParcelsTable({ parcels }: { parcels: ShipmentRequestDetail['declaredParcels'] }) {
+  const [expanded, setExpanded] = useState(false);
+  const { shown, hidden } = foldedRowsOf(parcels, expanded);
+  const withCustomerNumbers = parcels.some((parcel) => parcel.customerParcelNumber);
+  const withBoxLabels = parcels.some((parcel) => parcel.platformBoxLabel);
+  const withPacking = parcels.some((parcel) => parcel.packing && parcel.packing.length > 0);
   return (
-    <div className="flex gap-3 type-body leading-5">
-      <dt className="w-[128px] shrink-0 text-idpxyz-textMuted">{label}</dt>
-      <dd className={`min-w-0 flex-1 break-words text-idpxyz-text ${mono ? 'font-mono' : ''}`}>{value}</dd>
+    <div className="space-y-2">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{objectNouns.parcelNumber}</TableHead>
+            {withCustomerNumbers && <TableHead>{objectNouns.customerParcelNumber}</TableHead>}
+            {withBoxLabels && <TableHead>{objectNouns.platformBoxLabel}</TableHead>}
+            <TableHead>{objectNouns.trackingNumber}</TableHead>
+            <TableHead>申报重量</TableHead>
+            <TableHead>申报尺寸</TableHead>
+            {withPacking && <TableHead>{objectNouns.packing}</TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {shown.map((parcel) => (
+            <TableRow key={parcel.parcelId}>
+              <TableCell>
+                <span className="font-mono type-body">{parcel.parcelId}</span>
+              </TableCell>
+              {withCustomerNumbers && (
+                <TableCell>
+                  <span className="font-mono type-body">{parcel.customerParcelNumber ?? '—'}</span>
+                </TableCell>
+              )}
+              {withBoxLabels && (
+                <TableCell>
+                  <span className="font-mono type-body">{parcel.platformBoxLabel ?? '—'}</span>
+                </TableCell>
+              )}
+              <TableCell>
+                <span className="font-mono type-body">
+                  {parcel.trackingNumbers && parcel.trackingNumbers.length > 0 ? parcel.trackingNumbers.join('、') : '—'}
+                </span>
+              </TableCell>
+              <TableCell>
+                {parcel.declaredWeightValue ? `${parcel.declaredWeightValue} ${parcel.declaredWeightUnit ?? ''}` : '未填'}
+              </TableCell>
+              <TableCell>
+                {parcel.dimensions
+                  ? `${parcel.dimensions.length} × ${parcel.dimensions.width} × ${parcel.dimensions.height} ${parcel.dimensions.unit}`
+                  : '未填'}
+              </TableCell>
+              {withPacking && <TableCell>{packingSummaryOf(parcel.packing) || '—'}</TableCell>}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {hidden > 0 && (
+        <Button variant="ghost" size="sm" onClick={() => setExpanded(true)}>
+          展开其余 {hidden} 件
+        </Button>
+      )}
+      {expanded && foldedRowsOf(parcels, false).hidden > 0 && (
+        <Button variant="ghost" size="sm" onClick={() => setExpanded(false)}>
+          收起
+        </Button>
+      )}
     </div>
   );
 }
@@ -285,7 +457,7 @@ export function ShipmentRequestDetailPage({
       title={objectNouns.shipment}
       identifier={view ? shipmentDisplayNoOf(view) : shipmentRef}
       status={view ? <StatusPill code={view.state} /> : undefined}
-      description="这张运单的客户、件数、受理进度与决定。物流动态在「物流动态」页按包裹号查。"
+      description="这张运单的客户、件数、受理进度、受理前财务控制与决定。物流动态在「物流动态」页按包裹号查。"
       headerActions={
         onBack ? (
           <button

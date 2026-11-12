@@ -12,7 +12,7 @@ import (
 // 必填性、说明都取自 sheets 与 cardFields，没有手写的副本；增删一列规格自动跟着变。
 func TestSpecMirrorsTheSheetAndColumnDefinitions(t *testing.T) {
 	spec := Reader{}.PriceCardTemplateSpec()
-	if spec.TemplateVersion != TemplateVersion || strings.Join(spec.AcceptedTemplateVersions, ",") != "PPT-1,PPT-2" {
+	if spec.TemplateVersion != TemplateVersion || strings.Join(spec.AcceptedTemplateVersions, ",") != "PPT-1,PPT-2,PPT-3" {
 		t.Fatalf("version = %s accepted = %v", spec.TemplateVersion, spec.AcceptedTemplateVersions)
 	}
 	if len(spec.Sheets) != len(sheets) {
@@ -47,11 +47,25 @@ func TestSpecMirrorsTheSheetAndColumnDefinitions(t *testing.T) {
 		}
 	}
 	bounds := spec.Sheets[indexOfSheet(t, spec, sheetTotalBounds)]
-	if bounds.Repeatable || bounds.Since != TemplateVersion || len(bounds.Columns) != 2 || bounds.Columns[0].Key != "minimum" || bounds.Columns[1].Key != "maximum" {
+	if bounds.Repeatable || bounds.Since != templateVersionV2 || len(bounds.Columns) != 2 || bounds.Columns[0].Key != "minimum" || bounds.Columns[1].Key != "maximum" {
 		t.Errorf("total_bounds = %+v", bounds)
 	}
-	if card := spec.Sheets[indexOfSheet(t, spec, sheetCard)]; card.Repeatable || card.Layout != "FIELDS" || len(card.Columns) != len(cardFields) {
+	card := spec.Sheets[indexOfSheet(t, spec, sheetCard)]
+	if card.Repeatable || card.Layout != "FIELDS" || len(card.Columns) != len(cardFields) {
 		t.Errorf("card = %+v", card)
+	}
+	// 适用服务产品自 PPT-3 起才有：规格口列出它、标出版本，是可缺的列表格；其余 card 字段不带版本。
+	for _, column := range card.Columns {
+		wantSince := ""
+		if column.Key == "serviceProducts" {
+			wantSince = "PPT-3"
+			if column.Requirement != "optional" || column.Title != "适用服务产品" {
+				t.Errorf("serviceProducts = %+v", column)
+			}
+		}
+		if column.Since != wantSince {
+			t.Errorf("card 字段 %s 的 since = %q，want %q", column.Key, column.Since, wantSince)
+		}
 	}
 }
 

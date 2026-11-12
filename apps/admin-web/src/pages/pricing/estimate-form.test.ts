@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { emptyEstimateDraft, estimateLocalProblems, estimatePayloadOf, type EstimateDraft } from './estimate-form';
+import {
+  emptyEstimateDraft,
+  estimateLocalProblems,
+  estimatePayloadOf,
+  estimateServiceProductNote,
+  type EstimateDraft,
+} from './estimate-form';
 
 // 本文件钉试算表单（票 operator-workspace-gaps/06，UC-PP-001「试算声明」）的编码层：草稿 → 载荷逐格照抄、墙钟时刻换 RFC 3339、
 // 可缺的格留空即缺席（不拿零值或空串顶替）；本地只判编码层问题，领域规则留给服务端逐格答。
@@ -63,4 +69,23 @@ test('本地只判编码层问题', () => {
   deepEqual(estimateLocalProblems(draft({ basisAt: 'yesterday' }), SHANGHAI), { basisAt: '时刻格式应为本地日期与时间' });
   equal(estimateLocalProblems(draft({ length: '30' }), SHANGHAI).dimensions, '尺寸要三边与单位一起填，或都不填');
   equal(estimateLocalProblems(draft({ origin: '200000' }), SHANGHAI).postalRoute, '邮编路线要始发与目的一起填，或都不填');
+});
+
+// Covers: 售价方向选了服务产品载荷带 serviceProduct（手填的去掉首尾空白）；不选即缺席，不发空串——缺席是「只看不声明产品的卡」
+// （ADR-0382 决定二、三）。方向不是售价时草稿里留着的产品也不发。
+test('服务产品：售价方向选了才带 serviceProduct，不选或不是售价即缺席', () => {
+  const base = { scope: 'SYN-SCOPE-01', direction: 'SELL', basisAt: '2026-06-01T16:00', weightValue: '1', weightUnit: 'KG' };
+  equal(estimatePayloadOf(draft({ ...base, serviceProduct: 'SYN-SP-FBA' }), SHANGHAI).serviceProduct, 'SYN-SP-FBA');
+  equal(estimatePayloadOf(draft({ ...base, serviceProduct: '  SYN-SP-FBA ' }), SHANGHAI).serviceProduct, 'SYN-SP-FBA');
+  equal('serviceProduct' in estimatePayloadOf(draft(base), SHANGHAI), false);
+  equal('serviceProduct' in estimatePayloadOf(draft({ ...base, serviceProduct: '  ' }), SHANGHAI), false);
+  for (const direction of ['BUY', 'INTERNAL', '']) {
+    equal('serviceProduct' in estimatePayloadOf(draft({ ...base, direction, serviceProduct: 'SYN-SP-FBA' }), SHANGHAI), false, direction);
+  }
+});
+
+// Covers: 不选时说清只按不指名产品的卡试算；选了说先用指名它的卡、没有再用不指名的卡。
+test('服务产品一格下的说明随选没选而变', () => {
+  equal(estimateServiceProductNote(emptyEstimateDraft()), '只按不指名产品的卡试算');
+  equal(estimateServiceProductNote(draft({ serviceProduct: 'SYN-SP-FBA' })), '先用指名这个产品的卡，没有再用不指名的卡');
 });

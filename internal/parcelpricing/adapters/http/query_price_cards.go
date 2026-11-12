@@ -109,6 +109,8 @@ type priceCardBody struct {
 	Retired              bool   `json:"retired"`
 	RetiredAt            string `json:"retiredAt,omitempty"`
 	SuccessorVersion     string `json:"successorVersion,omitempty"`
+	// ServiceProducts 是卡声明的适用服务产品（ADR-0382 决定一），不声明即缺键——缺键就是接其余产品，不是「没读到」。
+	ServiceProducts []string `json:"serviceProducts,omitempty"`
 }
 
 func priceCardBodyOf(row ports.PriceCardCatalogueRow) priceCardBody {
@@ -141,5 +143,8 @@ func priceCardBodyOf(row ports.PriceCardCatalogueRow) priceCardBody {
 		body.RetiredAt = rfc3339(row.RetiredAt)
 	}
 	body.SuccessorVersion = row.SuccessorVersion
+	if len(row.ServiceProducts) > 0 {
+		body.ServiceProducts = append([]string(nil), row.ServiceProducts...)
+	}
 	return body
 }

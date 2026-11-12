@@ -628,6 +628,84 @@ export function getStatementLines(statement: string): Promise<ApiResult<Statemen
   return exchangeMasterData<StatementLinesResponseBody>(`/settlement-statement-lines?statement=${encodeURIComponent(statement)}`);
 }
 
+// —— 运单详情的受理前估价（GET /settlement-pre-acceptance-estimates；ADR-0379 决定二，形状照票 declared-goods-lines/19）——
+// 金额分两种写法：合计、逐件小计与占用金额是最小币单位的整数串（与费用、对账读口同一写法）；费用行是试算当时算出的金额，
+// 主单位的十进制串带小数，币种逐行给。两种不能混用同一个格式化函数。数组格按形状不缺席，但 Go 的 nil 切片会编成 null，
+// 读的一侧先收成数组再用。
+
+/** 一行试算费用。effect 取 ADD / DEDUCT；amount 是主单位十进制串（例如 "384.00"），不是最小币单位。 */
+export interface PreAcceptanceChargeLineRecord {
+  code: string;
+  effect: string;
+  amount: string;
+  currency: string;
+}
+
+/** 一件包裹的试算。补记之前形成的估价（detailRecorded 为 false）不带计价重量与费用行。 */
+export interface PreAcceptanceParcelEstimateRecord {
+  parcel: string;
+  evaluation: string;
+  /** 最小币单位整数串。 */
+  totalAmount: string;
+  currency: string;
+  pricingWeight?: { value: string; unit: string };
+  chargeLines?: PreAcceptanceChargeLineRecord[];
+}
+
+/**
+ * 一笔占用。kind 取 FUNDS_FREEZE / CREDIT_EXPOSURE；status 按种类各一套：冻结 HELD / RELEASED / CONVERTED，信用占用
+ * RECORDED / RELEASED / CONVERTED。部分转扣费的占用状态不变、convertedAmount 大于零。释放、转扣的时刻没有即不带。
+ */
+export interface PreAcceptanceOccupationRecord {
+  kind: string;
+  id: string;
+  status: string;
+  /** 最小币单位整数串。 */
+  amount: string;
+  currency: string;
+  formedAt: string;
+  releasedAt?: string;
+  /** 最小币单位整数串；"0" 即没转扣费。 */
+  convertedAmount?: string;
+  convertedAt?: string;
+}
+
+/** 一个提交版本的受理前估价。 */
+export interface PreAcceptanceEstimateRecord {
+  submissionVersion: string;
+  form: string;
+  pricingScope: string;
+  /** 价卡字面引用拆成的三格。 */
+  priceCard: { plan: string; version: string; fingerprint: string };
+  /** 没申报或未记即不带。 */
+  serviceProduct?: string;
+  /** false 是补记之前的旧行：逐件只有评价标识与小计。 */
+  detailRecorded: boolean;
+  /** 最小币单位整数串。 */
+  totalAmount: string;
+  currency: string;
+  trialAt: string;
+  recordedAt: string;
+  parcels: PreAcceptanceParcelEstimateRecord[];
+  /** 组合策略下冻结与信用占用可以同时在场；空数组是控制受限、没有占用。 */
+  occupations: PreAcceptanceOccupationRecord[];
+}
+
+/**
+ * 按委托读的估价，按试算时点排。没有留痕答空数组，不是 404。outcome 的取值随兄弟按键读口的惯例（对账单行那一口），钉形状时
+ * 没写出具体的词，页面也不据它分支，所以只收成可选的串。
+ */
+export interface PreAcceptanceEstimatesResponseBody {
+  outcome?: string;
+  estimates: PreAcceptanceEstimateRecord[];
+}
+
+export function getPreAcceptanceEstimates(shipmentRequest: string): Promise<ApiResult<PreAcceptanceEstimatesResponseBody>> {
+  return exchangeMasterData<PreAcceptanceEstimatesResponseBody>(
+    `/settlement-pre-acceptance-estimates?shipmentRequest=${encodeURIComponent(shipmentRequest)}`,
+  );
+}
+
 // —— 供应商账单与应付页（票 document-numbering/11；UC-SA-004，ADR-0340）——
 // 形状以 internal/settlementaccounting/adapters/http 的 query_supplier_bills.go 与 supplier_bill_decisions.go 为准。账单列表仍是
 // GET /settlement-statements?registry=supplier-bill-reception（listSettlementStatements），这里不另立第二个列表口。

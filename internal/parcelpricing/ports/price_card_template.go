@@ -182,6 +182,8 @@ type PriceCardTemplateColumnSpec struct {
 	MultiValued   bool
 	// AllowedValuesWhen 给「只在同一行另一格取某值时才封闭」的列：这一列平时是开放词汇，满足条件时取值才限在 Values 里。
 	AllowedValuesWhen []PriceCardTemplateValuesWhen
+	// Since 非空：这一列（card 表则是这个字段）自该版起才有。
+	Since string
 }
 
 // PriceCardTemplateValuesWhen 是一条条件封闭取值：同一行的 Column 格等于 Equals 时，本列只收 Values。

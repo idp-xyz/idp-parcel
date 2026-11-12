@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -65,7 +66,7 @@ func TestAnAmendmentCarryingContentFormsAVersionThatKeepsIt(t *testing.T) {
 	if !formed {
 		t.Fatal("the amendment formed no version")
 	}
-	if version.Content() != command.Content {
+	if !reflect.DeepEqual(version.Content(), command.Content) {
 		t.Fatalf("content = %#v, want the content the command carried（应用层不改值）", version.Content())
 	}
 	if fixture.requests.saved == nil {

@@ -8,6 +8,7 @@ test('引用的去处是对象所在的页，标识作检索词', () => {
   equal(refHash('legal-entity', 'SYN-LE-01'), '#/group-legal-entities?q=SYN-LE-01');
   equal(refHash('contract', 'SYN-CONTRACT-01'), '#/party-contracts?q=SYN-CONTRACT-01');
   equal(refHash('service-product', 'SYN-PROD-1'), '#/service-products?q=SYN-PROD-1');
+  equal(refHash('price-card', 'SYN-SELL-FBA'), '#/price-card-catalog?q=SYN-SELL-FBA');
 });
 
 test('规则包与财务控制策略落到商业规则与策略页对应的册', () => {

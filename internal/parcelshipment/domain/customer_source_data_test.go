@@ -539,3 +539,91 @@ func TestAMissingRequestEffectiveAtIsRecordedAsAbsentRatherThanBackfilled(t *tes
 		t.Fatalf("effective at = %v, want it backfilled by nothing", version.EffectiveAt())
 	}
 }
+
+// Covers: 首方契约「`CORRECTION` 必须带基准，取提交回执的 `submissionVersionId` 或前一次修订答复的 `sourceDataVersionId`」——
+// 范围上还没有修订时，指名接受基线那一版提交版本的更正接在链头上，直接采用，不判分叉；已有修订被采用之后再指名它，是对着
+// 过期基准改，照旧停在待复核。
+func TestACorrectionNamingTheAcceptedSubmissionVersionChainsOntoTheBaseline(t *testing.T) {
+	request, err := submitted(t).Decide(decisionSpec(t, allGroupsPassing(t)))
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	baseline, _ := request.AcceptanceBaseline()
+	correctionOn := func(id, prior string) domain.CustomerSourceDataVersion {
+		spec := amendmentSpec(t)
+		spec.VersionID = mustValue(t, domain.NewSourceDataVersionID, id)
+		spec.Intent = domain.CorrectionIntent
+		if spec.Basis, err = domain.NewAmendmentOfVersion(mustValue(t, domain.NewSourceDataVersionID, prior)); err != nil {
+			t.Fatalf("basis: %v", err)
+		}
+		version, err := domain.FormCustomerSourceDataVersion(spec)
+		if err != nil {
+			t.Fatalf("form %s: %v", id, err)
+		}
+		return version
+	}
+
+	if request, err = request.AmendCustomerSourceData(correctionOn("data-version-1", baseline.SubmissionVersionID().String())); err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	judgment, _ := request.CurrentSourceDataAdoption(consigneeScope(t))
+	if adopted, _ := judgment.AdoptedVersion(); judgment.Outcome() != domain.SourceDataAdopted || adopted.String() != "data-version-1" {
+		t.Fatalf("首条更正：outcome = %s adopted = %s, want ADOPTED data-version-1", judgment.Outcome(), adopted)
+	}
+
+	if request, err = request.AmendCustomerSourceData(correctionOn("data-version-2", baseline.SubmissionVersionID().String())); err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	if judgment, _ = request.CurrentSourceDataAdoption(consigneeScope(t)); judgment.Outcome() != domain.SourceDataAwaitingReview {
+		t.Fatalf("对着过期基准的更正：outcome = %s, want AWAITING_REVIEW", judgment.Outcome())
+	}
+}
+
+// Covers: 链头只认接受基线那一版、只在范围上还没有修订被采用时认——基线上已有一份补充被采用之后，再以提交版本为基础版本的
+// 更正是对着过期基准改；以受理前被补充顶掉的那一版提交版本为基础版本的更正也不是链头。两者都停在待复核。
+func TestOnlyTheAcceptedSubmissionVersionAndOnlyBeforeAnyAdoptionIsTheChainRoot(t *testing.T) {
+	correctionOn := func(id, prior string) domain.CustomerSourceDataVersion {
+		spec := amendmentSpec(t)
+		spec.VersionID = mustValue(t, domain.NewSourceDataVersionID, id)
+		spec.Intent = domain.CorrectionIntent
+		basis, err := domain.NewAmendmentOfVersion(mustValue(t, domain.NewSourceDataVersionID, prior))
+		if err != nil {
+			t.Fatalf("basis: %v", err)
+		}
+		spec.Basis = basis
+		version, err := domain.FormCustomerSourceDataVersion(spec)
+		if err != nil {
+			t.Fatalf("form %s: %v", id, err)
+		}
+		return version
+	}
+
+	afterSupplement := acceptedWithVersions(t, [2]string{"data-version-1", ""})
+	baseline, _ := afterSupplement.AcceptanceBaseline()
+	afterSupplement, err := afterSupplement.AmendCustomerSourceData(correctionOn("data-version-2", baseline.SubmissionVersionID().String()))
+	if err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	if judgment, _ := afterSupplement.CurrentSourceDataAdoption(consigneeScope(t)); judgment.Outcome() != domain.SourceDataAwaitingReview {
+		t.Fatalf("补充被采用后以提交版本为基准的更正：outcome = %s, want AWAITING_REVIEW", judgment.Outcome())
+	}
+
+	superseded, err := submitted(t).FormNewSubmissionVersion(supersessionSpecFor(t, "parcel-1", "parcel-2"))
+	if err != nil {
+		t.Fatalf("supersede: %v", err)
+	}
+	accepted, err := superseded.Decide(decisionSpec(t, allGroupsPassing(t)))
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	if baseline, _ := accepted.AcceptanceBaseline(); baseline.SubmissionVersionID().String() != "version-2" {
+		t.Fatalf("接受基线 = %s, want version-2", baseline.SubmissionVersionID())
+	}
+	accepted, err = accepted.AmendCustomerSourceData(correctionOn("data-version-1", "version-1"))
+	if err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	if judgment, _ := accepted.CurrentSourceDataAdoption(consigneeScope(t)); judgment.Outcome() != domain.SourceDataAwaitingReview {
+		t.Fatalf("以被顶掉的提交版本为基准的更正：outcome = %s, want AWAITING_REVIEW", judgment.Outcome())
+	}
+}

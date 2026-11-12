@@ -1,0 +1,13 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "retirements": [
+    {
+      "kind": "CREDIT_POLICY",
+      "scope": "SYN-SCOPE-01",
+      "objectId": "SYN-CREDIT-01",
+      "version": "v1",
+      "successorVersion": "v2",
+      "reference": "SYN-REISSUE-CREDIT-01-V2"
+    }
+  ]
+}

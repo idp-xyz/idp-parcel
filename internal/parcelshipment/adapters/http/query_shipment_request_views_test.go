@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -71,11 +72,15 @@ func viewDetailRecord(t *testing.T) ports.ShipmentRequestDetailRecord {
 		},
 		PriorVersionCount: 1,
 		Task: ports.AcceptanceTaskViewRecord{
-			State:                   domain.AcceptanceTaskComplete,
-			HasAttempt:              true,
-			LastAttemptReason:       "COMMERCIAL_BASIS_UNAVAILABLE",
-			LastAttemptContinuation: "CONT-1",
-			LastAttemptedAt:         viewSubmittedAt.Add(30 * time.Minute),
+			State:                       domain.AcceptanceTaskComplete,
+			HasAttempt:                  true,
+			LastAttemptReason:           "FINANCIAL_CONTROL_NOT_CONFIGURED",
+			LastAttemptResumePath:       domain.ResumeByOperatorRegistration,
+			LastAttemptContinuation:     "CONT-1",
+			LastAttemptedAt:             viewSubmittedAt.Add(30 * time.Minute),
+			LastAttemptSettlementReason: "ESTIMATE_PRICE_CARD_NOT_CONFIGURED",
+			LastAttemptServiceProduct:   "SYN-PROD-01",
+			LastAttemptEstimateGapCodes: []string{"MEASUREMENT", "POSTAL_ROUTE"},
 		},
 		HasDecision: true,
 		Decision: ports.AcceptanceDecisionViewRecord{
@@ -448,9 +453,13 @@ func TestViewsDetailReportsTheWholeView(t *testing.T) {
 			} `json:"declaredParcels"`
 			PriorVersionCount int `json:"priorVersionCount"`
 			AcceptanceTask    struct {
-				State                   string `json:"state"`
-				LastAttemptReason       string `json:"lastAttemptReason"`
-				LastAttemptContinuation string `json:"lastAttemptContinuation"`
+				State                       string   `json:"state"`
+				LastAttemptReason           string   `json:"lastAttemptReason"`
+				LastAttemptResumePath       string   `json:"lastAttemptResumePath"`
+				LastAttemptContinuation     string   `json:"lastAttemptContinuation"`
+				LastAttemptSettlementReason string   `json:"lastAttemptSettlementReason"`
+				LastAttemptServiceProduct   string   `json:"lastAttemptServiceProduct"`
+				LastAttemptEstimateGapCodes []string `json:"lastAttemptEstimateGapCodes"`
 			} `json:"acceptanceTask"`
 			Decision *struct {
 				DecisionID string `json:"decisionId"`
@@ -485,9 +494,15 @@ func TestViewsDetailReportsTheWholeView(t *testing.T) {
 	if view.PriorVersionCount != 1 {
 		t.Fatalf("prior versions = %d", view.PriorVersionCount)
 	}
+	// 这几格字段名与管理台票 declared-goods-lines/24 钉死（ADR-0383 决定三、四）：续办方交领域原词，结算原因不冠 SA-。
+	// lastAttemptEstimateGapCodes 与管理台票 declared-goods-lines/27 钉死（ADR-0381 决定四）：计价的缺项码原样。
 	if view.AcceptanceTask.State != "COMPLETE" ||
-		view.AcceptanceTask.LastAttemptReason != "COMMERCIAL_BASIS_UNAVAILABLE" ||
-		view.AcceptanceTask.LastAttemptContinuation != "CONT-1" {
+		view.AcceptanceTask.LastAttemptReason != "FINANCIAL_CONTROL_NOT_CONFIGURED" ||
+		view.AcceptanceTask.LastAttemptResumePath != "OPERATOR_REGISTRATION" ||
+		view.AcceptanceTask.LastAttemptContinuation != "CONT-1" ||
+		view.AcceptanceTask.LastAttemptSettlementReason != "ESTIMATE_PRICE_CARD_NOT_CONFIGURED" ||
+		view.AcceptanceTask.LastAttemptServiceProduct != "SYN-PROD-01" ||
+		!slices.Equal(view.AcceptanceTask.LastAttemptEstimateGapCodes, []string{"MEASUREMENT", "POSTAL_ROUTE"}) {
 		t.Fatalf("任务面变形：%+v", view.AcceptanceTask)
 	}
 	if view.Decision == nil || view.Decision.Kind != "ACCEPTED" ||
@@ -562,5 +577,183 @@ func TestViewsTransportFailuresSplitByRetryAction(t *testing.T) {
 	}
 	if allow := wrongMethod.Header().Get("Allow"); allow != http.MethodGet {
 		t.Fatalf("allow = %q", allow)
+	}
+}
+
+// Covers: ADR-0373、ADR-0374 决定六（票 declared-goods-lines/04）——详情交出委托级货物明细（每格带值与来源标记）与平台货件，逐件交
+// 客户件号、平台箱标号与这一箱的装箱分配，形状与提交口对应；没报的整键缺席。
+func TestViewsDetailReportsGoodsAndPlatformDeclarations(t *testing.T) {
+	record := viewDetailRecord(t)
+	parcel1 := mustValue(t, domain.NewDeclaredParcelID, "parcel-1")
+	parcel2 := mustValue(t, domain.NewDeclaredParcelID, "parcel-2")
+	this := domain.SourceMarkThisDeclaration
+	goods, err := domain.NewGoodsDetails(domain.GoodsDetailsSpec{
+		Category: domain.ContentCategorySaleOfGoods, CategoryMark: this,
+		Lines: []domain.GoodsLineSpec{
+			{Descriptions: []domain.GoodsDescriptionSpec{{Language: "en", Text: domain.GoodsCellSpec{Value: "T-shirt", Mark: domain.SourceMarkBoxList}}},
+				Quantity:       domain.GoodsCellSpec{Value: "48", Mark: this},
+				CommodityCodes: []domain.CommodityCodeSpec{{Side: domain.CommodityCodeExportSide, Code: domain.GoodsCellSpec{Value: "6109100000", Mark: this}}},
+				SalesOrder:     domain.SalesOrderReferenceSpec{OrderNumber: domain.GoodsCellSpec{Value: "1001", Mark: this}}},
+		},
+		Packing: []domain.PackingAllocationSpec{{Parcel: parcel1, Line: 1, Quantity: "24"}, {Parcel: parcel2, Line: 1, Quantity: "24"}},
+	}, []domain.DeclaredParcelID{parcel1, parcel2})
+	if err != nil {
+		t.Fatalf("货物明细：%v", err)
+	}
+	record.Goods = goods
+	shipment, err := domain.DeclarePlatformShipment("AMAZON", mustValue(t, domain.NewExternalIdentifierNumber, "FBA15SYNVIEW"), "")
+	if err != nil {
+		t.Fatalf("平台货件：%v", err)
+	}
+	record.PlatformShipment = shipment
+	record.DeclaredParcels[0].CustomerParcelNumber = "CUST-0001"
+	record.DeclaredParcels[1].PlatformBoxLabel = "FBA15SYNVIEWU000002"
+
+	response := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: record, found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1")
+	var body struct {
+		Request struct {
+			Goods *struct {
+				ContentCategory string `json:"contentCategory"`
+				Lines           []struct {
+					Line         int `json:"line"`
+					Descriptions []struct {
+						Lang string `json:"lang"`
+						Text struct{ Value, Mark string }
+					} `json:"descriptions"`
+					Quantity       *struct{ Value, Mark string } `json:"quantity"`
+					LineValue      *struct{ Value, Mark string } `json:"lineValue"`
+					CommodityCodes []struct {
+						Side string                       `json:"side"`
+						Code struct{ Value, Mark string } `json:"code"`
+					} `json:"commodityCodes"`
+					SalesOrder *struct {
+						OrderNumber *struct{ Value, Mark string } `json:"orderNumber"`
+					} `json:"salesOrder"`
+				} `json:"lines"`
+			} `json:"goods"`
+			PlatformShipment *struct {
+				Platform    string `json:"platform"`
+				ShipmentID  string `json:"shipmentId"`
+				ReferenceID string `json:"referenceId"`
+			} `json:"platformShipment"`
+			DeclaredParcels []struct {
+				ParcelID             string `json:"parcelId"`
+				CustomerParcelNumber string `json:"customerParcelNumber"`
+				PlatformBoxLabel     string `json:"platformBoxLabel"`
+				Packing              []struct {
+					Line     int    `json:"line"`
+					Quantity string `json:"quantity"`
+				} `json:"packing"`
+			} `json:"declaredParcels"`
+		} `json:"request"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	view := body.Request
+	if view.Goods == nil || view.Goods.ContentCategory != "SALE_OF_GOODS" || len(view.Goods.Lines) != 1 {
+		t.Fatalf("goods = %+v", view.Goods)
+	}
+	line := view.Goods.Lines[0]
+	if line.Line != 1 || line.Descriptions[0].Text.Value != "T-shirt" || line.Descriptions[0].Text.Mark != "BOX_LIST" ||
+		line.Quantity == nil || line.Quantity.Value != "48" || line.LineValue != nil ||
+		line.CommodityCodes[0].Side != "EXPORT" || line.SalesOrder == nil || line.SalesOrder.OrderNumber.Value != "1001" {
+		t.Fatalf("line = %+v；没报的格整键缺席", line)
+	}
+	if view.PlatformShipment == nil || view.PlatformShipment.ShipmentID != "FBA15SYNVIEW" || view.PlatformShipment.ReferenceID != "" {
+		t.Fatalf("platform shipment = %+v", view.PlatformShipment)
+	}
+	parcels := view.DeclaredParcels
+	if parcels[0].CustomerParcelNumber != "CUST-0001" || parcels[1].PlatformBoxLabel != "FBA15SYNVIEWU000002" ||
+		len(parcels[0].Packing) != 1 || parcels[0].Packing[0].Quantity != "24" || parcels[1].Packing[0].Line != 1 {
+		t.Fatalf("parcels = %+v", parcels)
+	}
+
+	plain := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: viewDetailRecord(t), found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1")
+	if strings.Contains(plain.Body.String(), `"goods"`) || strings.Contains(plain.Body.String(), `"platformShipment"`) {
+		t.Fatalf("没报货物与平台货件的委托交出了这两键：%s", plain.Body.String())
+	}
+}
+
+// Covers: 票 declared-goods-lines/04 完成判据「单件委托、多件不报分配」——只报整票清单时货物明细照交、各件不带 packing，单件委托
+// 同样不带；跟踪号逐件交。
+func TestViewsDetailReportsAWholeShipmentListWithoutPacking(t *testing.T) {
+	for name, parcels := range map[string]int{"单件委托": 1, "多件整票清单": 2} {
+		t.Run(name, func(t *testing.T) {
+			record := viewDetailRecord(t)
+			record.DeclaredParcels = record.DeclaredParcels[:parcels]
+			members := make([]domain.DeclaredParcelID, 0, parcels)
+			for _, parcel := range record.DeclaredParcels {
+				members = append(members, parcel.Parcel)
+			}
+			goods, err := domain.NewGoodsDetails(domain.GoodsDetailsSpec{Lines: []domain.GoodsLineSpec{
+				{Quantity: domain.GoodsCellSpec{Value: "3", Mark: domain.SourceMarkThisDeclaration}},
+			}}, members)
+			if err != nil {
+				t.Fatalf("货物明细：%v", err)
+			}
+			record.Goods = goods
+			record.DeclaredParcels[0].TrackingNumbers = []string{"SYN-TRACK-1"}
+			response := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: record, found: true},
+				http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1")
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200: %s", response.Code, response.Body.String())
+			}
+			body := response.Body.String()
+			if !strings.Contains(body, `"goods":{`) || strings.Contains(body, `"packing"`) {
+				t.Fatalf("整票清单要交货物明细、不带 packing：%s", body)
+			}
+			if !strings.Contains(body, `"trackingNumbers":["SYN-TRACK-1"]`) || strings.Count(body, `"trackingNumbers"`) != 1 {
+				t.Fatalf("跟踪号要只挂在有号的那一件上：%s", body)
+			}
+		})
+	}
+}
+
+// Covers: 票 declared-goods-lines/06——货物明细范围上两条修订分叉时，详情不交 goods 而说 UNDETERMINED：查阅的人要分得清
+// 「没报」与「说不出该按哪一版」；修订后的那一版被采用时说 ON_ADOPTED_VERSION。
+func TestViewsDetailSaysWhereTheGoodsDetailsComeFrom(t *testing.T) {
+	record := viewDetailRecord(t)
+	record.GoodsStanding = domain.GoodsDetailsUndetermined
+	body := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: record, found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1").Body.String()
+	if !strings.Contains(body, `"goodsStanding":"UNDETERMINED"`) || strings.Contains(body, `"goods":`) {
+		t.Fatalf("分叉时要说 UNDETERMINED 且不交 goods：%s", body)
+	}
+
+	plain := viewDetailRecord(t)
+	plain.GoodsStanding = domain.GoodsDetailsOnSubmission
+	body = getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: plain, found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1").Body.String()
+	if strings.Contains(body, `"goodsStanding"`) {
+		t.Fatalf("没报也没修订过的委托不带 goodsStanding：%s", body)
+	}
+}
+
+// Covers: ADR-0376 决定一——受理任务停在等待受控补充时，详情交出缺的各项（判组、包裹、原因），查阅的人看得到缺的是哪一条、
+// 哪几箱；不在等补充时整键缺席。
+func TestViewsDetailNamesWhatTheSupplementIsWaitingFor(t *testing.T) {
+	record := viewDetailRecord(t)
+	record.Task.SupplementGaps = []ports.SupplementGapViewRecord{
+		{Group: domain.RequiredDocumentCheck, Parcel: "parcel-2", Reason: "EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL"},
+		{Group: domain.RequiredDocumentCheck, Reason: "PACKING_DECLARED"},
+	}
+	body := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: record, found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1").Body.String()
+	for _, want := range []string{
+		`"supplementGaps":[`,
+		`{"group":"` + domain.RequiredDocumentCheck.String() + `","parcelId":"parcel-2","reason":"EVERY_PARCEL_HAS_PLATFORM_BOX_LABEL"}`,
+		`{"group":"` + domain.RequiredDocumentCheck.String() + `","reason":"PACKING_DECLARED"}`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("缺 %s：%s", want, body)
+		}
+	}
+	plain := getViews(t, &viewsIntakeDouble{scope: viewsScope(t)}, &viewsReaderDouble{detail: viewDetailRecord(t), found: true},
+		http.MethodGet, "/shipment-request-views?shipmentRequestId=REQ-1").Body.String()
+	if strings.Contains(plain, `"supplementGaps"`) {
+		t.Fatalf("不在等补充也带了缺口：%s", plain)
 	}
 }

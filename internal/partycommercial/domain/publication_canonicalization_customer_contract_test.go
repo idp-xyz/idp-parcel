@@ -156,10 +156,6 @@ func TestCustomerContractCanonicalizationRefusesWhatPublicationWouldRefuse(t *te
 		body domain.CustomerContractBody
 		want error
 	}{
-		"规则包缺席": {
-			body: domain.CustomerContractBody{CustomerAccount: commercialValue(t, domain.NewCustomerAccountID, "customer-1"), Bindings: []domain.FinancialControlBinding{appliedControl(t, "charge-prepaid")}},
-			want: domain.ErrInvalidCustomerContract,
-		},
 		"客户账户缺席（ADR-0177 决定一）": {
 			body: domain.CustomerContractBody{RulePackage: commercialValue(t, domain.NewCommercialObjectID, "rules-1"), Bindings: []domain.FinancialControlBinding{appliedControl(t, "charge-prepaid")}},
 			want: domain.ErrInvalidCustomerContract,

@@ -24,6 +24,7 @@ import { useToast } from '@idpxyz/ui-theme-runtime';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { partyOverviewStatesOf, usePartyOverviewLists } from './PartyOverviewSection';
 import { panelHeaderActionsOf, panelHintOf } from './business-party-panel-first-screen';
+import { identityTakesRevisions } from './identity-write-entries';
 import { panelProfileTabCountsOf, panelRelatedCountOf, type PanelRelatedTarget } from './business-party-panel-content';
 import { businessPartyRevisionHistory } from './BusinessPartyDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
@@ -207,7 +208,9 @@ export function BusinessPartyDetailPanel({
   // 在用的段数取读口在这一行上答的（两侧都算），不随合作关系册读到第几页而变；角色也在行上，不必等别的册答出。
   const liveRelationships = partyLiveRelationshipsOf(row).live;
   const hint = panelHintOf(row, ours, liveRelationships, roles.length);
-  const actions = panelHeaderActionsOf(mayWrite, pinned, hint, row.status);
+  // 登过停用的不再收新的一版资料（identityTakesRevisions）：页头的「更新资料」与各签里的入口都不摆，空着的资料换一句说明。
+  const takesRevisions = identityTakesRevisions(row);
+  const actions = panelHeaderActionsOf(mayWrite, pinned, hint, row.status, takesRevisions);
   // 「登记合作关系」就是「关联」签里那张内联表单：切到签、把表单打开、落到那一段，不另造一处写口。
   const openRelationshipForm = () => {
     openRelated({ section: 'relationships' });
@@ -355,6 +358,7 @@ export function BusinessPartyDetailPanel({
             relationshipsComplete={relationshipsComplete}
             hint={hint}
             mayWrite={mayWrite}
+            takesRevisions={takesRevisions}
             relationshipFormOpen={registering === row.partyId}
             onUpdateProfile={openProfileForm}
             onRegisterRelationship={openRelationshipForm}
@@ -365,12 +369,24 @@ export function BusinessPartyDetailPanel({
         </TabsContent>
         {tabs.includes('contacts') ? (
           <TabsContent value="contacts" forceMount={visited.has('contacts') || undefined} data-panel-scroller className={cardTabClass}>
-            <BusinessPartyPanelContacts partyId={row.partyId} profiles={profiles} mayWrite={mayWrite} onUpdateProfile={openProfileForm} />
+            <BusinessPartyPanelContacts
+              partyId={row.partyId}
+              profiles={profiles}
+              mayUpdateProfile={mayWrite && takesRevisions}
+              takesRevisions={takesRevisions}
+              onUpdateProfile={openProfileForm}
+            />
           </TabsContent>
         ) : null}
         {tabs.includes('profile') ? (
           <TabsContent value="profile" forceMount={visited.has('profile') || undefined} data-panel-scroller className={cardTabClass}>
-            <BusinessPartyPanelVersions partyId={row.partyId} profiles={profiles} mayWrite={mayWrite} onUpdateProfile={openProfileForm} />
+            <BusinessPartyPanelVersions
+              partyId={row.partyId}
+              profiles={profiles}
+              mayUpdateProfile={mayWrite && takesRevisions}
+              takesRevisions={takesRevisions}
+              onUpdateProfile={openProfileForm}
+            />
           </TabsContent>
         ) : null}
         <TabsContent value="overview" forceMount={visited.has('overview') || undefined} data-panel-scroller className={flushTabClass}>

@@ -176,6 +176,49 @@ export interface DeclaredParcelRecord {
   declaredWeightValue?: string;
   declaredWeightUnit?: string;
   dimensions?: ParcelDimensions;
+  /** 客户件号(客户为这一件给的号)与平台箱标号(ADR-0374 决定四),没报整键缺席。 */
+  customerParcelNumber?: string;
+  platformBoxLabel?: string;
+  /** 跟踪号:此刻仍适用的渠道包裹件号,按形成先后;还没打面单时缺席(ADR-0374 决定六)。 */
+  trackingNumbers?: string[];
+  /** 这一箱装了货物明细的哪几行各多少;整票清单时缺席。 */
+  packing?: PackingDraft[];
+}
+
+/** 详情里的一格申报内容:值原样;mark 说这一格是谁说的(THIS_DECLARATION 本单申报 / BOX_LIST 箱单 / COMMODITY_DECLARATION 商品申报资料)。 */
+export interface GoodsCellView {
+  value: string;
+  mark: string;
+}
+
+export interface GoodsLineView {
+  line: number;
+  descriptions?: { lang: string; text: GoodsCellView }[];
+  quantity?: GoodsCellView;
+  unit?: GoodsCellView;
+  unitValue?: GoodsCellView;
+  lineValue?: GoodsCellView;
+  currency?: GoodsCellView;
+  netWeight?: GoodsCellView;
+  netWeightUnit?: GoodsCellView;
+  commodityCodes?: { side: string; code: GoodsCellView }[];
+  originCountry?: GoodsCellView;
+  sku?: GoodsCellView;
+  salesOrder?: { platform?: GoodsCellView; orderNumber?: GoodsCellView; orderLine?: GoodsCellView };
+}
+
+/** 委托当前版本的货物明细(ADR-0373),形状同提交草案,每格多带来源标记。 */
+export interface GoodsView {
+  contentCategory?: string;
+  contentCategoryMark?: string;
+  contentCategoryNote?: GoodsCellView;
+  lines: GoodsLineView[];
+}
+
+export interface PlatformShipmentView {
+  platform: string;
+  shipmentId: string;
+  referenceId?: string;
 }
 
 /** 接受判断任务查阅面:任务阶段 + 最近一次没能推进的处理记录(有过才在场)。 */
@@ -184,6 +227,32 @@ export interface AcceptanceTaskRecord {
   lastAttemptReason?: string;
   lastAttemptContinuation?: string;
   lastAttemptedAt?: string;
+  /**
+   * 同一次尝试落库的续办方,取领域 ResumePath 原词(OPERATOR_REGISTRATION 等)。lastAttemptContinuation 是续办引用(派生出的
+   * `CONT-…` 串),说不出续办方,谁来续办只读这一格。
+   */
+  lastAttemptResumePath?: string;
+  /**
+   * 最近一次处理尝试上记的结算未形成原因(ADR-0383 决定三,票 declared-goods-lines/23):结算的 NotFormedReason 原词,不带
+   * `SA-` 前缀。只在财务控制那一步停下、且这次尝试落了库时在场。
+   */
+  lastAttemptSettlementReason?: string;
+  /** 同一次尝试判的那一版申报的服务产品;没申报不带。 */
+  lastAttemptServiceProduct?: string;
+  /**
+   * 申报不全那一轮计价点名的缺项码原样、去重(ADR-0381 决定四,票 declared-goods-lines/26):MEASUREMENT、ZONE 等计价原词。
+   * 只在申报不全分出的两路等待(等受控补充、等运营登记)上在场。
+   */
+  lastAttemptEstimateGapCodes?: string[];
+  /** 受理停在等客户补充时缺的各项(ADR-0376 决定一);不在等补充时缺席。 */
+  supplementGaps?: SupplementGapRecord[];
+}
+
+/** 一项受控补充缺口:判组与原因取服务端原词,包裹号缺席即委托级。 */
+export interface SupplementGapRecord {
+  group: string;
+  parcelId?: string;
+  reason: string;
 }
 
 /** 已形成的接受/拒绝决定(kind 词汇与撤回端点的 decisionKind 同一套)。 */
@@ -201,6 +270,18 @@ export interface ShipmentRequestDetail extends ShipmentRequestSummary {
   priorVersionCount: number;
   acceptanceTask: AcceptanceTaskRecord;
   decision?: DecisionRecord;
+  goods?: GoodsView;
+  /**
+   * goods 出自哪里(票 declared-goods-lines/06):ON_SUBMISSION 提交时报的、ON_ADOPTED_VERSION 资料修订后采用的那一版、
+   * UNDETERMINED 两条修订分叉待复核(此时不交 goods)。提交时没报、也没修订过的委托不带这一格。
+   */
+  goodsStanding?: string;
+  platformShipment?: PlatformShipmentView;
+  /**
+   * 最近一次受理判断记下的接受前财务控制结论（ADR-0379 决定三，票 declared-goods-lines/20）：与复核队列 recordedJudgments.financialControl
+   * 同一形状、同一个编码函数。没判过即不带；不带任何金额，金额在结算的受理前估价读口。
+   */
+  financialControl?: ReviewFinancialControlRecord;
 }
 
 /** 列表:空结果仍是 LISTED + 空数组(空列表不泄露任何存在性,是正常业务答案)。 */
@@ -290,6 +371,10 @@ export interface ReviewFinancialControlRecord {
   asOfAt?: string;
   asOfSemantics?: string;
   asOfPolicyVersion?: string;
+  /** 按哪个共同通过条件推出的结论(ALL_CONTROLS_PASS);`明确无控制`没有条件,缺席。 */
+  jointPassCondition?: string;
+  /** 有没有占着钱;结论受限时第一项仍可能占着,不能从 outcome 读出来。 */
+  occupationFormed?: boolean;
   /** 逐项控制项结果,空数组而不是缺席;`明确无控制`没有项,照实为空。 */
   items: ReviewControlItemRecord[];
 }
@@ -561,14 +646,58 @@ export interface DeclaredParcelDraft {
   declaredWidth?: string;
   declaredHeight?: string;
   declaredDimensionsUnit?: string;
-  /** 申报原始资料:具体必填字段由真实产品和关务区域决定,页面不发明必填。 */
-  goodsDescription?: string;
-  quantity?: string;
-  declaredValue?: string;
-  currency?: string;
-  originCountry?: string;
   /** 货物和服务资料的补充说明。 */
   serviceNotes?: string;
+  /** 这一箱的平台箱标号(如亚马逊 FBA 箱标,ADR-0374 决定四)。 */
+  platformBoxLabel?: string;
+  /** 这一箱装了货物明细的哪几行各多少(ADR-0373 决定三);要么各箱都报、要么都不报。 */
+  packing?: PackingDraft[];
+}
+
+/** 装箱分配的一条:行号从 1 起,与 goods.lines 的次序对应;数量随该行的计量单位。 */
+export interface PackingDraft {
+  line: number;
+  quantity: string;
+}
+
+/**
+ * 委托的货物明细(ADR-0373):货物明细行相当于商业发票的行,一种货的值只写一处。各格原样交给服务端,只认形状、
+ * 不核对;具体必填字段由真实产品和关务区域决定,页面不发明必填。
+ */
+export interface GoodsDraft {
+  /** 内件性质,UPU CN23 六格:GIFT / DOCUMENTS / COMMERCIAL_SAMPLE / RETURNED_GOODS / SALE_OF_GOODS / OTHER。 */
+  contentCategory?: string;
+  /** 只随 OTHER 说明一句是什么。 */
+  contentCategoryNote?: string;
+  lines: GoodsLineDraft[];
+}
+
+export interface GoodsLineDraft {
+  /** 品名,同一语言至多一条;lang 原样交,不知道语言时记 und。 */
+  descriptions?: { lang: string; text: string }[];
+  quantity?: string;
+  unit?: string;
+  /** 单价与行总价可只报一格,两格同用 currency。 */
+  unitValue?: string;
+  lineValue?: string;
+  currency?: string;
+  /** 整行的净重。 */
+  netWeight?: string;
+  netWeightUnit?: string;
+  /** 申报商品编码,口径 EXPORT / IMPORT 各至多一条。 */
+  commodityCodes?: { side: string; code: string }[];
+  originCountry?: string;
+  /** 货主自己的商品编码。 */
+  sku?: string;
+  /** 这一行货出自哪张销售订单;只是引用,服务端不核对。 */
+  salesOrder?: { platform?: string; orderNumber?: string; orderLine?: string };
+}
+
+/** 平台货件(ADR-0374):一个平台货件一份委托。 */
+export interface PlatformShipmentDraft {
+  platform: string;
+  shipmentId: string;
+  referenceId?: string;
 }
 
 export interface ShipmentRequestDraft {
@@ -588,6 +717,8 @@ export interface ShipmentRequestDraft {
   /** 目的服务范围。 */
   destinationServiceScope: string;
   parcels: DeclaredParcelDraft[];
+  goods?: GoodsDraft;
+  platformShipment?: PlatformShipmentDraft;
 }
 
 export interface WithdrawalDraft {

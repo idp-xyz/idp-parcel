@@ -101,6 +101,27 @@ func postalCodes(t *testing.T, origin, destination string) psdomain.DeclaredAddr
 // submittedRequest 造一份已提交委托。成员名单与画像分开给：缺画像的成员正是要演练的那一格。
 func submittedRequest(t *testing.T, parcelIDs []string, elements psdomain.DeclaredAddressElements, profiles ...psdomain.DeclaredParcelProfile) psdomain.ShipmentRequest {
 	t.Helper()
+	request, err := psdomain.SubmitShipmentRequest(submittedRequestSpec(t, parcelIDs, elements, profiles...))
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	return request
+}
+
+// submittedRequestWithProduct 是一件、带测量与邮编、申报了服务产品的已提交委托。
+func submittedRequestWithProduct(t *testing.T, product string) psdomain.ShipmentRequest {
+	t.Helper()
+	spec := submittedRequestSpec(t, []string{"parcel-1"}, postalCodes(t, "200000", "90210"), profileFor(t, "parcel-1", "1", "KG"))
+	spec.RequestedProduct = declaredProduct(t, product)
+	request, err := psdomain.SubmitShipmentRequest(spec)
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	return request
+}
+
+func submittedRequestSpec(t *testing.T, parcelIDs []string, elements psdomain.DeclaredAddressElements, profiles ...psdomain.DeclaredParcelProfile) psdomain.SubmitShipmentRequestSpec {
+	t.Helper()
 	parcels := make([]psdomain.DeclaredParcelID, 0, len(parcelIDs))
 	for _, raw := range parcelIDs {
 		parcels = append(parcels, value(t, psdomain.NewDeclaredParcelID, raw))
@@ -129,7 +150,7 @@ func submittedRequest(t *testing.T, parcelIDs []string, elements psdomain.Declar
 	if err != nil {
 		t.Fatalf("gate: %v", err)
 	}
-	request, err := psdomain.SubmitShipmentRequest(psdomain.SubmitShipmentRequestSpec{
+	return psdomain.SubmitShipmentRequestSpec{
 		Candidate:   candidate,
 		Gate:        gate,
 		VersionID:   value(t, psdomain.NewSubmissionVersionID, "version-1"),
@@ -137,11 +158,7 @@ func submittedRequest(t *testing.T, parcelIDs []string, elements psdomain.Declar
 		SubmittedAt: submittedAt,
 		Profiles:    profiles,
 		Elements:    elements,
-	})
-	if err != nil {
-		t.Fatalf("submit: %v", err)
 	}
-	return request
 }
 
 func allowedOwnership(t *testing.T) psdomain.ProductionOwnershipDecision {

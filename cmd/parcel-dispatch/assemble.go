@@ -810,6 +810,8 @@ type acceptanceChainGates struct {
 	estimateAdoptionRegistration  dispatch.Consumer
 	submissionVersionFormed       dispatch.Consumer
 	controlReleaseRefusalHandled  dispatch.Consumer
+	// pricingParameterRegistration 收计价「参数已登记」（ADR-0383 决定二）。
+	pricingParameterRegistration dispatch.Consumer
 }
 
 // operatorRegistrationRedrivePageSize 是登记续办门每次向`等待运营登记`队列要多少行。它不是
@@ -977,6 +979,13 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: pre-acceptance estimate adoption resume consumer: %w", err)
 	}
+	// 计价「参数已登记」那一份：发布侧是 parcel-pricing 价卡登记、价卡收尾与序列、目录复核的事务边界（ADR-0229 决定五），解开的
+	// 是控制那一步停在价卡一侧的等待（ADR-0383 决定一、二）。只认 SELL 方向，队列读口同上。
+	pricingParameterRegistration, err := psinbox.NewPricingParameterRegisteredConsumer(
+		db.Transactor(), inboxStore, requests, chain, operatorRegistrationRedrivePageSize)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: pricing parameter resume consumer: %w", err)
+	}
 	// ADR-0106 Decision 三的续办门：PS「新提交版本已形成」信封 → 同一条链拿新版本的任务再驱一拍，
 	// 停在`等待受控补充`的那一版已随入账留在库里。发布侧是 cmd/parcel-api 受控补充的事务边界壳。
 	submissionVersionFormed, err := psinbox.NewSubmissionVersionFormedConsumer(db.Transactor(), inboxStore, chain)
@@ -998,6 +1007,7 @@ func acceptanceChainConsumers(
 		estimateAdoptionRegistration:  estimateAdoptionRegistration,
 		submissionVersionFormed:       submissionVersionFormed,
 		controlReleaseRefusalHandled:  controlReleaseRefusalHandled,
+		pricingParameterRegistration:  pricingParameterRegistration,
 	}, nil
 }
 
@@ -1033,6 +1043,11 @@ func acceptanceCommercialBasis(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: acceptance content declarations: %w", err)
 	}
+	// 规则包正文只为提交条件读（ADR-0376 决定一）：规则包声明「必要资料」组适用时，按它引用的参考配置判。
+	rulePackages, err := pcpostgres.NewAcceptanceRulePackages(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance rule packages: %w", err)
+	}
 	keyStore, err := pspostgres.NewCommercialResolutionKeyStore(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: resolution key store: %w", err)
@@ -1061,6 +1076,7 @@ func acceptanceCommercialBasis(
 		Judgments:    pcapplication.NewFormJudgmentAsOfHandler(resolutions, asOfPolicies),
 		AsOfPolicies: asOfPolicies,
 		Contents:     contents,
+		Rules:        rulePackages,
 		Keys:         keys,
 		Values:       values,
 	}), nil
@@ -1237,7 +1253,8 @@ func acceptanceFinancialControl(
 const preAcceptanceTrialEvidence = ppdomain.EvidenceSynthetic
 
 // preAcceptanceTrials 接结算的受理前试算口（ADR-0179 决定一、三、四）：SA 的 PP 消费侧适配器 → PP「按委托提交版本形成受理前
-// 试算」入口 → 在用 SELL·客户费用价卡解析、PS 提交版本申报读口（经 PP 的 PS 消费侧适配器）与对给定价卡形成试算的入口。补齐读数
+// 试算」入口 → PS 提交版本申报读口（经 PP 的 PS 消费侧适配器，连同申报的服务产品）、按申报产品的在用 SELL·客户费用价卡解析
+// （ADR-0382 决定三）与对给定价卡形成试算的入口。补齐读数
 // 那两对与正式评价（formEvaluationFromRequest）同源同形：估价与随后的客户费用按同一版本清单作答，靠的就是这一点。
 // 这条链上没有评价库写口与交付口：试算只算不存、不交付（ADR-0152 决定二）。
 func preAcceptanceTrials(db *bentopg.DB, clock systemClock) (*sapricing.PreAcceptanceTrials, error) {
@@ -2761,12 +2778,23 @@ func formEvaluationFromRequest(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation identities: %w", err)
 	}
+	// SELL 请求选卡前读覆盖包裹的已接受委托申报的服务产品（ADR-0382 决定三），经 PP 的 PS 消费侧适配器；BUY 那一路同装、
+	// 不问它——选卡只有一种装法。
+	shipments, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: accepted service product source: %w", err)
+	}
+	products, err := ppshipment.NewAcceptedServiceProducts(shipments)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: accepted service product view: %w", err)
+	}
 	form, err := ppapplication.NewFormEvaluationFromRequestHandler(ppapplication.FormEvaluationFromRequestDeps{
-		Evaluations: evaluations,
-		PriceCards:  cards,
-		Identity:    identities,
-		Evaluate:    evaluate,
-		Inputs:      inputs,
+		Evaluations:     evaluations,
+		PriceCards:      cards,
+		Identity:        identities,
+		Evaluate:        evaluate,
+		Inputs:          inputs,
+		ServiceProducts: products,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form evaluation from request: %w", err)

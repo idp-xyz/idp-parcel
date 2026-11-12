@@ -13,6 +13,23 @@ import { field } from './fields';
 import { featureMeasure } from '../price-card-content';
 import { feeHasGroup, type CardFormState, type ConditionRow, type FeeItemState, type RateRow } from './model';
 import { cardFieldKeys, columnTitle, familySheet, sheetNames } from './spec';
+import { canonicalServiceProducts, declaresServiceProducts } from '../service-products';
+
+/** card 表里适用服务产品那一格的字段名，与方案文档的键同名（ADR-0382）；多个产品以英文分号分隔，同 amountRoundingPoints。 */
+export const serviceProductsCardField = 'serviceProducts';
+
+/** 规格口的 card 表收不收适用服务产品：收的那几版模板这一行总在，不收的版本写了就是未知字段。 */
+export function specTakesServiceProducts(spec: PriceCardTemplateSpec): boolean {
+  return cardFieldKeys(spec).includes(serviceProductsCardField);
+}
+
+/** card 表那一格的分号串 → 产品标识；空串答空数组。 */
+export function serviceProductsOfCell(text: string): string[] {
+  return text
+    .split(';')
+    .map((product) => product.trim())
+    .filter((product) => product !== '');
+}
 
 export interface Target {
   field: string;
@@ -433,6 +450,8 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
   defaultSheet(sheetNames.referenceCatalogues, '参考数据', { field: field.refs('zoneCatalogue'), label: '分区目录' });
 
   // ---- card 表：字段列全，没填的写 null ----
+  // 适用服务产品同此办：规格口列了它就总写这一行，没选或不是售价卡写 null（即不声明、接其余产品）；规格口没列它的模板版本
+  // 不写，那几版里它是未知字段。字段集与模板版本都随规格口，页面不替服务端定版本。
   const cardValues: Record<string, string | undefined> = {
     templateVersion: spec.templateVersion,
     planId,
@@ -440,6 +459,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
     scope: trim(basics.scope),
     direction: trim(basics.direction),
     purpose: trim(basics.purpose),
+    [serviceProductsCardField]: serviceProductsText(state),
     aggregation: trim(basics.aggregation),
     baseChargeCode: trim(basics.baseChargeCode),
     periodStartsAt: startsAt,
@@ -462,6 +482,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
     scope: basicsTarget('scope', '适用范围'),
     direction: basicsTarget('direction', '价格方向'),
     purpose: basicsTarget('purpose', '用途'),
+    [serviceProductsCardField]: basicsTarget('serviceProducts', '适用服务产品'),
     aggregation: basicsTarget('aggregation', '计价对象'),
     baseChargeCode: basicsTarget('baseChargeCode', '基础运费代码'),
     periodStartsAt: basicsTarget('periodStartsAt', '生效起点'),
@@ -486,6 +507,13 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
   sheets[sheetNames.card] = cardRows;
 
   return { workbook: { templateVersion: spec.templateVersion, sheets }, origins };
+}
+
+/** 只有售价卡有适用服务产品；没选或不是售价卡答空，那一行写 null，卡即接其余产品（ADR-0382 决定一）。 */
+function serviceProductsText(state: CardFormState): string | undefined {
+  if (!declaresServiceProducts(state.basics.direction)) return undefined;
+  const products = canonicalServiceProducts(state.basics.serviceProducts);
+  return products.length === 0 ? undefined : products.join(';');
 }
 
 function basisCells(fee: FeeItemState, dependencyId: string, baseChargeCode: string): Cells {

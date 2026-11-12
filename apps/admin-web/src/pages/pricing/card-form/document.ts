@@ -8,6 +8,7 @@
 import type { PriceCardWorkbook } from '../api';
 import { featureMeasure } from '../price-card-content';
 import { sheetNames } from './spec';
+import { serviceProductsCardField, serviceProductsOfCell } from './workbook';
 
 export class DocumentUnreadable extends Error {}
 
@@ -28,17 +29,28 @@ function decimal(text: string): { coefficient: string; scale: number } {
 const money = (text: string, currency: string) => ({ amount: decimal(text), currency });
 const quantity = (text: string, unit: string) => ({ value: decimal(text), unit });
 
+/** card 表里那一格的值；没有这一行答空串。 */
+function cardValue(workbook: PriceCardWorkbook, key: string): string {
+  const found = (workbook.sheets[sheetNames.card] ?? []).find((row) => row.field === key);
+  const value = found?.value;
+  return value === null || value === undefined ? '' : String(value);
+}
+
+/**
+ * 工作簿写下的适用服务产品。编辑器预览一步拿它念「适用产品」：它就是送去预览、服务端读过的那一份，不必等服务端在
+ * 预览答复里回显。
+ */
+export function workbookServiceProducts(workbook: PriceCardWorkbook): string[] {
+  return serviceProductsOfCell(cardValue(workbook, serviceProductsCardField));
+}
+
 export function workbookToDocument(workbook: PriceCardWorkbook): Doc {
   const sheet = (name: string): Row[] => workbook.sheets[name] ?? [];
   const get = (row: Row, key: string): string => {
     const value = row[key];
     return value === null || value === undefined ? '' : String(value);
   };
-  const cardRows = sheet(sheetNames.card);
-  const card = (key: string): string => {
-    const found = cardRows.find((row) => row.field === key);
-    return found === undefined ? '' : get(found, 'value');
-  };
+  const card = (key: string): string => cardValue(workbook, key);
 
   const tables = new Map(sheet(sheetNames.tables).map((row) => [get(row, 'tableId'), row]));
   const rateTable = (tableId: string): Doc => {
@@ -163,12 +175,15 @@ export function workbookToDocument(workbook: PriceCardWorkbook): Doc {
     };
   }
 
+  const serviceProducts = workbookServiceProducts(workbook);
   const doc: Doc = {
     canonicalization: 'FORM-PREVIEW',
     reference: { kind: 'pricing-plan', id: card('planId'), version: card('planVersion') },
     scope: card('scope'),
     direction: card('direction'),
     purpose: card('purpose'),
+    // 方案文档里这一键可缺，不声明就缺席（ADR-0382 决定四）；空数组不是它的写法。
+    ...(serviceProducts.length === 0 ? {} : { serviceProducts }),
     baseChargeCode: card('baseChargeCode'),
     aggregation: card('aggregation'),
     period: { startsAt: card('periodStartsAt'), endsAt: card('periodEndsAt') || openEnd },

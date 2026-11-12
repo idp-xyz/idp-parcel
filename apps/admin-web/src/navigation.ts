@@ -29,6 +29,7 @@ import {
   Milestone,
   Network,
   PackageOpen,
+  PackagePlus,
   PackageSearch,
   PackageCheck,
   PackageX,
@@ -82,6 +83,8 @@ export const navigationSections: NavigationSection[] = [
       { id: 'shipment-request-inquiry', label: '运单', icon: 'shipment-request-inquiry' },
       { id: 'tracking-projection', label: '物流动态', icon: 'tracking-projection' },
       { id: 'shipment-request', label: '新建与撤回', icon: 'shipment-request' },
+      // FBA 货件与小包是同一个委托、同一个提交口（ADR-0374 决定三），入口按场景分：箱子成表、装箱成矩阵，与一两件小包的表单不是一个样子。
+      { id: 'fba-shipment', label: '新建平台货件', icon: 'fba-shipment' },
       { id: 'acceptance-review', label: '待受理复核', icon: 'acceptance-review' },
       // 处置紧挨复核：同是接受判断任务上的等待态与续办角色（ADR-0132 决定二），但决定集不同——复核完成后决定可以是接受，
       // 处置只能选去向；两页分开，不让一项`业务限制`借复核那条路走到接受。
@@ -195,6 +198,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'group-legal-entities': Building2,
   'business-parties': UsersRound,
   'shipment-request': Send,
+  'fba-shipment': PackagePlus,
   'shipment-request-inquiry': PackageSearch,
   'acceptance-review': ClipboardCheck,
   'authorized-disposition': Signpost,
@@ -276,6 +280,13 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
   },
 
   // —— 运单（parcel-shipment）——
+  'fba-shipment': {
+    title: '新建平台货件',
+    summary: '送往电商平台仓的一个平台货件建一张运单：平台货件号、平台仓、每箱的箱标号与装箱。',
+    owner: '小包托运（parcel-shipment）',
+    source:
+      'docs/adr/0374-dedicated-line-fba-headhaul-is-an-ordinary-shipment-request-one-platform-shipment-one-request-one-carton-one-parcel.md 决定二、三；票 .scratch/declared-goods-lines/issues/05-admin-web-fba-shipment-and-multi-line-goods-entry.md',
+  },
   'shipment-request-inquiry': {
     title: '运单',
     summary: '查看全部运单：谁下的单、几件、现在到哪一步。',

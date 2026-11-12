@@ -214,8 +214,10 @@ type pricingPlanSnapshot struct {
 	AmountRounding   *amountRoundingSnapshot          `json:"amountRounding,omitempty"`
 	Catalogues       []referenceCatalogueLinkSnapshot `json:"referenceCatalogues,omitempty"`
 	TotalBounds      *totalBoundsSnapshot             `json:"totalChargeBounds,omitempty"`
-	Manifest         []versionReferenceSnapshot       `json:"manifest"`
-	ContentDigest    string                           `json:"contentDigest"`
+	// ServiceProducts 是卡声明的适用服务产品（ADR-0382 决定一）；不声明即缺键，既有各卡的快照读回不变。
+	ServiceProducts []string                   `json:"serviceProducts,omitempty"`
+	Manifest        []versionReferenceSnapshot `json:"manifest"`
+	ContentDigest   string                     `json:"contentDigest"`
 }
 
 func pricingPlanDocumentOf(plan PricingPlanVersion) pricingPlanSnapshot {
@@ -276,6 +278,7 @@ func pricingPlanDocumentOf(plan PricingPlanVersion) pricingPlanSnapshot {
 		}
 		document.TotalBounds = &bounds
 	}
+	document.ServiceProducts = serviceProductTexts(plan.serviceProducts)
 	for _, reference := range plan.manifest.references {
 		document.Manifest = append(document.Manifest, versionReferenceOf(reference))
 	}
@@ -339,6 +342,7 @@ func pricingPlanFrom(document pricingPlanSnapshot) PricingPlanVersion {
 		}
 		plan.structures.totalBounds = &bounds
 	}
+	plan.serviceProducts = serviceProductsFrom(document.ServiceProducts)
 	references := make([]VersionReference, 0, len(document.Manifest))
 	for _, reference := range document.Manifest {
 		references = append(references, versionReferenceFrom(reference))

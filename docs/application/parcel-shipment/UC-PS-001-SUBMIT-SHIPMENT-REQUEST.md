@@ -75,10 +75,10 @@
 |---|---|---|---|
 | 来源信封 | 否 | 接入适配器与接入来源 | 接入渠道身份、来源系统或主体、接入请求标识、来源发生时间（`occurredAt`）、系统接收时间（`receivedAt`）、原始内容或其不可变引用、关联与重试信息；两类时间是元数据，不进入业务内容摘要 |
 | 客户范围 | 仅可提供业务引用 | 接入身份与 `party-commercial` | 集团租户、货主客户账户、提交主体及其当前授权上下文必须由权威身份和商业关系解析 |
-| 服务请求 | 是 | 客户原始提交；适用性由 `party-commercial` 判断 | 客户委托参考、请求的服务产品或服务要求、客户请求生效时间（`requestEffectiveAt`）及客户明确约束；该时间的值和缺失/显式存在状态进入规范化内容摘要 |
+| 服务请求 | 是 | 客户原始提交；适用性由 `party-commercial` 判断 | 客户委托参考（客户单号）、平台货件号与平台参考号、请求的服务产品或服务要求、客户请求生效时间（`requestEffectiveAt`）及客户明确约束；该时间的值和缺失/显式存在状态进入规范化内容摘要 |
 | 寄收件范围 | 是 | 客户原始提交 | 同一委托声明的寄件关系、收件关系、地址和目的服务范围 |
-| 声明包裹 | 是 | 客户原始提交；内部身份由 `parcel-shipment` 建立 | 一个或多个客户声明成员及各自客户侧引用、声明测量、货物和服务资料 |
-| 申报原始资料 | 是 | 客户原始提交 | 品名、数量、价值、币种、原产地及适用监管资料；具体必填字段由真实产品和关务区域决定 |
+| 声明包裹 | 是 | 客户原始提交；内部身份由 `parcel-shipment` 建立 | 一个或多个客户声明成员及各自客户侧引用、声明测量、平台箱标号和服务资料；各成员在装箱分配里被指名，见「申报原始资料」一行 |
+| 申报原始资料 | 是 | 客户原始提交 | 委托的货物明细：内件性质，1 至 999 条货物明细行——每行品名（按语言多条）、数量与计量单位、单价与行总价及币种、净重、申报商品编码（出口侧与进口侧）、原产国、货主商品编码、销售订单引用——加可报的装箱分配（要么不报、要么报全）；内件性质为文件时可以没有行；各格原样保真，申报格带来源标记（[ADR-0373](../../adr/0373-a-shipment-requests-goods-details-are-invoice-lines-with-a-packing-allocation-kept-verbatim-and-replaced-as-a-whole.md)）；另及适用监管资料。具体必填字段由真实产品和关务区域决定 |
 
 一次提交可以包含多份委托。提交批次只负责处理归组，每份委托独立取得结果。每份委托必须至少包含一个包裹，且其全部成员共享客户账户、合同责任法人、合同与服务产品依据、寄收件关系和目的服务范围。
 
@@ -140,7 +140,7 @@
 | 法人与合同 | 取得明确责任法人和当前适用客户合同版本 | 按适用规则拒绝 | 尚未决定 | `PC-RULE`、`PS-RULE` |
 | 产品与服务 | 取得已发布服务产品版本并判断客户要求与适用范围 | 按适用规则拒绝 | 尚未决定 | `PC-RULE`、`PS-RULE` |
 | 成员基线 | 验证至少一个包裹及同一委托共享约束 | 整份当前提交版本不得接受；资料纠错形成新提交版本，成员重组先撤回原委托再关联重提 | 尚未决定 | `PS-RULE`、`BD-PS-007` |
-| 必要资料 | 按产品、合同、法人、服务/关务范围和有效期装配版本化资料规则 | 按适用规则形成拒绝、待补充或受控纠正 | 尚未决定 | `PS-RULE`、`BD-PS-001`、`BD-PS-006` |
+| 必要资料 | 按产品、合同、法人、服务/关务范围和有效期装配版本化资料规则；服务产品所采用接单规则包引用的提交条件在此逐条判（[ADR-0376](../../adr/0376-fba-submission-conditions-are-judged-as-required-documents-platform-identifiers-may-be-supplied-before-acceptance-and-rule-packages-follow-the-service-product.md) 决定一） | 按适用规则形成拒绝、待补充或受控纠正；提交条件未满足是待补充，续办方是客户 | 尚未决定 | `PS-RULE`、`BD-PS-001`、`BD-PS-006` |
 | 接受前财务控制 | 执行合同策略要求的预付冻结、信用校验、明确无控制或合同明确组合；逐项保留控制项结果与策略的共同通过条件（[PS CONTEXT](../../domain/parcel-shipment/CONTEXT.md) 词条「接受前财务控制采用结果」） | 按策略的共同通过条件判定不成立时按策略拒绝或进入授权处置：任一受限项在正文里登记 `REJECT` 即确定不通过；全部受限项登记 `AUTHORIZED_DISPOSITION` 时任务停`等待授权处置`，由授权角色决定去向（`拒绝`或`交客户补充`），放行不在集内（[ADR-0132](../../adr/0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md)）；不得默认放行 | 尚未决定 | `PC-RULE`、`BD-PS-003` |
 | 标准网络可达性 | 为每个相关包裹保留三值判断原结果 | 明确不可达时整份当前提交版本不能直接接受；允许待路由产品除外 | 资料不足不得映射为不可达；按适用规则待补充、拒绝或保持未决 | `NR-REACH`、`PS-RULE`、`BD-PS-001`、`BD-PS-007` |
 
@@ -282,6 +282,15 @@
 | `AT-PS-178` | 租户没有登单据编号时区，客户提交；之后补登再重放；单据号上线之前建成的委托被重放或查阅；运营按运单号检索委托 | 委托照常建成、答`已提交`，不带单据号，记下并答出「单据编号时区未配置」，序列不动；补登之后重放仍不补号，新委托才有号；上线前的委托读回与查阅答「上线前开立」，不答空号、不拿委托标识顶；按运单号检索只逐字命中可见范围内有这个号的委托 |
 | `AT-PS-179` | 租户换了不分周期的新格式，渲染出的号整段撞上当天已用的旧号；原样重发；租户再换不撞的格式后重发 | 跳过到上限仍撞，答`编号规则撞号`，不建立委托、不留答案；重发仍撞；换格式后重发建成，新号的流水从 1 起——撞号时取过的流水都随回滚释放 |
 | `AT-PS-180` | 别的上下文的页面（如线路规划）上出现一组委托标识，运营要看这些委托的运单号；其中有作用域外的、查无的、重复的、上线前开立没有号的 | 按委托标识集合在本人可见范围内一次取回概要：作用域内的带运单号或无号情形，作用域外的与查无的都不出现、答复不说缺的是哪一种，重复的只算一份；一次超出上限、空段或与按运单号检索并用是坏请求，不读；引用方读模型不复制单据号 |
+| `AT-PS-181` | 单件委托报两行货物：5 件 T 恤与 1 只手表，各带中文与英文品名、单价、出口侧编码与原产国，不报装箱分配 | 提交版本按声明顺序保全两行，行号 1、2；各格原样，申报格来源标记都是本单申报；接受基线指向同一份货物明细，关务按（资料版本锚，委托，行号）读得到两行，两行都在唯一的包裹里 |
+| `AT-PS-182` | 一行同时报单价与行总价，二者与数量对不上；另一行只有行总价；各行净重合计大于声明测量毛重 | 照样保全、照样进接受判断，本上下文不核对、不补算、不改写；租户的接单规则包没配这几条时不判 |
+| `AT-PS-183` | 货物明细形状错：一行一格都没有、超过 999 行、同一语言两条品名、同一口径两条编码、数量不是数；多件委托的装箱分配只报了一部分包裹、指了不在委托里的包裹或不存在的行、某行各包裹数量之和不等于该行数量 | 答请求形状不对，不保全为提交版本 |
+| `AT-PS-184` | 来源为「仓配出库」的整箱出委托：箱单给了品名与数量，申报单价取商品申报资料，原产国哪里都没有 | 品名、数量标箱单，单价与币种标商品申报资料，原产国缺席；不以默认值补齐 |
+| `AT-PS-186` | 快递式一票三件，客户只有整票商业发票，报两行、不报装箱分配；所采用接单规则包没要求报全 | 照样保全为整票清单；关务需要逐件申报时是关务那一格的资料缺口，不是受理失败 |
+| `AT-PS-187` | 合单：同一买家两张销售订单的货装进一个包裹，三行分别带各自的销售订单引用；另一张订单拆成两份委托发出 | 各行原样保全引用；同一张订单可以出现在几份委托的行上；本上下文不核对订单是否存在，也不因此合并或关联委托 |
+| `AT-PS-188` | FBA 空派：一个平台货件 50 箱同款，委托带平台货件号与平台参考号，每箱带平台箱标号；货物明细一行（数量 1200），装箱分配 50 条各 24 | 一份委托 50 个包裹、整票受理；货件号与参考号关联委托，箱标号关联各包裹；服务产品的接单规则包要求的平台号或装箱分配缺席时按规则包作答，规则包没配置不判；某一箱资料不满足规则包时整票按规则包作答（停在等待受控补充或拒绝），不部分接受其余箱子；两箱报同一个箱标号答请求形状不对 |
+| `AT-PS-190` | 内件性质为文件、没有货物明细行的单件委托；另一份内件性质为礼品却没有行 | 前者照收，货物明细只有内件性质、没有装箱分配；后者答请求形状不对 |
+| `AT-PS-189` | 仓配平台备货 30 箱经本产品网络发出，整份打包完成后提交；首次被拒绝，运营决定重新提交 | 首次以（出库请求，1）提交一份委托、带 30 个包裹，不预取面单；重提以（出库请求，2）形成关联的新委托，原键不复用；货件编号与箱标作平台货件号与平台箱标号 |
 
 ## 已确认业务决策与待提供参数
 
@@ -322,6 +331,9 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
+| 价卡一侧答不出的受理前估价等运营登记，计价「参数已登记」后续办；等待落库的处理尝试另记结算原因与申报的服务产品，委托详情从处理尝试落处读（[ADR-0383](../../adr/0383-an-estimate-the-price-card-side-cannot-form-waits-for-operator-registration-and-the-attempt-records-why.md)） | 这一类走内部重试、回滚不留痕、重投用完即放弃；小包托运不收计价的「参数已登记」；委托详情的「上次处理」读一份没有生产写入的列表 | 票 declared-goods-lines/23、24 |
+| 申报不全的受理前估价按缺项该谁补分流：客户可补的（测量、尺寸、收寄邮编）在财务控制那一步停进`等待受控补充`、缺口按件或按委托级记在任务上；缺分区、缺地址性质的归`等待运营登记`；计价在估价口点名缺项、结算逐件原样带回、处理尝试另记缺项码（[ADR-0381](../../adr/0381-an-incomplete-estimate-declaration-waits-for-customer-supplement-or-operator-registration-by-who-supplies-the-gap.md)） | 申报不全今天照旧内部重试、回滚不留痕、重投用完即放弃；计价把「卡要而申报没给」的寄件邮编与尺寸评成解不出的无合计、归了等运营登记；结算把逐件缺项折掉 | 票 declared-goods-lines/26、27 |
+| 委托详情交出最近一次受理判断记下的接受前财务控制结论（结论、各项满足或受限与依据、判断时点），不带金额（[ADR-0379](../../adr/0379-the-pre-acceptance-estimate-trail-records-product-weight-and-charge-lines-and-is-read-on-the-shipment-detail.md) 决定三） | 结论只在审核队列交出，委托详情不交 | 票 declared-goods-lines/20 |
 | `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」 | 已补：提交版本被新版本取代（客户补件、授权处置交客户补充之后的补件）时，接受链判新版本之前先按原关联放掉旧版本已成立的占用；放不掉停在 `SUPERSEDED_CONTROL_RELEASE` 内部重试，新版本不判 | [code/20](../../../.scratch/docs-consistency/code/20-superseded-submission-version-keeps-its-control-occupation.md) |
 | `AT-PS-035`「接受提交未成立时按原关联释放已成立各项形成的占用」，停在`等待受控补充`那一格 | 已补：形成决定处停进`等待受控补充`、暂停落库之后，按原关联放掉停住那一版已成立的占用；放不掉不撤销暂停；这一路的补偿引用不透出、不持久，兜底是补件之后接受链开头对同一笔再请求一次，以及撤回逐版释放，提供方都按幂等答原释放 | [code/72](../../../.scratch/docs-consistency/code/72-a-customer-supplement-pause-releases-the-paused-versions-occupation.md) |
 | `AT-PS-035` 同一句，被取代版本在终局路径上那一格 | 已补：自动拒绝、主动拒绝与授权处置都放这份委托各版已成立的占用，不只是当前版本；一版放不掉不挡其余各版，补偿续办，不回滚决定 | [code/73](../../../.scratch/docs-consistency/code/73-terminal-paths-release-every-superseded-versions-occupation.md) |
@@ -334,6 +346,8 @@
 | 迁移 0028（提交答案留存）之前保全的来源 | 那时答过准入暂停、交接已确认的非本产品生产归属、输入未受理、原委托不可见或关联不适用的，库里没有答案行，重发按没有形成答案重判；那时已建成的委托，重发只指名委托、不带原归属结果。当时的答案没有留下，无法回填。只影响演示数据（[ADR-0266](../../adr/0266-a-submission-replay-answers-what-the-first-round-answered-and-only-unresolved-ownership-is-judged-again.md) 越权风险点 4） | 不承接（无法回填） |
 | 关联不适用 / 撤回重提（[ADR-0255](../../adr/0255-a-submitted-request-is-regrouped-only-by-withdrawing-it-and-submitting-linked-new-requests.md)） | 已补：重建门开到`已撤回`、撤回决定进快照（[ADR-0286](../../adr/0286-withdrawn-shipment-request-rehydration-by-snapshot-expressiveness.md)），真库上以 `WITHDRAWN_RESUBMISSION` 关联已撤回的原委托成立，原样重放被撤回的提交答既有结果，方向与原委托终态不符仍答关联不适用；`AT-PS-076` 同此 | [code/36](../../../.scratch/docs-consistency/code/36-withdrawn-shipment-requests-cannot-be-read-back-from-the-store.md) |
 | CONTEXT「委托」：草稿 → 已提交时取得单据号（界面词「运单号」）（[ADR-0355](../../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)） | 已补：建单答「已建成」之后、同在续办守卫那一笔里经消费侧端口取号（`ports.ShipmentDocumentNumberIssuer`，适配器 `adapters/docnumbering`），号与无号原因记在委托行两列上（约束 `shipment_request_document_number_absence_closed` 收无号原因、`shipment_request_document_number_unique` 担保（租户，单据号）唯一）；日期按租户单据编号时区（类型声明 `ShipmentDocumentNumberType`）；撞号答 `NUMBERING_RULE_COLLISION`、整笔回滚；首方提交答复（含重放）带 `documentNumber` / `documentNumberAbsence`，委托查阅列表、单份、各队列与释放未受理册同带；管理台运单列表、详情、待受理复核、授权处置、释放未受理册、新建运单结果以运单号（单据号）为主，按运单号检索，撤回与取消表单指名委托的那一格改叫委托标识（`AT-PS-177`–`AT-PS-179`）。委托查阅另收一组委托标识（`?shipmentRequestIds=`，读口 `ListVisibleByIDs`，与列表、单份同一作用域），别的上下文的页面（线路规划各册）据此按页上的委托标识显运单号，引用方读模型不复制单据号；运单详情的地址第二段放运单号，壳层标签与最近打开随之写运单号（`AT-PS-180`，票 [document-numbering/10](../../../.scratch/document-numbering/issues/10-wrap-up-references-labels-and-tracking-by-shipment-number.md)）。客户追踪视图仍按包裹号定位，不按运单号（见票 04、10 完成记录） | [document-numbering/04](../../../.scratch/document-numbering/issues/04-shipment-numbers.md) |
-| CONTEXT「来源请求身份」：来源「仓配出库」（[ADR-0368](../../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定四） | 未做：`warehouse-fulfillment` 以货主客户账户的名义提交、来源请求键取自（出库请求，包裹序号）的那条路径没有入口、没有来源种类，也没有对应的重放与冲突测试；预取面单时波次释放先提交、打包后经资料修订补正声明测量的那一形同样未做（[ADR-0370](../../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定二）；仓配履约交来的商品明细与申报值落在客户原始资料的哪些条目，小包托运在地址要素与声明测量之外还没有定名的要素，要随这条路径一起定，并与关务读申报资料的口径对齐，条目须能带来源标记（本单申报、箱单或商品申报资料），供关务字段级溯源；请求方记货主客户账户、实际提交方记仓配履约、凭「仓配代办 × `WAREHOUSE_FULFILLMENT_AGENT`」授予授权、提交之外各请求的来源请求键加命令前缀（[ADR-0371](../../adr/0371-warehouse-fulfillment-acts-for-the-owner-on-warehouse-outbound-requests-and-every-decision-path-hands-off-the-acceptance-decision.md) 决定一、二）同样未做 | 仓配切片立票时承接 |
+| CONTEXT「来源请求身份」：来源「仓配出库」（[ADR-0368](../../adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md) 决定四） | 未做：`warehouse-fulfillment` 以货主客户账户的名义提交、来源请求键取自（出库请求，包裹序号）的那条路径没有入口、没有来源种类，也没有对应的重放与冲突测试；预取面单时波次释放先提交、打包后经资料修订补正声明测量的那一形同样未做（[ADR-0370](../../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定二）；仓配履约交来的商品明细与申报值由装箱记录汇成货物明细行与装箱分配、申报格带来源标记（[ADR-0373](../../adr/0373-a-shipment-requests-goods-details-are-invoice-lines-with-a-packing-allocation-kept-verbatim-and-replaced-as-a-whole.md) 决定七、十），这一形随「CONTEXT『货物明细』」那一行一起做；平台备货整份出库请求打包完成后提交一份委托、来源请求键（出库请求，提交轮次）、不预取面单（[ADR-0374](../../adr/0374-dedicated-line-fba-headhaul-is-an-ordinary-shipment-request-one-platform-shipment-one-request-one-carton-one-parcel.md) 决定五，`AT-PS-189`）同样未做；请求方记货主客户账户、实际提交方记仓配履约、凭「仓配代办 × `WAREHOUSE_FULFILLMENT_AGENT`」授予授权、提交之外各请求的来源请求键加命令前缀（[ADR-0371](../../adr/0371-warehouse-fulfillment-acts-for-the-owner-on-warehouse-outbound-requests-and-every-decision-path-hands-off-the-acceptance-decision.md) 决定一、二）同样未做 | 仓配切片立票时承接 |
+| CONTEXT「货物明细」「货物明细行」「装箱分配」「内件性质」「申报格来源标记」「销售订单引用」与「客户原始资料版本」保留货物明细一句（[ADR-0373](../../adr/0373-a-shipment-requests-goods-details-are-invoice-lines-with-a-packing-allocation-kept-verbatim-and-replaced-as-a-whole.md)）；`AT-PS-181` 至 `AT-PS-184`、`AT-PS-186`、`AT-PS-187` | 未做：首方提交口每个包裹只收一组扁平货物字段，拼成规范化条目，只进摘要、不留原文，没有委托级的行、装箱分配、内件性质、销售订单引用与来源标记；规范化要按 ADR-0373 决定八在 `PSC-1` 上加可缺键（领域半边随票 declared-goods-lines/02）；版本与接受基线不保留货物明细，没有按（资料版本锚，委托，行号）取行的读口；首方 API 字段形状按 ADR-0140 定；运营端新建委托表单与委托详情要能录入与查看多行与装箱分配 | 货物明细实现切片立票时承接 |
+| CONTEXT「外部标识关联」的平台货件号、平台参考号与平台箱标号，「号码的界面词」（[ADR-0374](../../adr/0374-dedicated-line-fba-headhaul-is-an-ordinary-shipment-request-one-platform-shipment-one-request-one-carton-one-parcel.md) 决定四、六）；`AT-PS-188` | 未做：外部标识类型没有平台的三种，平台箱标号随接受形成关联、`已提交`期间算歧义信号也没有；首方提交口不收平台号；管理台与客户面的称呼与多件委托的逐件展示没按界面词改 | 货物明细实现切片立票时承接 |
 | CONTEXT「接受或拒绝决定无论经哪条路形成……都在形成它的同一事务里经接受决定已形成的信封交给下游」一条（ADR-0371 决定五） | 未做：只有接受链形成决定的那一步交这封信封；主动拒绝与授权处置选拒绝在各自的命令事务里形成拒绝，不交，只有同一版本之后又跑一轮接受链时才补交，而这一轮不一定会有。仓配履约照现状收不到这两种拒绝。这封是交给下游的发布意图，不是 [ADR-0086](../../adr/0086-manual-review-wait-is-a-committed-pause-resumed-by-completion-envelope.md) 决定三不许主动拒绝再发的续办信封，也不是 [ADR-0132](../../adr/0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md) 决定二说的新信封类型；现有消费方对拒绝已入账收工，不需改 | 仓配切片立票时承接 |
 | CONTEXT「接受判断停进`等待受控补充`时……同一事务交出「委托待受控补充」信封」一条（ADR-0371 决定三） | 未做：暂停只落在接受判断任务上，没有出向信封；来源为「仓配出库」的委托停在这一格时，仓配履约得不到信号，也没有以货主名义补充的入口（补充问「仓配代办」授予并核对基准版本）；其他来源暂无消费方，投递路由随实现定 | 仓配切片立票时承接 |

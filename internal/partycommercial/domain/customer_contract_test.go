@@ -56,13 +56,13 @@ func contractContent(t *testing.T, bindings ...domain.FinancialControlBinding) d
 	return contract
 }
 
-// Covers: CONTEXT「每个用于新委托接受的客户合同版本必须明确引用适用接单规则包和接受前
-// 财务控制策略」。
+// Covers: CONTEXT「每个用于新委托接受的客户合同版本必须明确引用适用的接受前财务控制策略」；指名了接单规则包的合同
+// 读得回它（ADR-0376 决定三之后规则包可缺，指名了照旧在）。
 func TestContractNamesItsRulePackageAndControlBindings(t *testing.T) {
 	contract := contractContent(t, appliedControl(t, "charge-express"))
 
-	if contract.AcceptanceRulePackage().String() != "rules-1" {
-		t.Fatalf("rule package = %q, want rules-1", contract.AcceptanceRulePackage())
+	if rulePackage, named := contract.AcceptanceRulePackage(); !named || rulePackage.String() != "rules-1" {
+		t.Fatalf("rule package = %q named = %v, want rules-1", rulePackage, named)
 	}
 	binding, present := contract.FinancialControlFor(commercialValue(t, domain.NewChargeScopeReference, "charge-express"))
 	if !present || !binding.Applies() {
@@ -134,18 +134,6 @@ func TestOneScopeCannotBeBothAppliedAndInapplicable(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT — 合同必须引用接单规则包；缺失即建不成内容，不能留给接受判断去发现。
-func TestContractWithoutARulePackageCannotBeBuilt(t *testing.T) {
-	if _, err := domain.NewCustomerContract(
-		contractVersion(t, "contract-1"),
-		commercialValue(t, domain.NewCustomerAccountID, "customer-1"),
-		domain.CommercialObjectID{},
-		[]domain.FinancialControlBinding{appliedControl(t, "charge-express")},
-	); !errors.Is(err, domain.ErrInvalidCustomerContract) {
-		t.Fatalf("error = %v, want ErrInvalidCustomerContract", err)
-	}
-}
-
 // Covers: CONTEXT「合同版本必须明确关联…货主客户账户」（ADR-0177 决定一）——缺客户账户即建不成内容，不从委派人、
 // 客户关系或范围推；建成的合同如实报出它属于哪一户。
 func TestContractWithoutACustomerAccountCannotBeBuilt(t *testing.T) {
@@ -195,6 +183,32 @@ func TestContentRulePackageMustAgreeWithTheVersionShellWhenBothArePresent(t *tes
 		live, commercialValue(t, domain.NewCommercialObjectID, "rules-OTHER"),
 	); !errors.Is(err, domain.ErrRulePackageReferenceMismatch) {
 		t.Fatalf("error = %v, want ErrRulePackageReferenceMismatch", err)
+	}
+
+	// 壳上指名了、正文没写：两处说法不一（ADR-0376 决定三之后正文可缺，但可缺不等于可以与壳分歧）。
+	if err := domain.ConsistentAcceptanceRulePackage(live, domain.CommercialObjectID{}); !errors.Is(err, domain.ErrRulePackageMissingFromContent) ||
+		!errors.Is(err, domain.ErrRulePackageReferenceMismatch) {
+		t.Fatalf("壳上指名、正文缺：error = %v, want ErrRulePackageMissingFromContent（包着 ErrRulePackageReferenceMismatch）", err)
+	}
+	// 两处都不写：多产品合同的常态，放行。
+	if err := domain.ConsistentAcceptanceRulePackage(unnamed, domain.CommercialObjectID{}); err != nil {
+		t.Fatalf("两处都不写却拒了：%v", err)
+	}
+}
+
+// Covers: ADR-0376 决定三——合同可以不指名接单规则包：构造成立，读回答「没指名」而不是一个零值规则包。
+func TestAContractMayNameNoAcceptanceRulePackage(t *testing.T) {
+	contract, err := domain.NewCustomerContract(
+		contractVersion(t, "contract-multi-product"),
+		commercialValue(t, domain.NewCustomerAccountID, "customer-1"),
+		domain.CommercialObjectID{},
+		[]domain.FinancialControlBinding{appliedControl(t, "charge-express")},
+	)
+	if err != nil {
+		t.Fatalf("不指名规则包的合同立不起来：%v", err)
+	}
+	if rulePackage, named := contract.AcceptanceRulePackage(); named {
+		t.Fatalf("没指名却答了规则包 %q", rulePackage)
 	}
 }
 

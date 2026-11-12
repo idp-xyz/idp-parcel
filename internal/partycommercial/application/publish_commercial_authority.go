@@ -892,7 +892,7 @@ func declarationWrites(
 	}
 
 	if declarations.ContractContent != nil {
-		// open-decisions F-3：版本壳指名的规则包与正文件引用都在场时必须相等，
+		// open-decisions F-3：版本壳指名了规则包，正文要写同一个（正文可缺，ADR-0376 决定三，但不能与壳分歧），
 		// 不等整项拒绝，不静默选一处——读侧同一道核对在装载时还会再走一遍。
 		if err := domain.ConsistentAcceptanceRulePackage(version, declarations.ContractContent.RulePackage); err != nil {
 			return nil, err

@@ -18,6 +18,25 @@ export const objectNouns = {
    * 「运单号」专指委托的单据号（ADR-0355 决定十一），两者不混用。
    */
   parcelNumber: '包裹号',
+  /** 客户为这一件给的号（领域：客户包裹件号，ADR-0184 决定四）。 */
+  customerParcelNumber: '客户件号',
+  /** 收件人在末端承运商处查得到的号（领域：渠道包裹件号，含尾程件号）；运单号不当它用（ADR-0374 决定六）。 */
+  trackingNumber: '跟踪号',
+  /** 客户报的销售平台（如 AMAZON），与平台货件号一起认这票货件；值是客户给的串，原样显示。 */
+  platform: '销售平台',
+  /** 领域：平台货件（一个平台货件一张运单，ADR-0374 决定二）。 */
+  platformShipment: '平台货件',
+  /** 平台给一票货件的号与参考号（如亚马逊 FBA 的 Shipment ID 与 Reference ID，ADR-0374 决定四）。 */
+  platformShipmentNumber: '平台货件号',
+  platformReferenceNumber: '平台参考号',
+  /** 平台给每一箱的箱标号（如亚马逊 FBA 箱标）。 */
+  platformBoxLabel: '平台箱标号',
+  /** 领域：货物明细（委托级，相当于商业发票的行，ADR-0373）。 */
+  goodsDetails: '货物明细',
+  /** 领域：内件性质（UPU CN23 六格）。 */
+  contentCategory: '内件性质',
+  /** 领域：装箱分配（这一箱装了哪几行各多少）。 */
+  packing: '装箱',
   /** 领域：声明包裹（件数）。 */
   parcelCount: '件数',
   weight: '重量',

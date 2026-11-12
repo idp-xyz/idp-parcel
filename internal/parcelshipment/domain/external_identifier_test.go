@@ -410,3 +410,36 @@ func TestRepeatedVoidsYieldOneChangeAtTheFirstVoid(t *testing.T) {
 		t.Fatalf("changes = %+v, want 一条、时刻是第一次作废", changes)
 	}
 }
+
+// Covers: ADR-0374 决定四——平台箱标号与客户包裹件号走同一套：接受时每箱一条关联，类型平台箱标号，分配方与适用范围都是销售平台，
+// 依据是接受决定；它不在客户账户的编号空间里算数。
+func TestAnAcceptedRequestFormsOneRelationPerPlatformBoxLabel(t *testing.T) {
+	spec := submitSpec(t, "parcel-1", "parcel-2")
+	spec.PlatformShipment = platformShipment(t, "FBA15SYNTEST", "")
+	spec.PlatformBoxLabels = []domain.PlatformBoxLabelDeclaration{boxLabel(t, "parcel-2", "FBA15SYNTESTU000002")}
+	request, err := domain.SubmitShipmentRequest(spec)
+	if err != nil {
+		t.Fatalf("建单：%v", err)
+	}
+	if relations := request.ExternalIdentifierRelationsFormedByAcceptance(identityOfFixture(t)); len(relations) != 0 {
+		t.Fatalf("已提交就形成了 %d 条；接受前的声明包裹不是正式包裹", len(relations))
+	}
+	accepted, err := request.Decide(decisionSpec(t, allGroupsPassing(t)))
+	if err != nil {
+		t.Fatalf("接受：%v", err)
+	}
+	relations := accepted.ExternalIdentifierRelationsFormedByAcceptance(identityOfFixture(t))
+	if len(relations) != 1 {
+		t.Fatalf("relations = %d, want 1", len(relations))
+	}
+	relation := relations[0]
+	if relation.Kind() != domain.PlatformBoxLabel || relation.Kind().String() != "PLATFORM_BOX_LABEL" ||
+		relation.Allocator().String() != "AMAZON" || relation.Scope().String() != "AMAZON" ||
+		relation.Number().String() != "FBA15SYNTESTU000002" || relation.Parcel().String() != "parcel-2" ||
+		relation.Basis().String() != "decision-1" {
+		t.Fatalf("relation = %+v", relation)
+	}
+	if domain.PlatformBoxLabel.CountsInCustomerAccountSpace() {
+		t.Fatal("平台箱标号在销售平台的编号空间里算数，不在客户账户的")
+	}
+}

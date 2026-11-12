@@ -15,7 +15,8 @@ export type RefKind =
   | 'contract'
   | 'service-product'
   | 'rule-package'
-  | 'financial-control-policy';
+  | 'financial-control-policy'
+  | 'price-card';
 
 function policyRegisterHash(register: CommercialPolicyKind): string {
   return policiesHash('#/commercial-policies', { tab: 'registers', register });
@@ -28,11 +29,18 @@ const pageOf: Record<RefKind, () => string> = {
   'service-product': () => '#/service-products',
   'rule-package': () => policyRegisterHash('ACCEPTANCE_RULE_PACKAGE'),
   'financial-control-policy': () => policyRegisterHash('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY'),
+  // 价格表没有按地址直接打开某一版的入口；检索词交方案标识，读口的 q 覆盖方案标识，筛出来的是这个方案的各版本，那一版在其中。
+  'price-card': () => '#/price-card-catalog',
 };
 
 /** 引用的去处：对象所在的页，带上它的标识作检索词。 */
 export function refHash(kind: RefKind, id: string): string {
-  return hashWithQueryValue(pageOf[kind](), ADDRESS_KEYWORD_PARAM, id);
+  return hashWithQueryValue(refPageHash(kind), ADDRESS_KEYWORD_PARAM, id);
+}
+
+/** 那一类对象所在的页本身，不带检索词：要指人去那里新登一条、还没有某一条可筛时用。 */
+export function refPageHash(kind: RefKind): string {
+  return pageOf[kind]();
 }
 
 /** 行模型里一格引用的原值：格里显示的字可能拼了版本号（`合同@v1`），链接要的是对象标识本身。 */

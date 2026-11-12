@@ -1,18 +1,94 @@
+import { useState } from 'react';
+import { Button, Input } from '@idpxyz/ui-primitives';
+import { accessRefusalTitle, isOperatorRefusal } from '../../../auth/access-refusal';
 import { aggregationLabels, priceCardPurposeLabels, priceDirectionLabels } from '../../../vocabulary/price-card';
+import { listServiceProducts } from '../../party/api';
+import { serviceProductObjectOptions } from '../../party/picker-options';
+import { useLoaded } from '../../party/PublicationFormFields';
 import { field } from '../card-form/fields';
-import { defaultBaseChargeCode, type BasicsState } from '../card-form/model';
+import { basicsWithDirection, defaultBaseChargeCode, type BasicsState } from '../card-form/model';
 import { currencyChoices } from '../card-form/options';
 import { allowedValues, sheetNames } from '../card-form/spec';
-import { SelectField, TextField, SectionTitle, hintClass } from './controls';
+import { specTakesServiceProducts } from '../card-form/workbook';
+import {
+  addTypedServiceProducts,
+  declaresServiceProducts,
+  restProductsHint,
+  serviceProductChoices,
+  serviceProductsNotTakenNote,
+  toggleServiceProduct,
+} from '../service-products';
+import { FieldBox, SelectField, TextField, SectionTitle, hintClass } from './controls';
 import { useEditor } from './EditorContext';
 import { labelled, weightUnitOptions } from './options';
 
-// 方向与用途一一对应（领域里首发就是这三对）；选了方向顺手带出用途，运营仍可改，配对对不对由服务端判。
-const pairedPurpose: Readonly<Record<string, string>> = {
-  SELL: 'CUSTOMER_CHARGE',
-  BUY: 'SUPPLIER_COST',
-  INTERNAL: 'INTERNAL_PRICE',
-};
+/**
+ * 适用服务产品：从服务产品册勾选，可多选、可不选（ADR-0382 决定一）。册读不到时退回按标识添加，并说清为什么——表单不因此
+ * 变死；标识在不在册由服务端在预览时判。还在读册时只说在读，不先摆手填框：册一读回来手填框就换成勾选，先摆出来只会让人
+ * 白敲一遍。
+ */
+function ServiceProductsField({ chosen, onChange }: { chosen: readonly string[]; onChange: (next: string[]) => void }) {
+  const answer = useLoaded(listServiceProducts);
+  const [typed, setTyped] = useState('');
+  const options = answer?.kind === 'outcome' ? serviceProductObjectOptions(answer.body) : null;
+  const choices = serviceProductChoices(options ?? [], chosen);
+  const id = field.basics('serviceProducts');
+  const labelId = `${id}.label`;
+  const add = () => {
+    onChange(addTypedServiceProducts(chosen, typed));
+    setTyped('');
+  };
+  const unreadable =
+    answer === null || answer.kind === 'outcome'
+      ? null
+      : answer.kind === 'unconfigured'
+        ? '暂时读不到服务产品册（接入渠道未配置），先按标识添加，几个标识用英文分号隔开；标识对不对由预览时检查。'
+        : isOperatorRefusal(answer)
+          ? `暂时读不到服务产品册（${accessRefusalTitle(answer.kind)}），先按标识添加，几个标识用英文分号隔开；标识对不对由预览时检查。`
+          : '服务产品册读不到，先按标识添加，几个标识用英文分号隔开；标识对不对由预览时检查。';
+
+  return (
+    <FieldBox id={id} label="适用服务产品" labelsControl={false} labelId={labelId} className="md:col-span-2" hint={restProductsHint}>
+      <div className="space-y-2" data-field={id} tabIndex={-1} role="group" aria-labelledby={labelId}>
+        {choices.length > 0 ? (
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+            {choices.map((choice) => (
+              <label key={choice.value} className="flex items-center gap-1.5 type-value text-idpxyz-text">
+                <input type="checkbox" checked={choice.checked} onChange={(event) => onChange(toggleServiceProduct(chosen, choice.value, event.target.checked))} />
+                <span className={choice.listed ? 'font-mono' : 'font-mono text-idpxyz-breadcrumb'}>{choice.label}</span>
+              </label>
+            ))}
+          </div>
+        ) : null}
+        {answer === null ? <p className={hintClass}>正在读服务产品册…</p> : null}
+        {options !== null && options.length === 0 ? <p className={hintClass}>还没有发布任何服务产品，这一格可以不选。</p> : null}
+        {unreadable !== null ? (
+          <>
+            <div className="flex max-w-md gap-2">
+              <Input
+                value={typed}
+                className="font-mono type-value"
+                placeholder="服务产品标识"
+                aria-label="按标识添加服务产品"
+                onChange={(event) => setTyped(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    add();
+                  }
+                }}
+              />
+              <Button variant="outline" size="sm" onClick={add} disabled={typed.trim() === ''}>
+                添加
+              </Button>
+            </div>
+            <p className={hintClass}>{unreadable}</p>
+          </>
+        ) : null}
+      </div>
+    </FieldBox>
+  );
+}
 
 export function StepBasics() {
   const { state, update, spec, env } = useEditor();
@@ -35,13 +111,7 @@ export function StepBasics() {
             required
             value={basics.direction}
             options={labelled(allowedValues(spec, sheetNames.card, 'direction'), priceDirectionLabels)}
-            onChange={(direction) => {
-              const purpose = pairedPurpose[direction];
-              patch({
-                direction,
-                purpose: purpose !== undefined && purposes.includes(purpose) && (basics.purpose === '' || basics.purpose === pairedPurpose[basics.direction]) ? purpose : basics.purpose,
-              });
-            }}
+            onChange={(direction) => update((draft) => ({ ...draft, basics: basicsWithDirection(draft.basics, direction, purposes) }))}
             hint="售价是对客户收的，成本是供应商收我们的"
           />
           <SelectField
@@ -61,6 +131,15 @@ export function StepBasics() {
             onChange={(aggregation) => patch({ aggregation })}
             hint="选「每件计价」就是按每个包裹算钱，必须明确选，不替你默认"
           />
+          {/* 只有售价卡能声明适用产品（ADR-0382 决定一）；换成别的方向时已选的随之清掉，见 basicsWithDirection。
+              规格口的模板版本收不收这一格由规格口说，不收就只说一句，不摆一个提交不上去的选择。 */}
+          {declaresServiceProducts(basics.direction) ? (
+            specTakesServiceProducts(spec) ? (
+              <ServiceProductsField chosen={basics.serviceProducts} onChange={(serviceProducts) => patch({ serviceProducts })} />
+            ) : (
+              <p className={`${hintClass} md:col-span-2`}>{serviceProductsNotTakenNote}</p>
+            )
+          ) : null}
         </div>
       </section>
 

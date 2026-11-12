@@ -234,7 +234,19 @@ func seedSelfServiceGrant(t *testing.T, db *bentopg.DB) {
 // RECORDED（code/44 的接着办），再重放答 200 ALREADY_HANDLED 同一版本；同一请求标识改内容答 SOURCE_CONFLICT；他账户指名这份委托与指名
 // 不存在的委托同答 404 同字节；委托号对不上答 404；只持提交授予的客户端答 403 CUSTOMER_CLIENT_NOT_GRANTED；载荷自报账户 400。
 // 授予经票 13 的发布授予通道落库、矩阵取与演示种子同形的 DELIVERY_PLACE 两格；播下已固定的申报提交版本之后同一资料组的更正答 DISALLOWED。
-func TestACustomerClientAmendsThroughTheFirstPartyLineAgainstARealDatabase(t *testing.T) {
+// firstPartyAmendmentLine 是真库上经生产装配的同一组构造函数接起来的首方提交口与资料修订口，客户端照演示形态登记：
+// SYN-CUSTOMER-CLIENT-01 持提交与修订两项授予，02 是他账户，03 只持提交授予。
+type firstPartyAmendmentLine struct {
+	pool     *pgxpool.Pool
+	db       *bentopg.DB
+	requests *pspostgres.ShipmentRequests
+	submit   http.Handler
+	amend    http.Handler
+	post     func(endpoint http.Handler, path, subject, body string) *httptest.ResponseRecorder
+}
+
+func newFirstPartyAmendmentLine(t *testing.T) firstPartyAmendmentLine {
+	t.Helper()
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -301,6 +313,12 @@ func TestACustomerClientAmendsThroughTheFirstPartyLineAgainstARealDatabase(t *te
 		endpoint.ServeHTTP(response, request)
 		return response
 	}
+	return firstPartyAmendmentLine{pool: pool, db: db, requests: requests, submit: submit, amend: amend, post: post}
+}
+
+func TestACustomerClientAmendsThroughTheFirstPartyLineAgainstARealDatabase(t *testing.T) {
+	line := newFirstPartyAmendmentLine(t)
+	pool, db, requests, submit, amend, post := line.pool, line.db, line.requests, line.submit, line.amend, line.post
 
 	const original = "SYN-ACCESS-REQUEST-AM-0001"
 	first := post(submit, "/v1/shipment-requests", syntheticCustomerSubject, customerDraftBody(original))
@@ -445,5 +463,111 @@ func seedCustomsSubmittedFor(t *testing.T, pool *pgxpool.Pool, tenant, parcel st
 		         'SYN-DOSSIER-1', 'SYN-ROLES-1', 'SYN-READINESS-1', 'SYN-AUTH-1', $3, $3, true)`,
 		tenant, parcel, time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatalf("播种申报提交版本：%v", err)
+	}
+}
+
+// Covers: 票 declared-goods-lines/06 完成判据「真库测试：修订后委托视图读到新版本的货物明细」与 AT-PS-185——真库上经生产装配的
+// 同一组构造函数：客户经首方提交口交一单两行货，接受之后经资料修订口以更正交来整组新货物明细（基准取提交回执的
+// submissionVersionId，只剩一行、改了品名、带这一件的装箱分配），答 201 RECORDED、直接采用，并回显新版本的行数与分配条数；
+// 委托视图随即读到新版本的那一份，旧的两行不再在用。
+func TestACustomerClientReplacesTheGoodsDetailsThroughTheFirstPartyLineAgainstARealDatabase(t *testing.T) {
+	line := newFirstPartyAmendmentLine(t)
+	const original = "SYN-ACCESS-REQUEST-GD-0001"
+	withGoods := strings.Replace(customerDraftBody(original), `"parcels": [`, `"goods": {"contentCategory": "SALE_OF_GOODS", "lines": [
+    {"descriptions": [{"lang": "en", "text": "T-shirt"}], "quantity": "3"},
+    {"descriptions": [{"lang": "en", "text": "Cap"}], "quantity": "1"}]},
+  "parcels": [`, 1)
+	first := line.post(line.submit, "/v1/shipment-requests", syntheticCustomerSubject, withGoods)
+	if first.Code != http.StatusCreated || outcomeOf(t, first) != "SUBMITTED" {
+		t.Fatalf("首方提交 = %d %s, want 201 SUBMITTED", first.Code, first.Body.String())
+	}
+	requestID, basis, parcelID := receiptOf(t, first)
+
+	identity, err := domain.NewSourceIdentity(
+		mustValue(t, domain.NewTenantID, "SYN-TENANT-01"), mustValue(t, domain.NewCustomerAccountID, syntheticCustomerAccount),
+		mustValue(t, domain.NewSource, syntheticCustomerIssuer+"#"+syntheticCustomerSubject), mustValue(t, domain.NewSourceRequestKey, original))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, found, err := line.requests.FindBySourceIdentity(t.Context(), identity)
+	if err != nil || !found {
+		t.Fatalf("读回委托：err=%v found=%v", err, found)
+	}
+	acceptAndSave(t, line.db, line.requests, shipmentapp.SubmitShipmentRequestCommand{
+		Identity: identity, DeclaredParcelIDs: []domain.DeclaredParcelID{mustValue(t, domain.NewDeclaredParcelID, parcelID)},
+	}, stored)
+	rules := rulePackageOf(t, "SYN-TENANT-01")
+	seedClosureFor(t, line.db, identity, rules)
+	declareAmendmentAllowance(t, line.db, rules, false,
+		amendmentCell(t, "GOODS_DETAILS", pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredCorrectionIntent, pcdomain.AmendmentAllowed),
+		amendmentCell(t, "GOODS_DETAILS", pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredExplicitClearIntent, pcdomain.AmendmentAllowed))
+	registerSelfServiceKey(t, line.db)
+	seedSelfServiceGrant(t, line.db)
+
+	recorded := line.post(line.amend, amendmentPath, syntheticCustomerSubject, `{
+  "accessRequestId": "SYN-ACCESS-REQUEST-GD-0002",
+  "originalAccessRequestId": "`+original+`",
+  "shipmentRequestId": "`+requestID+`",
+  "dataGroup": "GOODS_DETAILS",
+  "basisVersionId": "`+basis+`",
+  "intent": "CORRECTION",
+  "reason": "SYN-REASON-CUSTOMS-RETURN",
+  "goods": {"contentCategory": "SALE_OF_GOODS", "lines": [{"descriptions": [{"lang": "en", "text": "Cotton T-shirt"}], "quantity": "3"}]},
+  "packing": [{"parcelId": "`+parcelID+`", "line": 1, "quantity": "3"}]
+}`)
+	var answer struct {
+		Outcome                string `json:"outcome"`
+		AdoptionOutcome        string `json:"adoptionOutcome"`
+		GoodsLineCount         *int   `json:"goodsLineCount"`
+		PackingAllocationCount *int   `json:"packingAllocationCount"`
+	}
+	if err := jsonUnmarshal(recorded, &answer); err != nil {
+		t.Fatal(err)
+	}
+	if recorded.Code != http.StatusCreated || answer.Outcome != "RECORDED" || answer.AdoptionOutcome != "ADOPTED" ||
+		answer.GoodsLineCount == nil || *answer.GoodsLineCount != 1 || answer.PackingAllocationCount == nil || *answer.PackingAllocationCount != 1 {
+		t.Fatalf("货物明细更正 = %d %s, want 201 RECORDED ADOPTED、1 行 1 条分配", recorded.Code, recorded.Body.String())
+	}
+
+	views, err := pspostgres.NewShipmentRequestViews(line.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, err := domain.NewAuthorizedQueryScope(mustValue(t, domain.NewQueryScopeReference, "SYN-SCOPE-GD"),
+		mustValue(t, domain.NewTenantID, "SYN-TENANT-01"), []domain.CustomerAccountID{mustValue(t, domain.NewCustomerAccountID, syntheticCustomerAccount)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, visible, err := views.FindVisibleByID(t.Context(), scope, mustValue(t, domain.NewShipmentRequestID, requestID))
+	if err != nil || !visible {
+		t.Fatalf("查阅详情：visible=%v err=%v", visible, err)
+	}
+	lines := detail.Goods.Lines()
+	if detail.GoodsStanding != domain.GoodsDetailsOnAdoptedVersion || len(lines) != 1 ||
+		lines[0].Descriptions()[0].Text().Value() != "Cotton T-shirt" || len(detail.Goods.Packing()) != 1 {
+		t.Fatalf("视图里的货物明细：standing = %v、%d 行，want 资料修订后的那一版 1 行 Cotton T-shirt", detail.GoodsStanding, len(lines))
+	}
+
+	// 显式清空整组：照样回显 0 行 0 条（与误删到一行不剩分得开），视图答已采用那一版、货物明细如实缺席，不回退到提交时那两行。
+	cleared := line.post(line.amend, amendmentPath, syntheticCustomerSubject, `{
+  "accessRequestId": "SYN-ACCESS-REQUEST-GD-0003",
+  "originalAccessRequestId": "`+original+`",
+  "shipmentRequestId": "`+requestID+`",
+  "dataGroup": "GOODS_DETAILS",
+  "basisVersionId": "`+sourceDataVersionOf(t, recorded)+`",
+  "intent": "EXPLICIT_CLEAR",
+  "reason": "SYN-REASON-CUSTOMS-RETURN"
+}`)
+	answer.GoodsLineCount, answer.PackingAllocationCount = nil, nil
+	if err := jsonUnmarshal(cleared, &answer); err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Code != http.StatusCreated || answer.AdoptionOutcome != "ADOPTED" || answer.GoodsLineCount == nil || *answer.GoodsLineCount != 0 ||
+		answer.PackingAllocationCount == nil || *answer.PackingAllocationCount != 0 {
+		t.Fatalf("显式清空 = %d %s, want 201 ADOPTED、回显 0 行 0 条", cleared.Code, cleared.Body.String())
+	}
+	detail, _, err = views.FindVisibleByID(t.Context(), scope, mustValue(t, domain.NewShipmentRequestID, requestID))
+	if err != nil || detail.GoodsStanding != domain.GoodsDetailsOnAdoptedVersion || detail.Goods.Declared() {
+		t.Fatalf("清空后的视图：err=%v standing=%v declared=%v, want 已采用那一版且货物明细缺席", err, detail.GoodsStanding, detail.Goods.Declared())
 	}
 }

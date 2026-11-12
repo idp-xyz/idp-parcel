@@ -21,7 +21,8 @@ type CustomerContractBodyPayload struct {
 }
 
 // ContractContentPayload 镜像批文 contractContentDocument：合同属于哪个货主客户账户（必填，ADR-0177 决定一）、接单规则包
-// 引用与按费用范围的约定表（可为空——「已登记，未对任何费用范围作约定」是读面认得的一格）。
+// 引用（可缺，ADR-0376 决定三：多产品合同不指名）与按费用范围的约定表（可为空——「已登记，未对任何费用范围作约定」是
+// 读面认得的一格）。
 type ContractContentPayload struct {
 	CustomerAccount string                  `json:"customerAccount"`
 	RulePackage     string                  `json:"rulePackage"`
@@ -48,12 +49,15 @@ type PreAcceptanceControlPayload struct {
 func (payload CustomerContractBodyPayload) body(problems *PublicationPayloadProblems) domain.CustomerContractBody {
 	var body domain.CustomerContractBody
 	if payload.ContractContent == nil {
-		problems.add("customerContract.contractContent", requiredCell("合同正文", "合同正文（规则包与按费用范围的约定）须在场"))
+		problems.add("customerContract.contractContent", requiredCell("合同正文", "合同正文（客户账户与按费用范围的约定）须在场"))
 	} else {
 		body.CustomerAccount = requireField(problems, "customerContract.contractContent.customerAccount",
 			domain.NewCustomerAccountID, payload.ContractContent.CustomerAccount)
-		body.RulePackage = requireField(problems, "customerContract.contractContent.rulePackage",
-			domain.NewCommercialObjectID, payload.ContractContent.RulePackage)
+		// 规则包可缺（ADR-0376 决定三）：多产品合同不指名，规则包随服务产品选；填了照旧过构造门。
+		if payload.ContractContent.RulePackage != "" {
+			body.RulePackage = requireField(problems, "customerContract.contractContent.rulePackage",
+				domain.NewCommercialObjectID, payload.ContractContent.RulePackage)
+		}
 		body.Bindings = make([]domain.FinancialControlBinding, 0, len(payload.ContractContent.Bindings))
 		for index, row := range payload.ContractContent.Bindings {
 			body.Bindings = append(body.Bindings, row.binding(problems, fmt.Sprintf("customerContract.contractContent.bindings[%d]", index)))

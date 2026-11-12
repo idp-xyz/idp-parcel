@@ -258,6 +258,56 @@ func TestACombinedPolicyOccupiesOneEstimateOnBothLedgers(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0379 决定一——试算答复带来的服务产品随估价留痕；同一请求再来时产品照旧在、答重放。没申报的估价留痕里没有产品。
+func TestTheServiceProductTheCardWasSelectedForIsTraced(t *testing.T) {
+	trials := estimating(t, 1_250, 800)
+	trials.answer.ServiceProduct = "SYN-PRODUCT-FBA"
+	traces := &traceDouble{}
+	handler := mustHandler(t, estimateDeps(t, requiredPolicy(t), adopted(t), trials, traces,
+		&balanceDouble{balance: balanceWith(t, 10_000)}, &ledgerDouble{ledger: domain.NewFreezeLedger()}))
+
+	for round := 1; round <= 2; round++ {
+		result, err := handler.Handle(context.Background(), command(t))
+		if err != nil || result.Outcome() != application.ControlApplied {
+			t.Fatalf("第 %d 轮 outcome = %q err = %v", round, result.Outcome(), err)
+		}
+	}
+	if product, declared := traces.only(t).Estimate.ServiceProduct(); !declared || product != "SYN-PRODUCT-FBA" {
+		t.Fatalf("留痕的服务产品 = %q %t", product, declared)
+	}
+
+	undeclared := &traceDouble{}
+	plain := mustHandler(t, estimateDeps(t, requiredPolicy(t), adopted(t), estimating(t, 1_250), undeclared,
+		&balanceDouble{balance: balanceWith(t, 10_000)}, &ledgerDouble{ledger: domain.NewFreezeLedger()}))
+	if _, err := plain.Handle(context.Background(), command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if _, declared := undeclared.only(t).Estimate.ServiceProduct(); declared {
+		t.Fatal("没申报的估价留痕里长出了产品")
+	}
+}
+
+// Covers: 票 declared-goods-lines/19 评审、ADR-0379 决定一「补记不得挡住估价形成」——试算答复带来的产品记不上（空白）时不记，控制照常
+// 执行、冻结照常占用，留痕里没有产品。
+func TestAServiceProductThatCannotBeRecordedDoesNotStopTheEstimate(t *testing.T) {
+	trials := estimating(t, 1_250, 800)
+	trials.answer.ServiceProduct = "   "
+	traces := &traceDouble{}
+	handler := mustHandler(t, estimateDeps(t, requiredPolicy(t), adopted(t), trials, traces,
+		&balanceDouble{balance: balanceWith(t, 10_000)}, &ledgerDouble{ledger: domain.NewFreezeLedger()}))
+
+	result, err := handler.Handle(context.Background(), command(t))
+	if err != nil || result.Outcome() != application.ControlApplied {
+		t.Fatalf("outcome = %q/%q err = %v, want CONTROL_APPLIED", result.Outcome(), result.NotFormedReason(), err)
+	}
+	if freeze, held := result.Freeze(); !held || freeze.AmountMinor() != 2_050 {
+		t.Fatalf("freeze = %#v held = %t", freeze, held)
+	}
+	if _, declared := traces.only(t).Estimate.ServiceProduct(); declared {
+		t.Fatal("记不上的产品进了留痕")
+	}
+}
+
 // Covers: ADR-0179 决定五 / 票 product-strategy-boundary/25 完成判据一的 SA 半边——采用册上没有这一户时停在金额未配置：不默认形态、
 // 不拿零顶，带续办引用；试算不问、余额不读、两本账与留痕都不碰。它与采用册读不回分两格：一个等登记，一个等重试。
 func TestAnUnadoptedAccountStopsAtAmountNotConfiguredBeforeAnyLedger(t *testing.T) {
@@ -383,6 +433,50 @@ func TestEveryEstimateCellStopsBeforeTouchingEitherLedger(t *testing.T) {
 			t.Fatalf("%s 的原因 %d 没有名字", name, tc.reason)
 		}
 		seen[tc.reason] = name
+	}
+}
+
+// Covers: ADR-0381 决定三——`申报不全`时计价点名的逐件缺项原样随结果转交（DeclarationGaps）：本上下文不折叠、
+// 不翻译、不解析任何一个码，没见过的码也照样带（分流的词汇归小包托运侧）；缺项缺席时转交空集；别的未形成原因
+// 不带缺项。
+func TestADeclarationIncompleteResultCarriesTheGapsVerbatim(t *testing.T) {
+	gaps := []ports.PreAcceptanceTrialGap{
+		{Parcel: "P-1", Missing: []string{"MEASUREMENT", "A_CODE_THIS_CONTEXT_NEVER_HEARD_OF"}},
+		{Parcel: "P-2", Missing: []string{"POSTAL_ROUTE", "ORIGIN_POSTAL"}},
+	}
+	run := func(t *testing.T, trials *trialSourceDouble) application.ApplyPreAcceptanceControlResult {
+		t.Helper()
+		handler := mustHandler(t, estimateDeps(t, requiredPolicy(t), adopted(t), trials, &traceDouble{},
+			&balanceDouble{balance: balanceWith(t, 10_000)}, &ledgerDouble{ledger: domain.NewFreezeLedger()}))
+		result, err := handler.Handle(context.Background(), command(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		return result
+	}
+
+	incomplete := run(t, &trialSourceDouble{answer: ports.PreAcceptanceTrialAnswer{
+		Outcome: ports.PreAcceptanceTrialsIncomplete, PriceCard: estimatePriceCard, Gaps: gaps,
+	}})
+	if incomplete.Outcome() != application.ControlNotFormed || incomplete.NotFormedReason() != application.EstimateDeclarationIncomplete {
+		t.Fatalf("outcome/reason = %q/%q, want CONTROL_NOT_FORMED/申报不全", incomplete.Outcome(), incomplete.NotFormedReason())
+	}
+	if !reflect.DeepEqual(incomplete.DeclarationGaps(), gaps) {
+		t.Fatalf("gaps = %+v, want 原样 %+v", incomplete.DeclarationGaps(), gaps)
+	}
+
+	bare := run(t, &trialSourceDouble{answer: ports.PreAcceptanceTrialAnswer{
+		Outcome: ports.PreAcceptanceTrialsIncomplete, PriceCard: estimatePriceCard,
+	}})
+	if len(bare.DeclarationGaps()) != 0 {
+		t.Fatalf("缺项缺席却转交了 %+v", bare.DeclarationGaps())
+	}
+
+	other := run(t, &trialSourceDouble{answer: ports.PreAcceptanceTrialAnswer{
+		Outcome: ports.PreAcceptanceTrialPriceCardNotConfigured, PriceCard: estimatePriceCard, Gaps: gaps,
+	}})
+	if other.NotFormedReason() != application.EstimatePriceCardNotConfigured || len(other.DeclarationGaps()) != 0 {
+		t.Fatalf("reason = %q gaps = %+v, want 别的原因不带缺项", other.NotFormedReason(), other.DeclarationGaps())
 	}
 }
 

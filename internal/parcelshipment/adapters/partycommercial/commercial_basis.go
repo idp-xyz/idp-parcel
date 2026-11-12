@@ -43,19 +43,23 @@ type CommercialBasisAdapter struct {
 	judgments    *pcapplication.FormJudgmentAsOfHandler
 	asOfPolicies pcports.AsOfPolicyDeclaration
 	contents     pcports.AcceptanceContentDeclaration
+	rules        pcports.AcceptanceRulePackageContentView
 	keys         ResolutionKeySource
 	values       AsOfValueSource
 }
 
-// CommercialBasisAdapterDeps 收拢七个协作方；≥5 个输入按本仓分界用结构体。
+// CommercialBasisAdapterDeps 收拢各协作方；≥5 个输入按本仓分界用结构体。
 type CommercialBasisAdapterDeps struct {
 	Resolve      *pcapplication.ResolveCommercialBasisHandler
 	Revalidate   *pcapplication.ValidateCommercialBasisHandler
 	Judgments    *pcapplication.FormJudgmentAsOfHandler
 	AsOfPolicies pcports.AsOfPolicyDeclaration
 	Contents     pcports.AcceptanceContentDeclaration
-	Keys         ResolutionKeySource
-	Values       AsOfValueSource
+	// Rules 读采用的规则包正文里的规则引用，只为提交条件（submission_conditions.go）。nil 时声明了「必要资料」组适用的
+	// 规则包答无法判定，不当成没有条件。
+	Rules  pcports.AcceptanceRulePackageContentView
+	Keys   ResolutionKeySource
+	Values AsOfValueSource
 }
 
 // NewCommercialBasisAdapter 装配三个阶段。Keys 与 Values 允许为 nil：今天没有任何租户
@@ -68,6 +72,7 @@ func NewCommercialBasisAdapter(deps CommercialBasisAdapterDeps) *CommercialBasis
 		judgments:    deps.Judgments,
 		asOfPolicies: deps.AsOfPolicies,
 		contents:     deps.Contents,
+		rules:        deps.Rules,
 		keys:         deps.Keys,
 		values:       deps.Values,
 	}
@@ -227,9 +232,10 @@ func (adapter *CommercialBasisAdapter) resolutionOf(
 	}
 }
 
-// adoptedResolution 把一份唯一闭包译成携带快照的`适用`结果。快照四类内容各有其源：
+// adoptedResolution 把一份唯一闭包译成携带快照的`适用`结果。快照的内容各有其源：
 // 标识/规则包/视图修订取自闭包本身，时点声明与内容声明按已选对象经提供方端口读取
-// （ADR-0042「在唯一选出后取用」），待路由许可按已选服务产品读取。
+// （ADR-0042「在唯一选出后取用」），待路由许可按已选服务产品读取，提交条件按已选规则包
+// 正文里的规则引用读取（submission_conditions.go）。
 //
 // 声明读不回或未配置时交回`无法判定`而不是造一份缺声明的快照：空适用组等于无条件接受，
 // 正是提供方 DeclareAcceptanceRuleContent 拒绝表达的东西，适配器不得在翻译里把它造出来。
@@ -283,11 +289,20 @@ func (adapter *CommercialBasisAdapter) adoptedResolution(
 		return resolution, err
 	}
 
+	conditions, unreadable, err := adapter.submissionConditionsFor(ctx, tenant, adopted, applicable)
+	if err != nil {
+		return psports.CommercialBasisResolution{}, err
+	}
+	if unreadable != "" {
+		return undeterminedResolution(unreadable)
+	}
+
 	snapshot, err := snapshotFor(closure, adopted, viewRevision, snapshotDeclarations{
-		DeclaredAsOf:   declared,
-		Applicable:     applicable,
-		ManualReview:   review,
-		PendingRouting: allowance,
+		DeclaredAsOf:         declared,
+		Applicable:           applicable,
+		ManualReview:         review,
+		PendingRouting:       allowance,
+		SubmissionConditions: conditions,
 	})
 	if err != nil {
 		return psports.CommercialBasisResolution{}, err
@@ -332,12 +347,13 @@ func (adapter *CommercialBasisAdapter) pendingRoutingFor(
 	return allowance, psports.CommercialBasisResolution{}, false, nil
 }
 
-// snapshotDeclarations 收拢快照里由提供方声明而非闭包本体携带的四项。
+// snapshotDeclarations 收拢快照里由提供方声明而非闭包本体携带的几项。
 type snapshotDeclarations struct {
-	DeclaredAsOf   []psdomain.DeclaredAsOf
-	Applicable     psdomain.ApplicableCheckGroups
-	ManualReview   psdomain.ManualReviewPolicy
-	PendingRouting psdomain.PendingRoutingAllowance
+	DeclaredAsOf         []psdomain.DeclaredAsOf
+	Applicable           psdomain.ApplicableCheckGroups
+	ManualReview         psdomain.ManualReviewPolicy
+	PendingRouting       psdomain.PendingRoutingAllowance
+	SubmissionConditions psdomain.SubmissionConditions
 }
 
 func snapshotFor(
@@ -374,6 +390,8 @@ func snapshotFor(
 		ManualReview:    declarations.ManualReview,
 		PendingRouting:  declarations.PendingRouting,
 		SettlementTerms: terms,
+
+		SubmissionConditions: declarations.SubmissionConditions,
 	})
 	if err != nil {
 		return psdomain.CommercialBasisSnapshot{}, fmt.Errorf("%w: commercial basis snapshot: %v", ErrUntranslatableAnswer, err)

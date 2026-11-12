@@ -38,6 +38,7 @@ func (double *priceCardCatalogDouble) LoadApplicable(
 	_ domain.PricingDirection,
 	_ domain.PricingScopeID,
 	_ time.Time,
+	_ domain.ServiceProductReference,
 ) ([]domain.PricingPlanVersion, error) {
 	return nil, nil
 }

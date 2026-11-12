@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
 // codeRequestNotYetAccepted：资料修订指名的委托还没接受。它与 `outcome` 里的`请求未受理`不是一回事：这里没有业务答案，只说
@@ -34,6 +35,8 @@ func answerAmendmentFailure(problem problemWriter, err error) {
 	switch {
 	case errors.Is(err, application.ErrAmendmentIntentNotDeclared):
 		problem(http.StatusBadRequest, codeMalformedRequest, "intent: the amendment intent is not declared")
+	case errors.Is(err, application.ErrAmendmentContentUnfit) && errors.Is(err, domain.ErrInvalidPacking):
+		problem(http.StatusBadRequest, codeMalformedRequest, "packing: name only the parcels of the accepted shipment, and every one of them, or declare no packing")
 	case errors.Is(err, application.ErrAmendmentContentUnfit):
 		problem(http.StatusBadRequest, codeMalformedRequest, "content: does not fit the declared scope and intent")
 	case errors.Is(err, application.ErrAmendedRequestNotAccepted):

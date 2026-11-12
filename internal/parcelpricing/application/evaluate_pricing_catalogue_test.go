@@ -52,6 +52,21 @@ func (double *catalogueReadingDouble) Register(context.Context, domain.Reference
 	return ports.ReferenceCatalogueRegistrationOutcomeInvalid, errors.New("not used")
 }
 
+// LoadVersion 让本替身也装得进试算那两条编排宽一格的目录口（ports.EstimateReferenceCatalogues）：按版本号
+// 交回登记里的那一版，没有即没找到。
+func (double *catalogueReadingDouble) LoadVersion(
+	_ context.Context,
+	_ domain.TenantID,
+	_ string,
+	catalogueVersion string,
+) (domain.ReferenceCatalogueRegistration, bool, error) {
+	if double.err != nil {
+		return domain.ReferenceCatalogueRegistration{}, false, double.err
+	}
+	registration, found := double.registrations[catalogueVersion]
+	return registration, found, nil
+}
+
 func (double *catalogueReadingDouble) ResolveAt(
 	_ context.Context,
 	_ domain.TenantID,

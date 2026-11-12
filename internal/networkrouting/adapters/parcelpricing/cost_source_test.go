@@ -682,6 +682,21 @@ func (book *catalogueBook) Register(context.Context, ppdomain.ReferenceCatalogue
 	return ppports.ReferenceCatalogueRegistrationOutcomeInvalid, errors.New("not used")
 }
 
+// LoadVersion 补齐试算那两条编排宽一格的目录口（ppports.EstimateReferenceCatalogues）：按标识交回在用登记里
+// 的那一版，版本号对得上才算找到。
+func (book *catalogueBook) LoadVersion(
+	_ context.Context, _ ppdomain.TenantID, catalogueID, catalogueVersion string,
+) (ppdomain.ReferenceCatalogueRegistration, bool, error) {
+	if book.err != nil {
+		return ppdomain.ReferenceCatalogueRegistration{}, false, book.err
+	}
+	registration, found := book.inForce[catalogueID]
+	if !found || registration.Reference().Version() != catalogueVersion {
+		return ppdomain.ReferenceCatalogueRegistration{}, false, nil
+	}
+	return registration, true, nil
+}
+
 func (book *catalogueBook) ResolveAt(
 	_ context.Context, _ ppdomain.TenantID, reference ppdomain.VersionReference, asOf time.Time, route ppdomain.PostalRoute,
 ) (ppdomain.ResolvedCatalogueValue, bool, error) {

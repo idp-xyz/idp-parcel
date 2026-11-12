@@ -15,9 +15,11 @@ import {
   effectiveBusinessPartyProfile,
   emptyBusinessPartyProfileDraft,
   otherLanguageNameOf,
+  profileClosedLine,
   profileContactsEmptyNoteOf,
   profileEditTagText,
   profileSummaryEmptyNoteOf,
+  profileVersionsEmptyNoteOf,
   suggestedBusinessPartyProfileRevision,
 } from './business-party-profile';
 
@@ -134,22 +136,32 @@ test('businessPartyProfileStateOf 分清在读、空着与有生效版', () => {
 });
 
 // Covers: 资料空着时各处的话——概要里没登过与都在未来生效各一句，是客户才补建议那一行；联系人签按「有资料没联系人 / 没有生效的
-// 资料 / 没登过」各一个标题、同一句去处。
+// 资料 / 没登过」各一个标题、同一句去处。登过停用的往来单位（末一个参数为假）登记册不再收新的资料：去处那一句换掉，
+// 对客户的建议不提，资料版本也不再说「登记后」。
 test('资料空着时的标题与说明', () => {
-  deepEqual(profileSummaryEmptyNoteOf(false, ['SUPPLIER']), {
+  deepEqual(profileSummaryEmptyNoteOf(false, ['SUPPLIER'], true), {
     title: '还没有登记资料',
     lines: ['联系人、地址、税号与收款账户都在「更新资料」里登记。'],
   });
-  deepEqual(profileSummaryEmptyNoteOf(false, ['CUSTOMER']), {
+  deepEqual(profileSummaryEmptyNoteOf(false, ['CUSTOMER'], true), {
     title: '还没有登记资料',
     lines: ['联系人、地址、税号与收款账户都在「更新资料」里登记。', '这家单位是客户，建议登记一位联系人，下单和对账时找得到人。'],
   });
-  deepEqual(profileSummaryEmptyNoteOf(true, []), { title: '还没有生效的资料', lines: ['已登记的版本都在未来生效。'] });
+  deepEqual(profileSummaryEmptyNoteOf(true, [], true), { title: '还没有生效的资料', lines: ['已登记的版本都在未来生效。'] });
   const body = { outcome: 'X', partyId: record.partyId, revisions: [record] };
   const lines = ['联系人与地址、税号一起在「更新资料」里登记。'];
-  deepEqual(profileContactsEmptyNoteOf({ kind: 'present', record: { ...record, contacts: [] }, body }), { title: '还没有登记联系人', lines });
-  deepEqual(profileContactsEmptyNoteOf({ kind: 'empty', scheduled: true, body }), { title: '还没有生效的资料', lines });
-  deepEqual(profileContactsEmptyNoteOf({ kind: 'empty', scheduled: false, body: { ...body, revisions: [] } }), { title: '还没有登记资料', lines });
+  deepEqual(profileContactsEmptyNoteOf({ kind: 'present', record: { ...record, contacts: [] }, body }, true), { title: '还没有登记联系人', lines });
+  deepEqual(profileContactsEmptyNoteOf({ kind: 'empty', scheduled: true, body }, true), { title: '还没有生效的资料', lines });
+  deepEqual(profileContactsEmptyNoteOf({ kind: 'empty', scheduled: false, body: { ...body, revisions: [] } }, true), { title: '还没有登记资料', lines });
+  deepEqual(profileVersionsEmptyNoteOf(true), { title: '还没有登记资料', lines: ['登记后每一版都列在这里，旧版本不会被覆盖。'] });
+  // 登过停用的
+  deepEqual(profileSummaryEmptyNoteOf(false, ['CUSTOMER'], false), { title: '还没有登记资料', lines: [profileClosedLine] });
+  deepEqual(profileSummaryEmptyNoteOf(true, [], false), { title: '还没有生效的资料', lines: ['已登记的版本都在未来生效。', profileClosedLine] });
+  deepEqual(profileContactsEmptyNoteOf({ kind: 'present', record: { ...record, contacts: [] }, body }, false), {
+    title: '还没有登记联系人',
+    lines: [profileClosedLine],
+  });
+  deepEqual(profileVersionsEmptyNoteOf(false), { title: '还没有登记资料', lines: [profileClosedLine] });
 });
 
 // Covers: 保存前核对的比较（票 business-party-redesign/11）——预填后不动，没有一行有变化；其他语言名称按语言比、排在最前：

@@ -64,7 +64,9 @@ type SubmissionVersion struct {
 	// requestedProduct 是随本版本声明的服务产品（票 psb/17），纪律同 elements：由 CanonicalizeSubmission 产出、随
 	// 版本进快照，缺席合法；每一版带自己的，不从上一版继承。
 	requestedProduct DeclaredServiceProduct
-	establishedAt    time.Time
+	// goods 是随本版本声明的货物明细（ADR-0373 决定五）：补充整份重报、不从上一版继承，零值即没报。
+	goods         GoodsDetails
+	establishedAt time.Time
 }
 
 func (version SubmissionVersion) VersionID() SubmissionVersionID {
@@ -92,6 +94,11 @@ func (version SubmissionVersion) DeclaredElements() DeclaredAddressElements {
 // GeoProjection 是这一版提交上要随路由判断带走的地理维。
 func (version SubmissionVersion) GeoProjection() CarriedGeoProjection {
 	return GeoProjectionOf(version.elements)
+}
+
+// Goods 交回本版本声明的货物明细；没报即零值（Declared 为假）。它是值，拷贝即语义。
+func (version SubmissionVersion) Goods() GoodsDetails {
+	return version.goods
 }
 
 // RequestedServiceProduct 交回本版本声明的服务产品；未声明即零值。商业依据解析键按它收窄服务产品候选（票 psb/17）。
@@ -152,7 +159,6 @@ type AcceptanceDecisionTask struct {
 	taskID              AcceptanceDecisionTaskID
 	submissionVersionID SubmissionVersionID
 	establishedAt       time.Time
-	processingAttempts  []ProcessingAttempt
 	reviewCompletion    ManualReviewCompletion
 	// authorizedDisposition 是本版本上已记录的授权处置（ADR-0132），一版至多一次、不覆盖。
 	// 它与 reviewCompletion 并列而不合成一格：复核完成之后决定仍由任务按规则形成，处置则
@@ -160,6 +166,8 @@ type AcceptanceDecisionTask struct {
 	authorizedDisposition AuthorizedDisposition
 	waitingOn             ResumePath
 	state                 AcceptanceTaskState
+	// supplementGaps 只在 waitingOn 为等待受控补充时非空（supplement_gaps.go）。
+	supplementGaps []SupplementGap
 }
 
 // AcceptanceTaskState 区分任务的两个终态。CONTEXT 把它们分开写：`已完成`只在接受或拒绝决定
@@ -236,6 +244,12 @@ type SubmitShipmentRequestSpec struct {
 	RequestedProduct DeclaredServiceProduct
 	// CustomerParcelNumbers 是客户为声明包裹给出的包裹件号（ADR-0184 决定四），允许缺席或只给部分成员。
 	CustomerParcelNumbers []CustomerParcelNumberDeclaration
+	// Goods 是随首个提交版本声明的货物明细（ADR-0373），允许缺席。装箱分配指的是本规格候选里的成员（现签的内部标识），
+	// 不是摘要那一份指的客户包裹参考；接单入口把同一份内容挪到成员上再带入，聚合据此再核一遍。
+	Goods GoodsDetails
+	// PlatformShipment 与 PlatformBoxLabels 是平台货件与每箱的平台箱标号（ADR-0374 决定四），允许缺席。
+	PlatformShipment  PlatformShipmentDeclaration
+	PlatformBoxLabels []PlatformBoxLabelDeclaration
 }
 
 type ShipmentRequest struct {
@@ -275,6 +289,11 @@ type ShipmentRequest struct {
 	// customerParcelNumbers 挂在委托上而不在提交版本上：号码标识的是成员，新版本的成员集合必须与当前版本相等，
 	// 所以它首次提交时固定、不随版本重报（ADR-0184 决定四）。接受时据它形成外部标识关联。
 	customerParcelNumbers []CustomerParcelNumberDeclaration
+	// platformShipment 与 platformBoxLabels 同客户包裹件号挂在委托上：箱标号标识的是成员，平台货件是这一票本身的号，都不是
+	// 某一版的内容。与客户包裹件号不同的是，受理前的受控补充可以整份换掉它们（ADR-0376 决定二）——这里存的是委托此刻的现行
+	// 声明，被换下的那一份不另留历史，每次补充的载荷摘要在来源保全里。接受后不再变，关联按它形成。
+	platformShipment  PlatformShipmentDeclaration
+	platformBoxLabels []PlatformBoxLabelDeclaration
 	// documentNumbering 是委托的单据号这一格（ADR-0355）。它不进快照文档，随两列读回：号在建单那一笔事务里开立、此后
 	// 不变，转移与保存都不碰它。
 	documentNumbering ShipmentDocumentNumbering
@@ -311,6 +330,13 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 	if err != nil {
 		return ShipmentRequest{}, err
 	}
+	if err := goodsFitMembers(spec.Goods, spec.Candidate.DeclaredParcelIDs()); err != nil {
+		return ShipmentRequest{}, err
+	}
+	boxLabels, err := platformBoxLabelsFor(spec.PlatformBoxLabels, spec.PlatformShipment, spec.Candidate.DeclaredParcelIDs())
+	if err != nil {
+		return ShipmentRequest{}, err
+	}
 
 	return ShipmentRequest{
 		shipmentRequestID: spec.Candidate.ShipmentRequestID(),
@@ -323,6 +349,7 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 			profiles:          profiles,
 			elements:          spec.Elements,
 			requestedProduct:  spec.RequestedProduct,
+			goods:             spec.Goods,
 			establishedAt:     spec.SubmittedAt,
 		},
 		acceptanceTask: AcceptanceDecisionTask{
@@ -334,6 +361,8 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 		submittedAt:           spec.SubmittedAt,
 		priorLink:             spec.Link,
 		customerParcelNumbers: customerNumbers,
+		platformShipment:      spec.PlatformShipment,
+		platformBoxLabels:     boxLabels,
 	}, nil
 }
 

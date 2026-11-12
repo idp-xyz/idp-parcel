@@ -1,9 +1,10 @@
 // form_pre_acceptance_estimates.go 是「按委托提交版本形成受理前试算」的入口（ADR-0179 决定一、三、四；票 product-strategy-boundary/25）：
-// 结算按采用行要控制金额时来问。本入口解析在用的 SELL·客户费用价卡、按提交版本逐件读申报造声明，交给定价卡的入口
-// （FormPlanGivenEstimateEvaluationsHandler）形成试算评价，逐件交回。合计不在这里：怎么合、哪几种结果停，是结算的估价形态。
+// 结算按采用行要控制金额时来问。本入口按提交版本读申报、按申报的服务产品解析在用的 SELL·客户费用价卡、逐件造声明，交给定价卡的
+// 入口（FormPlanGivenEstimateEvaluationsHandler）形成试算评价，逐件交回。合计不在这里：怎么合、哪几种结果停，是结算的估价形态。
 //
-// 选卡与正式 SELL·客户费用评价同口径：按（租户、计价范围、SELL、客户费用、时点）经 PriceCardInForceResolver 解析唯一在用版本，
-// 时点取调用方交来的控制判断时点。未配置与适用冲突各自停，不挑卡；缺件自成一格，逐件点名，不拿零或别件顶。
+// 选卡与正式 SELL·客户费用评价同口径：按（租户、计价范围、SELL、客户费用、时点）与这一版申报的服务产品经 PriceCardInForceResolver
+// 解析唯一在用版本（ADR-0382 决定二、三），时点取调用方交来的控制判断时点。未配置与适用冲突各自停，不挑卡；缺件自成一格，逐件点名，
+// 不拿零或别件顶。
 // 不入册、不交付（ADR-0152 决定二）：依赖里没有评价库写口，也没有交付口。
 package application
 
@@ -144,7 +145,8 @@ func NewFormPreAcceptanceEstimatesHandler(deps FormPreAcceptanceEstimatesDeps) (
 	return &FormPreAcceptanceEstimatesHandler{deps: deps}, nil
 }
 
-// Handle 把一次受理前试算推进到答案：受理 → 选卡 → 读申报 → 逐件交给定价卡的入口。先选卡后读申报：没有卡时连客户的申报都不必读。
+// Handle 把一次受理前试算推进到答案：受理 → 读申报 → 按申报的服务产品选卡 → 逐件交给定价卡的入口。先读申报后选卡：选哪张卡取决于
+// 这一版申报的服务产品（ADR-0382 决定三），不读申报就选不出卡。不可见的委托因此在选卡之前就停，在用解析口一次都不问。
 func (handler *FormPreAcceptanceEstimatesHandler) Handle(
 	ctx context.Context,
 	command FormPreAcceptanceEstimatesCommand,
@@ -152,8 +154,17 @@ func (handler *FormPreAcceptanceEstimatesHandler) Handle(
 	if !command.accepted() {
 		return FormPreAcceptanceEstimatesResult{Outcome: PreAcceptanceEstimatesNotAccepted}, nil
 	}
+	declaration, found, err := handler.deps.Declarations.LoadSubmissionDeclaration(
+		ctx, command.Tenant, command.ShipmentRequest, command.SubmissionVersion)
+	if err != nil {
+		return undecidedPreAcceptance(PreAcceptanceSubmissionDeclarationUnavailable, domain.VersionReference{}), nil
+	}
+	if !found || len(declaration.Parcels) == 0 {
+		return FormPreAcceptanceEstimatesResult{Outcome: PreAcceptanceSubmissionNotVisible}, nil
+	}
+
 	resolution, err := handler.deps.PriceCards.ResolveInForce(ctx, command.Tenant, command.Scope,
-		domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, command.At)
+		domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, command.At, declaration.ServiceProduct)
 	if err != nil {
 		return undecidedPreAcceptance(PreAcceptancePriceCardResolutionUnavailable, domain.VersionReference{}), nil
 	}
@@ -170,15 +181,6 @@ func (handler *FormPreAcceptanceEstimatesHandler) Handle(
 		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance estimates: unhandled price card resolution %d", resolution.Outcome)
 	}
 	plan := resolution.Plan
-
-	declaration, found, err := handler.deps.Declarations.LoadSubmissionDeclaration(
-		ctx, command.Tenant, command.ShipmentRequest, command.SubmissionVersion)
-	if err != nil {
-		return undecidedPreAcceptance(PreAcceptanceSubmissionDeclarationUnavailable, plan.Reference()), nil
-	}
-	if !found || len(declaration.Parcels) == 0 {
-		return FormPreAcceptanceEstimatesResult{Outcome: PreAcceptanceSubmissionNotVisible, Plan: plan.Reference()}, nil
-	}
 
 	estimates, undecided, err := handler.estimate(ctx, command, plan, declaration)
 	if err != nil {
@@ -216,12 +218,13 @@ func (handler *FormPreAcceptanceEstimatesHandler) estimate(
 			continue
 		}
 		measured = append(measured, PlanGivenEstimateDeclaration{
-			Subject:    preAcceptanceSubject(command, parcel.Parcel),
-			BasisAt:    command.At,
-			Weight:     *parcel.Weight,
-			Dimensions: parcel.Dimensions,
-			Route:      declaration.Route,
-			Settlement: &settlement,
+			Subject:        preAcceptanceSubject(command, parcel.Parcel),
+			BasisAt:        command.At,
+			Weight:         *parcel.Weight,
+			Dimensions:     parcel.Dimensions,
+			Route:          declaration.Route,
+			Settlement:     &settlement,
+			ServiceProduct: declaration.ServiceProduct,
 		})
 		positions = append(positions, index)
 	}

@@ -33,11 +33,11 @@ type PriceCards struct {
 
 var _ ports.PriceCardVersionLoader = (*PriceCards)(nil)
 
-// priceCardRowColumns 是两条读法共用的列面：装载与按引用读回都要把这些比对列与快照交叉核，
-// 列表写一处，两条 SELECT 与 Scan 才不会各漏一列。
+// priceCardRowColumns 是各条读法共用的列面：装载与按引用读回都要把这些比对列与快照交叉核，
+// 列表写一处、读的目标也只写一处（priceCardRow.scanTargets），各条 SELECT 与 Scan 才不会各漏一列。
 const priceCardRowColumns = `plan_id, plan_version, direction, purpose, scope,
 		        rate_table_id, rate_table_version, effective_from, effective_to,
-		        canonicalization, content_digest, source_file_sha256, snapshot`
+		        canonicalization, content_digest, source_file_sha256, snapshot, service_products`
 
 // priceCardRow 是价卡版本表一行的比对列面与快照。
 type priceCardRow struct {
@@ -47,15 +47,66 @@ type priceCardRow struct {
 	effectiveTo                                    *time.Time
 	canonicalization, digest, sourceSHA            string
 	snapshot                                       []byte
+	// serviceProducts 是卡声明的适用服务产品（ADR-0382 决定四），空即不声明。
+	serviceProducts []string
+}
+
+// scanTargets 按 priceCardRowColumns 的次序交出读的目标；带额外列的读法把自己的目标接在后面。
+func (row *priceCardRow) scanTargets() []any {
+	return []any{&row.planID, &row.planVersion, &row.direction, &row.purpose, &row.scope,
+		&row.tableID, &row.tableVersion, &row.effectiveFrom, &row.effectiveTo,
+		&row.canonicalization, &row.digest, &row.sourceSHA, &row.snapshot, &row.serviceProducts}
 }
 
 // scanPriceCardRow 按 priceCardRowColumns 的次序读一行。
 func scanPriceCardRow(scanner interface{ Scan(dest ...any) error }) (priceCardRow, error) {
 	var row priceCardRow
-	err := scanner.Scan(&row.planID, &row.planVersion, &row.direction, &row.purpose, &row.scope,
-		&row.tableID, &row.tableVersion, &row.effectiveFrom, &row.effectiveTo,
-		&row.canonicalization, &row.digest, &row.sourceSHA, &row.snapshot)
+	err := scanner.Scan(row.scanTargets()...)
 	return row, err
+}
+
+// namesProduct 报出这一行的卡有没有指名这个产品。
+func (row priceCardRow) namesProduct(product domain.ServiceProductReference) bool {
+	for _, named := range row.serviceProducts {
+		if named == product.String() {
+			return true
+		}
+	}
+	return false
+}
+
+// tierForProduct 是 ADR-0382 决定二的指名优先：时点选得中的各行里，先取指名这个产品的那一层；一张都没有才取不声明产品
+// 的那一层。指名了别的产品的行哪一层都不进。零值产品（没申报）只有不声明的那一层。层内几行怎么答由调用方各按自己的口径：
+// 在用解析多于一行即适用冲突，试算的卡集照旧只拦同一方案两版。ResolveInForce 与 LoadApplicable 都经这一处取层，同一份申报在
+// 两边才落在同一层。
+func tierForProduct(rows []priceCardRow, product domain.ServiceProductReference) []priceCardRow {
+	var named, unnamed []priceCardRow
+	for _, row := range rows {
+		switch {
+		case len(row.serviceProducts) == 0:
+			unnamed = append(unnamed, row)
+		case product.Declared() && row.namesProduct(product):
+			named = append(named, row)
+		}
+	}
+	if len(named) > 0 {
+		return named
+	}
+	return unnamed
+}
+
+// productsMatch 核列面与快照的适用产品：同样排序后保存，所以逐个比。
+func productsMatch(column []string, plan domain.PricingPlanVersion) bool {
+	declared := plan.ServiceProducts()
+	if len(column) != len(declared) {
+		return false
+	}
+	for index, product := range declared {
+		if column[index] != product.String() {
+			return false
+		}
+	}
+	return true
 }
 
 // plan 从一行重建方案：快照经领域整图重验（含按规范化版本重算内容摘要自校），再与比对列交叉核
@@ -77,6 +128,7 @@ func (row priceCardRow) plan(tenant domain.TenantID) (domain.PricingPlanVersion,
 		plan.RateTable().Reference().Version() != row.tableVersion ||
 		plan.CanonicalizationVersion() != row.canonicalization ||
 		plan.ContentDigest() != row.digest ||
+		!productsMatch(row.serviceProducts, plan) ||
 		registration.SourceFile().SHA256() != row.sourceSHA ||
 		!plan.EffectivePeriod().StartsAt().Equal(row.effectiveFrom) ||
 		!periodEndMatches(plan.EffectivePeriod(), row.effectiveTo) {
@@ -119,8 +171,8 @@ func (catalog *PriceCards) Register(
 			(tenant_id, plan_id, plan_version, direction, purpose, scope,
 			 rate_table_id, rate_table_version, effective_from, effective_to,
 			 canonicalization, content_digest, source_file_name, source_file_sha256,
-			 authorization_id, authorization_version, publication_approver, snapshot)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+			 authorization_id, authorization_version, publication_approver, snapshot, service_products)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		 ON CONFLICT DO NOTHING`,
 		registration.Tenant().String(),
 		plan.Reference().ID(),
@@ -140,6 +192,7 @@ func (catalog *PriceCards) Register(
 		registration.DirectionAuthorization().Version(),
 		registration.PublicationApprover(),
 		snapshot,
+		serviceProductColumn(plan),
 	)
 	if err != nil {
 		return ports.PriceCardRegistrationOutcomeInvalid, fmt.Errorf("register price card: %w", err)
@@ -167,18 +220,20 @@ func (catalog *PriceCards) Register(
 	return ports.PriceCardAlreadyRegistered, nil
 }
 
-// LoadApplicable 取（方向 + 适用范围 + 计价基准时点）下的全部适用价卡版本。方向
+// LoadApplicable 取（方向 + 适用范围 + 计价基准时点）与申报的服务产品下的全部适用价卡版本。方向
 // 隔离在查询谓词上（BUY 的册面不进 SELL 的答案）；选版按此刻的选用区间含 asOf——发布时的
 // [effective_from, effective_to) 在 SQL 里预筛，册上的截止与退役由 selectablePriceCardRow 折进来
 // （ADR-0234），与 ResolveInForce 同一口径：试算答适用冲突时要回头问那一口要候选，两口折法不同就会
-// 互相对不上。读回逐行经领域整图重验（含按规范化版本重算内容摘要自校），再与比对列交叉核——列与
-// 快照分岔说明行被改过。
+// 互相对不上。产品这一维先按 ADR-0382 的指名优先取层（tierForProduct，与 ResolveInForce 同一处），层内照旧是
+// 试算的卡集：不同方案并列各评各的（ADR-0152），只有同一方案两版同时适用才交回错误。读回逐行经领域整图重验
+// （含按规范化版本重算内容摘要自校），再与比对列交叉核——列与快照分岔说明行被改过。
 func (catalog *PriceCards) LoadApplicable(
 	ctx context.Context,
 	tenant domain.TenantID,
 	direction domain.PricingDirection,
 	scope domain.PricingScopeID,
 	asOf time.Time,
+	product domain.ServiceProductReference,
 ) ([]domain.PricingPlanVersion, error) {
 	if tenant.String() == "" || scope.String() == "" || asOf.IsZero() {
 		return nil, fmt.Errorf("load price cards: tenant, scope and asOf are required")
@@ -194,16 +249,16 @@ func (catalog *PriceCards) LoadApplicable(
 		  WHERE tenant_id = $1 AND direction = $2 AND scope = $3
 		    AND effective_from <= $4
 		    AND (effective_to IS NULL OR effective_to > $4)
+		    AND (cardinality(service_products) = 0 OR $5 = ANY(service_products))
 		  ORDER BY plan_id, plan_version`,
-		tenant.String(), direction.String(), scope.String(), asOf.UTC(),
+		tenant.String(), direction.String(), scope.String(), asOf.UTC(), product.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load price cards: %w", err)
 	}
 	defer rows.Close()
 
-	var plans []domain.PricingPlanVersion
-	previousPlanID := ""
+	var selected []priceCardRow
 	for rows.Next() {
 		selectable, err := scanSelectablePriceCardRow(rows)
 		if err != nil {
@@ -213,11 +268,21 @@ func (catalog *PriceCards) LoadApplicable(
 		if err != nil {
 			return nil, fmt.Errorf("load price cards: %w", err)
 		}
-		if !selects {
-			continue
+		if selects {
+			selected = append(selected, selectable.priceCardRow)
 		}
-		row := selectable.priceCardRow
-		// 同一方案身份两版同时适用：交回错误，不挑一版（行按 plan_id 有序，相邻
+	}
+	if err := rows.Err(); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("load price cards: %w", err)
+	}
+
+	var plans []domain.PricingPlanVersion
+	previousPlanID := ""
+	for _, row := range tierForProduct(selected, product) {
+		// 同一方案身份两版同时适用：交回错误，不挑一版（行按 plan_id 有序、取层不打乱次序，相邻
 		// 比较即可）。
 		if row.planID == previousPlanID {
 			return nil, fmt.Errorf("%w：%s", ErrAmbiguousPriceCard, row.planID)
@@ -229,12 +294,6 @@ func (catalog *PriceCards) LoadApplicable(
 			return nil, fmt.Errorf("load price cards: %w", err)
 		}
 		plans = append(plans, plan)
-	}
-	if err := rows.Err(); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("load price cards: %w", err)
 	}
 	return plans, nil
 }
@@ -317,10 +376,7 @@ func (catalog *PriceCards) ReadPriceCardContent(
 		   FROM parcel_pricing.price_card_version
 		  WHERE tenant_id = $1 AND plan_id = $2 AND plan_version = $3`,
 		tenant.String(), reference.ID(), reference.Version(),
-	).Scan(&row.planID, &row.planVersion, &row.direction, &row.purpose, &row.scope,
-		&row.tableID, &row.tableVersion, &row.effectiveFrom, &row.effectiveTo,
-		&row.canonicalization, &row.digest, &row.sourceSHA, &row.snapshot,
-		&approver, &registeredAt)
+	).Scan(append(row.scanTargets(), &approver, &registeredAt)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.PriceCardContent{}, false, nil
 	}
@@ -346,6 +402,16 @@ func (catalog *PriceCards) ReadPriceCardContent(
 		RegisteredAt:        registeredAt,
 		Document:            snapshot.Plan,
 	}, true, nil
+}
+
+// serviceProductColumn 是适用产品列的写法：不声明写空数组而不是 NULL，列是 NOT NULL，空数组正是「接其余产品」。
+func serviceProductColumn(plan domain.PricingPlanVersion) []string {
+	declared := plan.ServiceProducts()
+	column := make([]string, 0, len(declared))
+	for _, product := range declared {
+		column = append(column, product.String())
+	}
+	return column
 }
 
 // optionalPeriodEnd 把无上界适用期（endsAt 零值）折成 NULL 列。

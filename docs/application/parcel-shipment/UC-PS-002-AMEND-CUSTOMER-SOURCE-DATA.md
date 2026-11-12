@@ -82,8 +82,8 @@
 | 输入组 | 客户或代理可声明 | 权威来源 | 最低业务语义 |
 |---|---|---|---|
 | 来源信封 | 否 | 接入适配器与接入来源 | 请求身份、来源主体、来源发生时间（`occurredAt`）、系统接收时间（`receivedAt`）、原始内容或不可变引用、重试关系；两类时间不进入规范化内容摘要 |
-| 目标范围 | 是 | 客户请求，目标身份由 `parcel-shipment` 解析 | 委托、包裹、字段或资料组范围；不得以批次、袋、总单或客户名称模糊指代 |
-| 基础版本 | 是 | 客户请求引用，现行版本由 `parcel-shipment` 核对 | 请求方认为正在修订的源版本或明确“补充缺失资料”的基准 |
+| 目标范围 | 是 | 客户请求，目标身份由 `parcel-shipment` 解析 | 委托、包裹、字段或资料组范围；不得以批次、袋、总单或客户名称模糊指代。资料组「货物明细」作用于整份委托，内件性质、行与装箱分配整组替换，不按行指（[ADR-0373](../../adr/0373-a-shipment-requests-goods-details-are-invoice-lines-with-a-packing-allocation-kept-verbatim-and-replaced-as-a-whole.md) 决定四） |
+| 基础版本 | 是 | 客户请求引用，现行版本由 `parcel-shipment` 核对 | 请求方认为正在修订的源版本或明确“补充缺失资料”的基准；更正首次提交的值以接受基线那一版提交版本为基础版本，范围上还没有修订被采用时它就是现行版本（PS CONTEXT「当前客户资料版本采用判断」） |
 | 修订意图 | 是 | 客户请求 | 补充、更正、显式清空、来源更正或撤销关系及原因 |
 | 资料内容 | 是 | 客户原始声明 | 寄收件、货物、申报原始资料和服务要求范围内的声明内容 |
 | 业务时间 | 可声明 | 适用业务规则与 `parcel-shipment` | 资料何时在业务上成立或适用；不能仅以接收时间替代 |
@@ -182,6 +182,7 @@
 |---|---|---|
 | `AT-PS-014` | 接受后补充缺失的客户申报原始资料 | 形成新客户原始资料版本，接受基线不变，并标明下游待判断范围 |
 | `AT-PS-015` | 更正已接受的寄件、收件或货物声明值 | 保留旧版本和更正关系；当前判断引用新版本，不覆盖接受基线 |
+| `AT-PS-185` | 申报口预审退回要求改品名：委托在「关务资料形成中尚未提交」阶段，客户以更正交来完整的新货物明细，删掉一行、改了另一行的品名、相应改了装箱分配；另一请求只交改动的那一行 | 允许声明那一格允许时形成新版本，内件性质、行与装箱分配整组替换，行号按新版本重编，旧版本与接受基线不变；那一格没声明答等复核；只交一行的请求按整组读，即新货物明细只剩那一行，不按行合并 |
 | `AT-PS-016` | 同一请求身份以相同内容重试 | 返回原结果和版本，不重复形成新版本 |
 | `AT-PS-017` | 同一请求身份携带不同内容或范围 | 形成请求冲突；原请求和原版本不被覆盖 |
 | `AT-PS-018` | 无法识别目标委托、包裹或资料范围 | 输入未受理，不创建占位版本 |
@@ -239,3 +240,5 @@
 | 「未决」一行，ADR-0256 决定一第 2 格「重放须接着办」 | 已补：来源保全自成一笔事务，版本落库之前停下的各格（授权、阶段、矩阵未决，读不回，允许声明未声明答等复核，保存失败，并发抢先）来源保全都已落下；重放同一请求在委托的资料版本里找这次请求身份的版本，找到答 `ALREADY_HANDLED` 并带版本，找不到按首次请求继续走受理、授权、阶段、矩阵与保存；确定的业务拒绝（未获授权、不允许）条件没变就重新得到同一个答案；停在 `SOURCE_DATA_VERSION_NOT_HANDED_OFF` 的一格版本已落库，重放读回版本并重发交接意图。本行预期结果不变 | [code/44](../../../.scratch/docs-consistency/code/44-withdrawal-and-amendment-replays-short-circuit-after-an-undecided-round.md) |
 | 「未决」一行的授权适用冲突（ADR-0261） | 已补：`party-commercial` 多条命中答适用冲突（UC-PC-003 `AT-PC-042`），资料修订授权适配器译成 `APPLICABILITY_CONFLICT`，编排停在未决、原因 `SOURCE_DATA_AMENDMENT_AUTHORITY_APPLICABILITY_CONFLICT` | [code/24](../../../.scratch/docs-consistency/code/24-closed-authorization-rule-and-contract-versions-keep-granting.md) |
 | 仓配履约以货主名义提交的声明测量更正（[ADR-0370](../../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) 决定二，预取面单） | 未做：资料补充/更正请求的请求方没有「仓配履约代货主」这一种。[ADR-0371](../../adr/0371-warehouse-fulfillment-acts-for-the-owner-on-warehouse-outbound-requests-and-every-decision-path-hands-off-the-acceptance-decision.md) 已定请求方记货主客户账户、实际提交方记仓配履约、以「资料修订 × `WAREHOUSE_FULFILLMENT_AGENT`」向 PC 问授权，采用结果经资料版本已形成的信封交回；这几样代码都还没有 | 仓配切片立票时承接 |
+| 输入语义契约「目标范围」一行的资料组「货物明细」；`AT-PS-185`（[ADR-0373](../../adr/0373-a-shipment-requests-goods-details-are-invoice-lines-with-a-packing-allocation-kept-verbatim-and-replaced-as-a-whole.md) 决定四） | 未做：资料组只有寄件地、收件地与声明测量，修订口不收货物明细；货物明细是委托级资料组，与寄件地、收件地同类；资料修订的规范化形状按 ADR-0373 决定八的同一前提处理；这一组的资料组词随实现定名（与声明测量的 `DECLARED_MEASUREMENT` 同类）。`party-commercial` 的允许声明里资料组是开放引用、不校验存在，那边不用改；各格取值是租户的（`PAR-COM-13`），没登答等复核 | 货物明细实现切片立票时承接 |
+| 平台货件号、平台参考号与平台箱标号接受后的更正（[ADR-0374](../../adr/0374-dedicated-line-fba-headhaul-is-an-ordinary-shipment-request-one-platform-shipment-one-request-one-carton-one-parcel.md) 决定四） | 未做：平台号随首次提交声明在委托上，接受后没有资料组可改（客户包裹件号同样如此）；亚马逊重打箱标、货件号填错时只能撤回重提或走异常 | 待真实租户撞上时另立票 |

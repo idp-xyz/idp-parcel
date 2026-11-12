@@ -1,0 +1,21 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "retirements": [
+    {
+      "kind": "CUSTOMER_CONTRACT",
+      "scope": "SYN-SCOPE-01",
+      "objectId": "SYN-CONTRACT-01",
+      "version": "v1",
+      "successorVersion": "v2",
+      "reference": "SYN-REISSUE-CONTRACT-01-V2"
+    },
+    {
+      "kind": "SETTLEMENT_POLICY",
+      "scope": "SYN-SCOPE-01",
+      "objectId": "SYN-SETTLEMENT-PREPAID-01",
+      "version": "v1",
+      "successorVersion": "v2",
+      "reference": "SYN-REISSUE-SETTLEMENT-PREPAID-01-V2"
+    }
+  ]
+}

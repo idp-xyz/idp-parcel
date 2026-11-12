@@ -1151,6 +1151,11 @@ type FinancialControlRequest struct {
 // 前者只有运营做一次登记推得动、且那次登记会发信封来重驱，后者等依赖自己回来。哪几个原因落
 // 前一格由消费侧适配器判——它认得提供方的原因集合，编排不解析原因串；触发还没到位的未配置
 // 原因留在`未形成`，挪过来只会把烧完预算换成一次没人来推的等待（ADR-0094 决定四）。
+//
+// `等受控补充`是同一判据下的第三格（ADR-0381 决定一）：申报不全且缺项全是客户补得上的那几样时，只有客户
+// 补一次申报推得动，续办由新提交版本的信封驱动。缺项里混着登记才解得开的（分区、地址性质）落`未配置`——
+// 两类同场先走运营登记，登记解开后下一轮若还缺客户那几样再停等补充；一格缺项都点不出的申报不全留在
+// `未形成`照旧内部重试。分流照样在消费侧适配器：编排一个缺项码都不解析。
 type PreAcceptanceControlOutcome uint8
 
 const (
@@ -1160,6 +1165,7 @@ const (
 	PreAcceptanceControlRequestConflict
 	PreAcceptanceControlRequestNotAccepted
 	PreAcceptanceControlNotConfigured
+	PreAcceptanceControlCustomerSupplementRequired
 )
 
 func (outcome PreAcceptanceControlOutcome) String() string {
@@ -1174,6 +1180,8 @@ func (outcome PreAcceptanceControlOutcome) String() string {
 		return "REQUEST_NOT_ACCEPTED"
 	case PreAcceptanceControlNotConfigured:
 		return "NOT_CONFIGURED"
+	case PreAcceptanceControlCustomerSupplementRequired:
+		return "CUSTOMER_SUPPLEMENT_REQUIRED"
 	default:
 		return ""
 	}
@@ -1184,10 +1192,22 @@ func (outcome PreAcceptanceControlOutcome) String() string {
 //
 // 其余取值一律不带结果。交回一个零值结果正是用例禁止的默认放行——一次没能执行的控制会因此
 // 看起来像通过了。数字不写进来，理由同 JudgmentAsOfFormation。
+//
+// SettlementReason 只在提供方答未形成时在场，是它的原因码原样（ADR-0383 决定三）。它与 Reason 分开：Reason 是续办
+// 派生用的引用，消费侧适配器自己形成的停因（作用域没形成）也在那一格；编排不解析 Reason 的字面，要记下「结算说了
+// 什么」只能另交一格。
+//
+// SupplementGaps 只在`等受控补充`时在场：申报不全的缺项已由适配器按本上下文的封闭码译好、按缺的是哪件指名
+// （ADR-0381 决定四），编排把它原样落到等待态上，不再分流。EstimateGapCodes 是计价点名的缺项码原样、先见先记去重：
+// 申报不全分出的两路等待（受控补充与运营登记）都要把它记上处理尝试，而登记那一路不交译后缺口，所以它与
+// SupplementGaps 各是一格、不从彼此推。
 type PreAcceptanceControlAssessment struct {
-	Outcome PreAcceptanceControlOutcome
-	Result  domain.FinancialControlResult
-	Reason  domain.CheckReason
+	Outcome          PreAcceptanceControlOutcome
+	Result           domain.FinancialControlResult
+	Reason           domain.CheckReason
+	SettlementReason domain.SettlementNotFormedReason
+	SupplementGaps   []domain.SupplementGap
+	EstimateGapCodes []string
 }
 
 // ErrUntranslatableProviderAnswer 是消费侧适配器把提供方的答复译不进本上下文端口封闭集合时交回的错误所包的
@@ -1704,6 +1724,13 @@ type DeclaredParcelViewRecord struct {
 	Width          string
 	Height         string
 	DimensionsUnit string
+	// CustomerParcelNumber 与 PlatformBoxLabel 是委托上为这一件声明的客户包裹件号与平台箱标号（ADR-0184 决定四、ADR-0374
+	// 决定四），空串即没报。界面上叫客户件号与平台箱标号（PS CONTEXT「号码的界面词」）。
+	CustomerParcelNumber string
+	PlatformBoxLabel     string
+	// TrackingNumbers 是此刻仍适用、标识这一件的渠道包裹件号（含尾程件号），按形成先后；界面上叫跟踪号。作废或被替代的
+	// 不在内。一件包裹换过渠道可以有几个。
+	TrackingNumbers []string
 }
 
 // AcceptanceDecisionViewRecord 是详情里已形成的接受决定摘要。只带查阅要用的三样，
@@ -1719,18 +1746,37 @@ type AcceptanceDecisionViewRecord struct {
 // 成功判断，一份卡了十轮的委托看起来会和刚建单的一模一样；后两样是复核队列查阅面
 // （票 acceptance-review-read-face/01）要如实呈现的「停在哪、复核录了没」——WaitingOn
 // 零值即缺席（决定已形成或任务已完成），复核留痕四字段只在 ReviewCompleted 时在场。
+//
+// 最近一次处理记录读自处理尝试实际落库的那一处，即这一版任务最近落下的一条（ADR-0383 决定四）。续办方单列一格
+// （LastAttemptResumePath）：谁来动手要照记下的那一格交，读的一侧从原因名或续办引用推，就是第二处定义。结算原因与
+// 服务产品可缺，缺即那一轮没有（ADR-0383 决定三）。
 type AcceptanceTaskViewRecord struct {
-	State                   domain.AcceptanceTaskState
-	HasAttempt              bool
-	LastAttemptReason       string
-	LastAttemptContinuation string
-	LastAttemptedAt         time.Time
-	WaitingOn               domain.ResumePath
-	ReviewCompleted         bool
-	ReviewAuthority         string
-	ReviewReviewer          string
-	ReviewEvidence          string
-	ReviewCompletedAt       time.Time
+	State                       domain.AcceptanceTaskState
+	HasAttempt                  bool
+	LastAttemptReason           string
+	LastAttemptResumePath       domain.ResumePath
+	LastAttemptContinuation     string
+	LastAttemptedAt             time.Time
+	LastAttemptSettlementReason string
+	LastAttemptServiceProduct   string
+	// LastAttemptEstimateGapCodes 是那一轮计价点名的缺项码原样、去重（ADR-0381 决定四），只在申报不全分出的
+	// 两路等待上有，缺即那一轮没有。
+	LastAttemptEstimateGapCodes []string
+	WaitingOn                   domain.ResumePath
+	ReviewCompleted             bool
+	ReviewAuthority             string
+	ReviewReviewer              string
+	ReviewEvidence              string
+	ReviewCompletedAt           time.Time
+	// SupplementGaps 是停在等待受控补充时缺的各项（ADR-0376 决定一），不在等补充时为空。
+	SupplementGaps []SupplementGapViewRecord
+}
+
+// SupplementGapViewRecord 是一项受控补充缺口：判组与原因取领域的原词，包裹为空即委托级。
+type SupplementGapViewRecord struct {
+	Group  domain.AcceptanceCheckGroup
+	Parcel string
+	Reason string
 }
 
 // ShipmentRequestDetailRecord 是单份委托的查阅详情。
@@ -1744,6 +1790,15 @@ type ShipmentRequestDetailRecord struct {
 	Task              AcceptanceTaskViewRecord
 	HasDecision       bool
 	Decision          AcceptanceDecisionViewRecord
+	// Goods 是此刻在用的货物明细（domain.GoodsDetailsInEffect）：货物明细范围上有已采用的资料修订就是那一版，没有就是当前
+	// 提交版本上的那一份；GoodsStanding 说出自哪里——`待复核`时 Goods 为零值，不是没报。PlatformShipment 是委托上的平台货件
+	// （ADR-0373、ADR-0374），零值即没报。
+	Goods            domain.GoodsDetails
+	GoodsStanding    domain.GoodsDetailsStanding
+	PlatformShipment domain.PlatformShipmentDeclaration
+	// FinancialControl 是当前提交版本上最近一次受理判断记下的接受前财务控制结论（ADR-0379 决定三），与 RecordedJudgments 的那一格
+	// 同一份读法、同一个约定：零值即没判过。只在详情上，列表行不带——目录一页几十份委托，每份多一次读判断表换来的是列表不显示的一格。
+	FinancialControl domain.FinancialControlResult
 }
 
 // ShipmentRequestViews 是委托查阅的读口（CONTEXT「授权查询作用域」）。
@@ -1911,6 +1966,20 @@ type OperatorRegistrationQueueRecord struct {
 	SubmittedAt       time.Time
 }
 
+// Position 是这一行在队列上的位置，下一页从它之后取。
+func (record OperatorRegistrationQueueRecord) Position() OperatorRegistrationQueuePosition {
+	return OperatorRegistrationQueuePosition{SubmittedAt: record.SubmittedAt, ShipmentRequestID: record.ShipmentRequestID}
+}
+
+// OperatorRegistrationQueuePosition 是队列上的一个位置，与排序同列：（提交时刻、委托标识）。零值即从队首取。
+//
+// 翻页按位置往后取，不每页重读队首：自 ADR-0383 起，「被重驱、仍停着」是常态——一次登记只解得开它管的那几份，其余照旧
+// 等。每页重读队首时，比满一页还多的旧委托停着，后面的委托就永远轮不到，哪怕这次登记正是它们等的那一份。
+type OperatorRegistrationQueuePosition struct {
+	SubmittedAt       time.Time
+	ShipmentRequestID domain.ShipmentRequestID
+}
+
 // OperatorRegistrationQueue 按租户列出当前停在`等待运营登记`的`已提交`委托，老的在前，同刻按
 // 委托标识正序保证分页可重复（ADR-0094 Decision 五）。
 //
@@ -1920,11 +1989,13 @@ type OperatorRegistrationQueueRecord struct {
 //
 // 队列的定义就是投影列上的 `waitingOn = OPERATOR_REGISTRATION` 且 `state = SUBMITTED`（迁移 0013
 // 的部分索引逐字吻合）。等待态由 AwaitOperatorRegistration 在决定之前写下，由 Decide 与各终态
-// 转移改写或清零；读口照登记过滤，不在读侧重推。Limit 必须为正，判据同 ShipmentRequestViews。
+// 转移改写或清零；读口照登记过滤，不在读侧重推。after 之后（不含）取至多 limit 行；Limit 必须为正，判据同
+// ShipmentRequestViews。
 type OperatorRegistrationQueue interface {
 	ListWaitingOnOperatorRegistration(
 		ctx context.Context,
 		tenant domain.TenantID,
+		after OperatorRegistrationQueuePosition,
 		limit int,
 	) ([]OperatorRegistrationQueueRecord, error)
 }
@@ -2132,8 +2203,9 @@ type LabelTransactionViews interface {
 // 四个方法都收租户，理由与 RecordedJudgmentReader 同一条：委托标识的唯一性按租户圈定。
 //
 // 两类判断还收提交版本：判断是对某一版内容作出的，任务随版本重立（ADR-0045），记下它属于哪一版，
-// 读口才能只把当前版本的判断交给形成决定那一步。处理尝试与采用解析不收——尝试不参与决定，续办
-// 引用的派生已含版本；采用解析每轮按版本重解、后写覆盖。
+// 读口才能只把当前版本的判断交给形成决定那一步。处理尝试同样收版本：尝试不参与决定，但委托详情的
+// 「上次处理」读的是当前这一版任务最近的一条（ADR-0383 决定四），续办引用的派生虽含版本，却是摘要、
+// 读不回来。采用解析不收——每轮按版本重解、后写覆盖。
 type AcceptanceJudgmentRecorder interface {
 	RecordReachabilityJudgment(
 		ctx context.Context,
@@ -2153,6 +2225,7 @@ type AcceptanceJudgmentRecorder interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		requestID domain.ShipmentRequestID,
+		version domain.SubmissionVersionID,
 		attempt domain.ProcessingAttempt,
 	) error
 	// RecordAdoptedCommercialResolution 记下本轮采用的那次商业解析，供提交决定前按它重解。

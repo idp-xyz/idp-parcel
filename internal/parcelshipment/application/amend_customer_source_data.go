@@ -259,6 +259,11 @@ func (handler *AmendCustomerSourceDataHandler) decide(
 	if request.SourceDataScopeOutsideAcceptanceBaseline(command.Scope) {
 		return AmendCustomerSourceDataResult{outcome: AmendmentDisallowed}, nil
 	}
+	// 货物明细的装箱分配同样以接受基线为界，排在矩阵之前的理由同上：指错或漏了包裹是请求形状不对，改载荷才会好，矩阵怎么
+	// 登记都救不了它。它要读委托，所以只能在来源保全之后答；客户改了载荷重发要换一个修订请求标识（首方契约写明）。
+	if err := request.CheckSourceDataContentAgainstBaseline(command.Content); err != nil {
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w: %w", ErrAmendmentContentUnfit, err)
+	}
 
 	// 步骤 6 的前半：先判阶段，再问矩阵。矩阵按（资料组 × 阶段 × 意图）登记，阶段是本上下文对
 	// 自己对象生命周期位置的判断，规则包只声明「在某阶段允许什么」；判不出就停在未决，不猜一个

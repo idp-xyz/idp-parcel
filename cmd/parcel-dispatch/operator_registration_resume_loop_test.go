@@ -42,8 +42,13 @@ type operatorRegistrationLoopFixture struct {
 	settlementAccountGate *psinbox.OperatorRegistrationCompletedConsumer
 	// estimateAdoptionGate 是同一条链上收「受理前估价采用已登记」的那一份。
 	estimateAdoptionGate *psinbox.OperatorRegistrationCompletedConsumer
-	submittedHandoff     *pspostgres.OutboxShipmentRequestSubmittedHandoff
-	registration         *pcpostgres.OutboxOperatorRegistrationCompletedHandoff
+	// pricingParameterGate 是同一条链上收计价「参数已登记」的那一份（ADR-0383 决定二）。
+	pricingParameterGate *psinbox.OperatorRegistrationCompletedConsumer
+	// chain 与 inboxStore 留给要换页大小另装一扇门的用例：门与上面几扇同链、同账本。
+	chain            *psapplication.AdvanceAcceptanceChainHandler
+	inboxStore       *inbox.Store
+	submittedHandoff *pspostgres.OutboxShipmentRequestSubmittedHandoff
+	registration     *pcpostgres.OutboxOperatorRegistrationCompletedHandoff
 }
 
 const operatorRegistrationResumeConsumer = "parcel-shipment/advance-acceptance-chain-on-operator-registration"
@@ -114,6 +119,11 @@ func newOperatorRegistrationLoopFixtureWith(
 	if err != nil {
 		t.Fatalf("构造估价采用续办门：%v", err)
 	}
+	pricingParameterGate, err := psinbox.NewPricingParameterRegisteredConsumer(
+		base.transactor, inboxStore, base.requests, chain, operatorRegistrationRedrivePageSize)
+	if err != nil {
+		t.Fatalf("构造计价参数续办门：%v", err)
+	}
 	submittedHandoff, err := pspostgres.NewOutboxShipmentRequestSubmittedHandoff(base.db, store, systemClock{})
 	if err != nil {
 		t.Fatalf("构造提交交接：%v", err)
@@ -132,6 +142,9 @@ func newOperatorRegistrationLoopFixtureWith(
 		registrationGate:      registrationGate,
 		settlementAccountGate: settlementAccountGate,
 		estimateAdoptionGate:  estimateAdoptionGate,
+		pricingParameterGate:  pricingParameterGate,
+		chain:                 chain,
+		inboxStore:            inboxStore,
 		submittedHandoff:      submittedHandoff,
 		registration:          registration,
 	}
@@ -258,7 +271,7 @@ func (fixture *operatorRegistrationLoopFixture) listRegistrationQueue(
 	ctx context.Context,
 ) []psports.OperatorRegistrationQueueRecord {
 	t.Helper()
-	records, err := fixture.requests.ListWaitingOnOperatorRegistration(ctx, fixture.identity.TenantID(), 10)
+	records, err := fixture.requests.ListWaitingOnOperatorRegistration(ctx, fixture.identity.TenantID(), psports.OperatorRegistrationQueuePosition{}, 10)
 	if err != nil {
 		t.Fatalf("列等待运营登记队列：%v", err)
 	}
@@ -297,11 +310,15 @@ func (fixture *operatorRegistrationLoopFixture) markPublished(t *testing.T, deli
 // synRSwitchableAsOfCommercialBasis 是商业依据替身（隔离合成 `S`，不进生产装配）：解析与重校
 // 照 synRCommercialBasis，但规则声明不要求人工复核（本条闭环要走到接受），且时点形成可拨——
 // configured 为假时答`未配置`，正是 `ReachabilityAsOfNotConfigured` 的来源；拨真后照声明形成。
+//
+// asOfAt 在场时，拨真后的时点改由它给：要证「价卡在判断时点在不在用」的用例拿它照「提交接收」折时点，缺省的固定锚点说不出
+// 那一版是什么时候收到的。
 type synRSwitchableAsOfCommercialBasis struct {
 	inner       *synRCommercialBasis
 	t           *testing.T
 	configured  bool
 	asOfQueries int
+	asOfAt      func(context.Context, psports.JudgmentAsOfQuery) (time.Time, error)
 }
 
 func (double *synRSwitchableAsOfCommercialBasis) ResolveCommercialBasis(
@@ -318,6 +335,16 @@ func (double *synRSwitchableAsOfCommercialBasis) FormJudgmentAsOf(
 	double.asOfQueries++
 	if !double.configured {
 		return psports.JudgmentAsOfFormation{Outcome: psports.JudgmentAsOfNotConfigured}, nil
+	}
+	if double.asOfAt != nil {
+		at, err := double.asOfAt(ctx, query)
+		if err != nil {
+			return psports.JudgmentAsOfFormation{}, err
+		}
+		return psports.JudgmentAsOfFormation{
+			Outcome: psports.JudgmentAsOfFormed,
+			AsOf:    synJudgmentAsOf(double.t, query.Declared.Kind(), at),
+		}, nil
 	}
 	return double.inner.FormJudgmentAsOf(ctx, query)
 }

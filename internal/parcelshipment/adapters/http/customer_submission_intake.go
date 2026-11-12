@@ -144,6 +144,9 @@ type submissionDraft struct {
 	RecipientCountryCode    string                `json:"recipientCountryCode"`
 	DestinationServiceScope string                `json:"destinationServiceScope"`
 	Parcels                 []declaredParcelDraft `json:"parcels"`
+	// Goods 是委托级的货物明细（ADR-0373），PlatformShipment 是平台货件段（ADR-0374），都可缺席。
+	Goods            *goodsDraft            `json:"goods"`
+	PlatformShipment *platformShipmentDraft `json:"platformShipment"`
 }
 
 type declaredParcelDraft struct {
@@ -154,12 +157,11 @@ type declaredParcelDraft struct {
 	DeclaredWidth           string `json:"declaredWidth"`
 	DeclaredHeight          string `json:"declaredHeight"`
 	DeclaredDimensionsUnit  string `json:"declaredDimensionsUnit"`
-	GoodsDescription        string `json:"goodsDescription"`
-	Quantity                string `json:"quantity"`
-	DeclaredValue           string `json:"declaredValue"`
-	Currency                string `json:"currency"`
-	OriginCountry           string `json:"originCountry"`
 	ServiceNotes            string `json:"serviceNotes"`
+	// PlatformBoxLabel 是这一箱的平台箱标号，Packing 是这一箱装了货物明细的哪几行各多少（ADR-0374 决定四、ADR-0373
+	// 决定三）。货物本身不在包裹上：一种货的值只写在委托的货物明细行上一处。
+	PlatformBoxLabel string         `json:"platformBoxLabel"`
+	Packing          []packingDraft `json:"packing"`
 }
 
 // IntakeSubmission 把一次首方提交译成提交命令。
@@ -194,6 +196,15 @@ func (intake *CustomerSubmissionIntake) IntakeSubmission(
 	if err != nil {
 		return application.SubmitShipmentRequestCommand{}, err
 	}
+	// 摘要对着客户包裹参考算：货物明细与平台声明按客户参考译一次进摘要，按现签成员再译一次进命令（goods_intake.go 头注）。
+	declaredGoodsForDigest, err := declaredGoods(draft, customerParcels)
+	if err != nil {
+		return application.SubmitShipmentRequestCommand{}, err
+	}
+	shipmentForDigest, labelsForDigest, err := declaredPlatform(draft, customerParcels)
+	if err != nil {
+		return application.SubmitShipmentRequestCommand{}, err
+	}
 	// 只调这一次：摘要与要素子段由同一份规范化输入一次产出、一起进命令（pp-seams/05 裁决 3）。再为要素单独算一遍，
 	// 内容与摘要就有了各说各话的口子——结构上不给它留位置。
 	canonical, err := domain.CanonicalizeSubmission(domain.SubmissionPayloadSpec{
@@ -202,6 +213,9 @@ func (intake *CustomerSubmissionIntake) IntakeSubmission(
 		DeclaredParcelIDs: customerParcels,
 		Scope:             scopeEntries(draft),
 		Service:           serviceEntries(draft),
+		Goods:             declaredGoodsForDigest,
+		PlatformShipment:  shipmentForDigest,
+		PlatformBoxLabels: labelsForDigest,
 	})
 	if err != nil {
 		return application.SubmitShipmentRequestCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
@@ -218,6 +232,14 @@ func (intake *CustomerSubmissionIntake) IntakeSubmission(
 		return application.SubmitShipmentRequestCommand{}, err
 	}
 	customerNumbers, err := customerParcelNumbers(customerParcels, internalParcels)
+	if err != nil {
+		return application.SubmitShipmentRequestCommand{}, err
+	}
+	goods, err := goodsOnMembers(declaredGoodsForDigest, customerParcels, internalParcels)
+	if err != nil {
+		return application.SubmitShipmentRequestCommand{}, err
+	}
+	shipment, boxLabels, err := declaredPlatform(draft, internalParcels)
 	if err != nil {
 		return application.SubmitShipmentRequestCommand{}, err
 	}
@@ -243,6 +265,9 @@ func (intake *CustomerSubmissionIntake) IntakeSubmission(
 		DeclaredElements:        canonical.DeclaredElements(),
 		RequestedServiceProduct: canonical.RequestedServiceProduct(),
 		CustomerParcelNumbers:   customerNumbers,
+		DeclaredGoods:           goods,
+		PlatformShipment:        shipment,
+		PlatformBoxLabels:       boxLabels,
 	}, nil
 }
 
@@ -490,11 +515,6 @@ func serviceEntries(draft submissionDraft) []domain.CanonicalContentEntry {
 			"dimensions.width":  parcel.DeclaredWidth,
 			"dimensions.height": parcel.DeclaredHeight,
 			"dimensions.unit":   parcel.DeclaredDimensionsUnit,
-			"goods.description": parcel.GoodsDescription,
-			"goods.quantity":    parcel.Quantity,
-			"goods.value":       parcel.DeclaredValue,
-			"goods.currency":    parcel.Currency,
-			"goods.origin":      parcel.OriginCountry,
 			"service.notes":     parcel.ServiceNotes,
 		} {
 			entries["parcel["+reference+"]."+name] = value

@@ -53,7 +53,10 @@ export interface CustomerContractDraft {
    * 客户账户只让这一户的合同参选；表单不预填、不从别处推。
    */
   customerAccount: string;
-  /** 接单规则包对象标识：同时进壳上的指名引用与正文，两处必须相等由服务端核（ErrRulePackageReferenceMismatch）。 */
+  /**
+   * 接单规则包对象标识，可留空（ADR-0376 决定三）：规则包随服务产品选，多产品合同不指名。填了同时进壳上的指名引用与正文，
+   * 两处必须相等由服务端核（ErrRulePackageReferenceMismatch）；留空两处都不进载荷。
+   */
   rulePackage: string;
   bindings: ControlBindingDraft[];
   controlRequirement: ControlRequirementDraft;
@@ -159,12 +162,15 @@ export function payloadOf(
     scope: draft.scope,
     effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
     customerContract: {
-      contractContent: { customerAccount: draft.customerAccount, rulePackage: draft.rulePackage },
+      contractContent: { customerAccount: draft.customerAccount },
       preAcceptanceControl: controlPayloadOf(draft),
     },
   };
   if (draft.effectiveEndsAt.trim() !== '') payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
-  if (draft.rulePackage !== '') payload.references = { ACCEPTANCE_RULE_PACKAGE: draft.rulePackage };
+  if (draft.rulePackage !== '') {
+    payload.references = { ACCEPTANCE_RULE_PACKAGE: draft.rulePackage };
+    payload.customerContract!.contractContent.rulePackage = draft.rulePackage;
+  }
   if (draft.bindings.length > 0) {
     payload.customerContract!.contractContent.bindings = draft.bindings.map(bindingPayloadOf);
   }

@@ -44,7 +44,8 @@ func NewCustomerAmendmentIntake(authenticator CustomerAmendmentAuthenticator, cl
 }
 
 // amendmentDraft 是首方资料修订口的载荷形状（PAM-1；以 docs/api 为准）。内容字段按资料范围取用：寄件 / 收件范围
-// 取 postalCode、countryCode（空串即显式清空该要素），声明测量范围取重量与外廓；其余范围与显式清空不带内容字段。
+// 取 postalCode、countryCode（空串即显式清空该要素），声明测量范围取重量与外廓，货物明细范围取整组 goods 与按包裹号
+// 指的 packing；其余范围与显式清空不带内容字段。
 type amendmentDraft struct {
 	AccessRequestID         string `json:"accessRequestId"`
 	OriginalAccessRequestID string `json:"originalAccessRequestId"`
@@ -66,6 +67,9 @@ type amendmentDraft struct {
 	DeclaredWidth          string  `json:"declaredWidth"`
 	DeclaredHeight         string  `json:"declaredHeight"`
 	DeclaredDimensionsUnit string  `json:"declaredDimensionsUnit"`
+
+	Goods   *goodsDraft             `json:"goods"`
+	Packing []amendmentPackingDraft `json:"packing"`
 }
 
 func (draft amendmentDraft) parcelDraft() declaredParcelDraft {
@@ -165,6 +169,14 @@ func (intake *CustomerAmendmentIntake) IntakeSourceDataAmendment(
 	if err != nil {
 		return none, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
+	// 货物明细范围的形状（整份委托、补充与更正必须带整组）在这里就答 400，不等编排：编排在来源保全之后才判，客户改好载荷用
+	// 同一个修订请求标识重发会撞来源冲突。别的范围的错配在 amendmentContent 里同样先答。判断仍是领域那一道（FitsAmendment）。
+	if group == domain.GoodsDetailsDataGroup() && !canonical.Content().FitsAmendment(scope, intent) {
+		if _, named := scope.DeclaredParcelID(); named {
+			return none, malformedField("parcelId", fmt.Errorf("%s applies to the whole shipment request", group))
+		}
+		return none, malformedField("goods", fmt.Errorf("SUPPLEMENT and CORRECTION carry the whole new goods details; EXPLICIT_CLEAR carries none"))
+	}
 	requester, err := domain.NewRequesterReference("CUSTOMER_ACCOUNT:" + amendmentIdentity.CustomerAccountID().String())
 	if err != nil {
 		return none, err
@@ -194,8 +206,12 @@ func amendmentContent(draft amendmentDraft, group domain.SourceDataGroupReferenc
 	parcel := draft.parcelDraft()
 	hasElements := draft.PostalCode != nil || draft.CountryCode != nil
 	hasMeasurement := weightDeclared(parcel) || strings.TrimSpace(draft.DeclaredLength+draft.DeclaredWidth+draft.DeclaredHeight+draft.DeclaredDimensionsUnit) != ""
+	hasGoods := draft.Goods != nil || len(draft.Packing) > 0
+	if hasGoods && group != domain.GoodsDetailsDataGroup() {
+		return spec, fmt.Errorf("%w: goods fields do not belong to %s", ErrMalformedRequest, group)
+	}
 	if intent == domain.ExplicitClearIntent {
-		if hasElements || hasMeasurement {
+		if hasElements || hasMeasurement || hasGoods {
 			return spec, fmt.Errorf("%w: an explicit clear carries no content", ErrMalformedRequest)
 		}
 		return spec, nil
@@ -217,6 +233,22 @@ func amendmentContent(draft amendmentDraft, group domain.SourceDataGroupReferenc
 			}
 			spec.Entries = append(spec.Entries, entry)
 		}
+	case domain.GoodsDetailsDataGroup():
+		// 补充与更正不带 goods 在这里不拒：那是内容与范围、意图不配，由编排的 admit 按 FitsAmendment 一处判。
+		if hasElements || hasMeasurement {
+			return spec, fmt.Errorf("%w: address and measurement fields do not belong to %s", ErrMalformedRequest, group)
+		}
+		if draft.Goods == nil {
+			if hasGoods {
+				return spec, malformedField("packing", fmt.Errorf("packing needs goods lines to point at"))
+			}
+			return spec, nil
+		}
+		goods, err := amendedGoods(*draft.Goods, draft.Packing)
+		if err != nil {
+			return spec, err
+		}
+		spec.Goods = goods
 	case domain.DeclaredMeasurementDataGroup():
 		if hasElements {
 			return spec, fmt.Errorf("%w: address element fields do not belong to %s", ErrMalformedRequest, group)

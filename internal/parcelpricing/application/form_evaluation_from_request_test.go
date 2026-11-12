@@ -49,6 +49,7 @@ func (double *priceCardResolverDouble) ResolveInForce(
 	_ domain.PricingDirection,
 	_ domain.PricingPurpose,
 	at time.Time,
+	_ domain.ServiceProductReference,
 ) (ports.PriceCardInForceResolution, error) {
 	double.asked = append(double.asked, at)
 	if double.err != nil {
@@ -152,6 +153,19 @@ type formFixture struct {
 	inputs     *inputResolverDouble
 	store      *evaluationStoreDouble
 	downstream *evaluationDownstreamDouble
+	products   *acceptedProductDouble
+}
+
+// acceptedProductDouble 是覆盖包裹的已接受委托申报产品那一口的替身：默认没有产品。
+type acceptedProductDouble struct {
+	product domain.ServiceProductReference
+	err     error
+	parcels []string
+}
+
+func (double *acceptedProductDouble) LoadAcceptedServiceProduct(_ context.Context, _ domain.TenantID, parcel string) (domain.ServiceProductReference, error) {
+	double.parcels = append(double.parcels, parcel)
+	return double.product, double.err
 }
 
 // newFormFixture 装一套入口：默认价卡唯一命中、输入可得、铸造可用；inputs 为 nil 即「今天没有任何输入读口」。
@@ -164,6 +178,7 @@ func newFormFixture(t *testing.T, inputs *inputResolverDouble) *formFixture {
 		inputs:     inputs,
 		store:      &evaluationStoreDouble{byID: map[string]domain.PricingEvaluation{}},
 		downstream: &evaluationDownstreamDouble{},
+		products:   &acceptedProductDouble{},
 	}
 	evaluate := application.NewEvaluatePricingHandler(application.EvaluatePricingDeps{
 		Store:      fixture.store,
@@ -171,10 +186,11 @@ func newFormFixture(t *testing.T, inputs *inputResolverDouble) *formFixture {
 		Clock:      fixedClock{at: time.Date(2026, 8, 13, 15, 0, 0, 0, time.UTC)},
 	})
 	deps := application.FormEvaluationFromRequestDeps{
-		Evaluations: fixture.byRequest,
-		PriceCards:  fixture.priceCards,
-		Identity:    fixture.identity,
-		Evaluate:    evaluate,
+		Evaluations:     fixture.byRequest,
+		PriceCards:      fixture.priceCards,
+		Identity:        fixture.identity,
+		Evaluate:        evaluate,
+		ServiceProducts: fixture.products,
 	}
 	if inputs != nil {
 		deps.Inputs = inputs
@@ -425,7 +441,7 @@ func TestFormEvaluationFromRequestReportsWhichDependencyLeftItUndecided(t *testi
 	}
 }
 
-// Covers: 构造期拒 nil——四口必备缺一即报 ErrNilDependency 并点名；Inputs 可缺席不是漏装。
+// Covers: 构造期拒 nil——必备的各口缺一即报 ErrNilDependency 并点名；Inputs 可缺席不是漏装。
 func TestFormEvaluationFromRequestHandlerRejectsMissingDependencies(t *testing.T) {
 	evaluate := application.NewEvaluatePricingHandler(application.EvaluatePricingDeps{
 		Store:      &evaluationStoreDouble{byID: map[string]domain.PricingEvaluation{}},
@@ -433,10 +449,11 @@ func TestFormEvaluationFromRequestHandlerRejectsMissingDependencies(t *testing.T
 		Clock:      fixedClock{at: requestBasisAt},
 	})
 	complete := application.FormEvaluationFromRequestDeps{
-		Evaluations: &evaluationByRequestDouble{},
-		PriceCards:  &priceCardResolverDouble{},
-		Identity:    &identityDouble{},
-		Evaluate:    evaluate,
+		Evaluations:     &evaluationByRequestDouble{},
+		PriceCards:      &priceCardResolverDouble{},
+		Identity:        &identityDouble{},
+		Evaluate:        evaluate,
+		ServiceProducts: &acceptedProductDouble{},
 	}
 	if _, err := application.NewFormEvaluationFromRequestHandler(complete); err != nil {
 		t.Fatalf("complete deps rejected: %v", err)
@@ -446,6 +463,7 @@ func TestFormEvaluationFromRequestHandlerRejectsMissingDependencies(t *testing.T
 		"price cards": func(deps *application.FormEvaluationFromRequestDeps) { deps.PriceCards = nil },
 		"identity":    func(deps *application.FormEvaluationFromRequestDeps) { deps.Identity = nil },
 		"evaluate":    func(deps *application.FormEvaluationFromRequestDeps) { deps.Evaluate = nil },
+		"products":    func(deps *application.FormEvaluationFromRequestDeps) { deps.ServiceProducts = nil },
 	} {
 		deps := complete
 		strip(&deps)

@@ -12,8 +12,8 @@ echo "== 结算账户与受理前估价采用登记（settlement-accounting：�
   -input "$SEEDS/settlement/03-external-funds-receipt-account-01.json"
 "$BIN/parcel-settlement-register" funds-mapping \
   -input "$SEEDS/settlement/04-funds-mapping-account-01.json"
-# 受理前估价采用（ADR-0179 决定五）：这一户采用「逐件 SELL 试算合计」，计价范围与售价卡 SYN-PLAN-CN-SG-01 的
-# 范围同值——估价按（租户、计价范围、SELL、客户费用、判断时点）解析在用售价卡（决定三），范围对不上就解不出卡。
+# 受理前估价采用（ADR-0179 决定五）：这一户采用「逐件 SELL 试算合计」，计价范围与售价卡所在的 SYN-SCOPE-01 同值——估价按
+# （租户、计价范围、SELL、客户费用、判断时点）与申报的服务产品解析在用售价卡（决定三，ADR-0382 决定二），范围对不上就解不出卡。
 # 采用册对账户册设外键，所以排在账户之后。没登这一行的户，控制停在金额未配置；形态与范围是演示租户的合成取值。
 "$BIN/parcel-settlement-register" pre-acceptance-estimate-adoption \
   -input "$SEEDS/settlement/02-pre-acceptance-estimate-adoption-account-01.json"

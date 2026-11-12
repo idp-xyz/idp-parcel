@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "CREDIT_POLICY",
+      "objectId": "SYN-CREDIT-01",
+      "version": "v2",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "PCC-1:fcbd8f07e8b7f3a76db76f51e0c2d0e9fbd8e17f0c55073139e76bfeee862ed8",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-023",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "creditPolicyBody": {
+          "legalEntity": "SYN-LE-01",
+          "authorityLevel": "SYN-LEVEL-COMMERCIAL-01",
+          "chargeType": "SYN-CHARGE-PREPAID",
+          "limitMinor": 20000000,
+          "effectiveStartsAt": "2026-01-01T00:00:00Z"
+        }
+      }
+    }
+  ]
+}
