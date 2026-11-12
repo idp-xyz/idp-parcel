@@ -13,7 +13,7 @@ Blocked by: 票 [06](./06-shipment-level-weight-aggregation-lands-in-the-domain-
 取证钉 `11bfa1ffb`。
 
 - 导入模板能登记聚合方式为逐委托的价卡（`AggregationPerShipment`）。
-- 销售评价请求按包裹：`SellEvaluationRequestSpec` 带的是 `Parcel`，ADR-0190 决定一的自然键是租户、包裹与计费时点。
+- 销售评价请求按包裹：`SellEvaluationRequestSpec` 带的是 `Parcel`，ADR-0190 决定一的自然键是租户、包裹与计费时点；这一句已由 [ADR-0229](../../../docs/adr/0229-a-stalled-evaluation-request-resumes-as-a-new-generation-on-parameter-registration.md) 部分停用，自然键另加代次（2026-11-11 非作者评审指出，补注）。
 - 票级评价输入的构造函数 `NewAggregatePricingInputSnapshot` 在非测试代码里没有调用方。
 - 票级卡只收委托主体（`AggregationMode` 的 `admits`），包裹主体的请求用不了它。
 - 受理前估价是逐件试算再合计（[ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)）。

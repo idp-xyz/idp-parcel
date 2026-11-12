@@ -3,7 +3,7 @@
 Category: enhancement
 Status: ready-for-agent
 父票：[spec](../spec.md)
-Blocked by: 无。[ADR-0364](../../../docs/adr/0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md) 已接受（会话代决，越权风险点待计价 owner 复核）；冻结清单「记录」里出处写它决定三的那一行，2026-11-11 激活时已注明由本票承接
+Blocked by: 一项用户决定——ADR-0364 的档位边界、总额上下限的基数两项是否与本票同批做、只换一次号（见「范围说明」）。[ADR-0364](../../../docs/adr/0364-bracket-bounds-total-bounds-basis-and-shipment-weight-aggregation-are-declared-by-the-price-card-and-a-catalogue-may-register-an-explicit-rest-row.md) 已接受（会话代决，越权风险点待计价 owner 复核）；冻结清单「记录」里出处写它决定三的那一行，2026-11-11 激活时已注明由本票承接
 地盘：`internal/parcelpricing/domain`、`internal/parcelpricing/adapters/pricecardtemplate`、`apps/admin-web/src/pages/pricing`
 
 对应要求：Rating「分票计费」的领域一半。生产路径在票 [07](./07-shipment-level-sell-charging-enters-production.md)。
@@ -30,7 +30,13 @@ Blocked by: 无。[ADR-0364](../../../docs/adr/0364-bracket-bounds-total-bounds-
 
 ## 范围说明
 
-ADR-0364 同一篇里还有档位边界、总额上下限的基数、「其余邮编」行三项，冻结清单各有一行。它们不在客户要求清单里，本票不承接；但它们与本票共用同一次规范化版本换号（ADR-0364 决定五）。本票 2026-11-11 已激活，那三项还只是冻结清单上的记录。**开工前先向用户问一次**：那三项同批做、只换一次号，还是本票先单独换一次。
+ADR-0364 同一篇里还有档位边界、总额上下限的基数、「其余邮编」行三项，冻结清单各有一行。它们不在客户要求清单里，本票不承接。
+
+其中档位边界与总额上下限的基数两项，与本票共用同一次规范化版本换号：ADR-0364 决定五写的是「决定一至三在定价方案的规范化文档里加键……三项同批一次换号」。「其余邮编」行不在这一次里：同一条接着写「决定四加在目录登记的规范化形状上」，它换的是目录登记那条版本线，与本票无关。
+
+本票 2026-11-11 已激活，那两项还只是冻结清单上的记录。**开工前先向用户问一次**：那两项同批做、只换一次号，还是本票先单独换一次。这是一项用户决定，记在本票的 `Blocked by`。
+
+2026-11-11 非作者评审指出：本节原先把「其余邮编」行也算进同一次换号，读错了决定五；这项待用户决定也没有进阻塞边。两处已改。
 
 ## 要裁的
 
