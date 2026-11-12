@@ -90,9 +90,10 @@ export function BusinessPartySimilarParties({
                     className="flex items-center gap-2.5 px-4 py-2 hover:bg-idpxyz-hover focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-idpxyz-accent"
                   >
                     <PartyTile small kind={tileKindOf?.(row.partyId) ?? 'NONE'} />
+                    {/* 名称与编码放不下就折行，不截断：这一栏就是给人认「是不是同一家」的，截掉的那半截可能正是分得出两家的地方。 */}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate type-value text-idpxyz-text">{row.partyName}</span>
-                      <span className="block truncate font-mono type-body text-idpxyz-breadcrumb">{row.partyId}</span>
+                      <span className="block break-words type-value text-idpxyz-text">{row.partyName}</span>
+                      <span className="block break-all font-mono type-body text-idpxyz-breadcrumb">{row.partyId}</span>
                     </span>
                     <StatusPill code={row.status} />
                   </a>
