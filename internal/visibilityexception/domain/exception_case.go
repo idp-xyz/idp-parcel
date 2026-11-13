@@ -471,6 +471,54 @@ func (exceptionCase *ExceptionCase) Snapshot() ExceptionCaseSnapshot {
 	}
 }
 
+// RehydrateCase 从快照重建案件。读回的东西同样要过一遍不变量：主状态在封闭三态里，已关闭必带结论与关闭时间而未关闭
+// 必不带，处理中必有首次响应而待响应必无，归并只出现在已关闭的案件上且不指向自己，各时刻不早于建立。库里有同形的
+// CHECK，这里重验是为了坏数据在读的地方就停下，而不是变成一个看起来合法的案件再被推进。
+func RehydrateCase(snapshot ExceptionCaseSnapshot) (*ExceptionCase, error) {
+	if !snapshot.ID.valid() || !snapshot.Root.valid() || !snapshot.Scope.valid() || !snapshot.Team.valid() ||
+		snapshot.EstablishedAt.IsZero() {
+		return nil, ErrInvalidCase
+	}
+	closed := snapshot.Phase == CaseClosed
+	switch snapshot.Phase {
+	case CaseAwaitingResponse:
+		if !snapshot.FirstResponse.IsZero() {
+			return nil, ErrInvalidCase
+		}
+	case CaseInProgress:
+		if snapshot.FirstResponse.IsZero() {
+			return nil, ErrInvalidCase
+		}
+	case CaseClosed:
+	default:
+		return nil, ErrInvalidCase
+	}
+	if closed != !snapshot.ClosedAt.IsZero() || closed != (snapshot.Conclusion != "") {
+		return nil, ErrInvalidCase
+	}
+	if snapshot.MergedInto.valid() && (!closed || snapshot.MergedInto == snapshot.ID) {
+		return nil, ErrInvalidCase
+	}
+	for _, at := range []time.Time{snapshot.FirstResponse, snapshot.ClosedAt} {
+		if !at.IsZero() && at.Before(snapshot.EstablishedAt) {
+			return nil, ErrInvalidCase
+		}
+	}
+	return &ExceptionCase{
+		id:            snapshot.ID,
+		number:        snapshot.DocumentNumber,
+		root:          snapshot.Root,
+		scope:         snapshot.Scope,
+		team:          snapshot.Team,
+		phase:         snapshot.Phase,
+		establishedAt: snapshot.EstablishedAt.UTC(),
+		firstResponse: snapshot.FirstResponse,
+		closedAt:      snapshot.ClosedAt,
+		conclusion:    snapshot.Conclusion,
+		mergedInto:    snapshot.MergedInto,
+	}, nil
+}
+
 // TakeUp 接单：待响应 → 处理中，首次响应时间形成。
 func (exceptionCase *ExceptionCase) TakeUp(at time.Time) error {
 	if exceptionCase.phase == CaseClosed {
@@ -498,6 +546,9 @@ func (exceptionCase *ExceptionCase) Close(conclusion string, at time.Time) error
 	return nil
 }
 
+// CaseConclusionMerged 是归并关闭的结论词。它只由 MergeInto 写下。
+const CaseConclusionMerged = "MERGED"
+
 // MergeInto 受控归并：本案件以`已归并`结论关闭并关联主案件继续处置；原编号与历史
 // 不删不重置（CONTEXT 硬句），自己归并进自己不成立。
 func (exceptionCase *ExceptionCase) MergeInto(main CaseID, at time.Time) error {
@@ -508,5 +559,5 @@ func (exceptionCase *ExceptionCase) MergeInto(main CaseID, at time.Time) error {
 		return ErrInvalidCase
 	}
 	exceptionCase.mergedInto = main
-	return exceptionCase.Close("MERGED", at)
+	return exceptionCase.Close(CaseConclusionMerged, at)
 }

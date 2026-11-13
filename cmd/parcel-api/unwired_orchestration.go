@@ -2350,6 +2350,20 @@ func (unwiredRegulatoryRestrictions) ReleaseOnResult(
 	return customsapp.RestrictionResult{}, errOrchestrationNotWired
 }
 
+type unwiredExceptionCases struct{}
+
+func (unwiredExceptionCases) TakeUp(context.Context, visibilityapp.TakeUpCaseCommand) (visibilityapp.ManageCaseResult, error) {
+	return visibilityapp.ManageCaseResult{}, errOrchestrationNotWired
+}
+
+func (unwiredExceptionCases) Close(context.Context, visibilityapp.CloseCaseCommand) (visibilityapp.ManageCaseResult, error) {
+	return visibilityapp.ManageCaseResult{}, errOrchestrationNotWired
+}
+
+func (unwiredExceptionCases) Merge(context.Context, visibilityapp.MergeCaseCommand) (visibilityapp.ManageCaseResult, error) {
+	return visibilityapp.ManageCaseResult{}, errOrchestrationNotWired
+}
+
 type unwiredChargeConfirmation struct{}
 
 func (unwiredChargeConfirmation) Confirm(

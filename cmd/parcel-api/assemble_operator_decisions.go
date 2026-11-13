@@ -43,6 +43,8 @@ type operatorDecisionIntakes struct {
 	customs        *customshttp.OperatorDecisionIntake
 	settlement     *settlementhttp.OperatorDecisionIntake
 	networkRouting *networkhttp.OperatorDecisionIntake
+	// visibility 是异常案件的接单、关闭与归并（UC-VE-005）。
+	visibility *visibilityhttp.OperatorDecisionIntake
 }
 
 // buildOperatorMinter 建本进程唯一一只操作者铸造器：运营决定与登记写面各口共用它。
@@ -177,8 +179,16 @@ func buildOperatorDecisionIntakes(
 	if err != nil {
 		return operatorDecisionIntakes{}, err
 	}
+	visibilityAuthenticator, err := veaccess.NewOperatorDecisionAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	visibility, err := visibilityhttp.NewOperatorDecisionIntake(visibilityAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
 	return operatorDecisionIntakes{shipment: shipment, transport: transport, nodeOperations: nodeOperations, customs: customs,
-		settlement: settlement, networkRouting: networkRouting}, nil
+		settlement: settlement, networkRouting: networkRouting, visibility: visibility}, nil
 }
 
 // operatorRegistryIntakes 是操作者渠道登记册配置写能力面在各上下文的 Intake（ADR-0100 决定四；票 operator-channel/04）。

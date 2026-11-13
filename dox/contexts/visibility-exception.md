@@ -115,7 +115,7 @@
 
 - 信号与案件是两个对象，都不产生业务限制，也不认定责任。同一发作期内重复命中只更新判断历史；结束后再命中开关联的新发作期并重新分诊。
 - 分诊按租户登记的版本化规则；规则没登记时不建案。
-- 案件主状态只有待响应、处理中、已关闭三格；接单时形成首次响应时间。重复案件以「已归并」关闭并指向主案件，不删除。
+- 案件主状态只有待响应、处理中、已关闭三格。接单、关闭、归并是三种分开授予的运营决定，时刻取服务端落决定的那一刻，接单人与关闭人记在案件上。接单只形成一次首次响应时间；待响应可不经接单直接关闭，关闭必带结论。重复案件只能并进一份仍在处置的主案件，以「已归并」关闭并指向它，两边的单据号都不动。两个人同时处置同一份案件，后落的不盖掉先落的。
 - 建案时在同一事务内取单据号；归并不改两边的号。租户没登记单据编号时区时照常建案，记无号原因。撞号到跳号上限时这一次建案不落，记进重驱队列，按时原样再交分诊。
 
 **处置请求（无生产入口，见末节）**
@@ -167,6 +167,7 @@
 |---|---|
 | 客户查追踪 | `/v1/customer-tracking-view` `/v1/customer-shipment-tracking` |
 | 客户提交索赔 | `/v1/claims` |
+| 案件决定 | `/exception-case-take-ups` `/exception-case-closures` `/exception-case-merges` |
 | 运营只读 | `/tracking-projections` `/exception-triage-records` `/exception-case-records` `/claims-recovery-records` `/visibility-catalogues` |
 | 目录登记 | `/visibility-catalogue-<种类>-registrations`，种类为 `milestone-mapping` `triage-rule` `notification-policy` `claim-eligibility` `claim-authorization` `disclosure-policy` `exception-disclosure-rule` `conflict-signal-rule` |
 
@@ -181,7 +182,7 @@
 - **形成 ETA 与可见性缺口**：`FormETAHandler` 没有任何 `cmd/` 装配。下游的 ETA 可见性判断已接在 `parcel-dispatch` 上，但没有预测来源入队，客户视图的 ETA 一维在生产里只会答待确认或不展示。
 - **处置请求**（`SendDispositionRequestHandler`）、**披露决定**（`DecideDisclosureHandler`）、**客户异常通知**（`NotifyCustomerHandler`）、**证据**（`ManageEvidenceHandler`）：都没有装配。对应的目录可以登记，运营读口可以读，但没有东西写入。
 - **索赔受理之后的各步**：`/v1/claims` 只接受理。资格审核已装配但没有端点；责任结论、复核、开立追偿、记录追偿动作没有调用方。
-- **案件接单、关闭、归并，发作期结束，索赔撤回，补充延期，证据评价**：领域方法在（`TakeUp` `Close` `MergeInto` `End` `Withdraw` `ExtendSupplementDeadline` `Appraise`），应用层没有编排调用它们。
+- **发作期结束，索赔撤回，补充延期，证据评价**：领域方法在（`End` `Withdraw` `ExtendSupplementDeadline` `Appraise`），应用层没有编排调用它们。案件关闭前「未完成的处置请求都已移交或完成取消核对」此刻没有可核的对象，因为处置请求没有生产入口。
 - **生产里信号的来源只有两处**：替代链分叉裁不出，以及出发门禁阻断。旧文档说的关务异常信号、ETA 与缺口信号没有接到信号编排上。
 
 **代码里找不到机制**：

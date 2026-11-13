@@ -201,6 +201,15 @@ const (
 	DecisionRegulatoryRestrictionRelease       DecisionKind = "REGULATORY_RESTRICTION_RELEASE"
 )
 
+// DecisionExceptionCaseTakeUp、DecisionExceptionCaseClosure 与 DecisionExceptionCaseMerge 是异常运营人员对一份异常案件的三种
+// 决定：接单、以明确结论关闭、把重复案件归并进主案件。三种分开授予——能接单的不因此能下关闭结论，能关闭的不因此能把
+// 一份案件并进另一份。
+const (
+	DecisionExceptionCaseTakeUp  DecisionKind = "EXCEPTION_CASE_TAKE_UP"
+	DecisionExceptionCaseClosure DecisionKind = "EXCEPTION_CASE_CLOSURE"
+	DecisionExceptionCaseMerge   DecisionKind = "EXCEPTION_CASE_MERGE"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -235,6 +244,7 @@ var decisionKinds = []DecisionKind{
 	DecisionSupplierBillDisputeDecision,
 	DecisionStatementDisputeRegistration, DecisionStatementDisputeResolution,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
+	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 }
 
 // DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。
