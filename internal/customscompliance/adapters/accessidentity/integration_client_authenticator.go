@@ -20,7 +20,10 @@ type IntegrationClientAuthenticator struct {
 	minter ClientMinter
 }
 
-var _ customshttp.IntegrationClientAuthenticator = (*IntegrationClientAuthenticator)(nil)
+var (
+	_ customshttp.IntegrationClientAuthenticator = (*IntegrationClientAuthenticator)(nil)
+	_ customshttp.ManifestSourceAuthenticator    = (*IntegrationClientAuthenticator)(nil)
+)
 
 func NewIntegrationClientAuthenticator(minter ClientMinter) (*IntegrationClientAuthenticator, error) {
 	if minter == nil {
@@ -48,6 +51,31 @@ func (authenticator *IntegrationClientAuthenticator) Authenticate(
 		return domain.TenantID{}, answerClient(err)
 	}
 	return domain.NewTenantID(envelope.TenantID())
+}
+
+// AuthenticateManifestSource 交回信封上的租户与来源身份。来源身份是册上绑定的那一个：交舱单引用的客户端代表哪家承运商
+// 由它定，关务的 Intake 把它记成引用上的承运商责任。
+func (authenticator *IntegrationClientAuthenticator) AuthenticateManifestSource(
+	ctx context.Context,
+	credential customshttp.PresentedClientCredential,
+) (customshttp.ManifestSource, error) {
+	envelope, err := authenticator.minter.MintIntegrationClient(ctx,
+		identity.NewIntegrationClientCredential(credential.Token, credential.Certificate),
+		identity.IntegrationClientRequest{
+			FactType: identity.FactExternalRegulatoryManifest,
+			Admission: &identity.AdmissionRequirement{
+				Capability: identity.ExternalFactAdmissionCapability,
+				FactKind:   identity.FactExternalRegulatoryManifest.String(),
+			},
+		})
+	if err != nil {
+		return customshttp.ManifestSource{}, answerClient(err)
+	}
+	tenant, err := domain.NewTenantID(envelope.TenantID())
+	if err != nil {
+		return customshttp.ManifestSource{}, fmt.Errorf("customs accessidentity: tenant: %w", err)
+	}
+	return customshttp.ManifestSource{Tenant: tenant, Carrier: envelope.SourceIdentity()}, nil
 }
 
 func answerClient(err error) error {

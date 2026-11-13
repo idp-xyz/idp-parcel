@@ -159,3 +159,28 @@ func TestGrantedCustomsClientWithoutARegisteredAdmissionIntervalIsOutsideScope(t
 		t.Fatalf("err = %v, want ErrOutsideAdmissionScope", err)
 	}
 }
+
+// Covers: UC-CC-012「来源必须能够证明其代表该承运商」——交舱单引用的客户端按「外部监管舱单」这一类事实核授予，交回册上
+// 绑定的租户与来源身份；只持有监管结果授予的客户端交不了舱单引用（授予粒度等于权力粒度）。
+func TestAManifestSourceIsTheBoundSourceIdentityAndNeedsItsOwnGrant(t *testing.T) {
+	credential := customshttp.PresentedClientCredential{Token: "presented.client.token"}
+
+	granted := customsAuthenticator(t, clientVerifier{},
+		clientRegister{facts: []identity.ExternalFactType{identity.FactExternalRegulatoryManifest}, found: true}, admittingScope{})
+	source, err := granted.AuthenticateManifestSource(context.Background(), credential)
+	if err != nil || source.Tenant.String() != "SYN-TENANT-01" || source.Carrier != "SYN-SOURCE/broker" {
+		t.Fatalf("source = %+v, err = %v——租户与来源身份都该取自册上的绑定", source, err)
+	}
+
+	resultsOnly := customsAuthenticator(t, clientVerifier{},
+		clientRegister{facts: []identity.ExternalFactType{identity.FactCustomsExternalResult}, found: true}, admittingScope{})
+	if _, err := resultsOnly.AuthenticateManifestSource(context.Background(), credential); !errors.Is(err, customshttp.ErrIntegrationClientNotGranted) {
+		t.Fatalf("err = %v, want ErrIntegrationClientNotGranted——能回传监管结果不等于能替承运商报舱单", err)
+	}
+
+	outside := customsAuthenticator(t, clientVerifier{},
+		clientRegister{facts: []identity.ExternalFactType{identity.FactExternalRegulatoryManifest}, found: true}, identity.UnconfiguredAdmissionScope{})
+	if _, err := outside.AuthenticateManifestSource(context.Background(), credential); !errors.Is(err, customshttp.ErrOutsideAdmissionScope) {
+		t.Fatalf("err = %v, want ErrOutsideAdmissionScope——准入范围没登时这笔生产写不放行", err)
+	}
+}

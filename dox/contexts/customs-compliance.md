@@ -151,9 +151,10 @@
 - 关闭前在明确截点逐义务形成关闭依据项。每项都是已终结或已移交才可关闭；任一未解决或冲突都阻止关闭，没有部分关闭。义务清单来自登记的关闭义务目录，未登记答未配置。
 - 重开是追加式决定，不撤销原关闭决定；再次关闭要重新核对。
 
-**外部监管舱单与处置核对（无生产入口，见末节）**
+**外部监管舱单与处置核对（处置核对无生产入口，见末节）**
 
-- 舱单引用按来源版本保存；更正或替代形成新版本并指向前一版，原版本保留。能唯一匹配申报单元才建立关联，否则保持待关联，不猜。
+- 舱单引用由责任承运商的集成客户端交来。引用上的承运商责任取客户端在册上绑定的来源身份，不收载荷自报；别家承运商交同一舱单身份答未受理，推进它的版本答得与不在册同形。
+- 引用按来源版本保存；更正或替代走版本推进口，形成新版本并指向前一版，同舱单异版本走首登口是版本冲突。能唯一匹配申报单元才建立关联，否则保持待关联，不猜。
 - 处置执行核对逐范围比较执行事实与处置决定；执行方标记完成不自动终结监管义务。
 
 ## 生命周期
@@ -171,7 +172,7 @@
 | 做什么 | 路径 |
 |---|---|
 | 运营决定 | `/customs-cases` `/customs-declaration-submissions` `/customs-submission-authorizations` `/customs-case-closures` `/customs-release-gate-verifications` `/customs-internal-restrictions` `/customs-internal-restriction-decisions` `/customs-regulatory-credential-manual-registrations` |
-| 集成客户端送入 | `/customs/external-results` `/customs/technical-receipts` `/customs-regulatory-credential-registrations` |
+| 集成客户端送入 | `/customs/external-results` `/customs/technical-receipts` `/customs-regulatory-credential-registrations` `/customs/external-manifest-references` `/customs/external-manifest-reference-revisions` |
 | 动作准入 | `/customs-action-admission-judgements` `/customs-unadmitted-objects` |
 | 登记 | `/customs-case-requirement-registrations` `/customs-interpretation-rule-registrations` `/customs-gate-catalog-registrations` `/customs-candidate-port-registrations` `/customs-declaration-path-registrations` `/customs-node-zone-registrations` `/customs-duty-collaboration-registrations` `/customs-duty-payment-verification-registrations` |
 | 查阅 | `/customs-case-records` `/customs-submission-records` `/customs-external-result-records` `/customs-case-registers` `/customs-compliance-rules` `/customs-gate-conditions` `/customs-ports-paths` `/customs-credentials` `/customs-duty-collaborations` `/customs-duty-verifications` |
@@ -182,7 +183,7 @@
 
 离线口：`cmd/parcel-customs-register`，运营在数据库网络内手跑，不监听端口，输入是 JSON 文件。登记就绪判断与提交授权（含撤销）、解释规则、关闭义务目录与明细、门禁目录与明细、税费付款门禁规则、建案要求规则、口岸、申报路径、监管凭证、税费付款协作事项与核对、节点关务区域、申报发送通道。
 
-**有用例代码、但没有接进任何进程的**（`cmd/` 下非测试代码里找不到构造点）：外部监管舱单引用接收（`ReceiveManifestHandler`）、后续申报动作与替代（`ManageFollowUpHandler`）、原案内更正（`CorrectDeclarationHandler`）、监管限制的建立与解除（`ManageRestrictionHandler`）、处置执行核对（`VerifyDispositionHandler`）、凭证门禁判断（`RecordCredentialGateHandler`、`JudgeCredentialApplicabilityHandler`）。合规判断只有领域类型 `ComplianceJudgment`，没有用例。上面「规则」里属于这几块的句子，眼下没有生产入口能触发。
+**有用例代码、但没有接进任何进程的**（`cmd/` 下非测试代码里找不到构造点）：后续申报动作与替代（`ManageFollowUpHandler`）、原案内更正（`CorrectDeclarationHandler`）、监管限制的建立与解除（`ManageRestrictionHandler`）、处置执行核对（`VerifyDispositionHandler`）、凭证门禁判断（`RecordCredentialGateHandler`、`JudgeCredentialApplicabilityHandler`）。合规判断只有领域类型 `ComplianceJudgment`，没有用例。上面「规则」里属于这几块的句子，眼下没有生产入口能触发。
 
 ## 旧文档写了、代码里还没有的
 

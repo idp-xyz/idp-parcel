@@ -308,6 +308,7 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   DELIVERY_PRE_ADVICE_WITHDRAWAL: muted('预报撤回'),
   CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT: muted('承运商首次有效揽收判断'),
   CARRIER_BOOKING_ANSWER: muted('承运商订舱答复'),
+  EXTERNAL_REGULATORY_MANIFEST: muted('外部监管舱单'),
   BOOKING_REQUEST_SUBMISSION: muted('订舱申请'),
   BOOKING_REQUEST_CANCELLATION: muted('订舱取消'),
   CAPACITY_RESERVATION: muted('舱位预留'),

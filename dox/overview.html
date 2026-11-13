@@ -458,7 +458,7 @@ footer .wrap{padding-block:22px 40px}
       <div class="flow"><span>建立</span><i>→</i><span>进行中</span><i>→</i><span class="end">已关闭</span><i>→</i><span>受控重开</span><i>→</i><span>再次关闭</span></div>
       <h3>税费到放行</h3>
       <div class="flow"><span>核定税费</span><i>→</i><span>付款协作事项</span><i>→</i><span>资金事实</span><i>→</i><span>付款核对</span><i>→</i><span class="end">放行门禁核对</span></div>
-      <div class="note">外部监管舱单引用的接收、监管限制的建立与解除，编排已写好但还没有生产入口。两件都排在限量生产前要接上的清单里。</div>
+      <div class="note">监管限制的建立与解除，编排已写好但还没有生产入口，排在限量生产前要接上的清单里。外部监管舱单引用已经接上：责任承运商的系统经集成客户端交来，承运商责任取客户端在册上绑定的身份。</div>
     </div>
   </div>
   <div class="note">在管理台上：能登记口岸、申报路径、合规规则、税费协作，能看案件。建立案件、提交授权、申报提交、放行门禁核对、案件关闭后端都有接口，但没有页面。</div>
@@ -691,7 +691,7 @@ footer .wrap{padding-block:22px 40px}
 
 <section id="surf">
   <h2>产品里能操作的地方</h2>
-  <p class="sub">管理台 54 页、接口 254 个，都是从代码里读出来的清单。每一页的状态是沿代码追它调到的接口、再对后端已知缺口定的；这是静态分析，没有逐页点过。</p>
+  <p class="sub">管理台 54 页、接口 256 个，都是从代码里读出来的清单。每一页的状态是沿代码追它调到的接口、再对后端已知缺口定的；这是静态分析，没有逐页点过。</p>
   <div class="legend">
     <span><span class="pill p-ok">可用</span> 32 页：有写操作，页面说明的事能做完</span>
     <span><span class="pill p-wait">部分可用</span> 4 页：缺的部分有接口没页面，或后端没入口</span>
@@ -718,7 +718,7 @@ footer .wrap{padding-block:22px 40px}
   <div class="tbl"><table>
     <tr><th style="width:20%">接入面</th><th>谁用</th><th style="width:9%">数量</th></tr>
     <tr><td><b>客户接口</b></td><td>货主客户自己的系统：提交委托、受控补充、撤回、资料修订、取消包裹、提出索赔、查追踪、送站预报</td><td>11</td></tr>
-    <tr><td><b>集成客户端</b></td><td>外部系统回传事实：报关服务商的技术回执与监管结果、承运方的订舱答复、财务系统或银行的收付款事实</td><td>6</td></tr>
+    <tr><td><b>集成客户端</b></td><td>外部系统回传事实：报关服务商的技术回执与监管结果、责任承运商的监管舱单引用、承运方的订舱答复、财务系统或银行的收付款事实</td><td>8</td></tr>
     <tr><td><b>作业事实登记</b></td><td>一线作业端用登记过的设备登事实：收寄、交接、揽收、派送、交付</td><td>18</td></tr>
     <tr><td><b>运营决定</b></td><td>操作员作出要留名的决定：复核、处置、裁决、确认、审核</td><td>54</td></tr>
     <tr><td><b>登记册配置写</b></td><td>操作员登记主数据与规则：合同、价卡、网络、各类目录</td><td>75</td></tr>
@@ -745,7 +745,7 @@ footer .wrap{padding-block:22px 40px}
     <tr><td><b>网络与路由</b></td><td><span class="pill p-ok">可用</span> 网络目录、可达性判断、初始路由、复核、改路建议与决定</td><td><span class="pill p-off">未实现</span> 路由偏离判断、拆合后的新路由、退运独立路由计划</td><td>网络与网点、服务区域、路线规划可用</td></tr>
     <tr><td><b>节点作业</b></td><td><span class="pill p-ok">可用</span> 送站收寄、身份核对、预报与交接单、节点控制、协作承接</td><td><span class="pill p-wait">待接入</span> 集运作业的在线入口（现仅离线导入）<br><span class="pill p-off">未实现</span> 实际测量、封签状态历史、作业任务</td><td>网点作业部分可用；集运没有页面</td></tr>
     <tr><td><b>运输履约</b></td><td><span class="pill p-ok">可用</span> 揽收、交接、交付、委托与订舱、班次与装载、收费发生项、门禁读数</td><td><span class="pill p-wait">待接入</span> 追踪资料的真实来源<br><span class="pill p-off">未实现</span> 运输舱单、软容量超配、班次延误与取消</td><td>外部轨迹时间确认可用；运输班次只能看；委托、订舱、容量、派送、收费发生项、段关闭等都没有页面</td></tr>
-    <tr><td><b>关务与贸易合规</b></td><td><span class="pill p-ok">可用</span> 案件、就绪与授权、提交与发送、技术回执、内部合规限制、放行门禁、动作准入</td><td><span class="pill p-wait">待接入</span> 外部监管舱单引用接收、监管限制、申报更正、处置核对<br><span class="pill p-off">未实现</span> 申报就绪的自动评定、凭证额度核销</td><td>口岸与申报路径、合规规则可用；清关单、合规限制与税费部分可用；建案、授权、申报提交、放行核对、关闭没有页面</td></tr>
+    <tr><td><b>关务与贸易合规</b></td><td><span class="pill p-ok">可用</span> 案件、就绪与授权、提交与发送、技术回执、外部监管舱单引用、内部合规限制、放行门禁、动作准入</td><td><span class="pill p-wait">待接入</span> 监管限制、申报更正、处置核对<br><span class="pill p-off">未实现</span> 申报就绪的自动评定、凭证额度核销</td><td>口岸与申报路径、合规规则可用；清关单、合规限制与税费部分可用；建案、授权、申报提交、放行核对、关闭没有页面</td></tr>
     <tr><td><b>全程追踪与异常</b></td><td><span class="pill p-ok">可用</span> 投影、客户追踪视图、信号、分诊、索赔受理</td><td><span class="pill p-wait">待接入</span> ETA 形成、案件接单与关闭、证据、披露决定、客户异常通知、处置请求<br><span class="pill p-off">未实现</span> 严重度与优先级、责任结论</td><td>追踪规则、通知与披露、索赔资格与授权可用；物流动态、异常处理、异常案件、索赔与追偿只能看</td></tr>
     <tr><td><b>小包计价</b></td><td><span class="pill p-ok">可用</span> 价卡草稿到发布、评价、试算、回放、参考序列登记与复核</td><td><span class="pill p-wait">在做</span> 销售卡按有序范围列表选卡<br><span class="pill p-off">未实现</span> 仓储计费方案</td><td>价格表、汇率与燃油费率、计价试算可用；计费记录只能看</td></tr>
     <tr><td><b>结算与经营核算</b></td><td><span class="pill p-ok">可用</span> 评价请求、费用形成与确认、对账单发布、供应商账单与审核、资金采用与核销、接受前财务控制</td><td><span class="pill p-wait">待接入</span> 费用调整、对账单作废、成本分摊与经营结果、赔付与追偿金额<br><span class="pill p-off">未实现</span> 周期费用的形成、自动核销</td><td>供应商账单与应付、收付款核销可用；对账单部分可用；客户费用、经营核算只能看；费用确认、对账单发布没有页面</td></tr>
@@ -754,14 +754,13 @@ footer .wrap{padding-block:22px 40px}
     <tr><td><b>试点治理</b></td><td><span class="pill p-ok">可用</span> 候选版本组、阶段评审决定、权威区间、暂停恢复的记录</td><td>阶段评审的 <code>Go</code> 在代码里没有读者：准入读的是权威区间与暂停</td><td>试点治理只能看，登记走离线命令</td></tr>
     <tr><td><b>接入与身份</b></td><td><span class="pill p-ok">可用</span> 接入渠道登记、凭据验证、来源信封、操作员授予</td><td><span class="pill p-off">未实现</span> 签名推送的铸造、租户既有通道适配</td><td>操作者与授予可用；扫描设备只能看</td></tr>
   </table></div>
-  <h3>限量生产前要接上的四件</h3>
-  <p>四件都是编排已在、只缺装配与入口。首发范围写明这些能力要生产化。这四件说的是后端入口；管理台缺页面的操作另见上文「产品里能操作的地方」。</p>
+  <h3>限量生产前还要接上的</h3>
+  <p>都是编排已在、只缺装配与入口。首发范围写明这些能力要生产化。这几件说的是后端入口；管理台缺页面的操作另见上文「产品里能操作的地方」。</p>
   <div class="tbl"><table>
     <tr><th style="width:4%">#</th><th style="width:20%">上下文</th><th>接什么</th></tr>
-    <tr><td>1</td><td>关务与贸易合规</td><td>外部监管舱单引用接收</td></tr>
-    <tr><td>2</td><td>关务与贸易合规</td><td>监管限制的建立与解除</td></tr>
-    <tr><td>3</td><td>全程追踪与异常</td><td>异常案件接单与关闭、证据、披露决定、客户异常通知</td></tr>
-    <tr><td>4</td><td>结算与经营核算</td><td>费用调整、对账单作废与后续对账纳入</td></tr>
+    <tr><td>1</td><td>关务与贸易合规</td><td>监管限制的建立与解除</td></tr>
+    <tr><td>2</td><td>全程追踪与异常</td><td>异常案件接单与关闭、证据、披露决定、客户异常通知</td></tr>
+    <tr><td>3</td><td>结算与经营核算</td><td>费用调整、对账单作废与后续对账纳入</td></tr>
   </table></div>
 </section>
 

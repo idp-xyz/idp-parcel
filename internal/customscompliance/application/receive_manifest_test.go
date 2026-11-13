@@ -231,6 +231,7 @@ func TestRevisionsAdvanceVersionsAndRematchAssociations(t *testing.T) {
 	fixture.candidates.candidates = nil
 	revised, err := fixture.handler.Revise(context.Background(), application.ReviseManifestCommand{
 		TenantID:   tenant,
+		Carrier:    mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-1"),
 		Manifest:   mustValue(t, domain.NewExternalManifestID, "carrier-manifest-1"),
 		Version:    mustValue(t, domain.NewManifestSourceVersion, "v2"),
 		Scope:      mustValue(t, domain.NewDecisionScopeReference, "movement-2"),
@@ -254,6 +255,7 @@ func TestRevisionsAdvanceVersionsAndRematchAssociations(t *testing.T) {
 
 	same, err := fixture.handler.Revise(context.Background(), application.ReviseManifestCommand{
 		TenantID:   tenant,
+		Carrier:    mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-1"),
 		Manifest:   mustValue(t, domain.NewExternalManifestID, "carrier-manifest-1"),
 		Version:    mustValue(t, domain.NewManifestSourceVersion, "v2"),
 		Scope:      mustValue(t, domain.NewDecisionScopeReference, "movement-2"),
@@ -269,6 +271,7 @@ func TestRevisionsAdvanceVersionsAndRematchAssociations(t *testing.T) {
 
 	missing, err := fixture.handler.Revise(context.Background(), application.ReviseManifestCommand{
 		TenantID:   tenant,
+		Carrier:    mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-1"),
 		Manifest:   mustValue(t, domain.NewExternalManifestID, "carrier-manifest-9"),
 		Version:    mustValue(t, domain.NewManifestSourceVersion, "v1"),
 		Scope:      mustValue(t, domain.NewDecisionScopeReference, "movement-1"),
@@ -280,5 +283,55 @@ func TestRevisionsAdvanceVersionsAndRematchAssociations(t *testing.T) {
 	}
 	if missing.Outcome() != application.ManifestNotFound {
 		t.Fatalf("missing = %q", missing.Outcome())
+	}
+}
+
+// Covers: UC-CC-012「承运商来源只能作用于其被授权的……范围。越权来源未受理且不得确认候选对象是否存在」——
+// 同一舱单身份已由一家承运商责任入册后，另一家再交同一身份：首登答未受理且不交回在册内容，版本推进答得与不在册同形，
+// 在册那一份的版本与范围原样不动。
+func TestAnotherCarrierCanNeitherReadNorAdvanceARecordedManifest(t *testing.T) {
+	fixture := newManifestFixture(t)
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	if _, err := fixture.handler.Receive(context.Background(), application.ReceiveManifestCommand{
+		TenantID: tenant,
+		Spec:     manifestSpec(t, "v1"),
+	}); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+
+	foreign := manifestSpec(t, "v1")
+	foreign.Carrier = mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-2")
+	refused, err := fixture.handler.Receive(context.Background(), application.ReceiveManifestCommand{
+		TenantID: tenant,
+		Spec:     foreign,
+	})
+	if err != nil {
+		t.Fatalf("foreign receive: %v", err)
+	}
+	if refused.Outcome() != application.ManifestNotAccepted {
+		t.Fatalf("outcome = %q, want NOT_ACCEPTED——别家承运商交同一舱单身份不该读到已有或版本冲突", refused.Outcome())
+	}
+	if _, has := refused.Reference(); has {
+		t.Fatal("未受理却交回了在册引用——越权来源由此读到别家舱单的范围")
+	}
+
+	advanced, err := fixture.handler.Revise(context.Background(), application.ReviseManifestCommand{
+		TenantID:   tenant,
+		Carrier:    mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-2"),
+		Manifest:   mustValue(t, domain.NewExternalManifestID, "carrier-manifest-1"),
+		Version:    mustValue(t, domain.NewManifestSourceVersion, "v2"),
+		Scope:      mustValue(t, domain.NewDecisionScopeReference, "movement-9"),
+		SourceFact: "FOREIGN-FEED/manifest-amended",
+		At:         manifestAt,
+	})
+	if err != nil {
+		t.Fatalf("foreign revise: %v", err)
+	}
+	if advanced.Outcome() != application.ManifestNotFound {
+		t.Fatalf("outcome = %q, want NOT_FOUND——与不在册同答，否则这一口能探出别家舱单在不在册", advanced.Outcome())
+	}
+	kept := fixture.store.byManifest["carrier-manifest-1"]
+	if kept.Version().String() != "v1" || kept.Scope().String() != "movement-1" {
+		t.Fatalf("在册引用被别家承运商推进了：version=%q scope=%q", kept.Version(), kept.Scope())
 	}
 }

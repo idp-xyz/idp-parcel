@@ -116,10 +116,17 @@ const (
 // 谁，不知道哪次订舱是谁的。
 const FactCarrierBookingAnswer ExternalFactType = "CARRIER_BOOKING_ANSWER"
 
+// FactExternalRegulatoryManifest 是承运商在产品之外形成并提交的监管舱单的引用（首登与来源版本推进同一类，理由同上面
+// 「更正口不另立一类」）。提交方是责任承运商的系统，不是报关服务商：与 FactCustomsExternalResult 分开立，授予粒度才等于
+// 权力粒度——能回传监管结果的客户端不因此能替承运商报舱单。客户端绑定的来源身份就是引用上记的承运商责任，关务的 Intake
+// 取册上那一格，不收载荷自报。
+const FactExternalRegulatoryManifest ExternalFactType = "EXTERNAL_REGULATORY_MANIFEST"
+
 var externalFactTypes = []ExternalFactType{
 	FactCustomsExternalResult, FactRegulatoryCredential, FactCarrierTracking,
 	FactCarrierFirstEffectivePickupEvidence, FactExternalFunds,
 	FactCarrierBookingAnswer,
+	FactExternalRegulatoryManifest,
 }
 
 // ParseExternalFactType 按字面取值认事实类型，大小写不折叠：册里存的就是这些字面量。

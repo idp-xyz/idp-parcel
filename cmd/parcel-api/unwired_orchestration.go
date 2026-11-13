@@ -2318,6 +2318,22 @@ func (unwiredResults) Handle(
 	return customsapp.ReceiveExternalResultResult{}, errOrchestrationNotWired
 }
 
+type unwiredManifests struct{}
+
+func (unwiredManifests) Receive(
+	context.Context,
+	customsapp.ReceiveManifestCommand,
+) (customsapp.ManifestResult, error) {
+	return customsapp.ManifestResult{}, errOrchestrationNotWired
+}
+
+func (unwiredManifests) Revise(
+	context.Context,
+	customsapp.ReviseManifestCommand,
+) (customsapp.ManifestResult, error) {
+	return customsapp.ManifestResult{}, errOrchestrationNotWired
+}
+
 type unwiredChargeConfirmation struct{}
 
 func (unwiredChargeConfirmation) Confirm(

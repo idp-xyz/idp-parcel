@@ -45,6 +45,19 @@ const (
 	FactRegulatoryCredential  IntegrationClientFact = "REGULATORY_CREDENTIAL"
 )
 
+// ManifestSource 是外部监管舱单引用两口的认证结果：租户，以及客户端在册上绑定的来源身份——它代表的那家承运商。
+type ManifestSource struct {
+	Tenant domain.TenantID
+	// Carrier 是册上绑定的来源身份原文。空串说明这只客户端没绑来源身份，交不了舱单引用。
+	Carrier string
+}
+
+// ManifestSourceAuthenticator 认证一次交舱单引用的出示。它与 IntegrationClientAuthenticator 分开，是因为那两口只要租户，
+// 这两口还要来源身份；并进同一个方法，另两口就得处置一个它们用不上的值。
+type ManifestSourceAuthenticator interface {
+	AuthenticateManifestSource(ctx context.Context, credential PresentedClientCredential) (ManifestSource, error)
+}
+
 // PresentedClientCredential 是这一次 HTTP 出示：Bearer 令牌，与这次 TLS 连接上的客户端证书（DER；没有就为空）。
 type PresentedClientCredential struct {
 	Token       string
@@ -70,6 +83,7 @@ type IntegrationClientIntake struct {
 var (
 	_ ResultIntake                           = (*IntegrationClientIntake)(nil)
 	_ RegulatoryCredentialRegistrationIntake = (*IntegrationClientIntake)(nil)
+	_ ManifestReferenceIntake                = (*IntegrationClientIntake)(nil)
 )
 
 func NewIntegrationClientIntake(authenticator IntegrationClientAuthenticator, clock ports.Clock) (*IntegrationClientIntake, error) {
@@ -140,6 +154,129 @@ func (intake *IntegrationClientIntake) IntakeRegulatoryCredentialRegistration(
 		return application.RegisterCredentialCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
 	return command, nil
+}
+
+// manifestSource 认证交舱单引用的客户端，交回租户与它代表的承运商责任。认证器不认这一类事实（没实现
+// ManifestSourceAuthenticator）时整口答未配置，不退回只核租户的那条路：那样承运商责任只能从载荷收。
+func (intake *IntegrationClientIntake) manifestSource(
+	ctx context.Context,
+	request *http.Request,
+) (domain.TenantID, domain.CarrierResponsibilityReference, error) {
+	authenticator, able := intake.authenticator.(ManifestSourceAuthenticator)
+	if !able {
+		return domain.TenantID{}, domain.CarrierResponsibilityReference{}, ErrAccessChannelNotConfigured
+	}
+	source, err := authenticator.AuthenticateManifestSource(ctx, presentedClientCredential(request))
+	if err != nil {
+		return domain.TenantID{}, domain.CarrierResponsibilityReference{}, err
+	}
+	// 没绑来源身份的客户端代表不了任何承运商：与没有这一类授予同答，由管授予的人去册上补绑定。
+	carrier, err := domain.NewCarrierResponsibilityReference(source.Carrier)
+	if err != nil {
+		return domain.TenantID{}, domain.CarrierResponsibilityReference{}, ErrIntegrationClientNotGranted
+	}
+	return source.Tenant, carrier, nil
+}
+
+func (intake *IntegrationClientIntake) IntakeManifestReference(
+	ctx context.Context,
+	request *http.Request,
+) (application.ReceiveManifestCommand, error) {
+	none := application.ReceiveManifestCommand{}
+	tenant, carrier, err := intake.manifestSource(ctx, request)
+	if err != nil {
+		return none, err
+	}
+	var document manifestReferenceDocument
+	if err := decodeClosedDocument(request.Body, &document); err != nil {
+		return none, err
+	}
+	spec := domain.ExternalManifestReferenceSpec{
+		Carrier:    carrier,
+		SourceFact: strings.TrimSpace(document.SourceFact),
+		AcceptedAt: intake.clock.Now().UTC(),
+	}
+	if spec.Manifest, err = domain.NewExternalManifestID(document.ManifestID); err != nil {
+		return none, fmt.Errorf("%w: manifestId: %v", ErrMalformedRequest, err)
+	}
+	if spec.Version, err = domain.NewManifestSourceVersion(document.Version); err != nil {
+		return none, fmt.Errorf("%w: version: %v", ErrMalformedRequest, err)
+	}
+	if spec.Procedure, err = domain.NewCustomsProcedureReference(document.Procedure); err != nil {
+		return none, fmt.Errorf("%w: procedure: %v", ErrMalformedRequest, err)
+	}
+	if spec.Direction, err = manifestDirectionFromWord(document.Direction); err != nil {
+		return none, err
+	}
+	if spec.Scope, err = domain.NewDecisionScopeReference(document.Scope); err != nil {
+		return none, fmt.Errorf("%w: scope: %v", ErrMalformedRequest, err)
+	}
+	if spec.SourceFact == "" {
+		return none, fmt.Errorf("%w: sourceFact is required", ErrMalformedRequest)
+	}
+	return application.ReceiveManifestCommand{TenantID: tenant, Spec: spec}, nil
+}
+
+func (intake *IntegrationClientIntake) IntakeManifestRevision(
+	ctx context.Context,
+	request *http.Request,
+) (application.ReviseManifestCommand, error) {
+	none := application.ReviseManifestCommand{}
+	tenant, carrier, err := intake.manifestSource(ctx, request)
+	if err != nil {
+		return none, err
+	}
+	var document manifestRevisionDocument
+	if err := decodeClosedDocument(request.Body, &document); err != nil {
+		return none, err
+	}
+	command := application.ReviseManifestCommand{
+		TenantID:   tenant,
+		Carrier:    carrier,
+		SourceFact: strings.TrimSpace(document.SourceFact),
+		At:         intake.clock.Now().UTC(),
+	}
+	if command.Manifest, err = domain.NewExternalManifestID(document.ManifestID); err != nil {
+		return none, fmt.Errorf("%w: manifestId: %v", ErrMalformedRequest, err)
+	}
+	if command.Version, err = domain.NewManifestSourceVersion(document.Version); err != nil {
+		return none, fmt.Errorf("%w: version: %v", ErrMalformedRequest, err)
+	}
+	if command.Scope, err = domain.NewDecisionScopeReference(document.Scope); err != nil {
+		return none, fmt.Errorf("%w: scope: %v", ErrMalformedRequest, err)
+	}
+	if command.SourceFact == "" {
+		return none, fmt.Errorf("%w: sourceFact is required", ErrMalformedRequest)
+	}
+	return command, nil
+}
+
+// manifestReferenceDocument 是舱单引用首登口的载荷。没有租户与承运商两格：前者归认证结果，后者归册上的来源身份绑定；
+// 也没有接受时刻，那是服务端自己的时刻。载荷多带任何一格即拒（decodeClosedDocument）。
+type manifestReferenceDocument struct {
+	ManifestID string `json:"manifestId"`
+	Version    string `json:"version"`
+	Procedure  string `json:"procedure"`
+	Direction  string `json:"direction"`
+	Scope      string `json:"scope"`
+	SourceFact string `json:"sourceFact"`
+}
+
+// manifestRevisionDocument 是来源版本推进口的载荷：程序与方向随在册引用，不随版本改。
+type manifestRevisionDocument struct {
+	ManifestID string `json:"manifestId"`
+	Version    string `json:"version"`
+	Scope      string `json:"scope"`
+	SourceFact string `json:"sourceFact"`
+}
+
+func manifestDirectionFromWord(raw string) (domain.ManifestDirection, error) {
+	for _, direction := range []domain.ManifestDirection{domain.ImportManifest, domain.ExportManifest} {
+		if direction.String() == raw {
+			return direction, nil
+		}
+	}
+	return domain.ManifestDirectionInvalid, fmt.Errorf("%w: direction=%q is not a manifest direction word", ErrMalformedRequest, raw)
 }
 
 // externalResultDocument 是外部结果口的载荷，逐格镜像 application.ReceiveExternalResultCommand 去掉租户与接收时间——前者归

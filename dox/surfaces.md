@@ -155,14 +155,14 @@
 
 完整词典在 `apps/admin-web/src/vocabulary/`。
 
-## 接口：254 个，按接入面分
+## 接口：256 个，按接入面分
 
 谁能调哪一类接口，由接入面定。每一面的授予在[接入与身份](./contexts/access-identity.md)里登记。
 
 | 接入面 | 谁用 | 数量 |
 |---|---|---|
 | 客户接口 | 货主客户自己的系统。绑定一个客户账户，路径在 `/v1` 下 | 11 |
-| 集成客户端 | 外部系统回传事实：报关服务商、承运商、银行或财务系统 | 6 |
+| 集成客户端 | 外部系统回传事实：报关服务商、承运商、银行或财务系统 | 8 |
 | 作业事实登记 | 一线作业端用登记过的设备登事实：收寄、交接、揽收、派送、交付 | 18 |
 | 运营决定 | 操作员作出要留名的决定：复核、处置、裁决、确认、审核 | 54 |
 | 登记册配置写 | 操作员登记主数据与规则：合同、价卡、网络、目录 | 75 |
@@ -191,6 +191,8 @@
 | 方法 | 路径 | 做什么 |
 |---|---|---|
 | POST | `/customs-regulatory-credential-registrations` | 登记监管凭证 |
+| POST | `/customs/external-manifest-reference-revisions` | 责任承运商推进一份监管舱单引用的来源版本 |
+| POST | `/customs/external-manifest-references` | 责任承运商交来外部监管舱单的引用 |
 | POST | `/customs/external-results` | 报关服务商回传外部监管结果 |
 | POST | `/customs/technical-receipts` | 报关服务商回传技术回执 |
 | POST | `/settlement-external-funds-fact-correction-registrations` | 更正已回传的收付款事实 |
@@ -200,7 +202,7 @@
 ### 操作员与作业端接口
 
 其余各面的接口太多，不在这里逐条列；登记处就是完整清单。按路径前缀的数量：
-`transport` 50、`commercial` 43、`customs` 31、`pricing` 22、`settlement` 19、`node` 16、`visibility` 9、`network` 8、`shipment` 6、`reference` 5、`route` 5、`operator` 5、`document` 4、`post` 4、`cancellation` 2、`exception` 2、`control` 2、`claims` 1、`channel` 1、`collection` 1、`governance` 1、`label` 1、`work` 1、`operators` 1、`acceptance` 1、`authorized` 1、`tracking` 1。
+`transport` 50、`commercial` 43、`customs` 33、`pricing` 22、`settlement` 19、`node` 16、`visibility` 9、`network` 8、`shipment` 6、`reference` 5、`route` 5、`operator` 5、`document` 4、`post` 4、`cancellation` 2、`exception` 2、`control` 2、`claims` 1、`channel` 1、`collection` 1、`governance` 1、`label` 1、`work` 1、`operators` 1、`acceptance` 1、`authorized` 1、`tracking` 1。
 
 ## 离线登记命令
 

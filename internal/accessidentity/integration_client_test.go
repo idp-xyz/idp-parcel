@@ -139,6 +139,7 @@ func TestExternalFactTypesAreAClosedSet(t *testing.T) {
 		"CUSTOMS_EXTERNAL_RESULT", "REGULATORY_CREDENTIAL", "CARRIER_TRACKING",
 		"CARRIER_FIRST_EFFECTIVE_PICKUP_EVIDENCE", "EXTERNAL_FUNDS_FACT",
 		"CARRIER_BOOKING_ANSWER",
+		"EXTERNAL_REGULATORY_MANIFEST",
 	} {
 		fact, err := accessidentity.ParseExternalFactType(literal)
 		if err != nil || fact.String() != literal {

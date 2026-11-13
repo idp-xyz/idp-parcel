@@ -61,7 +61,10 @@ type ReceiveManifestCommand struct {
 // ReviseManifestCommand 携带一次来源版本推进请求（承运商明确的更正、撤销、替代或
 // 范围变化）。
 type ReviseManifestCommand struct {
-	TenantID   domain.TenantID
+	TenantID domain.TenantID
+	// Carrier 是这次推进的来源所代表的承运商责任。它必须等于在册引用上记的那一个：别家承运商推进不了这份舱单的版本，
+	// 而且要答得与「不在册」同形（见 Revise）。
+	Carrier    domain.CarrierResponsibilityReference
 	Manifest   domain.ExternalManifestID
 	Version    domain.ManifestSourceVersion
 	Scope      domain.DecisionScopeReference
@@ -125,6 +128,11 @@ func (handler *ReceiveManifestHandler) Receive(
 		return ManifestResult{outcome: ManifestUndecided}, nil
 	}
 	if found {
+		// 同一舱单身份已由另一家承运商责任入册：这一份不受理，也不交回在册内容——交回等于向越权来源确认了别家的舱单
+		// 存在并泄出它的范围（UC-CC-012「越权来源未受理且不得确认候选对象是否存在」）。
+		if existing.Carrier() != reference.Carrier() {
+			return ManifestResult{outcome: ManifestNotAccepted}, nil
+		}
 		if existing.Version() != reference.Version() {
 			return ManifestResult{outcome: ManifestVersionConflict}, nil
 		}
@@ -154,6 +162,9 @@ func (handler *ReceiveManifestHandler) Receive(
 		if err != nil || !found {
 			return ManifestResult{outcome: ManifestUndecided}, nil
 		}
+		if winner.Carrier() != reference.Carrier() {
+			return ManifestResult{outcome: ManifestNotAccepted}, nil
+		}
 		if winner.Version() != reference.Version() {
 			return ManifestResult{outcome: ManifestVersionConflict}, nil
 		}
@@ -176,7 +187,8 @@ func (handler *ReceiveManifestHandler) Revise(
 	if err != nil {
 		return ManifestResult{outcome: ManifestUndecided}, nil
 	}
-	if !found {
+	// 在册引用属于另一家承运商责任时与不在册同答：分开答就成了一个探测别家舱单在不在册的口。
+	if !found || current.Carrier() != command.Carrier {
 		return ManifestResult{outcome: ManifestNotFound}, nil
 	}
 	if current.Version() == command.Version {
