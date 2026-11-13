@@ -1,3 +1,4 @@
+import { manualTrace } from '../../vocabulary/provenance';
 import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
@@ -160,11 +161,27 @@ function CustomerClaimsTable({ names }: { names: PartyNames }) {
 
 // —— 客户通知签 ——
 
+/** 人工告知的通知在技术详情里带出留痕；经通道推送的不出这几行。约定渠道照旧上列——人工告知不改写义务上约定的渠道。 */
+function manualNotificationRows(row: CustomerNotificationRecord): { label: string; value: string }[] {
+  const manual = row.manualRecord;
+  if (!manual) return [];
+  return [
+    { label: '约定渠道', value: row.channel },
+    { label: '人工告知', value: `${manualTrace(manual.notifiedBy, manual.original, '告知')}（${manual.method}）` },
+    { label: '登记时间', value: formatInstant(manual.recordedAt) },
+  ];
+}
+
 function notificationColumns(names: PartyNames): ListColumn<CustomerNotificationRecord>[] {
   return [
     { id: 'customer', header: objectNouns.customer, className: 'whitespace-nowrap', render: (row) => customerCell(names, row.customer) },
     { id: 'status', header: '通知进度', render: (row) => <RowStatusPill status={notificationStatus(row)} /> },
-    { id: 'channel', header: '通知渠道', className: 'font-mono type-body leading-4', render: (row) => row.channel },
+    {
+      id: 'channel',
+      header: '通知渠道',
+      className: 'font-mono type-body leading-4',
+      render: (row) => (row.manualRecord ? `人工告知（${row.manualRecord.method}）` : row.channel),
+    },
     { id: 'deadline', header: '要求在此前通知', className: 'whitespace-nowrap font-mono type-body leading-4', render: (row) => formatInstant(row.deadline) },
     { id: 'decided', header: '决定通知时间', className: 'whitespace-nowrap font-mono type-body leading-4', render: (row) => formatInstant(row.decidedAt) },
     technicalColumn((row) => [
@@ -174,6 +191,7 @@ function notificationColumns(names: PartyNames): ListColumn<CustomerNotification
       { label: '通知内容', value: row.content },
       { label: '披露策略', value: row.policy },
       { label: '通知义务', value: row.obligation },
+      ...manualNotificationRows(row),
       ...row.milestones.map((node) => ({
         label: labelFor(node.milestone, notificationScope),
         value: `${formatInstant(node.recordedAt)}（${node.milestone}）`,

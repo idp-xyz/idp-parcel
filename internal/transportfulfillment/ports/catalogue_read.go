@@ -273,6 +273,8 @@ type BookingAnswerCatalogueRow struct {
 	Basis      string
 	DecidedAt  time.Time
 	RecordedAt time.Time
+	// ManualEntry 只在这份答复是人工录入的时在场；缺席即承运方系统答的。
+	ManualEntry *ManualEntryNote
 }
 
 // BookingAnswerBounceCatalogueRow 是承运答复挡回册上列的一行（ADR-0239 决定二，票 demo-chain-gaps/167）：（答复方、订舱、答复标识、

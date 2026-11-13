@@ -293,7 +293,13 @@ func (review *CaseReview) ListCustomerNotifications(
 			page:  source,
 			selection: `notification_id, customer_ref, episode_id, decided_at,
 				disclosure_policy_ref, content_ref, deadline,
-				channel_ref, obligation_ref, milestones`,
+				channel_ref, obligation_ref, milestones,
+				(SELECT json_build_object(
+				        'notifiedBy', manual.notified_by, 'method', manual.method,
+				        'original', manual.original_ref, 'recordedAt', manual.recorded_at)
+				   FROM visibility_exception.customer_notification_manual_record AS manual
+				  WHERE manual.tenant_id = customer_notification.tenant_id
+				    AND manual.notification_id = customer_notification.notification_id)`,
 		},
 		scanCustomerNotification, customerNotificationPosition)
 	if err != nil {
@@ -306,13 +312,29 @@ func scanCustomerNotification(rows pgx.Rows) (ports.CustomerNotificationCatalogu
 	var (
 		row           ports.CustomerNotificationCatalogueRow
 		milestonesRaw []byte
+		manualRaw     []byte
 	)
 	if err := rows.Scan(
 		&row.NotificationID, &row.Customer, &row.Episode, &row.DecidedAt,
 		&row.Policy, &row.Content, &row.Deadline,
-		&row.Channel, &row.Obligation, &milestonesRaw,
+		&row.Channel, &row.Obligation, &milestonesRaw, &manualRaw,
 	); err != nil {
 		return ports.CustomerNotificationCatalogueRow{}, err
+	}
+	if len(manualRaw) > 0 {
+		var manual struct {
+			NotifiedBy string    `json:"notifiedBy"`
+			Method     string    `json:"method"`
+			Original   string    `json:"original"`
+			RecordedAt time.Time `json:"recordedAt"`
+		}
+		if err := json.Unmarshal(manualRaw, &manual); err != nil {
+			return ports.CustomerNotificationCatalogueRow{}, err
+		}
+		row.ManualRecord = &ports.ManualNotificationNote{
+			NotifiedBy: manual.NotifiedBy, Method: manual.Method,
+			Original: manual.Original, RecordedAt: manual.RecordedAt.UTC(),
+		}
 	}
 	var nodes []notificationMilestoneRow
 	if err := json.Unmarshal(milestonesRaw, &nodes); err != nil {

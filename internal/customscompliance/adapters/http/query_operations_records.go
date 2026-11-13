@@ -268,11 +268,26 @@ type submissionAttempt struct {
 	Receipts   []receiptBody `json:"receipts"`
 }
 
+// sendFactBody 的 manualLodgement 只在这份发送事实是人工递交登记形成的时在场；缺席即发送口发出去的。
 type sendFactBody struct {
-	SentAt         string `json:"sentAt"`
-	Outcome        string `json:"outcome"`
-	ChannelMessage string `json:"channelMessage,omitempty"`
-	ResponseRef    string `json:"responseRef,omitempty"`
+	SentAt          string               `json:"sentAt"`
+	Outcome         string               `json:"outcome"`
+	ChannelMessage  string               `json:"channelMessage,omitempty"`
+	ResponseRef     string               `json:"responseRef,omitempty"`
+	ManualLodgement *manualLodgementBody `json:"manualLodgement,omitempty"`
+}
+
+type manualLodgementBody struct {
+	LodgedBy   string `json:"lodgedBy"`
+	Original   string `json:"original"`
+	Reference  string `json:"reference,omitempty"`
+	RecordedAt string `json:"recordedAt"`
+}
+
+// manualEntryBody 是人工录入的留痕：谁录的、凭哪份原件。整键缺席即接口送来的。
+type manualEntryBody struct {
+	EnteredBy string `json:"enteredBy"`
+	Original  string `json:"original"`
 }
 
 type receiptBody struct {
@@ -314,6 +329,12 @@ func NewQuerySubmissionVersionsEndpoint(intake CatalogueQueryIntake, reader Subm
 						SentAt: instant(fact.SentAt), Outcome: fact.Outcome,
 						ChannelMessage: fact.ChannelMessage, ResponseRef: fact.ResponseRef,
 					}
+					if lodgement := fact.ManualLodgement; lodgement != nil {
+						entry.SendFact.ManualLodgement = &manualLodgementBody{
+							LodgedBy: lodgement.LodgedBy, Original: lodgement.Original,
+							Reference: lodgement.Reference, RecordedAt: instant(lodgement.RecordedAt),
+						}
+					}
 				}
 				for _, receipt := range attempt.Receipts {
 					entry.Receipts = append(entry.Receipts, receiptBody{
@@ -346,6 +367,8 @@ type externalResultBody struct {
 	ReceivedAt        string       `json:"receivedAt,omitempty"`
 	RecordedAt        string       `json:"recordedAt"`
 	Release           *releaseBody `json:"release,omitempty"`
+	// ManualEntry 只在这条结果是人工录入的时在场。
+	ManualEntry *manualEntryBody `json:"manualEntry,omitempty"`
 }
 
 // releaseBody 只在放行层结果上在场（UC-CC-006：放行层落成范围与条件明确的放行事实）。
@@ -381,6 +404,9 @@ func NewQueryExternalResultsEndpoint(intake CatalogueQueryIntake, reader Externa
 				body.Release = &releaseBody{
 					Kind: release.Kind, Authority: release.Authority, Scope: release.Scope, Condition: release.Condition,
 				}
+			}
+			if record.EnteredBy != "" {
+				body.ManualEntry = &manualEntryBody{EnteredBy: record.EnteredBy, Original: record.Original}
 			}
 			return body
 		})

@@ -116,6 +116,7 @@ func NewQueryExternalTrackingFactsEndpoint(
 				Origin:               row.Origin,
 				RecordedAt:           rfc3339(row.RecordedAt),
 				EffectiveJudgedBy:    row.EffectiveJudgedBy,
+				ManualEntry:          manualEntryBodyOf(row.ManualEntry),
 			})
 		}
 		writeJSON(response, http.StatusOK, externalTrackingFactListResponse{Outcome: outcome, Facts: bodies, Page: page.Page(query.Limit)})
@@ -153,4 +154,20 @@ type externalTrackingFactBody struct {
 	Origin               string `json:"origin"`
 	RecordedAt           string `json:"recordedAt"`
 	EffectiveJudgedBy    string `json:"effectiveJudgedBy,omitempty"`
+	// ManualEntry 只在这条事实是人工录入的时在场；整键缺席即轨迹源送来的。
+	ManualEntry *manualEntryBody `json:"manualEntry,omitempty"`
+}
+
+// manualEntryBody 是人工录入的留痕：谁录的、凭哪份原件、何时录的。订舱答复册共用。
+type manualEntryBody struct {
+	EnteredBy string `json:"enteredBy"`
+	Original  string `json:"original"`
+	EnteredAt string `json:"enteredAt"`
+}
+
+func manualEntryBodyOf(note *ports.ManualEntryNote) *manualEntryBody {
+	if note == nil {
+		return nil
+	}
+	return &manualEntryBody{EnteredBy: note.EnteredBy, Original: note.Original, EnteredAt: rfc3339(note.EnteredAt)}
 }

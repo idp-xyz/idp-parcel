@@ -258,3 +258,29 @@ func TestFactQueryTransportProblemsCarryOnlyStableCodes(t *testing.T) {
 		}
 	})
 }
+
+// Covers: 人工录入的事实带 manualEntry（谁、原件、录入时刻）；轨迹源送来的整键缺席——页面只凭这一键在不在场分来源。
+func TestFactListCarriesManualEntryOnlyOnManuallyEnteredFacts(t *testing.T) {
+	manual := pendingReviewRow()
+	manual.Fact = "EXTF-M"
+	manual.ManualEntry = &ports.ManualEntryNote{
+		EnteredBy: "SYN-OP-3", Original: "承运商邮件 11-13.eml", EnteredAt: factReviewOccurredAt.Add(5 * time.Minute),
+	}
+	reader := &stubFactReview{rows: []ports.ExternalTrackingFactReviewRow{manual, pendingReviewRow()}}
+	response := getFacts(t, tfhttp.NewQueryExternalTrackingFactsEndpoint(grantedIntake(), reader), "/x?source=aggregator-a&view=pending")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Facts []map[string]json.RawMessage `json:"facts"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || len(body.Facts) != 2 {
+		t.Fatalf("解不出回答：%v %s", err, response.Body.String())
+	}
+	if got := string(body.Facts[0]["manualEntry"]); got != `{"enteredBy":"SYN-OP-3","original":"承运商邮件 11-13.eml","enteredAt":"2026-09-04T06:05:00Z"}` {
+		t.Fatalf("manualEntry = %s", got)
+	}
+	if _, present := body.Facts[1]["manualEntry"]; present {
+		t.Fatalf("轨迹源送来的事实不得带 manualEntry：%s", response.Body.String())
+	}
+}

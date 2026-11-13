@@ -248,3 +248,13 @@ test('词表没收录的结果词原样示出，不归进既有中文说法', ()
   ok(note.headline.includes('SOMETHING_NEW'), note.headline);
   deepEqual(note.details, []);
 });
+
+test('人工录入的事实：录入来源带出谁与原件，素材版不再说成承运商回传；轨迹源送来的说接口送达', () => {
+  const manual = { ...pendingFact, manualEntry: { enteredBy: 'SYN-OP-3', original: '承运商邮件 11-13.eml', enteredAt: '2026-11-13T06:05:00Z' } };
+  const [entered, delivered] = factRowsOf({ outcome: 'PENDING_EFFECTIVE_TIME_FACTS_LISTED', facts: [manual, pendingFact], page: onlyPage });
+
+  equal(entered.values.entry, '人工录入｜SYN-OP-3 录入，原件：承运商邮件 11-13.eml');
+  equal(entered.values.origin, '人工录入');
+  equal(delivered.values.entry, '接口送达');
+  equal(delivered.values.origin, '承运商回传');
+});

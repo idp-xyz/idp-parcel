@@ -719,7 +719,8 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 		        booking.requested_at, booking.cancelled_at, booking.recorded_at, booking.submitted_by, booking.cancelled_by,
 		        booking.document_number, booking.document_number_absence,
 		        commission.commission_id IS NOT NULL, commission.document_number, commission.document_number_absence,
-		        answers.ids, answers.outcomes, answers.quantities, answers.bases, answers.decided, answers.recorded
+		        answers.ids, answers.outcomes, answers.quantities, answers.bases, answers.decided, answers.recorded,
+		        answers.manual
 		   FROM (`+plan.PageSQL("booking.*", bookings)+`) AS booking
 		   LEFT JOIN transport_fulfillment.transport_commission AS commission
 		     ON commission.tenant_id = booking.tenant_id
@@ -730,7 +731,13 @@ func (catalogue *ReviewCatalogue) ListBookingRequests(
 		               array_agg(answer.quantity ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS quantities,
 		               array_agg(COALESCE(answer.basis, '') ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS bases,
 		               array_agg(answer.decided_at ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS decided,
-		               array_agg(answer.recorded_at ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS recorded
+		               array_agg(answer.recorded_at ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS recorded,
+		               array_agg((SELECT json_build_object(
+		                                 'enteredBy', entry.entered_by, 'original', entry.original_ref, 'enteredAt', entry.entered_at)::text
+		                            FROM transport_fulfillment.booking_answer_manual_entry AS entry
+		                           WHERE entry.tenant_id = answer.tenant_id AND entry.booking_id = answer.booking_id
+		                             AND entry.acceptance_ref = answer.acceptance_id)
+		                         ORDER BY answer.decided_at, answer.inserted_at, answer.acceptance_id) AS manual
 		          FROM transport_fulfillment.booking_answer AS answer
 		         WHERE answer.tenant_id = booking.tenant_id
 		           AND answer.booking_id = booking.booking_id) AS answers ON true
@@ -755,12 +762,13 @@ func bookingRequestRowScanner(tenant domain.TenantID) func(pgx.Row) (ports.Booki
 			ids, outcomes, bases                  []string
 			quantities                            []int64
 			decidedTimes, recordedAt              []time.Time
+			manualEntries                         []*string
 		)
 		if err := scanned.Scan(
 			&row.Booking, &row.Commission, &row.Schedule, &row.Quantity, &row.Unit,
 			&row.RequestedAt, &cancelledAt, &row.RecordedAt, &submittedBy, &cancelledBy,
 			&documentNumber, &documentNumberAbsence, &commissionFound, &commissionNumber, &commissionAbsence,
-			&ids, &outcomes, &quantities, &bases, &decidedTimes, &recordedAt,
+			&ids, &outcomes, &quantities, &bases, &decidedTimes, &recordedAt, &manualEntries,
 		); err != nil {
 			return ports.BookingRequestCatalogueRow{}, err
 		}
@@ -793,13 +801,20 @@ func bookingRequestRowScanner(tenant domain.TenantID) func(pgx.Row) (ports.Booki
 		row.SubmittedBy, row.CancelledBy = submitter.String(), canceller.String()
 		row.Answers = make([]ports.BookingAnswerCatalogueRow, 0, len(ids))
 		for index := range ids {
+			var note *ports.ManualEntryNote
+			if raw := manualEntries[index]; raw != nil {
+				if note, err = manualEntryNoteFromColumn([]byte(*raw)); err != nil {
+					return ports.BookingRequestCatalogueRow{}, fmt.Errorf("booking %q answer %q: %w", row.Booking, ids[index], err)
+				}
+			}
 			row.Answers = append(row.Answers, ports.BookingAnswerCatalogueRow{
-				Answer:     ids[index],
-				Outcome:    outcomes[index],
-				Quantity:   quantities[index],
-				Basis:      bases[index],
-				DecidedAt:  decidedTimes[index].UTC(),
-				RecordedAt: recordedAt[index].UTC(),
+				Answer:      ids[index],
+				Outcome:     outcomes[index],
+				Quantity:    quantities[index],
+				Basis:       bases[index],
+				DecidedAt:   decidedTimes[index].UTC(),
+				RecordedAt:  recordedAt[index].UTC(),
+				ManualEntry: note,
 			})
 		}
 		standing, current, err := bookingStanding(tenant, row.Booking, row.Quantity, row.Answers)

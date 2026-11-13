@@ -93,6 +93,16 @@ type SendFactRecord struct {
 	Outcome        string
 	ChannelMessage string
 	ResponseRef    string
+	// ManualLodgement 只在这份发送事实是人工递交登记形成的时在场：缺席即发送口发出去的。
+	ManualLodgement *ManualLodgementRecord
+}
+
+// ManualLodgementRecord 是人工递交的留痕：谁登记的、凭哪份原件、对方给的受理号（可缺）。
+type ManualLodgementRecord struct {
+	LodgedBy   string
+	Original   string
+	Reference  string
+	RecordedAt time.Time
 }
 
 // SubmissionAttemptRecord 是一次提交尝试连同发送事实与技术回执。SentAt 为零即尚未越过发送边界（已登记待发送）。
@@ -160,6 +170,9 @@ type ExternalResultViewRecord struct {
 	ReceivedAt        time.Time
 	RecordedAt        time.Time
 	Release           *ExternalResultReleaseRecord
+	// EnteredBy 与 Original 成对：都空即接口送来的，都在即人工录入的（谁录的、凭哪份原件）。
+	EnteredBy string
+	Original  string
 }
 
 // ExternalResultViewRead 按租户上列外部监管结果；version 非空时只答归属于该提交版本的。version 是册子选择器的取值

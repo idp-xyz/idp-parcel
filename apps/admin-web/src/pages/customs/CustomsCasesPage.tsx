@@ -211,6 +211,7 @@ const resultColumns = recordColumns(
     ['来源标识', 'source'],
     ['归属申报版本', 'version'],
     ['读法规则', 'rule'],
+    ['录入来源', 'entry'],
     ['接收时间', 'recordedAt'],
   ],
 );

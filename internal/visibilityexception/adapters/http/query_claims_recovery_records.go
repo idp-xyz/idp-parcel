@@ -138,6 +138,12 @@ func serveCustomerNotifications(
 			DecidedAt:      catalogueInstant(row.DecidedAt),
 			Deadline:       catalogueInstant(row.Deadline),
 		}
+		if manual := row.ManualRecord; manual != nil {
+			body.ManualRecord = &manualNotificationBody{
+				NotifiedBy: manual.NotifiedBy, Method: manual.Method,
+				Original: manual.Original, RecordedAt: catalogueInstant(manual.RecordedAt),
+			}
+		}
 		// 空里程碑交回空数组：还没有任何送达进展也是如实答案，不是缺字段。
 		milestones := make([]notificationMilestoneBody, 0, len(row.Milestones))
 		for _, node := range row.Milestones {
@@ -277,6 +283,15 @@ type customerNotificationBody struct {
 	Channel        string                      `json:"channel"`
 	Obligation     string                      `json:"obligation"`
 	Milestones     []notificationMilestoneBody `json:"milestones"`
+	// ManualRecord 只在这份通知是人工告知后登记的时在场；整键缺席即经通知通道推送的（或尚未发出）。
+	ManualRecord *manualNotificationBody `json:"manualRecord,omitempty"`
+}
+
+type manualNotificationBody struct {
+	NotifiedBy string `json:"notifiedBy"`
+	Method     string `json:"method"`
+	Original   string `json:"original"`
+	RecordedAt string `json:"recordedAt"`
 }
 
 type notificationMilestoneBody struct {

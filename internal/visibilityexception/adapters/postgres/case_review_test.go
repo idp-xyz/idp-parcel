@@ -610,3 +610,40 @@ func TestCaseReviewRejectsNonPositiveLimitAndAnswersEmptyHonestly(t *testing.T) 
 		t.Errorf("空追偿册：rows=%+v err=%v", recoveries, err)
 	}
 }
+
+// Covers: 通知册上人工告知后登记的通知带出留痕（谁、什么方式、凭哪份原件）；经通道推送的整格缺席。
+func TestCaseReviewTellsManuallyNotifiedFromPushedNotifications(t *testing.T) {
+	fixture := newCaseReviewFixture(t)
+	ctx := t.Context()
+	tenant := reviewValue(t, domain.NewTenantID, "tenant-a")
+	pushed := reviewNotification(t, "notice-pushed", "customer-1", "episode-1", etaGapBaseAt)
+	told := reviewNotification(t, "notice-told", "customer-2", "episode-2", etaGapBaseAt.Add(time.Hour))
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		if _, err := fixture.notifications.Save(txCtx, tenant, pushed); err != nil {
+			return err
+		}
+		_, err := fixture.notifications.Save(txCtx, tenant, told)
+		return err
+	})
+	recordedAt := etaGapBaseAt.Add(2 * time.Hour)
+	if _, err := fixture.pool.Exec(ctx,
+		`INSERT INTO visibility_exception.customer_notification_manual_record
+		     (tenant_id, notification_id, notified_by, method, original_ref, recorded_at)
+		 VALUES ('tenant-a', 'notice-told', 'SYN-OP-2', '电话', '通话记录 11-13 14:02', $1)`, recordedAt); err != nil {
+		t.Fatalf("落人工告知留痕：%v", err)
+	}
+
+	rows, err := rowsOf(fixture.review.ListCustomerNotifications(ctx, tenant, 10, firstPage(t, ports.CustomerNotificationPages)))
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("上列通知册：%v %+v", err, rows)
+	}
+	manual, channel := rows[0], rows[1]
+	if manual.NotificationID != "notice-told" || manual.ManualRecord == nil || manual.ManualRecord.NotifiedBy != "SYN-OP-2" ||
+		manual.ManualRecord.Method != "电话" || manual.ManualRecord.Original != "通话记录 11-13 14:02" ||
+		!manual.ManualRecord.RecordedAt.Equal(recordedAt) {
+		t.Fatalf("人工告知的通知没带出留痕：%+v %+v", manual, manual.ManualRecord)
+	}
+	if channel.NotificationID != "notice-pushed" || channel.ManualRecord != nil {
+		t.Fatalf("经通道推送的通知不得带留痕：%+v", channel)
+	}
+}

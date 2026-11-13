@@ -219,6 +219,7 @@ function FactDetail({ row, mayJudge, onClose, onJudged }: { row: FactRow; mayJud
         { label: '规则版本', value: row.values.basisDetail },
         { label: '接续', value: row.values.supersedes },
         { label: '记录来源', value: row.values.origin },
+        { label: '录入来源', value: row.values.entry },
       ])}
       actions={
         mayJudge ? (

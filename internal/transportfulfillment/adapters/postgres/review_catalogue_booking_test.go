@@ -320,3 +320,35 @@ func TestTheBounceRegistryTellsTheTwoBasesApartAndCountsResubmissions(t *testing
 		t.Fatalf("读口写了行：\n前 %s\n后 %s", before, after)
 	}
 }
+
+// Covers: 订舱册上人工录入的承运答复带出留痕，承运方系统答的整格缺席；同一订舱下两种并存时各归各。
+func TestTheBookingRegistryTellsManuallyEnteredAnswersFromCarrierOnes(t *testing.T) {
+	stores := newBookingCatalogueStores(t)
+	booking := stores.book(t, "SYN-TENANT-01", "SYN-BOOKING-MIXED", time.Hour)
+	stores.answer(t, booking, "SYN-ANSWER-CARRIER", domain.BookingWaitlisted, 0, time.Minute)
+	stores.answer(t, booking, "SYN-ANSWER-MANUAL", domain.BookingAccepted, 120, 2*time.Minute)
+	enteredAt := booking.RequestedAt().Add(3 * time.Minute)
+	if _, err := stores.pool.Exec(t.Context(),
+		`INSERT INTO transport_fulfillment.booking_answer_manual_entry
+		     (tenant_id, booking_id, acceptance_ref, entered_by, original_ref, entered_at)
+		 VALUES ('SYN-TENANT-01', 'SYN-BOOKING-MIXED', 'SYN-ANSWER-MANUAL', 'SYN-OP-5', '订舱确认传真.pdf', $1)`, enteredAt); err != nil {
+		t.Fatalf("落人工录入留痕：%v", err)
+	}
+
+	rows, err := rowsOf(stores.catalogue.ListBookingRequests(t.Context(), deliveryValue(t, domain.NewTenantID, "SYN-TENANT-01"), 50,
+		firstPage(t, ports.BookingRequestPages)))
+	if err != nil || len(rows) != 1 || len(rows[0].Answers) != 2 {
+		t.Fatalf("上列订舱册：%v %+v", err, rows)
+	}
+	carrier, manual := rows[0].Answers[0], rows[0].Answers[1]
+	if carrier.Answer != "SYN-ANSWER-CARRIER" || carrier.ManualEntry != nil {
+		t.Fatalf("承运方系统答的不得带留痕：%+v", carrier)
+	}
+	if manual.Answer != "SYN-ANSWER-MANUAL" || manual.ManualEntry == nil || manual.ManualEntry.EnteredBy != "SYN-OP-5" ||
+		manual.ManualEntry.Original != "订舱确认传真.pdf" || !manual.ManualEntry.EnteredAt.Equal(enteredAt) {
+		t.Fatalf("人工录入的答复没带出留痕：%+v %+v", manual, manual.ManualEntry)
+	}
+	if rows[0].Current == nil || rows[0].Current.ManualEntry == nil {
+		t.Fatalf("当前答复是人工录入的那一份，也应带留痕：%+v", rows[0].Current)
+	}
+}

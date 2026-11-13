@@ -126,3 +126,10 @@ test('挡回册两个筛选框换成筛选维：缺席与空白不发、两端�
   deepEqual(bounceFilterDimensions({ booking: ' B 1 ', source: 'OPERATOR/x#1' }), { booking: ['B 1'], source: ['OPERATOR/x#1'] });
   deepEqual(bounceFilterDimensions({ source: 'S' }), { source: ['S'] });
 });
+
+test('人工录入的答复带出谁录的与原件；承运方系统答的不加这一段', () => {
+  const carrier = { booking: 'SYN-BOOKING-1', answer: 'A1', outcome: 'WAITLISTED', decidedAt: '2026-10-21T01:00:00Z', recordedAt: '2026-10-21T01:00:01Z' };
+  const manual = { ...carrier, answer: 'A2', manualEntry: { enteredBy: 'SYN-OP-5', original: '订舱确认传真.pdf', enteredAt: '2026-10-21T02:00:00Z' } };
+  equal(answerLineOf(carrier).includes('人工录入'), false);
+  equal(answerLineOf(manual).endsWith('人工录入（SYN-OP-5 录入，原件：订舱确认传真.pdf）'), true);
+});

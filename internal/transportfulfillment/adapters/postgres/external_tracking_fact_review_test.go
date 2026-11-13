@@ -141,3 +141,54 @@ func TestListingCurrentFactsRefusesMeaninglessInput(t *testing.T) {
 		t.Fatalf("没有事实的源如实交回空列表：%v %+v", err, empty)
 	}
 }
+
+// Covers: 人工录入的轨迹事实在读面上带出留痕；判过有效时间另成一版之后留痕仍跟着这条事实；轨迹源送来的整格缺席。
+func TestListingCurrentFactsCarriesWhoEnteredAManualFactEvenAfterItWasJudged(t *testing.T) {
+	repository, transactor, pool := newExternalTrackingFacts(t)
+	ctx := t.Context()
+	const tenant = "tenant-manual-provenance"
+	base := time.Date(2026, 11, 13, 6, 0, 0, 0, time.UTC)
+
+	manual := reviewFactRecord(t, tenant, "syn-source-m", "MPF-1", "MPV-1a", base)
+	fromSource := reviewFactRecord(t, tenant, "syn-source-m", "MPF-2", "MPV-2", base.Add(time.Hour))
+	for _, record := range []ports.ExternalTrackingFactRecord{manual, fromSource} {
+		if outcome := mustSaveTrackingFact(t, transactor, ctx, repository, record); outcome != ports.ExternalTrackingFactSaved {
+			t.Fatalf("夹具 %s 落库 outcome = %s", record.Key.Fact, outcome)
+		}
+	}
+	enteredAt := base.Add(5 * time.Minute)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO transport_fulfillment.external_tracking_manual_entry
+		     (tenant_id, fact_id, version_id, entered_by, original_ref, entered_at)
+		 VALUES ($1, 'MPF-1', 'MPV-1a', 'SYN-OP-3', '承运商邮件 11-13.eml', $2)`, tenant, enteredAt); err != nil {
+		t.Fatalf("落人工录入留痕：%v", err)
+	}
+	judgment, _ := domain.JudgeEffectiveTimeExplicitly(base.Add(10 * time.Minute))
+	judgedFact, err := manual.Fact.JudgeEffectiveTime(judgment, segmentRef(t, domain.NewExternalTrackingFactVersion, "MPV-1b"))
+	if err != nil {
+		t.Fatalf("判断：%v", err)
+	}
+	if outcome := mustSaveTrackingFact(t, transactor, ctx, repository, ports.ExternalTrackingFactRecord{
+		Key:        ports.ExternalTrackingFactKey{TenantID: manual.Key.TenantID, Fact: manual.Key.Fact, Version: judgedFact.Version()},
+		Fact:       judgedFact,
+		RecordedAt: manual.RecordedAt.Add(time.Minute),
+	}); outcome != ports.ExternalTrackingFactSaved {
+		t.Fatalf("判断版本落库 outcome = %s", outcome)
+	}
+
+	rows, err := rowsOf(repository.ListCurrentExternalTrackingFacts(ctx, segmentRef(t, domain.NewTenantID, tenant),
+		segmentRef(t, domain.NewTrackingSourceReference, "syn-source-m"), ports.EveryCurrentVersion, 50,
+		firstPage(t, ports.ExternalTrackingFactPages)))
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("上列当前版：%v %+v", err, rows)
+	}
+	judged, plain := rows[0], rows[1]
+	if judged.Fact != "MPF-1" || judged.Version != "MPV-1b" || judged.ManualEntry == nil ||
+		judged.ManualEntry.EnteredBy != "SYN-OP-3" || judged.ManualEntry.Original != "承运商邮件 11-13.eml" ||
+		!judged.ManualEntry.EnteredAt.Equal(enteredAt) {
+		t.Fatalf("人工录入的事实判过之后应仍带留痕：%+v %+v", judged, judged.ManualEntry)
+	}
+	if plain.Fact != "MPF-2" || plain.ManualEntry != nil {
+		t.Fatalf("轨迹源送来的事实不得带留痕：%+v", plain)
+	}
+}

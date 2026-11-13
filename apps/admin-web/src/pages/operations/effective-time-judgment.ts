@@ -4,6 +4,7 @@
 // 「已按同值判过」是答案还是失败、待判断行会不会被填上一个不存在的有效时间——而页面组件要跑起来
 // 得有 React 与 DOM。判读是纯函数就能拿测试钉住（同 handover-scope-summary 的先例）。
 
+import { entrySourceLine, manualEntryWord } from '../../vocabulary/provenance';
 import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
@@ -75,7 +76,9 @@ export function factRowsOf(body: ExternalTrackingFactListResponseBody): FactRow[
           ? `${record.effectiveRule}@${record.effectiveRuleVersion}`
           : '',
       supersedes: record.supersedes ?? '',
-      origin: labelOf(versionOriginLabels, record.origin),
+      // 素材版的「承运商回传」对人工录入的事实是假话：那一版是人照着原件录的，不是承运商系统回传的。
+      origin: record.manualEntry && record.origin === 'MATERIAL' ? manualEntryWord : labelOf(versionOriginLabels, record.origin),
+      entry: entrySourceLine(record.manualEntry),
     },
   }));
 }

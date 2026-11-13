@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -74,7 +75,8 @@ func (repository *ExternalTrackingFacts) ListCurrentExternalTrackingFacts(
 		`current.fact_ref, current.version, current.source_ref, current.credential_ref, current.object_ref,
 		 current.source_event, current.status_ref, current.occurred_at, current.received_at,
 		 current.effective_basis, current.effective_at, current.effective_rule, current.effective_rule_version,
-		 current.supersedes_version, current.version_origin, current.recorded_at, current.effective_judged_by`, facts),
+		 current.supersedes_version, current.version_origin, current.recorded_at, current.effective_judged_by,
+		 `+manualTrackingEntryColumn, facts),
 		scanExternalTrackingFactReviewRow, externalTrackingFactPosition)
 	if err != nil {
 		return fail(err)
@@ -82,18 +84,53 @@ func (repository *ExternalTrackingFacts) ListCurrentExternalTrackingFacts(
 	return page, nil
 }
 
+// manualTrackingEntryColumn 取这条事实最近一次人工录入的留痕。按事实取、不按当前版取：判断会在素材版之上另成一版，
+// 当前版自己没有留痕行，而「这条事实是人录的」不因判过有效时间就不成立。人工录入的事实标识自带前缀、轨迹源写不到它名下，
+// 所以一条事实的素材版要么全是人录的要么全不是，取最近一条即当前内容的来源。
+const manualTrackingEntryColumn = `(SELECT json_build_object(
+		        'enteredBy', entry.entered_by, 'original', entry.original_ref, 'enteredAt', entry.entered_at)
+		   FROM transport_fulfillment.external_tracking_manual_entry AS entry
+		  WHERE entry.tenant_id = current.tenant_id AND entry.fact_id = current.fact_ref
+		  ORDER BY entry.entered_at DESC, entry.version_id DESC LIMIT 1)`
+
+// manualEntryNoteDocument 是留痕列的 JSON 形状，订舱答复册共用。
+type manualEntryNoteDocument struct {
+	EnteredBy string    `json:"enteredBy"`
+	Original  string    `json:"original"`
+	EnteredAt time.Time `json:"enteredAt"`
+}
+
+func manualEntryNoteFromColumn(raw []byte) (*ports.ManualEntryNote, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var document manualEntryNoteDocument
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return nil, fmt.Errorf("manual entry: %w", err)
+	}
+	return &ports.ManualEntryNote{
+		EnteredBy: document.EnteredBy, Original: document.Original, EnteredAt: document.EnteredAt.UTC(),
+	}, nil
+}
+
 func scanExternalTrackingFactReviewRow(scanned pgx.Row) (ports.ExternalTrackingFactReviewRow, error) {
 	var row ports.ExternalTrackingFactReviewRow
+	var manualEntry []byte
 	var sourceEvent, effectiveRule, effectiveRuleVersion, supersedes, judgedBy *string
 	var effectiveAt *time.Time
 	if err := scanned.Scan(
 		&row.Fact, &row.Version, &row.Source, &row.Credential, &row.Object,
 		&sourceEvent, &row.Status, &row.OccurredAt, &row.ReceivedAt,
 		&row.EffectiveBasis, &effectiveAt, &effectiveRule, &effectiveRuleVersion,
-		&supersedes, &row.Origin, &row.RecordedAt, &judgedBy,
+		&supersedes, &row.Origin, &row.RecordedAt, &judgedBy, &manualEntry,
 	); err != nil {
 		return ports.ExternalTrackingFactReviewRow{}, err
 	}
+	note, err := manualEntryNoteFromColumn(manualEntry)
+	if err != nil {
+		return ports.ExternalTrackingFactReviewRow{}, err
+	}
+	row.ManualEntry = note
 	row.OccurredAt = row.OccurredAt.UTC()
 	row.ReceivedAt = row.ReceivedAt.UTC()
 	row.RecordedAt = row.RecordedAt.UTC()

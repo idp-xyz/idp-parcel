@@ -9,6 +9,7 @@
 // 拼进查询串，答复多一格 page；不带条件即裸路径，答第一页。按 ?registry= 分派的三个读口把册名收进条件（registryConditions），
 // 当选择器拼在最前。各册点名了哪些维只在 internal/customscompliance/ports 的 catalogue_pages.go 一处。
 
+import type { ManualEntryRecord } from '../../vocabulary/provenance';
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
 import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 import type { RegistrationResponseBody } from '../../components/registration';
@@ -649,11 +650,20 @@ export interface TechnicalReceiptBody {
   receivedAt: string;
 }
 
+/** 人工递交的留痕：只在这份发送事实是人工递交登记形成的时在场。reference 是对方给的受理号，可缺。 */
+export interface ManualLodgementBody {
+  lodgedBy: string;
+  original: string;
+  reference?: string;
+  recordedAt: string;
+}
+
 export interface SendFactBody {
   sentAt: string;
   outcome: string;
   channelMessage?: string;
   responseRef?: string;
+  manualLodgement?: ManualLodgementBody;
 }
 
 /** 尝试登记、发送事实、技术回执三件事分开上列;sentAt 缺席即尚未越过发送边界。 */
@@ -722,6 +732,8 @@ export interface ExternalResultBody {
   receivedAt?: string;
   recordedAt: string;
   release?: ReleaseBody;
+  /** 只在这条结果是人工录入的时在场；缺席即接口送来的。 */
+  manualEntry?: ManualEntryRecord;
 }
 
 export interface ExternalResultListResponseBody {

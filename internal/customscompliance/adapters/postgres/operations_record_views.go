@@ -207,6 +207,12 @@ type attemptDocument struct {
 		Outcome        string    `json:"outcome"`
 		ChannelMessage *string   `json:"channelMessage"`
 		ResponseRef    *string   `json:"responseRef"`
+		Lodgement      *struct {
+			LodgedBy   string    `json:"lodgedBy"`
+			Original   string    `json:"original"`
+			Reference  *string   `json:"reference"`
+			RecordedAt time.Time `json:"recordedAt"`
+		} `json:"lodgement"`
 	} `json:"sendFact"`
 	Receipts []struct {
 		Source     string    `json:"source"`
@@ -257,7 +263,13 @@ func (views *OperationsRecordViews) ListSubmissionVersions(
 		                    'safeResend', a.safe_resend_ref, 'sentAt', a.sent_at,
 		                    'sendFact', (SELECT json_build_object(
 		                                        'sentAt', f.sent_at, 'outcome', f.outcome,
-		                                        'channelMessage', f.channel_message, 'responseRef', f.response_ref)
+		                                        'channelMessage', f.channel_message, 'responseRef', f.response_ref,
+		                                        'lodgement', (SELECT json_build_object(
+		                                                'lodgedBy', l.lodged_by, 'original', l.original_ref,
+		                                                'reference', l.reference, 'recordedAt', l.recorded_at)
+		                                           FROM customs_compliance.submission_manual_lodgement AS l
+		                                          WHERE l.tenant_id = f.tenant_id AND l.version_id = f.version_id
+		                                            AND l.sequence = f.sequence))
 		                                   FROM customs_compliance.submission_send_fact AS f
 		                                  WHERE f.tenant_id = a.tenant_id AND f.version_id = a.version_id
 		                                    AND f.sequence = a.sequence),
@@ -311,6 +323,12 @@ func (views *OperationsRecordViews) ListSubmissionVersions(
 				entry.SendFact = &ports.SendFactRecord{
 					SentAt: attempt.SendFact.SentAt.UTC(), Outcome: attempt.SendFact.Outcome,
 					ChannelMessage: orEmpty(attempt.SendFact.ChannelMessage), ResponseRef: orEmpty(attempt.SendFact.ResponseRef),
+				}
+				if lodgement := attempt.SendFact.Lodgement; lodgement != nil {
+					entry.SendFact.ManualLodgement = &ports.ManualLodgementRecord{
+						LodgedBy: lodgement.LodgedBy, Original: lodgement.Original,
+						Reference: orEmpty(lodgement.Reference), RecordedAt: lodgement.RecordedAt.UTC(),
+					}
 				}
 			}
 			for _, receipt := range attempt.Receipts {
@@ -381,7 +399,8 @@ func (views *OperationsRecordViews) ListExternalResults(
 		        COALESCE(e.result ->> 'scope', ''), e.unattributable, e.layer_conflict,
 		        COALESCE(e.corrects_source_id, ''), e.correction_in_force,
 		        (e.result ->> 'occurredAt')::timestamptz, (e.result ->> 'receivedAt')::timestamptz, e.recorded_at,
-		        r.kind, r.authority_ref, r.scope_ref, r.condition`,
+		        r.kind, r.authority_ref, r.scope_ref, r.condition,
+		        COALESCE(e.entered_by, ''), COALESCE(e.original_ref, '')`,
 		`customs_compliance.external_result AS e
 		   LEFT JOIN customs_compliance.release_outcome AS r
 		     ON r.tenant_id = e.tenant_id AND r.source_id = e.source_id`)
@@ -402,7 +421,8 @@ func (views *OperationsRecordViews) ListExternalResults(
 			&record.SubmissionVersion, &record.ClaimedVersion, &record.Scope, &record.Unattributable,
 			&record.LayerConflict, &record.CorrectsSource, &record.CorrectionInForce,
 			&occurredAt, &receivedAt, &record.RecordedAt,
-			&releaseKind, &releaseAuthority, &releaseScope, &releaseCondition); err != nil {
+			&releaseKind, &releaseAuthority, &releaseScope, &releaseCondition,
+			&record.EnteredBy, &record.Original); err != nil {
 			return fail(err)
 		}
 		record.RecordedAt = record.RecordedAt.UTC()

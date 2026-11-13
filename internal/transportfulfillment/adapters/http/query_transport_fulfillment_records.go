@@ -575,13 +575,14 @@ func serveBookingRequests(
 
 func bookingAnswerRowBody(booking string, row ports.BookingAnswerCatalogueRow) bookingAnswerBody {
 	return bookingAnswerBody{
-		Booking:    booking,
-		Answer:     row.Answer,
-		Outcome:    row.Outcome,
-		Quantity:   row.Quantity,
-		Basis:      row.Basis,
-		DecidedAt:  rfc3339(row.DecidedAt),
-		RecordedAt: rfc3339(row.RecordedAt),
+		Booking:     booking,
+		Answer:      row.Answer,
+		Outcome:     row.Outcome,
+		Quantity:    row.Quantity,
+		Basis:       row.Basis,
+		DecidedAt:   rfc3339(row.DecidedAt),
+		RecordedAt:  rfc3339(row.RecordedAt),
+		ManualEntry: manualEntryBodyOf(row.ManualEntry),
 	}
 }
 

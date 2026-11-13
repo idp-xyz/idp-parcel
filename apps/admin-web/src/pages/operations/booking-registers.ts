@@ -5,6 +5,7 @@
 // 状态词的读法只在读口（ports.BookingStanding*），这里只做示文，不由答复值与接受量再算一遍。
 
 import { weightUnitLabels } from '../../vocabulary/price-card';
+import { manualEntryWord, manualTrace } from '../../vocabulary/provenance';
 import { formatInstant } from '../catalogue-view';
 import type {
   BookingAnswerBounceRecord,
@@ -55,6 +56,8 @@ export function answerLineOf(answer: BookingAnswerRecord): string {
   if (answer.quantity !== undefined) parts.push(`接受量 ${answer.quantity}`);
   if (answer.basis) parts.push(`依据 ${answer.basis}`);
   parts.push(`标识 ${answer.answer}`, formatInstant(answer.decidedAt));
+  // 承运方系统答的不加这一段：页面上「没写」读作接口来的，与读面「整键缺席」同义。
+  if (answer.manualEntry) parts.push(`${manualEntryWord}（${manualTrace(answer.manualEntry.enteredBy, answer.manualEntry.original)}）`);
   return parts.join(' · ');
 }
 

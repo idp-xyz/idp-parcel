@@ -40,6 +40,15 @@ type ExternalTrackingFactReviewRow struct {
 	RecordedAt           time.Time
 	// EffectiveJudgedBy 是显式判断这一版有效时间的操作者（ADR-0303），没记下即空。
 	EffectiveJudgedBy string
+	// ManualEntry 只在这条事实是人工录入的时在场；缺席即轨迹源送来的。
+	ManualEntry *ManualEntryNote
+}
+
+// ManualEntryNote 是人工录入的留痕：谁录的、凭哪份原件、何时录的。
+type ManualEntryNote struct {
+	EnteredBy string
+	Original  string
+	EnteredAt time.Time
 }
 
 // EffectiveTimeReviewFilter 说上列哪些当前版。封闭两格而不是一个布尔：读口不接受「没传就当某一格」，

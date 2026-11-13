@@ -462,3 +462,38 @@ func TestClaimsRecoveryRecordsReaderFailureFormsNoAnswer(t *testing.T) {
 		assertNoOutcome(t, response)
 	}
 }
+
+// Covers: 人工告知后登记的通知带 manualRecord（谁、方式、原件、登记时刻）；经通道推送的整键缺席。
+func TestClaimsRecoveryRecordsCarryManualRecordOnlyOnManuallyNotifiedOnes(t *testing.T) {
+	intake := operationsIntakeDouble{query: operationsScope(t)}
+	row := func(id string) ports.CustomerNotificationCatalogueRow {
+		return ports.CustomerNotificationCatalogueRow{
+			NotificationID: id, Customer: "CUST-01", Episode: "episode-" + id, DecidedAt: operationsBaseAt,
+			Policy: "disclose/v1", Content: "content/v1", Deadline: operationsBaseAt.Add(time.Hour),
+			Channel: "WEBHOOK", Obligation: "DELIVERY_REQUIRED",
+		}
+	}
+	told := row("told")
+	told.ManualRecord = &ports.ManualNotificationNote{
+		NotifiedBy: "SYN-OP-2", Method: "电话", Original: "通话记录 14:02", RecordedAt: operationsBaseAt.Add(2 * time.Hour),
+	}
+	reader := &claimsReaderDouble{notifications: []ports.CustomerNotificationCatalogueRow{told, row("pushed")}}
+	response := crServe(t, intake, reader, http.MethodGet, "/claims-recovery-records?registry=customer-notification")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Notifications []map[string]json.RawMessage `json:"notifications"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || len(body.Notifications) != 2 {
+		t.Fatalf("解不出回答：%v %s", err, response.Body.String())
+	}
+	var manual struct{ NotifiedBy, Method, Original, RecordedAt string }
+	if err := json.Unmarshal(body.Notifications[0]["manualRecord"], &manual); err != nil ||
+		manual.NotifiedBy != "SYN-OP-2" || manual.Method != "电话" || manual.Original != "通话记录 14:02" || manual.RecordedAt == "" {
+		t.Fatalf("manualRecord 走样：%v %s", err, body.Notifications[0]["manualRecord"])
+	}
+	if _, present := body.Notifications[1]["manualRecord"]; present {
+		t.Fatalf("经通道推送的通知不得带 manualRecord：%s", response.Body.String())
+	}
+}

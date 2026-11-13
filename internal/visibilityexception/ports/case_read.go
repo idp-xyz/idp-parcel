@@ -148,6 +148,16 @@ type CustomerNotificationCatalogueRow struct {
 	Channel        string
 	Obligation     string
 	Milestones     []NotificationMilestoneNode
+	// ManualRecord 只在这份通知是人工告知后登记的时在场；缺席即经通知通道推送的（或尚未发出）。
+	ManualRecord *ManualNotificationNote
+}
+
+// ManualNotificationNote 是人工告知的留痕：谁告知的、用什么方式、凭哪份原件、何时登记的。
+type ManualNotificationNote struct {
+	NotifiedBy string
+	Method     string
+	Original   string
+	RecordedAt time.Time
 }
 
 // ClaimItemCatalogueRow 是客户索赔项册上列的一行：收到、通过资格审核、确认赔偿

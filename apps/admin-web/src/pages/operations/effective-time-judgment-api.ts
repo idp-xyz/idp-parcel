@@ -7,6 +7,7 @@
 // 读行与写行分成两个函数，读走 exchangeMasterData、写走 postMasterData——两行的 Intake 不是同一个，
 // 隔离读准入（ADR-0078）换得了读行换不了写行，调用点长得一样会让这条区别在阅读时消失。
 
+import type { ManualEntryRecord } from '../../vocabulary/provenance';
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
 import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
@@ -38,6 +39,8 @@ export interface ExternalTrackingFactRecord {
   supersedes?: string;
   origin: string;
   recordedAt: string;
+  /** 只在这条事实是人工录入的时在场；缺席即轨迹源送来的。 */
+  manualEntry?: ManualEntryRecord;
 }
 
 export type ExternalTrackingFactListResponseBody =

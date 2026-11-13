@@ -107,6 +107,8 @@ type bookingAnswerBody struct {
 	Basis      string `json:"basis,omitempty"`
 	DecidedAt  string `json:"decidedAt"`
 	RecordedAt string `json:"recordedAt"`
+	// ManualEntry 只在订舱册读面上、且这份答复是人工录入的时在场；写口的回答不带它。
+	ManualEntry *manualEntryBody `json:"manualEntry,omitempty"`
 }
 
 func writeBookingAnswerOutcome(response http.ResponseWriter, result application.CommissionResult) {

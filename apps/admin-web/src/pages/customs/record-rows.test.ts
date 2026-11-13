@@ -170,3 +170,32 @@ test('引到清关单处：按清关单列表换号，列表读不到只降级�
   equal(unreadable.number, 'CASE-1');
   ok(unreadable.note.includes('读不到'), unreadable.note);
 });
+
+// Covers: 产品形态「人工录入必须与接口来的分得开」——外部结果与发送事实在页面上各自说出来源。
+test('来源：人工录入的结果与人工递交的发送带出谁与原件，接口来的说接口送达', () => {
+  const rows = externalResultRows([
+    result({ source: 'MANUAL/1', manualEntry: { enteredBy: 'SYN-OP-7', original: '海关放行通知书.pdf' } }),
+    result({ source: 'RES-2' }),
+  ]);
+  equal(rows[0].values.entry, '人工录入｜SYN-OP-7 录入，原件：海关放行通知书.pdf');
+  equal(rows[1].values.entry, '接口送达');
+
+  const [row] = submissionRows(
+    [version({
+      attempts: [
+        {
+          sequence: 1, target: 'SYN-BROKER', result: 'ACKNOWLEDGED', sentAt: at, receipts: [],
+          sendFact: {
+            sentAt: at, outcome: 'ACKNOWLEDGED',
+            manualLodgement: { lodgedBy: 'SYN-OP-7', original: '单一窗口回执截图.png', reference: 'ACK-778', recordedAt: at },
+          },
+        },
+        { sequence: 2, target: 'SYN-BROKER', result: 'ACKNOWLEDGED', sentAt: at, receipts: [], sendFact: { sentAt: at, outcome: 'ACKNOWLEDGED' } },
+      ],
+    })],
+    [],
+  );
+  const lines = row.values.attempts.split('\n');
+  ok(lines[0].endsWith('，人工递交（SYN-OP-7 登记，原件：单一窗口回执截图.png，受理号 ACK-778）'), lines[0]);
+  ok(!lines[1].includes('人工递交'), lines[1]);
+});

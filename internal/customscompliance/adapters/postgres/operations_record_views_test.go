@@ -303,3 +303,50 @@ func TestUnadmittedObjectsAreThoseWhoseLatestJudgementDoesNotAdmit(t *testing.T)
 		t.Fatal("limit 为 0 必须拒")
 	}
 }
+
+// Covers: 人工录入的外部结果与人工递交的发送事实在读面上带出留痕（谁、凭哪份原件）；接口来的整格缺席，两种分得开。
+func TestOperationsViewsTellManualEntriesFromInterfaceDeliveredOnes(t *testing.T) {
+	views, fixture := newOperationsRecordViews(t)
+	seedDemoShapedChain(t, fixture)
+	tenant := recordTenant(t, "SYN-TENANT-01")
+
+	interfaceOnly, err := rowsOf(views.ListSubmissionVersions(t.Context(), tenant, 10, firstPage(t, ports.SubmissionVersionPages)))
+	if err != nil || interfaceOnly[0].Attempts[0].SendFact == nil || interfaceOnly[0].Attempts[0].SendFact.ManualLodgement != nil {
+		t.Fatalf("发送口发出去的发送事实不得带人工递交留痕：%v %+v", err, interfaceOnly)
+	}
+
+	fixture.seed(t,
+		`UPDATE customs_compliance.external_result SET entered_by = 'SYN-OP-7', original_ref = '海关放行通知书.pdf'
+		  WHERE tenant_id = 'SYN-TENANT-01' AND source_id = 'RES-REL'`)
+	fixture.seed(t,
+		`INSERT INTO customs_compliance.submission_manual_lodgement
+			(tenant_id, version_id, sequence, lodged_by, original_ref, reference, recorded_at)
+		 VALUES ('SYN-TENANT-01', 'SUBV-1', 1, 'SYN-OP-7', '单一窗口回执截图.png', 'ACK-778', $1)`, viewBaseAt.Add(time.Hour))
+
+	results, err := rowsOf(views.ListExternalResults(t.Context(), tenant, "", 10, firstPage(t, ports.ExternalResultPages)))
+	if err != nil {
+		t.Fatalf("上列外部结果：%v", err)
+	}
+	for _, result := range results {
+		switch result.Source {
+		case "RES-REL":
+			if result.EnteredBy != "SYN-OP-7" || result.Original != "海关放行通知书.pdf" {
+				t.Fatalf("人工录入的结果没带出留痕：%+v", result)
+			}
+		default:
+			if result.EnteredBy != "" || result.Original != "" {
+				t.Fatalf("接口送来的结果不得带留痕：%+v", result)
+			}
+		}
+	}
+
+	versions, err := rowsOf(views.ListSubmissionVersions(t.Context(), tenant, 10, firstPage(t, ports.SubmissionVersionPages)))
+	if err != nil {
+		t.Fatalf("上列提交版本：%v", err)
+	}
+	lodgement := versions[0].Attempts[0].SendFact.ManualLodgement
+	if lodgement == nil || lodgement.LodgedBy != "SYN-OP-7" || lodgement.Original != "单一窗口回执截图.png" ||
+		lodgement.Reference != "ACK-778" || !lodgement.RecordedAt.Equal(viewBaseAt.Add(time.Hour)) {
+		t.Fatalf("人工递交留痕走样：%+v", lodgement)
+	}
+}

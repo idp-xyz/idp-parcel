@@ -13,6 +13,7 @@
 // 两条列表读口已迁 ADR-0144（票 catalogue-read-pagination-rollout/05、06）：registry 是选册的选择器，不兼作筛选维；各册收哪些
 // 排序维、筛选维与 `q` 只在 internal/*/ports/catalogue_pages.go 的声明里，答复多一格 page。
 
+import type { ManualEntryRecord } from '../../vocabulary/provenance';
 import { exchangeMasterData, type ApiResult } from '../catalogue-api';
 import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
@@ -348,6 +349,8 @@ export interface BookingAnswerRecord {
   basis?: string;
   decidedAt: string;
   recordedAt: string;
+  /** 只在这份答复是人工录入的时在场；缺席即承运方系统答的。 */
+  manualEntry?: ManualEntryRecord;
 }
 
 /**

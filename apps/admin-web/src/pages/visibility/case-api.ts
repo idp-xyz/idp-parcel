@@ -190,6 +190,16 @@ export interface CustomerNotificationRecord {
   channel: string;
   obligation: string;
   milestones: NotificationMilestoneRecord[];
+  /** 只在这份通知是人工告知后登记的时在场；缺席即经通知通道推送的，或还没发出。 */
+  manualRecord?: ManualNotificationRecord;
+}
+
+/** 人工告知的留痕：谁告知的、用什么方式、凭哪份原件、何时登记的。 */
+export interface ManualNotificationRecord {
+  notifiedBy: string;
+  method: string;
+  original: string;
+  recordedAt: string;
 }
 
 /**

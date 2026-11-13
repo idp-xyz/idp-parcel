@@ -16,6 +16,7 @@ import { labelFor } from '../../vocabulary/status';
 import { documentNumberAbsenceNote, documentTypeWords } from '../../vocabulary/document-numbering';
 import type { RegisterRow } from './register-rows';
 import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
+import { entrySourceLine, manualTrace } from '../../vocabulary/provenance';
 
 const dash = '—';
 
@@ -178,7 +179,15 @@ export function attemptLabel(attempt: SubmissionAttemptBody): string {
   const sent = attempt.sendFact
     ? `，发送事实 ${labelFor(attempt.sendFact.outcome)}（${formatInstant(attempt.sendFact.sentAt)}）`
     : '，尚无发送事实';
-  return `#${attempt.sequence} → ${attempt.target}：${result}${sent}`;
+  return `#${attempt.sequence} → ${attempt.target}：${result}${sent}${lodgementNote(attempt)}`;
+}
+
+/** 人工递交的发送事实带出谁递交的、凭哪份原件、对方给的受理号；发送口发出去的不加这半句。 */
+function lodgementNote(attempt: SubmissionAttemptBody): string {
+  const lodgement = attempt.sendFact?.manualLodgement;
+  if (!lodgement) return '';
+  const reference = lodgement.reference ? `，受理号 ${lodgement.reference}` : '';
+  return `，人工递交（${manualTrace(lodgement.lodgedBy, lodgement.original, '登记')}${reference}）`;
 }
 
 export function receiptLabel(attempt: SubmissionAttemptBody): string {
@@ -259,6 +268,7 @@ export function externalResultRows(results: ExternalResultBody[]): RegisterRow[]
           .filter(Boolean)
           .join('；') || dash,
       occurredAt: result.occurredAt ? formatInstant(result.occurredAt) : dash,
+      entry: entrySourceLine(result.manualEntry),
       recordedAt: formatInstant(result.recordedAt),
     },
   }));
