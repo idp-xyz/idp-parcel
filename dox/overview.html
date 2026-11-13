@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IDP Parcel 业务全景</title>
+<style>
+/* 版式：一条主链图领头，下面按主链顺序逐段展开；每段左文右图，状态用色片标注 */
+:root{
+  --bg:#f5f7f9; --panel:#ffffff; --fg:#15222c; --muted:#5a6b78; --line:#d5dde3;
+  --accent:#0c6b8f; --accent-soft:#e2f0f5; --ink-band:#12303f; --ink-band-fg:#eef5f8;
+  --ok:#1f7a4d; --ok-soft:#e3f3ea; --wait:#a26308; --wait-soft:#fbf0d9;
+  --off:#6b7780; --off-soft:#e9edf0; --hold:#7a4aa0; --hold-soft:#efe6f6;
+  --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC","Source Han Sans SC",system-ui,sans-serif;
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f171d; --panel:#172129; --fg:#e4ecf1; --muted:#97a7b3; --line:#2c3a45;
+  --accent:#5fb8d9; --accent-soft:#16323e; --ink-band:#0a1a23; --ink-band-fg:#dcebf1;
+  --ok:#62c796; --ok-soft:#15322a; --wait:#e5b257; --wait-soft:#3a2d12;
+  --off:#93a0aa; --off-soft:#232e36; --hold:#c19be0; --hold-soft:#2c2238; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0f171d; --panel:#172129; --fg:#e4ecf1; --muted:#97a7b3; --line:#2c3a45;
+  --accent:#5fb8d9; --accent-soft:#16323e; --ink-band:#0a1a23; --ink-band-fg:#dcebf1;
+  --ok:#62c796; --ok-soft:#15322a; --wait:#e5b257; --wait-soft:#3a2d12;
+  --off:#93a0aa; --off-soft:#232e36; --hold:#c19be0; --hold-soft:#2c2238; color-scheme:dark }
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.75 var(--sans)}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{background:var(--ink-band);color:var(--ink-band-fg)}
+header.top .wrap{padding-block:40px 32px}
+.eyebrow{font-size:12px;letter-spacing:.14em;opacity:.75}
+h1{font-size:34px;line-height:1.25;margin:8px 0 12px;font-weight:700;text-wrap:balance}
+.lede{max-width:46em;font-size:16px;opacity:.92;margin:0}
+.meta{margin-top:18px;font-size:12.5px;opacity:.72;display:flex;flex-wrap:wrap;gap:6px 20px}
+nav.toc{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+nav.toc .wrap{display:flex;gap:4px 18px;flex-wrap:wrap;padding-block:10px;font-size:13.5px}
+nav.toc a{color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main .wrap{padding-block:8px 64px}
+section{padding-top:44px}
+h2{font-size:23px;line-height:1.35;margin:0 0 6px;text-wrap:balance}
+h2 .n{color:var(--accent);font-family:var(--mono);font-size:15px;margin-right:10px}
+h3{font-size:16px;margin:22px 0 6px}
+p{margin:0 0 12px;max-width:44em}
+.sub{color:var(--muted);margin-bottom:18px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}
+.two > *{min-width:0}
+@media (max-width:820px){.two{grid-template-columns:minmax(0,1fr)} h1{font-size:27px}}
+figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px}
+figure .scroll{overflow-x:auto}
+figure svg{display:block;width:100%;height:auto;min-width:560px}
+.two figure svg{min-width:420px}
+figcaption{font-size:12.5px;color:var(--muted);margin-top:10px}
+svg text{font-family:var(--sans);fill:var(--fg)}
+svg .t-m{fill:var(--muted)} svg .t-a{fill:var(--accent)} svg .t-on{fill:var(--ink-band-fg)}
+svg .bx{fill:var(--panel);stroke:var(--line);stroke-width:1.2}
+svg .bxa{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.2}
+svg .bxd{fill:var(--ink-band);stroke:var(--ink-band)}
+svg .band{fill:var(--off-soft);stroke:var(--line)}
+svg .bandw{fill:var(--wait-soft);stroke:var(--wait)}
+svg .ln{stroke:var(--muted);stroke-width:1.4;fill:none}
+svg .lnd{stroke:var(--muted);stroke-width:1.2;fill:none;stroke-dasharray:4 4}
+svg .ah{fill:var(--muted)}
+ul{margin:0 0 12px;padding-left:1.2em;max-width:44em}
+li{margin:3px 0}
+code{font-family:var(--mono);font-size:.88em;background:var(--off-soft);padding:1px 5px;border-radius:3px}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 12px;font-size:13.5px}
+.flow span{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:3px 9px}
+.flow i{font-style:normal;color:var(--muted)}
+.flow .end{border-color:var(--accent);background:var(--accent-soft)}
+.owner{display:inline-block;font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 7px;margin:0 6px 6px 0;font-family:var(--mono)}
+.tbl{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:12.5px;background:var(--off-soft)}
+tr:last-child td{border-bottom:0}
+.pill{display:inline-block;font-size:12px;border-radius:999px;padding:0 9px;line-height:1.7;white-space:nowrap}
+.p-ok{background:var(--ok-soft);color:var(--ok)} .p-wait{background:var(--wait-soft);color:var(--wait)}
+.p-off{background:var(--off-soft);color:var(--off)} .p-hold{background:var(--hold-soft);color:var(--hold)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:var(--muted);margin:0 0 14px}
+.note{border-left:3px solid var(--wait);background:var(--wait-soft);padding:10px 14px;border-radius:0 4px 4px 0;font-size:14px;max-width:46em;margin:12px 0}
+.keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:14px 0}
+.keys div{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.keys b{display:block;margin-bottom:2px}
+.keys span{font-size:13.5px;color:var(--muted)}
+footer{border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+footer .wrap{padding-block:22px 40px}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <div class="eyebrow">IDP PARCEL · 国际小包网络运营系统</div>
+  <h1>业务全景：一票国际小包从委托到结算</h1>
+  <p class="lede">这一页把产品做什么、一票货怎么走、钱怎么算、哪些能力今天已经能用，按业务顺序画出来。每一段都注明由哪个上下文负责，以及它在代码里的现状。</p>
+  <div class="meta"><span>对照 main <code>1dc1bfaba</code>（2026-11-12）</span><span>内容取自 dox/ 各文件，规则以那些文件和代码为准</span><span>全部证据层级为 S（受控模拟）</span></div>
+</div></header>
+
+<nav class="toc" aria-label="目录"><div class="wrap">
+  <a href="#who">谁在用</a><a href="#chain">主链</a><a href="#s0">开单之前</a><a href="#s1">委托与接受</a><a href="#s2">路由</a><a href="#s3">收寄与节点</a><a href="#s4">运输与交付</a><a href="#s5">关务</a><a href="#s6">追踪与异常</a><a href="#s7">计价与结算</a><a href="#cap">能力现状</a><a href="#golive">上线路径</a>
+</div></nav>
+
+<main><div class="wrap">
+
+<section id="who">
+  <h2>谁在用这个产品</h2>
+  <p class="sub">产品卖给自己经营国际小包网络的物流企业。开发方不是运营企业。</p>
+  <div class="two">
+    <div>
+      <p>文档和代码里说的<b>运营企业</b>，指的是买下产品的<b>租户</b>。<b>货主客户</b>是租户的客户，把包裹委托给租户。价卡、客户合同、供应商协议都是租户与它的相对方之间的文件，开发方不持有。</p>
+      <p>租户用产品面向货主客户提供国际小包服务，并组织实际的网络履约：自营节点收货分拣，外部伙伴承担干线、报关或尾程。</p>
+      <ul>
+        <li>集团租户是最高的数据隔离边界；货主账户之间业务隔离。</li>
+        <li>服务形态有两种，各自表达责任：<b>网络服务</b>（租户对端到端负责）和<b>面单渠道服务</b>（租户代客户向渠道取面单）。</li>
+        <li>多份供应商价卡并存时，对同一票逐候选算采购成本，按成本择优。时效只作资格，不进排序。</li>
+      </ul>
+    </div>
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 620 300" role="img" aria-label="开发方把产品卖给租户；租户向货主客户提供国际小包服务，并组织外部伙伴履约，最终交付收件人">
+        <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+        <rect class="bx" x="20" y="24" width="130" height="50" rx="4"/><text x="85" y="54" text-anchor="middle" font-size="14">开发方</text>
+        <rect class="bxd" x="230" y="14" width="170" height="70" rx="4"/><text class="t-on" x="315" y="44" text-anchor="middle" font-size="15" font-weight="700">租户（运营企业）</text><text class="t-on" x="315" y="66" text-anchor="middle" font-size="12">经营国际小包网络</text>
+        <rect class="bxa" x="470" y="24" width="130" height="50" rx="4"/><text x="535" y="54" text-anchor="middle" font-size="14">货主客户</text>
+        <line class="ln" x1="150" y1="49" x2="228" y2="49" marker-end="url(#a1)"/><text class="t-m" x="189" y="40" text-anchor="middle" font-size="12">卖产品</text>
+        <line class="ln" x1="470" y1="40" x2="402" y2="40" marker-end="url(#a1)"/><text class="t-m" x="436" y="31" text-anchor="middle" font-size="12">委托</text>
+        <line class="ln" x1="400" y1="62" x2="468" y2="62" marker-end="url(#a1)"/><text class="t-m" x="436" y="80" text-anchor="middle" font-size="12">服务</text>
+        <text class="t-m" x="315" y="122" text-anchor="middle" font-size="12">组织履约</text>
+        <line class="ln" x1="315" y1="84" x2="315" y2="106"/><line class="ln" x1="80" y1="134" x2="545" y2="134"/>
+        <g font-size="13">
+          <line class="ln" x1="80" y1="134" x2="80" y2="156" marker-end="url(#a1)"/><rect class="bx" x="20" y="158" width="120" height="44" rx="4"/><text x="80" y="185" text-anchor="middle">自营节点</text>
+          <line class="ln" x1="235" y1="134" x2="235" y2="156" marker-end="url(#a1)"/><rect class="bx" x="175" y="158" width="120" height="44" rx="4"/><text x="235" y="185" text-anchor="middle">承运伙伴</text>
+          <line class="ln" x1="390" y1="134" x2="390" y2="156" marker-end="url(#a1)"/><rect class="bx" x="330" y="158" width="120" height="44" rx="4"/><text x="390" y="185" text-anchor="middle">报关服务商</text>
+          <line class="ln" x1="545" y1="134" x2="545" y2="156" marker-end="url(#a1)"/><rect class="bx" x="485" y="158" width="120" height="44" rx="4"/><text x="545" y="185" text-anchor="middle">面单渠道</text>
+        </g>
+        <line class="lnd" x1="235" y1="202" x2="235" y2="244"/><line class="lnd" x1="235" y1="244" x2="468" y2="244" marker-end="url(#a1)"/>
+        <rect class="bx" x="470" y="222" width="130" height="44" rx="4"/><text x="535" y="249" text-anchor="middle" font-size="14">收件人</text>
+        <text class="t-m" x="350" y="236" text-anchor="middle" font-size="12">有效交付</text>
+        <text class="t-m" x="20" y="286" font-size="12">租户另与自己的财务系统对接；银行账、法定税务、总账不在产品内。</text>
+      </svg>
+      </div>
+      <figcaption>产品的使用方是租户。货主客户、收件人和外部伙伴都是租户的相对方。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="chain">
+  <h2>主链：七个阶段</h2>
+  <p class="sub">主链从一份网络服务委托的提交开始。阶段不是全局状态机：每个上下文拥有自己的生命周期，没有一个「大运单」状态。</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1120 372" role="img" aria-label="主链：委托与接受、初始路由、收寄与节点作业、运输履约与交付依次发生；关务控制只在出库、移动、交付、提交这些动作上设门禁；追踪异常与计价结算贯穿全程">
+      <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+      <text class="t-m" x="40" y="26" font-size="12">实物与责任的推进</text>
+      <g font-size="15" font-weight="700">
+        <rect class="bxa" x="40" y="38" width="230" height="86" rx="4"/><text class="t-a" x="56" y="62" font-size="13" font-family="monospace">1</text><text x="56" y="88">委托接入与接受决定</text>
+        <rect class="bxa" x="310" y="38" width="230" height="86" rx="4"/><text class="t-a" x="326" y="62" font-size="13" font-family="monospace">2</text><text x="326" y="88">初始路由与复核</text>
+        <rect class="bxa" x="580" y="38" width="230" height="86" rx="4"/><text class="t-a" x="596" y="62" font-size="13" font-family="monospace">3</text><text x="596" y="88">网络收寄与节点作业</text>
+        <rect class="bxa" x="850" y="38" width="230" height="86" rx="4"/><text class="t-a" x="866" y="62" font-size="13" font-family="monospace">5</text><text x="866" y="88">运输履约、交付与终局</text>
+      </g>
+      <g font-size="12" class="t-m">
+        <text class="t-m" x="56" y="110">接受时固定基线</text><text class="t-m" x="326" y="110">变化形成新路线版本</text><text class="t-m" x="596" y="110">收寄来源、集运、封签</text><text class="t-m" x="866" y="110">取消或处置在此分流</text>
+      </g>
+      <line class="ln" x1="270" y1="81" x2="308" y2="81" marker-end="url(#a2)"/><line class="ln" x1="540" y1="81" x2="578" y2="81" marker-end="url(#a2)"/><line class="ln" x1="810" y1="81" x2="848" y2="81" marker-end="url(#a2)"/>
+      <g font-size="12" font-family="monospace">
+        <text class="t-a" x="56" y="146">parcel-shipment</text><text class="t-a" x="326" y="146">network-routing</text><text class="t-a" x="596" y="146">node-operations</text><text class="t-a" x="866" y="146">transport-fulfillment</text>
+      </g>
+      <rect class="bandw" x="580" y="172" width="500" height="46" rx="4"/>
+      <text class="t-a" x="596" y="200" font-size="13" font-family="monospace">4</text><text x="614" y="200" font-size="14" font-weight="700">适用关务控制</text><text class="t-m" x="724" y="200" font-size="12">只阻断出库、移动、交付、提交这几类动作</text>
+      <line class="lnd" x1="695" y1="124" x2="695" y2="170"/><line class="lnd" x1="965" y1="124" x2="965" y2="170"/>
+      <text class="t-m" x="40" y="252" font-size="12">贯穿全程</text>
+      <rect class="band" x="40" y="262" width="1040" height="42" rx="4"/>
+      <text class="t-a" x="56" y="288" font-size="13" font-family="monospace">6</text><text x="74" y="288" font-size="14" font-weight="700">普通追踪、异常与客户披露</text><text class="t-m" x="270" y="288" font-size="12">读各上下文的源事实，形成内部投影与客户视图，两层分开</text><text class="t-a" x="900" y="288" font-size="12" font-family="monospace">visibility-exception</text>
+      <rect class="band" x="40" y="314" width="1040" height="42" rx="4"/>
+      <text class="t-a" x="56" y="340" font-size="13" font-family="monospace">7</text><text x="74" y="340" font-size="14" font-weight="700">计价与结算</text><text class="t-m" x="170" y="340" font-size="12">接受前估价与占用，收费发生项成本，费用、对账单、核销</text><text class="t-a" x="770" y="340" font-size="12" font-family="monospace">parcel-pricing · settlement-accounting</text>
+    </svg>
+    </div>
+    <figcaption>编号沿用产品文档的七个阶段。1、2、3、5 是实物与责任的先后；4 是控制域，只在特定动作上设门禁，不产生全程统一状态；6、7 贯穿全程。</figcaption>
+  </figure>
+  <div class="keys">
+    <div><b>不可覆盖的版本</b><span>合同、价卡、路由、申报都按版本发布。变化形成新版本，旧版本留着，可回放。</span></div>
+    <div><b>计划、承诺、事实分开</b><span>计划的路线、对客的承诺、已经发生的事实各管各的，任何一层不得静默覆盖另一层。</span></div>
+    <div><b>缺了就答「未配置」</b><span>租户没登记的取值，产品不替它填默认值，那一格如实停下并说明等谁。</span></div>
+    <div><b>评价不是费用</b><span>计价只算出一份评价；结算按自己的确认条件把它采用成费用，不回写评价。</span></div>
+  </div>
+</section>
+
+<section id="s0">
+  <h2><span class="n">开单之前</span>租户先登记什么</h2>
+  <p class="sub">一票委托能被接受，前提是这些商业与网络对象已经登记并发布。</p>
+  <div class="two">
+    <div>
+      <span class="owner">party-commercial</span><span class="owner">parcel-pricing</span><span class="owner">network-routing</span>
+      <ul>
+        <li><b>参与方</b>：责任法人、业务参与方、货主客户账户，以及它们之间的关系。</li>
+        <li><b>商业版本</b>：服务产品、客户合同、供应商商业协议、接单规则包、各类政策。</li>
+        <li><b>价卡</b>：定价方案与价表，分采购 <code>BUY</code>、销售 <code>SELL</code>、内部 <code>INTERNAL</code> 三个方向，互不合并。</li>
+        <li><b>计价参考序列</b>：燃油费率、汇率等按期登记，复核通过才在用。</li>
+        <li><b>网络目录</b>：物流节点、网络连接、线路、服务区域、服务日历、路由策略。</li>
+        <li><b>渠道</b>：产品—渠道映射、渠道账号使用授权。</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">商业版本怎么生效</h3>
+      <div class="flow"><span>草稿</span><i>→</i><span>待批准</span><i>→</i><span>已批准</span><i>→</i><span>已发布</span><i>→</i><span class="end">已生效</span><i>→</i><span>已到期或已退役</span></div>
+      <h3>价卡怎么生效</h3>
+      <div class="flow"><span>草稿</span><i>→</i><span>提交</span><i>→</i><span>批准并发布</span><i>→</i><span class="end">在用</span><i>→</i><span>后继截断或退役</span></div>
+      <h3>参考序列怎么生效</h3>
+      <div class="flow"><span>已登记</span><i>→</i><span class="end">复核通过即在用</span><i>或</i><span>已退回</span></div>
+      <p>已发布的内容不能原地改。要改就另起一版，由后继版本显式收尾旧版。</p>
+    </div>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="n">1</span>委托接入与接受决定</h2>
+  <p class="sub">货主客户提交一份委托。系统先保全来源、判定生产归属，再做接受判断。</p>
+  <div class="two">
+    <div>
+      <span class="owner">parcel-shipment</span><span class="owner">pilot-governance</span><span class="owner">settlement-accounting</span>
+      <p>委托只有四个存下来的状态。已接受之后不回退；「已取消」「已完成」不是另存的状态，而是由成员包裹的结果派生出来的。</p>
+      <p>接受判断会逐项核对商业依据、可达性、关务适用性和财务控制。任何一项答不出时，判断停下，并说清<b>等谁</b>：</p>
+      <div class="tbl"><table>
+        <tr><th>停在哪</th><th>等谁</th></tr>
+        <tr><td>等待受控补充</td><td>客户补资料</td></tr>
+        <tr><td>等待内部续办</td><td>系统重试（依赖失败、并发冲突）</td></tr>
+        <tr><td>等待人工复核</td><td>授权复核角色。复核完成本身不形成决定</td></tr>
+        <tr><td>等待运营登记</td><td>租户登记缺的参数。重试永远产不出</td></tr>
+        <tr><td>等待授权处置</td><td>授权处置角色（财务控制不通过时）</td></tr>
+      </table></div>
+      <p style="margin-top:12px"><b>接受前财务控制</b>：接受之前先估价，并占用资金冻结或信用暴露。费用确认时占用转出，取消或拒绝时释放。</p>
+    </div>
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 600 330" role="img" aria-label="委托状态：已提交可以形成新提交版本，然后单向进入已接受、已拒绝或已撤回三者之一">
+        <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+        <rect class="bxa" x="30" y="128" width="150" height="56" rx="4"/><text x="105" y="152" text-anchor="middle" font-size="15" font-weight="700">已提交</text><text class="t-m" x="105" y="172" text-anchor="middle" font-size="11" font-family="monospace">SUBMITTED</text>
+        <path class="ln" d="M70 128 C60 86,150 86,140 126" marker-end="url(#a3)"/><text class="t-m" x="105" y="84" text-anchor="middle" font-size="12">新提交版本（可多次）</text>
+        <rect class="bx" x="400" y="30" width="170" height="56" rx="4"/><text x="485" y="54" text-anchor="middle" font-size="15" font-weight="700">已接受</text><text class="t-m" x="485" y="74" text-anchor="middle" font-size="11" font-family="monospace">ACCEPTED</text>
+        <rect class="bx" x="400" y="128" width="170" height="56" rx="4"/><text x="485" y="152" text-anchor="middle" font-size="15" font-weight="700">已拒绝</text><text class="t-m" x="485" y="172" text-anchor="middle" font-size="11" font-family="monospace">REJECTED</text>
+        <rect class="bx" x="400" y="226" width="170" height="56" rx="4"/><text x="485" y="250" text-anchor="middle" font-size="15" font-weight="700">已撤回</text><text class="t-m" x="485" y="270" text-anchor="middle" font-size="11" font-family="monospace">WITHDRAWN</text>
+        <path class="ln" d="M180 144 L290 144 L290 58 L398 58" marker-end="url(#a3)"/><text class="t-m" x="296" y="50" font-size="12">校验全过</text>
+        <line class="ln" x1="180" y1="156" x2="398" y2="156" marker-end="url(#a3)"/><text class="t-m" x="296" y="148" font-size="12">条件不成立</text>
+        <path class="ln" d="M180 168 L290 168 L290 254 L398 254" marker-end="url(#a3)"/><text class="t-m" x="296" y="246" font-size="12">决定前撤回</text>
+        <text class="t-m" x="30" y="312" font-size="12">三个结果单向、互不转换。接受时固定委托接受基线，包裹进入成员基线。</text>
+      </svg>
+      </div>
+      <figcaption>撤回、接受、主动拒绝竞争同一个不可覆盖的决定边界：谁先成立，另外两个就不再发生。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="n">2</span>初始路由与复核</h2>
+  <p class="sub">接受之后为每个包裹形成路由计划。路线变化不改旧计划，而是出新版本。</p>
+  <div class="two">
+    <div>
+      <span class="owner">network-routing</span><span class="owner">parcel-pricing</span>
+      <ul>
+        <li><b>接受前</b>先做可达性判断：这条线、这个服务区域到不到得了。</li>
+        <li><b>接受后</b>形成初始路由计划，自委托接受那一刻起生效。</li>
+        <li>候选路线各自取一份采购评价，按最低成本选。成本并列时不任选，交授权角色裁决。</li>
+        <li>收寄、交接之后会复核。需要换路时形成改路建议，由授权角色作改路决定。</li>
+        <li>路由计划不绑定、不预占班次与容量，那是运输履约的事。</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">路由计划</h3>
+      <div class="flow"><span class="end">当前有效</span><i>→</i><span>已被替代</span><i>或</i><span>已失效</span><i>或</i><span>已结束</span></div>
+      <p>离开「当前有效」后不得原地恢复。原路径重新可用，也要重新判断、出一个新版本。</p>
+      <h3>网络可用性调整</h3>
+      <div class="flow"><span>登记</span><i>→</i><span>到期或被解除</span></div>
+      <p>解除只恢复候选资格，不会把已经改路的包裹切回去。</p>
+    </div>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="n">3</span>网络收寄与节点作业</h2>
+  <p class="sub">实物第一次进入租户的网络。从这一刻起，包裹有了正式承诺，也过了取消边界。</p>
+  <div class="two">
+    <div>
+      <span class="owner">node-operations</span><span class="owner">transport-fulfillment</span>
+      <p>收寄来源有两种：客户直接送站（节点作业负责），或场外揽收（运输履约负责）。</p>
+      <ul>
+        <li><b>身份核对</b>：到站的实物先当作待识别实物，核对后关联到包裹。节点只向小包托运要候选，不自行定身份。</li>
+        <li><b>送站预报与交接单</b>：客户可预报送站；交接单关闭后成员冻结。</li>
+        <li><b>节点控制</b>：谁在控制这件实物，随收寄成立，随权威交接转出。</li>
+        <li><b>集运单元</b>：多个包裹装进一个袋或箱，封装时留快照，开封后可再封装。</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">节点控制</h3>
+      <div class="flow"><span>尚未控制</span><i>→</i><span class="end">成立</span><i>→</i><span>转出</span></div>
+      <p>成立来自节点收寄或交接转入；转出只来自运输履约的「已交接」。</p>
+      <h3>集运单元实例</h3>
+      <div class="flow"><span>开放装入</span><i>→</i><span>已封装</span><i>→</i><span>开封</span><i>→</i><span>再封装</span><i>→</i><span class="end">关闭</span></div>
+      <h3>包裹（小包托运一侧）</h3>
+      <div class="flow"><span>进入成员基线</span><i>→</i><span>边界前可取消</span><i>→</i><span class="end">有效网络收寄</span><i>→</i><span>越界后只能处置</span><i>→</i><span>终局服务结果</span></div>
+      <div class="note">集运的六个作业动作今天没有在线入口，只能经离线导入命令，而该命令在 2026-12-31 之后拒绝启动。租户要用集运，这一条要提前做。</div>
+    </div>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="n">5</span>运输履约、交付与包裹终局</h2>
+  <p class="sub">节点之间的运输、末端派送，直到有效交付。取消与收寄后处置也在这一段分流。</p>
+  <div class="two">
+    <div>
+      <span class="owner">transport-fulfillment</span><span class="owner">parcel-shipment</span>
+      <p>这一段记录的是<b>控制事实</b>：场外揽收、实际承运商首次有效收寄、权威运输交接、有效交付。每一笔都逐对象判断，允许部分成立。</p>
+      <ul>
+        <li><b>运输委托与订舱</b>：向承运方下委托、申请舱位，承运方答复后定局。</li>
+        <li><b>班次与装载分配</b>：具体班次、容量池、装载分配。</li>
+        <li><b>交接</b>：交接判断为已交接时，控制转移给下一方。</li>
+        <li><b>运输收费发生项</b>：发生了哪些该计费的事。它不是金额，金额由计价和结算形成。</li>
+        <li><b>收寄后处置</b>：越过取消边界后，只能形成继续、拦截、改送、退运、服务终止等处置决定。</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">出发、交出、交付前的门禁读数</h3>
+      <div class="tbl"><table>
+        <tr><th>读数</th><th>含义</th></tr>
+        <tr><td><code>NOT_GUARDED</code></td><td>这个动作不受关务门禁</td></tr>
+        <tr><td><code>ADMITTED</code></td><td>关务放行</td></tr>
+        <tr><td><code>UNDECIDED</code></td><td>关务未决，或说不出该问谁</td></tr>
+        <tr><td><code>UNREADABLE</code></td><td>那一问没形成答复</td></tr>
+        <tr><td><code>BLOCKED</code></td><td>关务阻断</td></tr>
+      </table></div>
+      <p style="margin-top:12px">逐对象各一格，整条取最重的一格。读数本身不挡事实落册；挡下违规动作是动作之前那一问的事。</p>
+      <h3>交接判断</h3>
+      <div class="flow"><span>待确认</span><i>→</i><span class="end">已交接</span><i>或</i><span>已拒收</span></div>
+      <h3>订舱</h3>
+      <div class="flow"><span>已申请</span><i>→</i><span>候补</span><i>→</i><span class="end">接受</span><i>/</i><span>拒绝</span><i>/</i><span>失效</span><i>/</i><span>撤回</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="n">4</span>关务与贸易合规</h2>
+  <p class="sub">关务是控制域。它可以阻断特定动作，但不取得网络、节点或运输对象的所有权。</p>
+  <div class="two">
+    <div>
+      <span class="owner">customs-compliance</span>
+      <p>每票需要申报的货形成关务案件和申报单元。<b>申报就绪</b>与<b>提交授权</b>是两件事，各走各的：系统校验就绪，每次提交由授权业务角色明确确认，首发不做自动申报。</p>
+      <p>提交之后，技术回执、监管接收、业务受理、过程决定和放行结果是不同层的外部结果。它们各自到达，不压成一个「清关状态」。</p>
+      <ul>
+        <li><b>内部合规限制</b>与<b>监管限制</b>各自独立存在，互不替代。</li>
+        <li><b>税费</b>：核定税费或无需付款依据，经付款协作、资金事实、付款核对，再进放行门禁核对。</li>
+        <li><b>动作准入判断</b>：别的上下文在出库、移动、交付前来问，关务按案件现状作答。</li>
+        <li>出口和进口监管舱单由责任承运商在外部形成并提交，产品只接收外部引用。</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">一次提交</h3>
+      <div class="flow"><span>就绪判断</span><i>+</i><span>提交授权</span><i>→</i><span>固定提交版本</span><i>→</i><span>提交尝试</span><i>→</i><span>发送事实</span><i>→</i><span class="end">技术回执</span></div>
+      <h3>关务案件</h3>
+      <div class="flow"><span>建立</span><i>→</i><span>进行中</span><i>→</i><span class="end">已关闭</span><i>→</i><span>受控重开</span><i>→</i><span>再次关闭</span></div>
+      <h3>税费到放行</h3>
+      <div class="flow"><span>核定税费</span><i>→</i><span>付款协作事项</span><i>→</i><span>资金事实</span><i>→</i><span>付款核对</span><i>→</i><span class="end">放行门禁核对</span></div>
+      <div class="note">外部监管舱单引用的接收、监管限制的建立与解除，编排已写好但还没有生产入口。两件都排在限量生产前要接上的清单里。</div>
+    </div>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="n">6</span>全程追踪、异常与客户披露</h2>
+  <p class="sub">它不拥有任何物流事实，只读别的上下文已接受的源事实，形成自己的投影和判断。</p>
+  <div class="two">
+    <div>
+      <span class="owner">visibility-exception</span>
+      <ul>
+        <li><b>全程追踪投影</b>：各来源的事实归类成标准追踪里程碑。投影按版本派生，只引用源事实，不复制。</li>
+        <li><b>客户全程追踪视图</b>：与内部投影分层。每次查询校验请求方、货主账户和对象授权；外部单号不能当访问凭证。</li>
+        <li><b>异常</b>：信号 → 分诊 → 案件，分层处理。自动建案只来自规则命中。</li>
+        <li><b>客户异常通知</b>：系统生成草稿，由授权业务角色确认后发布。</li>
+        <li><b>索赔与追偿</b>：保留完整领域边界，首发只做受控模拟。</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">投影</h3>
+      <div class="flow"><span>源事实入账</span><i>→</i><span class="end">派生新版本</span><i>→</i><span>后续事实、更正再出新版本</span></div>
+      <h3>异常案件</h3>
+      <div class="flow"><span>待响应</span><i>→</i><span>处理中</span><i>→</i><span class="end">已关闭</span></div>
+      <h3>索赔项</h3>
+      <div class="flow"><span>已收到</span><i>→</i><span>资格审核</span><i>→</i><span>责任结论</span><i>→</i><span>期限内复核</span></div>
+      <div class="note">这是今天落差最大的一段。投影、客户追踪视图、信号、分诊和索赔受理可用；ETA 的形成、案件接单与关闭、证据、披露决定、客户异常通知都还没有生产入口。后四项排在限量生产前要接上的清单里。</div>
+    </div>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="n">7</span>计价与运营结算</h2>
+  <p class="sub">一票赚不赚钱，由两条互相隔离的线算出来：对客户的销售侧，对供应商的采购侧。</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1120 250" role="img" aria-label="销售侧：评价请求、SELL 评价、预估客户费用、费用确认、对账单、外部资金事实、核销。采购侧：运输收费发生项、BUY 评价、供应商预期成本、供应商账单、匹配与审核、审核应付、核销">
+      <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+      <text x="40" y="26" font-size="14" font-weight="700">销售侧</text><text class="t-m" x="96" y="26" font-size="12">对货主客户（SELL）</text>
+      <g font-size="13">
+        <rect class="bx" x="40" y="38" width="130" height="50" rx="4"/><text x="105" y="68" text-anchor="middle">评价请求</text>
+        <rect class="bxa" x="192" y="38" width="130" height="50" rx="4"/><text x="257" y="68" text-anchor="middle">SELL 评价</text>
+        <rect class="bx" x="344" y="38" width="130" height="50" rx="4"/><text x="409" y="68" text-anchor="middle">预估客户费用</text>
+        <rect class="bx" x="496" y="38" width="130" height="50" rx="4"/><text x="561" y="68" text-anchor="middle">费用确认</text>
+        <rect class="bx" x="648" y="38" width="130" height="50" rx="4"/><text x="713" y="68" text-anchor="middle">对账单</text>
+        <rect class="bx" x="800" y="38" width="130" height="50" rx="4"/><text x="865" y="68" text-anchor="middle">外部资金事实</text>
+        <rect class="bx" x="952" y="38" width="130" height="50" rx="4"/><text x="1017" y="68" text-anchor="middle">核销</text>
+      </g>
+      <g><line class="ln" x1="170" y1="63" x2="190" y2="63" marker-end="url(#a4)"/><line class="ln" x1="322" y1="63" x2="342" y2="63" marker-end="url(#a4)"/><line class="ln" x1="474" y1="63" x2="494" y2="63" marker-end="url(#a4)"/><line class="ln" x1="626" y1="63" x2="646" y2="63" marker-end="url(#a4)"/><line class="ln" x1="778" y1="63" x2="798" y2="63" marker-end="url(#a4)"/><line class="ln" x1="930" y1="63" x2="950" y2="63" marker-end="url(#a4)"/></g>
+      <line class="lnd" x1="40" y1="118" x2="1082" y2="118"/><text class="t-m" x="561" y="112" text-anchor="middle" font-size="12">两个方向各自评价，一侧的结论不推出另一侧</text>
+      <text x="40" y="150" font-size="14" font-weight="700">采购侧</text><text class="t-m" x="96" y="150" font-size="12">对供应商（BUY）</text>
+      <g font-size="13">
+        <rect class="bx" x="40" y="162" width="130" height="50" rx="4"/><text x="105" y="192" text-anchor="middle">运输收费发生项</text>
+        <rect class="bxa" x="192" y="162" width="130" height="50" rx="4"/><text x="257" y="192" text-anchor="middle">BUY 评价</text>
+        <rect class="bx" x="344" y="162" width="130" height="50" rx="4"/><text x="409" y="192" text-anchor="middle">供应商预期成本</text>
+        <rect class="bx" x="496" y="162" width="130" height="50" rx="4"/><text x="561" y="192" text-anchor="middle">供应商账单</text>
+        <rect class="bx" x="648" y="162" width="130" height="50" rx="4"/><text x="713" y="192" text-anchor="middle">匹配与审核</text>
+        <rect class="bx" x="800" y="162" width="130" height="50" rx="4"/><text x="865" y="192" text-anchor="middle">审核应付</text>
+        <rect class="bx" x="952" y="162" width="130" height="50" rx="4"/><text x="1017" y="192" text-anchor="middle">核销</text>
+      </g>
+      <g><line class="ln" x1="170" y1="187" x2="190" y2="187" marker-end="url(#a4)"/><line class="ln" x1="322" y1="187" x2="342" y2="187" marker-end="url(#a4)"/><line class="ln" x1="474" y1="187" x2="494" y2="187" marker-end="url(#a4)"/><line class="ln" x1="626" y1="187" x2="646" y2="187" marker-end="url(#a4)"/><line class="ln" x1="778" y1="187" x2="798" y2="187" marker-end="url(#a4)"/><line class="ln" x1="930" y1="187" x2="950" y2="187" marker-end="url(#a4)"/></g>
+      <text class="t-m" x="40" y="238" font-size="12">着色的两格由小包计价形成，其余由结算与经营核算形成。账单到达不等于应付；真实收付显式映射后才核销。</text>
+    </svg>
+    </div>
+    <figcaption>计价只出评价，结算把评价采用成钱。供应商账单要先与预期成本匹配、经审核，才成为应付。</figcaption>
+  </figure>
+  <div class="two" style="margin-top:22px">
+    <div>
+      <span class="owner">parcel-pricing</span>
+      <h3 style="margin-top:6px">一次价格评价的五种结果</h3>
+      <div class="tbl"><table>
+        <tr><th>结果</th><th>什么时候</th></tr>
+        <tr><td>已完成 <code>COMPLETED</code></td><td>输入、规则、计算都齐，有金额</td></tr>
+        <tr><td>待判断 <code>PENDING</code></td><td>事实、规则或依赖不足，补齐后另行评价</td></tr>
+        <tr><td>冲突 <code>CONFLICT</code></td><td>互斥的规则或版本选不出唯一一个</td></tr>
+        <tr><td>不可计价 <code>UNRATABLE</code></td><td>规则明确排除，补资料也不改变</td></tr>
+        <tr><td>计算失败 <code>FAILED</code></td><td>请求不合法或算不下去</td></tr>
+      </table></div>
+      <p style="margin-top:12px">五者不得互相替代。尤其不得用金额为零的已完成评价表达「不可计价」。同样的输入和版本清单必须回放出同样的结果。</p>
+    </div>
+    <div>
+      <span class="owner">settlement-accounting</span>
+      <h3 style="margin-top:6px">结算一侧的生命周期</h3>
+      <p><b>费用明细</b></p>
+      <div class="flow"><span>预估</span><i>→</i><span class="end">确认</span><i>→</i><span>调整追加</span></div>
+      <p><b>对账单</b></p>
+      <div class="flow"><span>草稿</span><i>→</i><span class="end">已发布</span><i>→</i><span>已作废（原单保留）</span></div>
+      <p><b>资金冻结与信用暴露</b></p>
+      <div class="flow"><span>占用</span><i>→</i><span class="end">已转出</span><i>或</i><span>已释放</span></div>
+      <p><b>外部资金事实</b></p>
+      <div class="flow"><span>已采用</span><i>→</i><span>映射</span><i>→</i><span class="end">核销</span><i>→</i><span>核销撤销</span></div>
+      <div class="note">费用调整、对账单作废与后续对账纳入还没有生产入口，排在限量生产前要接上的清单里。成本分摊与经营结果（毛利）随客户要求清单那一批在做。</div>
+    </div>
+  </div>
+  <h3>代收与清分（首发试点不启用）</h3>
+  <p>向收件人代收的货款本金单独记账，不是物流收入，也不是结算账户资金。机制已在产品内：</p>
+  <div class="flow"><span>渠道在途</span><i>→</i><span>待清分</span><i>→</i><span>应付客户</span><i>→</i><span class="end">已汇付</span><i style="margin-left:10px">旁路：</i><span>短款</span><span>已抵扣</span><span>溢款</span></div>
+</section>
+
+<section id="cap">
+  <h2>能力现状</h2>
+  <p class="sub">按上下文列出今天代码里的实际情况。依据是各上下文文件：有没有生产入口，是在 <code>cmd/</code> 下逐个查出来的；规则的行为没有逐条跑测试验证。</p>
+  <div class="legend">
+    <span><span class="pill p-ok">可用</span> 有生产入口</span>
+    <span><span class="pill p-wait">待接入</span> 编排已写好，缺装配与入口</span>
+    <span><span class="pill p-off">未实现</span> 代码里没有</span>
+    <span><span class="pill p-hold">不启用</span> 机制在，首发不用，或已搁置</span>
+  </div>
+  <div class="tbl"><table>
+    <tr><th style="width:17%">上下文</th><th style="width:37%">今天可用</th><th>还差什么</th></tr>
+    <tr><td><b>参与方与商业</b></td><td><span class="pill p-ok">可用</span> 参与方、关系、商业版本的发布与收尾、渠道映射与账号授权</td><td><span class="pill p-wait">在做</span> 客户合同声明销售价格来源<br><span class="pill p-off">未实现</span> 保价条件、人工费用调整授权</td></tr>
+    <tr><td><b>小包托运</b></td><td><span class="pill p-ok">可用</span> 提交、接受判断与五种等待、撤回、取消、收寄后处置、终局</td><td><span class="pill p-wait">待接入</span> 面单渠道写链<br><span class="pill p-off">未实现</span> 包裹拆分合并的身份谱系、保价要求</td></tr>
+    <tr><td><b>网络与路由</b></td><td><span class="pill p-ok">可用</span> 网络目录、可达性判断、初始路由、复核、改路建议与决定</td><td><span class="pill p-off">未实现</span> 路由偏离判断、拆合后的新路由、退运独立路由计划</td></tr>
+    <tr><td><b>节点作业</b></td><td><span class="pill p-ok">可用</span> 送站收寄、身份核对、预报与交接单、节点控制、协作承接</td><td><span class="pill p-wait">待接入</span> 集运作业的在线入口（现仅离线导入）<br><span class="pill p-off">未实现</span> 实际测量、封签状态历史、作业任务</td></tr>
+    <tr><td><b>运输履约</b></td><td><span class="pill p-ok">可用</span> 揽收、交接、交付、委托与订舱、班次与装载、收费发生项、门禁读数</td><td><span class="pill p-wait">待接入</span> 追踪资料的真实来源<br><span class="pill p-off">未实现</span> 运输舱单、软容量超配、班次延误与取消</td></tr>
+    <tr><td><b>关务与贸易合规</b></td><td><span class="pill p-ok">可用</span> 案件、就绪与授权、提交与发送、技术回执、内部合规限制、放行门禁、动作准入</td><td><span class="pill p-wait">待接入</span> 外部监管舱单引用接收、监管限制、申报更正、处置核对<br><span class="pill p-off">未实现</span> 申报就绪的自动评定、凭证额度核销</td></tr>
+    <tr><td><b>全程追踪与异常</b></td><td><span class="pill p-ok">可用</span> 投影、客户追踪视图、信号、分诊、索赔受理</td><td><span class="pill p-wait">待接入</span> ETA 形成、案件接单与关闭、证据、披露决定、客户异常通知、处置请求<br><span class="pill p-off">未实现</span> 严重度与优先级、责任结论</td></tr>
+    <tr><td><b>小包计价</b></td><td><span class="pill p-ok">可用</span> 价卡草稿到发布、评价、试算、回放、参考序列登记与复核</td><td><span class="pill p-wait">在做</span> 销售卡按有序范围列表选卡<br><span class="pill p-off">未实现</span> 仓储计费方案</td></tr>
+    <tr><td><b>结算与经营核算</b></td><td><span class="pill p-ok">可用</span> 评价请求、费用形成与确认、对账单发布、供应商账单与审核、资金采用与核销、接受前财务控制</td><td><span class="pill p-wait">待接入</span> 费用调整、对账单作废、成本分摊与经营结果、赔付与追偿金额<br><span class="pill p-off">未实现</span> 周期费用的形成、自动核销</td></tr>
+    <tr><td><b>代收与清分</b></td><td><span class="pill p-hold">不启用</span> 分户账与各资金位置的机制已在</td><td>首发试点不启用代收货款服务</td></tr>
+    <tr><td><b>仓配履约</b></td><td><span class="pill p-hold">已搁置</span> 可选能力，首发不含</td><td><span class="pill p-off">未实现</span> main 上没有生产代码</td></tr>
+    <tr><td><b>试点治理</b></td><td><span class="pill p-ok">可用</span> 候选版本组、阶段评审决定、权威区间、暂停恢复的记录</td><td>阶段评审的 <code>Go</code> 在代码里没有读者：准入读的是权威区间与暂停</td></tr>
+    <tr><td><b>接入与身份</b></td><td><span class="pill p-ok">可用</span> 接入渠道登记、凭据验证、来源信封、操作员授予</td><td><span class="pill p-off">未实现</span> 签名推送的铸造、租户既有通道适配</td></tr>
+  </table></div>
+  <h3>限量生产前要接上的四件</h3>
+  <p>四件都是编排已在、只缺装配与入口。首发范围写明这些能力要生产化。</p>
+  <div class="tbl"><table>
+    <tr><th style="width:4%">#</th><th style="width:20%">上下文</th><th>接什么</th></tr>
+    <tr><td>1</td><td>关务与贸易合规</td><td>外部监管舱单引用接收</td></tr>
+    <tr><td>2</td><td>关务与贸易合规</td><td>监管限制的建立与解除</td></tr>
+    <tr><td>3</td><td>全程追踪与异常</td><td>异常案件接单与关闭、证据、披露决定、客户异常通知</td></tr>
+    <tr><td>4</td><td>结算与经营核算</td><td>费用调整、对账单作废与后续对账纳入</td></tr>
+  </table></div>
+</section>
+
+<section id="golive">
+  <h2>一个租户怎样上线</h2>
+  <p class="sub">产品做完机制，不等于任何租户可以上生产。两件事是先后关系，互不替代。</p>
+  <div class="two">
+    <div>
+      <h3 style="margin-top:0">产品交付什么，租户提供什么</h3>
+      <div class="tbl"><table>
+        <tr><th>类</th><th>是什么</th><th>谁做</th></tr>
+        <tr><td><b>机制</b></td><td>规则、判断、版本化、门禁与记录形态</td><td>产品，现在做完</td></tr>
+        <tr><td><b>产品策略</b></td><td>判断方法、内置策略、连接器形态、参考配置</td><td>产品，现在做完</td></tr>
+        <tr><td><b>租户取值</b></td><td>这个租户具体是多少、是谁、是哪一条</td><td>租户，上线时登记；没登记就答「未配置」</td></tr>
+      </table></div>
+      <p style="margin-top:12px">真实名称、账号、凭据与映射不进代码仓库，只登脱敏标识与证据索引。</p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">执行阶段</h3>
+      <div class="flow"><span>历史数据回放</span><i>→</i><span>影子运行比对</span><i>→</i><span>限量生产</span><i>→</i><span class="end">正式验收评审</span></div>
+      <p>每一级升级都由租户责任法人指定的试点业务责任角色作 <code>Go/No-Go</code>，不随日期或指标自动升级。</p>
+      <h3>证据层级</h3>
+      <div class="tbl"><table>
+        <tr><td><code>P</code></td><td>真实生产：真实客户、合同、线路与委托</td></tr>
+        <tr><td><code>R</code></td><td>历史数据回放：来源可追溯的脱敏历史事实</td></tr>
+        <tr><td><code>S</code></td><td>受控模拟：合成数据或受控测试账户。不升级</td></tr>
+        <tr><td><code>N/A</code></td><td>本期不适用：必须记录依据和决定方</td></tr>
+      </table></div>
+      <p style="margin-top:12px">今天产品里的全部证据都是 <code>S</code>：用演示租户 <code>SYN-TENANT-01</code> 和合成数据走通。</p>
+    </div>
+  </div>
+</section>
+
+</div></main>
+
+<footer><div class="wrap">
+  本页是 dox/ 的图示版，不定义规则。规则与细节看 <code>dox/product.md</code>、<code>dox/context-map.md</code>、<code>dox/contexts/</code> 下各文件、<code>dox/tenant.md</code> 与 <code>dox/work.md</code>；与它们或代码不一致时以它们为准，并回来改这一页。
+</div></footer>
+
+</body>
+</html>
