@@ -5,10 +5,10 @@ import {
   bookingAnswerEntryEndpoint,
   bookingAnswerEntryHint,
   bookingAnswerEntryOutcomeLabels,
+  bookingAnswerEntryProblemNote,
   bookingAnswerEntryTitle,
   submitBookingAnswerEntry,
 } from './booking-answer-entry';
-import { judgmentProblemNote } from './effective-time-judgment';
 import type { TemplateViewState } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
@@ -510,7 +510,7 @@ export function TransportFulfillmentReviewPage() {
           snapshotHint={bookingAnswerEntryHint}
           submit={submitBookingAnswerEntry}
           outcomeLabels={bookingAnswerEntryOutcomeLabels}
-          problemNote={judgmentProblemNote}
+          problemNote={bookingAnswerEntryProblemNote}
         />
       </TabsContent>
     </Tabs>

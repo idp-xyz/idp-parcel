@@ -3,7 +3,9 @@ package tfhttp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
@@ -69,6 +71,10 @@ func (intake *IntegrationClientIntake) IntakeBookingAnswer(ctx context.Context, 
 	var payload BookingAnswerPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.AnswerBookingCommand{}, err
+	}
+	if strings.HasPrefix(strings.TrimSpace(payload.Answer), ManualBookingAnswerPrefix) {
+		// 这个前缀留给人工录入：承运系统交来一份带着它的答复，册上就会有一份看着像人录的、却没有录入留痕的答复。
+		return application.AnswerBookingCommand{}, fmt.Errorf("%w: answer ids starting with %s are reserved for manual entry", ErrMalformedRequest, ManualBookingAnswerPrefix)
 	}
 	return payload.Command(identity)
 }

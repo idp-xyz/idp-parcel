@@ -19,7 +19,8 @@ import (
 const OperatorDecisionBookingAnswerEntry OperatorDecision = "BOOKING_ANSWER_ENTRY"
 
 // ManualBookingAnswerPrefix 是人工录入的答复在答复标识上的前缀：操作员给的标识与承运系统给的不在一个名字空间里，
-// 人先录的一份不会让承运系统随后送来的同号答复被读成重放或冲突。
+// 同号的两份不会被读成同一份的重放。它不改变「一次订舱至多一份定局」：人先录了定局，承运系统随后交来的那一份照样是
+// 冲突、不落——同时走两条路的租户要知道，先落的那一份算数。承运答复口拒收带这个前缀的答复标识。
 const ManualBookingAnswerPrefix = "BKGMANUAL/"
 
 // ManualBookingAnswerPayload 是手工录入口的线格式：与承运答复口同一份形状（booking、answer、outcome、quantity、basis、

@@ -62,6 +62,11 @@ func TestAManuallyEnteredBookingAnswerRunsThroughTheProductionAssembly(t *testin
 		answer["outcome"] != "BOOKING_NOT_FOUND" || len(bounceRows(t, pool)) != 0 {
 		t.Fatalf("订舱不在册 = %d %v；挡回册 %v", status, answer, bounceRows(t, pool))
 	}
+	// 前缀留给人工录入：承运客户端交来带着它的答复标识是坏报文，不落行。
+	if status, answer := postWithToken(t, endpoints.trunk, bookingAnswerPath, "presented.client.token",
+		`{"booking": "SYN-BOOKING-TRUNK-DCG24", "answer": "BKGMANUAL/SYN-MAIL-ANSWER-1", "outcome": "ACCEPTED", "quantity": 120, "decidedAt": "2026-10-19T09:00:00Z"}`); status != http.StatusBadRequest {
+		t.Fatalf("承运客户端用人工录入的前缀 = %d %v，想要 400", status, answer)
+	}
 	if status, answer := postWithToken(t, manual, path, "presented.operator.token", body); status != http.StatusCreated || answer["outcome"] != "BOOKING_ANSWERED" {
 		t.Fatalf("人工录入接受 = %d %v", status, answer)
 	}
