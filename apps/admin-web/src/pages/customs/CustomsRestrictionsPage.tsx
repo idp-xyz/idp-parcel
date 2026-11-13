@@ -1,3 +1,4 @@
+import { restrictionDecisionTargets } from './decisions';
 import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
@@ -355,6 +356,8 @@ const registrationTargets: RegistrationTarget[] = [
   },
   dutyRegistrationTarget('duty-collaboration'),
   dutyRegistrationTarget('duty-payment-verification'),
+  // 监管限制的建立与解除是运营决定，不是配置登记；后端口都在，先挂在这一签上。
+  ...restrictionDecisionTargets,
 ];
 
 /**

@@ -18,6 +18,7 @@ export const casesTabs = [
   'preconditions',
   'credentials',
   'register',
+  'decisions',
 ] as const;
 
 export type CasesTab = (typeof casesTabs)[number];

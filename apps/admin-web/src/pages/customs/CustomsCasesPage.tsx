@@ -3,7 +3,8 @@ import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn, type ListCursorPaginationProps } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { RegistrationPanel } from '../../components/registration';
+import { MultiRegistrationPanel, RegistrationPanel } from '../../components/registration';
+import { caseDecisionTargets } from './decisions';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import type { ApiResult } from '../catalogue-api';
@@ -928,6 +929,7 @@ export function CustomsCasesPage() {
           <TabsTrigger value="preconditions">申报准备</TabsTrigger>
           <TabsTrigger value="credentials">监管凭证</TabsTrigger>
           <TabsTrigger value="register">登记监管凭证</TabsTrigger>
+          <TabsTrigger value="decisions">运营决定</TabsTrigger>
         </TabsList>
         <TabsContent value="cases" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <CustomsCasesTable />
@@ -967,6 +969,10 @@ export function CustomsCasesPage() {
             outcomeLabels={registrationOutcomeLabels}
             problemNote={problemNote}
           />
+        </TabsContent>
+        <TabsContent value="decisions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          {/* 建案、提交授权、申报提交、放行检查与关闭：后端口都在，这里先用登记面板接上，照提示填 JSON 提交。 */}
+          <MultiRegistrationPanel moduleId="customs-cases" targets={caseDecisionTargets} problemNote={problemNote} />
         </TabsContent>
       </Tabs>
     </div>
