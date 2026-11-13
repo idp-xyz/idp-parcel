@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -150,4 +151,71 @@ func disclosureConclusionFrom(raw string) (domain.DisclosureConclusion, error) {
 		}
 	}
 	return domain.DisclosureConclusionInvalid, fmt.Errorf("未知披露结论 %q", raw)
+}
+
+var _ ports.DisclosureDecisionLedger = (*DisclosureDecisions)(nil)
+
+// RecordDecider 记下发起这次披露判断的操作者。条件进语句：只在这一行还没有决定人时写。
+func (repository *DisclosureDecisions) RecordDecider(
+	ctx context.Context,
+	tenant domain.TenantID,
+	decision domain.DisclosureDecision,
+	operator string,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("record disclosure decider: %w", err)
+	}
+	if strings.TrimSpace(operator) == "" || decision.Conclusion().String() == "" {
+		return fmt.Errorf("record disclosure decider: a decision and its decider are required")
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE visibility_exception.disclosure_decision
+		    SET decided_by = $5
+		  WHERE tenant_id = $1 AND episode_id = $2 AND customer_ref = $3 AND decided_at = $4 AND decided_by IS NULL`,
+		tenant.String(), decision.Episode().String(), decision.Customer().String(), decision.DecidedAt(), operator,
+	); err != nil {
+		return fmt.Errorf("record disclosure decider: %w", err)
+	}
+	return nil
+}
+
+// SaveAuthorization 落一次授权确认：一行新的`披露`决定，指回它所确认的那份`待授权`决定，并记下确认人。同一份`待授权`
+// 决定只收一次确认（0037 的唯一索引）：撞上即交回 AlreadyRecorded，事务保持可用，编排读回赢家。
+func (repository *DisclosureDecisions) SaveAuthorization(
+	ctx context.Context,
+	authorization ports.DisclosureAuthorization,
+) (ports.DisclosureDecisionSaveOutcome, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.DisclosureDecisionSaveOutcomeInvalid, fmt.Errorf("save disclosure authorization: %w", err)
+	}
+	decision := authorization.Decision
+	content, disclosed := decision.Content()
+	if !disclosed || authorization.Authorizes.IsZero() || strings.TrimSpace(authorization.Operator) == "" {
+		return ports.DisclosureDecisionSaveOutcomeInvalid, fmt.Errorf("save disclosure authorization: a disclosing decision, the decision it authorizes and the authorizer are required")
+	}
+	tag, err := executor.Exec(ctx,
+		`INSERT INTO visibility_exception.disclosure_decision
+			(tenant_id, episode_id, customer_ref, decided_at,
+			 disclosure_policy_ref, conclusion, content_ref, decided_by, authorizes_decided_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 ON CONFLICT DO NOTHING`,
+		authorization.Tenant.String(),
+		decision.Episode().String(),
+		decision.Customer().String(),
+		decision.DecidedAt(),
+		decision.Policy().String(),
+		decision.Conclusion().String(),
+		content.String(),
+		authorization.Operator,
+		authorization.Authorizes.UTC(),
+	)
+	if err != nil {
+		return ports.DisclosureDecisionSaveOutcomeInvalid, fmt.Errorf("save disclosure authorization: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.DisclosureDecisionAlreadyRecorded, nil
+	}
+	return ports.DisclosureDecisionSaved, nil
 }

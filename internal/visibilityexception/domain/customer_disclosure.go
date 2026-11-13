@@ -96,6 +96,21 @@ func DecideDisclosure(
 	}, nil
 }
 
+// AuthorizeDisclosure 由授权角色对一份停在`待授权`的决定确认发布，形成一份新的`披露`决定：发作期与客户不变，规则引用
+// 与内容快照取确认这一刻适用的披露规则，决定时间晚于被确认的那一份。原来那份`待授权`不改写——它是当时如实的结论，
+// 确认是另一份决定。只有`待授权`能被确认：`暂不披露`等的是披露条件，不是授权，确认它等于替规则说条件成立了。
+func AuthorizeDisclosure(
+	awaiting DisclosureDecision,
+	policy DisclosurePolicyReference,
+	content DisclosureContentReference,
+	authorizedAt time.Time,
+) (DisclosureDecision, error) {
+	if awaiting.conclusion != AwaitingAuthorization || !authorizedAt.After(awaiting.decidedAt) {
+		return DisclosureDecision{}, ErrInvalidDisclosure
+	}
+	return DecideDisclosure(awaiting.episode, awaiting.customer, policy, DiscloseToCustomer, content, authorizedAt)
+}
+
 func (decision DisclosureDecision) Episode() EpisodeID {
 	return decision.episode
 }

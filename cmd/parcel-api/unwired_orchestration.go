@@ -2435,3 +2435,13 @@ func (unwiredTechnicalReceipts) Handle(
 ) (customsapp.TechnicalReceiptResult, error) {
 	return customsapp.TechnicalReceiptResult{}, errOrchestrationNotWired
 }
+
+type unwiredCustomerDisclosure struct{}
+
+func (unwiredCustomerDisclosure) Handle(context.Context, visibilityapp.DecideDisclosureCommand) (visibilityapp.DecideDisclosureResult, error) {
+	return visibilityapp.DecideDisclosureResult{}, errOrchestrationNotWired
+}
+
+func (unwiredCustomerDisclosure) Authorize(context.Context, visibilityapp.AuthorizeDisclosureCommand) (visibilityapp.DecideDisclosureResult, error) {
+	return visibilityapp.DecideDisclosureResult{}, errOrchestrationNotWired
+}

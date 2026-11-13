@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -224,10 +225,13 @@ func TestDisclosureDecisionsRoundTripAndTheLatestOneIsCurrent(t *testing.T) {
 	// 授权之后的新决定是新的一行，成为当前；旧行原样留着。
 	disclosed := recordedDecision(t, "ep-1", "acct-1", domain.DiscloseToCustomer, "content/eta-breach/v1", registrarBaseAt.Add(time.Hour))
 	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		_, err := store.Save(txCtx, tenant, disclosed)
+		var err error
+		outcome, err = store.SaveAuthorization(txCtx, ports.DisclosureAuthorization{
+			Tenant: tenant, Decision: disclosed, Authorizes: registrarBaseAt, Operator: "https://issuer#bob",
+		})
 		return err
-	}); err != nil {
-		t.Fatalf("登披露决定：%v", err)
+	}); err != nil || outcome != ports.DisclosureDecisionSaved {
+		t.Fatalf("登披露决定：err=%v outcome=%d", err, outcome)
 	}
 	current, _, err = store.FindCurrent(ctx, tenant, episode, customer)
 	if err != nil {
@@ -279,5 +283,173 @@ func TestDisclosureDecisionRowsAreCheckedByTheDatabase(t *testing.T) {
 			(tenant_id, episode_id, customer_ref, decided_at, disclosure_policy_ref, conclusion, content_ref)
 		 VALUES ('tenant-a', 'ep-1', 'acct-1', now(), 'p/v1', 'MAYBE', NULL)`); err == nil {
 		t.Fatal("库接受了三值之外的披露结论")
+	}
+}
+
+// Covers: 0037——披露决定上由人作出的那一半。发起人只在那一行还没有决定人时写；授权确认记下确认人并指回被确认的
+// 那一份；同一份待授权只收一次确认，换个时刻再确认也不落第二份；同一（发作期，客户）换个时刻再落一份按规则形成的
+// 决定同样不落。
+func TestDisclosureDecisionsKeepWhoDecidedAndAcceptOneAuthorizationPerAwaitingDecision(t *testing.T) {
+	fixture := newRegistrarFixture(t)
+	tenant := registrarTenant(t)
+	store := decisionStore(t, fixture)
+	ctx := t.Context()
+	within := func(work func(context.Context) error) {
+		t.Helper()
+		if err := fixture.transactor.WithinTransaction(ctx, work); err != nil {
+			t.Fatalf("事务：%v", err)
+		}
+	}
+
+	awaiting := recordedDecision(t, "ep-1", "acct-1", domain.AwaitingAuthorization, "", registrarBaseAt)
+	within(func(txCtx context.Context) error {
+		if _, err := store.Save(txCtx, tenant, awaiting); err != nil {
+			return err
+		}
+		if err := store.RecordDecider(txCtx, tenant, awaiting, "https://issuer#alice"); err != nil {
+			return err
+		}
+		// 第二次记不改写第一次的。
+		return store.RecordDecider(txCtx, tenant, awaiting, "https://issuer#mallory")
+	})
+
+	// 同一（发作期，客户）换个时刻再落一份按规则形成的决定：主键拦不住（决定时间不同），部分唯一索引拦。
+	var outcome ports.DisclosureDecisionSaveOutcome
+	within(func(txCtx context.Context) error {
+		var err error
+		outcome, err = store.Save(txCtx, tenant, recordedDecision(t, "ep-1", "acct-1", domain.NotYetDisclosable, "", registrarBaseAt.Add(time.Minute)))
+		return err
+	})
+	if outcome != ports.DisclosureDecisionAlreadyRecorded {
+		t.Fatalf("第二份按规则形成的决定 outcome=%d，想要 AlreadyRecorded", outcome)
+	}
+
+	authorize := func(at time.Time, operator string) ports.DisclosureDecisionSaveOutcome {
+		t.Helper()
+		var outcome ports.DisclosureDecisionSaveOutcome
+		within(func(txCtx context.Context) error {
+			var err error
+			outcome, err = store.SaveAuthorization(txCtx, ports.DisclosureAuthorization{
+				Tenant:     tenant,
+				Decision:   recordedDecision(t, "ep-1", "acct-1", domain.DiscloseToCustomer, "content/eta-breach/v1", at),
+				Authorizes: registrarBaseAt, Operator: operator,
+			})
+			return err
+		})
+		return outcome
+	}
+	if got := authorize(registrarBaseAt.Add(time.Hour), "https://issuer#bob"); got != ports.DisclosureDecisionSaved {
+		t.Fatalf("首次确认 outcome=%d", got)
+	}
+	if got := authorize(registrarBaseAt.Add(2*time.Hour), "https://issuer#carol"); got != ports.DisclosureDecisionAlreadyRecorded {
+		t.Fatalf("换个时刻再确认 outcome=%d，想要 AlreadyRecorded", got)
+	}
+
+	rows, err := fixture.pool.Query(ctx,
+		`SELECT conclusion, decided_by, authorizes_decided_at IS NOT NULL
+		   FROM visibility_exception.disclosure_decision
+		  WHERE tenant_id = $1 AND episode_id = 'ep-1' ORDER BY decided_at`, tenant.String())
+	if err != nil {
+		t.Fatalf("读决定行：%v", err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var conclusion, by string
+		var authorization bool
+		if err := rows.Scan(&conclusion, &by, &authorization); err != nil {
+			t.Fatalf("扫决定行：%v", err)
+		}
+		got = append(got, fmt.Sprintf("%s|%s|%t", conclusion, by, authorization))
+	}
+	want := []string{"AWAITING_AUTHORIZATION|https://issuer#alice|false", "DISCLOSE|https://issuer#bob|true"}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("决定行 = %v，想要 %v", got, want)
+	}
+
+	// 没有确认人、或拿一份不是披露的决定来当确认：写入口拒。
+	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		_, err := store.SaveAuthorization(txCtx, ports.DisclosureAuthorization{
+			Tenant: tenant, Decision: awaiting, Authorizes: registrarBaseAt, Operator: "https://issuer#bob",
+		})
+		return err
+	}); err == nil {
+		t.Fatal("一份待授权的决定被当成授权确认落了库")
+	}
+}
+
+// Covers: 两个并发窗口各由一条部分唯一索引守住。两个人同时确认同一份待授权——各带各的时刻，主键不相撞——恰有一笔
+// 落成；两个人同时对同一条信号发起判断，恰有一行按规则形成的决定。
+func TestConcurrentDisclosureDecisionsAndAuthorizationsLandExactlyOnce(t *testing.T) {
+	fixture := newRegistrarFixture(t)
+	tenant := registrarTenant(t)
+	store := decisionStore(t, fixture)
+	ctx := t.Context()
+
+	race := func(first, second func(context.Context) (ports.DisclosureDecisionSaveOutcome, error)) int {
+		t.Helper()
+		start := make(chan struct{})
+		outcomes := make(chan ports.DisclosureDecisionSaveOutcome, 2)
+		errs := make(chan error, 2)
+		for _, work := range []func(context.Context) (ports.DisclosureDecisionSaveOutcome, error){first, second} {
+			go func() {
+				<-start
+				var outcome ports.DisclosureDecisionSaveOutcome
+				err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+					var err error
+					outcome, err = work(txCtx)
+					return err
+				})
+				outcomes <- outcome
+				errs <- err
+			}()
+		}
+		close(start)
+		saved := 0
+		for range 2 {
+			if err := <-errs; err != nil {
+				t.Fatalf("并发写：%v", err)
+			}
+			if <-outcomes == ports.DisclosureDecisionSaved {
+				saved++
+			}
+		}
+		return saved
+	}
+
+	for round := range 20 {
+		episode := fmt.Sprintf("ep-race-%d", round)
+		ruleFormed := func(offset time.Duration) func(context.Context) (ports.DisclosureDecisionSaveOutcome, error) {
+			return func(txCtx context.Context) (ports.DisclosureDecisionSaveOutcome, error) {
+				return store.Save(txCtx, tenant, recordedDecision(t, episode, "acct-1", domain.AwaitingAuthorization, "", registrarBaseAt.Add(offset)))
+			}
+		}
+		if saved := race(ruleFormed(0), ruleFormed(time.Millisecond)); saved != 1 {
+			t.Fatalf("第 %d 轮：同时判断落成 %d 份，想要 1", round, saved)
+		}
+		var awaitingAt time.Time
+		if err := fixture.pool.QueryRow(ctx,
+			`SELECT decided_at FROM visibility_exception.disclosure_decision WHERE tenant_id = $1 AND episode_id = $2`,
+			tenant.String(), episode).Scan(&awaitingAt); err != nil {
+			t.Fatalf("第 %d 轮：按规则形成的决定该恰有一行：%v", round, err)
+		}
+		authorization := func(offset time.Duration, operator string) func(context.Context) (ports.DisclosureDecisionSaveOutcome, error) {
+			return func(txCtx context.Context) (ports.DisclosureDecisionSaveOutcome, error) {
+				return store.SaveAuthorization(txCtx, ports.DisclosureAuthorization{
+					Tenant:     tenant,
+					Decision:   recordedDecision(t, episode, "acct-1", domain.DiscloseToCustomer, "content/x", awaitingAt.Add(offset)),
+					Authorizes: awaitingAt, Operator: operator,
+				})
+			}
+		}
+		if saved := race(authorization(time.Hour, "https://issuer#bob"), authorization(time.Hour+time.Millisecond, "https://issuer#carol")); saved != 1 {
+			t.Fatalf("第 %d 轮：同时确认落成 %d 份，想要 1", round, saved)
+		}
+		var disclosed int
+		if err := fixture.pool.QueryRow(ctx,
+			`SELECT count(*) FROM visibility_exception.disclosure_decision WHERE tenant_id = $1 AND episode_id = $2 AND conclusion = 'DISCLOSE'`,
+			tenant.String(), episode).Scan(&disclosed); err != nil || disclosed != 1 {
+			t.Fatalf("第 %d 轮：披露决定 %d 行（err=%v），想要 1", round, disclosed, err)
+		}
 	}
 }

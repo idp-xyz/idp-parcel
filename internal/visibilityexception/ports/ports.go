@@ -473,6 +473,25 @@ type DisclosureDecisionStore interface {
 	) (DisclosureDecisionSaveOutcome, error)
 }
 
+// DisclosureAuthorization 是一次要落库的披露授权确认：确认形成的那份`披露`决定、它所确认的那份`待授权`决定的决定时间，
+// 以及作出确认的操作者。
+type DisclosureAuthorization struct {
+	Tenant     domain.TenantID
+	Decision   domain.DisclosureDecision
+	Authorizes time.Time
+	Operator   string
+}
+
+// DisclosureDecisionLedger 记下披露决定上由人作出的那一半：谁发起了这次披露判断，谁确认了发布。它与
+// DisclosureDecisionStore 分开——那一只按规则落三态结论，由披露判断的各条路共用；这一只只在运营决定口后面用。
+type DisclosureDecisionLedger interface {
+	// RecordDecider 记下发起这次披露判断的操作者。只在这一行还没有决定人时写。
+	RecordDecider(ctx context.Context, tenant domain.TenantID, decision domain.DisclosureDecision, operator string) error
+	// SaveAuthorization 落一次授权确认。同一份`待授权`决定只能被确认一次：两个人同时确认，后落的那一笔交回
+	// AlreadyRecorded、不形成第二份`披露`决定——否则同一条异常会对同一个客户发两次通知。
+	SaveAuthorization(ctx context.Context, authorization DisclosureAuthorization) (DisclosureDecisionSaveOutcome, error)
+}
+
 // NotificationDirective 是通知策略对一份披露决定的答复：适用渠道、要求时限与义务判据。
 // 「客户异常通知必须保存……要求时限和适用渠道」（CONTEXT）——三样都来自版本化通知
 // 策略，编排不补默认值。

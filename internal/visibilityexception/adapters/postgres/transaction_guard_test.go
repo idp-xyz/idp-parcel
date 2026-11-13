@@ -175,6 +175,12 @@ func TestCatalogAndTraceWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := decisions.Save(ctx, domain.TenantID{}, domain.DisclosureDecision{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务保存披露决定应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if err := decisions.RecordDecider(ctx, domain.TenantID{}, domain.DisclosureDecision{}, "operator"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务记披露决定人应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := decisions.SaveAuthorization(ctx, ports.DisclosureAuthorization{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务落披露授权确认应返回 ErrTransactionRequired，实得：%v", err)
+	}
 
 	evidence, err := adapter.NewEvidenceItems(db)
 	if err != nil {

@@ -84,7 +84,7 @@
 | 客户查询（按委托单据号） | `PARCELS_LISTED` `AWAITING_ACCEPTANCE` `CLOSED_WITHOUT_SERVICE` `SHIPMENT_NOT_FOUND` |
 | 运营追踪查阅 | `PROJECTIONS_LISTED` `CURRENT_PROJECTION` `PROJECTION_VERSION` `PROJECTION_NOT_FORMED` `VERSION_NOT_FOUND` |
 | 处置请求 | `SENT` `SUPERSEDED` `JUDGMENT_RECORDED` `ACCEPTANCE_WINDOW_EXPIRED` `CANCELLATION_RECORDED` |
-| 披露决定与通知 | `DECIDED`；`SUBMITTED` `SUBMISSION_FAILED` |
+| 披露决定与通知 | `DECIDED` `AUTHORIZED` `NOT_AWAITING_AUTHORIZATION` `DISCLOSURE_CONDITION_NO_LONGER_MET`；`SUBMITTED` `SUBMISSION_FAILED` |
 | 索赔 | `CLAIM_RECEIVED` `CLAIM_SCREENED` `CLAIM_AWAITING_SUPPLEMENT` `CLAIM_CONCLUDED` `CLAIM_REVIEWED` `REVIEW_WINDOW_CLOSED` `CLAIM_CONCURRENTLY_CHANGED` `NUMBERING_RULE_COLLISION` |
 | 追偿；证据 | `RECOVERY_OPENED` `RECOVERY_ACTION_RECORDED`；`EVIDENCE_SUBMITTED` `EVIDENCE_APPRAISED` `DISCLOSURE_PREPARED` |
 | 目录登记 | `REGISTERED` `REFUSED`（`SCOPE_MISSING` `VERSION_MISSING` `APPROVAL_MISSING` `EFFECTIVE_RANGE_MISSING` `EFFECTIVE_RANGE_REVERSED` `ENTRIES_MISSING` `ENTRY_INCOMPLETE` `ENTRY_DUPLICATED` `VERSION_NOT_OVERWRITABLE` `VERSION_OVERLAPS_EXISTING`） |
@@ -135,9 +135,9 @@
 - 按委托单据号查询时，已接受的委托才逐件列出当前有效包裹；号不存在与属他人账户对外同一答复。
 - 运营追踪查阅作用域是租户级，「投影未形成」如实作答；查阅不构成客户披露。
 
-**披露与通知（无生产入口，见末节）**
+**披露与通知（通知无生产入口，见末节）**
 
-- 披露决定按客户分别形成；案件存在不自动披露，条件不成立与授权不足分别答暂不披露和待授权。
+- 披露决定按客户分别形成；案件存在不自动披露，条件不成立与授权不足分别答暂不披露和待授权。发起披露判断与确认发布是两种分开授予的运营决定：发起的人只指名包裹与信号类型，结论由披露规则给，客户由已接受的委托反查。同一条信号对同一个客户只有一份按规则形成的决定；待授权的决定由授权角色确认后另形成一份披露决定，原决定不改，每份待授权只被确认一次。确认时重取此刻的规则：内容取规则的快照，规则已改成不披露则不放行。发起人与确认人记在决定上。
 - 通知保存内容快照、披露依据、时限与渠道；各节点分别记录，前一步不推出后一步；义务由哪个节点满足，按策略指名的节点判断。
 
 **证据、索赔与追偿（部分无生产入口，见末节）**
@@ -169,6 +169,7 @@
 | 客户提交索赔 | `/v1/claims` |
 | 案件决定 | `/exception-case-take-ups` `/exception-case-closures` `/exception-case-merges` |
 | 证据决定 | `/evidence-submissions` `/evidence-appraisals` `/evidence-disclosure-preparations` |
+| 披露决定 | `/customer-disclosure-decisions` `/customer-disclosure-authorizations` |
 | 运营只读 | `/tracking-projections` `/exception-triage-records` `/exception-case-records` `/claims-recovery-records` `/visibility-catalogues` |
 | 目录登记 | `/visibility-catalogue-<种类>-registrations`，种类为 `milestone-mapping` `triage-rule` `notification-policy` `claim-eligibility` `claim-authorization` `disclosure-policy` `exception-disclosure-rule` `conflict-signal-rule` |
 
@@ -181,7 +182,7 @@
 **有机制、生产装配没有调用方**（只被测试调用）：
 
 - **形成 ETA 与可见性缺口**：`FormETAHandler` 没有任何 `cmd/` 装配。下游的 ETA 可见性判断已接在 `parcel-dispatch` 上，但没有预测来源入队，客户视图的 ETA 一维在生产里只会答待确认或不展示。
-- **处置请求**（`SendDispositionRequestHandler`）、**披露决定**（`DecideDisclosureHandler`）、**客户异常通知**（`NotifyCustomerHandler`）：都没有装配。对应的目录可以登记，运营读口可以读，但没有东西写入。
+- **处置请求**（`SendDispositionRequestHandler`）、**客户异常通知**（`NotifyCustomerHandler`）：都没有装配。对应的目录可以登记，运营读口可以读，但没有东西写入。披露决定已接上，但只由操作员逐条发起，信号命中时不自动判。
 - **索赔受理之后的各步**：`/v1/claims` 只接受理。资格审核已装配但没有端点；责任结论、复核、开立追偿、记录追偿动作没有调用方。
 - **发作期结束，索赔撤回，补充延期**：领域方法在（`End` `Withdraw` `ExtendSupplementDeadline`），应用层没有编排调用它们。案件关闭前「未完成的处置请求都已移交或完成取消核对」此刻没有可核的对象，因为处置请求没有生产入口。
 - **生产里信号的来源只有两处**：替代链分叉裁不出，以及出发门禁阻断。旧文档说的关务异常信号、ETA 与缺口信号没有接到信号编排上。

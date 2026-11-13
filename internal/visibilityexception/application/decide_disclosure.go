@@ -19,6 +19,13 @@ const (
 	DisclosureExistingResult
 	DecideDisclosureUndecided
 	DecideDisclosureNotAccepted
+	// DisclosureAuthorized 是授权确认真形成了一份`披露`决定。
+	DisclosureAuthorized
+	// DisclosureNotAwaitingAuthorization 是这条信号此刻没有一份停在`待授权`的决定可确认：还没判过，或判成了`暂不披露`。
+	DisclosureNotAwaitingAuthorization
+	// DisclosureConditionNoLongerMet 是决定停在`待授权`期间披露规则变了，此刻的规则说这条信号不披露。确认的人只放行
+	// 发布，不替规则说披露条件成立。
+	DisclosureConditionNoLongerMet
 )
 
 func (outcome DecideDisclosureOutcome) String() string {
@@ -31,6 +38,12 @@ func (outcome DecideDisclosureOutcome) String() string {
 		return "UNDECIDED"
 	case DecideDisclosureNotAccepted:
 		return "NOT_ACCEPTED"
+	case DisclosureAuthorized:
+		return "AUTHORIZED"
+	case DisclosureNotAwaitingAuthorization:
+		return "NOT_AWAITING_AUTHORIZATION"
+	case DisclosureConditionNoLongerMet:
+		return "DISCLOSURE_CONDITION_NO_LONGER_MET"
 	default:
 		return ""
 	}
@@ -80,6 +93,17 @@ type DecideDisclosureCommand struct {
 	TenantID domain.TenantID
 	Parcel   domain.TrackedParcelReference
 	Kind     domain.ExceptionSignalKindReference
+	// Operator 是经运营决定口发起这次判断的操作者，只取认证结果。不经运营口的入口留空，那一行就没有决定人。
+	Operator string
+}
+
+// AuthorizeDisclosureCommand 指名要确认发布哪条信号上那份停在`待授权`的决定。命令里没有披露内容：内容取确认这一刻
+// 适用的披露规则，确认的人只放行、不另写一份给客户看的话。
+type AuthorizeDisclosureCommand struct {
+	TenantID domain.TenantID
+	Parcel   domain.TrackedParcelReference
+	Kind     domain.ExceptionSignalKindReference
+	Operator string
 }
 
 type DecideDisclosureResult struct {
@@ -107,7 +131,9 @@ type DecideDisclosureDeps struct {
 	Customers ports.ParcelCustomerAccountView
 	Rules     ports.ExceptionDisclosureRuleView
 	Decisions ports.DisclosureDecisionStore
-	Clock     ports.Clock
+	// Ledger 记决定上由人作出的那一半。只有运营决定口后面的装配给它；命令带了操作者而它不在是装配缺陷。
+	Ledger ports.DisclosureDecisionLedger
+	Clock  ports.Clock
 }
 
 type DecideDisclosureHandler struct {
@@ -196,6 +222,14 @@ func (handler *DecideDisclosureHandler) Handle(
 	}
 	switch saved {
 	case ports.DisclosureDecisionSaved:
+		if command.Operator != "" {
+			if handler.deps.Ledger == nil {
+				return DecideDisclosureResult{}, fmt.Errorf("decide disclosure: an operator decided but no ledger is wired")
+			}
+			if err := handler.deps.Ledger.RecordDecider(ctx, command.TenantID, decision, command.Operator); err != nil {
+				return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureDecisionStoreUnavailable}, nil
+			}
+		}
 		return DecideDisclosureResult{outcome: DisclosureDecided, decision: decision, hasDecision: true}, nil
 	case ports.DisclosureDecisionAlreadyRecorded:
 		existing, found, err := handler.deps.Decisions.FindCurrent(ctx, command.TenantID, episode.ID(), customer)
@@ -205,6 +239,92 @@ func (handler *DecideDisclosureHandler) Handle(
 		return DecideDisclosureResult{outcome: DisclosureExistingResult, decision: existing, hasDecision: true}, nil
 	default:
 		return DecideDisclosureResult{}, fmt.Errorf("decide disclosure: unexpected save outcome %d", saved)
+	}
+}
+
+// Authorize 是 `UC-VE-006` 步 5 的人工那一半：授权角色确认发布一份停在`待授权`的决定。找最近发作期与客户归属同
+// Handle；当前决定已是`披露`即交回原决定（重放或另一个人先确认了）；不是`待授权`就没有可确认的；披露规则重取——
+// 未配置即未决，规则此刻说不披露即如实答条件已不成立；内容快照与规则引用取此刻的规则。确认形成新的一份决定，原
+// `待授权`那一份不改。
+func (handler *DecideDisclosureHandler) Authorize(
+	ctx context.Context,
+	command AuthorizeDisclosureCommand,
+) (DecideDisclosureResult, error) {
+	if command.TenantID.String() == "" ||
+		command.Parcel.String() == "" ||
+		command.Kind.String() == "" ||
+		command.Operator == "" {
+		return DecideDisclosureResult{outcome: DecideDisclosureNotAccepted}, nil
+	}
+	if handler.deps.Ledger == nil {
+		return DecideDisclosureResult{}, fmt.Errorf("authorize disclosure: no ledger is wired")
+	}
+
+	episode, found, err := handler.deps.Episodes.FindLatest(ctx, command.TenantID, command.Parcel, command.Kind)
+	if err != nil {
+		return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureEpisodeStoreUnavailable}, nil
+	}
+	if !found {
+		return DecideDisclosureResult{outcome: DecideDisclosureNotAccepted}, nil
+	}
+	customer, determinable, err := handler.deps.Customers.FindCustomerAccount(ctx, command.TenantID, command.Parcel)
+	if err != nil {
+		return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureCustomerAccountUnavailable}, nil
+	}
+	if !determinable {
+		return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureCustomerAccountUndeterminable}, nil
+	}
+
+	current, found, err := handler.deps.Decisions.FindCurrent(ctx, command.TenantID, episode.ID(), customer)
+	if err != nil {
+		return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureDecisionStoreUnavailable}, nil
+	}
+	if !found {
+		return DecideDisclosureResult{outcome: DisclosureNotAwaitingAuthorization}, nil
+	}
+	switch current.Conclusion() {
+	case domain.DiscloseToCustomer:
+		return DecideDisclosureResult{outcome: DisclosureExistingResult, decision: current, hasDecision: true}, nil
+	case domain.AwaitingAuthorization:
+	default:
+		return DecideDisclosureResult{outcome: DisclosureNotAwaitingAuthorization, decision: current, hasDecision: true}, nil
+	}
+
+	snapshot := episode.Snapshot()
+	rule, configured, err := handler.deps.Rules.RuleForSignal(ctx, customer, snapshot.Kind, snapshot.Confidence)
+	if err != nil {
+		return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureRuleUnavailable}, nil
+	}
+	if !configured {
+		return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureRuleNotConfigured}, nil
+	}
+	if !rule.Disclosable {
+		return DecideDisclosureResult{outcome: DisclosureConditionNoLongerMet, decision: current, hasDecision: true}, nil
+	}
+
+	authorized, err := domain.AuthorizeDisclosure(current, rule.Policy, rule.Content, handler.deps.Clock.Now())
+	if err != nil {
+		// 规则说披露却没给内容快照，或时钟不晚于被确认的那一份——都是依赖坏答复，上抛而不吞成某一态。
+		return DecideDisclosureResult{}, fmt.Errorf("authorize disclosure: %w", err)
+	}
+	saved, err := handler.deps.Ledger.SaveAuthorization(ctx, ports.DisclosureAuthorization{
+		Tenant: command.TenantID, Decision: authorized, Authorizes: current.DecidedAt(), Operator: command.Operator,
+	})
+	if err != nil {
+		return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureDecisionStoreUnavailable}, nil
+	}
+	switch saved {
+	case ports.DisclosureDecisionSaved:
+		return DecideDisclosureResult{outcome: DisclosureAuthorized, decision: authorized, hasDecision: true}, nil
+	case ports.DisclosureDecisionAlreadyRecorded:
+		// 另一个人先确认了：读回赢家。读回的不是`披露`说明库里的状态与刚才那次读对不上，不猜。
+		winner, found, err := handler.deps.Decisions.FindCurrent(ctx, command.TenantID, episode.ID(), customer)
+		if err != nil || !found || winner.Conclusion() != domain.DiscloseToCustomer {
+			return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureDecisionStoreUnavailable}, nil
+		}
+		return DecideDisclosureResult{outcome: DisclosureExistingResult, decision: winner, hasDecision: true}, nil
+	default:
+		return DecideDisclosureResult{}, fmt.Errorf("authorize disclosure: unexpected save outcome %d", saved)
 	}
 }
 

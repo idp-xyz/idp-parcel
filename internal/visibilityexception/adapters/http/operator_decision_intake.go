@@ -28,6 +28,9 @@ const (
 	OperatorDecisionEvidenceSubmission            OperatorDecision = "EVIDENCE_SUBMISSION"
 	OperatorDecisionEvidenceAppraisal             OperatorDecision = "EVIDENCE_APPRAISAL"
 	OperatorDecisionEvidenceDisclosurePreparation OperatorDecision = "EVIDENCE_DISCLOSURE_PREPARATION"
+	// 客户可见异常披露上的两种：发起披露判断、确认发布一份待授权的决定。
+	OperatorDecisionCustomerDisclosureDecision      OperatorDecision = "CUSTOMER_DISCLOSURE_DECISION"
+	OperatorDecisionCustomerDisclosureAuthorization OperatorDecision = "CUSTOMER_DISCLOSURE_AUTHORIZATION"
 )
 
 // maxDecisionBytes 是一份运营决定载荷的上限：三口的载荷都只有几个标识和一段结论。

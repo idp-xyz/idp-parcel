@@ -219,6 +219,14 @@ const (
 	DecisionEvidenceDisclosurePreparation DecisionKind = "EVIDENCE_DISCLOSURE_PREPARATION"
 )
 
+// DecisionCustomerDisclosureDecision 与 DecisionCustomerDisclosureAuthorization 是客户可见异常披露上的两种决定：对一条异常
+// 信号发起披露判断（结论由披露规则给，人不给结论），以及对一份停在待授权的决定确认发布。两种分开授予——能发起判断的
+// 不因此能放行对客户的披露；首发的默认口径是逐条由授权角色确认。
+const (
+	DecisionCustomerDisclosureDecision      DecisionKind = "CUSTOMER_DISCLOSURE_DECISION"
+	DecisionCustomerDisclosureAuthorization DecisionKind = "CUSTOMER_DISCLOSURE_AUTHORIZATION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -255,6 +263,7 @@ var decisionKinds = []DecisionKind{
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,
+	DecisionCustomerDisclosureDecision, DecisionCustomerDisclosureAuthorization,
 }
 
 // DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。
