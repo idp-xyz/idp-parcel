@@ -87,6 +87,9 @@ tr:last-child td{border-bottom:0}
 .keys div{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
 .keys b{display:block;margin-bottom:2px}
 .keys span{font-size:13.5px;color:var(--muted)}
+ul.pg{list-style:none;padding:0;margin:0;max-width:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:4px 24px}
+ul.pg li{margin:0;color:var(--muted);font-size:13px}
+ul.pg li b{color:var(--fg);font-size:13.5px}
 footer{border-top:1px solid var(--line);color:var(--muted);font-size:13px}
 footer .wrap{padding-block:22px 40px}
 </style>
@@ -97,11 +100,11 @@ footer .wrap{padding-block:22px 40px}
   <div class="eyebrow">IDP PARCEL · 国际小包网络运营系统</div>
   <h1>业务全景：一票国际小包从委托到结算</h1>
   <p class="lede">这一页把产品做什么、一票货怎么走、钱怎么算、哪些能力今天已经能用，按业务顺序画出来。每一段都注明由哪个上下文负责，以及它在代码里的现状。</p>
-  <div class="meta"><span>对照 main <code>530487184</code>（2026-11-12）</span><span>内容取自 dox/ 各文件，规则以那些文件和代码为准</span><span>全部证据层级为 S（受控模拟）</span></div>
+  <div class="meta"><span>对照 main <code>d118b4f83</code>（2026-11-12）</span><span>内容取自 dox/ 各文件，规则以那些文件和代码为准</span><span>全部证据层级为 S（受控模拟）</span></div>
 </div></header>
 
 <nav class="toc" aria-label="目录"><div class="wrap">
-  <a href="#who">谁在用</a><a href="#chain">主链</a><a href="#scen">业务场景</a><a href="#s0">开单之前</a><a href="#s1">委托与接受</a><a href="#s2">路由</a><a href="#s3">收寄与节点</a><a href="#s4">运输与交付</a><a href="#s5">关务</a><a href="#s6">追踪与异常</a><a href="#s7">计价与结算</a><a href="#cap">能力现状</a><a href="#golive">上线路径</a>
+  <a href="#who">谁在用</a><a href="#chain">主链</a><a href="#scen">业务场景</a><a href="#s0">开单之前</a><a href="#s1">委托与接受</a><a href="#s2">路由</a><a href="#s3">收寄与节点</a><a href="#s4">运输与交付</a><a href="#s5">关务</a><a href="#s6">追踪与异常</a><a href="#s7">计价与结算</a><a href="#surf">管理台与接口</a><a href="#cap">能力现状</a><a href="#golive">上线路径</a>
 </div></nav>
 
 <main><div class="wrap">
@@ -274,12 +277,6 @@ footer .wrap{padding-block:22px 40px}
     <figcaption>仓配与主链的接口只有一处：出库走本产品网络时提交委托。文档进度：主数据与入库六篇用例在 main，库内作业五篇在分支上，都没有代码。</figcaption>
   </figure>
 
-  <h3>从哪里用</h3>
-  <div class="keys">
-    <div><b>管理台</b><span>运单、客户、合作伙伴、产品与价格、线路与运力、清关、异常与索赔、账务、设置九组菜单。</span></div>
-    <div><b>客户接口</b><span>提交委托、受控补充、撤回、资料修订、包裹取消、索赔受理、追踪查询、送站预报。</span></div>
-    <div><b>离线登记命令</b><span>运营在数据库网络内手跑的受控登记口，按上下文各一个。</span></div>
-  </div>
 </section>
 
 <section id="s0">
@@ -411,6 +408,9 @@ footer .wrap{padding-block:22px 40px}
         <li><b>班次与装载分配</b>：具体班次、容量池、装载分配。</li>
         <li><b>交接</b>：交接判断为已交接时，控制转移给下一方。</li>
         <li><b>运输收费发生项</b>：发生了哪些该计费的事。它不是金额，金额由计价和结算形成。</li>
+        <li><b>派送与签收</b>：对象凭「已交接」进入派送段才触发派送任务。任务与尝试分开，每次尝试逐对象记结果：已交付、拒收、无人签收、地址有误或待确认。失败的派送不结束当前运输方的控制。</li>
+        <li><b>有效交付必带交付证明（POD）</b>，同时结束该对象的参与。收件地点、时间窗口、交付条件任一项拿不到，任务保持待形成，不用默认值补。</li>
+        <li><b>外部轨迹时间确认</b>：承运商回传的轨迹从何时起算，由运营确认。</li>
         <li><b>收寄后处置</b>：越过取消边界后，只能形成继续、拦截、改送、退运、服务终止等处置决定。</li>
       </ul>
     </div>
@@ -552,6 +552,39 @@ footer .wrap{padding-block:22px 40px}
   <h3>代收与清分（首发试点不启用）</h3>
   <p>向收件人代收的货款本金单独记账，不是物流收入，也不是结算账户资金。机制已在产品内：</p>
   <div class="flow"><span>渠道在途</span><i>→</i><span>待清分</span><i>→</i><span>应付客户</span><i>→</i><span class="end">已汇付</span><i style="margin-left:10px">旁路：</i><span>短款</span><span>已抵扣</span><span>溢款</span></div>
+</section>
+
+<section id="surf">
+  <h2>产品里能操作的地方</h2>
+  <p class="sub">管理台 54 页、接口 254 个，都是从代码里读出来的清单。它回答「有哪些地方可以操作」；某一页背后的能力今天能不能用，看下面的能力现状。</p>
+  <h3>管理台：按菜单</h3>
+  <div class="tbl"><table>
+    <tr><th style="width:14%">菜单</th><th>页面与用途</th></tr>
+<tr><td><b>工作台</b><br><span style="color:var(--muted);font-size:12.5px">3 页</span></td><td><ul class="pg"><li><b>工作台</b>　登录后的起始页。</li><li><b>最近打开</b>　这台电脑上最近打开过的运单、客户等对象，点一下回到它。</li><li><b>保存的视图</b>　存下来的筛选条件，一键回到常用的列表视图。</li></ul></td></tr>
+<tr><td><b>运单</b><br><span style="color:var(--muted);font-size:12.5px">15 页</span></td><td><ul class="pg"><li><b>运单</b>　查看全部运单：谁下的单、几件、现在到哪一步。</li><li><b>物流动态</b>　每件包裹现在到哪一步、最近一条动态是什么。</li><li><b>新建与撤回</b>　新建一张运单，或在受理决定形成前撤回它。</li><li><b>新建平台货件</b>　送往电商平台仓的一个平台货件建一张运单：平台货件号、平台仓、每箱的箱标号与装箱。</li><li><b>待受理复核</b>　需要人工判断才能受理的运单，在这里完成复核。</li><li><b>受限运单处置</b>　被规则拦下的运单，由有权限的人决定去向：拒绝，或退回客户补充。</li><li><b>资金释放待处理</b>　预付冻结没能自动释放的运单，核对后在结算侧释放，或标记已处理。</li><li><b>取消运单</b>　客户或运营要求取消某件包裹时，在这里发起。</li><li><b>货物处置</b>　已收寄后客户要求停止服务的包裹，决定退运、改派或继续，并跟进待办。</li><li><b>面单</b>　向渠道购买面单的每一笔记录及其结果。</li><li><b>渠道择优</b>　多个渠道并列、需要人工定夺的运单。</li><li><b>路线规划</b>　每件包裹的运输路线怎么定、改过几次。</li><li><b>网点作业</b>　网点收寄、集运与交接的作业记录。</li><li><b>运输班次</b>　班次、舱位与承运商交接的实际情况。</li><li><b>外部轨迹时间确认</b>　承运商回传的轨迹从何时起算，由我们确认。</li></ul></td></tr>
+<tr><td><b>客户</b><br><span style="color:var(--muted);font-size:12.5px">2 页</span></td><td><ul class="pg"><li><b>客户与合同</b>　客户账户、合同及其版本：谁签了什么、什么时候生效。</li><li><b>商业规则</b>　接单、价格、结算、信用与授权等规则的各个版本。</li></ul></td></tr>
+<tr><td><b>合作伙伴</b><br><span style="color:var(--muted);font-size:12.5px">3 页</span></td><td><ul class="pg"><li><b>往来单位</b>　所有与我们有往来的单位——客户、承运商、代理、清关行、渠道——以及彼此之间的关系。</li><li><b>供应商协议</b>　与承运商、代理等供应商签的协议及其版本。</li><li><b>渠道产品</b>　渠道平台提供的产品目录，以及我们的服务产品与它们的对应关系。</li></ul></td></tr>
+<tr><td><b>产品与价格</b><br><span style="color:var(--muted);font-size:12.5px">5 页</span></td><td><ul class="pg"><li><b>服务产品</b>　我们对外销售的服务产品及其版本与形态。</li><li><b>价格表</b>　对客户与对供应商的价格表版本：导入、批准与发布。</li><li><b>汇率与燃油费率</b>　计价要引用的汇率、燃油费率等外部数据，按期登记。</li><li><b>计费记录</b>　每一次计价的结果与依据，用于对账与争议复核。</li><li><b>计价试算</b>　按价格表试算一件包裹的费用，不写入任何记录。</li></ul></td></tr>
+<tr><td><b>线路与运力</b><br><span style="color:var(--muted);font-size:12.5px">3 页</span></td><td><ul class="pg"><li><b>网络与网点</b>　网点、连接、线路与服务日历的登记。</li><li><b>服务区域</b>　各网点覆盖哪些区域。</li><li><b>口岸与申报路径</b>　可用的口岸与申报路径。</li></ul></td></tr>
+<tr><td><b>清关</b><br><span style="color:var(--muted);font-size:12.5px">3 页</span></td><td><ul class="pg"><li><b>清关单</b>　每件包裹的清关单、报关批次与海关回执。</li><li><b>合规限制与税费</b>　合规限制及其解除、监管核定税费、放行检查。</li><li><b>合规规则</b>　禁限运、归类、申报价值等合规判断规则的版本。</li></ul></td></tr>
+<tr><td><b>异常与索赔</b><br><span style="color:var(--muted);font-size:12.5px">4 页</span></td><td><ul class="pg"><li><b>异常处理</b>　需要人工分诊或协调处置的异常信号。</li><li><b>异常案件</b>　已立案的异常：谁在处理、处理到哪一步。</li><li><b>索赔与追偿</b>　客户索赔，以及向供应商或保险的追偿。</li><li><b>索赔资格与授权</b>　哪些合同覆盖哪些索赔，谁可以代客户提出。</li></ul></td></tr>
+<tr><td><b>账务</b><br><span style="color:var(--muted);font-size:12.5px">6 页</span></td><td><ul class="pg"><li><b>客户费用</b>　每张运单的费用明细、计费重量与调整。</li><li><b>对账单</b>　发给客户的对账单，以及客户对单上费用提出的争议。</li><li><b>供应商账单与应付</b>　登记供应商发来的账单、逐行审核，审核通过的金额形成应付。</li><li><b>收付款核销</b>　把实际收到或付出的钱核到对账单与账户上。</li><li><b>代收货款</b>　替客户代收的货款、回汇批次与差异。</li><li><b>经营核算</b>　按口径派生的经营毛利与经营损失。</li></ul></td></tr>
+<tr><td><b>设置</b><br><span style="color:var(--muted);font-size:12.5px">10 页</span></td><td><ul class="pg"><li><b>公司主体</b>　我们自己签约、开票、结算用的公司。</li><li><b>追踪规则</b>　承运商回传的事件如何对应到标准状态、什么情况自动立案。</li><li><b>通知与披露</b>　向客户披露什么、通知的时限与渠道。</li><li><b>单据编号</b>　运单、对账单、异常案件等各类单据的号怎么出：此刻的格式与样例号，改用新格式，登记单据编号时区。</li><li><b>扫描设备</b>　网点与场外作业使用的扫描设备登记。</li><li><b>操作者与授予</b>　本公司能登录管理台的操作者，以及每个人持有哪几格授予。</li><li><b>审批与发布</b>　等待批准的合同、价格与规则发布稿。</li><li><b>基础数据</b>　国家和地区、币种、计量单位的标准目录；国家和币种另可登记本公司启用哪些。</li><li><b>试点治理</b>　产品实例的阶段决定、暂停与恢复，只给管理员。</li><li><b>演示</b>　页面模板的演示页，不是业务功能。</li></ul></td></tr>
+  </table></div>
+  <h3>接口：谁能调哪一类</h3>
+  <p>每个接口属于一个接入面。谁持有哪一面的授予，在接入与身份里登记。</p>
+  <div class="tbl"><table>
+    <tr><th style="width:20%">接入面</th><th>谁用</th><th style="width:9%">数量</th></tr>
+    <tr><td><b>客户接口</b></td><td>货主客户自己的系统：提交委托、受控补充、撤回、资料修订、取消包裹、提出索赔、查追踪、送站预报</td><td>11</td></tr>
+    <tr><td><b>集成客户端</b></td><td>外部系统回传事实：报关服务商的技术回执与监管结果、承运方的订舱答复、财务系统或银行的收付款事实</td><td>6</td></tr>
+    <tr><td><b>作业事实登记</b></td><td>一线作业端用登记过的设备登事实：收寄、交接、揽收、派送、交付</td><td>18</td></tr>
+    <tr><td><b>运营决定</b></td><td>操作员作出要留名的决定：复核、处置、裁决、确认、审核</td><td>54</td></tr>
+    <tr><td><b>登记册配置写</b></td><td>操作员登记主数据与规则：合同、价卡、网络、各类目录</td><td>75</td></tr>
+    <tr><td><b>主数据与运营查阅读</b></td><td>操作员查阅</td><td>83</td></tr>
+    <tr><td><b>操作者与授予管理</b></td><td>管理员管谁能登录、持有哪几格授予</td><td>4</td></tr>
+    <tr><td><b>隔离读</b></td><td>受理复核与授权处置的队列</td><td>3</td></tr>
+  </table></div>
+  <p style="margin-top:12px">另有按上下文各一个的离线登记命令，运营在数据库网络内手跑，不监听端口。</p>
 </section>
 
 <section id="cap">
