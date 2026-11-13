@@ -61,6 +61,7 @@ svg .bxa{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.2}
 svg .bxd{fill:var(--ink-band);stroke:var(--ink-band)}
 svg .band{fill:var(--off-soft);stroke:var(--line)}
 svg .bandw{fill:var(--wait-soft);stroke:var(--wait)}
+svg .bxp{fill:var(--panel);stroke:var(--hold);stroke-width:1.3;stroke-dasharray:5 4}
 svg .ln{stroke:var(--muted);stroke-width:1.4;fill:none}
 svg .lnd{stroke:var(--muted);stroke-width:1.2;fill:none;stroke-dasharray:4 4}
 svg .ah{fill:var(--muted)}
@@ -96,11 +97,11 @@ footer .wrap{padding-block:22px 40px}
   <div class="eyebrow">IDP PARCEL · 国际小包网络运营系统</div>
   <h1>业务全景：一票国际小包从委托到结算</h1>
   <p class="lede">这一页把产品做什么、一票货怎么走、钱怎么算、哪些能力今天已经能用，按业务顺序画出来。每一段都注明由哪个上下文负责，以及它在代码里的现状。</p>
-  <div class="meta"><span>对照 main <code>1dc1bfaba</code>（2026-11-12）</span><span>内容取自 dox/ 各文件，规则以那些文件和代码为准</span><span>全部证据层级为 S（受控模拟）</span></div>
+  <div class="meta"><span>对照 main <code>530487184</code>（2026-11-12）</span><span>内容取自 dox/ 各文件，规则以那些文件和代码为准</span><span>全部证据层级为 S（受控模拟）</span></div>
 </div></header>
 
 <nav class="toc" aria-label="目录"><div class="wrap">
-  <a href="#who">谁在用</a><a href="#chain">主链</a><a href="#s0">开单之前</a><a href="#s1">委托与接受</a><a href="#s2">路由</a><a href="#s3">收寄与节点</a><a href="#s4">运输与交付</a><a href="#s5">关务</a><a href="#s6">追踪与异常</a><a href="#s7">计价与结算</a><a href="#cap">能力现状</a><a href="#golive">上线路径</a>
+  <a href="#who">谁在用</a><a href="#chain">主链</a><a href="#scen">业务场景</a><a href="#s0">开单之前</a><a href="#s1">委托与接受</a><a href="#s2">路由</a><a href="#s3">收寄与节点</a><a href="#s4">运输与交付</a><a href="#s5">关务</a><a href="#s6">追踪与异常</a><a href="#s7">计价与结算</a><a href="#cap">能力现状</a><a href="#golive">上线路径</a>
 </div></nav>
 
 <main><div class="wrap">
@@ -185,6 +186,99 @@ footer .wrap{padding-block:22px 40px}
     <div><b>计划、承诺、事实分开</b><span>计划的路线、对客的承诺、已经发生的事实各管各的，任何一层不得静默覆盖另一层。</span></div>
     <div><b>缺了就答「未配置」</b><span>租户没登记的取值，产品不替它填默认值，那一格如实停下并说明等谁。</span></div>
     <div><b>评价不是费用</b><span>计价只算出一份评价；结算按自己的确认条件把它采用成费用，不回写评价。</span></div>
+  </div>
+</section>
+
+<section id="scen">
+  <h2>租户拿它做哪几种生意</h2>
+  <p class="sub">上下文按「谁拥有什么」切，场景按「做哪种生意」切。每个场景都落在同一条主链上，区别在服务产品和它采用的规则。</p>
+  <div class="tbl"><table>
+    <tr><th style="width:24%">场景</th><th style="width:14%">现状</th><th>怎么落到主链上</th></tr>
+    <tr><td><b>国际小包网络服务</b></td><td><span class="pill p-ok">可用</span></td><td>租户对端到端负责。就是主链本身。</td></tr>
+    <tr><td><b>专线型 FBA 头程</b>（平台货件）</td><td><span class="pill p-ok">可用</span></td><td>一份普通委托：一个平台货件一份委托，一箱一个包裹，收件人是平台仓。受理、关务、计价、追踪、结算全部复用。</td></tr>
+    <tr><td><b>面单渠道服务</b></td><td><span class="pill p-wait">待接入</span></td><td>租户代客户向渠道取面单：择优 → 建立面单交易 → 提交渠道 → 记录结果。只读口可用，写链没有入口。</td></tr>
+    <tr><td><b>集运</b></td><td><span class="pill p-wait">待接入</span></td><td>多个包裹装进一个集运单元，封装留快照。机制可用，作业只能离线导入。</td></tr>
+    <tr><td><b>退运与收寄后处置</b></td><td><span class="pill p-ok">可用</span></td><td>越过取消边界后形成处置决定：继续、拦截、改送、退运、服务终止。</td></tr>
+    <tr><td><b>代收货款</b></td><td><span class="pill p-hold">不启用</span></td><td>分户账机制已在，首发试点不启用。</td></tr>
+    <tr><td><b>仓配履约</b>（入库、库内、出库、平台备货、代理仓）</td><td><span class="pill p-off">未实现</span></td><td>只有设计，没有代码，已搁置。出库走本产品网络时，以货主名义提交委托，之后进入主链。</td></tr>
+    <tr><td><b>货代型头程</b>（海运整柜拼箱、海卡、托盘、预约送仓）</td><td><span class="pill p-off">不在产品内</span></td><td>以订舱、提单、托盘为核心的头程不做。空派、海派里尾程走卡派的那一截也不在内。</td></tr>
+  </table></div>
+
+  <h3>专线型 FBA 头程怎么走</h3>
+  <div class="two">
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 640 300" role="img" aria-label="平台把一个入库计划分成两个平台货件；每个货件号是一份委托，货件里的每一箱是一个包裹并带平台箱标号；每份委托走主链送到一个平台仓">
+        <defs><marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+        <rect class="bx" x="16" y="112" width="112" height="56" rx="4"/><text x="72" y="136" text-anchor="middle" font-size="13">平台</text><text x="72" y="154" text-anchor="middle" font-size="13">入库计划</text>
+        <path class="ln" d="M128 130 L156 130 L156 66 L176 66" marker-end="url(#a5)"/><path class="ln" d="M128 150 L156 150 L156 214 L176 214" marker-end="url(#a5)"/>
+        <rect class="bxa" x="178" y="22" width="292" height="92" rx="4"/><text x="192" y="44" font-size="13" font-weight="700">平台货件号甲 ＝ 一份委托</text>
+        <g font-size="12"><rect class="bx" x="192" y="56" width="82" height="44" rx="3"/><text x="233" y="74" text-anchor="middle">箱 1</text><text class="t-m" x="233" y="91" text-anchor="middle">一个包裹</text>
+        <rect class="bx" x="283" y="56" width="82" height="44" rx="3"/><text x="324" y="74" text-anchor="middle">箱 2</text><text class="t-m" x="324" y="91" text-anchor="middle">一个包裹</text>
+        <rect class="bx" x="374" y="56" width="82" height="44" rx="3"/><text x="415" y="74" text-anchor="middle">箱 3</text><text class="t-m" x="415" y="91" text-anchor="middle">一个包裹</text></g>
+        <rect class="bxa" x="178" y="170" width="292" height="92" rx="4"/><text x="192" y="192" font-size="13" font-weight="700">平台货件号乙 ＝ 一份委托</text>
+        <g font-size="12"><rect class="bx" x="192" y="204" width="82" height="44" rx="3"/><text x="233" y="222" text-anchor="middle">箱 1</text><text class="t-m" x="233" y="239" text-anchor="middle">一个包裹</text>
+        <rect class="bx" x="283" y="204" width="82" height="44" rx="3"/><text x="324" y="222" text-anchor="middle">箱 2</text><text class="t-m" x="324" y="239" text-anchor="middle">一个包裹</text></g>
+        <line class="ln" x1="470" y1="68" x2="518" y2="68" marker-end="url(#a5)"/><line class="ln" x1="470" y1="216" x2="518" y2="216" marker-end="url(#a5)"/>
+        <text class="t-m" x="494" y="58" text-anchor="middle" font-size="11">走主链</text><text class="t-m" x="494" y="206" text-anchor="middle" font-size="11">走主链</text>
+        <rect class="bx" x="520" y="42" width="104" height="52" rx="4"/><text x="572" y="73" text-anchor="middle" font-size="13">平台仓甲</text>
+        <rect class="bx" x="520" y="190" width="104" height="52" rx="4"/><text x="572" y="221" text-anchor="middle" font-size="13">平台仓乙</text>
+        <text class="t-m" x="16" y="288" font-size="12">每箱带一个平台箱标号。货物明细行写商品与申报值，装箱分配写每箱装了什么。</text>
+      </svg>
+      </div>
+      <figcaption>一份委托只去一个平台仓。平台把入库计划分到几个仓，就是几个货件号、几份委托。</figcaption>
+    </figure>
+    <div>
+      <ul>
+        <li><b>不设 FBA 标志。</b>平台货件号、箱标号、装箱分配要不要必填，由该服务产品采用的接单规则包说。没配置就不判。</li>
+        <li><b>货物明细三部分</b>：内件性质、货物明细行（相当于商业发票）、装箱分配（相当于装箱单）。装箱分配要么不报，要么报全。</li>
+        <li><b>缺资料是等客户补，不是退单。</b>受理停在等待受控补充，逐条逐箱说清缺什么。</li>
+        <li><b>平台号</b>在受理前可补报或更正，接受之后不再改。</li>
+        <li><b>整票受理</b>：一箱有问题就整票补正或拆票。</li>
+        <li><b>箱标号也用来认货</b>：箱子在委托未接受时到站，节点按箱标号发现歧义，答身份冲突。</li>
+        <li>同一个货主账户可以同时用小包和 FBA 头程两个服务产品，各配一份接单规则包。</li>
+      </ul>
+      <p>入口：客户接口 <code>/v1/shipment-requests</code>，管理台「新建平台货件」页。</p>
+    </div>
+  </div>
+
+  <h3>仓配履约的设计（未实现）</h3>
+  <p>可选能力，在首发之外，已搁置。下图是设计意图，不是产品现在的行为：main 上没有它的代码。</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1120 290" role="img" aria-label="仓配履约的设计：入库预报、收货入账、上架与库内作业、出库请求；出库请求有本产品网络、自备面单、自提三种发运方式，其中本产品网络以货主名义提交委托后进入主链">
+      <defs><marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+      <g font-size="14">
+        <rect class="bxp" x="30" y="66" width="150" height="56" rx="4"/><text x="105" y="99" text-anchor="middle">入库预报</text>
+        <rect class="bxp" x="212" y="66" width="150" height="56" rx="4"/><text x="287" y="90" text-anchor="middle">收货</text><text class="t-m" x="287" y="109" text-anchor="middle" font-size="12">确认即入库存账</text>
+        <rect class="bxp" x="394" y="66" width="170" height="56" rx="4"/><text x="479" y="90" text-anchor="middle">上架与库内作业</text><text class="t-m" x="479" y="109" text-anchor="middle" font-size="12">移库、加工换标、盘点</text>
+        <rect class="bxp" x="596" y="66" width="150" height="56" rx="4"/><text x="671" y="90" text-anchor="middle">出库请求</text><text class="t-m" x="671" y="109" text-anchor="middle" font-size="12">带发运方式</text>
+      </g>
+      <line class="ln" x1="180" y1="94" x2="210" y2="94" marker-end="url(#a6)"/><line class="ln" x1="362" y1="94" x2="392" y2="94" marker-end="url(#a6)"/><line class="ln" x1="564" y1="94" x2="594" y2="94" marker-end="url(#a6)"/>
+      <path class="ln" d="M746 94 L772 94 L772 38 L796 38" marker-end="url(#a6)"/><line class="ln" x1="746" y1="94" x2="796" y2="94" marker-end="url(#a6)"/><path class="ln" d="M746 94 L772 94 L772 150 L796 150" marker-end="url(#a6)"/>
+      <g font-size="13">
+        <rect class="bxp" x="798" y="18" width="140" height="40" rx="4"/><text x="868" y="43" text-anchor="middle">本产品网络</text>
+        <rect class="bxp" x="798" y="74" width="140" height="40" rx="4"/><text x="868" y="99" text-anchor="middle">自备面单</text>
+        <rect class="bxp" x="798" y="130" width="140" height="40" rx="4"/><text x="868" y="155" text-anchor="middle">自提</text>
+      </g>
+      <line class="ln" x1="938" y1="38" x2="968" y2="38" marker-end="url(#a6)"/>
+      <rect class="bxa" x="970" y="12" width="124" height="52" rx="4"/><text x="1032" y="34" text-anchor="middle" font-size="12">以货主名义</text><text x="1032" y="52" text-anchor="middle" font-size="12" font-weight="700">提交委托 → 主链</text>
+      <g font-size="12">
+        <rect class="band" x="30" y="206" width="330" height="40" rx="4"/><text x="44" y="231">平台备货：整箱按箱号记，仓只贴平台标签</text>
+        <rect class="band" x="378" y="206" width="330" height="40" rx="4"/><text x="392" y="231">代理仓：出库经连接器转交，库存不进库存账</text>
+        <rect class="band" x="726" y="206" width="368" height="40" rx="4"/><text x="740" y="231">仓储作业收费发生项 → 小包计价评价 → 结算形成费用</text>
+      </g>
+      <text class="t-m" x="30" y="274" font-size="12">虚线框表示只有设计。库存账只经库存流水改变；商品库存与包裹是两种身份，打包并提交委托之后才有包裹。保税仓不进产品。</text>
+    </svg>
+    </div>
+    <figcaption>仓配与主链的接口只有一处：出库走本产品网络时提交委托。文档进度：主数据与入库六篇用例在 main，库内作业五篇在分支上，都没有代码。</figcaption>
+  </figure>
+
+  <h3>从哪里用</h3>
+  <div class="keys">
+    <div><b>管理台</b><span>运单、客户、合作伙伴、产品与价格、线路与运力、清关、异常与索赔、账务、设置九组菜单。</span></div>
+    <div><b>客户接口</b><span>提交委托、受控补充、撤回、资料修订、包裹取消、索赔受理、追踪查询、送站预报。</span></div>
+    <div><b>离线登记命令</b><span>运营在数据库网络内手跑的受控登记口，按上下文各一个。</span></div>
   </div>
 </section>
 
@@ -472,7 +566,7 @@ footer .wrap{padding-block:22px 40px}
   <div class="tbl"><table>
     <tr><th style="width:17%">上下文</th><th style="width:37%">今天可用</th><th>还差什么</th></tr>
     <tr><td><b>参与方与商业</b></td><td><span class="pill p-ok">可用</span> 参与方、关系、商业版本的发布与收尾、渠道映射与账号授权</td><td><span class="pill p-wait">在做</span> 客户合同声明销售价格来源<br><span class="pill p-off">未实现</span> 保价条件、人工费用调整授权</td></tr>
-    <tr><td><b>小包托运</b></td><td><span class="pill p-ok">可用</span> 提交、接受判断与五种等待、撤回、取消、收寄后处置、终局</td><td><span class="pill p-wait">待接入</span> 面单渠道写链<br><span class="pill p-off">未实现</span> 包裹拆分合并的身份谱系、保价要求</td></tr>
+    <tr><td><b>小包托运</b></td><td><span class="pill p-ok">可用</span> 提交（含平台货件）、货物明细与装箱分配、接受判断与五种等待、受控补充、撤回、取消、收寄后处置、终局</td><td><span class="pill p-wait">待接入</span> 面单渠道写链<br><span class="pill p-off">未实现</span> 包裹拆分合并的身份谱系、保价要求</td></tr>
     <tr><td><b>网络与路由</b></td><td><span class="pill p-ok">可用</span> 网络目录、可达性判断、初始路由、复核、改路建议与决定</td><td><span class="pill p-off">未实现</span> 路由偏离判断、拆合后的新路由、退运独立路由计划</td></tr>
     <tr><td><b>节点作业</b></td><td><span class="pill p-ok">可用</span> 送站收寄、身份核对、预报与交接单、节点控制、协作承接</td><td><span class="pill p-wait">待接入</span> 集运作业的在线入口（现仅离线导入）<br><span class="pill p-off">未实现</span> 实际测量、封签状态历史、作业任务</td></tr>
     <tr><td><b>运输履约</b></td><td><span class="pill p-ok">可用</span> 揽收、交接、交付、委托与订舱、班次与装载、收费发生项、门禁读数</td><td><span class="pill p-wait">待接入</span> 追踪资料的真实来源<br><span class="pill p-off">未实现</span> 运输舱单、软容量超配、班次延误与取消</td></tr>
@@ -481,7 +575,7 @@ footer .wrap{padding-block:22px 40px}
     <tr><td><b>小包计价</b></td><td><span class="pill p-ok">可用</span> 价卡草稿到发布、评价、试算、回放、参考序列登记与复核</td><td><span class="pill p-wait">在做</span> 销售卡按有序范围列表选卡<br><span class="pill p-off">未实现</span> 仓储计费方案</td></tr>
     <tr><td><b>结算与经营核算</b></td><td><span class="pill p-ok">可用</span> 评价请求、费用形成与确认、对账单发布、供应商账单与审核、资金采用与核销、接受前财务控制</td><td><span class="pill p-wait">待接入</span> 费用调整、对账单作废、成本分摊与经营结果、赔付与追偿金额<br><span class="pill p-off">未实现</span> 周期费用的形成、自动核销</td></tr>
     <tr><td><b>代收与清分</b></td><td><span class="pill p-hold">不启用</span> 分户账与各资金位置的机制已在</td><td>首发试点不启用代收货款服务</td></tr>
-    <tr><td><b>仓配履约</b></td><td><span class="pill p-hold">已搁置</span> 可选能力，首发不含</td><td><span class="pill p-off">未实现</span> main 上没有生产代码</td></tr>
+    <tr><td><b>仓配履约</b></td><td><span class="pill p-hold">已搁置</span> 可选能力，首发不含。设计见上文「仓配履约的设计」</td><td><span class="pill p-off">未实现</span> main 上没有生产代码；十一篇用例只有文档</td></tr>
     <tr><td><b>试点治理</b></td><td><span class="pill p-ok">可用</span> 候选版本组、阶段评审决定、权威区间、暂停恢复的记录</td><td>阶段评审的 <code>Go</code> 在代码里没有读者：准入读的是权威区间与暂停</td></tr>
     <tr><td><b>接入与身份</b></td><td><span class="pill p-ok">可用</span> 接入渠道登记、凭据验证、来源信封、操作员授予</td><td><span class="pill p-off">未实现</span> 签名推送的铸造、租户既有通道适配</td></tr>
   </table></div>

@@ -19,6 +19,7 @@
 | 本页 | 现状，以及每一块看哪 |
 | [overview.html](./overview.html) | 业务全景的图示版：一票货怎么走、钱怎么算、各上下文今天能用到哪。用浏览器打开；不定义规则 |
 | [product.md](./product.md) | 产品卖给谁、首发范围、主链与切片、机制／产品策略／租户取值三类 |
+| [scenarios.md](./scenarios.md) | 租户拿它做哪种生意：网络服务、面单渠道、FBA 头程、集运、仓配等各场景怎么落到主链上、今天能用到哪 |
 | [context-map.md](./context-map.md) | 上下文之间谁拥有什么、谁读谁 |
 | [contexts/](./contexts/) | 每个上下文一个文件：管什么、词、取值、规则、生命周期、入口，以及文档走在代码前面的 |
 | [decisions.md](./decisions.md) | 难逆转的取舍，每条一段（目前只有小包计价的几条） |

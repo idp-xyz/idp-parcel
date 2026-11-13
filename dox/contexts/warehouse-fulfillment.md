@@ -11,6 +11,8 @@
 - 在 `internal/` 与 `cmd/` 里搜 `warehouse`（不分大小写）：命中全在测试里，是夹具取值（`customer-warehouse-1`、`SYN-WAREHOUSE-1`、`RETURN_TO_BONDED_WAREHOUSE`）和一条被拒的 `"target_kind":"WAREHOUSE"` 用例，都与本上下文无关。搜「仓储」命中的是持久化仓储（repository）的意思。搜「仓配」只有下面「留的缝」一节那两处注释。
 - 文档只写了主数据与入库六篇用例。库内作业的用例与改到一半的旧 `CONTEXT.md` 在 origin 分支 `cursor/wf-in-warehouse` 上，没有并入 main；那个分支只有文档，没有代码。
 
+入库、库内、出库、平台备货与代理仓各段的设计概览见 [scenarios.md](../scenarios.md)「仓配履约」。
+
 ## 设计意图：管什么，不管什么
 
 - 管 3PL 仓配：货主的商品、库存账、入库、库内作业、出库、退货入库、代理仓，以及仓储作业的收费发生项。回答「哪个货主的哪种商品，在哪个仓哪个库位、什么状态、有多少、被谁占着」。
