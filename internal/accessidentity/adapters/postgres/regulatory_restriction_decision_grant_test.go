@@ -19,6 +19,7 @@ func TestTheRegulatoryRestrictionDecisionsAreGrantedAndReadBack(t *testing.T) {
 	}
 	for grantID, kind := range map[string]accessidentity.DecisionKind{
 		"SYN-DECISION-RR-ESTABLISH": accessidentity.DecisionRegulatoryRestrictionEstablishment,
+		"SYN-DECISION-RR-RELEASE":   accessidentity.DecisionRegulatoryRestrictionRelease,
 		"SYN-DECISION-RR-INTERNAL":  accessidentity.DecisionInternalRestrictionEstablishment,
 		"SYN-DECISION-RR-DISPUTE":   accessidentity.DecisionStatementDisputeResolution,
 	} {
@@ -33,8 +34,9 @@ func TestTheRegulatoryRestrictionDecisionsAreGrantedAndReadBack(t *testing.T) {
 	at := time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)
 	if !standing.HoldsDecisionAt(accessidentity.DecisionRegulatoryRestrictionEstablishment, at) ||
 		!standing.HoldsDecisionAt(accessidentity.DecisionInternalRestrictionEstablishment, at) ||
+		!standing.HoldsDecisionAt(accessidentity.DecisionRegulatoryRestrictionRelease, at) ||
 		!standing.HoldsDecisionAt(accessidentity.DecisionStatementDisputeResolution, at) ||
-		standing.HoldsDecisionAt(accessidentity.DecisionRegulatoryRestrictionRelease, at) {
-		t.Fatalf("决定种类没有原样读回——能建立的不该因此能解除：%+v", standing.Grants())
+		standing.HoldsDecisionAt(accessidentity.DecisionInternalRestrictionDecision, at) {
+		t.Fatalf("决定种类没有原样读回：%+v", standing.Grants())
 	}
 }

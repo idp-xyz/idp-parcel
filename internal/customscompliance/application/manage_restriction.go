@@ -255,9 +255,13 @@ func (handler *ManageRestrictionHandler) EstablishOnResult(
 	})
 }
 
-// ReleaseOnResult 依据一条已接收的监管结果解除限制。所引结果必须在册、归属得上、不处在同层冲突里，是放行结果、过程决定
-// 或处置决定这三层之一，范围就是这份限制的范围，且发生在限制生效之后。执行方的控制或隔离事实进不了外部结果册，也就当
-// 不了这里的依据。
+// ReleaseOnResult 依据一条已接收的监管结果解除限制。所引结果必须在册、归属得上、没被来源更正掉、不处在同层冲突里，是
+// 放行结果、过程决定或处置决定这三层之一，范围就是这份限制的范围，且发生在限制生效之后。执行方的控制或隔离事实进不了
+// 外部结果册，也就当不了这里的依据。
+//
+// 放行结果只认全部放行：部分放行与附条件放行不解除整份限制。过程决定与处置决定的原文是租户辖区的监管语义，产品读不出
+// 它是「解除扣留」还是「再次扣留」，所以这两层是否足以解除，由持有解除授予的关务人员读原文判断——与建立时由人声明约束
+// 哪些动作是同一条分界。
 func (handler *ManageRestrictionHandler) ReleaseOnResult(
 	ctx context.Context,
 	command ReleaseRestrictionOnResultCommand,
@@ -279,6 +283,9 @@ func (handler *ManageRestrictionHandler) ReleaseOnResult(
 	}
 	if record.Result.Scope() != restriction.Scope() || record.Result.OccurredAt().Before(restriction.EffectiveAt()) ||
 		record.Result.SourceID() == restriction.Decision().String() {
+		return RestrictionResult{outcome: RestrictionBasisNotAccepted}, nil
+	}
+	if record.Result.Layer() == domain.ReleaseResultLayer && (record.Release == nil || record.Release.Kind() != domain.FullRelease) {
 		return RestrictionResult{outcome: RestrictionBasisNotAccepted}, nil
 	}
 	release, err := domain.NewRegulatoryReleaseReference(record.Result.SourceID())
@@ -311,12 +318,22 @@ func (handler *ManageRestrictionHandler) acceptedResult(
 	if !found || record.Unattributable || record.LayerConflict {
 		return ports.ExternalResultRecord{}, RestrictionBasisNotAccepted
 	}
+	allowed := false
 	for _, layer := range layers {
-		if record.Result.Layer() == layer {
-			return record, RestrictionOutcomeInvalid
-		}
+		allowed = allowed || record.Result.Layer() == layer
 	}
-	return ports.ExternalResultRecord{}, RestrictionBasisNotAccepted
+	if !allowed {
+		return ports.ExternalResultRecord{}, RestrictionBasisNotAccepted
+	}
+	// 来源已经更正掉的结果是一条被收回的陈述；一对同层冲突里没带标记的那一方同样不能引——引它就是替来源选了边。
+	contest, err := handler.deps.Results.Contest(ctx, record.Key)
+	if err != nil {
+		return ports.ExternalResultRecord{}, RestrictionUndecided
+	}
+	if contest.Superseded || contest.InConflict {
+		return ports.ExternalResultRecord{}, RestrictionBasisNotAccepted
+	}
+	return record, RestrictionOutcomeInvalid
 }
 
 // JudgeAction 判断一个方向性动作对明确对象是否可继续。纯读：范围内全部限制参与领域

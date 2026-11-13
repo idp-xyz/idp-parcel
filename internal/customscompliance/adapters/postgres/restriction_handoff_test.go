@@ -80,8 +80,10 @@ func restrictionIntent(t *testing.T, tenant, id string) ports.RestrictionHandoff
 }
 
 // restrictionHandoffEventID 按生产同一公式重算信封 ID（票 sa-cc/34 裁决 3：口名 + 限制标识一维进哈希；维度照旧不含租户）。
+//
+// 自监管限制接进生产起是三维：租户、限制标识、建立或解除。本文件各用例都在 tenant-a 上交一份当前有效的限制。
 func restrictionHandoffEventID(restrictionID string) string {
-	return string(outboxintent.FingerprintEventID("restriction", restrictionID))
+	return string(outboxintent.FingerprintEventID("restriction", "tenant-a", restrictionID, "established"))
 }
 
 // Covers: 票 sa-cc/34 判据 (1)——限制标识是单一引用、无长度门，取到超过 eventing.MaxEventIDLength 的长度时信封仍

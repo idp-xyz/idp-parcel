@@ -56,8 +56,16 @@ const restrictionEventIDPort = "restriction"
 // restrictionEventID 把限制标识折成 outboxintent.FingerprintEventID 的定长形（票 sa-cc/34 裁决 3）。它不是串接、只有
 // 一维，但单一引用的长度同样归实例半边、本仓给不出上界。维度照今天的 ID 只取限制标识、不加租户——ID 认领哪一份
 // 意图是 ADR-0043 的题，加维等于换认领口径，归另一次裁决。
-func restrictionEventID(restrictionID string) eventing.EventID {
-	return outboxintent.FingerprintEventID(restrictionEventIDPort, restrictionID)
+//
+// 上面那句维度口径自监管限制接进生产起不再成立，改为三维：租户、限制标识、这份意图说的是建立还是解除。只取限制标识时，
+// 解除的那一份与建立的那一份算出同一个 ID，入队一步先查后插，解除于是静默不入队；两个租户用到同一个限制标识也会互相
+// 吞掉。限制只有这两种状态、解除只落一次，所以每种状态至多一份意图。
+func restrictionEventID(tenant, restrictionID string, current bool) eventing.EventID {
+	state := "released"
+	if current {
+		state = "established"
+	}
+	return outboxintent.FingerprintEventID(restrictionEventIDPort, tenant, restrictionID, state)
 }
 
 // HandOffRestriction 把一份意图入队。信封 ID 由限制标识认领（ADR-0043）、折成定长指纹形。
@@ -81,7 +89,7 @@ func (handoff *OutboxRestrictionHandoff) HandOffRestriction(
 	now := handoff.clock.Now().UTC()
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           restrictionEventID(intent.Restriction.ID().String()),
+		ID:           restrictionEventID(intent.TenantID.String(), intent.Restriction.ID().String(), intent.Restriction.Current()),
 		Source:       ccEventSource,
 		Type:         restrictionEventType,
 		Version:      1,

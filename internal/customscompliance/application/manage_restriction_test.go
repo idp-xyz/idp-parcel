@@ -260,8 +260,16 @@ func TestActionJudgmentListsEveryBlockerUntilAllRelease(t *testing.T) {
 }
 
 type acceptedResultsDouble struct {
-	bySource map[string]ports.ExternalResultRecord
-	err      error
+	bySource  map[string]ports.ExternalResultRecord
+	contested map[string]ports.ResultContest
+	err       error
+}
+
+func (double *acceptedResultsDouble) Contest(_ context.Context, key ports.ExternalResultKey) (ports.ResultContest, error) {
+	if double.err != nil {
+		return ports.ResultContest{}, double.err
+	}
+	return double.contested[key.SourceID], nil
 }
 
 func (double *acceptedResultsDouble) FindByKey(_ context.Context, key ports.ExternalResultKey) (ports.ExternalResultRecord, bool, error) {
@@ -296,6 +304,23 @@ func regulatoryResult(t *testing.T, source string, layer domain.ResultLayer, sco
 	}
 }
 
+// releaseOf 给一条放行层的记录补上放行内容：种类由用例给。
+func releaseOf(t *testing.T, record ports.ExternalResultRecord, kind domain.ReleaseKind) ports.ExternalResultRecord {
+	t.Helper()
+	condition := ""
+	if kind == domain.ConditionalRelease {
+		condition = "SYN 补交单证后放行"
+	}
+	outcome, err := domain.ReceiveReleaseOutcome(kind,
+		mustValue(t, domain.NewRegulatoryAuthorityReference, "customs-authority"),
+		record.Result.Scope(), condition, record.Result.ReceivedAt())
+	if err != nil {
+		t.Fatalf("release outcome: %v", err)
+	}
+	record.Release = &outcome
+	return record
+}
+
 func newBasedRestrictionFixture(t *testing.T, records ...ports.ExternalResultRecord) (*restrictionFixture, *acceptedResultsDouble) {
 	t.Helper()
 	results := &acceptedResultsDouble{bySource: map[string]ports.ExternalResultRecord{}}
@@ -323,7 +348,7 @@ func TestARestrictionIsEstablishedAndReleasedOnAcceptedRegulatoryResults(t *test
 	releasedAt := restrictionAt.Add(-time.Hour)
 	fixture, _ := newBasedRestrictionFixture(t,
 		regulatoryResult(t, "hold-1", domain.ProcessDecisionLayer, "parcel-1", heldAt),
-		regulatoryResult(t, "release-1", domain.ReleaseResultLayer, "parcel-1", releasedAt),
+		releaseOf(t, regulatoryResult(t, "release-1", domain.ReleaseResultLayer, "parcel-1", releasedAt), domain.FullRelease),
 	)
 	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
 	id := mustValue(t, domain.NewRestrictionID, "restriction-1")
@@ -368,8 +393,8 @@ func TestARestrictionBasisMustBeAnAcceptedResultOfTheRightLayerAndScope(t *testi
 	fixture, results := newBasedRestrictionFixture(t,
 		regulatoryResult(t, "hold-1", domain.ProcessDecisionLayer, "parcel-1", heldAt),
 		regulatoryResult(t, "receipt-1", domain.RegulatoryReceiptLayer, "parcel-1", heldAt),
-		regulatoryResult(t, "release-elsewhere", domain.ReleaseResultLayer, "parcel-2", heldAt.Add(time.Hour)),
-		regulatoryResult(t, "release-early", domain.ReleaseResultLayer, "parcel-1", heldAt.Add(-time.Hour)),
+		releaseOf(t, regulatoryResult(t, "release-elsewhere", domain.ReleaseResultLayer, "parcel-2", heldAt.Add(time.Hour)), domain.FullRelease),
+		releaseOf(t, regulatoryResult(t, "release-early", domain.ReleaseResultLayer, "parcel-1", heldAt.Add(-time.Hour)), domain.FullRelease),
 		regulatoryResult(t, "duty-1", domain.AssessedDutyLayer, "parcel-1", heldAt.Add(time.Hour)),
 		unattributable, conflicted,
 	)
@@ -468,4 +493,89 @@ func (store *staleRestrictionRead) FindByID(ctx context.Context, tenant domain.T
 		return store.stale, true, nil
 	}
 	return store.restrictionStoreDouble.FindByID(ctx, tenant, id)
+}
+
+// Covers: 被来源收回或与另一份相持不下的结果当不了依据——来源已另交一份生效的更正指向它，或它是一对同层冲突里没带标记
+// 的那一方，建立与解除都答依据不成立；放行结果只认全部放行，部分放行解除不了整份限制。
+func TestAWithdrawnContestedOrPartialResultIsNotABasis(t *testing.T) {
+	heldAt := restrictionAt.Add(-2 * time.Hour)
+	partial := releaseOf(t, regulatoryResult(t, "release-partial", domain.ReleaseResultLayer, "parcel-1", heldAt.Add(time.Hour)), domain.PartialRelease)
+	bare := regulatoryResult(t, "release-bare", domain.ReleaseResultLayer, "parcel-1", heldAt.Add(time.Hour))
+	fixture, results := newBasedRestrictionFixture(t,
+		regulatoryResult(t, "hold-1", domain.ProcessDecisionLayer, "parcel-1", heldAt),
+		regulatoryResult(t, "hold-withdrawn", domain.ProcessDecisionLayer, "parcel-1", heldAt),
+		regulatoryResult(t, "hold-disputed", domain.ProcessDecisionLayer, "parcel-1", heldAt),
+		regulatoryResult(t, "lift-withdrawn", domain.ProcessDecisionLayer, "parcel-1", heldAt.Add(time.Hour)),
+		partial, bare,
+	)
+	results.contested = map[string]ports.ResultContest{
+		"hold-withdrawn": {Superseded: true},
+		"hold-disputed":  {InConflict: true},
+		"lift-withdrawn": {Superseded: true},
+	}
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	id := mustValue(t, domain.NewRestrictionID, "restriction-1")
+	constrains := []domain.GuardedAction{domain.OutboundRelease}
+
+	for _, decision := range []string{"hold-withdrawn", "hold-disputed"} {
+		refused, err := fixture.handler.EstablishOnResult(context.Background(), application.EstablishRestrictionOnResultCommand{
+			TenantID: tenant, ID: id, Decision: decision, Constrains: constrains,
+		})
+		if err != nil || refused.Outcome() != application.RestrictionBasisNotAccepted {
+			t.Fatalf("以 %s 建立：outcome = %q err = %v, want BASIS_NOT_ACCEPTED", decision, refused.Outcome(), err)
+		}
+	}
+	if established, err := fixture.handler.EstablishOnResult(context.Background(), application.EstablishRestrictionOnResultCommand{
+		TenantID: tenant, ID: id, Decision: "hold-1", Constrains: constrains,
+	}); err != nil || established.Outcome() != application.RestrictionEstablished {
+		t.Fatalf("establish: outcome = %q err = %v", established.Outcome(), err)
+	}
+	for _, result := range []string{"lift-withdrawn", "release-partial", "release-bare"} {
+		refused, err := fixture.handler.ReleaseOnResult(context.Background(), application.ReleaseRestrictionOnResultCommand{
+			TenantID: tenant, ID: id, Result: result,
+		})
+		if err != nil || refused.Outcome() != application.RestrictionBasisNotAccepted {
+			t.Fatalf("以 %s 解除：outcome = %q err = %v, want BASIS_NOT_ACCEPTED", result, refused.Outcome(), err)
+		}
+	}
+	if kept := fixture.store.byID["restriction-1"]; !kept.Current() {
+		t.Fatal("站不住的依据把限制解除了")
+	}
+}
+
+// Covers: 动作准入读得到经依据建立的限制，且按动作时点读——限制自所引决定的业务发生时间起生效：那之前的动作不受它阻断，
+// 那之后的受阻断；解除自所引结果的业务发生时间起生效，那之前的动作仍受阻断。
+func TestAnEstablishedRestrictionBlocksFromTheDecisionsOccurrenceUntilTheReleaseOccurs(t *testing.T) {
+	heldAt := restrictionAt.Add(time.Hour) // 所引决定的业务发生时间晚于此刻：限制要到那时才生效。
+	liftedAt := heldAt.Add(2 * time.Hour)
+	fixture, _ := newBasedRestrictionFixture(t,
+		regulatoryResult(t, "hold-1", domain.ProcessDecisionLayer, "parcel-1", heldAt),
+		regulatoryResult(t, "lift-1", domain.ProcessDecisionLayer, "parcel-1", liftedAt),
+	)
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	id := mustValue(t, domain.NewRestrictionID, "restriction-1")
+	if _, err := fixture.handler.EstablishOnResult(context.Background(), application.EstablishRestrictionOnResultCommand{
+		TenantID: tenant, ID: id, Decision: "hold-1", Constrains: []domain.GuardedAction{domain.OutboundRelease},
+	}); err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+	if _, err := fixture.handler.ReleaseOnResult(context.Background(), application.ReleaseRestrictionOnResultCommand{
+		TenantID: tenant, ID: id, Result: "lift-1",
+	}); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	recorded := fixture.store.byID["restriction-1"]
+	for name, probe := range map[string]struct {
+		at   time.Time
+		want bool
+	}{
+		"决定发生之前": {heldAt.Add(-time.Minute), false},
+		"决定发生之后": {heldAt.Add(time.Minute), true},
+		"解除发生之前": {liftedAt.Add(-time.Minute), true},
+		"解除发生之后": {liftedAt.Add(time.Minute), false},
+	} {
+		if got := recorded.InForceAt(probe.at); got != probe.want {
+			t.Fatalf("%s：InForceAt = %v, want %v", name, got, probe.want)
+		}
+	}
 }

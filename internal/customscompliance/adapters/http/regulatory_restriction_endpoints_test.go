@@ -60,6 +60,10 @@ func (stub acceptedResultsStub) FindByKey(_ context.Context, key ports.ExternalR
 	return record, found, nil
 }
 
+func (stub acceptedResultsStub) Contest(context.Context, ports.ExternalResultKey) (ports.ResultContest, error) {
+	return ports.ResultContest{}, nil
+}
+
 type restrictionHandoffStub struct{}
 
 func (restrictionHandoffStub) HandOffRestriction(context.Context, ports.RestrictionHandoffIntent) error {
@@ -93,7 +97,19 @@ func acceptedResult(t *testing.T, source string, layer domain.ResultLayer, scope
 	if err != nil {
 		t.Fatalf("interpret %s: %v", source, err)
 	}
-	return ports.ExternalResultRecord{Result: result}
+	record := ports.ExternalResultRecord{Result: result}
+	if layer == domain.ReleaseResultLayer {
+		authority, err := domain.NewRegulatoryAuthorityReference("SYN-CUSTOMS-AUTHORITY")
+		if err != nil {
+			t.Fatal(err)
+		}
+		release, err := domain.ReceiveReleaseOutcome(domain.FullRelease, authority, scopeRef, "", occurredAt.Add(time.Minute))
+		if err != nil {
+			t.Fatalf("release outcome %s: %v", source, err)
+		}
+		record.Release = &release
+	}
+	return record
 }
 
 type regulatoryRestrictionEndpoints struct {

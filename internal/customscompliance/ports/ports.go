@@ -228,6 +228,17 @@ const (
 // 单立一口是让限制编排的替身不必背整只结果册。
 type AcceptedRegulatoryResults interface {
 	FindByKey(ctx context.Context, key ExternalResultKey) (ExternalResultRecord, bool, error)
+	// Contest 答这条结果此刻还站不站得住。更正关系记在更正它的那一份上、同层冲突的标记只落在后到的一份上，单读这一条
+	// 看不出来，所以另问一次。
+	Contest(ctx context.Context, key ExternalResultKey) (ResultContest, error)
+}
+
+// ResultContest 是一条外部结果此刻的受质疑情形。
+type ResultContest struct {
+	// Superseded：来源已另交一份生效的更正指向它——这是一条被来源收回的陈述。
+	Superseded bool
+	// InConflict：同一提交版本、同一层、同一范围上另有一份带同层冲突标记的结果——双方都在册、本上下文不选边。
+	InConflict bool
 }
 
 // RestrictionStore 保存监管限制并按范围盘出参与准入判断的限制。Save 的写入代数只

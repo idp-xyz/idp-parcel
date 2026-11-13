@@ -136,6 +136,8 @@ type regulatoryRestrictionResponse struct {
 	EffectiveAt   string   `json:"effectiveAt,omitempty"`
 	ReleasedBy    string   `json:"releasedBy,omitempty"`
 	ReleasedAt    string   `json:"releasedAt,omitempty"`
+	// HandoffReference 非空说明限制已入册而发布意图没交出去，凭它续办。
+	HandoffReference string `json:"handoffReference,omitempty"`
 }
 
 // writeRegulatoryRestriction 逐名转写。建立或解除真落了才 201；其余业务答案 200。未决只在限制册或外部结果册读写不动时
@@ -150,7 +152,7 @@ func writeRegulatoryRestriction(response http.ResponseWriter, result application
 		writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
 		return
 	}
-	body := regulatoryRestrictionResponse{Outcome: outcome}
+	body := regulatoryRestrictionResponse{Outcome: outcome, HandoffReference: result.HandoffReference()}
 	if restriction, present := result.Restriction(); present {
 		body.RestrictionID = restriction.ID().String()
 		body.Decision = restriction.Decision().String()

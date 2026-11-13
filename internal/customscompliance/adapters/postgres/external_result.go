@@ -110,6 +110,41 @@ func (repository *ExternalResults) FindByKey(
 	return record, true, nil
 }
 
+// Contest 实现 ports.AcceptedRegulatoryResults：这条结果有没有被来源更正掉，以及它是不是一对同层冲突里没带标记的那
+// 一方。两问都只在本租户内看。
+func (repository *ExternalResults) Contest(ctx context.Context, key ports.ExternalResultKey) (ports.ResultContest, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.ResultContest{}, fmt.Errorf("contest external result: %w", err)
+	}
+	var contest ports.ResultContest
+	err = querier.QueryRow(ctx,
+		`SELECT
+		    EXISTS (
+		        SELECT 1 FROM customs_compliance.external_result correction
+		         WHERE correction.tenant_id = $1
+		           AND correction.corrects_source_id = $2
+		           AND correction.correction_in_force),
+		    EXISTS (
+		        SELECT 1
+		          FROM customs_compliance.external_result cited
+		          JOIN customs_compliance.external_result other
+		            ON other.tenant_id = cited.tenant_id
+		           AND other.source_id <> cited.source_id
+		           AND other.layer_conflict
+		           AND other.submission_version = cited.submission_version
+		           AND other.result->>'layer' = cited.result->>'layer'
+		           AND other.result->>'scope' = cited.result->>'scope'
+		         WHERE cited.tenant_id = $1
+		           AND cited.source_id = $2)`,
+		key.TenantID.String(), key.SourceID,
+	).Scan(&contest.Superseded, &contest.InConflict)
+	if err != nil {
+		return ports.ResultContest{}, fmt.Errorf("contest external result: %w", err)
+	}
+	return contest, nil
+}
+
 // Save 写下一次接收记录。同（租户+来源标识）已有记录时答`已有记录`——业务答案不是
 // 错误（ADR-0031）；用 ON CONFLICT DO NOTHING 而不是捕 23505 译码：撞键的 INSERT 会
 // 把整个事务打进中止态，而编排拿到`已有记录`还要在同一个事务里读回原记录作答。
