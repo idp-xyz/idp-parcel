@@ -23,6 +23,8 @@ type transactionalTrackingAdopter struct {
 
 var errTrackingAdoptionUndecided = errors.New("parcel-api: tracking adoption undecided")
 
+var errTrackingHandoffNotSent = errors.New("parcel-api: tracking fact rolled back because its handoff was not sent")
+
 func (adopter transactionalTrackingAdopter) Adopt(ctx context.Context, material tfports.TrackingMaterial) (tfapp.AdoptTrackingMaterialResult, error) {
 	var result tfapp.AdoptTrackingMaterialResult
 	err := adopter.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -38,6 +40,14 @@ func (adopter transactionalTrackingAdopter) Adopt(ctx context.Context, material 
 	})
 	if err != nil && !errors.Is(err, errTrackingAdoptionUndecided) {
 		return tfapp.AdoptTrackingMaterialResult{}, err
+	}
+	switch result.Outcome() {
+	case tfapp.TrackingFactAdopted, tfapp.TrackingFactAdoptedPendingJudgment:
+		if result.HandoffReference() != "" {
+			// 编排答的是「已认领、意图没交出去」，而这一笔已经整笔回滚：事实并没有落。把那份答复原样交回，调用方会读到
+			// 一个不存在的事实标识。如实答没形成答案，重投即可。
+			return tfapp.AdoptTrackingMaterialResult{}, errTrackingHandoffNotSent
+		}
 	}
 	return result, nil
 }

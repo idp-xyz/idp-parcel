@@ -17,6 +17,7 @@ export function TrackingEntryPanel() {
         snapshotHint={trackingEntryHint}
         submit={async (snapshot) => {
           const answer = await submitTrackingEntries(snapshot);
+          // 没形成答复（整批没处理）时把上一批的逐条结果清掉，不让旧结果挂在新一次提交下面。
           setLines(answer.kind === 'outcome' ? trackingEntryLines(answer.body) : []);
           return answer;
         }}

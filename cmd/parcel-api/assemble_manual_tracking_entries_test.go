@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,8 +21,8 @@ import (
 
 // Covers: dox/decisions.md「产品形态」——承运商轨迹的手工录入口在真库上经生产装配走一遍。先把承运商运单号登记成外部
 // 承运凭证；一批三条：两条凭证认得出的认领成事实（没有登记有效时间规则，停在待判断）、一条凭证不认识的如实留痕；
-// 每一版事实各有一条人工录入留痕（录入人与原件）；整批重投全部认成重复，不落第二版、不记第二条留痕；持别的授予的人
-// 答未授予。合成租户与标识只记 `S`。
+// 每一版事实各有一条人工录入留痕（录入人与原件）；更正按录入时的事件号指到原来那条事实上，指向不在册的如实答；整批
+// 重投全部认成重复，不落新版本；持别的授予的人答未授予；交给下游的意图没发出去时那一条答没形成答案、事实不落。合成租户与标识只记 `S`。
 func TestManuallyEnteredTrackingIsAdoptedThroughTheProductionAssemblyAndKeepsItsEntryTrail(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -111,9 +112,10 @@ func TestManuallyEnteredTrackingIsAdoptedThroughTheProductionAssemblyAndKeepsIts
 	if status != http.StatusCreated || got.Outcome != "ENTRIES_PROCESSED" || got.Counts["TRACKING_FACT_ADOPTED_PENDING_JUDGMENT"] != 2 || got.Counts["MATERIAL_LEFT_UNADOPTED"] != 1 {
 		t.Fatalf("首次导入 = %d %+v", status, got)
 	}
-	if first := got.Entries[0]; first.Object != "SYN-PARCEL-TRK-1" || first.EventID != "TRKMANUAL/EVT-1" || first.Fact == "" || first.EffectiveBasis != "PENDING" {
+	if first := got.Entries[0]; first.Object != "SYN-PARCEL-TRK-1" || first.EventID != "TRKMANUAL/SYN-CARRIER-X/1Z-000001/EVT-1" || first.Fact == "" || first.EffectiveBasis != "PENDING" {
 		t.Fatalf("第一条 = %+v", first)
 	}
+	firstFact := got.Entries[0].Fact
 	if third := got.Entries[2]; third.Reason != "CREDENTIAL_UNKNOWN" || third.Fact != "" {
 		t.Fatalf("凭证不认识的那一条 = %+v", third)
 	}
@@ -131,8 +133,47 @@ func TestManuallyEnteredTrackingIsAdoptedThroughTheProductionAssemblyAndKeepsIts
 		t.Fatalf("事实 %d 版、人工录入留痕 %d 条，想要各 2", count(facts), count(trail))
 	}
 
+	// 更正：填录入时用的那个事件号即可；指向不在册的事件如实答更正对象不在册，不多出一条事实。
+	corrections := `{"entries":[` +
+		`{"source":"SYN-CARRIER-X","credential":"SYN-CARRIER-X/1Z-000001","eventId":"EVT-1B","correctionOf":"EVT-1","occurredAt":"` + occurred + `","status":"HELD","original":"SYN-CARRIER-MAIL-2"},` +
+		`{"source":"SYN-CARRIER-X","credential":"SYN-CARRIER-X/1Z-000001","eventId":"EVT-1C","correctionOf":"EVT-NOWHERE","occurredAt":"` + occurred + `","status":"HELD","original":"SYN-CARRIER-MAIL-2"}]}`
+	status, got = post(clerk, corrections)
+	if status != http.StatusCreated || got.Entries[0].Fact != firstFact || got.Entries[1].Outcome != "CORRECTION_TARGET_UNKNOWN" || count(facts) != 3 {
+		t.Fatalf("更正 = %d %+v；事实 %d 版", status, got.Entries, count(facts))
+	}
+
 	status, got = post(clerk, body)
-	if status != http.StatusOK || got.Counts["DUPLICATE_DELIVERY"] != 2 || count(facts) != 2 || count(trail) != 2 {
+	if status != http.StatusOK || got.Counts["DUPLICATE_DELIVERY"] != 2 || count(facts) != 3 || count(trail) != 2 {
 		t.Fatalf("整批重投 = %d %+v；事实 %d 版、留痕 %d 条", status, got.Counts, count(facts), count(trail))
+	}
+
+	// 意图交不出去（这里把 Outbox 表改名造出来）：那一笔整笔回滚，这一条如实答没形成答案，不交回一个不存在的事实号。
+	// 有效时间规则没登记时不交意图，所以先登一条规则让新事实在认领时就判过。
+	rules, err := buildEffectiveTimeRuleRegistration(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registered, err := rules.Register(t.Context(), tfapp.RegisterEffectiveTimeRuleCommand{
+		TenantID: mustValue(t, tfdomain.NewTenantID, tenant), Source: "SYN-CARRIER-X", Version: "SYN-ETR-000000000001",
+		SourceTimeMeaning: "EVENT_OCCURRENCE", Anchor: "OCCURRED_AT",
+	}); err != nil || registered.Outcome() != tfapp.EffectiveTimeRuleRegistered {
+		t.Fatalf("登有效时间规则：err=%v outcome=%v", err, registered.Outcome())
+	}
+	judgedBody := func(event string) string {
+		return `{"entries":[{"source":"SYN-CARRIER-X","credential":"SYN-CARRIER-X/1Z-000001","eventId":"` + event + `","occurredAt":"` + occurred + `","status":"IN_TRANSIT","original":"SYN-CARRIER-MAIL-3"}]}`
+	}
+	// 规则在、意图交得出去：认领时就判过，答已认领并落事实。
+	if status, got = post(clerk, judgedBody("EVT-8")); status != http.StatusCreated || got.Counts["TRACKING_FACT_ADOPTED"] != 1 || count(facts) != 4 {
+		t.Fatalf("按规则判过的那一条 = %d %+v；事实 %d 版", status, got.Counts, count(facts))
+	}
+	if _, err := pool.Exec(t.Context(), `ALTER TABLE `+migrate.SchemaBento+`.outbox RENAME TO outbox_gone`); err != nil {
+		t.Skipf("改不了 Outbox 表名，跳过意图失败这一段：%v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `ALTER TABLE `+migrate.SchemaBento+`.outbox_gone RENAME TO outbox`)
+	})
+	status, got = post(clerk, judgedBody("EVT-9"))
+	if status != http.StatusInternalServerError || count(facts) != 4 {
+		t.Fatalf("意图没交出去的那一条 = %d %+v；事实 %d 版，想要 500 且不落事实", status, got, count(facts))
 	}
 }

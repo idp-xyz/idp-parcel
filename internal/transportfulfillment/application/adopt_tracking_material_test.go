@@ -649,8 +649,21 @@ func TestAManuallyEnteredTrackingEventIsAdoptedByTheSameRulesAndLeavesAnEntryTra
 		t.Fatalf("留痕落不下：err=%v outcome=%q", err, undecided.Outcome())
 	}
 
+	// 人说这一条更正了某一条，而那一条不在册：不照样登记成一条新事实，如实答更正对象不在册。指得到时落在那条事实上。
+	stray := trackingMaterial(t, "MANUAL/evt-3")
+	stray.EnteredBy, stray.Original, stray.CorrectionOf = "OPERATOR/https://issuer#alice", "SYN-ORIGINAL", "MANUAL/evt-nowhere"
+	if refused, err := fixture.handler.Adopt(context.Background(), stray); err != nil || refused.Outcome() != application.TrackingCorrectionTargetUnknown {
+		t.Fatalf("更正对象不在册：err=%v outcome=%q", err, refused.Outcome())
+	}
+	correcting := trackingMaterial(t, "MANUAL/evt-4")
+	correcting.EnteredBy, correcting.Original, correcting.CorrectionOf = "OPERATOR/https://issuer#alice", "SYN-ORIGINAL", "MANUAL/evt-1"
+	corrected, err := fixture.handler.Adopt(context.Background(), correcting)
+	if correctedRecord, _ := corrected.Record(); err != nil || correctedRecord.Key.Fact != record.Key.Fact || len(ledger.entries) != 2 {
+		t.Fatalf("更正人工录入的那一条：err=%v outcome=%q 留痕 %d 条", err, corrected.Outcome(), len(ledger.entries))
+	}
+
 	fromSource := trackingMaterial(t, "evt-source-1")
-	if adopted, err := fixture.handler.Adopt(context.Background(), fromSource); err != nil || adopted.Outcome() != application.TrackingFactAdoptedPendingJudgment || len(ledger.entries) != 1 {
+	if adopted, err := fixture.handler.Adopt(context.Background(), fromSource); err != nil || adopted.Outcome() != application.TrackingFactAdoptedPendingJudgment || len(ledger.entries) != 2 {
 		t.Fatalf("源来的素材：err=%v outcome=%q 留痕 %d 条", err, adopted.Outcome(), len(ledger.entries))
 	}
 }

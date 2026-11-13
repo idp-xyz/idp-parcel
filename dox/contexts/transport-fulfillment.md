@@ -196,4 +196,4 @@
 
 ## 证据限制
 
-轨迹的认领编排（`AdoptTrackingMaterialHandler`）现在有一个生产入口：手工录入口 `/transport-fulfillment-external-tracking-manual-entries`，操作员照承运商给的材料一次录一条或一批（至多 200 条），逐条认领、各自一笔事务；必带所凭原件，录入人与原件另记一本留痕，源事件标识加 `TRKMANUAL/` 前缀、没给事件号的按内容派生（重复导入认得出）。认领规则不变：凭证要先登记到载运对象上，原始状态词不解释，有效时间按规则或逐条确认。轨迹源适配器那一路仍没有入口：`adapters/trackingsource` 下只有合成替身，真源的拉取节拍还没立。
+轨迹的认领编排（`AdoptTrackingMaterialHandler`）现在有一个生产入口：手工录入口 `/transport-fulfillment-external-tracking-manual-entries`，操作员照承运商给的材料一次录一条或一批（至多 200 条），逐条认领、各自一笔事务；必带所凭原件，录入人与原件另记一本留痕，源事件标识落在 `TRKMANUAL/<凭证>/` 名字空间里（事件号只需在一个凭证内唯一）、没给事件号的按内容派生（重复导入认得出）；更正只指得到同一空间里人工录入的轨迹，指不到的如实答 `CORRECTION_TARGET_UNKNOWN`、不另起一条事实。认领规则不变：凭证要先登记到载运对象上，原始状态词不解释，有效时间按规则或逐条确认。轨迹源适配器那一路仍没有入口：`adapters/trackingsource` 下只有合成替身，真源的拉取节拍还没立。

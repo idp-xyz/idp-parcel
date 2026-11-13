@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -25,14 +26,29 @@ const ManualTrackingEntryLimit = 200
 // 投递而丢掉。
 const ManualTrackingSourcePrefix = "TRKMANUAL/"
 
+// manualEventIDLimit 是操作员给的事件号的长度上限。
+const manualEventIDLimit = 200
+
+// manualEventReference 把操作员给的事件号放进人工录入自己的名字空间：前缀之后再按凭证分开。操作员多半拿每张运单内的
+// 序号或表格行号当事件号，只在一张运单里唯一；不按凭证分，第二张运单的「1」会被认成第一张运单那一条的重复而丢掉。
+// 已经带着前缀的（从响应里抄回来的）原样用。空的交回空。更正指向也经这里：它因此只指得到同一凭证上人工录入的轨迹，
+// 指不到轨迹源送来的那些。
+func manualEventReference(credential, event string) string {
+	event = strings.TrimSpace(event)
+	if event == "" || strings.HasPrefix(event, ManualTrackingSourcePrefix) {
+		return event
+	}
+	return ManualTrackingSourcePrefix + credential + "/" + event
+}
+
 // ManualTrackingEntryPayload 是一条轨迹的线格式。source 是轨迹源（与有效时间规则、里程碑映射里登记的同一个词）；
 // credential 是外部承运凭证（承运商运单号等，须先登记到载运对象上）；status 是承运商的原始状态词，原样填；occurredAt
 // 是承运商给的发生时间，承运商没给就不填——不拿录入时间顶替。eventId 可不填：不填时按（源、凭证、状态、发生时间）
-// 派生一个，同一条重复导入因此认得出来。correctionOf 填被更正那一条的 eventId（响应里交回的那个）。original 必填。
+// 派生一个，同一条重复导入因此认得出来。correctionOf 填被更正那一条的 eventId——录入时填的那个或响应里交回的那个都行，
+// 指的只能是同一个凭证上人工录入的轨迹。original 必填。
 type ManualTrackingEntryPayload struct {
 	Source       string `json:"source"`
 	Credential   string `json:"credential"`
-	Carrier      string `json:"carrier"`
 	EventID      string `json:"eventId"`
 	OccurredAt   string `json:"occurredAt"`
 	Status       string `json:"status"`
@@ -74,11 +90,10 @@ func (intake *OperatorDecisionIntake) IntakeManualTrackingEntries(ctx context.Co
 		material := ports.TrackingMaterial{
 			Source: ports.TrackingSourceReference(strings.TrimSpace(entry.Source)),
 			Subject: ports.TrackingSubject{
-				Tenant: operator.Tenant, CredentialReference: strings.TrimSpace(entry.Credential), CarrierReference: strings.TrimSpace(entry.Carrier),
+				Tenant: operator.Tenant, CredentialReference: strings.TrimSpace(entry.Credential),
 			},
 			ReceivedAt:      now.UTC(),
 			StatusReference: strings.TrimSpace(entry.Status),
-			CorrectionOf:    strings.TrimSpace(entry.CorrectionOf),
 			EnteredBy:       "OPERATOR/" + operator.Operator,
 			Original:        strings.TrimSpace(entry.Original),
 		}
@@ -93,7 +108,17 @@ func (intake *OperatorDecisionIntake) IntakeManualTrackingEntries(ctx context.Co
 			}
 			material.OccurredAt = ports.SourceTime{Given: true, At: at.UTC()}
 		}
-		canonical := strings.Join([]string{string(material.Source), material.Subject.CredentialReference, material.StatusReference, occurred, material.CorrectionOf}, "\x00")
+		// 指纹与派生的事件号用解析后的 UTC 时刻，不用原样的字符串：同一时刻换一种写法（时区、小数位）再导一遍，该被
+		// 认成同一条。
+		instant := ""
+		if material.OccurredAt.Given {
+			instant = material.OccurredAt.At.Format(time.RFC3339Nano)
+		}
+		if len(entry.EventID) > manualEventIDLimit || len(entry.CorrectionOf) > manualEventIDLimit+len(ManualTrackingSourcePrefix)+len(entry.Credential)+1 {
+			return nil, fmt.Errorf("%w: entries[%d].eventId or correctionOf is too long", ErrMalformedRequest, index)
+		}
+		material.CorrectionOf = manualEventReference(material.Subject.CredentialReference, entry.CorrectionOf)
+		canonical := strings.Join([]string{string(material.Source), material.Subject.CredentialReference, material.StatusReference, instant, material.CorrectionOf}, "\x00")
 		digest := sha256.Sum256([]byte(canonical))
 		material.PayloadDigest = hex.EncodeToString(digest[:])
 		material.Payload = []byte(canonical)
@@ -103,11 +128,15 @@ func (intake *OperatorDecisionIntake) IntakeManualTrackingEntries(ctx context.Co
 			// 同一条再导一遍该被认成重复，而不是落第二条事实。
 			event = hex.EncodeToString(digest[:16])
 		}
-		material.SourceEventID = ManualTrackingSourcePrefix + event
+		material.SourceEventID = manualEventReference(material.Subject.CredentialReference, event)
 		materials = append(materials, material)
 	}
 	return materials, nil
 }
+
+const manualEntryAnswerNotFormed = "ANSWER_NOT_FORMED"
+
+var errManualBatchNotProcessed = errors.New("tf http: no entry of the manual tracking batch formed an answer")
 
 type manualTrackingEntryAnswer struct {
 	Index           int    `json:"index"`
@@ -146,7 +175,7 @@ func NewManualTrackingEntriesEndpoint(intake ManualTrackingEntryIntake, adopter 
 			result, err := adopter.Adopt(request.Context(), material)
 			switch {
 			case err != nil || result.Outcome().String() == "":
-				answer.Outcome, answer.AnswerNotFormed = "ANSWER_NOT_FORMED", true
+				answer.Outcome, answer.AnswerNotFormed = manualEntryAnswerNotFormed, true
 			default:
 				answer.Outcome = result.Outcome().String()
 				if result.Outcome() == application.TrackingAdoptionUndecided {
@@ -165,6 +194,10 @@ func NewManualTrackingEntriesEndpoint(intake ManualTrackingEntryIntake, adopter 
 			}
 			response.Counts[answer.Outcome]++
 			response.Entries = append(response.Entries, answer)
+		}
+		if response.Counts[manualEntryAnswerNotFormed] == len(materials) {
+			// 一条答案都没形成（库不通、请求被取消）：这一批没有被处理，如实答没形成答案。重投整批是安全的。
+			return manualTrackingEntriesResponse{}, errManualBatchNotProcessed, true
 		}
 		return response, nil, true
 	}, func(writer http.ResponseWriter, response manualTrackingEntriesResponse) {

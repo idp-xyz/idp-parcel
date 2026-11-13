@@ -2,7 +2,6 @@ package tfhttp_test
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -55,46 +54,50 @@ func TestTheManualTrackingFaceTurnsEachEntryIntoMaterialUnderItsOwnDecisionKind(
 		`{"source":"SYN-CARRIER-X","credential":"SYN-CARRIER-X/1Z-000001","occurredAt":"2026-11-12T10:00:00Z","status":"ARRIVED","original":"SYN-MAIL-1"},` +
 		`{"source":"SYN-CARRIER-X","credential":"SYN-CARRIER-X/1Z-000001","status":"DELIVERED","original":"SYN-MAIL-1"}]}`
 
+	// 替身编排交不出具名答复：一条答案都没形成，这一批如实答没形成答案（500）。各条带答复的形状在装配测试里验。
 	response := postTracking(endpoint, "t", body)
-	var answer struct {
-		Outcome string
-		Counts  map[string]int
-		Entries []struct {
-			Index           int
-			Outcome         string
-			EventID         string
-			AnswerNotFormed bool
-		}
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
-		t.Fatalf("响应不是 JSON：%s", response.Body.String())
-	}
-	if response.Code != http.StatusOK || answer.Outcome != "ENTRIES_PROCESSED" || len(answer.Entries) != 3 || len(adopter.materials) != 3 {
-		t.Fatalf("answer = %d %s", response.Code, response.Body.String())
+	if response.Code != http.StatusInternalServerError || len(adopter.materials) != 3 {
+		t.Fatalf("answer = %d %s，素材 %d 条", response.Code, response.Body.String(), len(adopter.materials))
 	}
 	if len(asked) != 1 || asked[0] != "EXTERNAL_TRACKING_ENTRY" {
 		t.Fatalf("asked = %v", asked)
 	}
 	first, second, third := adopter.materials[0], adopter.materials[1], adopter.materials[2]
 	if first.Subject.Tenant.String() != operatorTenant || first.EnteredBy != "OPERATOR/"+operatorSubject || first.Original != "SYN-MAIL-1" ||
-		first.SourceEventID != "TRKMANUAL/EVT-9" || !first.OccurredAt.Given || first.ReceivedAt.Hour() != 9 || first.StatusReference != "IN_TRANSIT" {
+		first.SourceEventID != "TRKMANUAL/SYN-CARRIER-X/1Z-000001/EVT-9" || !first.OccurredAt.Given || first.ReceivedAt.Hour() != 9 || first.StatusReference != "IN_TRANSIT" {
 		t.Fatalf("第一条素材 = %+v", first)
 	}
-	if !strings.HasPrefix(second.SourceEventID, "TRKMANUAL/") || second.SourceEventID == "TRKMANUAL/" || second.SourceEventID == third.SourceEventID {
+	if !strings.HasPrefix(second.SourceEventID, "TRKMANUAL/SYN-CARRIER-X/1Z-000001/") || second.SourceEventID == third.SourceEventID {
 		t.Fatalf("派生的事件号 = %q / %q", second.SourceEventID, third.SourceEventID)
 	}
 	if third.OccurredAt.Given {
 		t.Fatal("承运商没给发生时间，素材上却有了一个")
 	}
-	// 没形成答案的条如实标出，不混进业务答复里。
-	if !answer.Entries[0].AnswerNotFormed || answer.Counts["ANSWER_NOT_FORMED"] != 3 || answer.Entries[1].EventID != second.SourceEventID {
-		t.Fatalf("各条答复 = %+v", answer)
-	}
-
 	replay, replayAdopter := manualTrackingEndpoint(t, nil)
 	postTracking(replay, "t", body)
 	if replayAdopter.materials[1].SourceEventID != second.SourceEventID {
 		t.Fatal("同一条两次导入派生出了不同的事件号")
+	}
+
+	// 事件号按凭证分开：两张运单都拿「1」当事件号，各是各的。同一时刻换一种写法派生出同一个号。更正指向落在同一凭证
+	// 的人工录入空间里，原样的承运商事件号指不到轨迹源送来的那些；从响应里抄回来的带前缀的号原样用。
+	scoped, scopedAdopter := manualTrackingEndpoint(t, nil)
+	postTracking(scoped, "t", `{"entries":[`+
+		`{"source":"S","credential":"WB-A","eventId":"1","status":"PICKED_UP","original":"O"},`+
+		`{"source":"S","credential":"WB-B","eventId":"1","status":"DELIVERED","original":"O"},`+
+		`{"source":"S","credential":"WB-A","status":"X","occurredAt":"2026-11-12T10:00:00Z","original":"O"},`+
+		`{"source":"S","credential":"WB-A","status":"X","occurredAt":"2026-11-12T18:00:00+08:00","original":"O"},`+
+		`{"source":"S","credential":"WB-A","eventId":"2","correctionOf":"1","status":"LOST","original":"O"},`+
+		`{"source":"S","credential":"WB-A","eventId":"3","correctionOf":"TRKMANUAL/WB-B/1","status":"LOST","original":"O"}]}`)
+	got := scopedAdopter.materials
+	if len(got) != 6 || got[0].SourceEventID != "TRKMANUAL/WB-A/1" || got[1].SourceEventID != "TRKMANUAL/WB-B/1" {
+		t.Fatalf("按凭证分开的事件号 = %q / %q", got[0].SourceEventID, got[1].SourceEventID)
+	}
+	if got[2].SourceEventID != got[3].SourceEventID {
+		t.Fatalf("同一时刻两种写法派生出不同的号：%q / %q", got[2].SourceEventID, got[3].SourceEventID)
+	}
+	if got[4].CorrectionOf != "TRKMANUAL/WB-A/1" || got[5].CorrectionOf != "TRKMANUAL/WB-B/1" {
+		t.Fatalf("更正指向 = %q / %q", got[4].CorrectionOf, got[5].CorrectionOf)
 	}
 }
 
@@ -109,6 +112,7 @@ func TestTheManualTrackingFaceRefusesMalformedBatchesBeforeAnyEntryIsAdopted(t *
 		"时间不成形":   `{"entries":[{"source":"S","credential":"C","status":"X","original":"O","occurredAt":"昨天"}]}`,
 		"自报租户":    `{"tenantId":"other","entries":[` + entry + `]}`,
 		"条上自报录入人": `{"entries":[{"source":"S","credential":"C","status":"X","original":"O","enteredBy":"someone"}]}`,
+		"事件号过长":   `{"entries":[{"source":"S","credential":"C","status":"X","original":"O","eventId":"` + strings.Repeat("x", 201) + `"}]}`,
 	} {
 		if response := postTracking(endpoint, "t", body); response.Code != http.StatusBadRequest {
 			t.Fatalf("%s = %d %s，想要 400", name, response.Code, response.Body.String())

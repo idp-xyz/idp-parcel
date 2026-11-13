@@ -13,9 +13,10 @@ export const trackingEntryTitle = '录入承运商轨迹';
 export const trackingEntryHint =
   '请填 entries（数组，一次 1 到 200 条）。每条填：source（轨迹来源，与时间确认规则、里程碑映射里登记的同一个词）、credential（承运商运单号等外部承运凭证，' +
   '要先在「外部承运凭证」里登记到包裹上）、status（承运商的原始状态词，原样填，不用翻译）、occurredAt（承运商给的发生时间，RFC 3339；承运商没给就不填，' +
-  '不要拿录入时间顶替）、original（所凭原件：邮件、截图或对账表的编号或存档引用，必填）。可选：eventId（承运商的事件号；不填时系统按内容派生一个，' +
-  '同一条重复导入会被认出来）、carrier、correctionOf（要更正的那一条的 eventId，取答复里交回的那个）。' +
-  '系统会在事件号前加 TRKMANUAL/，与接口来的轨迹分开。所属公司与录入人由系统按登录身份记下；需要持有「录入承运商轨迹」的授予。' +
+  '不要拿录入时间顶替）、original（所凭原件：邮件、截图或对账表的编号或存档引用，必填）。可选：eventId（事件号，只需在这一张运单内不重复；' +
+  '不填时系统按来源、运单、状态和发生时间派生一个，同一条重复导入会被认出来——同一张运单同一秒有两条状态相同的轨迹时请自己填 eventId 区分）、' +
+  'correctionOf（要更正的那一条的 eventId，填当初录入时用的那个即可；只能更正同一张运单上人工录入的轨迹，找不到时会如实告诉你）。' +
+  '系统会在事件号前加 TRKMANUAL/ 和运单号，与接口来的轨迹分开。所属公司与录入人由系统按登录身份记下；需要持有「录入承运商轨迹」的授予。' +
   '录进来的轨迹和接口来的一样，要经过时间确认才进物流动态。';
 
 /** 整批的答复只有一格；各条各自的答复在下面逐条列出。 */
@@ -29,6 +30,7 @@ export const trackingEntryRowLabels: Record<string, string> = {
   TRACKING_FACT_ADOPTED_PENDING_JUDGMENT: '已录入，等待时间确认',
   DUPLICATE_DELIVERY: '这一条已经录过',
   MATERIAL_LEFT_UNADOPTED: '没有录成事实，原因已记下',
+  CORRECTION_TARGET_UNKNOWN: '要更正的那一条找不到，这一条没有录入；请核对 correctionOf',
   INPUT_NOT_ACCEPTED: '内容不完整或不成立，没有受理',
   ADOPTION_UNDECIDED: '暂时定不了，稍后重投整批即可',
   ANSWER_NOT_FORMED: '这一条没有形成答复，稍后重投整批即可',

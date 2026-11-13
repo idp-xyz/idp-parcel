@@ -31,6 +31,10 @@ const (
 	TrackingMaterialLeftUnadopted
 	TrackingMaterialNotAccepted
 	TrackingAdoptionUndecided
+	// TrackingCorrectionTargetUnknown 只在人工录入时出现：录入的人说这一条更正了某一条，而那一条不在册。轨迹源声明的
+	// 更正认不出时照样登记、不回指（不替源猜它更正了谁）；人就在跟前，认不出多半是事件号填错了——照样登记会多出一条
+	// 事实而原来那条仍是当前，两条一起流向下游，录入的人却看不出自己的更正没生效。
+	TrackingCorrectionTargetUnknown
 )
 
 func (outcome TrackingAdoptionOutcome) String() string {
@@ -45,6 +49,8 @@ func (outcome TrackingAdoptionOutcome) String() string {
 		return "MATERIAL_LEFT_UNADOPTED"
 	case TrackingMaterialNotAccepted:
 		return "INPUT_NOT_ACCEPTED"
+	case TrackingCorrectionTargetUnknown:
+		return "CORRECTION_TARGET_UNKNOWN"
 	case TrackingAdoptionUndecided:
 		return "ADOPTION_UNDECIDED"
 	default:
@@ -193,6 +199,9 @@ func (handler *AdoptTrackingMaterialHandler) Adopt(
 	factRef, supersedes, undecided := handler.resolveCorrection(ctx, shape)
 	if undecided != nil {
 		return *undecided, nil
+	}
+	if manual && shape.correctionOf.String() != "" && factRef.String() == "" {
+		return AdoptTrackingMaterialResult{outcome: TrackingCorrectionTargetUnknown}, nil
 	}
 	if factRef.String() == "" {
 		factRef, err = handler.deps.Identities.NextExternalTrackingFactReference(ctx)
