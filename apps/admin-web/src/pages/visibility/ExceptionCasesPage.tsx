@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { MultiRegistrationPanel } from '../../components/registration';
+import { exceptionDecisionTargets } from './decisions';
+import { exceptionProblemNote } from './case-presentation';
 import {
   WorkbenchPageTemplate,
   toggleWorkbenchSort,
@@ -144,39 +148,53 @@ export function ExceptionCasesPage() {
   ];
 
   return (
-    <WorkbenchPageTemplate<ExceptionCaseRecord>
-      title={info.title}
-      subtitle="已立案的异常：哪票货出了问题、谁在处理、处理到哪一步。待响应的案件行首亮灯。"
-      onRefresh={retry}
-      refreshing={answer === null}
-      search={{ value: search, onChange: setSearch, placeholder: '搜案件号、包裹号、处理团队…' }}
-      statusChips={statusChips}
-      toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
-      columns={columns}
-      rows={rows}
-      rowKey={(row) => row.caseId}
-      selectedKey={selectedKey}
-      onSelect={setSelectedKey}
-      rowAttention={(row) => row.phase === 'AWAITING_RESPONSE'}
-      sort={sort}
-      onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
-      noMatchText="当前筛选条件下没有匹配的案件"
-      onClearFilters={() => {
-        setSearch('');
-        setPhase(allStatuses);
-      }}
-      renderDetail={(key) => {
-        const record = rows.find((row) => row.caseId === key);
-        return record ? <CaseDetail record={record} onClose={() => setSelectedKey(null)} /> : null;
-      }}
-      viewState={exceptionViewState(answer, rows.length, retry, {
-        module: info,
-        endpoint: 'GET /exception-case-records',
-        subject: '异常案件',
-        emptyTitle: '还没有异常案件',
-        emptyDescription: '异常信号经分诊决定立案后会出现在这里；要看刚进来的异常信号，去「异常处理」。',
-        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
-      })}
-    />
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="cases" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="cases">案件</TabsTrigger>
+          <TabsTrigger value="decisions">运营决定</TabsTrigger>
+        </TabsList>
+        <TabsContent value="cases" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <WorkbenchPageTemplate<ExceptionCaseRecord>
+            title={info.title}
+            subtitle="已立案的异常：哪票货出了问题、谁在处理、处理到哪一步。待响应的案件行首亮灯。"
+            onRefresh={retry}
+            refreshing={answer === null}
+            search={{ value: search, onChange: setSearch, placeholder: '搜案件号、包裹号、处理团队…' }}
+            statusChips={statusChips}
+            toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
+            columns={columns}
+            rows={rows}
+            rowKey={(row) => row.caseId}
+            selectedKey={selectedKey}
+            onSelect={setSelectedKey}
+            rowAttention={(row) => row.phase === 'AWAITING_RESPONSE'}
+            sort={sort}
+            onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
+            noMatchText="当前筛选条件下没有匹配的案件"
+            onClearFilters={() => {
+              setSearch('');
+              setPhase(allStatuses);
+            }}
+            renderDetail={(key) => {
+              const record = rows.find((row) => row.caseId === key);
+              return record ? <CaseDetail record={record} onClose={() => setSelectedKey(null)} /> : null;
+            }}
+            viewState={exceptionViewState(answer, rows.length, retry, {
+              module: info,
+              endpoint: 'GET /exception-case-records',
+              subject: '异常案件',
+              emptyTitle: '还没有异常案件',
+              emptyDescription: '异常信号经分诊决定立案后会出现在这里；要看刚进来的异常信号，去「异常处理」。',
+              narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
+            })}
+          />
+        </TabsContent>
+        <TabsContent value="decisions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          {/* 案件、证据、披露与通知的决定口：后端口都在，这里先用登记面板接上，照提示填 JSON 提交。 */}
+          <MultiRegistrationPanel moduleId="exception-cases" targets={exceptionDecisionTargets} problemNote={exceptionProblemNote} />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

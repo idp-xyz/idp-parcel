@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { MultiRegistrationPanel } from '../../components/registration';
+import { statementDecisionTargets } from './decisions';
+import { problemNote as decisionProblemNote } from './presentation';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -267,7 +271,19 @@ export function ReconciliationPage() {
   const [disputedOnly, place] = useDisputedOnlyPlace();
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <CustomerStatementsTable names={names} disputedOnly={disputedOnly} onDisputedOnlyChange={place} />
+      <Tabs defaultValue="statements" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="statements">对账单</TabsTrigger>
+          <TabsTrigger value="decisions">运营决定</TabsTrigger>
+        </TabsList>
+        <TabsContent value="statements" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <CustomerStatementsTable names={names} disputedOnly={disputedOnly} onDisputedOnlyChange={place} />
+        </TabsContent>
+        <TabsContent value="decisions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          {/* 发布、作废与后续账期纳入：后端口都在，这里先用登记面板接上，照提示填 JSON 提交。 */}
+          <MultiRegistrationPanel moduleId="reconciliation" targets={statementDecisionTargets} problemNote={decisionProblemNote} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

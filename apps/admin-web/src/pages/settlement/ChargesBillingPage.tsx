@@ -20,6 +20,9 @@ import { objectNouns } from '../../vocabulary/objects';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { pageEmptyNote } from './list-conditions';
+import { MultiRegistrationPanel } from '../../components/registration';
+import { chargeDecisionTargets } from './decisions';
+import { problemNote } from './presentation';
 import { AmountCell, TwoLine, technicalRows } from './ops-ui';
 import { feeItemLabel, parcelFromRef, sourceFactLabel } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
@@ -289,7 +292,7 @@ function SupplierExpectedCostsTable() {
 
 /**
  * 费用与计费。两册各自成签：客户费用（UC-SA-002 形成，经历预估、暂估与确认三段）与供应商预期成本（预估口径的版本册）。
- * 本页是查阅面，不设任何调整创建动作——每类调整只能由 CONTEXT「调整类型与唯一所有权」表指定的唯一创建用例形成。
+ * 「运营决定」签接的是费用确认与调整登记两个口：调整仍只由它的唯一创建用例形成，页面只是把那个口接进来。
  */
 export function ChargesBillingPage() {
   // 参与方名称一问放在页级，两签共用，切签不重问。
@@ -300,12 +303,16 @@ export function ChargesBillingPage() {
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="customer">客户费用</TabsTrigger>
           <TabsTrigger value="supplier">供应商预期成本</TabsTrigger>
+          <TabsTrigger value="decisions">运营决定</TabsTrigger>
         </TabsList>
         <TabsContent value="customer" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <CustomerChargesTable names={names} />
         </TabsContent>
         <TabsContent value="supplier" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <SupplierExpectedCostsTable />
+        </TabsContent>
+        <TabsContent value="decisions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <MultiRegistrationPanel moduleId="charges-billing" targets={chargeDecisionTargets} problemNote={problemNote} />
         </TabsContent>
       </Tabs>
     </div>
