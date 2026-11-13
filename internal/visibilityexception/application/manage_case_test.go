@@ -23,6 +23,20 @@ type caseStoreDouble struct {
 	err       error
 	// staleOnce 非空时，下一次 FindCase 交回这份旧案件（只一次）：模拟「读到之后、落库之前另一笔先落了」。
 	staleOnce *domain.ExceptionCase
+	// calls 记下各口被调的先后，证归并先锁后读。
+	calls []string
+}
+
+func (double *caseStoreDouble) LockCases(_ context.Context, _ domain.TenantID, ids ...domain.CaseID) error {
+	if double.err != nil {
+		return double.err
+	}
+	call := "lock"
+	for _, id := range ids {
+		call += " " + id.String()
+	}
+	double.calls = append(double.calls, call)
+	return nil
 }
 
 func caseKey(tenant domain.TenantID, id domain.CaseID) string {
@@ -33,6 +47,7 @@ func (double *caseStoreDouble) FindCase(_ context.Context, tenant domain.TenantI
 	if double.err != nil {
 		return nil, false, double.err
 	}
+	double.calls = append(double.calls, "find "+id.String())
 	if stale := double.staleOnce; stale != nil && stale.ID() == id {
 		double.staleOnce = nil
 		return stale, true, nil
@@ -222,6 +237,16 @@ func TestADuplicateCaseMergesOnlyIntoALiveMainCase(t *testing.T) {
 	}
 	if fixture.store.byKey[caseKey(fixture.tenant, main)].Phase() != domain.CaseAwaitingResponse {
 		t.Fatal("归并动了主案件")
+	}
+
+	// 先锁两份、再读：锁在任何一次读之前，否则读到的「主案件仍在处置」在落库时可能已经不成立。
+	fixture.store.calls = nil
+	third := fixture.seed(t, fixture.tenant, "case-third")
+	if _, err := fixture.handler.Merge(context.Background(), application.MergeCaseCommand{TenantID: fixture.tenant, Case: third, Main: main, Operator: operatorAlice}); err != nil {
+		t.Fatal(err)
+	}
+	if calls := fixture.store.calls; len(calls) < 3 || calls[0] != "lock case-third case-main" || calls[1] != "find case-third" || calls[2] != "find case-main" {
+		t.Fatalf("调用次序 = %v——归并要先把两份案件一起锁住，再读", calls)
 	}
 }
 

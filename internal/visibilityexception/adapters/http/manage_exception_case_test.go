@@ -42,6 +42,10 @@ type caseStoreStub struct {
 	err       error
 }
 
+func (stub *caseStoreStub) LockCases(context.Context, domain.TenantID, ...domain.CaseID) error {
+	return stub.err
+}
+
 func (stub *caseStoreStub) FindCase(_ context.Context, tenant domain.TenantID, id domain.CaseID) (*domain.ExceptionCase, bool, error) {
 	if stub.err != nil {
 		return nil, false, stub.err

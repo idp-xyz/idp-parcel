@@ -93,6 +93,36 @@ func (store *ExceptionCaseStore) FindCase(
 	return exceptionCase, true, nil
 }
 
+// LockCases 按案件标识升序给指名的行加行锁。顺序固定是为了两笔对向的归并不互相等死；不在册的标识不报错——在不在册
+// 由随后的 FindCase 答。
+func (store *ExceptionCaseStore) LockCases(ctx context.Context, tenant domain.TenantID, ids ...domain.CaseID) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock exception cases: %w", err)
+	}
+	wanted := make([]string, 0, len(ids))
+	for _, id := range ids {
+		wanted = append(wanted, id.String())
+	}
+	rows, err := executor.Query(ctx,
+		`SELECT case_id
+		   FROM visibility_exception.exception_case
+		  WHERE tenant_id = $1 AND case_id = ANY($2)
+		  ORDER BY case_id
+		    FOR UPDATE`,
+		tenant.String(), wanted)
+	if err != nil {
+		return fmt.Errorf("lock exception cases: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("lock exception cases: %w", err)
+	}
+	return nil
+}
+
 // AdvanceCase 落一次接单、关闭或归并。条件进语句：册上仍是 From 那一格才动。接单人只在这次推进形成了首次响应时写，
 // 关闭人只在这次推进形成了关闭时写——已有的接单人不被关闭那一笔盖掉。
 func (store *ExceptionCaseStore) AdvanceCase(ctx context.Context, advance ports.CaseAdvance) (ports.CaseAdvanceOutcome, error) {

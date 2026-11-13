@@ -108,4 +108,8 @@ func TestCaseAdvanceRefusesToRunOutsideATransaction(t *testing.T) {
 	if _, err := store.AdvanceCase(t.Context(), ports.CaseAdvance{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务推进案件应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	// 行锁只在事务里才留得住：事务之外锁一下就放，等于没锁。
+	if err := store.LockCases(t.Context(), domain.TenantID{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("无事务锁案件应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }

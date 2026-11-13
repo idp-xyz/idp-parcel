@@ -141,7 +141,9 @@ func (handler *ManageCaseHandler) TakeUp(ctx context.Context, command TakeUpCase
 	if err := exceptionCase.TakeUp(handler.deps.Clock.Now().UTC()); err != nil {
 		return ManageCaseResult{outcome: CaseNotAccepted}, nil
 	}
-	return handler.advance(ctx, command.TenantID, exceptionCase, from, command.Operator, CaseTakenUp)
+	result, err := handler.advance(ctx, command.TenantID, exceptionCase, from, command.Operator, CaseTakenUp)
+	// 接单没有「照现在的案件重做一次」这回事：案件动了就按它现在的样子作答。内部的那一格在这里收掉，出不了编排。
+	return settleMoved(result), err
 }
 
 // Close 以明确结论关闭案件。待响应的案件可以不经接单直接关闭（判定不成立）。关闭不关闭源案件或外部义务。
@@ -175,8 +177,11 @@ func (handler *ManageCaseHandler) close(ctx context.Context, command CloseCaseCo
 }
 
 // Merge 把重复案件并进主案件：本案件以「已归并」结论关闭并指向主案件，两边各自的单据号与历史都不动。主案件必须在册、
-// 仍在处置中、且不是这份案件自己。主案件在读过之后被别人关闭的那个窗口，本编排不锁主案件——并进一份刚关闭的案件留下
-// 的是一条指向已关闭案件的归并，查得到、不丢事实，由异常运营在主案件上受控重开或另行处置。
+// 仍在处置中、且不是这份案件自己。
+//
+// 两份案件先在本事务里一起锁住、再读：归并读两份、只写一份，不锁的话「甲并进乙」与「乙并进甲」同时到达会各自读到对方
+// 仍在处置、各自提交，两份都成了已归并而没有一份还在处置；主案件在读过之后被别人关闭也是同一个窗口。锁住之后这些
+// 决定排成先后：后到的那一笔读到的是先到那一笔落下之后的案件。
 func (handler *ManageCaseHandler) Merge(ctx context.Context, command MergeCaseCommand) (ManageCaseResult, error) {
 	result, err := handler.merge(ctx, command)
 	if err == nil && result.outcome == caseMovedUnderDecision {
@@ -186,15 +191,21 @@ func (handler *ManageCaseHandler) Merge(ctx context.Context, command MergeCaseCo
 }
 
 func (handler *ManageCaseHandler) merge(ctx context.Context, command MergeCaseCommand) (ManageCaseResult, error) {
+	if strings.TrimSpace(command.TenantID.String()) == "" || strings.TrimSpace(command.Case.String()) == "" || strings.TrimSpace(command.Operator) == "" {
+		return ManageCaseResult{outcome: CaseNotAccepted}, nil
+	}
+	if strings.TrimSpace(command.Main.String()) == "" || command.Main == command.Case {
+		return ManageCaseResult{outcome: CaseMainNotEligible}, nil
+	}
+	if err := handler.deps.Cases.LockCases(ctx, command.TenantID, command.Case, command.Main); err != nil {
+		return ManageCaseResult{outcome: CaseUndecided}, nil
+	}
 	exceptionCase, outcome := handler.load(ctx, command.TenantID, command.Case, command.Operator)
 	if outcome != ManageCaseOutcomeInvalid {
 		return ManageCaseResult{outcome: outcome}, nil
 	}
 	if exceptionCase.Phase() == domain.CaseClosed {
 		return ManageCaseResult{outcome: CaseAlreadyClosed, exceptionCase: exceptionCase}, nil
-	}
-	if strings.TrimSpace(command.Main.String()) == "" || command.Main == command.Case {
-		return ManageCaseResult{outcome: CaseMainNotEligible}, nil
 	}
 	main, found, err := handler.deps.Cases.FindCase(ctx, command.TenantID, command.Main)
 	if err != nil {
