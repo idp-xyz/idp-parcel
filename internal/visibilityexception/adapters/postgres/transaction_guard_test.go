@@ -186,6 +186,12 @@ func TestCatalogAndTraceWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := evidence.SaveDisclosure(ctx, domain.TenantID{}, domain.EvidenceDisclosureVersion{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务保存证据披露版本应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if err := evidence.RecordRegistrar(ctx, domain.TenantID{}, domain.EvidenceItemID{}, "operator"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务记证据登记人应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := evidence.AppraiseEvidence(ctx, ports.EvidenceAppraisalRecord{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务落证据评价应返回 ErrTransactionRequired，实得：%v", err)
+	}
 
 	receipts, err := adapter.NewMaterialReceiptRegistrar(db)
 	if err != nil {

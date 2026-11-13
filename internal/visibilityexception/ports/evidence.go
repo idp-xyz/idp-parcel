@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
@@ -60,6 +61,33 @@ type EvidenceStore interface {
 		tenant domain.TenantID,
 		version domain.EvidenceDisclosureVersion,
 	) (EvidenceSaveOutcome, error)
+}
+
+type EvidenceAppraisalOutcome uint8
+
+const (
+	EvidenceAppraisalOutcomeInvalid EvidenceAppraisalOutcome = iota
+	EvidenceAppraisalRecorded
+	// EvidenceAlreadyAppraised：这项证据在册上已经不是`已收到`——另一笔评价先落了，或它不在册。评价只落一次，后到的不盖
+	// 掉先落的结论与依据。
+	EvidenceAlreadyAppraised
+)
+
+// EvidenceAppraisalRecord 是一次要落库的证据评价：评价之后的证据项、作出评价的操作者与评价的时刻。
+type EvidenceAppraisalRecord struct {
+	Tenant      domain.TenantID
+	Item        domain.EvidenceItem
+	Operator    string
+	AppraisedAt time.Time
+}
+
+// EvidenceDecisionStore 记下证据上由人作出的决定留下的操作证据：谁把这份材料登成了证据项，谁在什么时候评价了它。它与
+// EvidenceStore 分开——那一只管证据项与披露版本的本体，由证据到达的各条路共用；这一只只在运营决定口后面用。
+type EvidenceDecisionStore interface {
+	// RecordRegistrar 记下登记人。只在这一行还没有登记人时写：同一份材料重放不改登记人。
+	RecordRegistrar(ctx context.Context, tenant domain.TenantID, item domain.EvidenceItemID, operator string) error
+	// AppraiseEvidence 落一次评价。只在册上仍是`已收到`时才成。
+	AppraiseEvidence(ctx context.Context, record EvidenceAppraisalRecord) (EvidenceAppraisalOutcome, error)
 }
 
 // EvidenceIdentityFactory 签发证据项标识。与其余身份工厂分开，理由相同：证据到达由

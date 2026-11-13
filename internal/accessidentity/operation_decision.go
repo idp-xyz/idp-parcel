@@ -210,6 +210,15 @@ const (
 	DecisionExceptionCaseMerge   DecisionKind = "EXCEPTION_CASE_MERGE"
 )
 
+// DecisionEvidenceSubmission、DecisionEvidenceAppraisal 与 DecisionEvidenceDisclosurePreparation 是异常运营人员对证据的三种
+// 决定：把收到的一份材料登成证据项、经调查对它作出采信或不采信的评价、为它准备一份对外披露的脱敏版本。三种分开授予——
+// 能登材料的不因此能评价它的真伪，能评价的不因此能决定把什么给外面看。
+const (
+	DecisionEvidenceSubmission            DecisionKind = "EVIDENCE_SUBMISSION"
+	DecisionEvidenceAppraisal             DecisionKind = "EVIDENCE_APPRAISAL"
+	DecisionEvidenceDisclosurePreparation DecisionKind = "EVIDENCE_DISCLOSURE_PREPARATION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -245,6 +254,7 @@ var decisionKinds = []DecisionKind{
 	DecisionStatementDisputeRegistration, DecisionStatementDisputeResolution,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
+	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,
 }
 
 // DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。

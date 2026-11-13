@@ -220,3 +220,67 @@ func TestEvidenceRowsAreCheckedByTheDatabase(t *testing.T) {
 		t.Fatal("库接受了脱敏指纹等于原件的披露版本")
 	}
 }
+
+// Covers: 证据上的操作证据与带条件的评价（迁移 visibility_exception 0036）——登记人只记第一位，再记一次不改；评价把
+// `已收到`推成采信并记下评价人与时刻；基于同一份旧读数的第二笔评价一行不动、答已评价，先落的结论与依据不被盖掉；
+// 另一个租户拿同名证据标识评价不动这一行。
+func TestEvidenceRecordsItsRegistrarOnceAndIsAppraisedOnlyFromReceived(t *testing.T) {
+	fixture := newRegistrarFixture(t)
+	tenant := registrarTenant(t)
+	store := evidenceStore(t, fixture)
+	item := submittedEvidence(t, "evidence-1", "customer-1", "sha256:damage-photo")
+	if outcome := saveEvidence(t, fixture, store, tenant, item); outcome != ports.EvidenceSaved {
+		t.Fatalf("保存 outcome = %d", outcome)
+	}
+	inTx := func(run func(context.Context) error) {
+		t.Helper()
+		if err := fixture.transactor.WithinTransaction(t.Context(), run); err != nil {
+			t.Fatalf("事务内写入：%v", err)
+		}
+	}
+	for _, operator := range []string{"https://issuer#alice", "https://issuer#bob"} {
+		inTx(func(txCtx context.Context) error { return store.RecordRegistrar(txCtx, tenant, item.ID(), operator) })
+	}
+	appraise := func(tenant domain.TenantID, appraisal domain.EvidenceAppraisal, basis, operator string) ports.EvidenceAppraisalOutcome {
+		t.Helper()
+		appraised, err := item.Appraise(appraisal, basis, evidenceBaseAt.Add(time.Hour))
+		if err != nil {
+			t.Fatalf("评价（领域）：%v", err)
+		}
+		var outcome ports.EvidenceAppraisalOutcome
+		inTx(func(txCtx context.Context) error {
+			var err error
+			outcome, err = store.AppraiseEvidence(txCtx, ports.EvidenceAppraisalRecord{
+				Tenant: tenant, Item: appraised, Operator: operator, AppraisedAt: evidenceBaseAt.Add(time.Hour),
+			})
+			return err
+		})
+		return outcome
+	}
+	if outcome := appraise(build(t, domain.NewTenantID, "tenant-other"), domain.EvidenceCredited, "别家的依据", "https://issuer#mallory"); outcome != ports.EvidenceAlreadyAppraised {
+		t.Fatalf("另一个租户评价 outcome = %d，want EvidenceAlreadyAppraised——一行都不该动", outcome)
+	}
+	if outcome := appraise(tenant, domain.EvidenceCredited, "照片元数据与收寄时间一致", "https://issuer#carol"); outcome != ports.EvidenceAppraisalRecorded {
+		t.Fatalf("评价 outcome = %d，want EvidenceAppraisalRecorded", outcome)
+	}
+	if outcome := appraise(tenant, domain.EvidenceDiscredited, "后到的相反结论", "https://issuer#dave"); outcome != ports.EvidenceAlreadyAppraised {
+		t.Fatalf("基于旧读数的评价 outcome = %d，want EvidenceAlreadyAppraised", outcome)
+	}
+
+	var registeredBy, appraisedBy, appraisal, basis string
+	var appraisedAt time.Time
+	if err := fixture.pool.QueryRow(t.Context(),
+		`SELECT registered_by, appraised_by, appraisal, appraisal_basis, appraised_at
+		   FROM visibility_exception.evidence_item WHERE tenant_id = $1 AND evidence_id = 'evidence-1'`, tenant.String(),
+	).Scan(&registeredBy, &appraisedBy, &appraisal, &basis, &appraisedAt); err != nil {
+		t.Fatalf("读操作证据：%v", err)
+	}
+	if registeredBy != "https://issuer#alice" || appraisedBy != "https://issuer#carol" || appraisal != "CREDITED" ||
+		basis != "照片元数据与收寄时间一致" || !appraisedAt.Equal(evidenceBaseAt.Add(time.Hour)) {
+		t.Fatalf("登记人 %q 评价人 %q 评价 %q 依据 %q 时刻 %v", registeredBy, appraisedBy, appraisal, basis, appraisedAt)
+	}
+	read, found, err := store.FindByID(t.Context(), tenant, item.ID())
+	if err != nil || !found || read.Appraisal() != domain.EvidenceCredited {
+		t.Fatalf("读回的证据项：%+v found=%v err=%v", read, found, err)
+	}
+}

@@ -128,7 +128,8 @@ type caseAnswer struct {
 	} `json:"error"`
 }
 
-func serveCase(t *testing.T, handler http.Handler, token, body string) (int, caseAnswer) {
+// serveRaw 以给定令牌与载荷打一次运营决定口，交回状态码与响应体原文。
+func serveRaw(t *testing.T, handler http.Handler, token, body string) (int, []byte) {
 	t.Helper()
 	request := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(body))
 	if token != "" {
@@ -136,11 +137,17 @@ func serveCase(t *testing.T, handler http.Handler, token, body string) (int, cas
 	}
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
+	return recorder.Code, recorder.Body.Bytes()
+}
+
+func serveCase(t *testing.T, handler http.Handler, token, body string) (int, caseAnswer) {
+	t.Helper()
+	status, raw := serveRaw(t, handler, token, body)
 	var answer caseAnswer
-	if err := json.Unmarshal(recorder.Body.Bytes(), &answer); err != nil {
-		t.Fatalf("响应不是 JSON：%v（%s）", err, recorder.Body.String())
+	if err := json.Unmarshal(raw, &answer); err != nil {
+		t.Fatalf("响应不是 JSON：%v（%s）", err, raw)
 	}
-	return recorder.Code, answer
+	return status, answer
 }
 
 // Covers: 异常案件的三个运营决定口（UC-VE-005）——各按自己那一种决定认证；接单形成首次响应时间并记下认证出来的操作者

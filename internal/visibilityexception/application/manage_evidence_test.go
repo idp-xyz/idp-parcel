@@ -377,3 +377,159 @@ func TestADisclosureThatLeaksTheOriginalOrLacksScopeIsNotAccepted(t *testing.T) 
 		t.Fatal("a refused preparation still recorded a version")
 	}
 }
+
+// evidenceDecisionsDouble 记登记人、落评价：评价带「册上仍是已收到」的条件，与真库同一个语义，落下后写回证据册替身。
+type evidenceDecisionsDouble struct {
+	store      *evidenceStoreDouble
+	registrars map[domain.EvidenceItemID]string
+	appraisers map[domain.EvidenceItemID]string
+	err        error
+}
+
+func (double *evidenceDecisionsDouble) RecordRegistrar(_ context.Context, _ domain.TenantID, item domain.EvidenceItemID, operator string) error {
+	if double.err != nil {
+		return double.err
+	}
+	if _, recorded := double.registrars[item]; !recorded {
+		double.registrars[item] = operator
+	}
+	return nil
+}
+
+func (double *evidenceDecisionsDouble) AppraiseEvidence(_ context.Context, record ports.EvidenceAppraisalRecord) (ports.EvidenceAppraisalOutcome, error) {
+	if double.err != nil {
+		return ports.EvidenceAppraisalOutcomeInvalid, double.err
+	}
+	current, found := double.store.byID[record.Item.ID()]
+	if !found || current.Appraisal() != domain.EvidenceReceived {
+		return ports.EvidenceAlreadyAppraised, nil
+	}
+	double.store.byID[record.Item.ID()] = record.Item
+	double.appraisers[record.Item.ID()] = record.Operator
+	return ports.EvidenceAppraisalRecorded, nil
+}
+
+func newDecidedEvidenceFixture(t *testing.T) (*evidenceFixture, *evidenceDecisionsDouble) {
+	t.Helper()
+	fixture := &evidenceFixture{store: newEvidenceStore(), identities: &evidenceIdentityDouble{}}
+	decisions := &evidenceDecisionsDouble{store: fixture.store, registrars: map[domain.EvidenceItemID]string{}, appraisers: map[domain.EvidenceItemID]string{}}
+	fixture.handler = application.NewManageEvidenceHandler(application.ManageEvidenceDeps{
+		Decisions:  decisions,
+		Evidence:   fixture.store,
+		Identities: fixture.identities,
+		Clock:      fixedClock{at: evidenceSubmittedAt.Add(time.Hour)},
+	})
+	return fixture, decisions
+}
+
+// Covers: 运营决定口登记证据——命令不带收到时刻时取编排时钟（运营口不收补报），登记人是认证出来的操作者；同一提供方
+// 再登同一份材料返回原项，登记人仍是第一位。
+func TestAnOperatorRegistersEvidenceAtTheServersMomentAndIsRecordedOnce(t *testing.T) {
+	fixture, decisions := newDecidedEvidenceFixture(t)
+	command := submitCommand(t)
+	command.SubmittedAt = time.Time{}
+	command.Operator = "https://issuer#alice"
+
+	submitted, err := fixture.handler.SubmitEvidence(context.Background(), command)
+	if err != nil || submitted.Outcome() != application.EvidenceSubmitted {
+		t.Fatalf("submit: outcome = %q err = %v", submitted.Outcome(), err)
+	}
+	item, _ := submitted.Evidence()
+	if !item.SubmittedAt().Equal(evidenceSubmittedAt.Add(time.Hour)) || item.Appraisal() != domain.EvidenceReceived {
+		t.Fatalf("证据项：收到时刻 %v 评价 %q——时刻该取编排时钟，评价起点是已收到", item.SubmittedAt(), item.Appraisal())
+	}
+
+	command.Operator = "https://issuer#bob"
+	again, err := fixture.handler.SubmitEvidence(context.Background(), command)
+	if err != nil || again.Outcome() != application.EvidenceExistingResult {
+		t.Fatalf("再登：outcome = %q err = %v, want EVIDENCE_EXISTING_RESULT", again.Outcome(), err)
+	}
+	if registrar := decisions.registrars[item.ID()]; registrar != "https://issuer#alice" {
+		t.Fatalf("登记人 = %q，被再登的那一位盖掉了", registrar)
+	}
+}
+
+// Covers: `UC-VE-007` 步 2「有效性」与 CONTEXT「材料被提交不表示其内容已经被认定为事实」「证据冲突必须保留」——评价只
+// 能是采信或不采信且依据必备；评价把已收到的证据推成采信，评价人与时刻落下；已评价的再评价交回在册那一份、不改写；
+// 两个人同时评价，后落的答已评价、先落的结论不被盖掉；不在册的证据答不在册；依据缺、评价词是已收到、没有操作者都不受理。
+func TestEvidenceIsAppraisedOnceWithABasis(t *testing.T) {
+	fixture, decisions := newDecidedEvidenceFixture(t)
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	submitted, err := fixture.handler.SubmitEvidence(context.Background(), submitCommand(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, _ := submitted.Evidence()
+	appraise := func(evidence domain.EvidenceItemID, appraisal domain.EvidenceAppraisal, basis, operator string) application.ManageEvidenceResult {
+		t.Helper()
+		result, err := fixture.handler.Appraise(context.Background(), application.AppraiseEvidenceCommand{
+			TenantID: tenant, Evidence: evidence, Appraisal: appraisal, Basis: basis, Operator: operator,
+		})
+		if err != nil {
+			t.Fatalf("appraise: %v", err)
+		}
+		return result
+	}
+
+	for name, refused := range map[string]application.ManageEvidenceResult{
+		"没有依据":    appraise(item.ID(), domain.EvidenceCredited, "  ", "https://issuer#carol"),
+		"评价词是已收到": appraise(item.ID(), domain.EvidenceReceived, "依据", "https://issuer#carol"),
+		"没有操作者":   appraise(item.ID(), domain.EvidenceCredited, "依据", ""),
+	} {
+		if refused.Outcome() != application.ManageEvidenceNotAccepted {
+			t.Fatalf("%s：outcome = %q, want NOT_ACCEPTED", name, refused.Outcome())
+		}
+	}
+	if missing := appraise(mustValue(t, domain.NewEvidenceItemID, "evidence-9"), domain.EvidenceCredited, "依据", "https://issuer#carol"); missing.Outcome() != application.EvidenceNotFound {
+		t.Fatalf("不在册：outcome = %q, want EVIDENCE_NOT_FOUND", missing.Outcome())
+	}
+	if fixture.store.byID[item.ID()].Appraisal() != domain.EvidenceReceived {
+		t.Fatal("被拒的评价动了证据项")
+	}
+
+	// 两个人都读到已收到：先落的一笔由替身直接落下，模拟「读到之后、落评价之前另一笔先落了」。
+	credited, err := item.Appraise(domain.EvidenceCredited, "先落的依据", evidenceSubmittedAt.Add(30*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := fixture.store.byID[item.ID()]
+	racing := application.NewManageEvidenceHandler(application.ManageEvidenceDeps{
+		Decisions:  decisions,
+		Evidence:   staleEvidenceRead{evidenceStoreDouble: fixture.store, stale: stale, read: new(bool)},
+		Identities: fixture.identities,
+		Clock:      fixedClock{at: evidenceSubmittedAt.Add(time.Hour)},
+	})
+	fixture.store.byID[item.ID()] = credited
+	decisions.appraisers[item.ID()] = "https://issuer#carol"
+	late, err := racing.Appraise(context.Background(), application.AppraiseEvidenceCommand{
+		TenantID: tenant, Evidence: item.ID(), Appraisal: domain.EvidenceDiscredited, Basis: "后到的相反结论", Operator: "https://issuer#dave",
+	})
+	if err != nil || late.Outcome() != application.EvidenceAlreadyAppraisedResult {
+		t.Fatalf("后落的评价：outcome = %q err = %v, want EVIDENCE_ALREADY_APPRAISED", late.Outcome(), err)
+	}
+	if winner, _ := late.Evidence(); winner.Appraisal() != domain.EvidenceCredited {
+		t.Fatalf("交回的不是在册那一份：%q", winner.Appraisal())
+	}
+	if kept := fixture.store.byID[item.ID()]; kept.Appraisal() != domain.EvidenceCredited || decisions.appraisers[item.ID()] != "https://issuer#carol" {
+		t.Fatalf("先落的评价被盖掉了：%q 评价人 %q", kept.Appraisal(), decisions.appraisers[item.ID()])
+	}
+
+	if again := appraise(item.ID(), domain.EvidenceDiscredited, "再评一次", "https://issuer#dave"); again.Outcome() != application.EvidenceAlreadyAppraisedResult {
+		t.Fatalf("再评价：outcome = %q, want EVIDENCE_ALREADY_APPRAISED", again.Outcome())
+	}
+}
+
+// staleEvidenceRead 第一次按标识读交回一份早先读到的旧证据项，此后读写都落到真替身上。
+type staleEvidenceRead struct {
+	*evidenceStoreDouble
+	stale domain.EvidenceItem
+	read  *bool
+}
+
+func (store staleEvidenceRead) FindByID(ctx context.Context, tenant domain.TenantID, id domain.EvidenceItemID) (domain.EvidenceItem, bool, error) {
+	if !*store.read {
+		*store.read = true
+		return store.stale, true, nil
+	}
+	return store.evidenceStoreDouble.FindByID(ctx, tenant, id)
+}

@@ -23,6 +23,13 @@ const (
 	OperatorDecisionExceptionCaseMerge   OperatorDecision = "EXCEPTION_CASE_MERGE"
 )
 
+// 证据的三种决定：登记、评价、准备对外披露版本。同样各按自己那一种认证。
+const (
+	OperatorDecisionEvidenceSubmission            OperatorDecision = "EVIDENCE_SUBMISSION"
+	OperatorDecisionEvidenceAppraisal             OperatorDecision = "EVIDENCE_APPRAISAL"
+	OperatorDecisionEvidenceDisclosurePreparation OperatorDecision = "EVIDENCE_DISCLOSURE_PREPARATION"
+)
+
 // maxDecisionBytes 是一份运营决定载荷的上限：三口的载荷都只有几个标识和一段结论。
 const maxDecisionBytes = 64 << 10
 

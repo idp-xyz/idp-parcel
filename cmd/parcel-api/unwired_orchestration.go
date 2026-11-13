@@ -2364,6 +2364,20 @@ func (unwiredExceptionCases) Merge(context.Context, visibilityapp.MergeCaseComma
 	return visibilityapp.ManageCaseResult{}, errOrchestrationNotWired
 }
 
+type unwiredEvidence struct{}
+
+func (unwiredEvidence) SubmitEvidence(context.Context, visibilityapp.SubmitEvidenceCommand) (visibilityapp.ManageEvidenceResult, error) {
+	return visibilityapp.ManageEvidenceResult{}, errOrchestrationNotWired
+}
+
+func (unwiredEvidence) Appraise(context.Context, visibilityapp.AppraiseEvidenceCommand) (visibilityapp.ManageEvidenceResult, error) {
+	return visibilityapp.ManageEvidenceResult{}, errOrchestrationNotWired
+}
+
+func (unwiredEvidence) PrepareDisclosure(context.Context, visibilityapp.PrepareEvidenceDisclosureCommand) (visibilityapp.ManageEvidenceResult, error) {
+	return visibilityapp.ManageEvidenceResult{}, errOrchestrationNotWired
+}
+
 type unwiredChargeConfirmation struct{}
 
 func (unwiredChargeConfirmation) Confirm(

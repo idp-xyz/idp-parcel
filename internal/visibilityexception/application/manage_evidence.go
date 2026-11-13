@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -23,6 +24,12 @@ const (
 	EvidenceDisclosureExistingResult
 	ManageEvidenceUndecided
 	ManageEvidenceNotAccepted
+	// EvidenceAppraised：这一轮形成了采信或不采信的评价。
+	EvidenceAppraised
+	// EvidenceAlreadyAppraisedResult：这项证据此前已经评价过。评价不改写——异议走调查与裁决——所以交回在册的那一份。
+	EvidenceAlreadyAppraisedResult
+	// EvidenceNotFound：指名的证据项不在本租户的册上。
+	EvidenceNotFound
 )
 
 func (outcome ManageEvidenceOutcome) String() string {
@@ -39,6 +46,12 @@ func (outcome ManageEvidenceOutcome) String() string {
 		return "UNDECIDED"
 	case ManageEvidenceNotAccepted:
 		return "NOT_ACCEPTED"
+	case EvidenceAppraised:
+		return "EVIDENCE_APPRAISED"
+	case EvidenceAlreadyAppraisedResult:
+		return "EVIDENCE_ALREADY_APPRAISED"
+	case EvidenceNotFound:
+		return "EVIDENCE_NOT_FOUND"
 	default:
 		return ""
 	}
@@ -68,11 +81,24 @@ func (reason ManageEvidenceUndecidedReason) String() string {
 // 评价——评价起点恒为`已收到`，由领域构造器钉死，调用方给不了（「材料被提交不表示其内容
 // 已经被认定为事实」，CONTEXT）。也没有案件或索赔键：证据项是被引的本体，引用在引用方
 // 身上。租户显式随命令到达（ADR-0003）。
+//
+// SubmittedAt 为零时取编排时钟：运营决定口不收补报的收到时刻，材料是在登记的这一刻被本产品收下的。Operator 是把它登
+// 成证据项的操作者，非空时记作登记人。
 type SubmitEvidenceCommand struct {
 	TenantID    domain.TenantID
 	Provider    domain.EvidenceProviderReference
 	Digest      domain.EvidenceContentDigest
 	SubmittedAt time.Time
+	Operator    string
+}
+
+// AppraiseEvidenceCommand 请求对一项已收到的证据作出经调查的评价：采信或不采信，依据必备。评价时刻取编排时钟。
+type AppraiseEvidenceCommand struct {
+	TenantID  domain.TenantID
+	Evidence  domain.EvidenceItemID
+	Appraisal domain.EvidenceAppraisal
+	Basis     string
+	Operator  string
 }
 
 // PrepareEvidenceDisclosureCommand 请求为一项已收到的证据形成对外披露版本：脱敏后的
@@ -113,6 +139,8 @@ func (result ManageEvidenceResult) UndecidedReason() ManageEvidenceUndecidedReas
 }
 
 type ManageEvidenceDeps struct {
+	// Decisions 记登记人与评价。Appraise 必须有它；SubmitEvidence 在它在场且命令带了操作者时记登记人。
+	Decisions  ports.EvidenceDecisionStore
 	Evidence   ports.EvidenceStore
 	Identities ports.EvidenceIdentityFactory
 	Clock      ports.Clock
@@ -136,6 +164,9 @@ func (handler *ManageEvidenceHandler) SubmitEvidence(
 	ctx context.Context,
 	command SubmitEvidenceCommand,
 ) (ManageEvidenceResult, error) {
+	if command.SubmittedAt.IsZero() && handler.deps.Clock != nil {
+		command.SubmittedAt = handler.deps.Clock.Now().UTC()
+	}
 	if command.TenantID.String() == "" ||
 		command.Provider.String() == "" ||
 		command.Digest.String() == "" ||
@@ -166,6 +197,11 @@ func (handler *ManageEvidenceHandler) SubmitEvidence(
 	}
 	switch saved {
 	case ports.EvidenceSaved:
+		if operator := strings.TrimSpace(command.Operator); operator != "" && handler.deps.Decisions != nil {
+			if err := handler.deps.Decisions.RecordRegistrar(ctx, command.TenantID, item.ID(), operator); err != nil {
+				return ManageEvidenceResult{outcome: ManageEvidenceUndecided, reason: EvidenceStoreUnavailable}, nil
+			}
+		}
 		return ManageEvidenceResult{outcome: EvidenceSubmitted, item: item, hasItem: true}, nil
 	case ports.EvidenceAlreadyRecorded:
 		// 取回之后、写入之前另一方把同（提供方+指纹）建了出来：读回赢家如实交出。
@@ -176,6 +212,55 @@ func (handler *ManageEvidenceHandler) SubmitEvidence(
 		return ManageEvidenceResult{outcome: EvidenceExistingResult, item: existing, hasItem: true}, nil
 	default:
 		return ManageEvidenceResult{}, fmt.Errorf("submit evidence: unexpected save outcome %d", saved)
+	}
+}
+
+// Appraise 对一项已收到的证据作出经调查的评价（`UC-VE-007` 步 2「有效性」）：采信或不采信，依据必备。评价只落一次——
+// 已评价的证据再评价，交回在册的那一份而不改写它；两个人同时评价同一项，后落的那一笔同样答已评价。评价不形成事实或
+// 责任结论，只说这份材料经调查之后本产品信不信它。
+func (handler *ManageEvidenceHandler) Appraise(
+	ctx context.Context,
+	command AppraiseEvidenceCommand,
+) (ManageEvidenceResult, error) {
+	basis, operator := strings.TrimSpace(command.Basis), strings.TrimSpace(command.Operator)
+	if handler.deps.Decisions == nil || command.TenantID.String() == "" || command.Evidence.String() == "" ||
+		basis == "" || operator == "" ||
+		(command.Appraisal != domain.EvidenceCredited && command.Appraisal != domain.EvidenceDiscredited) {
+		return ManageEvidenceResult{outcome: ManageEvidenceNotAccepted}, nil
+	}
+	item, found, err := handler.deps.Evidence.FindByID(ctx, command.TenantID, command.Evidence)
+	if err != nil {
+		return ManageEvidenceResult{outcome: ManageEvidenceUndecided, reason: EvidenceStoreUnavailable}, nil
+	}
+	if !found {
+		return ManageEvidenceResult{outcome: EvidenceNotFound}, nil
+	}
+	if item.Appraisal() != domain.EvidenceReceived {
+		return ManageEvidenceResult{outcome: EvidenceAlreadyAppraisedResult, item: item, hasItem: true}, nil
+	}
+	at := handler.deps.Clock.Now().UTC()
+	appraised, err := item.Appraise(command.Appraisal, basis, at)
+	if err != nil {
+		return ManageEvidenceResult{outcome: ManageEvidenceNotAccepted, item: item, hasItem: true}, nil
+	}
+	recorded, err := handler.deps.Decisions.AppraiseEvidence(ctx, ports.EvidenceAppraisalRecord{
+		Tenant: command.TenantID, Item: appraised, Operator: operator, AppraisedAt: at,
+	})
+	if err != nil {
+		return ManageEvidenceResult{outcome: ManageEvidenceUndecided, reason: EvidenceStoreUnavailable}, nil
+	}
+	switch recorded {
+	case ports.EvidenceAppraisalRecorded:
+		return ManageEvidenceResult{outcome: EvidenceAppraised, item: appraised, hasItem: true}, nil
+	case ports.EvidenceAlreadyAppraised:
+		// 读到`已收到`之后、落评价之前另一笔评价先落了：读回赢家如实交出，不盖掉它。
+		winner, found, err := handler.deps.Evidence.FindByID(ctx, command.TenantID, command.Evidence)
+		if err != nil || !found {
+			return ManageEvidenceResult{outcome: ManageEvidenceUndecided, reason: EvidenceStoreUnavailable}, nil
+		}
+		return ManageEvidenceResult{outcome: EvidenceAlreadyAppraisedResult, item: winner, hasItem: true}, nil
+	default:
+		return ManageEvidenceResult{}, fmt.Errorf("appraise evidence: unexpected outcome %d", recorded)
 	}
 }
 

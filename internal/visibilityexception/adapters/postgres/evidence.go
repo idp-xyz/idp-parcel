@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -72,8 +73,8 @@ func (repository *EvidenceItems) FindByProviderDigest(
 
 // Save 落一项证据。撞（提供方+指纹）唯一约束交回 AlreadyRecorded（ON CONFLICT DO NOTHING，
 // 事务保持可用），编排读回赢家；证据项标识是新键新行，撞主键同样归入 DO NOTHING——两个
-// 约束任一命中都表示「这一行不是本轮写的」，编排都按已有处理。没有 UPDATE 路径：评价的
-// 推进（Appraise）今天没有编排，等它有入口时再开专门的回填口，不在这里预留。
+// 约束任一命中都表示「这一行不是本轮写的」，编排都按已有处理。评价的推进不走这里，走
+// AppraiseEvidence 那只带条件的回填口。
 func (repository *EvidenceItems) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -107,6 +108,64 @@ func (repository *EvidenceItems) Save(
 		return ports.EvidenceAlreadyRecorded, nil
 	}
 	return ports.EvidenceSaved, nil
+}
+
+var _ ports.EvidenceDecisionStore = (*EvidenceItems)(nil)
+
+// RecordRegistrar 记下把这份材料登成证据项的操作者。条件进语句：只在还没有登记人时写——同一份材料重放、或另一个人
+// 再登一次同一份，登记人仍是第一位。
+func (repository *EvidenceItems) RecordRegistrar(
+	ctx context.Context,
+	tenant domain.TenantID,
+	item domain.EvidenceItemID,
+	operator string,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("record evidence registrar: %w", err)
+	}
+	if strings.TrimSpace(operator) == "" {
+		return fmt.Errorf("record evidence registrar: operator is blank")
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE visibility_exception.evidence_item
+		    SET registered_by = $3
+		  WHERE tenant_id = $1 AND evidence_id = $2 AND registered_by IS NULL`,
+		tenant.String(), item.String(), operator,
+	); err != nil {
+		return fmt.Errorf("record evidence registrar: %w", err)
+	}
+	return nil
+}
+
+// AppraiseEvidence 落一次评价。条件进语句：册上仍是`已收到`才动。两个人同时评价同一项证据，后落的那一笔一行不动、
+// 答已评价，先落的结论与依据不被盖掉。
+func (repository *EvidenceItems) AppraiseEvidence(
+	ctx context.Context,
+	record ports.EvidenceAppraisalRecord,
+) (ports.EvidenceAppraisalOutcome, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.EvidenceAppraisalOutcomeInvalid, fmt.Errorf("appraise evidence: %w", err)
+	}
+	snapshot := record.Item.Snapshot()
+	if snapshot.ID.String() == "" || snapshot.Appraisal == domain.EvidenceReceived || strings.TrimSpace(record.Operator) == "" || record.AppraisedAt.IsZero() {
+		return ports.EvidenceAppraisalOutcomeInvalid, fmt.Errorf("appraise evidence: an appraised item, its appraiser and the appraisal time are required")
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE visibility_exception.evidence_item
+		    SET appraisal = $3, appraisal_basis = $4, appraised_by = $5, appraised_at = $6
+		  WHERE tenant_id = $1 AND evidence_id = $2 AND appraisal = 'RECEIVED'`,
+		record.Tenant.String(), snapshot.ID.String(),
+		snapshot.Appraisal.String(), snapshot.AppraisalBasis, record.Operator, record.AppraisedAt.UTC(),
+	)
+	if err != nil {
+		return ports.EvidenceAppraisalOutcomeInvalid, fmt.Errorf("appraise evidence: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.EvidenceAlreadyAppraised, nil
+	}
+	return ports.EvidenceAppraisalRecorded, nil
 }
 
 func (repository *EvidenceItems) FindDisclosure(

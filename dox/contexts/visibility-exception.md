@@ -86,7 +86,7 @@
 | 处置请求 | `SENT` `SUPERSEDED` `JUDGMENT_RECORDED` `ACCEPTANCE_WINDOW_EXPIRED` `CANCELLATION_RECORDED` |
 | 披露决定与通知 | `DECIDED`；`SUBMITTED` `SUBMISSION_FAILED` |
 | 索赔 | `CLAIM_RECEIVED` `CLAIM_SCREENED` `CLAIM_AWAITING_SUPPLEMENT` `CLAIM_CONCLUDED` `CLAIM_REVIEWED` `REVIEW_WINDOW_CLOSED` `CLAIM_CONCURRENTLY_CHANGED` `NUMBERING_RULE_COLLISION` |
-| 追偿；证据 | `RECOVERY_OPENED` `RECOVERY_ACTION_RECORDED`；`EVIDENCE_SUBMITTED` `DISCLOSURE_PREPARED` |
+| 追偿；证据 | `RECOVERY_OPENED` `RECOVERY_ACTION_RECORDED`；`EVIDENCE_SUBMITTED` `EVIDENCE_APPRAISED` `DISCLOSURE_PREPARED` |
 | 目录登记 | `REGISTERED` `REFUSED`（`SCOPE_MISSING` `VERSION_MISSING` `APPROVAL_MISSING` `EFFECTIVE_RANGE_MISSING` `EFFECTIVE_RANGE_REVERSED` `ENTRIES_MISSING` `ENTRY_INCOMPLETE` `ENTRY_DUPLICATED` `VERSION_NOT_OVERWRITABLE` `VERSION_OVERLAPS_EXISTING`） |
 | 索赔材料收讫 | `REGISTERED` `ALREADY_REGISTERED` `REVOKED` `ALREADY_REVOKED` `REFUSED` |
 
@@ -142,7 +142,7 @@
 
 **证据、索赔与追偿（部分无生产入口，见末节）**
 
-- 证据提交只表示收到；评价另记，对外披露形成脱敏版本，原件摘要保留。
+- 证据的登记、评价、披露版本准备是三种分开授予的运营决定。本产品只记内容指纹，不存材料本体。登记只表示收到，收到时刻取服务端登记的那一刻，同一提供方的同一份材料是同一项。评价只能是采信或不采信、依据必备、只落一次，已评价的不改写。披露版本锚住原件指纹，脱敏指纹不得与原件相同，必带披露范围。登记人、评价人与评价时刻记在证据项上。
 - 索赔逐项受理，同一批次、同一项重放答原结果；内容不同的重放不接受。受理、资格审核、责任结论是三个判断。
 - 首次索赔期限与最低材料按目标包裹所属委托接受时固定的规则版本取；取不到就停在未登记。
 - 资料不足进入限期补充，固定缺少的材料与截止时间；延期形成新期限版本，原期限保留。
@@ -168,6 +168,7 @@
 | 客户查追踪 | `/v1/customer-tracking-view` `/v1/customer-shipment-tracking` |
 | 客户提交索赔 | `/v1/claims` |
 | 案件决定 | `/exception-case-take-ups` `/exception-case-closures` `/exception-case-merges` |
+| 证据决定 | `/evidence-submissions` `/evidence-appraisals` `/evidence-disclosure-preparations` |
 | 运营只读 | `/tracking-projections` `/exception-triage-records` `/exception-case-records` `/claims-recovery-records` `/visibility-catalogues` |
 | 目录登记 | `/visibility-catalogue-<种类>-registrations`，种类为 `milestone-mapping` `triage-rule` `notification-policy` `claim-eligibility` `claim-authorization` `disclosure-policy` `exception-disclosure-rule` `conflict-signal-rule` |
 
@@ -180,9 +181,9 @@
 **有机制、生产装配没有调用方**（只被测试调用）：
 
 - **形成 ETA 与可见性缺口**：`FormETAHandler` 没有任何 `cmd/` 装配。下游的 ETA 可见性判断已接在 `parcel-dispatch` 上，但没有预测来源入队，客户视图的 ETA 一维在生产里只会答待确认或不展示。
-- **处置请求**（`SendDispositionRequestHandler`）、**披露决定**（`DecideDisclosureHandler`）、**客户异常通知**（`NotifyCustomerHandler`）、**证据**（`ManageEvidenceHandler`）：都没有装配。对应的目录可以登记，运营读口可以读，但没有东西写入。
+- **处置请求**（`SendDispositionRequestHandler`）、**披露决定**（`DecideDisclosureHandler`）、**客户异常通知**（`NotifyCustomerHandler`）：都没有装配。对应的目录可以登记，运营读口可以读，但没有东西写入。
 - **索赔受理之后的各步**：`/v1/claims` 只接受理。资格审核已装配但没有端点；责任结论、复核、开立追偿、记录追偿动作没有调用方。
-- **发作期结束，索赔撤回，补充延期，证据评价**：领域方法在（`End` `Withdraw` `ExtendSupplementDeadline` `Appraise`），应用层没有编排调用它们。案件关闭前「未完成的处置请求都已移交或完成取消核对」此刻没有可核的对象，因为处置请求没有生产入口。
+- **发作期结束，索赔撤回，补充延期**：领域方法在（`End` `Withdraw` `ExtendSupplementDeadline`），应用层没有编排调用它们。案件关闭前「未完成的处置请求都已移交或完成取消核对」此刻没有可核的对象，因为处置请求没有生产入口。
 - **生产里信号的来源只有两处**：替代链分叉裁不出，以及出发门禁阻断。旧文档说的关务异常信号、ETA 与缺口信号没有接到信号编排上。
 
 **代码里找不到机制**：
