@@ -638,3 +638,37 @@ func TestReplayConflictAndRecoveryDiscipline(t *testing.T) {
 		}
 	})
 }
+
+// Covers: dox/decisions.md「产品形态」——人工录入的海关结果记下录入人与所凭原件，进的是同一套接收编排；给了录入人
+// 没给原件（或反过来）不受理、什么也不落；接口来的两格都空。两格不进内容指纹：同一条结果先由人录、后由接口再来一遍是重放。
+func TestAManuallyEnteredResultCarriesWhoEnteredItAndTheOriginalItWasReadFrom(t *testing.T) {
+	fixture := newResultFixture(t)
+	manual := resultCommand(t, "source-manual-1")
+	manual.EnteredBy, manual.Original = "OPERATOR/https://issuer#alice", "SYN-RECEIPT-NO-20261113-01"
+	result, err := fixture.handler.Handle(context.Background(), manual)
+	record, present := result.Record()
+	if err != nil || result.Outcome() != application.ResultRecorded || !present ||
+		record.EnteredBy != "OPERATOR/https://issuer#alice" || record.Original != "SYN-RECEIPT-NO-20261113-01" {
+		t.Fatalf("人工录入：err=%v outcome=%q record=%+v", err, result.Outcome(), record)
+	}
+
+	fromInterface := resultCommand(t, "source-manual-1")
+	replayed, err := fixture.handler.Handle(context.Background(), fromInterface)
+	if err != nil || replayed.Outcome() != application.ResultExistingResult {
+		t.Fatalf("同一条结果由接口再来：err=%v outcome=%q，想要重放", err, replayed.Outcome())
+	}
+
+	for name, mutate := range map[string]func(*application.ReceiveExternalResultCommand){
+		"有录入人没有原件": func(command *application.ReceiveExternalResultCommand) {
+			command.EnteredBy = "OPERATOR/https://issuer#alice"
+		},
+		"有原件没有录入人": func(command *application.ReceiveExternalResultCommand) { command.Original = "SYN-RECEIPT-NO-1" },
+	} {
+		command := resultCommand(t, "source-manual-"+name)
+		mutate(&command)
+		refused, err := fixture.handler.Handle(context.Background(), command)
+		if _, present := refused.Record(); err != nil || refused.Outcome() != application.ResultNotAccepted || present {
+			t.Fatalf("%s：err=%v outcome=%q", name, err, refused.Outcome())
+		}
+	}
+}

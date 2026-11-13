@@ -106,6 +106,14 @@ func (intake *IntegrationClientIntake) IntakeResult(
 	if err := decodeClosedDocument(request.Body, &document); err != nil {
 		return none, err
 	}
+	return document.command(tenant, intake.clock.Now().UTC())
+}
+
+// command 把线格式译成接收命令。集成客户端口与操作员手工录入口共用这一份：两族只差谁在提交、凭什么授予，载荷的读法
+// 只有一份。
+func (document externalResultDocument) command(tenant domain.TenantID, receivedAt time.Time) (application.ReceiveExternalResultCommand, error) {
+	none := application.ReceiveExternalResultCommand{}
+	var err error
 	command := application.ReceiveExternalResultCommand{
 		TenantID:       tenant,
 		SourceID:       document.SourceID,
@@ -114,7 +122,7 @@ func (intake *IntegrationClientIntake) IntakeResult(
 		ClaimedVersion: document.ClaimedVersion,
 		Attempt:        document.Attempt,
 		Scope:          document.Scope,
-		ReceivedAt:     intake.clock.Now().UTC(),
+		ReceivedAt:     receivedAt,
 		Corrects:       document.CorrectsSourceID,
 	}
 	if document.Layer != "" {

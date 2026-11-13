@@ -135,6 +135,10 @@ type ReceiveExternalResultCommand struct {
 	// Corrects 是来源明确声明本结果所更正的那一份的来源标识，可缺。缺席即没有更正语义，照同层判法判后续
 	// 事件或矛盾；本编排不从业务时间或语义差别猜更正（UC-CC-006「没有更正语义的矛盾结果保持冲突」）。
 	Corrects string
+	// EnteredBy 是人工录入时的录入人（`OPERATOR/<发行方>#<sub>`），Original 是所凭原件的引用。两格只由操作员口给：
+	// 给了录入人就必须给原件——没有原件可查的人工录入等于让人凭记忆造一条监管事实。接口来的两格都空。
+	EnteredBy string
+	Original  string
 }
 
 type ReceiveExternalResultResult struct {
@@ -198,6 +202,10 @@ func (handler *ReceiveExternalResultHandler) Handle(
 	ctx context.Context,
 	command ReceiveExternalResultCommand,
 ) (ReceiveExternalResultResult, error) {
+	if (strings.TrimSpace(command.EnteredBy) == "") != (strings.TrimSpace(command.Original) == "") {
+		// 人工录入必带所凭原件；接口来的不带录入人，也就不该带原件这一格。
+		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
+	}
 	if strings.TrimSpace(command.TenantID.String()) == "" ||
 		strings.TrimSpace(command.SourceID) == "" ||
 		strings.TrimSpace(command.RawSemantics) == "" ||
@@ -264,6 +272,8 @@ func (handler *ReceiveExternalResultHandler) Handle(
 			RawSemantics:   command.RawSemantics,
 			ClaimedVersion: command.ClaimedVersion,
 			RecordedAt:     handler.deps.Clock.Now(),
+			EnteredBy:      strings.TrimSpace(command.EnteredBy),
+			Original:       strings.TrimSpace(command.Original),
 		}
 		return handler.commit(ctx, record, ResultUnattributable)
 	}
@@ -390,6 +400,8 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		Result:        interpreted,
 		Release:       release,
 		RecordedAt:    handler.deps.Clock.Now(),
+		EnteredBy:     strings.TrimSpace(command.EnteredBy),
+		Original:      strings.TrimSpace(command.Original),
 	}
 	outcome := ResultRecorded
 	switch inForce, err := domain.CheckLayerConsistency(layerFacts, domain.LayerFact{Result: interpreted, Release: release}); {

@@ -40,6 +40,11 @@ type ExternalResultRecord struct {
 	ClaimedVersion string
 	LayerConflict  bool
 	RecordedAt     time.Time
+	// EnteredBy 与 Original 只在人工录入的记录上非空：谁照着哪一份原件（回执、通知书的编号或存档引用）录的。接口来的
+	// 记录两格都空。它们只进审计、不进内容指纹：同一份海关结果由接口来还是由人录，监管语义相同，证据分量不同，读的人
+	// 要分得开。
+	EnteredBy string
+	Original  string
 	// Release 只在放行层的可归属记录上非空：UC-CC-006 步 5 要求放行层在分层事实之外落成
 	// 范围与条件明确的放行事实（票 mechanism-executor-triage/07 CC-b）。它与 Result 同一
 	// 记录、同一事务——放行结果不是从分层事实推导出来的第二份东西，是同一次接收按来源

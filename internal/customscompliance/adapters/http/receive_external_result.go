@@ -9,7 +9,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"net/http"
+	"strings"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
 )
@@ -85,6 +89,50 @@ type resultResponse struct {
 	UndecidedReason       string `json:"undecidedReason,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
 	HandoffReference      string `json:"handoffReference,omitempty"`
+}
+
+// OperatorDecisionCustomsExternalResultEntry 是关务人员照海关回执人工录入一条外部监管结果（dox/decisions.md「产品形态」）。
+const OperatorDecisionCustomsExternalResultEntry OperatorDecision = "CUSTOMS_EXTERNAL_RESULT_ENTRY"
+
+// manualExternalResultDocument 是手工录入口的线格式：与集成客户端口同一份形状，另加 original——所凭原件的编号或存档
+// 引用，必填。
+type manualExternalResultDocument struct {
+	externalResultDocument
+	Original string `json:"original"`
+}
+
+// manualResultIntake 让操作员渠道的运营决定口也能交出接收命令：按人工录入这一种决定认证，载荷的读法与集成客户端口是
+// 同一份，录入人记成 `OPERATOR/<发行方>#<sub>`、原件引用随命令走。接收时刻由服务端给。
+type manualResultIntake struct {
+	intake *OperatorDecisionIntake
+	now    func() time.Time
+}
+
+// ManualResultIntake 交回手工录入口的 Intake。
+func ManualResultIntake(intake *OperatorDecisionIntake, now func() time.Time) ResultIntake {
+	return manualResultIntake{intake: intake, now: now}
+}
+
+func (manual manualResultIntake) IntakeResult(ctx context.Context, request *http.Request) (application.ReceiveExternalResultCommand, error) {
+	none := application.ReceiveExternalResultCommand{}
+	operator, err := manual.intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionCustomsExternalResultEntry)
+	if err != nil {
+		return none, err
+	}
+	var document manualExternalResultDocument
+	if err := decodeClosedDocument(request.Body, &document); err != nil {
+		return none, err
+	}
+	if strings.TrimSpace(document.Original) == "" {
+		return none, fmt.Errorf("%w: original is required for a manually entered result", ErrMalformedRequest)
+	}
+	command, err := document.command(operator.Tenant, manual.now().UTC())
+	if err != nil {
+		return none, err
+	}
+	command.EnteredBy = "OPERATOR/" + operator.Operator
+	command.Original = strings.TrimSpace(document.Original)
+	return command, nil
 }
 
 func writeResultOutcome(response http.ResponseWriter, result application.ReceiveExternalResultResult) {

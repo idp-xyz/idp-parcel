@@ -11,10 +11,10 @@ test('清关的每个运营决定口都有路径、标题与填写提示', () =>
   }
 });
 
-test('清关单页挂五个口、限制页挂两个口，选册键不重复', () => {
+test('清关单页挂六个口、限制页挂两个口，选册键不重复', () => {
   deepEqual(
     caseDecisionTargets.map((target) => target.id),
-    ['case-establishment', 'submission-authorization', 'declaration-submission', 'release-gate-verification', 'case-closure'],
+    ['case-establishment', 'submission-authorization', 'declaration-submission', 'external-result-entry', 'release-gate-verification', 'case-closure'],
   );
   deepEqual(
     restrictionDecisionTargets.map((target) => target.endpoint),

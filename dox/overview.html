@@ -691,7 +691,7 @@ footer .wrap{padding-block:22px 40px}
 
 <section id="surf">
   <h2>产品里能操作的地方</h2>
-  <p class="sub">管理台 54 页、接口 271 个，都是从代码里读出来的清单。每一页的状态是沿代码追它调到的接口、再对后端已知缺口定的；这是静态分析，没有逐页点过。</p>
+  <p class="sub">管理台 54 页、接口 272 个，都是从代码里读出来的清单。每一页的状态是沿代码追它调到的接口、再对后端已知缺口定的；这是静态分析，没有逐页点过。</p>
   <div class="legend">
     <span><span class="pill p-ok">可用</span> 32 页：有写操作，页面说明的事能做完</span>
     <span><span class="pill p-wait">部分可用</span> 6 页：能做一部分，或动作只有填 JSON 的入口</span>
@@ -712,7 +712,7 @@ footer .wrap{padding-block:22px 40px}
 <tr><td><b>账务</b><br><span style="color:var(--muted);font-size:12.5px">6 页</span></td><td><ul class="pg"><li><span class="pill p-wait">部分可用</span> <b>客户费用</b>　每张运单的费用明细、计费重量与调整。<br><span class="nt">费用确认与费用调整在「运营决定」签上，照提示填 JSON 提交，不是引导式表单</span></li><li><span class="pill p-wait">部分可用</span> <b>对账单</b>　发给客户的对账单，以及客户对单上费用提出的争议。<br><span class="nt">能登记与处置争议；发布、作废与后续账期纳入在「运营决定」签上，照提示填 JSON 提交，不是引导式表单</span></li><li><span class="pill p-ok">可用</span> <b>供应商账单与应付</b>　登记供应商发来的账单、逐行审核，审核通过的金额形成应付。<br><span class="nt">接收账单、逐行审核</span></li><li><span class="pill p-ok">可用</span> <b>收付款核销</b>　把实际收到或付出的钱核到对账单与账户上。<br><span class="nt">手工登记收付款事实及其更正</span></li><li><span class="pill p-off">只能看</span> <b>代收货款</b>　替客户代收的货款、回汇批次与差异。<br><span class="nt">首发试点不启用代收货款</span></li><li><span class="pill p-off">只能看</span> <b>经营核算</b>　按口径派生的经营毛利与经营损失。<br><span class="nt">暂无数据：成本分摊与经营结果的形成后端没有入口</span></li></ul></td></tr>
 <tr><td><b>设置</b><br><span style="color:var(--muted);font-size:12.5px">10 页</span></td><td><ul class="pg"><li><span class="pill p-ok">可用</span> <b>公司主体</b>　我们自己签约、开票、结算用的公司。<br><span class="nt">登记、修订</span></li><li><span class="pill p-ok">可用</span> <b>追踪规则</b>　承运商回传的事件如何对应到标准状态、什么情况自动立案。<br><span class="nt">登记里程碑映射、分诊规则等</span></li><li><span class="pill p-ok">可用</span> <b>通知与披露</b>　向客户披露什么、通知的时限与渠道。<br><span class="nt">登记披露与通知策略；通知的发送只有接口，没有页面</span></li><li><span class="pill p-ok">可用</span> <b>单据编号</b>　运单、对账单、异常案件等各类单据的号怎么出：此刻的格式与样例号，改用新格式，登记单据编号时区。<br><span class="nt">预览、改格式、登记时区</span></li><li><span class="pill p-off">只能看</span> <b>扫描设备</b>　网点与场外作业使用的扫描设备登记。<br><span class="nt">设备登记走离线命令</span></li><li><span class="pill p-ok">可用</span> <b>操作者与授予</b>　本公司能登录管理台的操作者，以及每个人持有哪几格授予。<br><span class="nt">登记操作者、授予与撤销</span></li><li><span class="pill p-ok">可用</span> <b>审批与发布</b>　等待批准的合同、价格与规则发布稿。<br><span class="nt">预览、起草、批准、发布</span></li><li><span class="pill p-ok">可用</span> <b>基础数据</b>　国家和地区、币种、计量单位的标准目录；国家和币种另可登记本公司启用哪些。<br><span class="nt">登记本公司启用的国家与币种</span></li><li><span class="pill p-off">只能看</span> <b>试点治理</b>　产品实例的阶段决定、暂停与恢复，只给管理员。<br><span class="nt">阶段决定、暂停与恢复的登记走离线命令</span></li><li><span class="pill p-hold">本机</span> <b>演示</b>　页面模板的演示页，不是业务功能。<br><span class="nt">演示页</span></li></ul></td></tr>
   </table></div>
-  <div class="note">运营决定类接口 69 个里有 28 个、登记类 73 个里有 22 个，管理台没有任何一页调它。清关、账务、异常三组的决定口已接进各自页面的「运营决定」签（照提示填 JSON 提交，不是引导式表单）；运输的委托、订舱、容量、派送、收费发生项、段关闭，今天仍只能直接调接口或走演示脚本。</div>
+  <div class="note">运营决定类接口 70 个里有 28 个、登记类 73 个里有 22 个，管理台没有任何一页调它。清关、账务、异常三组的决定口已接进各自页面的「运营决定」签（照提示填 JSON 提交，不是引导式表单）；运输的委托、订舱、容量、派送、收费发生项、段关闭，今天仍只能直接调接口或走演示脚本。</div>
   <h3>接口：谁能调哪一类</h3>
   <p>每个接口属于一个接入面。谁持有哪一面的授予，在接入与身份里登记。</p>
   <div class="tbl"><table>

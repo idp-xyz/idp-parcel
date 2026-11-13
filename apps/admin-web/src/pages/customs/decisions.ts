@@ -15,6 +15,7 @@ export type CustomsDecisionKind =
   | 'declaration-submission'
   | 'release-gate-verification'
   | 'case-closure'
+  | 'external-result-entry'
   | 'regulatory-restriction'
   | 'regulatory-restriction-release';
 
@@ -24,6 +25,7 @@ export const customsDecisionEndpoints: Record<CustomsDecisionKind, string> = {
   'declaration-submission': '/customs-declaration-submissions',
   'release-gate-verification': '/customs-release-gate-verifications',
   'case-closure': '/customs-case-closures',
+  'external-result-entry': '/customs-external-result-manual-registrations',
   'regulatory-restriction': '/customs-regulatory-restrictions',
   'regulatory-restriction-release': '/customs-regulatory-restriction-releases',
 };
@@ -34,6 +36,7 @@ export const customsDecisionTitles: Record<CustomsDecisionKind, string> = {
   'declaration-submission': '提交申报',
   'release-gate-verification': '放行检查',
   'case-closure': '关闭清关单',
+  'external-result-entry': '录入海关结果',
   'regulatory-restriction': '建立监管限制',
   'regulatory-restriction-release': '解除监管限制',
 };
@@ -55,6 +58,12 @@ export const customsDecisionHints: Record<CustomsDecisionKind, string> = {
     'FINAL_DELIVERY 交付）、boundary（边界）。' +
     identityNote,
   'case-closure': '请填 caseId（清关单）、cutoffAt（截点，RFC 3339 时间，例如 2026-11-13T08:00:00Z）。还有未了结的事项时答不能关闭并列出来。' + identityNote,
+  'external-result-entry':
+    '没有对接海关或报关行系统时，照回执在这里录入。请填 sourceId（给这条结果起的标识，同一份回执只用一个）、layer（结果层：REGULATORY_RECEIPT 海关已接收 / ' +
+    'BUSINESS_ACCEPTANCE 海关已受理 / PROCESS_DECISION 过程决定 / ASSESSED_DUTY 核定税费 / RELEASE_RESULT 放行结果 / DISPOSITION_DECISION 处置决定）、' +
+    'role（发出结果的机构角色）、rawSemantics（回执原文）、claimedVersion（回执对应的申报版本）、attempt（第几次提交，整数）、scope（申报范围）、' +
+    'occurredAt（回执上的业务时间，RFC 3339）、original（所凭原件的编号或存档引用，必填）。放行结果另填 release；更正前一条时填 correctsSourceId。' +
+    identityNote,
   'regulatory-restriction':
     '请填 restrictionId（给这条限制起的标识）、decision（依据的那条海关结果的来源标识）、constrains（限制哪几步，数组，取值同放行检查的 action）。' +
     '依据必须是已登记、可归属、未被更正的海关结果。' +
@@ -65,6 +74,9 @@ export const customsDecisionHints: Record<CustomsDecisionKind, string> = {
 
 /** 各口答复的中文。没收录的原样示出英文原名。 */
 export const customsDecisionOutcomeLabels: Record<string, string> = {
+  RESULT_RECORDED: '已记下这条海关结果',
+  UNATTRIBUTABLE: '归属不到已有的申报版本，原文已留存',
+  LAYER_CONFLICT: '与同一层已有的结果矛盾，两份都已留存',
   CASE_ESTABLISHED: '已建立清关单',
   EXISTING_CASE: '这张清关单已经在了',
   AUTHORIZATION_CONFIRMED: '已确认提交授权',
@@ -113,9 +125,9 @@ export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTa
   };
 }
 
-/** 清关单页「运营决定」签上的五个口，按一张清关单从建到关的顺序排。 */
+/** 清关单页「运营决定」签上的六个口，按一张清关单从建到关的顺序排；海关结果在没有对接时由人照回执录入。 */
 export const caseDecisionTargets: RegistrationTarget[] = (
-  ['case-establishment', 'submission-authorization', 'declaration-submission', 'release-gate-verification', 'case-closure'] as const
+  ['case-establishment', 'submission-authorization', 'declaration-submission', 'external-result-entry', 'release-gate-verification', 'case-closure'] as const
 ).map(customsDecisionTarget);
 
 /** 限制页登记签上追加的两个口。 */

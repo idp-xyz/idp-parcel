@@ -13,6 +13,7 @@ type manualExternalFactsWiring struct {
 	externalFundsFactAdoption           settlementhttp.ExternalFundsFactRegistrar
 	externalFundsFactCorrectionAdoption settlementhttp.ExternalFundsFactCorrectionRegistrar
 	regulatoryCredentialRegistration    customshttp.RegulatoryCredentialRegistrar
+	externalResults                     customshttp.ResultHandler
 }
 
 func init() {
@@ -27,6 +28,9 @@ func init() {
 			"/customs-regulatory-credential-manual-registrations": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionRegulatoryCredentialRegistration),
 			},
+			"/customs-external-result-manual-registrations": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionCustomsExternalResultEntry),
+			},
 		},
 		build: func(sources endpointSources) (manualExternalFactsWiring, error) {
 			// 编排取集成客户端族那边的同一套构造（buildSettlementRegistrationOrchestration、buildCustomsRegistrationOrchestration）：两族只差
@@ -36,7 +40,13 @@ func init() {
 				return manualExternalFactsWiring{}, err
 			}
 			customs, err := buildCustomsRegistrationOrchestration(sources.db)
+			if err != nil {
+				return manualExternalFactsWiring{}, err
+			}
+			// 海关外部结果的手工录入进的是集成客户端口后面的同一只接收编排。
+			results, err := buildExternalResultsOrchestration(sources.db)
 			return manualExternalFactsWiring{
+				externalResults:                     results,
 				externalFundsFactAdoption:           settlement.externalFundsFact,
 				externalFundsFactCorrectionAdoption: settlement.externalFundsFactCorrection,
 				regulatoryCredentialRegistration:    customs.regulatoryCredential,
@@ -50,6 +60,9 @@ func init() {
 				{Pattern: "/settlement-external-funds-fact-manual-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactEndpoint(channels.operatorDecisions.settlement, wiring.externalFundsFactAdoption)},
 				{Pattern: "/settlement-external-funds-fact-correction-manual-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(channels.operatorDecisions.settlement, wiring.externalFundsFactCorrectionAdoption)},
 				{Pattern: "/customs-regulatory-credential-manual-registrations", Handler: customshttp.NewRegisterRegulatoryCredentialEndpoint(channels.operatorDecisions.customs, wiring.regulatoryCredentialRegistration)},
+				// 海关外部结果的手工录入口（dox/decisions.md「产品形态」）：没有对接海关或报关行系统的租户，由关务人员照回执录入。
+				// 录入人与所凭原件记在结果上，与接口来的分得开。
+				{Pattern: "/customs-external-result-manual-registrations", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.ManualResultIntake(channels.operatorDecisions.customs, systemClock{}.Now), wiring.externalResults)},
 			}
 		},
 	})

@@ -60,6 +60,7 @@ func (repository *ExternalResults) FindByKey(
 
 	var (
 		digest, rawSemantics, claimedVersion             string
+		enteredBy, original                              string
 		unattributable, layerConflict, correctionInForce bool
 		resultJSON                                       []byte
 		corrects                                         *string
@@ -67,14 +68,15 @@ func (repository *ExternalResults) FindByKey(
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT content_digest, unattributable, raw_semantics, claimed_version,
-		        layer_conflict, result, recorded_at, corrects_source_id, correction_in_force
+		        layer_conflict, result, recorded_at, corrects_source_id, correction_in_force,
+		        COALESCE(entered_by, ''), COALESCE(original_ref, '')
 		   FROM customs_compliance.external_result
 		  WHERE tenant_id = $1
 		    AND source_id = $2`,
 		key.TenantID.String(),
 		key.SourceID,
 	).Scan(&digest, &unattributable, &rawSemantics, &claimedVersion,
-		&layerConflict, &resultJSON, &recordedAt, &corrects, &correctionInForce)
+		&layerConflict, &resultJSON, &recordedAt, &corrects, &correctionInForce, &enteredBy, &original)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ExternalResultRecord{}, false, nil
 	}
@@ -92,6 +94,8 @@ func (repository *ExternalResults) FindByKey(
 		RecordedAt:     recordedAt.UTC(),
 		// 生效标记照库里读回，不在读口另判：它是接收那一刻的判断。
 		CorrectionInForce: correctionInForce,
+		EnteredBy:         enteredBy,
+		Original:          original,
 	}
 	if len(resultJSON) > 0 {
 		result, err := rebuildResult(resultJSON, corrects)
@@ -180,8 +184,8 @@ func (repository *ExternalResults) Save(
 		`INSERT INTO customs_compliance.external_result
 			(tenant_id, source_id, content_digest, unattributable, raw_semantics,
 			 claimed_version, layer_conflict, result, submission_version, recorded_at,
-			 corrects_source_id, correction_in_force)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			 corrects_source_id, correction_in_force, entered_by, original_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULLIF($13, ''), NULLIF($14, ''))
 		 ON CONFLICT ON CONSTRAINT external_result_pkey DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.SourceID,
@@ -195,6 +199,8 @@ func (repository *ExternalResults) Save(
 		record.RecordedAt.UTC(),
 		corrects,
 		record.CorrectionInForce,
+		record.EnteredBy,
+		record.Original,
 	)
 	if err != nil {
 		return ports.ExternalResultSaveOutcomeInvalid, fmt.Errorf("save external result: %w", err)

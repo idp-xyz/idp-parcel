@@ -240,6 +240,10 @@ const (
 	DecisionAdjustmentInclusion          DecisionKind = "ADJUSTMENT_INCLUSION"
 )
 
+// DecisionCustomsExternalResultEntry 是关务人员照海关回执把一条外部监管结果录进来。它与集成客户端族的同一类事实并存：
+// 有对接的由外部系统推，没有对接的由人照原件录，录入人与原件记在结果上。
+const DecisionCustomsExternalResultEntry DecisionKind = "CUSTOMS_EXTERNAL_RESULT_ENTRY"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -274,6 +278,7 @@ var decisionKinds = []DecisionKind{
 	DecisionSupplierBillDisputeDecision,
 	DecisionStatementDisputeRegistration, DecisionStatementDisputeResolution,
 	DecisionChargeAdjustmentRegistration, DecisionStatementVoid, DecisionLateChargeInclusion, DecisionAdjustmentInclusion,
+	DecisionCustomsExternalResultEntry,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,
