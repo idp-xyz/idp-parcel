@@ -12,6 +12,8 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
+	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
+	customsdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -83,16 +85,32 @@ func TestAManuallyEnteredCustomsResultIsReceivedByTheSameOrchestrationAndKeepsIt
 	if status, answer := post(outsider, body); status != http.StatusForbidden {
 		t.Fatalf("持别的授予的人录入 = %d %v，想要 403", status, answer)
 	}
-	if status, answer := post(clerk, body); status != http.StatusOK || answer["outcome"] != "UNATTRIBUTABLE" {
+	if status, answer := post(clerk, body); status != http.StatusOK || answer["outcome"] != "UNATTRIBUTABLE" || answer["sourceId"] != "MANUAL/SYN-RESULT-MANUAL-1" {
 		t.Fatalf("手工录入 = %d %v，想要留存不猜", status, answer)
 	}
 	if status, answer := post(clerk, body); status != http.StatusOK || answer["outcome"] != "EXISTING_RESULT" {
 		t.Fatalf("同一份重投 = %d %v", status, answer)
 	}
+	// 接口随后送来同一个回执号、内容略有出入的那一条：与人工录入的不在一个名字空间，各自成行，不被答成来源冲突丢掉。
+	results, err := buildExternalResultsOrchestration(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromInterface := externalResultCommand(t, "SYN-RESULT-MANUAL-1", "SYN-CC-VERSION-MISSING")
+	fromInterface.TenantID = mustValue(t, customsdomain.NewTenantID, customsDecisionTenant)
+	fromInterface.RawSemantics = "SYN-RAW-RELEASED-WITH-CONDITION"
+	if delivered, err := results.Handle(t.Context(), fromInterface); err != nil || delivered.Outcome() != customsapp.ResultUnattributable {
+		t.Fatalf("接口送来同号的那一条：err=%v outcome=%q，想要各自成行", err, delivered.Outcome())
+	}
+	// 载荷超过运营决定口的上限是坏报文。
+	if status, answer := post(clerk, strings.Replace(body, "SYN-RAW-RELEASED", strings.Repeat("x", 2<<20), 1)); status != http.StatusBadRequest {
+		t.Fatalf("超限的载荷 = %d %v，想要 400", status, answer["error"])
+	}
+
 	var rows int
 	var enteredBy, original string
 	if err := pool.QueryRow(t.Context(),
-		`SELECT count(*), min(entered_by), min(original_ref) FROM customs_compliance.external_result WHERE tenant_id = $1 AND source_id = 'SYN-RESULT-MANUAL-1'`,
+		`SELECT count(*), min(entered_by), min(original_ref) FROM customs_compliance.external_result WHERE tenant_id = $1 AND source_id = 'MANUAL/SYN-RESULT-MANUAL-1'`,
 		customsDecisionTenant).Scan(&rows, &enteredBy, &original); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +118,7 @@ func TestAManuallyEnteredCustomsResultIsReceivedByTheSameOrchestrationAndKeepsIt
 		t.Fatalf("结果行 %d 行，录入人 %q，原件 %q", rows, enteredBy, original)
 	}
 	if _, err := pool.Exec(t.Context(),
-		`UPDATE customs_compliance.external_result SET original_ref = NULL WHERE tenant_id = $1 AND source_id = 'SYN-RESULT-MANUAL-1'`,
+		`UPDATE customs_compliance.external_result SET original_ref = NULL WHERE tenant_id = $1 AND source_id = 'MANUAL/SYN-RESULT-MANUAL-1'`,
 		customsDecisionTenant); err == nil {
 		t.Fatal("库接受了有录入人没有原件的结果行")
 	}

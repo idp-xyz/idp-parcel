@@ -172,7 +172,7 @@
 | 做什么 | 路径 |
 |---|---|
 | 运营决定 | `/customs-cases` `/customs-declaration-submissions` `/customs-submission-authorizations` `/customs-case-closures` `/customs-release-gate-verifications` `/customs-internal-restrictions` `/customs-internal-restriction-decisions` `/customs-regulatory-restrictions` `/customs-regulatory-restriction-releases` `/customs-regulatory-credential-manual-registrations` |
-| 集成客户端送入（外部结果另有手工录入口 `/customs-external-result-manual-registrations`：关务人员照回执录入，进同一只接收编排，必带所凭原件，录入人与原件记在结果上、不进内容指纹） | `/customs/external-results` `/customs/technical-receipts` `/customs-regulatory-credential-registrations` `/customs/external-manifest-references` `/customs/external-manifest-reference-revisions` |
+| 集成客户端送入（外部结果另有手工录入口 `/customs-external-result-manual-registrations`：关务人员照回执录入，进同一只接收编排，必带所凭原件，录入人与原件记在结果上、不进内容指纹；来源标识由服务端加 `MANUAL/` 前缀，与接口来的各自成行） | `/customs/external-results` `/customs/technical-receipts` `/customs-regulatory-credential-registrations` `/customs/external-manifest-references` `/customs/external-manifest-reference-revisions` |
 | 动作准入 | `/customs-action-admission-judgements` `/customs-unadmitted-objects` |
 | 登记 | `/customs-case-requirement-registrations` `/customs-interpretation-rule-registrations` `/customs-gate-catalog-registrations` `/customs-candidate-port-registrations` `/customs-declaration-path-registrations` `/customs-node-zone-registrations` `/customs-duty-collaboration-registrations` `/customs-duty-payment-verification-registrations` |
 | 查阅 | `/customs-case-records` `/customs-submission-records` `/customs-external-result-records` `/customs-case-registers` `/customs-compliance-rules` `/customs-gate-conditions` `/customs-ports-paths` `/customs-credentials` `/customs-duty-collaborations` `/customs-duty-verifications` |

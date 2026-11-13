@@ -43,7 +43,7 @@ func TestTheManualResultFaceAuthenticatesItsOwnKindAndRecordsWhoEnteredFromWhich
 	}
 	command := handler.commands[0]
 	if command.TenantID.String() != "SYN-TENANT-01" || command.EnteredBy != "OPERATOR/https://issuer#alice" || command.Original != "SYN-RECEIPT-NO-01" ||
-		command.SourceID != "SYN-RESULT-MANUAL-1" || !command.ReceivedAt.Equal(now) || command.OccurredAt.IsZero() {
+		command.SourceID != "MANUAL/SYN-RESULT-MANUAL-1" || !command.ReceivedAt.Equal(now) || command.OccurredAt.IsZero() {
 		t.Fatalf("command = %+v", command)
 	}
 

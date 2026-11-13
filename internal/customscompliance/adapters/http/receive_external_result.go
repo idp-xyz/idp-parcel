@@ -89,10 +89,16 @@ type resultResponse struct {
 	UndecidedReason       string `json:"undecidedReason,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
 	HandoffReference      string `json:"handoffReference,omitempty"`
+	// SourceID 只在记录在场时交回：人工录入的标识由服务端加了前缀，录入的人要知道库里记的是哪一个。
+	SourceID string `json:"sourceId,omitempty"`
 }
 
 // OperatorDecisionCustomsExternalResultEntry 是关务人员照海关回执人工录入一条外部监管结果（dox/decisions.md「产品形态」）。
 const OperatorDecisionCustomsExternalResultEntry OperatorDecision = "CUSTOMS_EXTERNAL_RESULT_ENTRY"
+
+// ManualSourcePrefix 是人工录入的外部结果在来源标识上的前缀。要更正一条人工录入的结果，correctsSourceId 填带前缀的
+// 那一个；更正接口送来的结果，照填接口的标识。
+const ManualSourcePrefix = "MANUAL/"
 
 // manualExternalResultDocument 是手工录入口的线格式：与集成客户端口同一份形状，另加 original——所凭原件的编号或存档
 // 引用，必填。
@@ -120,7 +126,7 @@ func (manual manualResultIntake) IntakeResult(ctx context.Context, request *http
 		return none, err
 	}
 	var document manualExternalResultDocument
-	if err := decodeClosedDocument(request.Body, &document); err != nil {
+	if err := decodeClosedPayload(request.Body, &document); err != nil {
 		return none, err
 	}
 	if strings.TrimSpace(document.Original) == "" {
@@ -130,6 +136,10 @@ func (manual manualResultIntake) IntakeResult(ctx context.Context, request *http
 	if err != nil {
 		return none, err
 	}
+	// 人工录入的来源标识自成一个名字空间：操作员多半拿回执号当标识，而回执号也是连接器最自然的来源标识。两边共用一个
+	// 空间时，人先录了一条、接口随后送来同号而内容略有出入的那一条，会被答成来源冲突而整条丢掉——库里留下的是人抄的
+	// 那一份，没有任何人看得见。分开之后两条各自成行，由同层判法去比（后续事件、更正或显式的同层冲突）。
+	command.SourceID = ManualSourcePrefix + strings.TrimSpace(command.SourceID)
 	command.EnteredBy = "OPERATOR/" + operator.Operator
 	command.Original = strings.TrimSpace(document.Original)
 	return command, nil
@@ -151,6 +161,9 @@ func writeResultOutcome(response http.ResponseWriter, result application.Receive
 	}
 	if handoff := result.ResultHandoffReference(); handoff != "" {
 		body.HandoffReference = handoff
+	}
+	if record, has := result.Record(); has {
+		body.SourceID = record.Key.SourceID
 	}
 
 	status := http.StatusOK
