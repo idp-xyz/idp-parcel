@@ -112,7 +112,7 @@ func TestCaseAggregateWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := restrictions.Save(ctx, domain.TenantID{}, domain.RegulatoryRestriction{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务保存限制应返回 ErrTransactionRequired，实得：%v", err)
 	}
-	if err := restrictions.Update(ctx, domain.TenantID{}, domain.RegulatoryRestriction{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+	if _, err := restrictions.Update(ctx, domain.TenantID{}, domain.RegulatoryRestriction{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务更新限制应返回 ErrTransactionRequired，实得：%v", err)
 	}
 

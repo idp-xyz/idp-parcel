@@ -333,6 +333,8 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   CUSTOMS_EXTERNAL_RESULT: muted('海关结果'),
   INTERNAL_RESTRICTION_ESTABLISHMENT: muted('建立内部限制'),
   INTERNAL_RESTRICTION_DECISION: muted('内部限制决定'),
+  REGULATORY_RESTRICTION_ESTABLISHMENT: muted('建立监管限制'),
+  REGULATORY_RESTRICTION_RELEASE: muted('解除监管限制'),
   RELEASE_GATE_VERIFICATION: muted('放行检查'),
   REGULATORY_CREDENTIAL: muted('监管凭证'),
   REGULATORY_CREDENTIAL_REGISTRATION: muted('监管凭证登记'),

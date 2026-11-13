@@ -193,6 +193,14 @@ const (
 	DecisionStatementDisputeResolution   DecisionKind = "STATEMENT_DISPUTE_RESOLUTION"
 )
 
+// DecisionRegulatoryRestrictionEstablishment 与 DecisionRegulatoryRestrictionRelease 是关务人员依据一条已接收的外部监管结果
+// 建立、解除监管限制的两种决定。两种分开授予：能把一条扣留决定登成限制的人，不因此能凭一条放行结果解除它。依据由关务
+// 的编排对外部结果册核，本册只管谁此刻持有哪一种。
+const (
+	DecisionRegulatoryRestrictionEstablishment DecisionKind = "REGULATORY_RESTRICTION_ESTABLISHMENT"
+	DecisionRegulatoryRestrictionRelease       DecisionKind = "REGULATORY_RESTRICTION_RELEASE"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -226,6 +234,7 @@ var decisionKinds = []DecisionKind{
 	DecisionPostIntakeManualItemHandling,
 	DecisionSupplierBillDisputeDecision,
 	DecisionStatementDisputeRegistration, DecisionStatementDisputeResolution,
+	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 }
 
 // DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。

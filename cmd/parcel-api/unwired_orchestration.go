@@ -2334,6 +2334,22 @@ func (unwiredManifests) Revise(
 	return customsapp.ManifestResult{}, errOrchestrationNotWired
 }
 
+type unwiredRegulatoryRestrictions struct{}
+
+func (unwiredRegulatoryRestrictions) EstablishOnResult(
+	context.Context,
+	customsapp.EstablishRestrictionOnResultCommand,
+) (customsapp.RestrictionResult, error) {
+	return customsapp.RestrictionResult{}, errOrchestrationNotWired
+}
+
+func (unwiredRegulatoryRestrictions) ReleaseOnResult(
+	context.Context,
+	customsapp.ReleaseRestrictionOnResultCommand,
+) (customsapp.RestrictionResult, error) {
+	return customsapp.RestrictionResult{}, errOrchestrationNotWired
+}
+
 type unwiredChargeConfirmation struct{}
 
 func (unwiredChargeConfirmation) Confirm(

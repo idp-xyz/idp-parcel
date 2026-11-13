@@ -463,29 +463,30 @@ func (repository *Restrictions) Update(
 	ctx context.Context,
 	tenant domain.TenantID,
 	restriction domain.RegulatoryRestriction,
-) error {
+) (ports.RestrictionUpdateOutcome, error) {
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("update restriction: %w", err)
+		return ports.RestrictionUpdateOutcomeInvalid, fmt.Errorf("update restriction: %w", err)
 	}
 	releasedBy, releasedAt := releaseColumns(restriction)
 
 	tag, err := executor.Exec(ctx,
 		`UPDATE customs_compliance.regulatory_restriction
 		    SET released_by = $3, released_at = $4
-		  WHERE tenant_id = $1 AND restriction_id = $2`,
+		  WHERE tenant_id = $1 AND restriction_id = $2 AND released_at IS NULL`,
 		tenant.String(),
 		restriction.ID().String(),
 		releasedBy,
 		releasedAt,
 	)
 	if err != nil {
-		return fmt.Errorf("update restriction: %w", err)
+		return ports.RestrictionUpdateOutcomeInvalid, fmt.Errorf("update restriction: %w", err)
 	}
+	// 一行都没动：这份限制已经解除（并发的另一笔解除先落了），或不在册。解除只落一次，后到的不盖掉先落的依据。
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("update restriction: %s not found", restriction.ID())
+		return ports.RestrictionAlreadySettled, nil
 	}
-	return nil
+	return ports.RestrictionReleaseRecorded, nil
 }
 
 // GateVerifications 实现 ports.GateVerificationStore（写入代数同 ADR-0031）。条件

@@ -38,8 +38,7 @@
 | 监管凭证 | 许可证、证书等监管资格凭据。有独立身份和不可变版本；附件不代替它 |
 | 监管限制 | 依据监管过程决定对明确对象形成的阻断，列明所约束的动作 |
 | 内部合规限制 | 运营企业依据贸易合规规则形成的内部阻断决定。与监管限制互不改名、互不解除 |
-| 限制责任来源 | 对一项内部合规限制及其解除负责的来源 |
-| 限制覆盖项 | 一项内部合规限制对明确对象、动作和时间的一条独立覆盖 |
+| 限制责任来源／限制覆盖项 | 对一项内部合规限制及其解除负责的来源；该限制对明确对象、动作和时间的一条独立覆盖 |
 | 税费付款核对 | 把核定税费与外部资金事实按范围比较的版本化判断。不形成付款或放行 |
 | 放行门禁核对 | 对明确范围、拟执行动作，判断放行前置条件是否满足。不代替放行结果 |
 | 动作准入判断 | 对明确对象和一次动作意图，把限制、放行门禁核对、外部放行结果折成的封闭答复 |
@@ -117,9 +116,10 @@
 - 凭证版本不可变；换期限、持有人或额度是另一张凭证。同身份同内容重登只答已存在。
 - 凭证可以经集成客户端、租户人员人工登记、受控登记 CLI 三路进来。人工登记记下登记人，只作操作证据，不是凭证内容。
 
-**限制（部分无生产入口，见末节）**
+**限制**
 
 - 监管限制与内部合规限制是两种限制，各按自己的依据解除，互不解除；外部放行不自动解除任一种。
+- 监管限制由关务人员依据一条已接收的外部监管结果建立与解除，两种决定分开授予。建立只认过程决定或处置决定；范围与生效时刻取自所引结果，人只声明约束哪些动作。解除只认同范围、生效之后的放行结果或决定，解除只落一次。结果不在册、归属不上或处在同层冲突里，答依据不成立。
 - 内部合规限制必须写明责任来源、依据、受限动作、开始时间和解除条件，覆盖项逐项保存。
 - 只有原限制责任来源可以形成解除决定。解除是追加式的，只覆盖指名的覆盖项，不删原限制历史；任一限制仍有效就继续阻断。
 - 适用性待确认或冲突时如实答待确认或冲突，不读成无内部限制。
@@ -171,7 +171,7 @@
 
 | 做什么 | 路径 |
 |---|---|
-| 运营决定 | `/customs-cases` `/customs-declaration-submissions` `/customs-submission-authorizations` `/customs-case-closures` `/customs-release-gate-verifications` `/customs-internal-restrictions` `/customs-internal-restriction-decisions` `/customs-regulatory-credential-manual-registrations` |
+| 运营决定 | `/customs-cases` `/customs-declaration-submissions` `/customs-submission-authorizations` `/customs-case-closures` `/customs-release-gate-verifications` `/customs-internal-restrictions` `/customs-internal-restriction-decisions` `/customs-regulatory-restrictions` `/customs-regulatory-restriction-releases` `/customs-regulatory-credential-manual-registrations` |
 | 集成客户端送入 | `/customs/external-results` `/customs/technical-receipts` `/customs-regulatory-credential-registrations` `/customs/external-manifest-references` `/customs/external-manifest-reference-revisions` |
 | 动作准入 | `/customs-action-admission-judgements` `/customs-unadmitted-objects` |
 | 登记 | `/customs-case-requirement-registrations` `/customs-interpretation-rule-registrations` `/customs-gate-catalog-registrations` `/customs-candidate-port-registrations` `/customs-declaration-path-registrations` `/customs-node-zone-registrations` `/customs-duty-collaboration-registrations` `/customs-duty-payment-verification-registrations` |
@@ -183,7 +183,7 @@
 
 离线口：`cmd/parcel-customs-register`，运营在数据库网络内手跑，不监听端口，输入是 JSON 文件。登记就绪判断与提交授权（含撤销）、解释规则、关闭义务目录与明细、门禁目录与明细、税费付款门禁规则、建案要求规则、口岸、申报路径、监管凭证、税费付款协作事项与核对、节点关务区域、申报发送通道。
 
-**有用例代码、但没有接进任何进程的**（`cmd/` 下非测试代码里找不到构造点）：后续申报动作与替代（`ManageFollowUpHandler`）、原案内更正（`CorrectDeclarationHandler`）、监管限制的建立与解除（`ManageRestrictionHandler`）、处置执行核对（`VerifyDispositionHandler`）、凭证门禁判断（`RecordCredentialGateHandler`、`JudgeCredentialApplicabilityHandler`）。合规判断只有领域类型 `ComplianceJudgment`，没有用例。上面「规则」里属于这几块的句子，眼下没有生产入口能触发。
+**有用例代码、但没有接进任何进程的**（`cmd/` 下非测试代码里找不到构造点）：后续申报动作与替代（`ManageFollowUpHandler`）、原案内更正（`CorrectDeclarationHandler`）、处置执行核对（`VerifyDispositionHandler`）、凭证门禁判断（`RecordCredentialGateHandler`、`JudgeCredentialApplicabilityHandler`）。合规判断只有领域类型 `ComplianceJudgment`，没有用例。上面「规则」里属于这几块的句子，眼下没有生产入口能触发。
 
 ## 旧文档写了、代码里还没有的
 

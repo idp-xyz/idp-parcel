@@ -265,7 +265,24 @@ func TestRestrictionEstablishAndReleaseAreSeparateSteps(t *testing.T) {
 		t.Fatalf("解除限制：%v", err)
 	}
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		return fixture.restrictions.Update(txCtx, tenant, released)
+		outcome, err := fixture.restrictions.Update(txCtx, tenant, released)
+		if err == nil && outcome != ports.RestrictionReleaseRecorded {
+			t.Errorf("解除 outcome = %d，want RestrictionReleaseRecorded", outcome)
+		}
+		return err
+	})
+	// 解除只落一次：同一份限制再解除一次（换一条依据），一行不动、答已解除，先落的依据不被盖掉。
+	again, err := holding.ReleaseByRegulatoryOutcome(
+		crgValue(t, domain.NewRegulatoryReleaseReference, "release/outcome-later"), crgBaseAt.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("再次解除（领域）：%v", err)
+	}
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		outcome, err := fixture.restrictions.Update(txCtx, tenant, again)
+		if err == nil && outcome != ports.RestrictionAlreadySettled {
+			t.Errorf("再次解除 outcome = %d，want RestrictionAlreadySettled", outcome)
+		}
+		return err
 	})
 
 	found, exists, err := fixture.restrictions.FindByID(ctx, tenant,
@@ -315,19 +332,19 @@ func TestRestrictionEstablishAndReleaseAreSeparateSteps(t *testing.T) {
 		t.Fatalf("准入判断没按读回的限制阻断：%+v", admissibility.BlockedBy())
 	}
 
-	// 跨租户不可见；不存在的限制 Update 如实报错。
+	// 跨租户不可见；另一租户拿同名标识解除，一行不动。
 	if _, exists, err := fixture.restrictions.FindByID(ctx,
 		crgValue(t, domain.NewTenantID, "tenant-b"),
 		crgValue(t, domain.NewRestrictionID, "restriction-1")); err != nil || exists {
 		t.Fatalf("跨租户可见：err=%v exists=%v", err, exists)
 	}
-	ghost := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		return fixture.restrictions.Update(txCtx,
-			crgValue(t, domain.NewTenantID, "tenant-b"), released)
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		outcome, err := fixture.restrictions.Update(txCtx, crgValue(t, domain.NewTenantID, "tenant-b"), released)
+		if err == nil && outcome != ports.RestrictionAlreadySettled {
+			t.Errorf("另一租户拿同名标识改动了限制：outcome = %d", outcome)
+		}
+		return err
 	})
-	if ghost == nil {
-		t.Fatalf("另一租户拿同名标识改动了限制")
-	}
 }
 
 // TestReleaseShapeIsPinnedByCheck 证解除形状入库内 CHECK：只有时刻没有依据的解除
@@ -476,7 +493,7 @@ func TestCRGWritesRequireTransactionAndRollBack(t *testing.T) {
 	if _, err := fixture.restrictions.Save(ctx, tenant, restriction); err == nil {
 		t.Fatalf("无事务写限制被接受了")
 	}
-	if err := fixture.restrictions.Update(ctx, tenant, restriction); err == nil {
+	if _, err := fixture.restrictions.Update(ctx, tenant, restriction); err == nil {
 		t.Fatalf("无事务改限制被接受了")
 	}
 	if _, err := fixture.gates.Save(ctx, gateKey, gate); err == nil {

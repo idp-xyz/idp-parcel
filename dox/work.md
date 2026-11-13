@@ -13,9 +13,8 @@
 
 2026-11-12 用户委托会话裁定。判据与上线线同一句：真实租户到那一步就撞且产品里没有路，或会答错而没人看见；并且首发范围写明要生产化。各件都是「编排已在、缺装配与入口」，只做机制半边，用 `SYN-` 数据走通，证据记 `S`。
 
-1. **关务：监管限制的建立与解除**（`ManageRestrictionHandler`）。外部监管扣留要与内部合规限制各自独立存在。
-2. **追踪与异常：异常案件接单与关闭、证据、披露决定、客户异常通知**（`ManageEvidenceHandler` `DecideDisclosureHandler` `NotifyCustomerHandler`；案件的接单与关闭只有领域方法，要补一层编排）。
-3. **结算：费用调整、对账单作废与后续对账纳入**（`RecordChargeAdjustmentHandler`，以及 `Void` `IncludeAdjustment` `IncludeLateCharge`）。一个真实账期里迟到费用与调整会自然发生。
+1. **追踪与异常：异常案件接单与关闭、证据、披露决定、客户异常通知**（`ManageEvidenceHandler` `DecideDisclosureHandler` `NotifyCustomerHandler`；案件的接单与关闭只有领域方法，要补一层编排）。
+2. **结算：费用调整、对账单作废与后续对账纳入**（`RecordChargeAdjustmentHandler`，以及 `Void` `IncludeAdjustment` `IncludeLateCharge`）。一个真实账期里迟到费用与调整会自然发生。
 
 ## 不做，租户用到再补
 
@@ -30,8 +29,8 @@
 
 2026-11-13 用户定。排在上面各件之后。后端接口都已在，只补页面；清单见 [surfaces.md](./surfaces.md)「有接口、没有页面的操作」。
 
-4. **清关**：建立关务案件、提交授权、申报提交、放行门禁核对、案件关闭。
-5. **账务**：费用确认、对账单发布。
+3. **清关**：建立关务案件、提交授权、申报提交、放行门禁核对、案件关闭、监管限制的建立与解除。
+4. **账务**：费用确认、对账单发布。
 
 运输那一批操作先不补页面，等第一家租户明确自营运输还是全部外包再定。
 

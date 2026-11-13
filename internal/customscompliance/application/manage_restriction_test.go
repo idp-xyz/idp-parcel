@@ -56,9 +56,12 @@ func (double *restrictionStoreDouble) Update(
 	_ context.Context,
 	_ domain.TenantID,
 	restriction domain.RegulatoryRestriction,
-) error {
+) (ports.RestrictionUpdateOutcome, error) {
+	if current, exists := double.byID[restriction.ID().String()]; !exists || !current.Current() {
+		return ports.RestrictionAlreadySettled, nil
+	}
 	double.byID[restriction.ID().String()] = restriction
-	return nil
+	return ports.RestrictionReleaseRecorded, nil
 }
 
 type restrictionDownstreamDouble struct {
@@ -254,4 +257,215 @@ func TestActionJudgmentListsEveryBlockerUntilAllRelease(t *testing.T) {
 	if held.Outcome() != application.RestrictionEstablished || held.HandoffReference() == "" {
 		t.Fatalf("outcome = %q ref = %q", held.Outcome(), held.HandoffReference())
 	}
+}
+
+type acceptedResultsDouble struct {
+	bySource map[string]ports.ExternalResultRecord
+	err      error
+}
+
+func (double *acceptedResultsDouble) FindByKey(_ context.Context, key ports.ExternalResultKey) (ports.ExternalResultRecord, bool, error) {
+	if double.err != nil {
+		return ports.ExternalResultRecord{}, false, double.err
+	}
+	record, found := double.bySource[key.SourceID]
+	return record, found, nil
+}
+
+// regulatoryResult 造一条已接收的外部监管结果记录：层、范围与业务发生时间由用例给。
+func regulatoryResult(t *testing.T, source string, layer domain.ResultLayer, scope string, occurredAt time.Time) ports.ExternalResultRecord {
+	t.Helper()
+	result, err := domain.InterpretExternalResult(domain.ExternalResultSpec{
+		Layer:        layer,
+		SourceID:     source,
+		Role:         mustValue(t, domain.NewSourceAuthorityRole, "customs-authority"),
+		RawSemantics: "SYN 监管原文",
+		Rule:         mustValue(t, domain.NewInterpretationRuleReference, "interpretation-rule/v1"),
+		Version:      mustValue(t, domain.NewSubmissionVersionID, "submission/v1"),
+		Attempt:      1,
+		Scope:        mustValue(t, domain.NewDecisionScopeReference, scope),
+		OccurredAt:   occurredAt,
+		ReceivedAt:   occurredAt.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("interpret %s: %v", source, err)
+	}
+	return ports.ExternalResultRecord{
+		Key:    ports.ExternalResultKey{TenantID: mustValue(t, domain.NewTenantID, "tenant-1"), SourceID: source},
+		Result: result,
+	}
+}
+
+func newBasedRestrictionFixture(t *testing.T, records ...ports.ExternalResultRecord) (*restrictionFixture, *acceptedResultsDouble) {
+	t.Helper()
+	results := &acceptedResultsDouble{bySource: map[string]ports.ExternalResultRecord{}}
+	for _, record := range records {
+		results.bySource[record.Key.SourceID] = record
+	}
+	fixture := &restrictionFixture{
+		store:      &restrictionStoreDouble{byID: map[string]domain.RegulatoryRestriction{}},
+		downstream: &restrictionDownstreamDouble{},
+	}
+	fixture.handler = application.NewManageRestrictionHandler(application.ManageRestrictionDeps{
+		Results:    results,
+		Store:      fixture.store,
+		Downstream: fixture.downstream,
+		Clock:      fixedClock{at: restrictionAt},
+	})
+	return fixture, results
+}
+
+// Covers: CC CONTEXT「只有责任来源接受的监管结果才能解除相应监管限制」与监管限制要由监管决定立——依据一条已接收的过程
+// 决定建立限制：决定身份、范围与生效时刻都取自那条结果，人只声明约束哪些动作；依据同范围、生效之后的一条放行结果解除，
+// 解除时刻取放行结果的业务发生时间。
+func TestARestrictionIsEstablishedAndReleasedOnAcceptedRegulatoryResults(t *testing.T) {
+	heldAt := restrictionAt.Add(-2 * time.Hour)
+	releasedAt := restrictionAt.Add(-time.Hour)
+	fixture, _ := newBasedRestrictionFixture(t,
+		regulatoryResult(t, "hold-1", domain.ProcessDecisionLayer, "parcel-1", heldAt),
+		regulatoryResult(t, "release-1", domain.ReleaseResultLayer, "parcel-1", releasedAt),
+	)
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	id := mustValue(t, domain.NewRestrictionID, "restriction-1")
+
+	established, err := fixture.handler.EstablishOnResult(context.Background(), application.EstablishRestrictionOnResultCommand{
+		TenantID: tenant, ID: id, Decision: "hold-1",
+		Constrains: []domain.GuardedAction{domain.OutboundRelease, domain.LoadingDeparture},
+	})
+	if err != nil || established.Outcome() != application.RestrictionEstablished {
+		t.Fatalf("establish: outcome = %q err = %v", established.Outcome(), err)
+	}
+	restriction, _ := established.Restriction()
+	if restriction.Decision().String() != "hold-1" || restriction.Scope().String() != "parcel-1" || !restriction.EffectiveAt().Equal(heldAt) {
+		t.Fatalf("限制没有取所引结果的身份、范围与发生时间：%+v", restriction)
+	}
+
+	released, err := fixture.handler.ReleaseOnResult(context.Background(), application.ReleaseRestrictionOnResultCommand{
+		TenantID: tenant, ID: id, Result: "release-1",
+	})
+	if err != nil || released.Outcome() != application.RestrictionReleased {
+		t.Fatalf("release: outcome = %q err = %v", released.Outcome(), err)
+	}
+	after, _ := released.Restriction()
+	reference, at, done := after.Release()
+	if !done || reference.String() != "release-1" || !at.Equal(releasedAt) {
+		t.Fatalf("解除依据或时刻不对：%q %v done=%v", reference, at, done)
+	}
+	if len(fixture.downstream.intents) != 2 {
+		t.Fatalf("意图数 = %d，want 2（建立与解除各一份）", len(fixture.downstream.intents))
+	}
+}
+
+// Covers: 人造不出一条没有监管决定撑着的限制，也凭不了不相干的结果解除——所引结果不在册、归属不上原提交、处在同层冲突
+// 里、层次不是决定层、范围不是限制的范围、发生在限制生效之前，或解除时引的就是建立它的那条决定，都答依据不成立，限制册
+// 一行不动；外部结果册读不动是没形成答案。
+func TestARestrictionBasisMustBeAnAcceptedResultOfTheRightLayerAndScope(t *testing.T) {
+	heldAt := restrictionAt.Add(-2 * time.Hour)
+	unattributable := regulatoryResult(t, "hold-orphan", domain.ProcessDecisionLayer, "parcel-1", heldAt)
+	unattributable.Unattributable = true
+	conflicted := regulatoryResult(t, "hold-conflicted", domain.ProcessDecisionLayer, "parcel-1", heldAt)
+	conflicted.LayerConflict = true
+	fixture, results := newBasedRestrictionFixture(t,
+		regulatoryResult(t, "hold-1", domain.ProcessDecisionLayer, "parcel-1", heldAt),
+		regulatoryResult(t, "receipt-1", domain.RegulatoryReceiptLayer, "parcel-1", heldAt),
+		regulatoryResult(t, "release-elsewhere", domain.ReleaseResultLayer, "parcel-2", heldAt.Add(time.Hour)),
+		regulatoryResult(t, "release-early", domain.ReleaseResultLayer, "parcel-1", heldAt.Add(-time.Hour)),
+		regulatoryResult(t, "duty-1", domain.AssessedDutyLayer, "parcel-1", heldAt.Add(time.Hour)),
+		unattributable, conflicted,
+	)
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	id := mustValue(t, domain.NewRestrictionID, "restriction-1")
+	constrains := []domain.GuardedAction{domain.OutboundRelease}
+
+	for _, decision := range []string{"hold-missing", "hold-orphan", "hold-conflicted", "receipt-1"} {
+		refused, err := fixture.handler.EstablishOnResult(context.Background(), application.EstablishRestrictionOnResultCommand{
+			TenantID: tenant, ID: id, Decision: decision, Constrains: constrains,
+		})
+		if err != nil || refused.Outcome() != application.RestrictionBasisNotAccepted {
+			t.Fatalf("以 %s 建立：outcome = %q err = %v, want BASIS_NOT_ACCEPTED", decision, refused.Outcome(), err)
+		}
+	}
+	if len(fixture.store.byID) != 0 {
+		t.Fatal("依据不成立的建立留下了限制")
+	}
+
+	if established, err := fixture.handler.EstablishOnResult(context.Background(), application.EstablishRestrictionOnResultCommand{
+		TenantID: tenant, ID: id, Decision: "hold-1", Constrains: constrains,
+	}); err != nil || established.Outcome() != application.RestrictionEstablished {
+		t.Fatalf("establish: outcome = %q err = %v", established.Outcome(), err)
+	}
+	for _, result := range []string{"release-missing", "release-elsewhere", "release-early", "duty-1", "hold-1"} {
+		refused, err := fixture.handler.ReleaseOnResult(context.Background(), application.ReleaseRestrictionOnResultCommand{
+			TenantID: tenant, ID: id, Result: result,
+		})
+		if err != nil || refused.Outcome() != application.RestrictionBasisNotAccepted {
+			t.Fatalf("以 %s 解除：outcome = %q err = %v, want BASIS_NOT_ACCEPTED", result, refused.Outcome(), err)
+		}
+	}
+	if kept := fixture.store.byID["restriction-1"]; !kept.Current() {
+		t.Fatal("依据不成立的解除把限制解除了")
+	}
+
+	results.err = errors.New("connection refused")
+	undecided, err := fixture.handler.ReleaseOnResult(context.Background(), application.ReleaseRestrictionOnResultCommand{
+		TenantID: tenant, ID: id, Result: "release-1",
+	})
+	if err != nil || undecided.Outcome() != application.RestrictionUndecided {
+		t.Fatalf("结果册读不动：outcome = %q err = %v, want UNDECIDED", undecided.Outcome(), err)
+	}
+}
+
+// Covers: 解除只落一次——两笔解除都读到限制当前有效，先落的一笔成；后落的一笔答已解除并交回在册那一份，先落的解除依据
+// 不被盖掉。
+func TestALateReleaseDoesNotOverwriteTheEarlierReleaseBasis(t *testing.T) {
+	fixture := newRestrictionFixture(t)
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	spec := restrictionSpec(t, "restriction-1", domain.OutboundRelease)
+	if _, err := fixture.handler.Establish(context.Background(), application.EstablishRestrictionCommand{TenantID: tenant, Spec: spec}); err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+	stale := fixture.store.byID["restriction-1"]
+	racing := application.NewManageRestrictionHandler(application.ManageRestrictionDeps{
+		Store:      &staleRestrictionRead{restrictionStoreDouble: fixture.store, stale: stale},
+		Downstream: fixture.downstream,
+		Clock:      fixedClock{at: restrictionAt},
+	})
+	release := func(handler *application.ManageRestrictionHandler, basis string) application.RestrictionResult {
+		t.Helper()
+		result, err := handler.Release(context.Background(), application.ReleaseRestrictionCommand{
+			TenantID: tenant, ID: spec.ID,
+			Release: mustValue(t, domain.NewRegulatoryReleaseReference, basis), At: restrictionAt,
+		})
+		if err != nil {
+			t.Fatalf("release on %s: %v", basis, err)
+		}
+		return result
+	}
+	if first := release(fixture.handler, "release-first"); first.Outcome() != application.RestrictionReleased {
+		t.Fatalf("先落的解除：outcome = %q", first.Outcome())
+	}
+	late := release(racing, "release-late")
+	if late.Outcome() != application.RestrictionAlreadyReleased {
+		t.Fatalf("后落的解除：outcome = %q, want ALREADY_RELEASED", late.Outcome())
+	}
+	kept, _, _ := fixture.store.byID["restriction-1"].Release()
+	if kept.String() != "release-first" {
+		t.Fatalf("在册解除依据 = %q，被后到的那一笔盖掉了", kept)
+	}
+}
+
+// staleRestrictionRead 第一次读交回一份早先读到的旧限制，此后与写都落到真替身上：模拟「读到当前有效之后、落解除之前
+// 另一笔先落了」。
+type staleRestrictionRead struct {
+	*restrictionStoreDouble
+	stale domain.RegulatoryRestriction
+	read  bool
+}
+
+func (store *staleRestrictionRead) FindByID(ctx context.Context, tenant domain.TenantID, id domain.RestrictionID) (domain.RegulatoryRestriction, bool, error) {
+	if !store.read {
+		store.read = true
+		return store.stale, true, nil
+	}
+	return store.restrictionStoreDouble.FindByID(ctx, tenant, id)
 }

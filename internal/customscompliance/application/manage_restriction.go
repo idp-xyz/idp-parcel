@@ -27,6 +27,9 @@ const (
 	RestrictionNotFound
 	RestrictionNotAccepted
 	RestrictionUndecided
+	// RestrictionBasisNotAccepted：所引的外部监管结果当不了这次建立或解除的依据——不在册、归属不上、同层冲突、层次不对、
+	// 范围不是这份限制的范围，或发生在限制生效之前。
+	RestrictionBasisNotAccepted
 )
 
 func (outcome RestrictionOutcome) String() string {
@@ -47,6 +50,8 @@ func (outcome RestrictionOutcome) String() string {
 		return "NOT_ACCEPTED"
 	case RestrictionUndecided:
 		return "UNDECIDED"
+	case RestrictionBasisNotAccepted:
+		return "BASIS_NOT_ACCEPTED"
 	default:
 		return ""
 	}
@@ -87,7 +92,26 @@ func (result RestrictionResult) HandoffReference() string {
 	return result.handoffRef
 }
 
+// EstablishRestrictionOnResultCommand 是关务人员依据一条已接收的外部监管结果建立监管限制的请求。限制的决定身份、范围与
+// 生效时刻都取自所引的那条结果，请求方只指名结果、给限制标识、声明它约束哪些方向性动作——哪种监管决定约束哪些动作是
+// 关务人员读决定原文作出的判断，产品不替它推导。
+type EstablishRestrictionOnResultCommand struct {
+	TenantID   domain.TenantID
+	ID         domain.RestrictionID
+	Decision   string
+	Constrains []domain.GuardedAction
+}
+
+// ReleaseRestrictionOnResultCommand 是依据一条已接收的外部监管结果解除监管限制的请求。解除时刻取所引结果的业务发生时间。
+type ReleaseRestrictionOnResultCommand struct {
+	TenantID domain.TenantID
+	ID       domain.RestrictionID
+	Result   string
+}
+
 type ManageRestrictionDeps struct {
+	// Results 只供 EstablishOnResult 与 ReleaseOnResult 核依据；不经这两个入口时可以为空。
+	Results    ports.AcceptedRegulatoryResults
 	Store      ports.RestrictionStore
 	Downstream ports.RestrictionHandoff
 	Clock      ports.Clock
@@ -176,8 +200,20 @@ func (handler *ManageRestrictionHandler) Release(
 	if err != nil {
 		return RestrictionResult{outcome: RestrictionNotAccepted}, nil
 	}
-	if err := handler.deps.Store.Update(ctx, command.TenantID, released); err != nil {
+	updated, err := handler.deps.Store.Update(ctx, command.TenantID, released)
+	if err != nil {
 		return RestrictionResult{outcome: RestrictionUndecided}, nil
+	}
+	if updated == ports.RestrictionAlreadySettled {
+		// 读到「当前有效」之后、落解除之前，另一笔解除先落了：答已解除并交回在册那一份，不盖掉先落的解除依据。
+		settled, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.ID)
+		if err != nil || !found {
+			return RestrictionResult{outcome: RestrictionUndecided}, nil
+		}
+		return RestrictionResult{outcome: RestrictionAlreadyReleased, restriction: settled, hasRecord: true}, nil
+	}
+	if updated != ports.RestrictionReleaseRecorded {
+		return RestrictionResult{}, fmt.Errorf("%w: update %d", ErrUnexpectedRestrictionSave, updated)
 	}
 	result := RestrictionResult{
 		outcome:     RestrictionReleased,
@@ -186,6 +222,101 @@ func (handler *ManageRestrictionHandler) Release(
 	}
 	result.handoffRef = handler.handOffRestriction(ctx, command.TenantID, released)
 	return result, nil
+}
+
+// EstablishOnResult 依据一条已接收的监管决定建立限制。所引结果必须在册、归属得上原提交、不处在同层冲突里，并且是过程
+// 决定或处置决定这两层——接收、受理、核定税费与放行都不是能立限制的决定。限制的决定身份取结果的来源标识，范围与生效时刻
+// 取结果自己的范围与业务发生时间：人只声明约束哪些动作，造不出一条没有监管决定撑着的限制。
+func (handler *ManageRestrictionHandler) EstablishOnResult(
+	ctx context.Context,
+	command EstablishRestrictionOnResultCommand,
+) (RestrictionResult, error) {
+	if strings.TrimSpace(command.TenantID.String()) == "" || handler.deps.Results == nil {
+		return RestrictionResult{outcome: RestrictionNotAccepted}, nil
+	}
+	record, outcome := handler.acceptedResult(ctx, command.TenantID, command.Decision,
+		domain.ProcessDecisionLayer, domain.DispositionDecisionLayer)
+	if outcome != RestrictionOutcomeInvalid {
+		return RestrictionResult{outcome: outcome}, nil
+	}
+	decision, err := domain.NewRegulatoryDecisionID(record.Result.SourceID())
+	if err != nil {
+		return RestrictionResult{outcome: RestrictionBasisNotAccepted}, nil
+	}
+	return handler.Establish(ctx, EstablishRestrictionCommand{
+		TenantID: command.TenantID,
+		Spec: domain.RegulatoryRestrictionSpec{
+			ID:          command.ID,
+			Decision:    decision,
+			Scope:       record.Result.Scope(),
+			Constrains:  command.Constrains,
+			EffectiveAt: record.Result.OccurredAt(),
+		},
+	})
+}
+
+// ReleaseOnResult 依据一条已接收的监管结果解除限制。所引结果必须在册、归属得上、不处在同层冲突里，是放行结果、过程决定
+// 或处置决定这三层之一，范围就是这份限制的范围，且发生在限制生效之后。执行方的控制或隔离事实进不了外部结果册，也就当
+// 不了这里的依据。
+func (handler *ManageRestrictionHandler) ReleaseOnResult(
+	ctx context.Context,
+	command ReleaseRestrictionOnResultCommand,
+) (RestrictionResult, error) {
+	if strings.TrimSpace(command.TenantID.String()) == "" || handler.deps.Results == nil {
+		return RestrictionResult{outcome: RestrictionNotAccepted}, nil
+	}
+	restriction, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.ID)
+	if err != nil {
+		return RestrictionResult{outcome: RestrictionUndecided}, nil
+	}
+	if !found {
+		return RestrictionResult{outcome: RestrictionNotFound}, nil
+	}
+	record, outcome := handler.acceptedResult(ctx, command.TenantID, command.Result,
+		domain.ReleaseResultLayer, domain.ProcessDecisionLayer, domain.DispositionDecisionLayer)
+	if outcome != RestrictionOutcomeInvalid {
+		return RestrictionResult{outcome: outcome}, nil
+	}
+	if record.Result.Scope() != restriction.Scope() || record.Result.OccurredAt().Before(restriction.EffectiveAt()) ||
+		record.Result.SourceID() == restriction.Decision().String() {
+		return RestrictionResult{outcome: RestrictionBasisNotAccepted}, nil
+	}
+	release, err := domain.NewRegulatoryReleaseReference(record.Result.SourceID())
+	if err != nil {
+		return RestrictionResult{outcome: RestrictionBasisNotAccepted}, nil
+	}
+	return handler.Release(ctx, ReleaseRestrictionCommand{
+		TenantID: command.TenantID,
+		ID:       command.ID,
+		Release:  release,
+		At:       record.Result.OccurredAt(),
+	})
+}
+
+// acceptedResult 读所引的外部监管结果并核它当不当得了依据。交回的 outcome 为零值表示可用；否则是该直接作答的那一格。
+func (handler *ManageRestrictionHandler) acceptedResult(
+	ctx context.Context,
+	tenant domain.TenantID,
+	source string,
+	layers ...domain.ResultLayer,
+) (ports.ExternalResultRecord, RestrictionOutcome) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return ports.ExternalResultRecord{}, RestrictionNotAccepted
+	}
+	record, found, err := handler.deps.Results.FindByKey(ctx, ports.ExternalResultKey{TenantID: tenant, SourceID: source})
+	if err != nil {
+		return ports.ExternalResultRecord{}, RestrictionUndecided
+	}
+	if !found || record.Unattributable || record.LayerConflict {
+		return ports.ExternalResultRecord{}, RestrictionBasisNotAccepted
+	}
+	for _, layer := range layers {
+		if record.Result.Layer() == layer {
+			return record, RestrictionOutcomeInvalid
+		}
+	}
+	return ports.ExternalResultRecord{}, RestrictionBasisNotAccepted
 }
 
 // JudgeAction 判断一个方向性动作对明确对象是否可继续。纯读：范围内全部限制参与领域

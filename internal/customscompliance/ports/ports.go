@@ -214,6 +214,22 @@ const (
 	RestrictionAlreadyRecorded
 )
 
+type RestrictionUpdateOutcome uint8
+
+const (
+	RestrictionUpdateOutcomeInvalid RestrictionUpdateOutcome = iota
+	RestrictionReleaseRecorded
+	// RestrictionAlreadySettled：这份限制在册上已经解除了——另一笔解除先落了，或它已不在。解除只落一次，后到的不盖掉
+	// 先落的解除依据。
+	RestrictionAlreadySettled
+)
+
+// AcceptedRegulatoryResults 按来源标识读一条已接收的外部监管结果，供监管限制的建立与解除核依据。外部结果册天然满足它；
+// 单立一口是让限制编排的替身不必背整只结果册。
+type AcceptedRegulatoryResults interface {
+	FindByKey(ctx context.Context, key ExternalResultKey) (ExternalResultRecord, bool, error)
+}
+
 // RestrictionStore 保存监管限制并按范围盘出参与准入判断的限制。Save 的写入代数只
 // 管建立（同 ID 重复建立交回 AlreadyRecorded）；解除是同一限制的状态推进，走 Update
 // ——限制身份不变，谁先解除成功谁算，重复解除由领域的不再有效拦。
@@ -221,7 +237,7 @@ type RestrictionStore interface {
 	FindByID(ctx context.Context, tenant domain.TenantID, id domain.RestrictionID) (domain.RegulatoryRestriction, bool, error)
 	ListByScope(ctx context.Context, tenant domain.TenantID, scope domain.DecisionScopeReference) ([]domain.RegulatoryRestriction, error)
 	Save(ctx context.Context, tenant domain.TenantID, restriction domain.RegulatoryRestriction) (RestrictionSaveOutcome, error)
-	Update(ctx context.Context, tenant domain.TenantID, restriction domain.RegulatoryRestriction) error
+	Update(ctx context.Context, tenant domain.TenantID, restriction domain.RegulatoryRestriction) (RestrictionUpdateOutcome, error)
 }
 
 // RestrictionHandoffIntent 把限制的建立与解除交给适用下游（TF/NO 的门禁执行方消费
