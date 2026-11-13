@@ -102,11 +102,11 @@ footer .wrap{padding-block:22px 40px}
   <div class="eyebrow">IDP PARCEL · 国际小包网络运营系统</div>
   <h1>业务全景：一票国际小包从委托到结算</h1>
   <p class="lede">这一页把产品做什么、一票货怎么走、钱怎么算、哪些能力今天已经能用，按业务顺序画出来。每一段都注明由哪个上下文负责，以及它在代码里的现状。</p>
-  <div class="meta"><span>对照 main <code>95b563884</code>（2026-11-12）</span><span>内容取自 dox/ 各文件，规则以那些文件和代码为准</span><span>全部证据层级为 S（受控模拟）</span></div>
+  <div class="meta"><span>对照 main <code>dfb3b80a9</code>（2026-11-12）</span><span>内容取自 dox/ 各文件，规则以那些文件和代码为准</span><span>全部证据层级为 S（受控模拟）</span></div>
 </div></header>
 
 <nav class="toc" aria-label="目录"><div class="wrap">
-  <a href="#who">谁在用</a><a href="#chain">主链</a><a href="#scen">业务场景</a><a href="#s0">开单之前</a><a href="#s1">委托与接受</a><a href="#s2">路由</a><a href="#s3">收寄与节点</a><a href="#s4">运输与交付</a><a href="#s5">关务</a><a href="#s6">追踪与异常</a><a href="#s7">计价与结算</a><a href="#surf">管理台与接口</a><a href="#cap">能力现状</a><a href="#golive">上线路径</a>
+  <a href="#who">谁在用</a><a href="#chain">主链</a><a href="#scen">业务场景</a><a href="#s0">开单之前</a><a href="#s1">委托与接受</a><a href="#s2">路由</a><a href="#s3">收寄与节点</a><a href="#s4">运输与交付</a><a href="#s5">关务</a><a href="#s6">追踪与异常</a><a href="#s7">计价与结算</a><a href="#fin">财务结算</a><a href="#surf">管理台与接口</a><a href="#cap">能力现状</a><a href="#golive">上线路径</a>
 </div></nav>
 
 <main><div class="wrap">
@@ -557,6 +557,136 @@ footer .wrap{padding-block:22px 40px}
   <p>向收件人代收的货款本金单独记账，不是物流收入，也不是结算账户资金。机制已在产品内：</p>
   <div class="flow"><span>渠道在途</span><i>→</i><span>待清分</span><i>→</i><span>应付客户</span><i>→</i><span class="end">已汇付</span><i style="margin-left:10px">旁路：</i><span>短款</span><span>已抵扣</span><span>溢款</span></div>
   <div class="note">在管理台上：供应商账单的接收与审核、收付款事实的登记、对账单争议可以操作。费用确认和对账单发布后端有接口，但没有页面；客户费用和经营核算两页只能看。</div>
+</section>
+
+<section id="fin">
+  <h2>财务结算细看</h2>
+  <p class="sub">产品做的是运营结算：把评价变成费用、出对账单、审核供应商账单、把真实收付核到未结项上。它不是财务系统。</p>
+  <div class="two">
+    <div>
+      <h3 style="margin-top:0">边界</h3>
+      <ul>
+        <li><b>在产品内</b>：客户运营应收、供应商预期成本与审核应付、对账单与争议、收付款事实的采用与核销、运营结算余额、接受前的冻结与授信占用、赔付与追偿金额、经营毛利。</li>
+        <li><b>不在产品内</b>：银行账、支付清算、法定发票与税务、总账。真实收付由租户的财务系统或银行发生，产品只接收它们回传的事实。</li>
+        <li>「客户运营应收」不是会计应收，「运营结算余额」不是银行余额。</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">结算账户</h3>
+      <p>所有费用、余额、对账和核销都归到结算账户上。它不是货主客户账户，也不是银行账户。一个结算账户由五格唯一确定，改任一格就是另一个账户：</p>
+      <div class="flow"><span>责任法人</span><span>结算相对方</span><span>收付方向</span><span>结算币种</span><span>结算政策</span></div>
+      <p>余额由五个数组成：入账余额、授信额度、冻结金额、已确认未结金额、可用余额。它们在映射、核销、撤销和费用确认的同一笔里重算。</p>
+    </div>
+  </div>
+
+  <h3>接单之前：冻结与授信占用</h3>
+  <div class="two">
+    <div>
+      <p>合同策略要求控制时，委托接受之前先按逐件销售试算的合计估价，再占用客户的钱或额度。合同没要求就照实答不适用，不用零金额冒充。</p>
+      <ul>
+        <li>预付客户占用的是<b>资金冻结</b>，账期客户占用的是<b>信用暴露</b>。</li>
+        <li>估价只留痕，不形成费用。</li>
+        <li>结算只给出各项控制的结果，不替小包托运作接受或拒绝的决定。</li>
+      </ul>
+    </div>
+    <div>
+      <div class="flow"><span>受理前估价</span><i>→</i><span>占用</span><i>→</i><span class="end">费用确认时整份转出</span></div>
+      <div class="flow"><span>受理前估价</span><i>→</i><span>占用</span><i>→</i><span>接受失败、拒绝或撤回时释放</span></div>
+      <p>转出时，实际确认的金额完整入账，不截断到当初冻结的金额。释放没能自动完成的，进管理台的「资金释放待处理」。</p>
+    </div>
+  </div>
+
+  <h3>对客户：从费用到收款</h3>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1120 196" role="img" aria-label="一期对账：已确认且归属日在本期内的费用，在截单时刻进入截单快照，据此发布对账单；发布后单号、范围、金额固定，之后的调整与迟到费用进入后续账期">
+      <defs><marker id="a7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+      <g font-size="13">
+        <rect class="bx" x="30" y="28" width="150" height="60" rx="4"/><text x="105" y="52" text-anchor="middle" font-weight="700">费用已确认</text><text class="t-m" x="105" y="72" text-anchor="middle" font-size="12">有确认依据</text>
+        <rect class="bx" x="212" y="28" width="150" height="60" rx="4"/><text x="287" y="52" text-anchor="middle" font-weight="700">结算归属日</text><text class="t-m" x="287" y="72" text-anchor="middle" font-size="12">按账户的业务时区</text>
+        <rect class="bxa" x="394" y="28" width="150" height="60" rx="4"/><text x="469" y="52" text-anchor="middle" font-weight="700">截单</text><text class="t-m" x="469" y="72" text-anchor="middle" font-size="12">到点自动，或人工发起</text>
+        <rect class="bx" x="576" y="28" width="150" height="60" rx="4"/><text x="651" y="52" text-anchor="middle" font-weight="700">截单快照</text><text class="t-m" x="651" y="72" text-anchor="middle" font-size="12">本期费用的固定集合</text>
+        <rect class="bxa" x="758" y="28" width="150" height="60" rx="4"/><text x="833" y="52" text-anchor="middle" font-weight="700">对账单发布</text><text class="t-m" x="833" y="72" text-anchor="middle" font-size="12">单号、范围、金额固定</text>
+        <rect class="bx" x="940" y="28" width="150" height="60" rx="4"/><text x="1015" y="52" text-anchor="middle" font-weight="700">收款核销</text><text class="t-m" x="1015" y="72" text-anchor="middle" font-size="12">真实到账映射后核销</text>
+      </g>
+      <g><line class="ln" x1="180" y1="58" x2="210" y2="58" marker-end="url(#a7)"/><line class="ln" x1="362" y1="58" x2="392" y2="58" marker-end="url(#a7)"/><line class="ln" x1="544" y1="58" x2="574" y2="58" marker-end="url(#a7)"/><line class="ln" x1="726" y1="58" x2="756" y2="58" marker-end="url(#a7)"/><line class="ln" x1="908" y1="58" x2="938" y2="58" marker-end="url(#a7)"/></g>
+      <path class="lnd" d="M833 88 L833 128 L560 128" marker-end="url(#a7)"/>
+      <rect class="band" x="212" y="110" width="346" height="38" rx="4"/><text x="226" y="134" font-size="12.5">发布之后的调整与迟到费用：只进后续账期</text>
+      <path class="lnd" d="M880 88 L880 164 L740 164" marker-end="url(#a7)"/>
+      <rect class="band" x="576" y="146" width="162" height="36" rx="4"/><text x="590" y="169" font-size="12.5">客户提出费用争议</text>
+      <text class="t-m" x="30" y="134" font-size="12">过了截单时刻的</text><text class="t-m" x="30" y="152" font-size="12">归下一日</text>
+    </svg>
+    </div>
+    <figcaption>对账单总额必须等于所含费用金额之和。争议只对已发布的对账单提出，指向明确的费用和金额范围；作废之后才提出的不登记。</figcaption>
+  </figure>
+  <div class="two" style="margin-top:18px">
+    <div>
+      <p><b>费用怎么来。</b>到了包裹的计费时点，结算向计价请求一份销售评价。评价已完成且合计不为零，就整组采用成预估客户费用；原币金额、结算币金额和换算依据来自同一份评价，结算不重算。</p>
+      <p><b>缺什么就停在哪。</b>结算政策没采用、结算账户没登记、费用项目映不上，请求都会带着停因停下，不替租户填默认值。租户补登之后只续办这一次登记解得开的那几件。</p>
+    </div>
+    <div>
+      <p><b>确认。</b>每个费用项目点名要哪一种确认依据，这是租户取值。依据记下后，账户采用了确认时点就当场确认。</p>
+      <p><b>收款。</b>收付款事实只有一个入口：财务系统或银行经集成客户端回传，或有授予的财务人员手工登记。映射、核销、核销撤销各自成立，都不改原费用、对账单或资金事实。</p>
+    </div>
+  </div>
+
+  <h3>对供应商：从成本到应付</h3>
+  <div class="two">
+    <div>
+      <p>三样东西分别存在，互不替代：</p>
+      <div class="tbl"><table>
+        <tr><th>是什么</th><th>从哪来</th></tr>
+        <tr><td><b>供应商预期成本</b></td><td>运输收费发生项加采购评价，产品自己算出来的内部预期</td></tr>
+        <tr><td><b>供应商账单主张</b></td><td>供应商发来的账单。收到不等于应付</td></tr>
+        <tr><td><b>审核应付</b></td><td>审核人对一行主张上通过的那一段金额</td></tr>
+      </table></div>
+    </div>
+    <div>
+      <ul>
+        <li>账单一行要点名它对应的预期成本。<b>已匹配金额</b>是这一行有预期成本撑着的部分，也是通过审核的上限。</li>
+        <li>审核按行、按金额范围给结果：通过、争议或拒绝。争议的那一段不形成应付，也不挡其他金额。</li>
+        <li>审核授权、应付归哪个账户、金额上限各自登记；任一项没登记，审核停在未决，不默认放行。</li>
+        <li>计价纠错不是差额，而是重述全额的新成本版本。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>赔付、追偿、代垫与经营核算</h3>
+  <div class="two">
+    <div>
+      <ul>
+        <li><b>客户赔付</b>是对客户的应付或退款义务，不因追偿延后或冲抵。</li>
+        <li><b>应追偿金额</b>与<b>追偿认可金额</b>是向责任方主张和对方认可的数，两者都不是到账。</li>
+        <li><b>客户代垫回收</b>：租户确实垫付了税费，且客户负有责任时，向客户形成的金额。</li>
+      </ul>
+    </div>
+    <div>
+      <p><b>经营毛利</b>按三种口径各算各的，不可直接修改：</p>
+      <div class="tbl"><table>
+        <tr><th>口径</th><th>用什么算</th></tr>
+        <tr><td>预估</td><td>客户预估费用与供应商预期成本</td></tr>
+        <tr><td>已确认</td><td>客户运营应收、审核应付与贷项</td></tr>
+        <tr><td>已结算</td><td>只用核销分配</td></tr>
+      </table></div>
+    </div>
+  </div>
+
+  <h3>今天能做到哪</h3>
+  <div class="tbl"><table>
+    <tr><th style="width:30%">环节</th><th style="width:22%">后端</th><th>管理台</th></tr>
+    <tr><td>接受前估价、冻结与信用暴露</td><td><span class="pill p-ok">可用</span></td><td>自动执行；释放失败的在「资金释放待处理」处理</td></tr>
+    <tr><td>销售评价请求与预估客户费用</td><td><span class="pill p-ok">可用</span></td><td>「客户费用」只能看</td></tr>
+    <tr><td>费用确认</td><td><span class="pill p-ok">可用</span></td><td><span class="pill p-wait">没有页面</span> 只能调接口</td></tr>
+    <tr><td>截单与对账单发布</td><td><span class="pill p-ok">可用</span></td><td><span class="pill p-wait">没有页面</span> 到点自动截单；人工发布只能调接口</td></tr>
+    <tr><td>对账单争议的登记与处置</td><td><span class="pill p-ok">可用</span></td><td><span class="pill p-ok">可用</span>「对账单」页</td></tr>
+    <tr><td>供应商账单接收与逐行审核</td><td><span class="pill p-ok">可用</span></td><td><span class="pill p-ok">可用</span>「供应商账单与应付」页</td></tr>
+    <tr><td>收付款事实的采用与核销</td><td><span class="pill p-ok">可用</span></td><td><span class="pill p-ok">可用</span>「收付款核销」页可手工登记事实</td></tr>
+    <tr><td>费用调整、对账单作废、后续对账纳入</td><td><span class="pill p-wait">待接入</span></td><td>—</td></tr>
+    <tr><td>成本分摊与经营结果</td><td><span class="pill p-wait">待接入</span></td><td>「经营核算」只能看，暂无数据</td></tr>
+    <tr><td>赔付、追偿金额与代垫回收</td><td><span class="pill p-wait">待接入</span></td><td>—</td></tr>
+    <tr><td>供应商费用贷项</td><td><span class="pill p-wait">待接入</span></td><td>—</td></tr>
+    <tr><td>周期费用、自动核销、税、报表币种与汇兑差、催收</td><td><span class="pill p-off">未实现</span></td><td>—</td></tr>
+  </table></div>
 </section>
 
 <section id="surf">
