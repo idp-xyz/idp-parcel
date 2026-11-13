@@ -25,6 +25,10 @@ const (
 	GapExistingResult
 	FormETAUndecided
 	FormETANotAccepted
+	// ETAExistingSuperseded 只在人工录入时出现：录的这份内容在这条线上早先已经形成过一版，而那一版已被后来的版本接替。
+	// 不重形成、不把当前版移回去（同一条线上的输入版本只形成一次）——但也不能只答「已有结果」：录入的人多半是想把
+	// 预计到达改回先前那个值，答已有结果会让他以为改成了。
+	ETAExistingSuperseded
 )
 
 func (outcome FormETAOutcome) String() string {
@@ -43,6 +47,8 @@ func (outcome FormETAOutcome) String() string {
 		return "GAP_EXISTING_RESULT"
 	case FormETAUndecided:
 		return "UNDECIDED"
+	case ETAExistingSuperseded:
+		return "ETA_EXISTING_SUPERSEDED"
 	case FormETANotAccepted:
 		return "NOT_ACCEPTED"
 	default:
@@ -208,6 +214,10 @@ func (handler *FormETAHandler) FormETA(
 		}
 		if seen {
 			result := FormETAResult{outcome: ETAExistingResult, eta: formed, hasETA: true}
+			if manual && formed.Version() != current.Version() {
+				// 交回的是此刻的当前版，不是早先那一版：录入的人要看到的是「现在算数的是哪一个」。
+				return FormETAResult{outcome: ETAExistingSuperseded, eta: current, hasETA: true}, nil
+			}
 			if formed.Version() == current.Version() {
 				// 当前版自己的输入版本重放：把同一份意图再交一次（ADR-0043）。
 				result.handoffRef = handler.handOffETA(ctx, command.TenantID, current)

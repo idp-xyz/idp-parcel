@@ -8,5 +8,7 @@ test('录入预计到达的提示说清两种来源、时间范围、原件必�
     ok(etaEntryHint.includes(word), word);
   }
   ok(etaEntryOutcomeLabels.ETA_REFRESHED.includes('前一版保留'));
+  ok(etaEntryOutcomeLabels.ETA_EXISTING_SUPERSEDED.includes('接替'));
+  ok(etaEntryHint.includes('必须晚于'));
   ok(etaEntryProblemNote('MALFORMED_REQUEST').includes('rangeTo'));
 });

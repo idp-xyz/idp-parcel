@@ -790,6 +790,14 @@ func TestAManuallyEnteredETAFormsAVersionOnItsLineAndLeavesAnEntryTrail(t *testi
 		len(ledger.entries) != 2 || ledger.entries[1].EnteredBy != "OPERATOR/https://issuer#bob" {
 		t.Fatalf("输入变了：err=%v outcome=%q 留痕 %+v", err, refreshed.Outcome(), ledger.entries)
 	}
+	// 把内容改回先前那一份：不重形成、不移当前版，但如实说那一版已被接替，并交回此刻的当前版。
+	current, _ := fixture.handler.FormETA(ctx, changed)
+	currentETA, _ := current.ETA()
+	if reverted, err := fixture.handler.FormETA(ctx, manual); err != nil || reverted.Outcome() != application.ETAExistingSuperseded || len(ledger.entries) != 2 {
+		t.Fatalf("改回先前的内容：err=%v outcome=%q", err, reverted.Outcome())
+	} else if shown, _ := reverted.ETA(); shown.Version() != currentETA.Version() {
+		t.Fatalf("交回的是 %s，想要此刻的当前版 %s", shown.Version(), currentETA.Version())
+	}
 	if fromSource, err := fixture.handler.FormETA(ctx, etaCommand(t, "inputs/v9")); err != nil || fromSource.Outcome() != application.ETARefreshed || len(ledger.entries) != 2 {
 		t.Fatalf("预测来源送来的：err=%v outcome=%q 留痕 %d 条", err, fromSource.Outcome(), len(ledger.entries))
 	}

@@ -105,6 +105,16 @@ func TestAManuallyEnteredETARunsThroughTheProductionAssembly(t *testing.T) {
 	if status != http.StatusCreated || answer["outcome"] != "ETA_REFRESHED" || answer["priorVersion"] != first || count(versions) != 2 || count(trail) != 2 {
 		t.Fatalf("改了范围 = %d %v；预测 %d 版、留痕 %d 条", status, answer, count(versions), count(trail))
 	}
+	second, _ := answer["version"].(string)
+	// 把内容改回第一份：不多一版、不移当前版，如实说那一版已被接替，并交回此刻的当前版。
+	if status, answer = post(clerk, entry("CARRIER_PROVIDED", "2026-11-20T08:00:00Z", "2026-11-20T18:00:00Z", "SYN-CARRIER-ETA-MAIL-1")); status != http.StatusOK ||
+		answer["outcome"] != "ETA_EXISTING_SUPERSEDED" || answer["version"] != second || count(versions) != 2 {
+		t.Fatalf("改回第一份内容 = %d %v；预测 %d 版", status, answer, count(versions))
+	}
+	// 只有一个时间点：坏报文，不是 500。
+	if status, answer = post(clerk, entry("CARRIER_PROVIDED", "2026-11-23T08:00:00Z", "2026-11-23T08:00:00Z", "SYN-CARRIER-ETA-MAIL-3")); status != http.StatusBadRequest {
+		t.Fatalf("只有一个时间点 = %d %v，想要 400", status, answer)
+	}
 	if status, answer = post(clerk, entry("OPERATOR_DERIVED", "2026-11-22T08:00:00Z", "2026-11-22T18:00:00Z", "SYN-OPS-ESTIMATE-1")); status != http.StatusCreated ||
 		answer["outcome"] != "ETA_FORMED" || count(versions) != 3 {
 		t.Fatalf("运营自己估的另一条线 = %d %v；预测 %d 版", status, answer, count(versions))

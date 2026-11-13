@@ -3,6 +3,7 @@ package visibilityhttp_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
@@ -38,7 +39,7 @@ func TestTheETAEntryFaceDerivesTheInputVersionFromContentAndTakesIdentityFromAut
 	if status, _ := serveRaw(t, endpoint, "t", body("2026-11-20T08:00:00Z", "2026-11-20T18:00:00Z", " SYN-MAIL-1 ")); status != http.StatusInternalServerError {
 		t.Fatalf("没有名字的答复 = %d，想要 500", status)
 	}
-	serveRaw(t, endpoint, "t", body("2026-11-20T16:00:00+08:00", "2026-11-21T02:00:00+08:00", "SYN-MAIL-1"))
+	serveRaw(t, endpoint, "t", body("2026-11-20T16:00:00.000000789+08:00", "2026-11-21T02:00:00+08:00", "SYN-MAIL-1"))
 	serveRaw(t, endpoint, "t", body("2026-11-20T08:00:00Z", "2026-11-20T20:00:00Z", "SYN-MAIL-1"))
 	serveRaw(t, endpoint, "t", body("2026-11-20T08:00:00Z", "2026-11-20T18:00:00Z", "SYN-MAIL-2"))
 	if len(former.commands) != 4 || len(asked) != 4 || asked[0] != visibilityhttp.OperatorDecisionETAEntry {
@@ -59,13 +60,16 @@ func TestTheETAEntryFaceDerivesTheInputVersionFromContentAndTakesIdentityFromAut
 	}
 
 	for name, malformed := range map[string]string{
-		"没有原件":   `{"parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH"}`,
-		"来源不在词表": `{"parcel":"P","milestone":"M","source":"GUESSED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH","original":"O"}`,
-		"时间不成形":  `{"parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"明天","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH","original":"O"}`,
-		"范围倒置":   `{"parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T18:00:00Z","rangeTo":"2026-11-20T08:00:00Z","confidence":"HIGH","original":"O"}`,
-		"自报输入版本": `{"inputs":"x","parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH","original":"O"}`,
-		"自报录入人":  `{"enteredBy":"x","parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH","original":"O"}`,
-		"没有可信度":  `{"parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","original":"O"}`,
+		"没有原件":    `{"parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH"}`,
+		"来源不在词表":  `{"parcel":"P","milestone":"M","source":"GUESSED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH","original":"O"}`,
+		"时间不成形":   `{"parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"明天","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH","original":"O"}`,
+		"只有一个时间点": `{"parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T08:00:00Z","confidence":"HIGH","original":"O"}`,
+		"年份不合理":   `{"parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"1999-11-20T08:00:00Z","rangeTo":"2026-11-20T08:00:00Z","confidence":"HIGH","original":"O"}`,
+		"里程碑过长":   `{"parcel":"P","milestone":"` + strings.Repeat("m", 201) + `","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH","original":"O"}`,
+		"范围倒置":    `{"parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T18:00:00Z","rangeTo":"2026-11-20T08:00:00Z","confidence":"HIGH","original":"O"}`,
+		"自报输入版本":  `{"inputs":"x","parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH","original":"O"}`,
+		"自报录入人":   `{"enteredBy":"x","parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","confidence":"HIGH","original":"O"}`,
+		"没有可信度":   `{"parcel":"P","milestone":"M","source":"CARRIER_PROVIDED","rangeFrom":"2026-11-20T08:00:00Z","rangeTo":"2026-11-20T18:00:00Z","original":"O"}`,
 	} {
 		if status, _ := serveRaw(t, endpoint, "t", malformed); status != http.StatusBadRequest {
 			t.Fatalf("%s 该答 400，实得 %d", name, status)
