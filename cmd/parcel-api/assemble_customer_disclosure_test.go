@@ -349,7 +349,7 @@ func TestTheProductionDisclosureFacesDecideAndAuthorizeOnceAgainstARealDatabase(
 	}); err != nil || authorized.Outcome() != visibilityapp.DisclosureAuthorized {
 		t.Fatalf("第二期确认披露：err=%v outcome=%q", err, authorized.Outcome())
 	}
-	// 把推送端点换成一个打不通的地址：手工标记不推送，也不看端点登没登。
+	// 手工标记不推送：推送计数不变。
 	pushesBefore := pushes.Load()
 	offline := notify
 	offline.Episode, offline.Method, offline.Original = later.ID(), "电话", "SYN-CALL-LOG-20261113-01"

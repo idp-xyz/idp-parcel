@@ -33,3 +33,9 @@ test('手工标记通知的提示要求通知方式与原件，并说明系统�
   const hint = exceptionDecisionHints['customer-exception-notification-manual-record'];
   for (const word of ['method', 'original', '不发送']) ok(hint.includes(word), word);
 });
+
+test('「已提交」在推送口与手工标记口各说各的', () => {
+  const labelOf = (id: string) => exceptionDecisionTargets.find((target) => target.id === id)?.outcomeLabels.SUBMITTED;
+  equal(labelOf('customer-exception-notification'), '已提交给通知渠道');
+  equal(labelOf('customer-exception-notification-manual-record'), '已记为已通知客户');
+});

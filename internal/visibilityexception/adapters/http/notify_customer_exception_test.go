@@ -88,10 +88,11 @@ func TestTheManualNotificationFaceRequiresHowAndFromWhichOriginalTheCustomerWasN
 		t.Fatalf("命令 = %+v", command)
 	}
 	for name, malformed := range map[string]string{
-		"没有方式":   `{` + target + `,"original":"SYN-CALL-LOG-1"}`,
-		"没有原件":   `{` + target + `,"method":"电话"}`,
-		"原件只有空白": `{` + target + `,"method":"电话","original":"  "}`,
-		"带了客户":   `{` + target + `,"method":"电话","original":"O","customer":"x"}`,
+		"没有方式":    `{` + target + `,"original":"SYN-CALL-LOG-1"}`,
+		"没有原件":    `{` + target + `,"method":"电话"}`,
+		"原件只有空白":  `{` + target + `,"method":"电话","original":"  "}`,
+		"带了客户":    `{` + target + `,"method":"电话","original":"O","customer":"x"}`,
+		"方式带控制字符": `{` + target + `,"method":"电\u0000话","original":"O"}`,
 	} {
 		if status, _ := serveRaw(t, endpoint, "t", malformed); status != http.StatusBadRequest {
 			t.Fatalf("%s 该答 400，实得 %d", name, status)

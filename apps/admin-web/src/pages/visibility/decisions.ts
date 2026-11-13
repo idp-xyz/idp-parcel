@@ -93,10 +93,17 @@ export const exceptionDecisionOutcomeLabels: Record<string, string> = {
   EXISTING_RESULT: '此前已经有结果，见下',
   NOT_AWAITING_AUTHORIZATION: '这一期信号没有等待确认的披露判断',
   DISCLOSURE_CONDITION_NO_LONGER_MET: '披露规则已改成不披露，不能确认',
-  SUBMITTED: '已记为已通知客户（系统推送的是已提交给通知渠道）',
+  SUBMITTED: '已提交给通知渠道',
   SUBMISSION_FAILED: '提交给通知渠道没有成功，可以再发一次',
   UNDECIDED: '暂时定不了，原因见下',
   NOT_ACCEPTED: '内容不完整或不成立，没有受理',
+};
+
+/** 手工标记这一口自己的答复词：「已提交」「已有结果」在这里说的是另一件事。 */
+export const manualNotificationOutcomeLabels: Record<string, string> = {
+  ...exceptionDecisionOutcomeLabels,
+  SUBMITTED: '已记为已通知客户',
+  EXISTING_RESULT: '这份通知此前已经发出或已经记过，没有再记一次',
 };
 
 export const exceptionDecisionUndecidedLabels: Record<string, string> = {
@@ -122,7 +129,7 @@ export async function submitExceptionDecision(kind: ExceptionDecisionKind, snaps
   return withUndecidedReason(await postMasterData<RegistrationResponseBody & { reason?: string }>(exceptionDecisionEndpoints[kind], snapshot));
 }
 
-/** 异常案件页「运营决定」签上的九个口：案件、证据、披露与通知，各按办事顺序排。 */
+/** 异常案件页「运营决定」签上的十个口：案件、证据、披露与通知，各按办事顺序排。 */
 export const exceptionDecisionTargets: RegistrationTarget[] = (Object.keys(exceptionDecisionEndpoints) as ExceptionDecisionKind[]).map((kind) => ({
   id: kind,
   label: exceptionDecisionTitles[kind],
@@ -130,6 +137,6 @@ export const exceptionDecisionTargets: RegistrationTarget[] = (Object.keys(excep
   endpoint: `POST ${exceptionDecisionEndpoints[kind]}`,
   snapshotHint: exceptionDecisionHints[kind],
   submit: (snapshot: unknown) => submitExceptionDecision(kind, snapshot),
-  outcomeLabels: exceptionDecisionOutcomeLabels,
+  outcomeLabels: kind === 'customer-exception-notification-manual-record' ? manualNotificationOutcomeLabels : exceptionDecisionOutcomeLabels,
   undecidedReasonLabels: exceptionDecisionUndecidedLabels,
 }));

@@ -7,6 +7,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"net/http"
 	"strings"
+	"unicode"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 )
@@ -59,7 +60,9 @@ func (intake *OperatorDecisionIntake) IntakeManualCustomerExceptionNotification(
 		return none, fmt.Errorf("%w: episodeId: %v", ErrMalformedRequest, err)
 	}
 	method, original := strings.TrimSpace(payload.Method), strings.TrimSpace(payload.Original)
-	if method == "" || original == "" || len(method) > 200 || len(original) > 500 {
+	// 控制字符（含 NUL）在这里就拒：库不收 NUL，放过去会在第二笔事务里撞成一个没有原因可查的 500。
+	hasControl := func(text string) bool { return strings.IndexFunc(text, unicode.IsControl) >= 0 }
+	if method == "" || original == "" || len(method) > 200 || len(original) > 500 || hasControl(method) || hasControl(original) {
 		return none, fmt.Errorf("%w: method and original are required for a manual notification record", ErrMalformedRequest)
 	}
 	return application.NotifySignalCommand{
