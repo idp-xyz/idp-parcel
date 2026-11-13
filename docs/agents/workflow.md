@@ -33,6 +33,8 @@
 
 ## 一个 PN 切片怎么走
 
+能不能开工先过 [AGENTS.md「交付模式」](../../AGENTS.md#交付模式)；下图只管开工之后怎么走。
+
 ```mermaid
 flowchart TD
     slice["读 PN 切片表<br/>确认切片编号与主责上下文"] --> pack["读该 PN 的 docs/design/*handoff*<br/>认领一个 W 包"]
@@ -76,6 +78,8 @@ flowchart TD
 **敏感实例外置**——在写票面、登记册与测试夹具那一步。真实名称、账号、凭据与映射不进仓库；票面与登记册只写脱敏标识与证据索引，夹具用 `SYN-` 合成数据。
 
 ## 进 main 的步骤
+
+先读 [AGENTS.md「交付模式」](../../AGENTS.md#交付模式)：评审只评一轮、只修挡上线的，下面第 2、3 步照它收窄；两处相抵以它为准。
 
 后端票与改现行规则的文档票（CONTEXT、UC、ADR、产品与协作文档），不论一个会话还是几个会话做，进 main 都照这一串；diff 全在 `apps/admin-web/**` 的票走下一节「前端切片」。这一串照 2026-10-21 文档自洽修订各票的实际做法写下（会话代决，待用户复核）；每一步的来历与理由在 [parallel-sessions](./parallel-sessions.md) 对应各节，这里只给步骤与入口。
 
@@ -199,7 +203,7 @@ git rev-list --count origin/main~3..HEAD              # → 3   对，裸字面�
 
 - **shell 就是 WSL 的 bash**：git、go、docker、pnpm、`pwsh` 直接调用，不经 `wsl -d … bash -lc`；上一节讲 Windows PowerShell 5.1 编码、渲染、引号拆参与 Cursor 署名改写的各条对它不适用。`scripts/*.ps1` 照样用 `pwsh -NoProfile -File` 跑。
 - **一个作者一棵 worktree**：同级的 `/home/tops/workspace/idp-parcel-<名>`，一条分支；临时文件放会话的 scratchpad 目录，不放仓库里。不用 `git stash`——它跨 worktree 共享。
-- **技能**：Claude Code 不读 `~/.cursor/skills`；2026-10-21 观察 `~/.claude/skills` 下没有 idp-skills。AGENTS.md 路由的技能按名调不到时，读 idp-skills 仓 `skills/<分类>/<名>/SKILL.md` 照做，并照 AGENTS.md「Skill 可见执行」点名。Claude Code 自带的 `/code-review` 不是 idp-skills 那份双轴评审，评审门要的是后者（本文「进 main 的步骤」）。
+- **技能**：Claude Code 不读 `~/.cursor/skills`；2026-10-21 观察 `~/.claude/skills` 下没有 idp-skills。AGENTS.md 路由的技能按名调不到时，读 idp-skills 仓 `skills/<分类>/<名>/SKILL.md` 照做，并照 AGENTS.md「Skills 路由」点名。Claude Code 自带的 `/code-review` 不是 idp-skills 那份双轴评审，评审门要的是后者（本文「进 main 的步骤」）。
 - **多会话协调不走 idp-mcp**：没有 `list_sessions`、`broadcast`、`dispatch_task`，也读不到 `.cursor/rules/idp-mcp-messenger.mdc`（它被 `.gitignore` 忽略、只在主树本地，Claude Code 也不加载 `.cursor/rules`）。协调方派子代理时把地盘、号段与规矩写进派单，结果交回协调方；parallel-sessions 里依赖 idp-mcp 工具的几节（点名、度量五数）只对 Cursor 多通道形态成立。
 
 ### 与宿主无关

@@ -2,6 +2,27 @@
 
 给人与 Agent 共用的工作方式入口。产品与领域规则以 `docs/` 权威文档为准；本文件只规定**怎么开工、怎么改、何时用 skill**，不重述限界上下文内容。
 
+## 交付模式
+
+2026-11-12 用户裁定，本节优先于本文件其余各节与 `docs/agents/` 下各文。起因：上线线已达成（见[上线线与冻结清单](./.scratch/launch-line-freeze-2026-10-27.md)），而冻结之后票与 ADR 照旧在长——流程里每一步的产出都是下一步的输入，没有哪一步会说「够了」。
+
+**能开工的只有三种**，其余一律不开工，也不立票：
+
+1. 冻结清单「限量生产前必须」一节里还没进 main 的。
+2. 真实租户实际撞上的问题。
+3. 用户点名的。
+
+在途分支不自动豁免：继续还是搁置，由用户逐条点名。
+
+**做的过程中只产出代码、测试和这张票自己的票面。** 具体四条：
+
+- **ADR 只记难逆转的取舍。** 换掉它要迁数据、改对外契约或动上下文边界的才写；某个字段、某个口、某条分支的行为留在代码与测试里，要改口径就改 `CONTEXT.md` 或 `UC-*` 那一句。
+- **评审只评一轮，只修挡上线的。** 口径用冻结清单「上线线」一节那句；不挡的在冻结清单「记录」追加一行，不立后续票，不开第二轮评审，修完由作者重跑评审的探针即可。
+- **不主动做审计、盘点、复核与文档自洽扫描。** 「再查一遍还缺什么」永远有答案，它不是交付。
+- **同时在写的会话不超过两个。** 超过之后花在协调上的比省下的多。
+
+本节的解除条件：首个租户上线，或用户点名。
+
 ## 开工顺序
 
 对任何功能或缺陷，按序加载材料；每步完成后再进入下一步。
@@ -53,7 +74,7 @@
 ## 改文档
 
 - 改领域语言、不变量或生命周期 → 改对应 `CONTEXT.md`（必要时 CONTEXT-MAP / GLOSSARY / SCENARIOS），再改引用它的 `UC-*`。
-- 改难逆转技术或产品取舍 → 新 ADR 或 supersede；不改写已接受 ADR 历史。新 ADR 只改掉前一份的某几句时是部分停用：被停 ADR 的 `Status` 行索引注记与 Links 各加一条前向指针，正文不动，写法见 [adr/README](./docs/adr/README.md) 顶部；同一笔把 `CONTEXT.md` 里被停的句子改成现行规则。
+- 改难逆转技术或产品取舍 → 新 ADR 或 supersede（够不够得上「难逆转」照[交付模式](#交付模式)那条判，够不上的不写）；不改写已接受 ADR 历史。新 ADR 只改掉前一份的某几句时是部分停用：被停 ADR 的 `Status` 行索引注记与 Links 各加一条前向指针，正文不动，写法见 [adr/README](./docs/adr/README.md) 顶部；同一笔把 `CONTEXT.md` 里被停的句子改成现行规则。
 - `CONTEXT.md` 写成现行、代码尚未到的规则 → 规则句上不挂票号；规则与实现的差距写在各 UC 的「给开发的交接」，`CONTEXT.md` 头部只放一句同形的固定指针。
 - 改试点实例状态 → [参数登记册](./docs/product/PILOT-PARAMETER-REGISTER.md)，不写入领域文档当长期事实。
 - 新增权威文档 → 在 [docs/README.md](./docs/README.md) 补入口与职责一句。
@@ -61,68 +82,23 @@
 
 ## Skills 路由
 
-Skill 权威源是 [`idp-xyz/idp-skills`](https://github.com/idp-xyz/idp-skills)（私有）；本机 `~/.cursor/skills` 只是它的安装副本，改 skill 正文回上游仓库改，不要就地编辑。以下名单取该仓 `engineering`/`misc`/`productivity` 分类中与本仓相关者；细节以各 skill 正文为准。写作类、TS/Obsidian/教学类与 `personal`、`deprecated` 分类已排除，勿当本仓默认路径。
-
-工程 skills 的 tracker / 标签 / 领域布局见下方 [Agent skills](#agent-skills)。
-
-**通用流程与本仓的绑定见 [技能流程在本仓的落法](./docs/agents/workflow.md)**：哪些上游步骤（`/wayfinder`、`/to-tickets`、`/setup-idp-skills`）本仓已用文档做过因而不必再跑、一个 PN 切片实际怎么走、红线在流程哪一步生效、以及本机环境的暗礁。
-
-### Skill 可见执行
-
-Skill 是 Agent 作业流程，不是 shell 命令；Cursor 不一定显示 skill 名。**本仓要求**在用户触发 skill（`/name`、@ 引用或口述「按某 skill 执行」）时，让人类能盯到进度：
-
-1. **开场** — 首条回复写明：`按 /skill-name · Step N：…`（N 取该 skill 正文进程表第一项），并一句点出本 skill 目的。
-2. **换步** — 每次进入 skill 的下一进程点，单独起一行：`按 /skill-name · Step N：标题`；该步的**完成标准**用半句标出（与 skill 正文一致，不另造阶段）。
-3. **等人** — 需要选择/确认时写：`⏸ 等待你决定（Section/Step …）`；收到答复后写：`▶ 继续 Step N`。
-4. **收工** — 结束时写：`✓ /skill-name 完成`，并列产物路径或「无变更」；若卡在 skill 中途收口，写：`◼ /skill-name 暂停于 Step N` 与恢复条件。
-5. **嵌套** — 父 skill 调用子 skill（如 `/implement` → `/tdd`）时，父子名都写上：`按 /implement · Step … › /tdd · red`。
-
-禁止只默默读写文件却不点名 skill；禁止自造与 skill 正文冲突的 Step 编号——skill 无编号则用 skill 内原有小节标题。
-
-### 本仓主路径
+交付模式下只用这几个；别的 skill 不因为「这一步通常该跑」而跑，用户点名时才用。
 
 | 意图 | Skill |
 |---|---|
-| 不知用哪个 | `/which-skill` |
-| 磨想法并落 `CONTEXT`/ADR | `/grill-with-docs` |
-| 术语/边界/不变量/生命周期 | `/ubiquitous-language` → `/domain-modeling` |
-| 多会话：对话收成规格 | `/to-spec` |
-| 多会话：规格拆成带阻塞边的票 | `/to-tickets` |
-| 按票或明确行为实现（含 TDD + 双轴评审） | `/implement` |
-| 只要测试先行的小行为 | `/tdd` |
-| 相对固定点评审分支/PR | `/code-review` |
-
-默认：边界清晰 → `/implement`（或 `/tdd`）→ 必要时再 `/code-review`。「必要时」只指作者自己额外的评审：代码票与改现行规则的文档票落 main 前都要一份非作者评审，步骤见 [workflow.md「进 main 的步骤」](./docs/agents/workflow.md#进-main-的步骤)，前端切片按其「前端切片」一节。  
-多会话：`/grill-with-docs` → `/to-spec` → `/to-tickets` → **每票清上下文**再 `/implement`。
-
-### 入口与旁路
-
-| 意图 | Skill |
-|---|---|
-| 外来 bug/需求堆（非 to-tickets 产物） | `/triage` |
+| 按票或明确行为实现 | `/implement`（小行为直接 `/tdd`） |
 | 难复现缺陷、回归 | `/diagnosing-bugs` |
-| 大到看不清路的探索地图 | `/wayfinder`（产出决策，不直接交付代码） |
-| 需可运行证据再定案 | `/prototype`（扔弃；结论经 `/handoff` 回主线） |
-| 会话将满或换线程保上下文 | `/handoff` |
-| 加深模块缝与接口形状 | `/improve-codebase-architecture`、`/codebase-design` |
+| 落 main 前那一轮评审 | `/code-review` |
+| 会话将满或换线程 | `/handoff` |
+| 进行中的 merge/rebase 冲突 | `/resolving-merge-conflicts` |
 
-### 偶发工具
+停用到交付模式解除：`/grill-with-docs`、`/ubiquitous-language`、`/domain-modeling`、`/to-spec`、`/to-tickets`、`/triage`、`/wayfinder`、`/prototype`、`/improve-codebase-architecture`、`/codebase-design`、`/research`。
 
-| 意图 | Skill |
-|---|---|
-| 查一手资料并落引用笔记 | `/research` |
-| 解决进行中的 merge/rebase 冲突 | `/resolving-merge-conflicts` |
-| 走手工第三方配置/密钥步骤 | `/wizard`（上游仍属 `in-progress`，产出需人工复核） |
-| 装本仓 pre-commit | `/setup-pre-commit` |
-| 改本文件或 agent 可读文档写法 | `/writing-for-agents` |
+用 skill 时首条回复点名它（`按 /skill-name`），收工时列产物路径或「无变更」；中间不必逐步播报。Skill 权威源是 [`idp-xyz/idp-skills`](https://github.com/idp-xyz/idp-skills)（私有），调不到时的读法与进 main 的步骤见 [workflow.md](./docs/agents/workflow.md)；前端切片按其「前端切片」一节。
 
 ## 当前默认切片
 
-在另有明确 ticket 之前，编码默认推进：
-
-- 用例：[UC-PS-001](./docs/application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)
-- 技术边界：[parcel-go-first-consumer-slice-decision-brief.md](./docs/design/parcel-go-first-consumer-slice-decision-brief.md)
-- 范围：机制与产品策略已放行，租户取值仍阻断；Bento 持久化闸门的 Parcel 半边已过、持久化进生产装配获准，`B-06` 登记仍在闸门后；边界以 [ADR-0017](./docs/adr/0017-admission-gates-judged-by-blocking-cause.md)、[ADR-0146](./docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 与 [ADR-0277](./docs/adr/0277-the-parcel-half-of-the-bento-persistence-gate-has-passed-and-registration-still-waits-for-both-consumers.md) 为准，不在此复述
+没有默认切片。无票可做时不自己找活：对着[交付模式](#交付模式)那三种查一遍，都没有就停下来告诉用户。
 
 ## Agent skills
 
@@ -144,4 +120,4 @@ How the generic skill flow maps onto this repo's PN slices, handoff work package
 
 ### Parallel sessions
 
-Territory, committing, and reporting when several sessions write one working tree. Single-session work can skip its territory, numbering and roll-call sections, but the steps into `main` bind every session: see [`docs/agents/workflow.md`「进 main 的步骤」](./docs/agents/workflow.md#进-main-的步骤). See [`docs/agents/parallel-sessions.md`](./docs/agents/parallel-sessions.md). 多会话时开工第一眼看 `scripts/branch-state.ps1` 算出来的状态页（main 与 origin、各树未提交、在途分支），派单前带 `-Path <地盘>` 查半成品；不读任何人的自报。**diff 全在 `apps/admin-web/**` 的票不走它**：一人在 `main` 上直接做，落法见 [workflow.md「前端切片」](./docs/agents/workflow.md#前端切片一人在-main-上直接做)。
+At most two writing sessions at a time ([交付模式](#交付模式)). Territory, committing, and reporting when several sessions write one working tree. Single-session work can skip its territory, numbering and roll-call sections, but the steps into `main` bind every session: see [`docs/agents/workflow.md`「进 main 的步骤」](./docs/agents/workflow.md#进-main-的步骤). See [`docs/agents/parallel-sessions.md`](./docs/agents/parallel-sessions.md). 多会话时开工第一眼看 `scripts/branch-state.ps1` 算出来的状态页（main 与 origin、各树未提交、在途分支），派单前带 `-Path <地盘>` 查半成品；不读任何人的自报。**diff 全在 `apps/admin-web/**` 的票不走它**：一人在 `main` 上直接做，落法见 [workflow.md「前端切片」](./docs/agents/workflow.md#前端切片一人在-main-上直接做)。
