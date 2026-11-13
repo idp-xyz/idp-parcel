@@ -102,7 +102,7 @@ footer .wrap{padding-block:22px 40px}
   <div class="eyebrow">IDP PARCEL · 国际小包网络运营系统</div>
   <h1>业务全景：一票国际小包从委托到结算</h1>
   <p class="lede">这一页把产品做什么、一票货怎么走、钱怎么算、哪些能力今天已经能用，按业务顺序画出来。每一段都注明由哪个上下文负责，以及它在代码里的现状。</p>
-  <div class="meta"><span>对照 main <code>d118b4f83</code>（2026-11-12）</span><span>内容取自 dox/ 各文件，规则以那些文件和代码为准</span><span>全部证据层级为 S（受控模拟）</span></div>
+  <div class="meta"><span>对照 main <code>95b563884</code>（2026-11-12）</span><span>内容取自 dox/ 各文件，规则以那些文件和代码为准</span><span>全部证据层级为 S（受控模拟）</span></div>
 </div></header>
 
 <nav class="toc" aria-label="目录"><div class="wrap">
@@ -433,6 +433,7 @@ footer .wrap{padding-block:22px 40px}
       <div class="flow"><span>已申请</span><i>→</i><span>候补</span><i>→</i><span class="end">接受</span><i>/</i><span>拒绝</span><i>/</i><span>失效</span><i>/</i><span>撤回</span></div>
     </div>
   </div>
+  <div class="note">在管理台上：这一段只有「运输班次」（只能看）和「外部轨迹时间确认」两页。运输委托、订舱、容量、派送触发、收费发生项、段关闭等操作后端都有接口，但没有页面。</div>
 </section>
 
 <section id="s5">
@@ -460,6 +461,7 @@ footer .wrap{padding-block:22px 40px}
       <div class="note">外部监管舱单引用的接收、监管限制的建立与解除，编排已写好但还没有生产入口。两件都排在限量生产前要接上的清单里。</div>
     </div>
   </div>
+  <div class="note">在管理台上：能登记口岸、申报路径、合规规则、税费协作，能看案件。建立案件、提交授权、申报提交、放行门禁核对、案件关闭后端都有接口，但没有页面。</div>
 </section>
 
 <section id="s6">
@@ -554,6 +556,7 @@ footer .wrap{padding-block:22px 40px}
   <h3>代收与清分（首发试点不启用）</h3>
   <p>向收件人代收的货款本金单独记账，不是物流收入，也不是结算账户资金。机制已在产品内：</p>
   <div class="flow"><span>渠道在途</span><i>→</i><span>待清分</span><i>→</i><span>应付客户</span><i>→</i><span class="end">已汇付</span><i style="margin-left:10px">旁路：</i><span>短款</span><span>已抵扣</span><span>溢款</span></div>
+  <div class="note">在管理台上：供应商账单的接收与审核、收付款事实的登记、对账单争议可以操作。费用确认和对账单发布后端有接口，但没有页面；客户费用和经营核算两页只能看。</div>
 </section>
 
 <section id="surf">
@@ -598,7 +601,7 @@ footer .wrap{padding-block:22px 40px}
 
 <section id="cap">
   <h2>能力现状</h2>
-  <p class="sub">按上下文列出今天代码里的实际情况。依据是各上下文文件：有没有生产入口，是在 <code>cmd/</code> 下逐个查出来的；规则的行为没有逐条跑测试验证。</p>
+  <p class="sub">按上下文列出今天代码里的实际情况，分两层：后端有没有生产入口（在 <code>cmd/</code> 下逐个查的），以及管理台上能不能操作（逐页沿代码追的）。后端可用而管理台没有页面的，现在只能直接调接口或走演示脚本。规则的行为没有逐条跑测试验证。</p>
   <div class="legend">
     <span><span class="pill p-ok">可用</span> 有生产入口</span>
     <span><span class="pill p-wait">待接入</span> 编排已写好，缺装配与入口</span>
@@ -606,23 +609,23 @@ footer .wrap{padding-block:22px 40px}
     <span><span class="pill p-hold">不启用</span> 机制在，首发不用，或已搁置</span>
   </div>
   <div class="tbl"><table>
-    <tr><th style="width:17%">上下文</th><th style="width:37%">今天可用</th><th>还差什么</th></tr>
-    <tr><td><b>参与方与商业</b></td><td><span class="pill p-ok">可用</span> 参与方、关系、商业版本的发布与收尾、渠道映射与账号授权</td><td><span class="pill p-wait">在做</span> 客户合同声明销售价格来源<br><span class="pill p-off">未实现</span> 保价条件、人工费用调整授权</td></tr>
-    <tr><td><b>小包托运</b></td><td><span class="pill p-ok">可用</span> 提交（含平台货件）、货物明细与装箱分配、接受判断与五种等待、受控补充、撤回、取消、收寄后处置、终局</td><td><span class="pill p-wait">待接入</span> 面单渠道写链<br><span class="pill p-off">未实现</span> 包裹拆分合并的身份谱系、保价要求</td></tr>
-    <tr><td><b>网络与路由</b></td><td><span class="pill p-ok">可用</span> 网络目录、可达性判断、初始路由、复核、改路建议与决定</td><td><span class="pill p-off">未实现</span> 路由偏离判断、拆合后的新路由、退运独立路由计划</td></tr>
-    <tr><td><b>节点作业</b></td><td><span class="pill p-ok">可用</span> 送站收寄、身份核对、预报与交接单、节点控制、协作承接</td><td><span class="pill p-wait">待接入</span> 集运作业的在线入口（现仅离线导入）<br><span class="pill p-off">未实现</span> 实际测量、封签状态历史、作业任务</td></tr>
-    <tr><td><b>运输履约</b></td><td><span class="pill p-ok">可用</span> 揽收、交接、交付、委托与订舱、班次与装载、收费发生项、门禁读数</td><td><span class="pill p-wait">待接入</span> 追踪资料的真实来源<br><span class="pill p-off">未实现</span> 运输舱单、软容量超配、班次延误与取消</td></tr>
-    <tr><td><b>关务与贸易合规</b></td><td><span class="pill p-ok">可用</span> 案件、就绪与授权、提交与发送、技术回执、内部合规限制、放行门禁、动作准入</td><td><span class="pill p-wait">待接入</span> 外部监管舱单引用接收、监管限制、申报更正、处置核对<br><span class="pill p-off">未实现</span> 申报就绪的自动评定、凭证额度核销</td></tr>
-    <tr><td><b>全程追踪与异常</b></td><td><span class="pill p-ok">可用</span> 投影、客户追踪视图、信号、分诊、索赔受理</td><td><span class="pill p-wait">待接入</span> ETA 形成、案件接单与关闭、证据、披露决定、客户异常通知、处置请求<br><span class="pill p-off">未实现</span> 严重度与优先级、责任结论</td></tr>
-    <tr><td><b>小包计价</b></td><td><span class="pill p-ok">可用</span> 价卡草稿到发布、评价、试算、回放、参考序列登记与复核</td><td><span class="pill p-wait">在做</span> 销售卡按有序范围列表选卡<br><span class="pill p-off">未实现</span> 仓储计费方案</td></tr>
-    <tr><td><b>结算与经营核算</b></td><td><span class="pill p-ok">可用</span> 评价请求、费用形成与确认、对账单发布、供应商账单与审核、资金采用与核销、接受前财务控制</td><td><span class="pill p-wait">待接入</span> 费用调整、对账单作废、成本分摊与经营结果、赔付与追偿金额<br><span class="pill p-off">未实现</span> 周期费用的形成、自动核销</td></tr>
-    <tr><td><b>代收与清分</b></td><td><span class="pill p-hold">不启用</span> 分户账与各资金位置的机制已在</td><td>首发试点不启用代收货款服务</td></tr>
-    <tr><td><b>仓配履约</b></td><td><span class="pill p-hold">已搁置</span> 可选能力，首发不含。设计见上文「仓配履约的设计」</td><td><span class="pill p-off">未实现</span> main 上没有生产代码；十一篇用例只有文档</td></tr>
-    <tr><td><b>试点治理</b></td><td><span class="pill p-ok">可用</span> 候选版本组、阶段评审决定、权威区间、暂停恢复的记录</td><td>阶段评审的 <code>Go</code> 在代码里没有读者：准入读的是权威区间与暂停</td></tr>
-    <tr><td><b>接入与身份</b></td><td><span class="pill p-ok">可用</span> 接入渠道登记、凭据验证、来源信封、操作员授予</td><td><span class="pill p-off">未实现</span> 签名推送的铸造、租户既有通道适配</td></tr>
+    <tr><th style="width:13%">上下文</th><th style="width:28%">后端今天可用</th><th style="width:28%">后端还差什么</th><th>在管理台上</th></tr>
+    <tr><td><b>参与方与商业</b></td><td><span class="pill p-ok">可用</span> 参与方、关系、商业版本的发布与收尾、渠道映射与账号授权</td><td><span class="pill p-wait">在做</span> 客户合同声明销售价格来源<br><span class="pill p-off">未实现</span> 保价条件、人工费用调整授权</td><td>客户与合同、商业规则、往来单位、供应商协议、渠道产品、服务产品、公司主体、审批与发布都可用</td></tr>
+    <tr><td><b>小包托运</b></td><td><span class="pill p-ok">可用</span> 提交（含平台货件）、货物明细与装箱分配、接受判断与五种等待、受控补充、撤回、取消、收寄后处置、终局</td><td><span class="pill p-wait">待接入</span> 面单渠道写链<br><span class="pill p-off">未实现</span> 包裹拆分合并的身份谱系、保价要求</td><td>新建、平台货件、复核、受限处置、取消、货物处置可用；面单、渠道择优只能看</td></tr>
+    <tr><td><b>网络与路由</b></td><td><span class="pill p-ok">可用</span> 网络目录、可达性判断、初始路由、复核、改路建议与决定</td><td><span class="pill p-off">未实现</span> 路由偏离判断、拆合后的新路由、退运独立路由计划</td><td>网络与网点、服务区域、路线规划可用</td></tr>
+    <tr><td><b>节点作业</b></td><td><span class="pill p-ok">可用</span> 送站收寄、身份核对、预报与交接单、节点控制、协作承接</td><td><span class="pill p-wait">待接入</span> 集运作业的在线入口（现仅离线导入）<br><span class="pill p-off">未实现</span> 实际测量、封签状态历史、作业任务</td><td>网点作业部分可用；集运没有页面</td></tr>
+    <tr><td><b>运输履约</b></td><td><span class="pill p-ok">可用</span> 揽收、交接、交付、委托与订舱、班次与装载、收费发生项、门禁读数</td><td><span class="pill p-wait">待接入</span> 追踪资料的真实来源<br><span class="pill p-off">未实现</span> 运输舱单、软容量超配、班次延误与取消</td><td>外部轨迹时间确认可用；运输班次只能看；委托、订舱、容量、派送、收费发生项、段关闭等都没有页面</td></tr>
+    <tr><td><b>关务与贸易合规</b></td><td><span class="pill p-ok">可用</span> 案件、就绪与授权、提交与发送、技术回执、内部合规限制、放行门禁、动作准入</td><td><span class="pill p-wait">待接入</span> 外部监管舱单引用接收、监管限制、申报更正、处置核对<br><span class="pill p-off">未实现</span> 申报就绪的自动评定、凭证额度核销</td><td>口岸与申报路径、合规规则可用；清关单、合规限制与税费部分可用；建案、授权、申报提交、放行核对、关闭没有页面</td></tr>
+    <tr><td><b>全程追踪与异常</b></td><td><span class="pill p-ok">可用</span> 投影、客户追踪视图、信号、分诊、索赔受理</td><td><span class="pill p-wait">待接入</span> ETA 形成、案件接单与关闭、证据、披露决定、客户异常通知、处置请求<br><span class="pill p-off">未实现</span> 严重度与优先级、责任结论</td><td>追踪规则、通知与披露、索赔资格与授权可用；物流动态、异常处理、异常案件、索赔与追偿只能看</td></tr>
+    <tr><td><b>小包计价</b></td><td><span class="pill p-ok">可用</span> 价卡草稿到发布、评价、试算、回放、参考序列登记与复核</td><td><span class="pill p-wait">在做</span> 销售卡按有序范围列表选卡<br><span class="pill p-off">未实现</span> 仓储计费方案</td><td>价格表、汇率与燃油费率、计价试算可用；计费记录只能看</td></tr>
+    <tr><td><b>结算与经营核算</b></td><td><span class="pill p-ok">可用</span> 评价请求、费用形成与确认、对账单发布、供应商账单与审核、资金采用与核销、接受前财务控制</td><td><span class="pill p-wait">待接入</span> 费用调整、对账单作废、成本分摊与经营结果、赔付与追偿金额<br><span class="pill p-off">未实现</span> 周期费用的形成、自动核销</td><td>供应商账单与应付、收付款核销可用；对账单部分可用；客户费用、经营核算只能看；费用确认、对账单发布没有页面</td></tr>
+    <tr><td><b>代收与清分</b></td><td><span class="pill p-hold">不启用</span> 分户账与各资金位置的机制已在</td><td>首发试点不启用代收货款服务</td><td>代收货款只能看</td></tr>
+    <tr><td><b>仓配履约</b></td><td><span class="pill p-hold">已搁置</span> 可选能力，首发不含。设计见上文「仓配履约的设计」</td><td><span class="pill p-off">未实现</span> main 上没有生产代码；十一篇用例只有文档</td><td>没有页面</td></tr>
+    <tr><td><b>试点治理</b></td><td><span class="pill p-ok">可用</span> 候选版本组、阶段评审决定、权威区间、暂停恢复的记录</td><td>阶段评审的 <code>Go</code> 在代码里没有读者：准入读的是权威区间与暂停</td><td>试点治理只能看，登记走离线命令</td></tr>
+    <tr><td><b>接入与身份</b></td><td><span class="pill p-ok">可用</span> 接入渠道登记、凭据验证、来源信封、操作员授予</td><td><span class="pill p-off">未实现</span> 签名推送的铸造、租户既有通道适配</td><td>操作者与授予可用；扫描设备只能看</td></tr>
   </table></div>
   <h3>限量生产前要接上的四件</h3>
-  <p>四件都是编排已在、只缺装配与入口。首发范围写明这些能力要生产化。</p>
+  <p>四件都是编排已在、只缺装配与入口。首发范围写明这些能力要生产化。这四件说的是后端入口；管理台缺页面的操作另见上文「产品里能操作的地方」。</p>
   <div class="tbl"><table>
     <tr><th style="width:4%">#</th><th style="width:20%">上下文</th><th>接什么</th></tr>
     <tr><td>1</td><td>关务与贸易合规</td><td>外部监管舱单引用接收</td></tr>
