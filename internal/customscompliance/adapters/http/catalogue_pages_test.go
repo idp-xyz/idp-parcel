@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
@@ -70,6 +71,12 @@ func (recorder *pageRecorder) ListExternalResults(
 ) (cataloguepage.Result[ports.ExternalResultViewRecord], error) {
 	recorder.version = version
 	return recorded[ports.ExternalResultViewRecord](recorder, tenant, limit, query)
+}
+
+func (recorder *pageRecorder) ListExternalManifestReferences(
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ExternalManifestReferenceRecord], error) {
+	return recorded[ports.ExternalManifestReferenceRecord](recorder, tenant, limit, query)
 }
 
 func (recorder *pageRecorder) ListActionAdmissionJudgements(
@@ -208,6 +215,12 @@ func pagedCatalogues() []pagedCatalogue {
 			endpoint: serving(customshttp.NewQueryExternalResultsEndpoint),
 			sort:     "-recordedAt", at: at(pageInstant, "SYN-RESULT-01"),
 			filters: url.Values{"layer": {layer}}, outOfVocabulary: outside("layer"), list: "results",
+		},
+		{
+			name: "舱单引用", target: "/customs-external-manifest-reference-records", catalogue: ports.ExternalManifestReferencePages,
+			endpoint: serving(customshttp.NewQueryExternalManifestReferencesEndpoint),
+			sort:     "acceptedAt", at: at(pageInstant, "SYN-CARRIER-01", "SYN-MANIFEST-01"),
+			filters: url.Values{"direction": {direction}}, outOfVocabulary: outside("direction"), list: "manifests",
 		},
 		{
 			name: "判断册", target: "/customs-action-admission-judgements", catalogue: ports.AdmissionJudgementPages,
@@ -609,5 +622,57 @@ func TestTheUnadmittedCountIsTheWholeBacklogWhilePageTotalFollowsTheConditions(t
 				t.Fatalf("积压件数、total 或截断走样：%s", response.Body.Bytes())
 			}
 		})
+	}
+}
+
+type manifestReferenceReaderDouble struct {
+	rows []ports.ExternalManifestReferenceRecord
+}
+
+func (double manifestReferenceReaderDouble) ListExternalManifestReferences(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ExternalManifestReferenceRecord], error) {
+	return cataloguepage.Result[ports.ExternalManifestReferenceRecord]{Rows: double.rows, Total: int64(len(double.rows))}, nil
+}
+
+// Covers: 舱单引用查阅逐字段透出在册的那一版；人工录入的带 manualEntry（谁、原件），承运方系统声明的整键缺席；
+// 首版没有 priorVersion、尚未关联没有 associationUnit，两键缺席而不是空串。
+func TestManifestReferenceRecordsCarryManualEntryOnlyOnManuallyEnteredVersions(t *testing.T) {
+	accepted := time.Date(2026, 11, 13, 8, 0, 0, 0, time.UTC)
+	reader := manifestReferenceReaderDouble{rows: []ports.ExternalManifestReferenceRecord{
+		{
+			Carrier: "SYN-CARRIER-01", Manifest: "SYN-MANIFEST-01", Version: "v2", Procedure: "SYN-PROCEDURE-01",
+			Direction: "EXPORT", Scope: "SYN-SCOPE-01", SourceFact: "舱单确认函.pdf", AcceptedAt: accepted,
+			PriorVersion: "v1", AssociationUnit: "SYN-UNIT-01", EnteredBy: "SYN-OP-4", Original: "舱单确认函.pdf",
+		},
+		{
+			Carrier: "SYN-CARRIER-01", Manifest: "SYN-MANIFEST-02", Version: "v1", Procedure: "SYN-PROCEDURE-01",
+			Direction: "EXPORT", Scope: "SYN-SCOPE-02", SourceFact: "carrier-msg-9", AcceptedAt: accepted,
+		},
+	}}
+	endpoint := customshttp.NewQueryExternalManifestReferencesEndpoint(grantedPageIntake, reader)
+	request := httptest.NewRequest(http.MethodGet, "/customs-external-manifest-reference-records", nil)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Outcome   string                       `json:"outcome"`
+		Manifests []map[string]json.RawMessage `json:"manifests"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.Outcome != "EXTERNAL_MANIFEST_REFERENCES_LISTED" || len(body.Manifests) != 2 {
+		t.Fatalf("解不出回答：%v %s", err, response.Body.String())
+	}
+	manual, declared := body.Manifests[0], body.Manifests[1]
+	if string(manual["manualEntry"]) != `{"enteredBy":"SYN-OP-4","original":"舱单确认函.pdf"}` ||
+		string(manual["priorVersion"]) != `"v1"` || string(manual["associationUnit"]) != `"SYN-UNIT-01"` ||
+		string(manual["acceptedAt"]) != `"2026-11-13T08:00:00Z"` {
+		t.Fatalf("人工录入的那一行走样：%s", response.Body.String())
+	}
+	for _, key := range []string{"manualEntry", "priorVersion", "associationUnit"} {
+		if _, present := declared[key]; present {
+			t.Fatalf("承运方系统声明的首版不得带 %s：%s", key, response.Body.String())
+		}
 	}
 }

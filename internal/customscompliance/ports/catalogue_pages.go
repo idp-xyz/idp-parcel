@@ -298,3 +298,19 @@ var DutyVerificationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "validity", Vocabulary: cataloguepage.Words[domain.DutyFactValidity]()},
 	},
 })
+
+// ExternalManifestReferencePages 是外部监管舱单引用查阅（GET /customs-external-manifest-reference-records）的声明。
+//
+// 一份舱单一行（它在册的那一版），缺省序是接受时刻倒序：新近收到或修订的在前。接受时刻随修订前移——倒序翻页时途中被修订的
+// 舱单挪到已翻过的那头，本轮可能不再见到它。行标识是（承运人、舱单号），即主键去掉租户。direction 是封闭词表一维。
+var ExternalManifestReferencePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "customs-external-manifest-reference-records",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "acceptedAt", Kind: cataloguepage.Instant},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "acceptedAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "direction", Vocabulary: cataloguepage.Words[domain.ManifestDirection]()},
+	},
+})

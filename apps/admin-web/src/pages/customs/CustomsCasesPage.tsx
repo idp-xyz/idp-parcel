@@ -22,6 +22,7 @@ import {
   listCaseRegisters,
   listCredentials,
   listCustomsCases,
+  listExternalManifestReferences,
   listExternalResults,
   listSubmissionVersions,
   listUnadmittedObjects,
@@ -46,6 +47,7 @@ import {
   caseNumberReader,
   caseRows,
   externalResultRows,
+  manifestReferenceRows,
   judgementRows,
   snapshotRows,
   submissionRows,
@@ -462,6 +464,50 @@ function ExternalResultsTable() {
       emptyDescription="接收、受理、放行等结果由报关行或海关接口送入；还没有收到不等于被拒绝。"
       filterSummary={`本页 ${results.length} 条 · 其中放行 ${results.filter((r) => r.release).length} 条`}
       noun="海关结果"
+      pagination={pagination}
+      narrowed={catalogueConditionsNarrow(conditions) || pastFirstPage(pagination)}
+    />
+  );
+}
+
+const manifestColumns = recordColumns(
+  [
+    { id: 'manifest', header: '舱单号', mono: true, nowrap: true },
+    { id: 'carrier', header: '承运人', mono: true, nowrap: true },
+    { id: 'direction', header: '进出口', nowrap: true },
+    { id: 'scope', header: '范围', mono: true },
+    { id: 'association', header: '关联的报关批次', mono: true },
+    { id: 'entryWord', header: '来源', nowrap: true },
+    { id: 'acceptedAt', header: '接受时间', mono: true, nowrap: true },
+  ],
+  [
+    ['版本', 'version'],
+    ['上一版', 'priorVersion'],
+    ['监管程序', 'procedure'],
+    ['来源事实', 'sourceFact'],
+    ['录入来源', 'entry'],
+  ],
+);
+
+function ManifestReferencesTable() {
+  const { search, setSearch, conditions } = useKeywordConditions();
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listExternalManifestReferences);
+  const manifests = outcomeBody(answer)?.manifests ?? [];
+  return (
+    <RecordTable
+      title="舱单引用"
+      description="承运人向监管申报的舱单在本系统登记的引用：每份舱单一行，显示在册的那一版，以及它是人工录入的还是承运方系统声明的"
+      search={{ value: search, onChange: setSearch, placeholder: '搜舱单号、承运人、版本、范围' }}
+      pageOnly="舱单号、承运人、范围"
+      columns={manifestColumns}
+      rows={manifestReferenceRows(manifests)}
+      answer={answer}
+      retry={retry}
+      endpoint="GET /customs-external-manifest-reference-records"
+      emptyTitle="还没有舱单引用"
+      emptyDescription="舱单引用由承运方系统声明，或在「运营决定」签里人工录入；还没有不等于不需要。"
+      filterSummary={`本页 ${manifests.length} 份 · 其中人工录入 ${manifests.filter((m) => m.manualEntry).length} 份`}
+      noun="舱单引用"
       pagination={pagination}
       narrowed={catalogueConditionsNarrow(conditions) || pastFirstPage(pagination)}
     />
@@ -925,6 +971,7 @@ export function CustomsCasesPage() {
           <TabsTrigger value="snapshots">申报资料</TabsTrigger>
           <TabsTrigger value="submissions">申报记录</TabsTrigger>
           <TabsTrigger value="results">海关结果与放行</TabsTrigger>
+          <TabsTrigger value="manifests">舱单引用</TabsTrigger>
           <TabsTrigger value="admission">放行记录</TabsTrigger>
           <TabsTrigger value="closure-obligations">关闭核对</TabsTrigger>
           <TabsTrigger value="preconditions">申报准备</TabsTrigger>
@@ -946,6 +993,9 @@ export function CustomsCasesPage() {
         </TabsContent>
         <TabsContent value="results" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <ExternalResultsTable />
+        </TabsContent>
+        <TabsContent value="manifests" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <ManifestReferencesTable />
         </TabsContent>
         <TabsContent value="admission" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <AdmissionJudgementsTable unadmittedOnly={unadmittedOnly} onUnadmittedOnlyChange={(next) => place('admission', next)} />

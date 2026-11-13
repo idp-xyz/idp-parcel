@@ -9,6 +9,7 @@ import {
   caseRows,
   externalResultRows,
   judgementRows,
+  manifestReferenceRows,
   submissionRows,
   unitRows,
 } from './record-rows';
@@ -198,4 +199,23 @@ test('来源：人工录入的结果与人工递交的发送带出谁与原件�
   const lines = row.values.attempts.split('\n');
   ok(lines[0].endsWith('，人工递交（SYN-OP-7 登记，原件：单一窗口回执截图.png，受理号 ACK-778）'), lines[0]);
   ok(!lines[1].includes('人工递交'), lines[1]);
+});
+
+// Covers: 舱单引用——在册这一版是人录的才说人工录入；承运方系统声明的说接口送达；尚未关联与首版如实显示。
+test('舱单引用行：来源只凭留痕在不在场，未关联写尚未关联', () => {
+  const base = {
+    carrier: 'SYN-CARRIER-01', procedure: 'proc-1', direction: 'EXPORT', scope: 'SYN-SCOPE-01', sourceFact: 'fact-1', acceptedAt: at,
+  };
+  const rows = manifestReferenceRows([
+    { ...base, manifest: 'MF-1', version: 'v2', priorVersion: 'v1', associationUnit: 'UNIT-1', manualEntry: { enteredBy: 'SYN-OP-4', original: '舱单确认函.pdf' } },
+    { ...base, manifest: 'MF-2', version: 'v1' },
+  ]);
+  equal(rows[0].key, 'manifest:SYN-CARRIER-01:MF-1');
+  equal(rows[0].values.entryWord, '人工录入');
+  equal(rows[0].values.entry, '人工录入｜SYN-OP-4 录入，原件：舱单确认函.pdf');
+  equal(rows[0].values.association, 'UNIT-1');
+  equal(rows[0].values.priorVersion, 'v1');
+  equal(rows[1].values.entryWord, '接口送达');
+  equal(rows[1].values.association, '尚未关联');
+  equal(rows[1].values.priorVersion, '');
 });

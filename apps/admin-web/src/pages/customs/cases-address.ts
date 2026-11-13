@@ -13,6 +13,7 @@ export const casesTabs = [
   'snapshots',
   'submissions',
   'results',
+  'manifests',
   'admission',
   'closure-obligations',
   'preconditions',

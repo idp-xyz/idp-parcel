@@ -15,6 +15,7 @@ func init() {
 		results:     unwiredExternalResultViews{},
 		judgements:  unwiredAdmissionJudgementViews{},
 		unadmitted:  unwiredUnadmittedObjects{},
+		manifests:   unwiredExternalManifestReferences{},
 	})
 }
 
@@ -56,4 +57,12 @@ func (unwiredUnadmittedObjects) ListUnadmittedObjects(
 	context.Context, customsdomain.TenantID, int, cataloguepage.Query,
 ) (customsports.UnadmittedObjects, error) {
 	return customsports.UnadmittedObjects{}, errOrchestrationNotWired
+}
+
+type unwiredExternalManifestReferences struct{}
+
+func (unwiredExternalManifestReferences) ListExternalManifestReferences(
+	context.Context, customsdomain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[customsports.ExternalManifestReferenceRecord], error) {
+	return cataloguepage.Result[customsports.ExternalManifestReferenceRecord]{}, errOrchestrationNotWired
 }

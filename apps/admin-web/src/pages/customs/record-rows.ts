@@ -7,6 +7,7 @@
 import type {
   AdmissionJudgementBody,
   CustomsCaseBody,
+  ExternalManifestReferenceBody,
   ExternalResultBody,
   SubmissionAttemptBody,
   SubmissionVersionBody,
@@ -16,7 +17,7 @@ import { labelFor } from '../../vocabulary/status';
 import { documentNumberAbsenceNote, documentTypeWords } from '../../vocabulary/document-numbering';
 import type { RegisterRow } from './register-rows';
 import { shortenEmbeddedPrincipalRefs } from '../../components/principal-ref';
-import { entrySourceLine, manualTrace } from '../../vocabulary/provenance';
+import { entrySourceLine, entrySourceWord, manualTrace } from '../../vocabulary/provenance';
 
 const dash = '—';
 
@@ -299,6 +300,30 @@ export function judgementRows(judgements: AdmissionJudgementBody[], label: (node
         .join('\n'),
       actionAt: formatInstant(judgement.actionAt),
       judgedAt: formatInstant(judgement.judgedAt),
+    },
+  }));
+}
+
+/**
+ * 舱单引用一行：一份舱单在册的那一版。来源一格只凭读面的留痕在不在场——在册这一版是人录的才说人工录入，
+ * 人录过之后被承运方系统推到别的版本的不算。
+ */
+export function manifestReferenceRows(manifests: ExternalManifestReferenceBody[]): RegisterRow[] {
+  return manifests.map((manifest) => ({
+    key: `manifest:${manifest.carrier}:${manifest.manifest}`,
+    values: {
+      manifest: manifest.manifest,
+      carrier: manifest.carrier,
+      version: manifest.version,
+      direction: labelFor(manifest.direction),
+      scope: manifest.scope,
+      association: manifest.associationUnit ?? '尚未关联',
+      entryWord: entrySourceWord(manifest.manualEntry),
+      entry: entrySourceLine(manifest.manualEntry),
+      procedure: manifest.procedure,
+      sourceFact: manifest.sourceFact,
+      priorVersion: manifest.priorVersion ?? '',
+      acceptedAt: formatInstant(manifest.acceptedAt),
     },
   }));
 }

@@ -750,6 +750,40 @@ export function listExternalResults(
   return exchangeMasterData<ExternalResultListResponseBody>(catalogueRequestPath('/customs-external-result-records', conditions, after));
 }
 
+/**
+ * 一份外部监管舱单在册的那一版。priorVersion 首版缺席；associationUnit 尚未关联到报关批次即缺席；
+ * manualEntry 只在在册的这一版是人工录入的时在场，缺席即承运方系统声明的。
+ */
+export interface ExternalManifestReferenceBody {
+  carrier: string;
+  manifest: string;
+  version: string;
+  procedure: string;
+  direction: string;
+  scope: string;
+  sourceFact: string;
+  acceptedAt: string;
+  priorVersion?: string;
+  associationUnit?: string;
+  manualEntry?: ManualEntryRecord;
+}
+
+export interface ExternalManifestReferenceListResponseBody {
+  outcome: 'EXTERNAL_MANIFEST_REFERENCES_LISTED';
+  manifests: ExternalManifestReferenceBody[];
+  page: CataloguePage;
+}
+
+/** 收哪些键见 ports.ExternalManifestReferencePages。 */
+export function listExternalManifestReferences(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<ExternalManifestReferenceListResponseBody>> {
+  return exchangeMasterData<ExternalManifestReferenceListResponseBody>(
+    catalogueRequestPath('/customs-external-manifest-reference-records', conditions, after),
+  );
+}
+
 export interface AdmissionBasisBody {
   cause: string;
   scope?: string;

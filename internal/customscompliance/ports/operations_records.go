@@ -256,3 +256,30 @@ type UnadmittedObjectRead interface {
 		query cataloguepage.Query,
 	) (UnadmittedObjects, error)
 }
+
+// ExternalManifestReferenceRecord 是外部监管舱单引用查阅的一行：一份舱单在册的那一版。
+type ExternalManifestReferenceRecord struct {
+	Carrier         string
+	Manifest        string
+	Version         string
+	Procedure       string
+	Direction       string
+	Scope           string
+	SourceFact      string
+	AcceptedAt      time.Time
+	PriorVersion    string
+	AssociationUnit string
+	// EnteredBy 与 Original 成对：都空即承运方系统声明的，都在即在册的这一版是人工录入的（谁录的、凭哪份原件）。
+	EnteredBy string
+	Original  string
+}
+
+// ExternalManifestReferenceRead 按租户上列外部监管舱单引用。
+type ExternalManifestReferenceRead interface {
+	ListExternalManifestReferences(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ExternalManifestReferenceRecord], error)
+}

@@ -697,3 +697,75 @@ func unadmittedObjectPosition(record ports.ActionAdmissionJudgementRecord, _ str
 		Identity: []string{record.Object},
 	}
 }
+
+// —— 外部监管舱单引用 ——
+
+// externalManifestReferencePages 把 ports.ExternalManifestReferencePages 落到列上；q 在承运人、舱单号、版本号与范围上做字面包含。
+var externalManifestReferencePages = ports.ExternalManifestReferencePages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"acceptedAt": "m.accepted_at"},
+	Identity: []string{"m.carrier_ref", "m.manifest_id"},
+	Filters:  map[string]string{"direction": "m.direction"},
+	Keyword:  []string{"m.carrier_ref", "m.manifest_id", "m.version_id", "m.scope_ref"},
+})
+
+// ListExternalManifestReferences 上列外部监管舱单引用，一份舱单一行。
+//
+// 留痕按（承运人、舱单号、版本号、录入时刻 = 接受时刻）对上在册的这一版：引用行与承运方系统共用，同一个版本号可以先被人录、
+// 后被系统原样重述，也可以推到别的版本又推回来，只按版本号对会把系统声明的那一版说成人录的。人工录入口落留痕时用的就是那一版
+// 的接受时刻，所以两边相等即同一次录入。
+func (views *OperationsRecordViews) ListExternalManifestReferences(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.ExternalManifestReferenceRecord], error) {
+	fail := func(err error) (cataloguepage.Result[ports.ExternalManifestReferenceRecord], error) {
+		return cataloguepage.Result[ports.ExternalManifestReferenceRecord]{}, fmt.Errorf("list external manifest references: %w", err)
+	}
+	const source = "customs_compliance.external_manifest_reference AS m"
+	page, err := openPage(ctx, views.db, externalManifestReferencePages, query, limit, source, "m.tenant_id = $1", tenant.String())
+	if err != nil {
+		return fail(err)
+	}
+	rows, err := page.rows(ctx,
+		`m.carrier_ref, m.manifest_id, m.version_id, m.procedure_ref, m.direction, m.scope_ref, m.source_fact,
+		        m.accepted_at, COALESCE(m.prior_version, ''), COALESCE(m.association_unit, ''),
+		        COALESCE(entry.entered_by, ''), COALESCE(entry.original_ref, '')`,
+		source+`
+		   LEFT JOIN customs_compliance.external_manifest_manual_entry AS entry
+		     ON entry.tenant_id = m.tenant_id AND entry.carrier_ref = m.carrier_ref
+		    AND entry.manifest_id = m.manifest_id AND entry.version_id = m.version_id
+		    AND entry.entered_at = m.accepted_at`)
+	if err != nil {
+		return fail(err)
+	}
+	defer rows.Close()
+
+	records := make([]ports.ExternalManifestReferenceRecord, 0, limit+1)
+	for rows.Next() {
+		var record ports.ExternalManifestReferenceRecord
+		if err := rows.Scan(&record.Carrier, &record.Manifest, &record.Version, &record.Procedure, &record.Direction,
+			&record.Scope, &record.SourceFact, &record.AcceptedAt, &record.PriorVersion, &record.AssociationUnit,
+			&record.EnteredBy, &record.Original); err != nil {
+			return fail(err)
+		}
+		record.AcceptedAt = record.AcceptedAt.UTC()
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return fail(err)
+	}
+	result, err := cataloguepage.Finish(query, records, limit, page.total,
+		func(record ports.ExternalManifestReferenceRecord, _ string) cataloguepage.Position {
+			return cataloguepage.Position{
+				Value:    cataloguepage.FormatInstant(record.AcceptedAt),
+				Identity: []string{record.Carrier, record.Manifest},
+			}
+		})
+	if err != nil {
+		return fail(err)
+	}
+	return result, nil
+}
+
+var _ ports.ExternalManifestReferenceRead = (*OperationsRecordViews)(nil)

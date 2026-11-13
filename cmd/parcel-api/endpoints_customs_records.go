@@ -19,16 +19,18 @@ type customsRecordsWiring struct {
 	results     customshttp.ExternalResultViewReader
 	judgements  customshttp.ActionAdmissionJudgementReader
 	unadmitted  customshttp.UnadmittedObjectReader
+	manifests   customshttp.ExternalManifestReferenceReader
 }
 
 func init() {
 	registerEndpoints(endpointFeature[customsRecordsWiring]{
 		lines: map[string]endpointLine{
-			"/customs-case-records":                {method: http.MethodGet, face: operationsReadFace()},
-			"/customs-submission-records":          {method: http.MethodGet, face: operationsReadFace()},
-			"/customs-external-result-records":     {method: http.MethodGet, face: operationsReadFace()},
-			"/customs-action-admission-judgements": {method: http.MethodGet, face: operationsReadFace()},
-			"/customs-unadmitted-objects":          {method: http.MethodGet, face: operationsReadFace()},
+			"/customs-case-records":                        {method: http.MethodGet, face: operationsReadFace()},
+			"/customs-submission-records":                  {method: http.MethodGet, face: operationsReadFace()},
+			"/customs-external-result-records":             {method: http.MethodGet, face: operationsReadFace()},
+			"/customs-action-admission-judgements":         {method: http.MethodGet, face: operationsReadFace()},
+			"/customs-unadmitted-objects":                  {method: http.MethodGet, face: operationsReadFace()},
+			"/customs-external-manifest-reference-records": {method: http.MethodGet, face: operationsReadFace()},
 		},
 		build: func(sources endpointSources) (customsRecordsWiring, error) {
 			views, err := ccpostgres.NewOperationsRecordViews(sources.db)
@@ -36,7 +38,7 @@ func init() {
 				return customsRecordsWiring{}, err
 			}
 			// 各口共用一个读适配器（同一上下文的几张事实表），各按自己的接口消费；卡关对象读的是判断册那张表。
-			return customsRecordsWiring{cases: views, submissions: views, results: views, judgements: views, unadmitted: views}, nil
+			return customsRecordsWiring{cases: views, submissions: views, results: views, judgements: views, unadmitted: views, manifests: views}, nil
 		},
 		mount: func(channels endpointChannels, wiring customsRecordsWiring) []httpapi.BusinessEndpoint {
 			intake := channels.complianceRules()
@@ -46,6 +48,7 @@ func init() {
 				{Pattern: "/customs-external-result-records", Handler: customshttp.NewQueryExternalResultsEndpoint(intake, wiring.results)},
 				{Pattern: "/customs-action-admission-judgements", Handler: customshttp.NewQueryActionAdmissionJudgementsEndpoint(intake, wiring.judgements)},
 				{Pattern: "/customs-unadmitted-objects", Handler: customshttp.NewQueryUnadmittedObjectsEndpoint(intake, wiring.unadmitted)},
+				{Pattern: "/customs-external-manifest-reference-records", Handler: customshttp.NewQueryExternalManifestReferencesEndpoint(intake, wiring.manifests)},
 			}
 		},
 	})

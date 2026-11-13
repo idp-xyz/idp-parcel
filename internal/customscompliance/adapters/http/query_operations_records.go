@@ -558,3 +558,54 @@ func NewQueryUnadmittedObjectsEndpoint(intake CatalogueQueryIntake, reader Unadm
 		})
 	})
 }
+
+// —— 外部监管舱单引用 ——
+
+const outcomeExternalManifestReferencesListed = "EXTERNAL_MANIFEST_REFERENCES_LISTED"
+
+// ExternalManifestReferenceReader 是舱单引用查阅端点消费的读口。
+type ExternalManifestReferenceReader interface {
+	ListExternalManifestReferences(
+		ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ExternalManifestReferenceRecord], error)
+}
+
+var _ ExternalManifestReferenceReader = ports.ExternalManifestReferenceRead(nil)
+
+// externalManifestReferenceBody 逐字段透出一份舱单在册的那一版。priorVersion 首版缺席；associationUnit 尚未关联到申报单元即缺席；
+// manualEntry 只在在册的这一版是人工录入的时在场，整键缺席即承运方系统声明的。
+type externalManifestReferenceBody struct {
+	Carrier         string           `json:"carrier"`
+	Manifest        string           `json:"manifest"`
+	Version         string           `json:"version"`
+	Procedure       string           `json:"procedure"`
+	Direction       string           `json:"direction"`
+	Scope           string           `json:"scope"`
+	SourceFact      string           `json:"sourceFact"`
+	AcceptedAt      string           `json:"acceptedAt"`
+	PriorVersion    string           `json:"priorVersion,omitempty"`
+	AssociationUnit string           `json:"associationUnit,omitempty"`
+	ManualEntry     *manualEntryBody `json:"manualEntry,omitempty"`
+}
+
+// NewQueryExternalManifestReferencesEndpoint 交回外部监管舱单引用查阅的 HTTP 入口
+// （GET /customs-external-manifest-reference-records；收哪些键见 ports.ExternalManifestReferencePages）。
+func NewQueryExternalManifestReferencesEndpoint(intake CatalogueQueryIntake, reader ExternalManifestReferenceReader) http.Handler {
+	return serveRecordList(intake, ports.ExternalManifestReferencePages, outcomeExternalManifestReferencesListed, "manifests",
+		func(
+			request *http.Request, _ url.Values, tenant domain.TenantID, limit int, query cataloguepage.Query,
+		) (cataloguepage.Result[ports.ExternalManifestReferenceRecord], error) {
+			return reader.ListExternalManifestReferences(request.Context(), tenant, limit, query)
+		},
+		func(record ports.ExternalManifestReferenceRecord) externalManifestReferenceBody {
+			body := externalManifestReferenceBody{
+				Carrier: record.Carrier, Manifest: record.Manifest, Version: record.Version, Procedure: record.Procedure,
+				Direction: record.Direction, Scope: record.Scope, SourceFact: record.SourceFact,
+				AcceptedAt: instant(record.AcceptedAt), PriorVersion: record.PriorVersion, AssociationUnit: record.AssociationUnit,
+			}
+			if record.EnteredBy != "" {
+				body.ManualEntry = &manualEntryBody{EnteredBy: record.EnteredBy, Original: record.Original}
+			}
+			return body
+		})
+}

@@ -20,6 +20,7 @@ import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import { problemNote } from './presentation';
 import { listTrackingProjections, type ApiResult, type ProjectionListResponseBody } from './api';
 import { TrackingDetailPanel } from './TrackingDetailPanel';
+import { ETAPredictionsTable } from './ETAPredictionsTable';
 import { defaultTrackingSort, trackingListConditions } from './list-conditions';
 import { PageOnlyNote } from './page-only';
 import {
@@ -156,7 +157,7 @@ function viewStateOf(
 }
 
 /**
- * 物流动态页。「物流动态」签是原来的查阅面；「录入预计到达」签给没有预测来源对接的租户：把承运商告知的或自己估的
+ * 物流动态页。「物流动态」签是原来的查阅面；「预计到达」签列各预测线当前登记的那一版与它的来源；「录入预计到达」签给没有预测来源对接的租户：把承运商告知的或自己估的
  * 预计到达录进来。
  */
 export function TrackingProjectionPage() {
@@ -164,10 +165,14 @@ export function TrackingProjectionPage() {
     <Tabs defaultValue="projections" className="flex-1 flex flex-col overflow-hidden gap-0 bg-idpxyz-editor">
       <TabsList className="px-4 shrink-0">
         <TabsTrigger value="projections">物流动态</TabsTrigger>
+        <TabsTrigger value="eta-predictions">预计到达</TabsTrigger>
         <TabsTrigger value="eta-entry">录入预计到达</TabsTrigger>
       </TabsList>
       <TabsContent value="projections" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
         <TrackingProjections />
+      </TabsContent>
+      <TabsContent value="eta-predictions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+        <ETAPredictionsTable />
       </TabsContent>
       <TabsContent value="eta-entry" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
         <RegistrationPanel

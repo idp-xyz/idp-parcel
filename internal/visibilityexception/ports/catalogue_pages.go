@@ -184,3 +184,17 @@ func keyedCataloguePages(name, key string) *cataloguepage.Catalogue {
 		Selectors:   []string{"kind"},
 	})
 }
+
+// ETAPredictionPages 是 ETA 预测查阅（GET /eta-prediction-records）的声明。
+//
+// 一条预测线（包裹、里程碑、来源）一行，上列它的当前版。缺省序是预测时刻倒序：新近形成的在前。预测时刻随新版本前移——倒序翻页时
+// 途中出了新版的那条线挪到已翻过的那头，本轮可能不再见到它。行标识是版本标识（租户内唯一）。预测没有状态一格，不放筛选维；
+// q 覆盖包裹、里程碑、来源与版本。
+var ETAPredictionPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "eta-prediction-records",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "predictedAt", Kind: cataloguepage.Instant},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "predictedAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+})

@@ -350,3 +350,68 @@ func TestOperationsViewsTellManualEntriesFromInterfaceDeliveredOnes(t *testing.T
 		t.Fatalf("人工递交留痕走样：%+v", lodgement)
 	}
 }
+
+// Covers: 舱单引用查阅——一份舱单一行、新近接受的在前、他租户读不到、q 按字面收窄；留痕只认「在册这一版的这一次录入」：
+// 人工录入的在册版带出谁与原件；人录过之后承运方系统把它推到新版的不带；同版号但接受时刻对不上的旧留痕不算数。
+func TestOperationsViewsListManifestReferencesAndTellManualVersions(t *testing.T) {
+	views, fixture := newOperationsRecordViews(t)
+	tenant := recordTenant(t, "SYN-TENANT-01")
+	reference := func(tenantID, manifest, version string, acceptedAt time.Time, prior any) {
+		fixture.seed(t,
+			`INSERT INTO customs_compliance.external_manifest_reference
+				(tenant_id, manifest_id, version_id, carrier_ref, procedure_ref, direction, scope_ref, source_fact, accepted_at, prior_version)
+			 VALUES ($1, $2, $3, 'SYN-CARRIER-01', 'SYN-PROCEDURE-01', 'EXPORT', 'SYN-SCOPE-'||$2, 'SYN-FACT-'||$2, $4, $5)`,
+			tenantID, manifest, version, acceptedAt, prior)
+	}
+	entry := func(manifest, version string, enteredAt time.Time) {
+		fixture.seed(t,
+			`INSERT INTO customs_compliance.external_manifest_manual_entry
+				(tenant_id, carrier_ref, manifest_id, version_id, entered_by, original_ref, entered_at)
+			 VALUES ('SYN-TENANT-01', 'SYN-CARRIER-01', $1, $2, 'SYN-OP-4', '舱单确认函 '||$1, $3)`,
+			manifest, version, enteredAt)
+	}
+	// MF-MANUAL：在册版就是人录的那一次。
+	reference("SYN-TENANT-01", "MF-MANUAL", "v1", viewBaseAt.Add(3*time.Hour), nil)
+	entry("MF-MANUAL", "v1", viewBaseAt.Add(3*time.Hour))
+	// MF-MOVED：人录过 v1，之后承运方系统推到 v2——在册的 v2 没有留痕。
+	reference("SYN-TENANT-01", "MF-MOVED", "v2", viewBaseAt.Add(2*time.Hour), "v1")
+	entry("MF-MOVED", "v1", viewBaseAt.Add(time.Hour))
+	// MF-RESTATED：人录过 v1，推到别的版本后承运方系统又声明回 v1——版本号相同，但不是那一次录入。
+	reference("SYN-TENANT-01", "MF-RESTATED", "v1", viewBaseAt.Add(time.Hour), "v2")
+	entry("MF-RESTATED", "v1", viewBaseAt)
+	reference("SYN-TENANT-02", "MF-OTHER", "v1", viewBaseAt, nil)
+
+	rows, err := rowsOf(views.ListExternalManifestReferences(t.Context(), tenant, 10, firstPage(t, ports.ExternalManifestReferencePages)))
+	if err != nil {
+		t.Fatalf("上列舱单引用：%v", err)
+	}
+	if len(rows) != 3 || rows[0].Manifest != "MF-MANUAL" || rows[1].Manifest != "MF-MOVED" || rows[2].Manifest != "MF-RESTATED" {
+		t.Fatalf("应按接受时刻新近在前列出本租户三份：%+v", rows)
+	}
+	manual := rows[0]
+	if manual.EnteredBy != "SYN-OP-4" || manual.Original != "舱单确认函 MF-MANUAL" || manual.Carrier != "SYN-CARRIER-01" ||
+		manual.Version != "v1" || manual.Direction != "EXPORT" || manual.Scope != "SYN-SCOPE-MF-MANUAL" ||
+		manual.SourceFact != "SYN-FACT-MF-MANUAL" || !manual.AcceptedAt.Equal(viewBaseAt.Add(3*time.Hour)) || manual.PriorVersion != "" {
+		t.Fatalf("人工录入的在册版走样：%+v", manual)
+	}
+	for _, declared := range rows[1:] {
+		if declared.EnteredBy != "" || declared.Original != "" {
+			t.Fatalf("在册版不是那一次人工录入的，不得带留痕：%+v", declared)
+		}
+	}
+	if rows[1].PriorVersion != "v1" {
+		t.Fatalf("前版没透出：%+v", rows[1])
+	}
+	narrowed, err := rowsOf(views.ListExternalManifestReferences(t.Context(), tenant, 10,
+		pageQuery(t, ports.ExternalManifestReferencePages, url.Values{"q": {"mf-moved"}})))
+	if err != nil || len(narrowed) != 1 || narrowed[0].Manifest != "MF-MOVED" {
+		t.Fatalf("q 收窄走样：%v %+v", err, narrowed)
+	}
+	if empty, err := rowsOf(views.ListExternalManifestReferences(t.Context(), recordTenant(t, "SYN-TENANT-03"), 10,
+		firstPage(t, ports.ExternalManifestReferencePages))); err != nil || len(empty) != 0 {
+		t.Fatalf("空册应答空列表：%v %+v", err, empty)
+	}
+	if _, err := views.ListExternalManifestReferences(t.Context(), tenant, 0, firstPage(t, ports.ExternalManifestReferencePages)); err == nil {
+		t.Fatal("页大小 0 没被拒")
+	}
+}
