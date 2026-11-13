@@ -401,12 +401,24 @@ const (
 	ManifestAlreadyRecorded
 )
 
-// ManifestStore 按外部舱单身份保存受控引用——一舱单一当前引用；来源版本推进走
-// Update（原引用与历史关联由领域在新引用内保留）。
+type ManifestUpdateOutcome uint8
+
+const (
+	ManifestUpdateOutcomeInvalid ManifestUpdateOutcome = iota
+	ManifestAdvanced
+	// ManifestVersionMoved：在册引用已不是这次推进所基于的那一版——另一笔推进先落了。
+	ManifestVersionMoved
+)
+
+// ManifestStore 按（承运商责任，外部舱单身份）保存受控引用——一家承运商的一份舱单一条当前引用。外部舱单身份是承运商
+// 自己编号空间里的号，两家承运商用到同一个号互不相干：键里不带承运商，一家就能占住另一家的号，首登口也成了探测别家
+// 舱单在不在册的口。来源版本推进走 Update（原引用与历史关联由领域在新引用内保留），且只在在册版本仍是新引用指回的
+// 前版时才落：并发的两笔推进后到的那一笔答版本已移动，不静默盖掉先到的。
 type ManifestStore interface {
 	FindByManifest(
 		ctx context.Context,
 		tenant domain.TenantID,
+		carrier domain.CarrierResponsibilityReference,
 		manifest domain.ExternalManifestID,
 	) (domain.ExternalManifestReference, bool, error)
 	Save(
@@ -418,7 +430,7 @@ type ManifestStore interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		reference domain.ExternalManifestReference,
-	) error
+	) (ManifestUpdateOutcome, error)
 }
 
 // ManifestHandoffIntent 把舱单引用的接受、关联与版本推进交给适用下游（案件视图与

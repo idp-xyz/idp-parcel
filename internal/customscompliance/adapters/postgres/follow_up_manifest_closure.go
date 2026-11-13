@@ -289,6 +289,7 @@ func NewManifests(db *bentopg.DB) (*Manifests, error) {
 func (repository *Manifests) FindByManifest(
 	ctx context.Context,
 	tenant domain.TenantID,
+	carrier domain.CarrierResponsibilityReference,
 	manifest domain.ExternalManifestID,
 ) (domain.ExternalManifestReference, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
@@ -297,17 +298,17 @@ func (repository *Manifests) FindByManifest(
 	}
 
 	var (
-		versionID, carrier, procedure, direction, scope, sourceFact string
-		acceptedAt                                                  time.Time
-		priorVersion, associationUnit                               *string
+		versionID, procedure, direction, scope, sourceFact string
+		acceptedAt                                         time.Time
+		priorVersion, associationUnit                      *string
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT version_id, carrier_ref, procedure_ref, direction, scope_ref,
+		`SELECT version_id, procedure_ref, direction, scope_ref,
 		        source_fact, accepted_at, prior_version, association_unit
 		   FROM customs_compliance.external_manifest_reference
-		  WHERE tenant_id = $1 AND manifest_id = $2`,
-		tenant.String(), manifest.String(),
-	).Scan(&versionID, &carrier, &procedure, &direction, &scope,
+		  WHERE tenant_id = $1 AND carrier_ref = $2 AND manifest_id = $3`,
+		tenant.String(), carrier.String(), manifest.String(),
+	).Scan(&versionID, &procedure, &direction, &scope,
 		&sourceFact, &acceptedAt, &priorVersion, &associationUnit)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ExternalManifestReference{}, false, nil
@@ -316,7 +317,7 @@ func (repository *Manifests) FindByManifest(
 		return domain.ExternalManifestReference{}, false, fmt.Errorf("find manifest reference: %w", err)
 	}
 
-	reference, err := rebuildManifest(manifest, versionID, carrier, procedure, direction,
+	reference, err := rebuildManifest(manifest, versionID, carrier.String(), procedure, direction,
 		scope, sourceFact, acceptedAt, priorVersion, associationUnit)
 	if err != nil {
 		return domain.ExternalManifestReference{}, false, fmt.Errorf("rebuild manifest reference: %w", err)
@@ -339,7 +340,7 @@ func (repository *Manifests) Save(
 			(tenant_id, manifest_id, version_id, carrier_ref, procedure_ref, direction,
 			 scope_ref, source_fact, accepted_at, prior_version, association_unit)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		 ON CONFLICT (tenant_id, manifest_id) DO NOTHING`,
+		 ON CONFLICT (tenant_id, carrier_ref, manifest_id) DO NOTHING`,
 		tenant.String(),
 		reference.Manifest().String(),
 		reference.Version().String(),
@@ -365,17 +366,21 @@ func (repository *Manifests) Update(
 	ctx context.Context,
 	tenant domain.TenantID,
 	reference domain.ExternalManifestReference,
-) error {
+) (ports.ManifestUpdateOutcome, error) {
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("update manifest reference: %w", err)
+		return ports.ManifestUpdateOutcomeInvalid, fmt.Errorf("update manifest reference: %w", err)
+	}
+	prior, revised := reference.PriorVersion()
+	if !revised {
+		return ports.ManifestUpdateOutcomeInvalid, fmt.Errorf("update manifest reference: %s carries no prior version", reference.Manifest())
 	}
 
 	tag, err := executor.Exec(ctx,
 		`UPDATE customs_compliance.external_manifest_reference
 		    SET version_id = $3, scope_ref = $4, source_fact = $5, accepted_at = $6,
 		        prior_version = $7, association_unit = $8
-		  WHERE tenant_id = $1 AND manifest_id = $2`,
+		  WHERE tenant_id = $1 AND manifest_id = $2 AND carrier_ref = $9 AND version_id = $10`,
 		tenant.String(),
 		reference.Manifest().String(),
 		reference.Version().String(),
@@ -384,14 +389,18 @@ func (repository *Manifests) Update(
 		reference.AcceptedAt(),
 		manifestPriorColumn(reference),
 		manifestAssociationColumn(reference),
+		reference.Carrier().String(),
+		prior.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("update manifest reference: %w", err)
+		return ports.ManifestUpdateOutcomeInvalid, fmt.Errorf("update manifest reference: %w", err)
 	}
+	// 一行都没动：在册版本已不是这次推进所基于的那一版（另一笔推进先落了），或这一行不在了。两者对推进方是同一个
+	// 答案——它手里那份前版过时了，要重读再定。
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("update manifest reference: %s not found", reference.Manifest())
+		return ports.ManifestVersionMoved, nil
 	}
-	return nil
+	return ports.ManifestAdvanced, nil
 }
 
 func rebuildManifest(

@@ -45,25 +45,35 @@ type manifestStoreStub struct {
 	err        error
 }
 
-func (stub *manifestStoreStub) FindByManifest(_ context.Context, _ domain.TenantID, manifest domain.ExternalManifestID) (domain.ExternalManifestReference, bool, error) {
+func manifestRow(carrier domain.CarrierResponsibilityReference, manifest domain.ExternalManifestID) string {
+	return carrier.String() + "|" + manifest.String()
+}
+
+func (stub *manifestStoreStub) FindByManifest(_ context.Context, _ domain.TenantID, carrier domain.CarrierResponsibilityReference, manifest domain.ExternalManifestID) (domain.ExternalManifestReference, bool, error) {
 	if stub.err != nil {
 		return domain.ExternalManifestReference{}, false, stub.err
 	}
-	reference, found := stub.byManifest[manifest.String()]
+	reference, found := stub.byManifest[manifestRow(carrier, manifest)]
 	return reference, found, nil
 }
 
 func (stub *manifestStoreStub) Save(_ context.Context, _ domain.TenantID, reference domain.ExternalManifestReference) (ports.ManifestSaveOutcome, error) {
-	if _, exists := stub.byManifest[reference.Manifest().String()]; exists {
+	row := manifestRow(reference.Carrier(), reference.Manifest())
+	if _, exists := stub.byManifest[row]; exists {
 		return ports.ManifestAlreadyRecorded, nil
 	}
-	stub.byManifest[reference.Manifest().String()] = reference
+	stub.byManifest[row] = reference
 	return ports.ManifestSaved, nil
 }
 
-func (stub *manifestStoreStub) Update(_ context.Context, _ domain.TenantID, reference domain.ExternalManifestReference) error {
-	stub.byManifest[reference.Manifest().String()] = reference
-	return nil
+func (stub *manifestStoreStub) Update(_ context.Context, _ domain.TenantID, reference domain.ExternalManifestReference) (ports.ManifestUpdateOutcome, error) {
+	row := manifestRow(reference.Carrier(), reference.Manifest())
+	prior, _ := reference.PriorVersion()
+	if current, exists := stub.byManifest[row]; !exists || current.Version() != prior {
+		return ports.ManifestVersionMoved, nil
+	}
+	stub.byManifest[row] = reference
+	return ports.ManifestAdvanced, nil
 }
 
 type manifestCandidatesStub struct{ candidates []domain.AssociationCandidate }
@@ -136,7 +146,7 @@ func TestACarrierClientRegistersAManifestReferenceUnderItsBoundIdentity(t *testi
 	if status != http.StatusCreated || answer.Outcome != "PENDING_ASSOCIATION" || answer.Version != "V1" || answer.DeclarationUnit != "" {
 		t.Fatalf("status %d answer %+v, want 201 PENDING_ASSOCIATION V1 且不带申报单元", status, answer)
 	}
-	recorded, found := endpoints.store.byManifest["SYN-MANIFEST-0001"]
+	recorded, found := endpoints.store.byManifest["SYN-PARTY-CARRIER-TRUNK-01|SYN-MANIFEST-0001"]
 	if !found || recorded.Carrier().String() != "SYN-PARTY-CARRIER-TRUNK-01" || recorded.Direction() != domain.ExportManifest ||
 		!recorded.AcceptedAt().Equal(clientReceivedAt) {
 		t.Fatalf("入册引用 = %+v（found=%v）——承运商责任该是册上绑定的来源身份，接受时刻该是服务端时钟", recorded, found)
@@ -149,7 +159,8 @@ func TestACarrierClientRegistersAManifestReferenceUnderItsBoundIdentity(t *testi
 }
 
 // Covers: UC-CC-012「更正、替代……形成新版本和关系，原引用不覆盖」的入口面——同舱单异版本经首登口来答版本冲突；经推进口来
-// 形成新版本并指回前版（201）；别家承运商的客户端推进同一舱单答得与不在册同形，在册引用不动。
+// 形成新版本并指回前版（201）；别家承运商的客户端推进同一个号读的是它自己的编号空间，答不在册，在册引用不动；同版本
+// 而范围不同答内容冲突。
 func TestARevisionAdvancesTheVersionOnlyThroughItsOwnFaceAndOnlyForTheSameCarrier(t *testing.T) {
 	endpoints := manifestEndpointsForTest(t, manifestAuthenticator{carrier: "SYN-PARTY-CARRIER-TRUNK-01"})
 	if status, answer := serveManifest(t, endpoints.receive, commandRequest(manifestReferenceBody)); status != http.StatusCreated {
@@ -172,8 +183,13 @@ func TestARevisionAdvancesTheVersionOnlyThroughItsOwnFaceAndOnlyForTheSameCarrie
 	if status, answer := serveManifest(t, foreign.revise, commandRequest(revisionBody)); status != http.StatusOK || answer.Outcome != "NOT_FOUND" || answer.Version != "" {
 		t.Fatalf("别家承运商推进：status %d answer %+v, want 200 NOT_FOUND 且不带在册版本", status, answer)
 	}
-	if kept := endpoints.store.byManifest["SYN-MANIFEST-0001"]; kept.Version().String() != "V1" {
+	if kept := endpoints.store.byManifest["SYN-PARTY-CARRIER-TRUNK-01|SYN-MANIFEST-0001"]; kept.Version().String() != "V1" {
 		t.Fatalf("在册版本 = %q，被别家承运商推进了", kept.Version())
+	}
+
+	changedScope := strings.Replace(manifestReferenceBody, `"SYN-MOVEMENT-0001"`, `"SYN-MOVEMENT-0009"`, 1)
+	if status, answer := serveManifest(t, endpoints.receive, commandRequest(changedScope)); status != http.StatusOK || answer.Outcome != "CONTENT_CONFLICT" || answer.Version != "" {
+		t.Fatalf("同版本异范围：status %d answer %+v, want 200 CONTENT_CONFLICT 且不带在册版本", status, answer)
 	}
 
 	status, answer := serveManifest(t, endpoints.revise, commandRequest(revisionBody))

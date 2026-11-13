@@ -14,8 +14,9 @@ import (
 )
 
 // transactionalManifests 把外部监管舱单引用的首登与版本推进各包进一笔事务，理由随 transactionalResults：引用册的写口
-// 按框架合同无事务即拒，事务边界归装配点。编排交回业务答案（含待关联、未受理、不在册）时事务提交；意图投递失败不翻
-// 结果——编排吞成续办引用后照常作答，重放重发同一份；编排返回错误时整笔回滚。
+// 按框架合同无事务即拒，事务边界归装配点。编排交回业务答案（含待关联、未受理、不在册、各种冲突）时事务提交；编排返回
+// 错误时整笔回滚。意图与引用在同一笔里入队：入队的 SQL 失败时这笔事务已经坏了，提交不成、整笔回滚、答 5xx，通道
+// 重发时引用与意图一起重来——所以这条装配上不会出现「引用已入册而意图没交」，编排的续办引用在这里实际用不上。
 type transactionalManifests struct {
 	transactor bentoapp.Transactor
 	inner      *customsapp.ReceiveManifestHandler

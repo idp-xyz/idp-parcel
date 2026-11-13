@@ -33,12 +33,18 @@ type manifestStoreDouble struct {
 	byManifest map[string]domain.ExternalManifestReference
 }
 
+// manifestRow 是替身的行键：承运商责任加舱单身份，与真库的键同形。
+func manifestRow(carrier domain.CarrierResponsibilityReference, manifest domain.ExternalManifestID) string {
+	return carrier.String() + "|" + manifest.String()
+}
+
 func (double *manifestStoreDouble) FindByManifest(
 	_ context.Context,
 	_ domain.TenantID,
+	carrier domain.CarrierResponsibilityReference,
 	manifest domain.ExternalManifestID,
 ) (domain.ExternalManifestReference, bool, error) {
-	reference, found := double.byManifest[manifest.String()]
+	reference, found := double.byManifest[manifestRow(carrier, manifest)]
 	return reference, found, nil
 }
 
@@ -47,10 +53,11 @@ func (double *manifestStoreDouble) Save(
 	_ domain.TenantID,
 	reference domain.ExternalManifestReference,
 ) (ports.ManifestSaveOutcome, error) {
-	if _, exists := double.byManifest[reference.Manifest().String()]; exists {
+	row := manifestRow(reference.Carrier(), reference.Manifest())
+	if _, exists := double.byManifest[row]; exists {
 		return ports.ManifestAlreadyRecorded, nil
 	}
-	double.byManifest[reference.Manifest().String()] = reference
+	double.byManifest[row] = reference
 	return ports.ManifestSaved, nil
 }
 
@@ -58,9 +65,14 @@ func (double *manifestStoreDouble) Update(
 	_ context.Context,
 	_ domain.TenantID,
 	reference domain.ExternalManifestReference,
-) error {
-	double.byManifest[reference.Manifest().String()] = reference
-	return nil
+) (ports.ManifestUpdateOutcome, error) {
+	row := manifestRow(reference.Carrier(), reference.Manifest())
+	prior, _ := reference.PriorVersion()
+	if current, exists := double.byManifest[row]; !exists || current.Version() != prior {
+		return ports.ManifestVersionMoved, nil
+	}
+	double.byManifest[row] = reference
+	return ports.ManifestAdvanced, nil
 }
 
 type manifestDownstreamDouble struct {
@@ -287,11 +299,14 @@ func TestRevisionsAdvanceVersionsAndRematchAssociations(t *testing.T) {
 }
 
 // Covers: UC-CC-012「承运商来源只能作用于其被授权的……范围。越权来源未受理且不得确认候选对象是否存在」——
-// 同一舱单身份已由一家承运商责任入册后，另一家再交同一身份：首登答未受理且不交回在册内容，版本推进答得与不在册同形，
-// 在册那一份的版本与范围原样不动。
-func TestAnotherCarrierCanNeitherReadNorAdvanceARecordedManifest(t *testing.T) {
+// 外部舱单身份只在承运商自己的编号空间里唯一。一家承运商入册某个号之后，另一家交同一个号：首登在它自己的那一格里
+// 照常入册，答复与这个号从没人用过时一样，读不到也占不住前一家的引用；它推进这个号的版本，动的只是它自己那一条。
+func TestTwoCarriersUsingTheSameManifestNumberNeverSeeOrTouchEachOther(t *testing.T) {
 	fixture := newManifestFixture(t)
 	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	first := mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-1")
+	second := mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-2")
+	number := mustValue(t, domain.NewExternalManifestID, "carrier-manifest-1")
 	if _, err := fixture.handler.Receive(context.Background(), application.ReceiveManifestCommand{
 		TenantID: tenant,
 		Spec:     manifestSpec(t, "v1"),
@@ -299,39 +314,137 @@ func TestAnotherCarrierCanNeitherReadNorAdvanceARecordedManifest(t *testing.T) {
 		t.Fatalf("receive: %v", err)
 	}
 
-	foreign := manifestSpec(t, "v1")
-	foreign.Carrier = mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-2")
-	refused, err := fixture.handler.Receive(context.Background(), application.ReceiveManifestCommand{
-		TenantID: tenant,
-		Spec:     foreign,
-	})
+	sameNumber := manifestSpec(t, "v7")
+	sameNumber.Carrier = second
+	sameNumber.Scope = mustValue(t, domain.NewDecisionScopeReference, "movement-7")
+	other, err := fixture.handler.Receive(context.Background(), application.ReceiveManifestCommand{TenantID: tenant, Spec: sameNumber})
 	if err != nil {
-		t.Fatalf("foreign receive: %v", err)
+		t.Fatalf("second carrier receive: %v", err)
 	}
-	if refused.Outcome() != application.ManifestNotAccepted {
-		t.Fatalf("outcome = %q, want NOT_ACCEPTED——别家承运商交同一舱单身份不该读到已有或版本冲突", refused.Outcome())
+	if other.Outcome() != application.ManifestPendingAssociation {
+		t.Fatalf("outcome = %q, want PENDING_ASSOCIATION——答复不该因为别家用过这个号而不同", other.Outcome())
 	}
-	if _, has := refused.Reference(); has {
-		t.Fatal("未受理却交回了在册引用——越权来源由此读到别家舱单的范围")
+	if reference, _ := other.Reference(); reference.Carrier() != second || reference.Version().String() != "v7" {
+		t.Fatalf("交回的不是第二家自己的引用：%+v", reference)
 	}
 
 	advanced, err := fixture.handler.Revise(context.Background(), application.ReviseManifestCommand{
 		TenantID:   tenant,
-		Carrier:    mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-2"),
-		Manifest:   mustValue(t, domain.NewExternalManifestID, "carrier-manifest-1"),
-		Version:    mustValue(t, domain.NewManifestSourceVersion, "v2"),
-		Scope:      mustValue(t, domain.NewDecisionScopeReference, "movement-9"),
-		SourceFact: "FOREIGN-FEED/manifest-amended",
+		Carrier:    second,
+		Manifest:   number,
+		Version:    mustValue(t, domain.NewManifestSourceVersion, "v8"),
+		Scope:      mustValue(t, domain.NewDecisionScopeReference, "movement-8"),
+		SourceFact: "SECOND-FEED/manifest-amended",
 		At:         manifestAt,
 	})
-	if err != nil {
-		t.Fatalf("foreign revise: %v", err)
+	if err != nil || advanced.Outcome() != application.ManifestRevised {
+		t.Fatalf("second carrier revise: outcome = %q err = %v", advanced.Outcome(), err)
 	}
-	if advanced.Outcome() != application.ManifestNotFound {
-		t.Fatalf("outcome = %q, want NOT_FOUND——与不在册同答，否则这一口能探出别家舱单在不在册", advanced.Outcome())
-	}
-	kept := fixture.store.byManifest["carrier-manifest-1"]
+	kept := fixture.store.byManifest[manifestRow(first, number)]
 	if kept.Version().String() != "v1" || kept.Scope().String() != "movement-1" {
-		t.Fatalf("在册引用被别家承运商推进了：version=%q scope=%q", kept.Version(), kept.Scope())
+		t.Fatalf("第一家的引用被第二家动了：version=%q scope=%q", kept.Version(), kept.Scope())
 	}
+
+	unknown, err := fixture.handler.Revise(context.Background(), application.ReviseManifestCommand{
+		TenantID:   tenant,
+		Carrier:    mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-3"),
+		Manifest:   number,
+		Version:    mustValue(t, domain.NewManifestSourceVersion, "v2"),
+		Scope:      mustValue(t, domain.NewDecisionScopeReference, "movement-9"),
+		SourceFact: "THIRD-FEED/manifest-amended",
+		At:         manifestAt,
+	})
+	if err != nil || unknown.Outcome() != application.ManifestNotFound {
+		t.Fatalf("没交过这个号的承运商推进：outcome = %q err = %v, want NOT_FOUND", unknown.Outcome(), err)
+	}
+}
+
+// Covers: UC-CC-012「同一来源身份/版本携带不同内容形成冲突」与「不按接收顺序决定」——同一家承运商的同一个号、同一个
+// 版本再次到达而范围不同，答内容冲突、不交回在册内容、在册那一份不动；内容相同只是报文身份换了的才是重放。
+func TestTheSameVersionArrivingWithDifferentContentIsAConflictNotAReplay(t *testing.T) {
+	fixture := newManifestFixture(t)
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	if _, err := fixture.handler.Receive(context.Background(), application.ReceiveManifestCommand{TenantID: tenant, Spec: manifestSpec(t, "v1")}); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+
+	resent := manifestSpec(t, "v1")
+	resent.SourceFact = "CARRIER-FEED/manifest-filed-again"
+	replayed, err := fixture.handler.Receive(context.Background(), application.ReceiveManifestCommand{TenantID: tenant, Spec: resent})
+	if err != nil || replayed.Outcome() != application.ManifestExisting {
+		t.Fatalf("同内容重发：outcome = %q err = %v, want EXISTING", replayed.Outcome(), err)
+	}
+
+	changed := manifestSpec(t, "v1")
+	changed.Scope = mustValue(t, domain.NewDecisionScopeReference, "movement-2")
+	conflicted, err := fixture.handler.Receive(context.Background(), application.ReceiveManifestCommand{TenantID: tenant, Spec: changed})
+	if err != nil || conflicted.Outcome() != application.ManifestContentConflict {
+		t.Fatalf("同版本异范围：outcome = %q err = %v, want CONTENT_CONFLICT", conflicted.Outcome(), err)
+	}
+	if _, has := conflicted.Reference(); has {
+		t.Fatal("内容冲突不该交回在册引用")
+	}
+	carrier := mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-1")
+	if kept := fixture.store.byManifest[manifestRow(carrier, changed.Manifest)]; kept.Scope().String() != "movement-1" {
+		t.Fatalf("在册范围 = %q，被后到的同版本覆盖了", kept.Scope())
+	}
+}
+
+// Covers: UC-CC-012「更正、替代……乱序到达时全部保留，……不按接收顺序决定」的并发面——两笔推进都读到 v1：先落的一笔
+// 成为 v2；后落的一笔指回的前版已不在册，答版本冲突，不静默盖掉 v2。
+func TestALateRevisionBasedOnAStaleVersionDoesNotOverwriteTheEarlierOne(t *testing.T) {
+	fixture := newManifestFixture(t)
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	received, err := fixture.handler.Receive(context.Background(), application.ReceiveManifestCommand{TenantID: tenant, Spec: manifestSpec(t, "v1")})
+	if err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	stale, _ := received.Reference()
+	carrier := mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-1")
+	number := mustValue(t, domain.NewExternalManifestID, "carrier-manifest-1")
+
+	// 第三笔推进在读到 v1 之后、落库之前被第二笔抢先：用一只在读时交回旧版的库模拟这个窗口。
+	racing := application.NewReceiveManifestHandler(application.ReceiveManifestDeps{
+		Candidates: fixture.candidates,
+		Store:      staleReadStore{manifestStoreDouble: fixture.store, stale: stale},
+		Downstream: &manifestDownstreamDouble{},
+		Clock:      fixedClock{at: manifestAt},
+	})
+	revise := func(handler *application.ReceiveManifestHandler, version, scope string) application.ManifestResult {
+		t.Helper()
+		result, err := handler.Revise(context.Background(), application.ReviseManifestCommand{
+			TenantID:   tenant,
+			Carrier:    carrier,
+			Manifest:   number,
+			Version:    mustValue(t, domain.NewManifestSourceVersion, version),
+			Scope:      mustValue(t, domain.NewDecisionScopeReference, scope),
+			SourceFact: "CARRIER-FEED/" + version,
+			At:         manifestAt,
+		})
+		if err != nil {
+			t.Fatalf("revise %s: %v", version, err)
+		}
+		return result
+	}
+	if first := revise(fixture.handler, "v2", "movement-2"); first.Outcome() != application.ManifestRevised {
+		t.Fatalf("先落的推进：outcome = %q", first.Outcome())
+	}
+	if late := revise(racing, "v3", "movement-3"); late.Outcome() != application.ManifestVersionConflict {
+		t.Fatalf("后落的推进：outcome = %q, want VERSION_CONFLICT——它指回的 v1 已经不是在册版本", late.Outcome())
+	}
+	if kept := fixture.store.byManifest[manifestRow(carrier, number)]; kept.Version().String() != "v2" {
+		t.Fatalf("在册版本 = %q，v2 被后到的 v3 盖掉了", kept.Version())
+	}
+}
+
+// staleReadStore 读时交回一份早先读到的旧版，写仍落到真替身上：模拟「读到前版之后、落新版之前另一笔先落了」。
+type staleReadStore struct {
+	*manifestStoreDouble
+	stale domain.ExternalManifestReference
+}
+
+func (store staleReadStore) FindByManifest(
+	context.Context, domain.TenantID, domain.CarrierResponsibilityReference, domain.ExternalManifestID,
+) (domain.ExternalManifestReference, bool, error) {
+	return store.stale, true, nil
 }

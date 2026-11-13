@@ -80,10 +80,10 @@ func manifestIntent(t *testing.T, tenant string) ports.ManifestHandoffIntent {
 	}
 }
 
-// manifestHandoffEventID 按生产同一公式重算信封 ID（票 sa-cc/34 裁决 3：口名 + 租户 / 舱单身份 / 来源版本全进哈希）。
+// manifestHandoffEventID 按生产同一公式重算信封 ID（票 sa-cc/34 裁决 3：口名 + 租户 / 承运商责任 / 舱单身份 / 来源版本全进哈希）。
 func manifestHandoffEventID(tenant string, intent ports.ManifestHandoffIntent) string {
 	return string(outboxintent.FingerprintEventID("carrier-manifest",
-		tenant, intent.Reference.Manifest().String(), intent.Reference.Version().String()))
+		tenant, intent.Reference.Carrier().String(), intent.Reference.Manifest().String(), intent.Reference.Version().String()))
 }
 
 // Covers: 票 sa-cc/34 判据 (1)——舱单身份与来源版本取到旧串接形必然超过 eventing.MaxEventIDLength 的长度，
@@ -184,7 +184,7 @@ func TestManifestIntentCommitsAtomicallyWithTheReference(t *testing.T) {
 		return fixture.handoff.HandOffManifest(txCtx, intent)
 	})
 
-	if _, exists, err := fixture.manifests.FindByManifest(ctx, intent.TenantID, intent.Reference.Manifest()); err != nil || !exists {
+	if _, exists, err := fixture.manifests.FindByManifest(ctx, intent.TenantID, intent.Reference.Carrier(), intent.Reference.Manifest()); err != nil || !exists {
 		t.Fatalf("业务行不在：err=%v exists=%v", err, exists)
 	}
 	if count := countManifestIntents(t, fixture.pool, eventID); count != 1 {
@@ -214,7 +214,7 @@ func TestManifestIntentRollbackDropsBoth(t *testing.T) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
 
-	if _, exists, err := fixture.manifests.FindByManifest(ctx, intent.TenantID, intent.Reference.Manifest()); err != nil || exists {
+	if _, exists, err := fixture.manifests.FindByManifest(ctx, intent.TenantID, intent.Reference.Carrier(), intent.Reference.Manifest()); err != nil || exists {
 		t.Fatalf("回滚后业务行仍在：err=%v exists=%v", err, exists)
 	}
 	if count := countManifestIntents(t, fixture.pool, eventID); count != 0 {

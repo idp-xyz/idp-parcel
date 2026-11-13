@@ -280,7 +280,7 @@ func TestManifestAcceptsThenRevisesTheCurrentRow(t *testing.T) {
 		t.Fatalf("重写 outcome = %d", outcome)
 	}
 
-	loaded, found, err := fixture.manifests.FindByManifest(ctx, tenant, first.Manifest())
+	loaded, found, err := fixture.manifests.FindByManifest(ctx, tenant, first.Carrier(), first.Manifest())
 	if err != nil || !found {
 		t.Fatalf("读首版：err=%v found=%v", err, found)
 	}
@@ -299,10 +299,14 @@ func TestManifestAcceptsThenRevisesTheCurrentRow(t *testing.T) {
 		t.Fatalf("改版：%v", err)
 	}
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		return fixture.manifests.Update(txCtx, tenant, revised)
+		outcome, err := fixture.manifests.Update(txCtx, tenant, revised)
+		if err == nil && outcome != ports.ManifestAdvanced {
+			t.Errorf("推进 outcome = %d，want ManifestAdvanced", outcome)
+		}
+		return err
 	})
 
-	current, found, err := fixture.manifests.FindByManifest(ctx, tenant, first.Manifest())
+	current, found, err := fixture.manifests.FindByManifest(ctx, tenant, first.Carrier(), first.Manifest())
 	if err != nil || !found || current.Version().String() != "manifest/v2" {
 		t.Fatalf("当前版 = %s found=%v err=%v", current.Version(), found, err)
 	}
@@ -421,7 +425,7 @@ func TestFollowUpManifestClosuresOfAnotherTenantAreInvisible(t *testing.T) {
 		t.Fatalf("跨租户目标可见：err=%v found=%v", err, found)
 	}
 	if _, found, err := fixture.manifests.FindByManifest(ctx,
-		fmcValue(t, domain.NewTenantID, "tenant-b"),
+		fmcValue(t, domain.NewTenantID, "tenant-b"), acceptedManifest(t).Carrier(),
 		fmcValue(t, domain.NewExternalManifestID, "carrier-manifest/MAWB-123")); err != nil || found {
 		t.Fatalf("跨租户舱单可见：err=%v found=%v", err, found)
 	}
@@ -468,5 +472,72 @@ func TestReplacementCannotExistBeforeTarget(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("没有目标的替代关系被库接受了")
+	}
+}
+
+// Covers: 迁移 customs_compliance 0034 的键与 Update 的前版条件（UC-CC-012）——两家承运商用同一个舱单号各自成行，谁也
+// 占不住谁的号、读不到谁的引用；基于同一份前版的两笔推进，先落的一笔成，后落的一笔答版本已移动，不盖掉先落的。
+func TestTwoCarriersHoldTheSameManifestNumberAndAStaleRevisionDoesNotOverwrite(t *testing.T) {
+	fixture := newFMCFixture(t)
+	ctx := t.Context()
+	tenant := fmcValue(t, domain.NewTenantID, "tenant-a")
+	first := acceptedManifest(t)
+	spec := domain.ExternalManifestReferenceSpec{
+		Manifest:   first.Manifest(),
+		Version:    fmcValue(t, domain.NewManifestSourceVersion, "other/v1"),
+		Carrier:    fmcValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility/OTHER"),
+		Procedure:  first.Procedure(),
+		Direction:  first.Direction(),
+		Scope:      fmcValue(t, domain.NewDecisionScopeReference, "other-scope-1"),
+		SourceFact: "other-report/submitted",
+		AcceptedAt: fmcBaseAt,
+	}
+	second, err := domain.AcceptManifestReference(spec)
+	if err != nil {
+		t.Fatalf("接受第二家的引用：%v", err)
+	}
+	if first.Carrier() == second.Carrier() {
+		t.Fatal("夹具没造对：两份引用要属于不同的承运商责任")
+	}
+	for name, reference := range map[string]domain.ExternalManifestReference{"第一家": first, "第二家": second} {
+		if outcome := fixture.saveManifest(t, ctx, "tenant-a", reference); outcome != ports.ManifestSaved {
+			t.Fatalf("%s首登 outcome = %d，want ManifestSaved——同一个号在另一家的编号空间里是另一行", name, outcome)
+		}
+	}
+	loaded, found, err := fixture.manifests.FindByManifest(ctx, tenant, second.Carrier(), second.Manifest())
+	if err != nil || !found || loaded.Version().String() != "other/v1" || loaded.Scope().String() != "other-scope-1" {
+		t.Fatalf("第二家读回的不是自己的引用：%+v found=%v err=%v", loaded, found, err)
+	}
+
+	advance := func(version, scope string) ports.ManifestUpdateOutcome {
+		t.Helper()
+		revised, err := first.Revise(
+			fmcValue(t, domain.NewManifestSourceVersion, version),
+			fmcValue(t, domain.NewDecisionScopeReference, scope),
+			"carrier-report/"+version, fmcBaseAt.Add(time.Hour))
+		if err != nil {
+			t.Fatalf("改版 %s：%v", version, err)
+		}
+		var outcome ports.ManifestUpdateOutcome
+		fixture.inTx(t, ctx, func(txCtx context.Context) error {
+			var err error
+			outcome, err = fixture.manifests.Update(txCtx, tenant, revised)
+			return err
+		})
+		return outcome
+	}
+	if outcome := advance("manifest/v2", "manifest-scope-2"); outcome != ports.ManifestAdvanced {
+		t.Fatalf("先落的推进 outcome = %d，want ManifestAdvanced", outcome)
+	}
+	if outcome := advance("manifest/v3", "manifest-scope-3"); outcome != ports.ManifestVersionMoved {
+		t.Fatalf("基于旧前版的推进 outcome = %d，want ManifestVersionMoved", outcome)
+	}
+	current, _, err := fixture.manifests.FindByManifest(ctx, tenant, first.Carrier(), first.Manifest())
+	if err != nil || current.Version().String() != "manifest/v2" {
+		t.Fatalf("在册版本 = %q err=%v，v2 被后到的推进盖掉了", current.Version(), err)
+	}
+	untouched, _, err := fixture.manifests.FindByManifest(ctx, tenant, second.Carrier(), second.Manifest())
+	if err != nil || untouched.Version().String() != "other/v1" {
+		t.Fatalf("第二家的引用被第一家的推进动了：%q err=%v", untouched.Version(), err)
 	}
 }

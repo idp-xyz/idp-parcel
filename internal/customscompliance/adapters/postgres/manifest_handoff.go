@@ -46,7 +46,9 @@ var _ ports.ManifestHandoff = (*OutboxManifestHandoff)(nil)
 // manifestPayload 是意图载荷的传输形状：只有下游 FindByManifest 所需的租户与舱单
 // 标识，不带关联或来源版本明细。
 type manifestPayload struct {
-	TenantID   string `json:"tenantId"`
+	TenantID string `json:"tenantId"`
+	// CarrierRef 与 ManifestID 一起才认得出一条引用：外部舱单身份只在承运商自己的编号空间里唯一。
+	CarrierRef string `json:"carrierRef"`
 	ManifestID string `json:"manifestId"`
 }
 
@@ -61,8 +63,11 @@ const manifestEventIDPort = "carrier-manifest"
 // 版本不是舱单身份：承运商更正推进版本走的是同一个舱单（Revise 换版本、指回前身），
 // ID 少了版本两版就算出同一份，而 outboxintent.EnqueueOnce 先查后插——修订版
 // 于是静默不入队，编排却收到「交接成功」。
-func manifestEventID(tenant, manifest, version string) eventing.EventID {
-	return outboxintent.FingerprintEventID(manifestEventIDPort, tenant, manifest, version)
+//
+// 承运商责任也必须在里面：引用按（承运商责任，舱单身份）成行，两家承运商用到同一个号是两条引用。少了它两条引用的首版
+// 算出同一份 ID，后入队的那一家静默不入队。
+func manifestEventID(tenant, carrier, manifest, version string) eventing.EventID {
+	return outboxintent.FingerprintEventID(manifestEventIDPort, tenant, carrier, manifest, version)
 }
 
 // manifestPartitionKey 取（租户+舱单），不取版本。
@@ -92,6 +97,7 @@ func (handoff *OutboxManifestHandoff) HandOffManifest(
 
 	payload, err := json.Marshal(manifestPayload{
 		TenantID:   intent.TenantID.String(),
+		CarrierRef: intent.Reference.Carrier().String(),
 		ManifestID: intent.Reference.Manifest().String(),
 	})
 	if err != nil {
@@ -101,6 +107,7 @@ func (handoff *OutboxManifestHandoff) HandOffManifest(
 	now := handoff.clock.Now().UTC()
 	eventID := manifestEventID(
 		intent.TenantID.String(),
+		intent.Reference.Carrier().String(),
 		intent.Reference.Manifest().String(),
 		intent.Reference.Version().String(),
 	)

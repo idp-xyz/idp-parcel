@@ -27,6 +27,9 @@ const (
 	ManifestNotFound
 	ManifestNotAccepted
 	ManifestUndecided
+	// ManifestContentConflict：同一来源身份与版本再次到达，程序、方向或范围却与在册的不同。不按后到的覆盖，也不当重放
+	// 答已有——来源要么走版本推进口声明变更关系，要么由人复核。
+	ManifestContentConflict
 )
 
 func (outcome ManifestOutcome) String() string {
@@ -47,6 +50,8 @@ func (outcome ManifestOutcome) String() string {
 		return "NOT_ACCEPTED"
 	case ManifestUndecided:
 		return "UNDECIDED"
+	case ManifestContentConflict:
+		return "CONTENT_CONFLICT"
 	default:
 		return ""
 	}
@@ -62,8 +67,8 @@ type ReceiveManifestCommand struct {
 // 范围变化）。
 type ReviseManifestCommand struct {
 	TenantID domain.TenantID
-	// Carrier 是这次推进的来源所代表的承运商责任。它必须等于在册引用上记的那一个：别家承运商推进不了这份舱单的版本，
-	// 而且要答得与「不在册」同形（见 Revise）。
+	// Carrier 是这次推进的来源所代表的承运商责任。引用按（承运商责任，舱单身份）成行，所以别家承运商推进同一个号时
+	// 读到的是自己编号空间里的那一格：没有就答不在册，碰不到别家的引用。
 	Carrier    domain.CarrierResponsibilityReference
 	Manifest   domain.ExternalManifestID
 	Version    domain.ManifestSourceVersion
@@ -123,24 +128,14 @@ func (handler *ReceiveManifestHandler) Receive(
 		return ManifestResult{outcome: ManifestNotAccepted}, nil
 	}
 
-	existing, found, err := handler.deps.Store.FindByManifest(ctx, command.TenantID, reference.Manifest())
+	// 引用按（承运商责任，舱单身份）找：别家承运商用同一个号是它自己编号空间里的另一条引用，在这里读不到，也就既探不出
+	// 别家的舱单在不在册，也占不住别家的号（UC-CC-012「越权来源未受理且不得确认候选对象是否存在」）。
+	existing, found, err := handler.deps.Store.FindByManifest(ctx, command.TenantID, reference.Carrier(), reference.Manifest())
 	if err != nil {
 		return ManifestResult{outcome: ManifestUndecided}, nil
 	}
 	if found {
-		// 同一舱单身份已由另一家承运商责任入册：这一份不受理，也不交回在册内容——交回等于向越权来源确认了别家的舱单
-		// 存在并泄出它的范围（UC-CC-012「越权来源未受理且不得确认候选对象是否存在」）。
-		if existing.Carrier() != reference.Carrier() {
-			return ManifestResult{outcome: ManifestNotAccepted}, nil
-		}
-		if existing.Version() != reference.Version() {
-			return ManifestResult{outcome: ManifestVersionConflict}, nil
-		}
-		return ManifestResult{
-			outcome:   ManifestExisting,
-			reference: existing,
-			hasRecord: true,
-		}, nil
+		return answerRecordedManifest(existing, reference), nil
 	}
 
 	associated, outcome, err := handler.associate(ctx, command.TenantID, reference, reference.Procedure())
@@ -158,17 +153,11 @@ func (handler *ReceiveManifestHandler) Receive(
 		result.handoffRef = handler.handOffManifest(ctx, command.TenantID, associated)
 		return result, nil
 	case ports.ManifestAlreadyRecorded:
-		winner, found, err := handler.deps.Store.FindByManifest(ctx, command.TenantID, reference.Manifest())
+		winner, found, err := handler.deps.Store.FindByManifest(ctx, command.TenantID, reference.Carrier(), reference.Manifest())
 		if err != nil || !found {
 			return ManifestResult{outcome: ManifestUndecided}, nil
 		}
-		if winner.Carrier() != reference.Carrier() {
-			return ManifestResult{outcome: ManifestNotAccepted}, nil
-		}
-		if winner.Version() != reference.Version() {
-			return ManifestResult{outcome: ManifestVersionConflict}, nil
-		}
-		return ManifestResult{outcome: ManifestExisting, reference: winner, hasRecord: true}, nil
+		return answerRecordedManifest(winner, reference), nil
 	default:
 		return ManifestResult{}, fmt.Errorf("%w: %d", ErrUnexpectedManifestSave, saved)
 	}
@@ -183,12 +172,11 @@ func (handler *ReceiveManifestHandler) Revise(
 	if strings.TrimSpace(command.TenantID.String()) == "" {
 		return ManifestResult{outcome: ManifestNotAccepted}, nil
 	}
-	current, found, err := handler.deps.Store.FindByManifest(ctx, command.TenantID, command.Manifest)
+	current, found, err := handler.deps.Store.FindByManifest(ctx, command.TenantID, command.Carrier, command.Manifest)
 	if err != nil {
 		return ManifestResult{outcome: ManifestUndecided}, nil
 	}
-	// 在册引用属于另一家承运商责任时与不在册同答：分开答就成了一个探测别家舱单在不在册的口。
-	if !found || current.Carrier() != command.Carrier {
+	if !found {
 		return ManifestResult{outcome: ManifestNotFound}, nil
 	}
 	if current.Version() == command.Version {
@@ -204,12 +192,35 @@ func (handler *ReceiveManifestHandler) Revise(
 	if err != nil {
 		return ManifestResult{outcome: ManifestUndecided}, nil
 	}
-	if err := handler.deps.Store.Update(ctx, command.TenantID, associated); err != nil {
+	updated, err := handler.deps.Store.Update(ctx, command.TenantID, associated)
+	if err != nil {
 		return ManifestResult{outcome: ManifestUndecided}, nil
+	}
+	switch updated {
+	case ports.ManifestAdvanced:
+	case ports.ManifestVersionMoved:
+		// 读到前版之后、落新版之前，另一笔推进先落了：这一笔指回的前版已经不是在册的那一版，落下去就会静默盖掉先到
+		// 的版本。答版本冲突，由来源按现在的在册版本重新声明变更关系。
+		return ManifestResult{outcome: ManifestVersionConflict}, nil
+	default:
+		return ManifestResult{}, fmt.Errorf("%w: update %d", ErrUnexpectedManifestSave, updated)
 	}
 	result := ManifestResult{outcome: ManifestRevised, reference: associated, hasRecord: true}
 	result.handoffRef = handler.handOffManifest(ctx, command.TenantID, associated)
 	return result, nil
+}
+
+// answerRecordedManifest 对「这家承运商的这份舱单已经在册」作答：版本不同是版本冲突（推进走 Revise）；版本相同而程序、
+// 方向或范围不同是内容冲突，不交回在册内容也不覆盖；都相同才是重放，交回在册那一份。来源事实引用不比——同一份舱单
+// 重发时报文身份本来就会换。
+func answerRecordedManifest(recorded, arrived domain.ExternalManifestReference) ManifestResult {
+	if recorded.Version() != arrived.Version() {
+		return ManifestResult{outcome: ManifestVersionConflict}
+	}
+	if recorded.Procedure() != arrived.Procedure() || recorded.Direction() != arrived.Direction() || recorded.Scope() != arrived.Scope() {
+		return ManifestResult{outcome: ManifestContentConflict}
+	}
+	return ManifestResult{outcome: ManifestExisting, reference: recorded, hasRecord: true}
 }
 
 // associate 盘候选并尝试唯一匹配。匹配不了不是错误——引用保持待关联入册。
