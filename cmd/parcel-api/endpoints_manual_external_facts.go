@@ -16,6 +16,7 @@ type manualExternalFactsWiring struct {
 	regulatoryCredentialRegistration    customshttp.RegulatoryCredentialRegistrar
 	externalResults                     customshttp.ResultHandler
 	trackingEntries                     tfhttp.TrackingMaterialAdopter
+	manualLodgement                     customshttp.ManualLodgementRecorder
 }
 
 func init() {
@@ -32,6 +33,9 @@ func init() {
 			},
 			"/customs-external-result-manual-registrations": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionCustomsExternalResultEntry),
+			},
+			"/customs-declaration-manual-lodgements": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionCustomsManualLodgement),
 			},
 			"/transport-fulfillment-external-tracking-manual-entries": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionExternalTrackingEntry),
@@ -54,7 +58,12 @@ func init() {
 				return manualExternalFactsWiring{}, err
 			}
 			tracking, err := buildManualTrackingAdopter(sources.db)
+			if err != nil {
+				return manualExternalFactsWiring{}, err
+			}
+			lodgement, err := buildManualLodgement(sources.db)
 			return manualExternalFactsWiring{
+				manualLodgement:                     lodgement,
 				trackingEntries:                     tracking,
 				externalResults:                     results,
 				externalFundsFactAdoption:           settlement.externalFundsFact,
@@ -75,6 +84,8 @@ func init() {
 				{Pattern: "/customs-external-result-manual-registrations", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.ManualResultIntake(channels.operatorDecisions.customs, systemClock{}.Now), wiring.externalResults)},
 				// 承运商轨迹的手工录入口（dox/decisions.md「产品形态」）：一次一条或一批，逐条认领、各自一笔事务。
 				{Pattern: "/transport-fulfillment-external-tracking-manual-entries", Handler: tfhttp.NewManualTrackingEntriesEndpoint(channels.operatorDecisions.transport, wiring.trackingEntries, systemClock{}.Now)},
+				// 申报的线下递交标记口（dox/decisions.md「产品形态」）：没有对接报关行或单一窗口时，线下递交之后回来记一笔。
+				{Pattern: "/customs-declaration-manual-lodgements", Handler: customshttp.NewRecordManualLodgementEndpoint(channels.operatorDecisions.customs, wiring.manualLodgement)},
 			}
 		},
 	})

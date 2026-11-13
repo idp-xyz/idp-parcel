@@ -203,14 +203,25 @@ func (handler *SendDeclarationHandler) Send(
 // lapsed 读单元此刻的就绪与授权。两者成版时都有效；此刻任一不在了或已失效，就不再支持这一次实际发送。读不动是未决。
 // 不比成版时的那一份依据：重新取得的判断照样支持发送，这与提交编排「双有效才成版」同一口径。
 func (handler *SendDeclarationHandler) lapsed(ctx context.Context, tenant domain.TenantID, unit domain.DeclarationUnitID) (bool, error) {
-	readiness, found, err := handler.deps.Readiness.LoadReadiness(ctx, tenant, unit)
+	return unitLapsed(ctx, handler.deps.Readiness, handler.deps.Authority, tenant, unit)
+}
+
+// unitLapsed 是系统发送与线下递交标记共用的那一道门。
+func unitLapsed(
+	ctx context.Context,
+	readinessView ports.ReadinessView,
+	authorityView ports.SubmissionAuthorityView,
+	tenant domain.TenantID,
+	unit domain.DeclarationUnitID,
+) (bool, error) {
+	readiness, found, err := readinessView.LoadReadiness(ctx, tenant, unit)
 	if err != nil {
 		return false, fmt.Errorf("readiness view: %w", err)
 	}
 	if !found || !readiness.Effective() {
 		return true, nil
 	}
-	authorization, granted, err := handler.deps.Authority.LoadSubmissionAuthority(ctx, tenant, unit)
+	authorization, granted, err := authorityView.LoadSubmissionAuthority(ctx, tenant, unit)
 	if err != nil {
 		return false, fmt.Errorf("submission authority view: %w", err)
 	}

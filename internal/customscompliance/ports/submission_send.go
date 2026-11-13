@@ -32,6 +32,21 @@ type SubmissionSendFactStore interface {
 	FindSendFactByChannelMessage(ctx context.Context, tenant domain.TenantID, message string) (domain.SubmissionSendFact, bool, error)
 }
 
+// ManualLodgement 是一条线下递交留痕：哪一份尝试是谁在线下递交的、凭的是哪份递交凭据。
+type ManualLodgement struct {
+	Tenant     domain.TenantID
+	Version    domain.SubmissionVersionID
+	Sequence   int
+	LodgedBy   string
+	Original   string
+	RecordedAt time.Time
+}
+
+// ManualLodgementLedger 记线下递交的留痕，与发送事实同一事务落。系统发送的尝试没有这一条。
+type ManualLodgementLedger interface {
+	RecordManualLodgement(ctx context.Context, lodgement ManualLodgement) error
+}
+
 // TechnicalReceiptStore 是技术回执册。
 type TechnicalReceiptStore interface {
 	SaveTechnicalReceipt(ctx context.Context, tenant domain.TenantID, receipt domain.TechnicalReceipt, at time.Time) (SubmissionSendEffect, error)

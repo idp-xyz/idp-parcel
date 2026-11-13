@@ -7,5 +7,6 @@ func init() {
 		regulatoryCredentialRegistration:    unwiredRegulatoryCredentialRegistration{},
 		externalResults:                     unwiredResults{},
 		trackingEntries:                     unwiredTrackingAdopter{},
+		manualLodgement:                     unwiredManualLodgement{},
 	})
 }

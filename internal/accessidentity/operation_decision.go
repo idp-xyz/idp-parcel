@@ -248,6 +248,10 @@ const DecisionCustomsExternalResultEntry DecisionKind = "CUSTOMS_EXTERNAL_RESULT
 // 录入人与原件另记一本留痕。
 const DecisionExternalTrackingEntry DecisionKind = "EXTERNAL_TRACKING_ENTRY"
 
+// DecisionCustomsManualLodgement 是关务人员在线下递交一版申报之后回来记「已递交」。它与提交执行分开授予：形成提交
+// 版本的人不因此是递交它的人。
+const DecisionCustomsManualLodgement DecisionKind = "CUSTOMS_MANUAL_LODGEMENT"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -284,6 +288,7 @@ var decisionKinds = []DecisionKind{
 	DecisionChargeAdjustmentRegistration, DecisionStatementVoid, DecisionLateChargeInclusion, DecisionAdjustmentInclusion,
 	DecisionCustomsExternalResultEntry,
 	DecisionExternalTrackingEntry,
+	DecisionCustomsManualLodgement,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,

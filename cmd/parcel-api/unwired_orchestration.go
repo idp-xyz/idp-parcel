@@ -2475,3 +2475,9 @@ type unwiredTrackingAdopter struct{}
 func (unwiredTrackingAdopter) Adopt(context.Context, tfports.TrackingMaterial) (tfapp.AdoptTrackingMaterialResult, error) {
 	return tfapp.AdoptTrackingMaterialResult{}, errOrchestrationNotWired
 }
+
+type unwiredManualLodgement struct{}
+
+func (unwiredManualLodgement) Record(context.Context, customsapp.RecordManualLodgementCommand) (customsapp.RecordManualLodgementResult, error) {
+	return customsapp.RecordManualLodgementResult{}, errOrchestrationNotWired
+}

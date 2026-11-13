@@ -301,3 +301,22 @@ func (repository *SubmissionSends) ListTechnicalReceipts(
 	}
 	return receipts, rows.Err()
 }
+
+var _ ports.ManualLodgementLedger = (*SubmissionSends)(nil)
+
+// RecordManualLodgement 记一份尝试是谁在线下递交的。一份尝试至多一条，撞键照错误上抛。
+func (repository *SubmissionSends) RecordManualLodgement(ctx context.Context, lodgement ports.ManualLodgement) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("record manual lodgement: %w", err)
+	}
+	if _, err := executor.Exec(ctx, `
+		INSERT INTO customs_compliance.submission_manual_lodgement
+			(tenant_id, version_id, sequence, lodged_by, original_ref, recorded_at)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		lodgement.Tenant.String(), lodgement.Version.String(), lodgement.Sequence, lodgement.LodgedBy, lodgement.Original, lodgement.RecordedAt.UTC(),
+	); err != nil {
+		return fmt.Errorf("record manual lodgement: %w", err)
+	}
+	return nil
+}

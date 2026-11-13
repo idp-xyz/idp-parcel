@@ -67,6 +67,9 @@ func TestSubmissionSendWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := sends.SaveSendFact(t.Context(), tenant, fact, time.Now()); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveSendFact err = %v", err)
 	}
+	if err := sends.RecordManualLodgement(t.Context(), ports.ManualLodgement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("无事务记线下递交留痕应返回 ErrTransactionRequired，实得：%v", err)
+	}
 	if _, err := sends.SaveTechnicalReceipt(t.Context(), tenant, receipt, time.Now()); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveTechnicalReceipt err = %v", err)
 	}

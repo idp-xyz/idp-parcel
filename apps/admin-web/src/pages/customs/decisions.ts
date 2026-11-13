@@ -15,6 +15,7 @@ export type CustomsDecisionKind =
   | 'declaration-submission'
   | 'release-gate-verification'
   | 'case-closure'
+  | 'manual-lodgement'
   | 'external-result-entry'
   | 'regulatory-restriction'
   | 'regulatory-restriction-release';
@@ -25,6 +26,7 @@ export const customsDecisionEndpoints: Record<CustomsDecisionKind, string> = {
   'declaration-submission': '/customs-declaration-submissions',
   'release-gate-verification': '/customs-release-gate-verifications',
   'case-closure': '/customs-case-closures',
+  'manual-lodgement': '/customs-declaration-manual-lodgements',
   'external-result-entry': '/customs-external-result-manual-registrations',
   'regulatory-restriction': '/customs-regulatory-restrictions',
   'regulatory-restriction-release': '/customs-regulatory-restriction-releases',
@@ -36,6 +38,7 @@ export const customsDecisionTitles: Record<CustomsDecisionKind, string> = {
   'declaration-submission': '提交申报',
   'release-gate-verification': '放行检查',
   'case-closure': '关闭清关单',
+  'manual-lodgement': '标记申报已线下递交',
   'external-result-entry': '录入海关结果',
   'regulatory-restriction': '建立监管限制',
   'regulatory-restriction-release': '解除监管限制',
@@ -58,6 +61,12 @@ export const customsDecisionHints: Record<CustomsDecisionKind, string> = {
     'FINAL_DELIVERY 交付）、boundary（边界）。' +
     identityNote,
   'case-closure': '请填 caseId（清关单）、cutoffAt（截点，RFC 3339 时间，例如 2026-11-13T08:00:00Z）。还有未了结的事项时答不能关闭并列出来。' + identityNote,
+  'manual-lodgement':
+    '没有对接报关行或单一窗口时用这一个：这一版申报你已经在线下递交了，在这里记一笔。请填 version（提交版本，取「提交申报」答复里的 versionId）、' +
+    'original（递交凭据：回单、邮件或受理单的编号或存档引用，必填）。可选：lodgedAt（实际递交的时间，RFC 3339，不能晚于现在；不填取现在）、' +
+    'reference（对方给的受理号）。系统不发送任何东西；这一版记为「已递交、待确认」，海关的受理与放行随后用「录入海关结果」录进来。' +
+    '登记之后申报准备或提交授权已经失效的，要先重新取得。' +
+    identityNote,
   'external-result-entry':
     '没有对接海关或报关行系统时，照回执在这里录入。请填 sourceId（给这条结果起的标识，同一份回执只用一个）、layer（结果层：REGULATORY_RECEIPT 海关已接收 / ' +
     'BUSINESS_ACCEPTANCE 海关已受理 / PROCESS_DECISION 过程决定 / ASSESSED_DUTY 核定税费 / RELEASE_RESULT 放行结果 / DISPOSITION_DECISION 处置决定）、' +
@@ -124,6 +133,15 @@ export const externalResultEntryOutcomeLabels: Record<string, string> = {
   RESULT_UNDECIDED: '暂时定不了，原因见下',
 };
 
+/** 线下递交标记这一口自己的答复词。 */
+export const manualLodgementOutcomeLabels: Record<string, string> = {
+  LODGEMENT_RECORDED: '已记为已递交，等待海关结果',
+  DECLARATION_ALREADY_SENT: '这一版此前已经发出或已经记过，没有再记一次',
+  DECLARATION_SEND_HELD: '申报准备或提交授权已经失效，没有记；请先重新取得',
+  LODGEMENT_REFERENCE_TAKEN: '这个受理号已经记在另一版申报上',
+  SOURCE_NOT_ACCEPTED: '内容不完整或不成立（版本不在册、没有递交凭据或递交时间在未来），没有受理',
+};
+
 export const externalResultEntryUndecidedLabels: Record<string, string> = {
   RELEASE_SEMANTICS_UNINTERPRETED: '放行结果没有填 release，或读不出放行内容',
   EVALUATION_INSTANT_UNTRUSTED: '回执上的业务时间没填，或晚于现在',
@@ -133,6 +151,17 @@ export const externalResultEntryUndecidedLabels: Record<string, string> = {
 };
 
 export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTarget {
+  if (kind === 'manual-lodgement') {
+    return {
+      id: kind,
+      label: customsDecisionTitles[kind],
+      title: customsDecisionTitles[kind],
+      endpoint: `POST ${customsDecisionEndpoints[kind]}`,
+      snapshotHint: customsDecisionHints[kind],
+      submit: (snapshot: unknown) => submitCustomsDecision(kind, snapshot),
+      outcomeLabels: manualLodgementOutcomeLabels,
+    };
+  }
   if (kind === 'external-result-entry') {
     return {
       id: kind,
@@ -156,9 +185,9 @@ export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTa
   };
 }
 
-/** 清关单页「运营决定」签上的六个口，按一张清关单从建到关的顺序排；海关结果在没有对接时由人照回执录入。 */
+/** 清关单页「运营决定」签上的七个口，按一张清关单从建到关的顺序排；海关结果在没有对接时由人照回执录入。 */
 export const caseDecisionTargets: RegistrationTarget[] = (
-  ['case-establishment', 'submission-authorization', 'declaration-submission', 'external-result-entry', 'release-gate-verification', 'case-closure'] as const
+  ['case-establishment', 'submission-authorization', 'declaration-submission', 'manual-lodgement', 'external-result-entry', 'release-gate-verification', 'case-closure'] as const
 ).map(customsDecisionTarget);
 
 /** 限制页登记签上追加的两个口。 */

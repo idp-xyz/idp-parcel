@@ -316,6 +316,75 @@ func TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces(t *te
 	if n := fixture.count(t, `SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = 'customs-compliance.declaration-submission.formed'`); n != 1 {
 		t.Fatalf("提交版本形成意图 = %d, want 1", n)
 	}
+
+	// —— 线下递交标记（dox/decisions.md「产品形态」）：没有对接报关行时，这一版在线下递交之后回来记一笔 ——
+	const lodger = "SYN-LODGER-PSB18"
+	interval, err := accessidentity.NewEffectiveInterval(time.Now().Add(-time.Hour), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerOperator(t, fixture.db, fixture.operators, lodger, interval, accessidentity.DecisionCustomsManualLodgement)
+	minter, err := buildOperatorMinter(tokenSubjectVerifier{}, fixture.operators, admitAll{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, unwiredDecisionTargets{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const lodgementFace = "/customs-declaration-manual-lodgements"
+	for _, feature := range endpointRegistry {
+		if feature.wiringKey != any((*manualExternalFactsWiring)(nil)) {
+			continue
+		}
+		mounted, err := feature.production(endpointSources{db: fixture.db}, endpointChannels{operatorDecisions: decisions})
+		if err != nil {
+			t.Fatalf("装配：%v", err)
+		}
+		for _, candidate := range mounted {
+			fixture.endpoints[candidate.Pattern] = candidate.Handler
+		}
+	}
+	lodgedAt := time.Now().UTC().Add(-30 * time.Minute).Truncate(time.Second)
+	lodgement := `{"version":"` + versionID + `","lodgedAt":"` + lodgedAt.Format(time.RFC3339) + `","reference":"SYN-CUSTOMS-ACK-001","original":"SYN-LODGEMENT-SLIP-1"}`
+	if status, answer := fixture.post(t, lodgementFace, customsSubmitter, lodgement); status != http.StatusForbidden {
+		t.Fatalf("持提交授予的人标记递交 = %d %v，想要 403", status, answer)
+	}
+	if status, answer := fixture.post(t, lodgementFace, lodger, `{"version":"`+versionID+`","lodgedAt":"`+time.Now().UTC().Add(time.Hour).Format(time.RFC3339)+`","original":"SYN-LODGEMENT-SLIP-1"}`); status != http.StatusOK ||
+		answer["outcome"] != "SOURCE_NOT_ACCEPTED" {
+		t.Fatalf("递交时刻在未来 = %d %v", status, answer)
+	}
+	// 两个人同时标记同一版：恰有一人记下，另一人答已发过，交回同一笔。
+	type lodgementReply struct {
+		status int
+		answer map[string]any
+	}
+	replies := make(chan lodgementReply, 2)
+	for range 2 {
+		go func() {
+			status, answer := fixture.post(t, lodgementFace, lodger, lodgement)
+			replies <- lodgementReply{status, answer}
+		}()
+	}
+	outcomes := map[string]int{}
+	for range 2 {
+		reply := <-replies
+		outcomes[reply.answer["outcome"].(string)]++
+		if reply.answer["result"] != "PENDING_CONFIRMATION" || reply.answer["reference"] != "SYN-CUSTOMS-ACK-001" || reply.answer["sentAt"] != lodgedAt.Format(time.RFC3339Nano) {
+			t.Fatalf("标记答复 = %d %v", reply.status, reply.answer)
+		}
+	}
+	if outcomes["LODGEMENT_RECORDED"] != 1 || outcomes["DECLARATION_ALREADY_SENT"] != 1 {
+		t.Fatalf("两人同时标记 = %v", outcomes)
+	}
+	if n := fixture.count(t, `SELECT count(*) FROM customs_compliance.submission_manual_lodgement
+		 WHERE tenant_id = $1 AND version_id = $2 AND original_ref = 'SYN-LODGEMENT-SLIP-1' AND lodged_by = $3`,
+		customsDecisionTenant, versionID, "OPERATOR/"+customsDecisionIssuer+"#"+lodger); n != 1 {
+		t.Fatalf("线下递交留痕 = %d 条，想要 1", n)
+	}
+	if n := fixture.count(t, `SELECT count(*) FROM customs_compliance.submission_send_fact WHERE tenant_id = $1 AND version_id = $2`, customsDecisionTenant, versionID); n != 1 {
+		t.Fatalf("发送事实 = %d 笔，想要 1", n)
+	}
 }
 
 // Covers: AT-CC-445、AT-CC-112（生产装配半边）——三口各按自己那一种决定认证：建案官、批准人、提交人互相用不了别人的口，答

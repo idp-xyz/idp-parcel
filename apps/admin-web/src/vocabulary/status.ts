@@ -361,6 +361,7 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   ADJUSTMENT_INCLUSION: muted('调整纳入后续账期'),
   CUSTOMS_EXTERNAL_RESULT_ENTRY: muted('录入海关结果'),
   EXTERNAL_TRACKING_ENTRY: muted('录入承运商轨迹'),
+  CUSTOMS_MANUAL_LODGEMENT: muted('标记申报已线下递交'),
   EXTERNAL_FUNDS_FACT: muted('外部收付款'),
   EXTERNAL_FUNDS_FACT_ADOPTION: muted('收付款登记'),
   CLAIM_SUBMISSION: muted('索赔提交'),
