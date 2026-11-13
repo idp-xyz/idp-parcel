@@ -64,3 +64,40 @@ func TestTheNotificationFaceAuthenticatesUnderItsOwnDecisionKindAndTakesIdentity
 		t.Fatalf("没有凭据该答 401 且不到编排，实得 %d / %d 次", status, len(stub.commands))
 	}
 }
+
+// Covers: dox/decisions.md「产品形态」——手工标记口与发送口按同一种决定认证；载荷另必带通知方式与所凭原件，去首尾
+// 空白后随命令走；缺一格、带了客户一类的格都是坏报文。
+func TestTheManualNotificationFaceRequiresHowAndFromWhichOriginalTheCustomerWasNotified(t *testing.T) {
+	asked := []visibilityhttp.OperatorDecision{}
+	intake, err := visibilityhttp.NewOperatorDecisionIntake(caseDecisionAuthenticator{asked: &asked})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stub := &notifierStub{err: errors.New("编排不在本用例的范围")}
+	endpoint := visibilityhttp.NewRecordManualCustomerNotificationEndpoint(intake, stub)
+	target := `"parcel":"SYN-PARCEL-1","signalKind":"ETA_BREACH_RISK","episodeId":"SYN-EPISODE-1"`
+
+	if status, _ := serveRaw(t, endpoint, "t", `{`+target+`,"method":" 电话 ","original":" SYN-CALL-LOG-1 "}`); status != http.StatusInternalServerError {
+		t.Fatalf("编排报错该答 500，实得 %d", status)
+	}
+	if len(asked) != 1 || asked[0] != visibilityhttp.OperatorDecisionCustomerExceptionNotification || len(stub.commands) != 1 {
+		t.Fatalf("认证问的决定种类 = %v，编排 %d 次", asked, len(stub.commands))
+	}
+	if command := stub.commands[0]; command.Method != "电话" || command.Original != "SYN-CALL-LOG-1" || command.Operator != "https://issuer#alice" ||
+		command.Episode.String() != "SYN-EPISODE-1" {
+		t.Fatalf("命令 = %+v", command)
+	}
+	for name, malformed := range map[string]string{
+		"没有方式":   `{` + target + `,"original":"SYN-CALL-LOG-1"}`,
+		"没有原件":   `{` + target + `,"method":"电话"}`,
+		"原件只有空白": `{` + target + `,"method":"电话","original":"  "}`,
+		"带了客户":   `{` + target + `,"method":"电话","original":"O","customer":"x"}`,
+	} {
+		if status, _ := serveRaw(t, endpoint, "t", malformed); status != http.StatusBadRequest {
+			t.Fatalf("%s 该答 400，实得 %d", name, status)
+		}
+	}
+	if len(stub.commands) != 1 {
+		t.Fatal("坏载荷到了编排")
+	}
+}

@@ -168,3 +168,85 @@ func TestTheNotificationRecordExistsBeforeThePushAndKeepsItsIdentityAcrossRetrie
 		t.Fatalf("过程节点时刻 = %v", recorded)
 	}
 }
+
+type manualNotificationLedgerDouble struct {
+	records []ports.ManualNotificationRecord
+	err     error
+}
+
+func (double *manualNotificationLedgerDouble) RecordManualNotification(_ context.Context, record ports.ManualNotificationRecord) error {
+	if double.err != nil {
+		return double.err
+	}
+	double.records = append(double.records, record)
+	return nil
+}
+
+// Covers: dox/decisions.md「产品形态」——操作员在线下通知客户后来记一笔：进的是同一只通知编排（披露决定、通知策略、
+// 过程节点、发送锁都不变），「已提交」之外另记一条留痕——谁、用什么方式、凭哪份原件；再标一次交回已有结果、不记第二条；
+// 只给方式不给原件（或反过来）不受理；留痕落不下答未决。
+func TestAnOfflineNotificationIsRecordedThroughTheSameOrchestrationWithItsOwnTrail(t *testing.T) {
+	fixture := newNotifySignalFixture(t)
+	ledger := &manualNotificationLedgerDouble{}
+	decide := newDecideFixture(t)
+	handler := application.NewNotifyCustomerHandler(application.NotifyCustomerDeps{
+		Decisions: fixture.decisions, Notifications: fixture.notifications, Policy: fixture.policy, Identities: fixture.identities,
+		Channel: fixture.channel, Downstream: fixture.downstream, Clock: fixedClock{at: disclosureDecidedAt.Add(time.Minute)},
+		EpisodeByID: episodeByID{decide.episodes}, Customers: decide.customers, SendLock: fixture.lock, Preflight: fixture.preflight,
+		ManualRecords: ledger,
+	})
+	mark := func(command application.NotifySignalCommand) application.NotifyCustomerResult {
+		t.Helper()
+		result, prepared, err := handler.PrepareSignal(context.Background(), command)
+		if err != nil {
+			t.Fatalf("prepare: %v", err)
+		}
+		if !prepared {
+			return result
+		}
+		if result, err = handler.HandleSignal(context.Background(), command); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		return result
+	}
+	manual := notifySignalCommand(t)
+	manual.Method, manual.Original = "电话", "SYN-CALL-LOG-20261113-01"
+
+	for name, mutate := range map[string]func(*application.NotifySignalCommand){
+		"只给方式": func(command *application.NotifySignalCommand) { command.Original = "" },
+		"只给原件": func(command *application.NotifySignalCommand) { command.Method = " " },
+	} {
+		command := manual
+		mutate(&command)
+		if refused := mark(command); refused.Outcome() != application.NotifyNotAccepted || len(fixture.notifications.byDisclosure) != 0 {
+			t.Fatalf("%s：outcome=%q", name, refused.Outcome())
+		}
+	}
+
+	result := mark(manual)
+	notification, present := result.Notification()
+	if result.Outcome() != application.NotificationSubmitted || !present || len(ledger.records) != 1 {
+		t.Fatalf("手工标记：outcome=%q 留痕 %d 条", result.Outcome(), len(ledger.records))
+	}
+	if record := ledger.records[0]; record.Notification != notification.ID() || record.NotifiedBy != "https://issuer#carol" ||
+		record.Method != "电话" || record.Original != "SYN-CALL-LOG-20261113-01" {
+		t.Fatalf("留痕 = %+v", record)
+	}
+	if again := mark(manual); again.Outcome() != application.NotificationExistingResult || len(ledger.records) != 1 {
+		t.Fatalf("再标一次：outcome=%q 留痕 %d 条", again.Outcome(), len(ledger.records))
+	}
+
+	failing := newNotifySignalFixture(t)
+	failingHandler := application.NewNotifyCustomerHandler(application.NotifyCustomerDeps{
+		Decisions: failing.decisions, Notifications: failing.notifications, Policy: failing.policy, Identities: failing.identities,
+		Channel: failing.channel, Downstream: failing.downstream, Clock: fixedClock{at: disclosureDecidedAt.Add(time.Minute)},
+		EpisodeByID: episodeByID{decide.episodes}, Customers: decide.customers, SendLock: failing.lock, Preflight: failing.preflight,
+		ManualRecords: &manualNotificationLedgerDouble{err: errors.New("ledger down")},
+	})
+	if _, prepared, err := failingHandler.PrepareSignal(context.Background(), manual); err != nil || !prepared {
+		t.Fatalf("prepare：err=%v prepared=%v", err, prepared)
+	}
+	if undecided, err := failingHandler.HandleSignal(context.Background(), manual); err != nil || undecided.Outcome() != application.NotifyUndecided {
+		t.Fatalf("留痕落不下：err=%v outcome=%q", err, undecided.Outcome())
+	}
+}

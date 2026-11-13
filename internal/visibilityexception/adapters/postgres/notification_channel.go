@@ -102,3 +102,22 @@ func (repository *CustomerNotifications) LockDisclosure(
 	}
 	return nil
 }
+
+var _ ports.ManualNotificationLedger = (*CustomerNotifications)(nil)
+
+// RecordManualNotification 记一份通知是谁、用什么方式在线下通知的。一份通知至多一条，撞键照错误上抛。
+func (repository *CustomerNotifications) RecordManualNotification(ctx context.Context, record ports.ManualNotificationRecord) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("record manual notification: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO visibility_exception.customer_notification_manual_record
+		     (tenant_id, notification_id, notified_by, method, original_ref, recorded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		record.Tenant.String(), record.Notification.String(), record.NotifiedBy, record.Method, record.Original, record.RecordedAt.UTC(),
+	); err != nil {
+		return fmt.Errorf("record manual notification: %w", err)
+	}
+	return nil
+}

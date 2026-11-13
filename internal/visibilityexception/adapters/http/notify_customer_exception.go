@@ -2,7 +2,11 @@ package visibilityhttp
 
 import (
 	"context"
+	"fmt"
+	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"net/http"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 )
@@ -17,6 +21,56 @@ type CustomerExceptionNotifier interface {
 
 type CustomerExceptionNotificationIntake interface {
 	IntakeCustomerExceptionNotification(ctx context.Context, request *http.Request) (application.NotifySignalCommand, error)
+	IntakeManualCustomerExceptionNotification(ctx context.Context, request *http.Request) (application.NotifySignalCommand, error)
+}
+
+// ManualCustomerNotificationPayload 是手工标记口的线格式：指名哪件包裹上哪一类信号的哪一期（同披露两口），另加
+// method——用什么方式通知的客户（电话、邮件……，原样记）——与 original——所凭原件的编号或存档引用。两格必填。
+type ManualCustomerNotificationPayload struct {
+	Parcel     string `json:"parcel"`
+	SignalKind string `json:"signalKind"`
+	EpisodeID  string `json:"episodeId"`
+	Method     string `json:"method"`
+	Original   string `json:"original"`
+}
+
+// IntakeManualCustomerExceptionNotification 与发送口按同一种决定认证：两口说的都是「把这份披露通知客户」，谁能通知客户
+// 是同一种授予；差别只在这一口不推送，由人在线下通知之后来记一笔。
+func (intake *OperatorDecisionIntake) IntakeManualCustomerExceptionNotification(ctx context.Context, request *http.Request) (application.NotifySignalCommand, error) {
+	none := application.NotifySignalCommand{}
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionCustomerExceptionNotification)
+	if err != nil {
+		return none, err
+	}
+	var payload ManualCustomerNotificationPayload
+	if err := decodeClosedDecision(request.Body, &payload); err != nil {
+		return none, err
+	}
+	parcel, err := domain.NewTrackedParcelReference(payload.Parcel)
+	if err != nil {
+		return none, fmt.Errorf("%w: parcel: %v", ErrMalformedRequest, err)
+	}
+	kind, err := domain.NewExceptionSignalKindReference(payload.SignalKind)
+	if err != nil {
+		return none, fmt.Errorf("%w: signalKind: %v", ErrMalformedRequest, err)
+	}
+	episode, err := domain.NewEpisodeID(payload.EpisodeID)
+	if err != nil {
+		return none, fmt.Errorf("%w: episodeId: %v", ErrMalformedRequest, err)
+	}
+	method, original := strings.TrimSpace(payload.Method), strings.TrimSpace(payload.Original)
+	if method == "" || original == "" || len(method) > 200 || len(original) > 500 {
+		return none, fmt.Errorf("%w: method and original are required for a manual notification record", ErrMalformedRequest)
+	}
+	return application.NotifySignalCommand{
+		TenantID: operator.Tenant, Parcel: parcel, Kind: kind, Episode: episode, Operator: operator.Operator, Method: method, Original: original,
+	}, nil
+}
+
+// NewRecordManualCustomerNotificationEndpoint 交回手工标记口（POST /customer-exception-notification-manual-records）。
+// 答复与发送口同一份形状。
+func NewRecordManualCustomerNotificationEndpoint(intake CustomerExceptionNotificationIntake, notifier CustomerExceptionNotifier) http.Handler {
+	return notificationEndpoint(intake.IntakeManualCustomerExceptionNotification, notifier)
 }
 
 var _ CustomerExceptionNotificationIntake = (*OperatorDecisionIntake)(nil)
@@ -33,13 +87,20 @@ func (intake *OperatorDecisionIntake) IntakeCustomerExceptionNotification(ctx co
 }
 
 func NewNotifyCustomerExceptionEndpoint(intake CustomerExceptionNotificationIntake, notifier CustomerExceptionNotifier) http.Handler {
+	return notificationEndpoint(intake.IntakeCustomerExceptionNotification, notifier)
+}
+
+func notificationEndpoint(
+	take func(context.Context, *http.Request) (application.NotifySignalCommand, error),
+	notifier CustomerExceptionNotifier,
+) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost {
 			response.Header().Set("Allow", http.MethodPost)
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
-		command, err := intake.IntakeCustomerExceptionNotification(request.Context(), request)
+		command, err := take(request.Context(), request)
 		if err != nil {
 			writeCaseDecisionIntakeProblem(response, err)
 			return

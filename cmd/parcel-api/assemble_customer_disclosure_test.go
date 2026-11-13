@@ -337,4 +337,40 @@ func TestTheProductionDisclosureFacesDecideAndAuthorizeOnceAgainstARealDatabase(
 	if sent, err = notifier.HandleSignal(t.Context(), notify); err != nil || sent.Outcome() != visibilityapp.NotificationExistingResult || pushes.Load() != 2 {
 		t.Fatalf("已提交后再发：err=%v outcome=%q 推送 %d 次", err, sent.Outcome(), pushes.Load())
 	}
+
+	// —— 手工标记（dox/decisions.md「产品形态」）：另一期信号的披露由人在线下通知客户，来记一笔 ——
+	laterDecide := decide
+	laterDecide.Episode = later.ID()
+	if decided, err := faces.Handle(t.Context(), laterDecide); err != nil || decided.Outcome() != visibilityapp.DisclosureDecided {
+		t.Fatalf("第二期判披露：err=%v outcome=%q", err, decided.Outcome())
+	}
+	if authorized, err := faces.Authorize(t.Context(), visibilityapp.AuthorizeDisclosureCommand{
+		TenantID: tenant, Parcel: tracked, Kind: kind, Episode: later.ID(), Operator: "https://id.syn.example/dex#SYN-OPERATOR-02",
+	}); err != nil || authorized.Outcome() != visibilityapp.DisclosureAuthorized {
+		t.Fatalf("第二期确认披露：err=%v outcome=%q", err, authorized.Outcome())
+	}
+	// 把推送端点换成一个打不通的地址：手工标记不推送，也不看端点登没登。
+	pushesBefore := pushes.Load()
+	offline := notify
+	offline.Episode, offline.Method, offline.Original = later.ID(), "电话", "SYN-CALL-LOG-20261113-01"
+	marked, err := notifier.HandleSignal(t.Context(), offline)
+	if err != nil || marked.Outcome() != visibilityapp.NotificationSubmitted || pushes.Load() != pushesBefore {
+		t.Fatalf("手工标记：err=%v outcome=%q 推送 %d → %d 次", err, marked.Outcome(), pushesBefore, pushes.Load())
+	}
+	if again, err := notifier.HandleSignal(t.Context(), offline); err != nil || again.Outcome() != visibilityapp.NotificationExistingResult {
+		t.Fatalf("再标一次：err=%v outcome=%q", err, again.Outcome())
+	}
+	var manualRows int
+	var notifiedBy, method, original string
+	if err := pool.QueryRow(t.Context(),
+		`SELECT count(*), min(notified_by), min(method), min(original_ref) FROM visibility_exception.customer_notification_manual_record WHERE tenant_id = 'SYN-TENANT-01'`,
+	).Scan(&manualRows, &notifiedBy, &method, &original); err != nil {
+		t.Fatal(err)
+	}
+	if manualRows != 1 || notifiedBy != "https://id.syn.example/dex#SYN-OPERATOR-04" || method != "电话" || original != "SYN-CALL-LOG-20261113-01" {
+		t.Fatalf("人工通知留痕 %d 条：%q / %q / %q——系统推送的那一份不该有留痕", manualRows, notifiedBy, method, original)
+	}
+	if notificationRows() != 2 {
+		t.Fatalf("通知 %d 行，想要 2", notificationRows())
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
@@ -137,6 +138,8 @@ type NotifyCustomerDeps struct {
 	Customers   ports.ParcelCustomerAccountView
 	SendLock    ports.NotificationSendLock
 	Preflight   ports.NotificationChannelPreflight
+	// ManualRecords 记人工通知的留痕。只有手工标记口后面的装配给它；命令带了通知方式而它不在是装配缺陷。
+	ManualRecords ports.ManualNotificationLedger
 }
 
 // NotifySignalCommand 是操作员指名「把这一期信号的披露通知客户」：包裹、信号类型与哪一期。客户不在命令里——由包裹的
@@ -147,6 +150,15 @@ type NotifySignalCommand struct {
 	Kind     domain.ExceptionSignalKindReference
 	Episode  domain.EpisodeID
 	Operator string
+	// Method 与 Original 只在手工标记时给：操作员已经在线下通知了客户（dox/decisions.md「产品形态」），这里只是记一笔
+	// ——用什么方式通知的、凭的是哪份原件。两格同在或同缺。给了它们，装配点接的渠道不推送任何东西。
+	Method   string
+	Original string
+}
+
+// manual 报这条命令是不是手工标记。
+func (command NotifySignalCommand) manual() bool {
+	return strings.TrimSpace(command.Method) != "" || strings.TrimSpace(command.Original) != ""
 }
 
 type NotifyCustomerHandler struct {
@@ -168,6 +180,15 @@ func (handler *NotifyCustomerHandler) resolveSignal(ctx context.Context, command
 	if command.TenantID.String() == "" || command.Parcel.String() == "" || command.Kind.String() == "" ||
 		command.Episode.String() == "" || command.Operator == "" {
 		return none, false, NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
+	}
+	if command.manual() {
+		if strings.TrimSpace(command.Method) == "" || strings.TrimSpace(command.Original) == "" {
+			// 手工标记必带通知方式与所凭原件：没有原件可查的「已通知」等于凭一句话替客户确认了知情。
+			return none, false, NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
+		}
+		if handler.deps.ManualRecords == nil {
+			return none, false, NotifyCustomerResult{}, fmt.Errorf("notify customer: a manual record arrived but no manual ledger is wired")
+		}
 	}
 	if handler.deps.EpisodeByID == nil || handler.deps.Customers == nil || handler.deps.SendLock == nil || handler.deps.Preflight == nil {
 		return none, false, NotifyCustomerResult{}, fmt.Errorf("notify customer: the operator entry is not fully wired")
@@ -263,7 +284,19 @@ func (handler *NotifyCustomerHandler) HandleSignal(ctx context.Context, command 
 	if err != nil || !proceed {
 		return terminal, err
 	}
-	return handler.Handle(ctx, target)
+	result, err := handler.Handle(ctx, target)
+	if err != nil || !command.manual() || result.outcome != NotificationSubmitted {
+		// 已有结果（此前系统推过，或已经标记过）不再记第二条留痕：那份通知是怎么出去的，以第一次为准。
+		return result, err
+	}
+	if err := handler.deps.ManualRecords.RecordManualNotification(ctx, ports.ManualNotificationRecord{
+		Tenant: command.TenantID, Notification: result.notification.ID(), NotifiedBy: command.Operator,
+		Method: strings.TrimSpace(command.Method), Original: strings.TrimSpace(command.Original), RecordedAt: handler.deps.Clock.Now(),
+	}); err != nil {
+		// 节点记了而留痕没落：答未决，装配点整笔回滚——不留一个看不出是人通知的「已提交」。
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
+	}
+	return result, nil
 }
 
 // Handle 把一份已登记的`披露`结论决定推进到客户通知：受理（发作期与客户缺一即未受理）

@@ -583,6 +583,23 @@ type NotificationChannelPreflight interface {
 	CheckChannel(ctx context.Context, channel domain.NotificationChannelReference) error
 }
 
+// ManualNotificationRecord 是一条人工通知留痕：这份通知不是系统推出去的，是谁、用什么方式（电话、邮件……）在线下
+// 通知了客户，凭的是哪份原件（通话记录、邮件的编号或存档引用）。
+type ManualNotificationRecord struct {
+	Tenant       domain.TenantID
+	Notification domain.NotificationID
+	NotifiedBy   string
+	Method       string
+	Original     string
+	RecordedAt   time.Time
+}
+
+// ManualNotificationLedger 记人工通知的留痕，与「已提交」那个过程节点同一事务落。系统推送的通知没有这一条：人通知的
+// 与系统推的靠这本册里有没有它分开。
+type ManualNotificationLedger interface {
+	RecordManualNotification(ctx context.Context, record ManualNotificationRecord) error
+}
+
 // NotificationSendLock 让同一份披露（租户+发作期+客户）上的发送一次只走一笔，锁随事务释放。没有它，两个人同时对一份
 // 失败过的通知重发，会各推一次、各自回填过程节点，后落的那一笔盖掉先落的。
 type NotificationSendLock interface {

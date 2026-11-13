@@ -17,7 +17,8 @@ export type ExceptionDecisionKind =
   | 'evidence-disclosure-preparation'
   | 'customer-disclosure-decision'
   | 'customer-disclosure-authorization'
-  | 'customer-exception-notification';
+  | 'customer-exception-notification'
+  | 'customer-exception-notification-manual-record';
 
 export const exceptionDecisionEndpoints: Record<ExceptionDecisionKind, string> = {
   'case-take-up': '/exception-case-take-ups',
@@ -29,6 +30,7 @@ export const exceptionDecisionEndpoints: Record<ExceptionDecisionKind, string> =
   'customer-disclosure-decision': '/customer-disclosure-decisions',
   'customer-disclosure-authorization': '/customer-disclosure-authorizations',
   'customer-exception-notification': '/customer-exception-notifications',
+  'customer-exception-notification-manual-record': '/customer-exception-notification-manual-records',
 };
 
 export const exceptionDecisionTitles: Record<ExceptionDecisionKind, string> = {
@@ -40,7 +42,8 @@ export const exceptionDecisionTitles: Record<ExceptionDecisionKind, string> = {
   'evidence-disclosure-preparation': '准备证据披露版本',
   'customer-disclosure-decision': '判断是否向客户披露',
   'customer-disclosure-authorization': '确认向客户披露',
-  'customer-exception-notification': '通知客户',
+  'customer-exception-notification': '通知客户（系统推送）',
+  'customer-exception-notification-manual-record': '已电话或邮件通知客户',
 };
 
 const identityNote = ' 所属公司与操作者由系统按登录身份记下，不用填；需要持有这一种运营决定的授予。';
@@ -62,6 +65,12 @@ export const exceptionDecisionHints: Record<ExceptionDecisionKind, string> = {
     signalTarget + ' 确认的是一份停在「待授权」的判断；披露内容取规则里的那一份，规则已改成不披露则不放行。' + identityNote,
   'customer-exception-notification':
     signalTarget + ' 通知的是已经成立的披露；首次发送与失败后重发都在这里。通知策略与通知渠道要先登记好。' + identityNote,
+  'customer-exception-notification-manual-record':
+    '没有对接客户系统时用这一个：你已经用电话、邮件等方式通知了客户，在这里记一笔。' +
+    signalTarget +
+    ' 另填 method（通知方式，如 电话、邮件）、original（所凭原件：通话记录、邮件的编号或存档引用，必填）。系统不发送任何东西，也不需要登记通知渠道；' +
+    '通知策略仍要先登记（时限从它来）。系统推送失败过的通知也可以在这里改记为已人工通知。' +
+    identityNote,
 };
 
 /** 各口答复的中文。没收录的原样示出英文原名。 */
@@ -84,7 +93,7 @@ export const exceptionDecisionOutcomeLabels: Record<string, string> = {
   EXISTING_RESULT: '此前已经有结果，见下',
   NOT_AWAITING_AUTHORIZATION: '这一期信号没有等待确认的披露判断',
   DISCLOSURE_CONDITION_NO_LONGER_MET: '披露规则已改成不披露，不能确认',
-  SUBMITTED: '已提交给通知渠道',
+  SUBMITTED: '已记为已通知客户（系统推送的是已提交给通知渠道）',
   SUBMISSION_FAILED: '提交给通知渠道没有成功，可以再发一次',
   UNDECIDED: '暂时定不了，原因见下',
   NOT_ACCEPTED: '内容不完整或不成立，没有受理',

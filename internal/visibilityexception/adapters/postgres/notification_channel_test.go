@@ -10,6 +10,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 func channelEndpoint(t *testing.T, channel, endpoint, credential string) domain.NotificationChannelEndpoint {
@@ -66,6 +67,9 @@ func TestNotificationChannelsRoundTripPerTenantAndReRegistrationReplacesTheEndpo
 	}
 	if err := notifications.LockDisclosure(ctx, tenant, build(t, domain.NewEpisodeID, "ep-1"), build(t, domain.NewCustomerAccountReference, "acct-1")); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务取通知发送锁应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if err := notifications.RecordManualNotification(ctx, ports.ManualNotificationRecord{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("无事务记人工通知留痕应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }
 
