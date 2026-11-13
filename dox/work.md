@@ -11,11 +11,14 @@
 ## 待做
 
 - **等用户裁定：替代链分叉按不按业务时间裁决。** 旧文档说不裁、各后继不参与派生；代码（`judgeForks`）按业务时间裁，同刻才立信号。见 [contexts/visibility-exception.md](./contexts/visibility-exception.md) 末节。
-- **给 `accessidentity` 与 `pilotgovernance` 各补一个上下文文件。**
-- **把上下文之间的所有权关系收成 `dox/context-map.md`**，替掉对旧 CONTEXT-MAP 的指向。
-- **写 `product.md` 与 `tenant.md`**。
+
+- **等用户裁定：各上下文文件末节列出的落差哪些要补。** 分两类：有编排而没有生产入口的，与旧文档写了而代码里没有的。是否挡第一家租户上线，看租户用不用到。
+- **把 `decisions.md` 补到其余上下文。**
 
 ## 上线前要核的
+
+- 阶段评审的 `Go` 在代码里没有读者：准入读的是权威区间与暂停，不读 `Go`。「先有 `Go` 才授予权威区间」眼下靠操作纪律守，见 [contexts/pilot-governance.md](./contexts/pilot-governance.md) 末节。
+- 集运作业的导入命令 `cmd/parcel-frontline-import` 在写死的日期之后拒绝启动，见 [tenant.md](./tenant.md)。
 
 - 「受理前估价采用」与「SELL 计费时点采用」两本册登的是同一个范围。
 - 首个带 PR 的推送看一次 Actions，确认两种事件各跑各的步骤。

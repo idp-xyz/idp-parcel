@@ -1,8 +1,8 @@
 # idp-parcel 文档入口
 
-取证于 main `99fc0037d`（2026-11-12）。
+取证于 main `1bdbc1b7b`（2026-11-12）。
 
-`dox/` 是现行文档。`docs/` 与 `.scratch/` 是历史记录：迁进 `dox/` 的内容以这里为准，还没迁的暂时仍看那边，下面的表写明每一块现在看哪。
+`dox/` 是现行文档，规则以这里为准。`docs/` 与 `.scratch/` 自 2026-11-12 起冻结，是历史记录，只在追一条规则的来历时翻。
 
 ## 这个目录的规矩
 
@@ -14,14 +14,17 @@
 
 ## 文件
 
-| 文件 | 回答什么 | 状态 |
-|---|---|---|
-| 本页 | 现状，以及每一块看哪 | 现行 |
-| [product.md](./product.md) | 产品是什么、首发范围、切片 | 待写 |
-| [contexts/](./contexts/) | 每个上下文一个文件：管什么、词、规则、生命周期、入口 | 十一个已写；规则句未逐条验证行为 |
-| [decisions.md](./decisions.md) | 难逆转的取舍，每条一段 | 起了头 |
-| [work.md](./work.md) | 在做与待做 | 现行 |
-| [tenant.md](./tenant.md) | 一个租户上线要提供什么 | 待写 |
+| 文件 | 回答什么 |
+|---|---|
+| 本页 | 现状，以及每一块看哪 |
+| [product.md](./product.md) | 产品卖给谁、首发范围、主链与切片、机制／产品策略／租户取值三类 |
+| [context-map.md](./context-map.md) | 上下文之间谁拥有什么、谁读谁 |
+| [contexts/](./contexts/) | 每个上下文一个文件：管什么、词、取值、规则、生命周期、入口，以及文档走在代码前面的 |
+| [decisions.md](./decisions.md) | 难逆转的取舍，每条一段（目前只有小包计价的几条） |
+| [work.md](./work.md) | 在做、待做、上线前要核的、搁置 |
+| [tenant.md](./tenant.md) | 一个租户上线要提供什么、登在哪个口、怎样算可以上生产 |
+
+各文件的规则句提炼自旧文档并对过代码里有对应的机制，没有逐条跑测试验证行为；每个文件开头写明了它核到什么程度。
 
 ## 一句话
 
@@ -64,8 +67,10 @@
 | 结算与经营核算 | [contexts/settlement-accounting.md](./contexts/settlement-accounting.md) |
 | 代收与清分 | [contexts/collection-remittance.md](./contexts/collection-remittance.md) |
 | 仓配履约（可选，未实现） | [contexts/warehouse-fulfillment.md](./contexts/warehouse-fulfillment.md) |
+| 接入与身份（共享技术能力） | [contexts/access-identity.md](./contexts/access-identity.md) |
+| 试点治理 | [contexts/pilot-governance.md](./contexts/pilot-governance.md) |
 
-`accessidentity`（接入与身份）与 `pilotgovernance`（试点治理）两个包还没有文件。上下文之间谁拥有什么，暂时仍看 [CONTEXT-MAP](../docs/domain/CONTEXT-MAP.md)。
+上下文之间谁拥有什么、谁读谁，看 [context-map.md](./context-map.md)。
 
 ## 在做、待做、搁置
 

@@ -1,6 +1,6 @@
 # AGENTS
 
-给人与 Agent 共用的工作方式入口。产品与领域规则以 `docs/` 权威文档为准；本文件只规定**怎么开工、怎么改、何时用 skill**，不重述限界上下文内容。
+给人与 Agent 共用的工作方式入口。产品与领域规则以 [`dox/`](./dox/README.md) 为准；`docs/` 与 `.scratch/` 是历史记录，只在追一条规则的来历时翻。本文件只规定**怎么开工、怎么改、何时用 skill**，不重述限界上下文内容。
 
 ## 交付模式
 
@@ -25,20 +25,18 @@
 
 ## 开工顺序
 
-对任何功能或缺陷，按序加载材料；每步完成后再进入下一步。
+对任何功能或缺陷，按序读；每步做到能答出「完成」那一句再往下。
 
-1. **定切片** — 读 [首发开发主线](./docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)，确认所属 PN 切片与主链/关务旁路。  
-   **完成**：能说出 PN 编号、主责上下文、是否关务专项。
-2. **定边界** — 读 [CONTEXT-MAP](./docs/domain/CONTEXT-MAP.md) 与目标上下文的 `CONTEXT.md`；跨术语读 [GLOSSARY](./docs/domain/GLOSSARY.md)。  
-   **完成**：说清本上下文拥有/不拥有，以及会引用的邻接上下文。
-3. **定行为** — 读对应 `UC-*`（见 [application/README](./docs/application/README.md)）与相关 ADR（见 [adr/README](./docs/adr/README.md)）。  
-   **完成**：用例输入/结果/失败边界与未确认 `BD-*` 已列出。
-4. **定交接** — 读该 PN 的 `docs/design/*handoff*`（无真实参数时优先合成任务包，如 [PN02-SYN](./docs/design/pn-02-synthetic-business-contract-development-task-pack.md)）。  
-   **完成**：每个待定格已按三类归好（三类见[红线](#红线)一节「软件产品」那段）：机制与产品策略由本票做出执行器或参考配置，租户取值留空答`未配置`；证据记 `S` 还是可提交 PN-08 候选已判明。
-5. **再编码** — 技术切片以 [Go 首个消费者决策简报](./docs/design/parcel-go-first-consumer-slice-decision-brief.md) 与包布局为准；默认主刀为 `UC-PS-001`「来源保全 → 生产归属 → 已提交」。  
-   **完成**：变更落在正确 `internal/<context>/` 层；领域包不依赖 HTTP/`pgx`。
+1. **看现状** — 读 [dox/README.md](./dox/README.md) 与 [dox/work.md](./dox/work.md)。  
+   **完成**：这件事在 work.md 的「在做」里，或属[交付模式](#交付模式)那三种之一。都不是就停下来问用户。
+2. **定边界** — 读目标上下文在 `dox/contexts/` 下的那一个文件，跨上下文再读 [dox/context-map.md](./dox/context-map.md)。  
+   **完成**：说得清本上下文管什么、不管什么，以及要读哪个邻接上下文。
+3. **归三类** — 每个待定格归进机制、产品策略或租户取值（定义在 [dox/product.md](./dox/product.md)）。  
+   **完成**：机制与产品策略由本次做出来，证据记 `S`；租户取值留空答`未配置`。
+4. **再编码** — 变更落在正确的 `internal/<context>/` 层；领域包不依赖 HTTP 或 `pgx`。  
+   **完成**：代码与测试改完；规则变了的，同一笔改该上下文在 `dox/contexts/` 下的文件。
 
-全库文档索引与阅读顺序：[docs/README.md](./docs/README.md)。`docs/archive/` 仅追溯，不是现行规则。
+上下文文件开头写着它核到什么程度。规则句与代码不一致时以代码和测试为准，并在同一笔把文件改对。
 
 ## 红线
 
@@ -52,20 +50,20 @@
 | 单一权威 | 一决策一处定义；用例与交接只引用，不复制第二套口径 |
 | 敏感实例外置 | 仓库只登脱敏标识与证据索引；真实映射留在约定的受限存储 |
 
-冲突时：产品基线 / 试点范围 / `CONTEXT*` / ADR 优先于用例与设计交接；交接优先于临时代码注释。
+冲突时：代码与测试优先于 `dox/`，`dox/` 优先于 `docs/` 与 `.scratch/`，都优先于临时代码注释。
 
 **本仓开发的是卖给物流企业的软件产品，开发方不是运营企业。** 文档里的「运营企业」指购买产品的租户，锚点货主客户是租户的客户。产品开发由开发方独立做完：缺真实参数、真源或租户证据时，先把那一格归进三类，再动手——
 
-- **机制**与**产品策略**（判断方法、内置策略、连接器形态、随产品发布的参考配置）现在就做完。外部系统对着公开规范、沙箱或模拟源接，用演示租户加 `SYN-` 数据走通，证据记 `S`；演示租户就是 `scripts/demo-seeds` 灌的 `SYN-TENANT-01`，开发与演示共用这一份，代码按真实租户对待它（[ADR-0150](./docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)）。
+- **机制**与**产品策略**（判断方法、内置策略、连接器形态、随产品发布的参考配置）现在就做完。外部系统对着公开规范、沙箱或模拟源接，用演示租户加 `SYN-` 数据走通，证据记 `S`；演示租户就是 `scripts/demo-seeds` 灌的 `SYN-TENANT-01`，开发与演示共用这一份，代码按真实租户对待它。
 - **租户取值**（某个租户的具体数值、对象、人与阶段决定）留空并拒绝默认值，那一格如实答`未配置`。它属租户上线时的实施，票照常收口。
 
-立票与分诊时，`Blocked by` 与 `needs-info` 只指向另一张票、一篇待接受的 ADR 或一项用户决定。三类的分界检验与产品就绪判据见[开发主线](./docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#切片的机制半边与实例半边)，取舍见 [ADR-0146](./docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)；两处是唯一权威。
+立票与分诊时，`Blocked by` 与 `needs-info` 只指向另一张票、一篇待接受的 ADR 或一项用户决定。三类的定义与分界检验只在 [dox/product.md](./dox/product.md)。
 
 ## 写代码注释
 
-**注释一律用中文。** 本仓的领域语言是中文，`CONTEXT.md` 与 `UC-*` 都用中文表达不变量；注释里换成英文会在术语上多一次翻译，读的人还得自己对回去。
+**注释一律用中文。** 本仓的领域语言是中文，`dox/contexts/` 下各文件用中文表达不变量；注释里换成英文会在术语上多一次翻译，读的人还得自己对回去。
 
-注释只写代码本身讲不出的东西——某条取舍为何如此、哪条 `CONTEXT` 规则要求它、换个写法会破坏什么。不写「这一行做了什么」，也不写变更说明。引用领域术语时用文档里的原词（`已提交`、`适用冲突`、`预计承诺`），不要自造译法。
+注释只写代码本身讲不出的东西——某条取舍为何如此、哪条规则要求它、换个写法会破坏什么。不写「这一行做了什么」，也不写变更说明。引用领域术语时用文档里的原词（`已提交`、`适用冲突`、`预计承诺`），不要自造译法。
 
 注释里引另一个文件，照 [改文档](#改文档) 那一条办。规则与理由都在那里，此处不复述——复述的那半会在那条改动时留在这里变旧，而这一句自己声称过不重复。
 
@@ -73,12 +71,15 @@
 
 ## 改文档
 
-- 改领域语言、不变量或生命周期 → 改对应 `CONTEXT.md`（必要时 CONTEXT-MAP / GLOSSARY / SCENARIOS），再改引用它的 `UC-*`。
-- 改难逆转技术或产品取舍 → 新 ADR 或 supersede（够不够得上「难逆转」照[交付模式](#交付模式)那条判，够不上的不写）；不改写已接受 ADR 历史。新 ADR 只改掉前一份的某几句时是部分停用：被停 ADR 的 `Status` 行索引注记与 Links 各加一条前向指针，正文不动，写法见 [adr/README](./docs/adr/README.md) 顶部；同一笔把 `CONTEXT.md` 里被停的句子改成现行规则。
-- `CONTEXT.md` 写成现行、代码尚未到的规则 → 规则句上不挂票号；规则与实现的差距写在各 UC 的「给开发的交接」，`CONTEXT.md` 头部只放一句同形的固定指针。
-- 改试点实例状态 → [参数登记册](./docs/product/PILOT-PARAMETER-REGISTER.md)，不写入领域文档当长期事实。
-- 新增权威文档 → 在 [docs/README.md](./docs/README.md) 补入口与职责一句。
-- 引另一个文件的某句或某段 → 优先用符号名，无符号可指时用引文，一律**不用行号，也不用计数**；跨文件的序数（「第三条」）与位置词（「上一条」「上节」）同属，同此；已接受 ADR 的「决定几」编号不在此列——正文冻结，编号不会漂。行号失效时仍然指得很稳，只是指错了，没有任何东西会报；引文至少失配可见，但中文注释一折行就搜不中。**计数与行号同构**：「另一个包里有几道校验」「本包另三套门禁」数的都是别处的东西，被数那一侧增减一项是完全正当的改动，而改的人不会路过你这句话，于是它无声地变错——同一条理由，同一种守不住。只有一个例外：**数本身就是论点时**（举证「这几处各不相同」）必须写，且必须锚住取证时的 SHA，否则那几处被修好之后举证自己成了假话。ADR 尤其要守——它引的常是它自己要改的那份代码，Context 会在决定落地那一刻失效。**Go 注释里的跨文件引用同受此约束**，理由一字不差地成立：全仓抽验六处行号引用四处已经指错（实测于 `1dbc680`），而往被引文档头部插五行之后 `go build`、`go vet` 与全仓 `go test` 零信号——`internal/` 下没有任何测试读过 `.md` 的内容，这一类**结构上守不了**，只能靠不写。
+现行文档只有 `dox/`，规矩在 [dox/README.md](./dox/README.md)「这个目录的规矩」。落到动作上：
+
+- 规则、词、生命周期或入口变了 → 直接改该上下文在 `dox/contexts/` 下的那一句，与代码同一笔。不写「补记」「更正」「此前」，来历看 `git log`。
+- 做了难逆转的取舍（换掉它要迁数据、改对外契约或动上下文边界）→ 在 [dox/decisions.md](./dox/decisions.md) 加一段或改写原来那段。不新建 ADR 文件。
+- 开工、收工、搁置 → 改 [dox/work.md](./dox/work.md)；做完的条目删掉。不在 `.scratch/` 立新票。
+- 进 main 的改动让现状变了 → 同一笔改 [dox/README.md](./dox/README.md) 对应那一格。
+- `docs/` 与 `.scratch/` 不再改。例外只有在途那一批票的票面，做完为止，名单见 dox/work.md。
+- 文件超过行数上限 → 删，不拆。
+- 引另一个文件的某句或某段 → 用符号名，无符号可指时用引文；**不用行号、计数、序数与位置词**（「第三条」「上一节」）。被引的那一侧增减一项是正当改动，改的人不会路过你这句，它会无声地变错，而没有任何测试读 `.md`。Go 注释里的跨文件引用同受此约束。
 
 ## Skills 路由
 
@@ -102,22 +103,9 @@
 
 ## Agent skills
 
-### Issue tracker
+Skill 里说的 tracker、标签与领域文档，在本仓这样对应：
 
-Issues and specs live as markdown under `.scratch/<feature>/`. See [`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md).
-
-### Triage labels
-
-Default category/state role strings (`bug`, `ready-for-agent`, …). See [`docs/agents/triage-labels.md`](./docs/agents/triage-labels.md).
-
-### Domain docs
-
-Multi-context map at `docs/domain/CONTEXT-MAP.md`; shared ADRs in `docs/adr/`. See [`docs/agents/domain.md`](./docs/agents/domain.md).
-
-### Flow binding
-
-How the generic skill flow maps onto this repo's PN slices, handoff work packages, and evidence levels. See [`docs/agents/workflow.md`](./docs/agents/workflow.md).
-
-### Parallel sessions
-
-At most two writing sessions at a time ([交付模式](#交付模式)). Territory, committing, and reporting when several sessions write one working tree. Single-session work can skip its territory, numbering and roll-call sections, but the steps into `main` bind every session: see [`docs/agents/workflow.md`「进 main 的步骤」](./docs/agents/workflow.md#进-main-的步骤). See [`docs/agents/parallel-sessions.md`](./docs/agents/parallel-sessions.md). 多会话时开工第一眼看 `scripts/branch-state.ps1` 算出来的状态页（main 与 origin、各树未提交、在途分支），派单前带 `-Path <地盘>` 查半成品；不读任何人的自报。**diff 全在 `apps/admin-web/**` 的票不走它**：一人在 `main` 上直接做，落法见 [workflow.md「前端切片」](./docs/agents/workflow.md#前端切片一人在-main-上直接做)。
+- **Issue tracker** — [dox/work.md](./dox/work.md)，一个文件。在途那一批票仍在 `.scratch/` 下做完，其写法见 [`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md)。
+- **Domain docs** — [dox/context-map.md](./dox/context-map.md) 与 `dox/contexts/` 下各文件；决定在 [dox/decisions.md](./dox/decisions.md)。
+- **进 main 的步骤与本机环境** — [`docs/agents/workflow.md`](./docs/agents/workflow.md)，仍然有效；它与[交付模式](#交付模式)相抵时以交付模式为准。
+- **并行会话** — 交付模式下同时在写的会话不超过两个；两个会话共写一棵树时的做法见 [`docs/agents/parallel-sessions.md`](./docs/agents/parallel-sessions.md)。**diff 全在 `apps/admin-web/**` 的票**一人在 `main` 上直接做，见 workflow.md「前端切片」。
