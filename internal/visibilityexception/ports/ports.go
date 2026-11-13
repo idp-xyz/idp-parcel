@@ -583,6 +583,20 @@ type NotificationChannelPreflight interface {
 	CheckChannel(ctx context.Context, channel domain.NotificationChannelReference) error
 }
 
+// ManualETAEntry 是一条人工录入留痕：哪一版 ETA 预测是谁照着哪份原件录的。
+type ManualETAEntry struct {
+	Tenant    domain.TenantID
+	Version   domain.ETAVersionID
+	EnteredBy string
+	Original  string
+	EnteredAt time.Time
+}
+
+// ManualETAEntryLedger 记人工录入的 ETA 留痕，与预测版本同一事务落。预测来源送来的版本没有这一条。
+type ManualETAEntryLedger interface {
+	RecordManualETAEntry(ctx context.Context, entry ManualETAEntry) error
+}
+
 // ManualNotificationRecord 是一条人工通知留痕：这份通知不是系统推出去的，是谁、用什么方式（电话、邮件……）在线下
 // 通知了客户，凭的是哪份原件（通话记录、邮件的编号或存档引用）。
 type ManualNotificationRecord struct {

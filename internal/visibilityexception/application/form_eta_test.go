@@ -739,3 +739,80 @@ func TestFailedHandoffsKeepTheResultsWithResumableReferences(t *testing.T) {
 		t.Fatalf("gap = %q ref=%q; a failed handoff must keep the gap with a reference", gap.Outcome(), gap.HandoffReference())
 	}
 }
+
+type manualETALedgerDouble struct {
+	entries []ports.ManualETAEntry
+	err     error
+}
+
+func (double *manualETALedgerDouble) RecordManualETAEntry(_ context.Context, entry ports.ManualETAEntry) error {
+	if double.err != nil {
+		return double.err
+	}
+	double.entries = append(double.entries, entry)
+	return nil
+}
+
+func manualETAFixture(t *testing.T, ledger *manualETALedgerDouble) *etaFixture {
+	t.Helper()
+	fixture := newETAFixture(t)
+	fixture.handler = application.NewFormETAHandler(application.FormETADeps{
+		Predictions: fixture.predictions, Gaps: fixture.gaps, Identities: fixture.identities, ViewChain: fixture.viewChain,
+		SignalChain: fixture.signalChain, Clock: fixedClock{at: etaClockAt}, ManualEntries: ledger,
+	})
+	return fixture
+}
+
+// Covers: dox/decisions.md「产品形态」——操作员录入的预计到达进同一只 ETA 形成编排：形成一版并另记一条留痕（哪一版、
+// 谁录的、凭哪份原件）；同一份输入重录是已有结果、不记第二条；输入变了换版、再记一条；有录入人没有原件（或反过来）
+// 不受理；留痕落不下答未决；预测来源送来的不记留痕；没接留痕册是装配缺陷、上抛。
+func TestAManuallyEnteredETAFormsAVersionOnItsLineAndLeavesAnEntryTrail(t *testing.T) {
+	ledger := &manualETALedgerDouble{}
+	fixture := manualETAFixture(t, ledger)
+	ctx := context.Background()
+	manual := etaCommand(t, "ETAMANUAL/inputs-1")
+	manual.EnteredBy, manual.Original = "OPERATOR/https://issuer#alice", "SYN-CARRIER-ETA-MAIL-1"
+
+	formed, err := fixture.handler.FormETA(ctx, manual)
+	eta, has := formed.ETA()
+	if err != nil || formed.Outcome() != application.ETAFormed || !has || len(ledger.entries) != 1 {
+		t.Fatalf("人工录入：err=%v outcome=%q 留痕 %d 条", err, formed.Outcome(), len(ledger.entries))
+	}
+	if entry := ledger.entries[0]; entry.Version != eta.Version() || entry.EnteredBy != "OPERATOR/https://issuer#alice" || entry.Original != "SYN-CARRIER-ETA-MAIL-1" {
+		t.Fatalf("留痕 = %+v", entry)
+	}
+	if again, err := fixture.handler.FormETA(ctx, manual); err != nil || again.Outcome() != application.ETAExistingResult || len(ledger.entries) != 1 {
+		t.Fatalf("同一份输入重录：err=%v outcome=%q 留痕 %d 条", err, again.Outcome(), len(ledger.entries))
+	}
+	changed := etaCommand(t, "ETAMANUAL/inputs-2")
+	changed.EnteredBy, changed.Original = "OPERATOR/https://issuer#bob", "SYN-CARRIER-ETA-MAIL-2"
+	if refreshed, err := fixture.handler.FormETA(ctx, changed); err != nil || refreshed.Outcome() != application.ETARefreshed ||
+		len(ledger.entries) != 2 || ledger.entries[1].EnteredBy != "OPERATOR/https://issuer#bob" {
+		t.Fatalf("输入变了：err=%v outcome=%q 留痕 %+v", err, refreshed.Outcome(), ledger.entries)
+	}
+	if fromSource, err := fixture.handler.FormETA(ctx, etaCommand(t, "inputs/v9")); err != nil || fromSource.Outcome() != application.ETARefreshed || len(ledger.entries) != 2 {
+		t.Fatalf("预测来源送来的：err=%v outcome=%q 留痕 %d 条", err, fromSource.Outcome(), len(ledger.entries))
+	}
+
+	for name, mutate := range map[string]func(*application.FormETACommand){
+		"有录入人没有原件": func(command *application.FormETACommand) { command.Original = " " },
+		"有原件没有录入人": func(command *application.FormETACommand) { command.EnteredBy = "" },
+	} {
+		fresh := manualETAFixture(t, &manualETALedgerDouble{})
+		command := manual
+		mutate(&command)
+		if refused, err := fresh.handler.FormETA(ctx, command); err != nil || refused.Outcome() != application.FormETANotAccepted {
+			t.Fatalf("%s：err=%v outcome=%q", name, err, refused.Outcome())
+		}
+		if fresh.identities.next != 0 {
+			t.Fatalf("%s：不受理却签了版本号", name)
+		}
+	}
+	failing := manualETAFixture(t, &manualETALedgerDouble{err: errors.New("ledger down")})
+	if undecided, err := failing.handler.FormETA(ctx, manual); err != nil || undecided.Outcome() != application.FormETAUndecided {
+		t.Fatalf("留痕落不下：err=%v outcome=%q", err, undecided.Outcome())
+	}
+	if _, err := newETAFixture(t).handler.FormETA(ctx, manual); err == nil {
+		t.Fatal("没接留痕册的人工录入没有上抛")
+	}
+}

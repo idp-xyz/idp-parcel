@@ -762,3 +762,21 @@ func notificationMilestoneFrom(value string) (domain.NotificationMilestone, erro
 			fmt.Errorf("visibility exception postgres: unknown notification milestone %q", value)
 	}
 }
+
+var _ ports.ManualETAEntryLedger = (*ETAs)(nil)
+
+// RecordManualETAEntry 记一版预测是谁照着哪份原件录的。只在事务里写：与那一版预测同笔。一版至多一条，撞键照错误上抛。
+func (repository *ETAs) RecordManualETAEntry(ctx context.Context, entry ports.ManualETAEntry) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("record manual eta entry: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO visibility_exception.eta_manual_entry (tenant_id, version_id, entered_by, original_ref, entered_at)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		entry.Tenant.String(), entry.Version.String(), entry.EnteredBy, entry.Original, entry.EnteredAt.UTC(),
+	); err != nil {
+		return fmt.Errorf("record manual eta entry: %w", err)
+	}
+	return nil
+}

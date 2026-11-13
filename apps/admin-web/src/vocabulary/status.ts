@@ -364,6 +364,7 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   CUSTOMS_MANUAL_LODGEMENT: muted('标记申报已线下递交'),
   BOOKING_ANSWER_ENTRY: muted('录入承运方的订舱答复'),
   EXTERNAL_MANIFEST_ENTRY: muted('录入外部舱单引用'),
+  ETA_ENTRY: muted('录入预计到达'),
   EXTERNAL_FUNDS_FACT: muted('外部收付款'),
   EXTERNAL_FUNDS_FACT_ADOPTION: muted('收付款登记'),
   CLAIM_SUBMISSION: muted('索赔提交'),

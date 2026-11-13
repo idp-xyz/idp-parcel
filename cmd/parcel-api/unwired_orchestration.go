@@ -2481,3 +2481,9 @@ type unwiredManualLodgement struct{}
 func (unwiredManualLodgement) Record(context.Context, customsapp.RecordManualLodgementCommand) (customsapp.RecordManualLodgementResult, error) {
 	return customsapp.RecordManualLodgementResult{}, errOrchestrationNotWired
 }
+
+type unwiredETAFormer struct{}
+
+func (unwiredETAFormer) FormETA(context.Context, visibilityapp.FormETACommand) (visibilityapp.FormETAResult, error) {
+	return visibilityapp.FormETAResult{}, errOrchestrationNotWired
+}

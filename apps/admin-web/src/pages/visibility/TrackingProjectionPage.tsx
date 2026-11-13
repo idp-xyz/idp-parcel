@@ -1,3 +1,6 @@
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { RegistrationPanel } from '../../components/registration';
+import { etaEntryEndpoint, etaEntryHint, etaEntryOutcomeLabels, etaEntryProblemNote, etaEntryTitle, submitETAEntry } from './eta-entry';
 import { useState } from 'react';
 import {
   WorkbenchPageTemplate,
@@ -152,7 +155,36 @@ function viewStateOf(
   }
 }
 
+/**
+ * 物流动态页。「物流动态」签是原来的查阅面；「录入预计到达」签给没有预测来源对接的租户：把承运商告知的或自己估的
+ * 预计到达录进来。
+ */
 export function TrackingProjectionPage() {
+  return (
+    <Tabs defaultValue="projections" className="flex-1 flex flex-col overflow-hidden gap-0 bg-idpxyz-editor">
+      <TabsList className="px-4 shrink-0">
+        <TabsTrigger value="projections">物流动态</TabsTrigger>
+        <TabsTrigger value="eta-entry">录入预计到达</TabsTrigger>
+      </TabsList>
+      <TabsContent value="projections" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+        <TrackingProjections />
+      </TabsContent>
+      <TabsContent value="eta-entry" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+        <RegistrationPanel
+          moduleId="tracking-projection"
+          title={etaEntryTitle}
+          endpoint={`POST ${etaEntryEndpoint}`}
+          snapshotHint={etaEntryHint}
+          submit={submitETAEntry}
+          outcomeLabels={etaEntryOutcomeLabels}
+          problemNote={etaEntryProblemNote}
+        />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function TrackingProjections() {
   const [search, setSearch] = useAddressKeyword();
   const [status, setStatus] = useState<'ALL' | string>('ALL');
   const [sort, setSort] = useState<WorkbenchSort>(defaultTrackingSort);

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -90,6 +91,10 @@ type FormETACommand struct {
 	RangeFrom  time.Time
 	RangeTo    time.Time
 	Confidence domain.ConfidenceReference
+	// EnteredBy 与 Original 只在人工录入时给（dox/decisions.md「产品形态」）：没有预测来源对接时，操作员把承运商告知的
+	// 或自己估的预计到达录进来——谁录的、凭的是哪份原件。两格同在或同缺。
+	EnteredBy string
+	Original  string
 }
 
 // FormVisibilityGapCommand 携带一次缺口判断请求：明确预期的观察、版本化窗口规则与
@@ -144,6 +149,8 @@ type FormETADeps struct {
 	ViewChain   ports.ETAHandoff
 	SignalChain ports.VisibilityGapHandoff
 	Clock       ports.Clock
+	// ManualEntries 记人工录入的留痕。只有手工录入口用到；命令带了录入人而它不在是装配缺陷。
+	ManualEntries ports.ManualETAEntryLedger
 }
 
 type FormETAHandler struct {
@@ -177,6 +184,14 @@ func (handler *FormETAHandler) FormETA(
 		command.RangeFrom.IsZero() ||
 		command.RangeTo.IsZero() {
 		return FormETAResult{outcome: FormETANotAccepted}, nil
+	}
+	manual := strings.TrimSpace(command.EnteredBy) != ""
+	if manual != (strings.TrimSpace(command.Original) != "") {
+		// 人工录入必带所凭原件；预测来源送来的不带录入人，也就不该带原件这一格。
+		return FormETAResult{outcome: FormETANotAccepted}, nil
+	}
+	if manual && handler.deps.ManualEntries == nil {
+		return FormETAResult{}, fmt.Errorf("form eta: a manual entry arrived but no manual entry ledger is wired")
 	}
 
 	current, found, err := handler.deps.Predictions.LockCurrent(
@@ -235,6 +250,15 @@ func (handler *FormETAHandler) FormETA(
 			return FormETAResult{outcome: FormETAUndecided, reason: ETACurrentChanged}, nil
 		}
 		return FormETAResult{outcome: FormETAUndecided, reason: ETAStoreUnavailable}, nil
+	}
+	if manual {
+		if err := handler.deps.ManualEntries.RecordManualETAEntry(ctx, ports.ManualETAEntry{
+			Tenant: command.TenantID, Version: prediction.Version(), EnteredBy: strings.TrimSpace(command.EnteredBy),
+			Original: strings.TrimSpace(command.Original), EnteredAt: spec.PredictedAt,
+		}); err != nil {
+			// 预测落了而留痕没落：答未决，装配点整笔回滚——不留一版看不出是人录的预测。
+			return FormETAResult{outcome: FormETAUndecided, reason: ETAStoreUnavailable}, nil
+		}
 	}
 	return FormETAResult{
 		outcome:    outcome,

@@ -475,6 +475,9 @@ func TestETAGapNotificationWritesRequireTransaction(t *testing.T) {
 	if err := fixture.etas.Save(ctx, tenant, formedETA(t, "eta-1/v1", "inputs/v1")); err == nil {
 		t.Fatal("无事务 Save ETA 被接受了")
 	}
+	if err := fixture.etas.RecordManualETAEntry(ctx, ports.ManualETAEntry{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("无事务记人工录入的 ETA 留痕应返回 ErrTransactionRequired，实得：%v", err)
+	}
 	if err := fixture.gaps.Save(ctx, tenant, formedGap(t, "window-rule/v1")); err == nil {
 		t.Fatal("无事务 Save 缺口被接受了")
 	}

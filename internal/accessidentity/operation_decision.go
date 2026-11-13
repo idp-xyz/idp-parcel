@@ -259,6 +259,9 @@ const DecisionBookingAnswerEntry DecisionKind = "BOOKING_ANSWER_ENTRY"
 // DecisionExternalManifestEntry 是操作员照承运商给的材料把外部监管舱单的引用（及其版本推进）录进来。
 const DecisionExternalManifestEntry DecisionKind = "EXTERNAL_MANIFEST_ENTRY"
 
+// DecisionETAEntry 是操作员把一件包裹到某个里程碑的预计到达录进来：承运商告知的，或运营自己估的。
+const DecisionETAEntry DecisionKind = "ETA_ENTRY"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -298,6 +301,7 @@ var decisionKinds = []DecisionKind{
 	DecisionCustomsManualLodgement,
 	DecisionBookingAnswerEntry,
 	DecisionExternalManifestEntry,
+	DecisionETAEntry,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,
