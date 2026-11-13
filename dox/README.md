@@ -1,6 +1,6 @@
 # idp-parcel 文档入口
 
-取证于 main `3dd72c42a`（2026-11-12）。
+取证于 main `99fc0037d`（2026-11-12）。
 
 `dox/` 是现行文档。`docs/` 与 `.scratch/` 是历史记录：迁进 `dox/` 的内容以这里为准，还没迁的暂时仍看那边，下面的表写明每一块现在看哪。
 
@@ -18,7 +18,7 @@
 |---|---|---|
 | 本页 | 现状，以及每一块看哪 | 现行 |
 | [product.md](./product.md) | 产品是什么、首发范围、切片 | 待写 |
-| [contexts/](./contexts/) | 每个上下文一个文件：管什么、词、规则、生命周期、入口 | 试点一个 |
+| [contexts/](./contexts/) | 每个上下文一个文件：管什么、词、规则、生命周期、入口 | 十一个已写；规则句未逐条验证行为 |
 | [decisions.md](./decisions.md) | 难逆转的取舍，每条一段 | 起了头 |
 | [work.md](./work.md) | 在做与待做 | 现行 |
 | [tenant.md](./tenant.md) | 一个租户上线要提供什么 | 待写 |
@@ -49,23 +49,23 @@
 
 ## 一条规则现在是什么，看哪
 
-已迁进 `dox/contexts/` 的上下文只看那一个文件。还没迁的，先看它在 `docs/domain/` 下的 `CONTEXT.md`；用例的输入、结果与失败边界看 `UC-*`；ADR 只在要追「为什么这样定」时读，并且先看它的 Status 行有没有被后来的 ADR 停掉。
+每个上下文一个文件，只看它。每个文件开头写明核到什么程度，末节列出旧文档写了而代码里还没有的。要追一条规则当初为什么这样定，才去翻 `docs/` 下的旧 `CONTEXT.md`、`UC-*` 与 ADR。
 
-| 上下文 | 现行规则 | 用例 |
-|---|---|---|
-| 参与方与商业 | [CONTEXT](../docs/domain/party-commercial/CONTEXT.md) | [UC-PC](../docs/application/party-commercial/) |
-| 小包托运 | [CONTEXT](../docs/domain/parcel-shipment/CONTEXT.md) | [UC-PS](../docs/application/parcel-shipment/) |
-| 网络与路由 | [CONTEXT](../docs/domain/network-routing/CONTEXT.md) | [UC-NR](../docs/application/network-routing/) |
-| 节点作业 | [CONTEXT](../docs/domain/node-operations/CONTEXT.md) | [UC-NO](../docs/application/node-operations/) |
-| 运输履约 | [CONTEXT](../docs/domain/transport-fulfillment/CONTEXT.md) | [UC-TF](../docs/application/transport-fulfillment/) |
-| 关务与贸易合规 | [CONTEXT](../docs/domain/customs-compliance/CONTEXT.md) | [UC-CC](../docs/application/customs-compliance/) |
-| 全程追踪与异常 | [CONTEXT](../docs/domain/visibility-exception/CONTEXT.md) | [UC-VE](../docs/application/visibility-exception/) |
-| 小包计价 | [dox/contexts/parcel-pricing.md](./contexts/parcel-pricing.md)（试点，已迁） | 同左 |
-| 结算与经营核算 | [CONTEXT](../docs/domain/settlement-accounting/CONTEXT.md) | [UC-SA](../docs/application/settlement-accounting/) |
-| 代收与清分 | [CONTEXT](../docs/domain/collection-remittance/CONTEXT.md) | [UC-CR](../docs/application/collection-remittance/) |
-| 仓配履约（可选） | [CONTEXT](../docs/domain/warehouse-fulfillment/CONTEXT.md) | [UC-WF](../docs/application/warehouse-fulfillment/) |
+| 上下文 | 文件 |
+|---|---|
+| 参与方与商业 | [contexts/party-commercial.md](./contexts/party-commercial.md) |
+| 小包托运 | [contexts/parcel-shipment.md](./contexts/parcel-shipment.md) |
+| 网络与路由 | [contexts/network-routing.md](./contexts/network-routing.md) |
+| 节点作业 | [contexts/node-operations.md](./contexts/node-operations.md) |
+| 运输履约 | [contexts/transport-fulfillment.md](./contexts/transport-fulfillment.md) |
+| 关务与贸易合规 | [contexts/customs-compliance.md](./contexts/customs-compliance.md) |
+| 全程追踪与异常 | [contexts/visibility-exception.md](./contexts/visibility-exception.md) |
+| 小包计价 | [contexts/parcel-pricing.md](./contexts/parcel-pricing.md) |
+| 结算与经营核算 | [contexts/settlement-accounting.md](./contexts/settlement-accounting.md) |
+| 代收与清分 | [contexts/collection-remittance.md](./contexts/collection-remittance.md) |
+| 仓配履约（可选，未实现） | [contexts/warehouse-fulfillment.md](./contexts/warehouse-fulfillment.md) |
 
-上下文之间谁拥有什么看 [CONTEXT-MAP](../docs/domain/CONTEXT-MAP.md)，跨上下文的词看 [GLOSSARY](../docs/domain/GLOSSARY.md)。
+`accessidentity`（接入与身份）与 `pilotgovernance`（试点治理）两个包还没有文件。上下文之间谁拥有什么，暂时仍看 [CONTEXT-MAP](../docs/domain/CONTEXT-MAP.md)。
 
 ## 在做、待做、搁置
 

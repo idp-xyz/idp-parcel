@@ -10,7 +10,9 @@
 
 ## 待做
 
-- **把其余上下文迁进 `dox/contexts/`**：等用户看过试点文件再定。
+- **等用户裁定：替代链分叉按不按业务时间裁决。** 旧文档说不裁、各后继不参与派生；代码（`judgeForks`）按业务时间裁，同刻才立信号。见 [contexts/visibility-exception.md](./contexts/visibility-exception.md) 末节。
+- **给 `accessidentity` 与 `pilotgovernance` 各补一个上下文文件。**
+- **把上下文之间的所有权关系收成 `dox/context-map.md`**，替掉对旧 CONTEXT-MAP 的指向。
 - **写 `product.md` 与 `tenant.md`**。
 
 ## 上线前要核的
