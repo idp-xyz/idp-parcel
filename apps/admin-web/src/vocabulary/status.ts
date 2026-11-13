@@ -343,6 +343,7 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   EVIDENCE_DISCLOSURE_PREPARATION: muted('证据披露版本准备'),
   CUSTOMER_DISCLOSURE_DECISION: muted('客户披露判断'),
   CUSTOMER_DISCLOSURE_AUTHORIZATION: muted('客户披露授权'),
+  CUSTOMER_EXCEPTION_NOTIFICATION: muted('客户异常通知'),
   RELEASE_GATE_VERIFICATION: muted('放行检查'),
   REGULATORY_CREDENTIAL: muted('监管凭证'),
   REGULATORY_CREDENTIAL_REGISTRATION: muted('监管凭证登记'),

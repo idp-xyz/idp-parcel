@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -50,6 +51,13 @@ const (
 	NotificationPolicyNotConfigured
 	NotificationIdentityUnavailable
 	NotificationDecisionStoreUnavailable
+	// NotificationChannelNotConfigured 是通知策略指名的渠道没有登记推送端点；NotificationChannelCredentialMissing 是
+	// 渠道登的凭据变量在运行环境里没有值。两种都没有东西发出去，不记`失败`节点。
+	NotificationChannelNotConfigured
+	NotificationChannelCredentialMissing
+	NotificationEpisodeStoreUnavailable
+	NotificationCustomerAccountUnavailable
+	NotificationCustomerAccountUndeterminable
 )
 
 func (reason NotifyCustomerUndecidedReason) String() string {
@@ -64,6 +72,16 @@ func (reason NotifyCustomerUndecidedReason) String() string {
 		return "NOTIFICATION_IDENTITY_UNAVAILABLE"
 	case NotificationDecisionStoreUnavailable:
 		return "NOTIFICATION_DECISION_STORE_UNAVAILABLE"
+	case NotificationChannelNotConfigured:
+		return "NOTIFICATION_CHANNEL_NOT_CONFIGURED"
+	case NotificationChannelCredentialMissing:
+		return "NOTIFICATION_CHANNEL_CREDENTIAL_MISSING"
+	case NotificationEpisodeStoreUnavailable:
+		return "NOTIFICATION_EPISODE_STORE_UNAVAILABLE"
+	case NotificationCustomerAccountUnavailable:
+		return "NOTIFICATION_CUSTOMER_ACCOUNT_UNAVAILABLE"
+	case NotificationCustomerAccountUndeterminable:
+		return "NOTIFICATION_CUSTOMER_ACCOUNT_UNDETERMINABLE"
 	default:
 		return ""
 	}
@@ -114,6 +132,50 @@ type NotifyCustomerDeps struct {
 	Channel       ports.NotificationChannelGateway
 	Downstream    ports.NotificationHandoff
 	Clock         ports.Clock
+	// 下面三只只给运营决定口那一路（HandleSignal）用：按标识找发作期、按包裹反查客户、把同一份披露上的发送排成一列。
+	EpisodeByID ports.SignalEpisodeLookup
+	Customers   ports.ParcelCustomerAccountView
+	SendLock    ports.NotificationSendLock
+}
+
+// NotifySignalCommand 是操作员指名「把这一期信号的披露通知客户」：包裹、信号类型与哪一期。客户不在命令里——由包裹的
+// 已接受委托反查；通知内容、渠道与时限也不在——取披露决定的内容快照与通知策略。首次发送与失败后的重发是同一条命令。
+type NotifySignalCommand struct {
+	TenantID domain.TenantID
+	Parcel   domain.TrackedParcelReference
+	Kind     domain.ExceptionSignalKindReference
+	Episode  domain.EpisodeID
+	Operator string
+}
+
+// HandleSignal 是 `UC-VE-006` 步 6 的运营入口：找到指名的那一期（标识不属于这件包裹这一类信号即未受理）→ 反查客户
+// 归属（不可确定即未决）→ 把这份披露上的发送排成一列 → 交给 Handle。
+func (handler *NotifyCustomerHandler) HandleSignal(ctx context.Context, command NotifySignalCommand) (NotifyCustomerResult, error) {
+	if command.TenantID.String() == "" || command.Parcel.String() == "" || command.Kind.String() == "" ||
+		command.Episode.String() == "" || command.Operator == "" {
+		return NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
+	}
+	if handler.deps.EpisodeByID == nil || handler.deps.Customers == nil || handler.deps.SendLock == nil {
+		return NotifyCustomerResult{}, fmt.Errorf("notify customer: the operator entry is not fully wired")
+	}
+	episode, found, err := handler.deps.EpisodeByID.FindEpisode(ctx, command.TenantID, command.Parcel, command.Kind, command.Episode)
+	if err != nil {
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationEpisodeStoreUnavailable}, nil
+	}
+	if !found || episode == nil {
+		return NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
+	}
+	customer, determinable, err := handler.deps.Customers.FindCustomerAccount(ctx, command.TenantID, command.Parcel)
+	if err != nil {
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationCustomerAccountUnavailable}, nil
+	}
+	if !determinable {
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationCustomerAccountUndeterminable}, nil
+	}
+	if err := handler.deps.SendLock.LockDisclosure(ctx, command.TenantID, episode.ID(), customer); err != nil {
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
+	}
+	return handler.Handle(ctx, NotifyCustomerCommand{TenantID: command.TenantID, Episode: episode.ID(), Customer: customer})
 }
 
 type NotifyCustomerHandler struct {
@@ -236,6 +298,14 @@ func (handler *NotifyCustomerHandler) submit(
 	milestone := domain.NotificationSubmittedToChannel
 	outcome := NotificationSubmitted
 	if err := handler.deps.Channel.SubmitToChannel(ctx, notification); err != nil {
+		// 渠道没登记、凭据变量没有值：没有东西发出去，如实答未决（装配点据此回滚，连「已生成」也不留——留下一份永远
+		// 发不出去的通知等于替租户记了一次没发生过的生成）。
+		switch {
+		case errors.Is(err, ports.ErrNotificationChannelNotConfigured):
+			return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationChannelNotConfigured}, nil
+		case errors.Is(err, ports.ErrNotificationChannelCredentialMissing):
+			return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationChannelCredentialMissing}, nil
+		}
 		milestone = domain.NotificationFailed
 		outcome = NotificationSubmissionFailed
 	}

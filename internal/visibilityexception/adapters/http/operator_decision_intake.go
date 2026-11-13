@@ -31,6 +31,8 @@ const (
 	// 客户可见异常披露上的两种：发起披露判断、确认发布一份待授权的决定。
 	OperatorDecisionCustomerDisclosureDecision      OperatorDecision = "CUSTOMER_DISCLOSURE_DECISION"
 	OperatorDecisionCustomerDisclosureAuthorization OperatorDecision = "CUSTOMER_DISCLOSURE_AUTHORIZATION"
+	// 把一份已成立的披露决定通知客户（首发与重发）。
+	OperatorDecisionCustomerExceptionNotification OperatorDecision = "CUSTOMER_EXCEPTION_NOTIFICATION"
 )
 
 // maxDecisionBytes 是一份运营决定载荷的上限：三口的载荷都只有几个标识和一段结论。

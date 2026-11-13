@@ -227,6 +227,10 @@ const (
 	DecisionCustomerDisclosureAuthorization DecisionKind = "CUSTOMER_DISCLOSURE_AUTHORIZATION"
 )
 
+// DecisionCustomerExceptionNotification 是把一份已成立的`披露`决定通知客户：首次发送与失败后的重发是同一种决定。它与
+// 披露授权分开授予——确认可以披露的人不因此是按下发送的人。
+const DecisionCustomerExceptionNotification DecisionKind = "CUSTOMER_EXCEPTION_NOTIFICATION"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -264,6 +268,7 @@ var decisionKinds = []DecisionKind{
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,
 	DecisionCustomerDisclosureDecision, DecisionCustomerDisclosureAuthorization,
+	DecisionCustomerExceptionNotification,
 }
 
 // DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。

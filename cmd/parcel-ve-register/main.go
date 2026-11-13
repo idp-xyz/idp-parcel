@@ -86,6 +86,7 @@ const (
 	commandDepartureGateSignalRule   = "departure-gate-signal-rule"
 	commandMaterialReceipt           = "claim-material-receipt"
 	commandMaterialReceiptRevocation = "claim-material-receipt-revocation"
+	commandNotificationChannel       = "notification-channel"
 )
 
 // registerCommands 是本入口开的全部登记种类，用法提示与路由共用一份，不各列一遍。
@@ -103,6 +104,7 @@ var registerCommands = []string{
 	commandDepartureGateSignalRule,
 	commandMaterialReceipt,
 	commandMaterialReceiptRevocation,
+	commandNotificationChannel,
 }
 
 type systemClock struct{}
@@ -138,6 +140,7 @@ var _ executionTracer = (*vepg.ChannelExecutions)(nil)
 type registrars struct {
 	catalogs   *application.CatalogRegistration
 	receipts   *application.MaterialReceiptRegistration
+	channels   *vepg.NotificationChannels
 	tracer     executionTracer
 	transactor bentoapp.Transactor
 	clock      ports.Clock
@@ -256,7 +259,12 @@ func buildRegistrars(db *bentopg.DB) (registrars, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造留痕库：%w", err)
 	}
+	channels, err := vepg.NewNotificationChannels(db)
+	if err != nil {
+		return none, fmt.Errorf("构造通知渠道登记册：%w", err)
+	}
 	return registrars{
+		channels:   channels,
 		catalogs:   catalogs,
 		receipts:   receipts,
 		tracer:     tracer,
@@ -399,6 +407,9 @@ func execute(
 ) (string, int) {
 	if command == commandMaterialReceipt || command == commandMaterialReceiptRevocation {
 		return executeMaterialReceipt(ctx, command, raw, identity, regs)
+	}
+	if command == commandNotificationChannel {
+		return executeNotificationChannel(ctx, raw, identity, regs)
 	}
 	reg, err := translateCommand(command, raw)
 	if err != nil {
@@ -562,4 +573,34 @@ func catalogAnswer(command string, result application.RegisterCatalogResult) (st
 	default:
 		return fmt.Sprintf("%s: 未知用例结果 %d", command, result.Outcome()), exitUndecided
 	}
+}
+
+// executeNotificationChannel 登记或换掉一个通知渠道的推送端点（通知策略只指名渠道引用，往哪里推由这里登）。它没有
+// 版本与区间：同一（租户，渠道引用）重登即换端点，所以答案只有已登记、输入被拒与未决三种。登记与留痕同一笔事务。
+func executeNotificationChannel(ctx context.Context, raw []byte, identity channelIdentity, regs registrars) (string, int) {
+	tenant, channel, err := registrationjson.NotificationChannelFromJSON(raw)
+	if err != nil {
+		return fmt.Sprintf("%s: 输入被拒：%v", commandNotificationChannel, err), exitUsage
+	}
+	if regs.channels == nil {
+		return commandNotificationChannel + ": 未决：通知渠道登记册没有装配", exitUndecided
+	}
+	err = regs.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		now := regs.clock.Now()
+		if err := regs.channels.RegisterChannel(txCtx, tenant, channel, now); err != nil {
+			return err
+		}
+		return regs.tracer.Append(txCtx, vepg.ChannelExecution{
+			Command:         commandNotificationChannel,
+			RecordReference: tenant.String() + "/" + channel.Channel().String(),
+			OSUser:          identity.osUser,
+			Hostname:        identity.hostname,
+			Outcome:         application.CatalogRegistered.String(),
+			ExecutedAt:      now,
+		})
+	})
+	if err != nil {
+		return fmt.Sprintf("%s: 未决：%v", commandNotificationChannel, err), exitUndecided
+	}
+	return commandNotificationChannel + ": " + application.CatalogRegistered.String(), exitRegistered
 }

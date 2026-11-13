@@ -2445,3 +2445,9 @@ func (unwiredCustomerDisclosure) Handle(context.Context, visibilityapp.DecideDis
 func (unwiredCustomerDisclosure) Authorize(context.Context, visibilityapp.AuthorizeDisclosureCommand) (visibilityapp.DecideDisclosureResult, error) {
 	return visibilityapp.DecideDisclosureResult{}, errOrchestrationNotWired
 }
+
+type unwiredCustomerExceptionNotification struct{}
+
+func (unwiredCustomerExceptionNotification) HandleSignal(context.Context, visibilityapp.NotifySignalCommand) (visibilityapp.NotifyCustomerResult, error) {
+	return visibilityapp.NotifyCustomerResult{}, errOrchestrationNotWired
+}

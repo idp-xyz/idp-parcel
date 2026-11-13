@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -176,5 +180,127 @@ func TestTheProductionDisclosureFacesDecideAndAuthorizeOnceAgainstARealDatabase(
 	}
 	if decisionRows("episode_id = 'SYN-EPISODE-DISC-01' AND conclusion = 'DISCLOSE' AND content_ref = 'SYN-content/eta-breach/v1' AND authorizes_decided_at IS NOT NULL") != 1 || decisionRows("true") != 2 {
 		t.Fatalf("披露决定 %d 行、共 %d 行，想要 1 与 2", decisionRows("conclusion = 'DISCLOSE'"), decisionRows("true"))
+	}
+
+	// —— UC-VE-006 步 6：把这份披露通知客户，经生产装配的通知口走一遍 ——
+	var pushes atomic.Int32
+	var pushStatus atomic.Int32
+	pushStatus.Store(http.StatusInternalServerError)
+	var lastKey atomic.Value
+	customerSystem := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		pushes.Add(1)
+		lastKey.Store(request.Header.Get("Idempotency-Key") + "|" + request.Header.Get("Authorization"))
+		response.WriteHeader(int(pushStatus.Load()))
+	}))
+	defer customerSystem.Close()
+	notifier, err := buildCustomerExceptionNotificationFace(db, func(name string) string {
+		if name == "SYN_CUSTOMER_HOOK_TOKEN" {
+			return "SYN-token"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	notify := visibilityapp.NotifySignalCommand{TenantID: tenant, Parcel: tracked, Kind: kind, Episode: episode.ID(), Operator: "https://id.syn.example/dex#SYN-OPERATOR-04"}
+	notificationRows := func() (count int) {
+		t.Helper()
+		if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM visibility_exception.customer_notification WHERE tenant_id = 'SYN-TENANT-01'`).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	undecidedFor := func(stage string, reason visibilityapp.NotifyCustomerUndecidedReason) {
+		t.Helper()
+		result, err := notifier.HandleSignal(t.Context(), notify)
+		if err != nil || result.Outcome() != visibilityapp.NotifyUndecided || result.UndecidedReason() != reason || notificationRows() != 0 || pushes.Load() != 0 {
+			t.Fatalf("%s：err=%v outcome=%q reason=%q 通知 %d 行 推送 %d 次", stage, err, result.Outcome(), result.UndecidedReason(), notificationRows(), pushes.Load())
+		}
+	}
+	undecidedFor("通知策略未登记", visibilityapp.NotificationPolicyNotConfigured)
+
+	channelRef := mustValue(t, vedomain.NewNotificationChannelReference, "SYN-customer-webhook")
+	if err := transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		_, err := registrar.RegisterNotificationPolicy(txCtx, tenant, veports.NotificationPolicyRegistration{
+			Policy: mustValue(t, vedomain.NewDisclosurePolicyReference, "SYN-exception-disclosure/v1"), Channel: channelRef,
+			DeadlineAfter: 24 * time.Hour, Obligation: mustValue(t, vedomain.NewDisclosurePolicyReference, "SYN-notify-policy/v1"), ApprovedBy: "SYN-OPERATOR-01",
+		})
+		return err
+	}); err != nil {
+		t.Fatalf("登通知策略：%v", err)
+	}
+	undecidedFor("渠道未登记", visibilityapp.NotificationChannelNotConfigured)
+
+	channels, err := vepostgres.NewNotificationChannels(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerChannel := func(credential string) {
+		t.Helper()
+		endpoint, err := vedomain.NewNotificationChannelEndpoint(channelRef, customerSystem.URL+"/hooks/exceptions", credential)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			return channels.RegisterChannel(txCtx, tenant, endpoint, time.Now())
+		}); err != nil {
+			t.Fatalf("登通知渠道：%v", err)
+		}
+	}
+	registerChannel("SYN_UNSET_VARIABLE")
+	undecidedFor("凭据变量没有值", visibilityapp.NotificationChannelCredentialMissing)
+	registerChannel("SYN_CUSTOMER_HOOK_TOKEN")
+
+	// 客户系统答 500：记下`失败`节点，通知留着等重发。
+	sent, err := notifier.HandleSignal(t.Context(), notify)
+	if err != nil || sent.Outcome() != visibilityapp.NotificationSubmissionFailed || notificationRows() != 1 || pushes.Load() != 1 {
+		t.Fatalf("客户系统答 500：err=%v outcome=%q 通知 %d 行 推送 %d 次", err, sent.Outcome(), notificationRows(), pushes.Load())
+	}
+	// 另一个租户、没有披露决定的第二期：都不受理，不推。
+	foreignNotify := notify
+	foreignNotify.TenantID = mustValue(t, vedomain.NewTenantID, "SYN-TENANT-02")
+	undisclosed := notify
+	undisclosed.Episode = later.ID()
+	for name, command := range map[string]visibilityapp.NotifySignalCommand{"另一个租户": foreignNotify, "没有披露决定的那一期": undisclosed} {
+		if sent, err = notifier.HandleSignal(t.Context(), command); err != nil || sent.Outcome() != visibilityapp.NotifyNotAccepted || pushes.Load() != 1 {
+			t.Fatalf("%s：err=%v outcome=%q 推送 %d 次", name, err, sent.Outcome(), pushes.Load())
+		}
+	}
+
+	// 客户系统恢复：两个人同时重发，恰推一次——一人答已提交、一人答已有结果，过程节点接在失败之后。
+	pushStatus.Store(http.StatusNoContent)
+	resend := make(chan struct{})
+	resent := make(chan visibilityapp.NotifyCustomerOutcome, 2)
+	for range 2 {
+		go func() {
+			<-resend
+			result, err := notifier.HandleSignal(context.Background(), notify)
+			if err != nil {
+				t.Errorf("重发：%v", err)
+			}
+			resent <- result.Outcome()
+		}()
+	}
+	close(resend)
+	got := map[visibilityapp.NotifyCustomerOutcome]int{}
+	for range 2 {
+		got[<-resent]++
+	}
+	if got[visibilityapp.NotificationSubmitted] != 1 || got[visibilityapp.NotificationExistingResult] != 1 || pushes.Load() != 2 {
+		t.Fatalf("两人同时重发 = %v 推送共 %d 次，想要一人已提交、一人已有结果、共 2 次", got, pushes.Load())
+	}
+	if key, _ := lastKey.Load().(string); !strings.HasPrefix(key, "SYN-TENANT-01/SYN-EPISODE-DISC-01/"+syntheticCustomerAccount+"/") || !strings.HasSuffix(key, "|Bearer SYN-token") {
+		t.Fatalf("幂等键与凭据 = %q", key)
+	}
+	var milestones string
+	if err := pool.QueryRow(t.Context(),
+		`SELECT milestones::text FROM visibility_exception.customer_notification WHERE tenant_id = 'SYN-TENANT-01'`).Scan(&milestones); err != nil {
+		t.Fatalf("读过程节点：%v", err)
+	}
+	if !strings.Contains(milestones, "FAILED") || !strings.Contains(milestones, "SUBMITTED_TO_CHANNEL") || strings.Count(milestones, "SUBMITTED_TO_CHANNEL") != 1 {
+		t.Fatalf("过程节点 = %s，想要失败之后接一次已提交", milestones)
+	}
+	if sent, err = notifier.HandleSignal(t.Context(), notify); err != nil || sent.Outcome() != visibilityapp.NotificationExistingResult || pushes.Load() != 2 {
+		t.Fatalf("已提交后再发：err=%v outcome=%q 推送 %d 次", err, sent.Outcome(), pushes.Load())
 	}
 }

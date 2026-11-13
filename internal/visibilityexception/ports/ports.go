@@ -564,6 +564,25 @@ type NotificationChannelGateway interface {
 	SubmitToChannel(ctx context.Context, notification *domain.CustomerNotification) error
 }
 
+// ErrNotificationChannelNotConfigured 由渠道口交回：通知策略指名的渠道，租户没有登记推送端点。这不是一次发送失败——
+// 没有东西离开本进程，也没有可重试的对象；编排据此答未决，不记`失败`节点。
+var ErrNotificationChannelNotConfigured = errors.New("notification channel is not configured")
+
+// ErrNotificationChannelCredentialMissing 由渠道口交回：渠道登的凭据变量在运行环境里没有值。补上环境之前重投只会再答
+// 一次同一格，同样不记`失败`节点。
+var ErrNotificationChannelCredentialMissing = errors.New("notification channel credential is missing")
+
+// NotificationChannelDirectory 按租户与渠道引用找回登记的推送端点。第二个返回值为 false 即这个渠道没有登记。
+type NotificationChannelDirectory interface {
+	FindChannel(ctx context.Context, tenant domain.TenantID, channel domain.NotificationChannelReference) (domain.NotificationChannelEndpoint, bool, error)
+}
+
+// NotificationSendLock 让同一份披露（租户+发作期+客户）上的发送一次只走一笔，锁随事务释放。没有它，两个人同时对一份
+// 失败过的通知重发，会各推一次、各自回填过程节点，后落的那一笔盖掉先落的。
+type NotificationSendLock interface {
+	LockDisclosure(ctx context.Context, tenant domain.TenantID, episode domain.EpisodeID, customer domain.CustomerAccountReference) error
+}
+
 // NotificationHandoffIntent 把通知决定交给适用下游（义务台账、升级判断的输入）。意图
 // 由通知标识认领，重放重发同一份（ADR-0043）。租户随意图到达（ADR-0003）：通知对象
 // 没有租户维，下游按（租户+披露身份）查库。
