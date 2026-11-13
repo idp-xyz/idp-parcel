@@ -27,6 +27,14 @@ func (store disclosureEpisodes) FindLatest(_ context.Context, _ domain.TenantID,
 	return store.episode, true, nil
 }
 
+func (store disclosureEpisodes) FindEpisode(ctx context.Context, tenant domain.TenantID, parcel domain.TrackedParcelReference, kind domain.ExceptionSignalKindReference, id domain.EpisodeID) (*domain.SignalEpisode, bool, error) {
+	episode, found, err := store.FindLatest(ctx, tenant, parcel, kind)
+	if err != nil || !found || episode.ID() != id {
+		return nil, false, err
+	}
+	return episode, true, nil
+}
+
 type disclosureCustomers struct{ found bool }
 
 func (customers *disclosureCustomers) FindCustomerAccount(context.Context, domain.TenantID, domain.TrackedParcelReference) (domain.CustomerAccountReference, bool, error) {
@@ -125,7 +133,7 @@ func newDisclosureOrchestration(t *testing.T) *disclosureOrchestration {
 	}
 	book := &disclosureBook{}
 	handler := application.NewDecideDisclosureHandler(application.DecideDisclosureDeps{
-		Episodes: disclosureEpisodes{episode: episode}, Customers: fixture.customers, Rules: fixture.rules,
+		Episodes: disclosureEpisodes{episode: episode}, EpisodeByID: disclosureEpisodes{episode: episode}, Customers: fixture.customers, Rules: fixture.rules,
 		Decisions: book, Ledger: book, Clock: fixture.clock,
 	})
 	intake, err := visibilityhttp.NewOperatorDecisionIntake(caseDecisionAuthenticator{})

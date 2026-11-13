@@ -79,7 +79,7 @@ func TestTheProductionDisclosureFacesDecideAndAuthorizeOnceAgainstARealDatabase(
 	if err != nil {
 		t.Fatal(err)
 	}
-	decide := visibilityapp.DecideDisclosureCommand{TenantID: tenant, Parcel: tracked, Kind: kind, Operator: "https://id.syn.example/dex#SYN-OPERATOR-01"}
+	decide := visibilityapp.DecideDisclosureCommand{TenantID: tenant, Parcel: tracked, Kind: kind, Episode: episode.ID(), Operator: "https://id.syn.example/dex#SYN-OPERATOR-01"}
 	decisionRows := func(where string) (count int) {
 		t.Helper()
 		if err := pool.QueryRow(t.Context(),
@@ -128,12 +128,38 @@ func TestTheProductionDisclosureFacesDecideAndAuthorizeOnceAgainstARealDatabase(
 		t.Fatalf("重判：err=%v outcome=%q", err, result.Outcome())
 	}
 
+	// 同一件包裹同一类信号因另一个原因又开了一期、成了最近的那一期：对原来那一期的确认仍落在原来那一期上。
+	laterFact := mustValue(t, vedomain.NewSourceFactReference, "movement-fact/"+parcel+"/MF-2")
+	laterCause, err := vedomain.SourceFactCausalCondition(vedomain.SourceTransportFulfillment, laterFact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	later, err := vedomain.OpenEpisode(mustValue(t, vedomain.NewEpisodeID, "SYN-EPISODE-DISC-02"), vedomain.SignalHit{
+		Kind: kind, Parcel: tracked, Cause: laterCause, Rule: signalRule, Confidence: confidence,
+		Basis: []vedomain.SignalFactBasis{{
+			Source: vedomain.SourceTransportFulfillment, Fact: laterFact, Version: mustValue(t, vedomain.NewSourceFactVersion, "v1"),
+		}},
+		At: raisedAt.Add(30 * time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	laterConclusion, err := vedomain.ConcludeTriage(later.ID(), vedomain.ManualReviewRequired, signalRule, raisedAt.Add(30*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		return episodes.SaveRaised(txCtx, veports.RaisedSignalRecord{Tenant: tenant, Parcel: tracked, Kind: kind, Episode: later, Conclusion: laterConclusion})
+	}); err != nil {
+		t.Fatalf("落第二期：%v", err)
+	}
+
 	start := make(chan struct{})
 	outcomes := make(chan visibilityapp.DecideDisclosureOutcome, 2)
 	for _, operator := range []string{"https://id.syn.example/dex#SYN-OPERATOR-02", "https://id.syn.example/dex#SYN-OPERATOR-03"} {
 		go func() {
 			<-start
-			result, err := faces.Authorize(context.Background(), visibilityapp.AuthorizeDisclosureCommand{TenantID: tenant, Parcel: tracked, Kind: kind, Operator: operator})
+			result, err := faces.Authorize(context.Background(), visibilityapp.AuthorizeDisclosureCommand{TenantID: tenant, Parcel: tracked, Kind: kind, Episode: episode.ID(), Operator: operator})
 			if err != nil {
 				t.Errorf("确认：%v", err)
 			}
@@ -148,7 +174,7 @@ func TestTheProductionDisclosureFacesDecideAndAuthorizeOnceAgainstARealDatabase(
 	if seen[visibilityapp.DisclosureAuthorized] != 1 || seen[visibilityapp.DisclosureExistingResult] != 1 {
 		t.Fatalf("两人同时确认 = %v，想要一人已授权、一人已有结果", seen)
 	}
-	if decisionRows("conclusion = 'DISCLOSE' AND content_ref = 'SYN-content/eta-breach/v1' AND authorizes_decided_at IS NOT NULL") != 1 || decisionRows("true") != 2 {
+	if decisionRows("episode_id = 'SYN-EPISODE-DISC-01' AND conclusion = 'DISCLOSE' AND content_ref = 'SYN-content/eta-breach/v1' AND authorizes_decided_at IS NOT NULL") != 1 || decisionRows("true") != 2 {
 		t.Fatalf("披露决定 %d 行、共 %d 行，想要 1 与 2", decisionRows("conclusion = 'DISCLOSE'"), decisionRows("true"))
 	}
 }

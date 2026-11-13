@@ -52,6 +52,19 @@ func (repository *SignalEpisodes) FindLatest(
 	return repository.findLatest(ctx, tenant, parcel, kind, ``)
 }
 
+var _ ports.SignalEpisodeLookup = (*SignalEpisodes)(nil)
+
+// FindEpisode 按标识找回这件对象这一类信号的那一期；标识不属于它们就答没有。
+func (repository *SignalEpisodes) FindEpisode(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	kind domain.ExceptionSignalKindReference,
+	episode domain.EpisodeID,
+) (*domain.SignalEpisode, bool, error) {
+	return repository.findLatest(ctx, tenant, parcel, kind, ` AND episode_id = $4`, episode.String())
+}
+
 func (repository *SignalEpisodes) findLatest(
 	ctx context.Context,
 	tenant domain.TenantID,

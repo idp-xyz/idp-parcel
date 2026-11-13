@@ -345,6 +345,19 @@ type SignalEpisodeStore interface {
 	SaveHit(ctx context.Context, tenant domain.TenantID, episode *domain.SignalEpisode) error
 }
 
+// SignalEpisodeLookup 按标识找回一期发作期，供指名了哪一期的读者（披露的两个运营决定口）用。对象与类型一并给：标识
+// 对不上这件对象这一类信号就答没有，调用方不必再核一遍。同一件对象同一类信号可以因不同的因果条件同时有几期，「最近
+// 的那一期」会随新命中换人，人作的决定必须钉在他看过的那一期上。
+type SignalEpisodeLookup interface {
+	FindEpisode(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.TrackedParcelReference,
+		kind domain.ExceptionSignalKindReference,
+		episode domain.EpisodeID,
+	) (*domain.SignalEpisode, bool, error)
+}
+
 // SignalEpisodeIdentityFactory 签发发作期标识。与视图、投影身份工厂分开，理由相同：
 // 不同用例触发，合并会让一个编排依赖它根本不签发的身份。
 type SignalEpisodeIdentityFactory interface {

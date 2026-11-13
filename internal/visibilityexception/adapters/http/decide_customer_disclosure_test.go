@@ -31,8 +31,8 @@ func (stub *disclosureDeciderStub) Authorize(_ context.Context, command applicat
 }
 
 type disclosureAnswer struct {
-	Outcome, Reason, Conclusion, Customer, Policy, Content, DecidedAt string
-	Error                                                             struct{ Code string }
+	Outcome, Reason, EpisodeID, Conclusion, Customer, Policy, Content, DecidedAt string
+	Error                                                                        struct{ Code string }
 }
 
 func disclosureEndpointsForTest(t *testing.T, authErr error) (http.Handler, http.Handler, *disclosureDeciderStub, *[]visibilityhttp.OperatorDecision) {
@@ -61,7 +61,7 @@ func TestDisclosureFacesAuthenticateUnderTheirOwnDecisionKindsAndTakeIdentityFro
 	decide, authorize, stub, asked := disclosureEndpointsForTest(t, nil)
 	stub.err = errors.New("编排不在本用例的范围")
 
-	body := `{"parcel":"SYN-PARCEL-1","signalKind":"ETA_BREACH_RISK"}`
+	body := `{"parcel":"SYN-PARCEL-1","signalKind":"ETA_BREACH_RISK","episodeId":"episode-1","episodeId":"episode-1"}`
 	if status, _ := serveRaw(t, decide, "t", body); status != http.StatusInternalServerError {
 		t.Fatalf("编排报错该答 500，实得 %d", status)
 	}
@@ -77,19 +77,20 @@ func TestDisclosureFacesAuthenticateUnderTheirOwnDecisionKindsAndTakeIdentityFro
 	}
 	decided, authorized := stub.decided[0], stub.authorizations[0]
 	if decided.TenantID.String() != "SYN-TENANT-01" || decided.Operator != "https://issuer#alice" ||
-		decided.Parcel.String() != "SYN-PARCEL-1" || decided.Kind.String() != "ETA_BREACH_RISK" {
+		decided.Parcel.String() != "SYN-PARCEL-1" || decided.Kind.String() != "ETA_BREACH_RISK" || decided.Episode.String() != "episode-1" {
 		t.Fatalf("披露判断命令 = %+v", decided)
 	}
-	if authorized.TenantID.String() != "SYN-TENANT-01" || authorized.Operator != "https://issuer#alice" || authorized.Parcel.String() != "SYN-PARCEL-1" {
+	if authorized.TenantID.String() != "SYN-TENANT-01" || authorized.Operator != "https://issuer#alice" || authorized.Parcel.String() != "SYN-PARCEL-1" || authorized.Episode.String() != "episode-1" {
 		t.Fatalf("披露授权命令 = %+v", authorized)
 	}
 
 	for name, malformed := range map[string]string{
-		"带了结论":   `{"parcel":"SYN-PARCEL-1","signalKind":"ETA_BREACH_RISK","conclusion":"DISCLOSE"}`,
-		"带了租户":   `{"parcel":"SYN-PARCEL-1","signalKind":"ETA_BREACH_RISK","tenantId":"other"}`,
-		"带了内容":   `{"parcel":"SYN-PARCEL-1","signalKind":"ETA_BREACH_RISK","content":"x"}`,
-		"没有包裹":   `{"signalKind":"ETA_BREACH_RISK"}`,
-		"没有类型":   `{"parcel":"SYN-PARCEL-1"}`,
+		"带了结论":   `{"parcel":"SYN-PARCEL-1","signalKind":"ETA_BREACH_RISK","episodeId":"episode-1","conclusion":"DISCLOSE"}`,
+		"带了租户":   `{"parcel":"SYN-PARCEL-1","signalKind":"ETA_BREACH_RISK","episodeId":"episode-1","tenantId":"other"}`,
+		"带了内容":   `{"parcel":"SYN-PARCEL-1","signalKind":"ETA_BREACH_RISK","episodeId":"episode-1","content":"x"}`,
+		"没有包裹":   `{"signalKind":"ETA_BREACH_RISK","episodeId":"episode-1","episodeId":"episode-1"}`,
+		"没有类型":   `{"parcel":"SYN-PARCEL-1","episodeId":"episode-1"}`,
+		"没有哪一期":  `{"parcel":"SYN-PARCEL-1","signalKind":"ETA_BREACH_RISK"}`,
 		"不是JSON": `parcel=1`,
 	} {
 		for _, endpoint := range []http.Handler{decide, authorize} {
@@ -115,7 +116,7 @@ func TestDisclosureFacesAuthenticateUnderTheirOwnDecisionKindsAndTakeIdentityFro
 func TestDisclosureAnswersAreTranscribedByOutcome(t *testing.T) {
 	fixture := newDisclosureOrchestration(t)
 	decide, authorize := fixture.decide, fixture.authorize
-	body := `{"parcel":"parcel-1","signalKind":"ETA_BREACH_RISK"}`
+	body := `{"parcel":"parcel-1","signalKind":"ETA_BREACH_RISK","episodeId":"episode-1","episodeId":"episode-1"}`
 
 	fixture.rules.configured = false
 	if status, answer := serveDisclosure(t, decide, "t", body); status != http.StatusOK || answer.Outcome != "UNDECIDED" || answer.Reason != "DISCLOSURE_RULE_NOT_CONFIGURED" {
@@ -132,7 +133,7 @@ func TestDisclosureAnswersAreTranscribedByOutcome(t *testing.T) {
 		t.Fatalf("没判过就确认：status %d answer %+v", status, answer)
 	}
 	status, answer := serveDisclosure(t, decide, "t", body)
-	if status != http.StatusCreated || answer.Outcome != "DECIDED" || answer.Conclusion != "AWAITING_AUTHORIZATION" ||
+	if status != http.StatusCreated || answer.Outcome != "DECIDED" || answer.EpisodeID != "episode-1" || answer.Conclusion != "AWAITING_AUTHORIZATION" ||
 		answer.Customer != "customer-1" || answer.Policy != "exception-disclosure/v1" || answer.Content != "" || answer.DecidedAt != "2026-11-13T02:00:00Z" {
 		t.Fatalf("判出待授权：status %d answer %+v", status, answer)
 	}
@@ -148,7 +149,7 @@ func TestDisclosureAnswersAreTranscribedByOutcome(t *testing.T) {
 	if status, answer = serveDisclosure(t, authorize, "t", body); status != http.StatusOK || answer.Outcome != "EXISTING_RESULT" || answer.Conclusion != "DISCLOSE" {
 		t.Fatalf("再确认：status %d answer %+v", status, answer)
 	}
-	if status, answer = serveDisclosure(t, decide, "t", `{"parcel":"parcel-none","signalKind":"ETA_BREACH_RISK"}`); status != http.StatusOK || answer.Outcome != "NOT_ACCEPTED" {
+	if status, answer = serveDisclosure(t, decide, "t", `{"parcel":"parcel-none","signalKind":"ETA_BREACH_RISK","episodeId":"episode-1","episodeId":"episode-1"}`); status != http.StatusOK || answer.Outcome != "NOT_ACCEPTED" {
 		t.Fatalf("没有信号的包裹：status %d answer %+v", status, answer)
 	}
 	fixture.customers.found = false

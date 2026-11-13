@@ -93,6 +93,8 @@ type DecideDisclosureCommand struct {
 	TenantID domain.TenantID
 	Parcel   domain.TrackedParcelReference
 	Kind     domain.ExceptionSignalKindReference
+	// Episode 指名判哪一期。运营决定口必给：人判的是他看过的那一期。留空取这一类最近的那一期，给不经人的入口用。
+	Episode domain.EpisodeID
 	// Operator 是经运营决定口发起这次判断的操作者，只取认证结果。不经运营口的入口留空，那一行就没有决定人。
 	Operator string
 }
@@ -103,6 +105,8 @@ type AuthorizeDisclosureCommand struct {
 	TenantID domain.TenantID
 	Parcel   domain.TrackedParcelReference
 	Kind     domain.ExceptionSignalKindReference
+	// Episode 必给：同一件包裹同一类信号可以同时有几期，确认的是确认人看过的那一期，不是此刻最近的那一期。
+	Episode  domain.EpisodeID
 	Operator string
 }
 
@@ -127,10 +131,12 @@ func (result DecideDisclosureResult) UndecidedReason() DecideDisclosureUndecided
 }
 
 type DecideDisclosureDeps struct {
-	Episodes  ports.SignalEpisodeStore
-	Customers ports.ParcelCustomerAccountView
-	Rules     ports.ExceptionDisclosureRuleView
-	Decisions ports.DisclosureDecisionStore
+	Episodes ports.SignalEpisodeStore
+	// EpisodeByID 按标识找发作期。命令指名了哪一期而它不在是装配缺陷。
+	EpisodeByID ports.SignalEpisodeLookup
+	Customers   ports.ParcelCustomerAccountView
+	Rules       ports.ExceptionDisclosureRuleView
+	Decisions   ports.DisclosureDecisionStore
 	// Ledger 记决定上由人作出的那一半。只有运营决定口后面的装配给它；命令带了操作者而它不在是装配缺陷。
 	Ledger ports.DisclosureDecisionLedger
 	Clock  ports.Clock
@@ -162,8 +168,14 @@ func (handler *DecideDisclosureHandler) Handle(
 		return DecideDisclosureResult{outcome: DecideDisclosureNotAccepted}, nil
 	}
 
-	episode, found, err := handler.deps.Episodes.FindLatest(ctx, command.TenantID, command.Parcel, command.Kind)
+	if command.Operator != "" && command.Episode.String() == "" {
+		return DecideDisclosureResult{outcome: DecideDisclosureNotAccepted}, nil
+	}
+	episode, found, err := handler.findEpisode(ctx, command.TenantID, command.Parcel, command.Kind, command.Episode)
 	if err != nil {
+		return DecideDisclosureResult{}, err
+	}
+	if episode == nil && found {
 		return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureEpisodeStoreUnavailable}, nil
 	}
 	if !found {
@@ -253,6 +265,7 @@ func (handler *DecideDisclosureHandler) Authorize(
 	if command.TenantID.String() == "" ||
 		command.Parcel.String() == "" ||
 		command.Kind.String() == "" ||
+		command.Episode.String() == "" ||
 		command.Operator == "" {
 		return DecideDisclosureResult{outcome: DecideDisclosureNotAccepted}, nil
 	}
@@ -260,8 +273,11 @@ func (handler *DecideDisclosureHandler) Authorize(
 		return DecideDisclosureResult{}, fmt.Errorf("authorize disclosure: no ledger is wired")
 	}
 
-	episode, found, err := handler.deps.Episodes.FindLatest(ctx, command.TenantID, command.Parcel, command.Kind)
+	episode, found, err := handler.findEpisode(ctx, command.TenantID, command.Parcel, command.Kind, command.Episode)
 	if err != nil {
+		return DecideDisclosureResult{}, err
+	}
+	if episode == nil && found {
 		return DecideDisclosureResult{outcome: DecideDisclosureUndecided, reason: DisclosureEpisodeStoreUnavailable}, nil
 	}
 	if !found {
@@ -326,6 +342,37 @@ func (handler *DecideDisclosureHandler) Authorize(
 	default:
 		return DecideDisclosureResult{}, fmt.Errorf("authorize disclosure: unexpected save outcome %d", saved)
 	}
+}
+
+// findEpisode 找命令指名的那一期；没指名就取这一类最近的那一期。三种答复：找到（期，true，nil）；没有（nil，false，
+// nil）；发作期册读不动（nil，true，nil）——调用方据此答未决。指名了哪一期却没接按标识找的那一只是装配缺陷，上抛。
+func (handler *DecideDisclosureHandler) findEpisode(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.TrackedParcelReference,
+	kind domain.ExceptionSignalKindReference,
+	named domain.EpisodeID,
+) (*domain.SignalEpisode, bool, error) {
+	var (
+		episode *domain.SignalEpisode
+		found   bool
+		err     error
+	)
+	if named.String() == "" {
+		episode, found, err = handler.deps.Episodes.FindLatest(ctx, tenant, parcel, kind)
+	} else {
+		if handler.deps.EpisodeByID == nil {
+			return nil, false, fmt.Errorf("decide disclosure: an episode is named but no episode lookup is wired")
+		}
+		episode, found, err = handler.deps.EpisodeByID.FindEpisode(ctx, tenant, parcel, kind, named)
+	}
+	if err != nil {
+		return nil, true, nil
+	}
+	if !found || episode == nil {
+		return nil, false, nil
+	}
+	return episode, true, nil
 }
 
 // concludeDisclosure 把规则三格译成三态结论。顺序即 `UC-VE-006` 的两道门：先问披露条件

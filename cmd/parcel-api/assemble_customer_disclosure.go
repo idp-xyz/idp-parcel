@@ -55,7 +55,7 @@ func buildCustomerDisclosureFaces(db *bentopg.DB) (customerDisclosureFaces, erro
 			return nil, fmt.Errorf("parcel-api: disclosure rules: %w", err)
 		}
 		return visibilityapp.NewDecideDisclosureHandler(visibilityapp.DecideDisclosureDeps{
-			Episodes: episodes, Customers: customers, Rules: rules, Decisions: decisions, Ledger: decisions, Clock: systemClock{},
+			Episodes: episodes, EpisodeByID: episodes, Customers: customers, Rules: rules, Decisions: decisions, Ledger: decisions, Clock: systemClock{},
 		}), nil
 	}
 	undecided := func(result visibilityapp.DecideDisclosureResult) bool {

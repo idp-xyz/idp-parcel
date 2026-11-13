@@ -23,6 +23,7 @@ type episodeKey struct {
 type episodeStoreDouble struct {
 	latest      map[episodeKey]*domain.SignalEpisode
 	latestKind  map[episodeKey]*domain.SignalEpisode
+	byID        map[string]*domain.SignalEpisode
 	conclusions []domain.TriageConclusion
 	cases       []*domain.ExceptionCase
 	findErr     error

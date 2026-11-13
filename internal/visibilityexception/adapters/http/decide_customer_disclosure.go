@@ -11,7 +11,8 @@ import (
 )
 
 // 本文件是客户可见异常披露的两个运营决定口（UC-VE-006 步 3–5）：对一条异常信号发起披露判断，以及确认发布一份停在
-// `待授权`的决定。两口的载荷相同——指名哪件包裹上的哪一类信号；结论、客户与披露内容都不在载荷里：结论由披露规则给，
+// `待授权`的决定。两口的载荷相同——指名哪件包裹上哪一类信号的哪一期（同一件包裹同一类信号可以因不同原因同时有
+// 几期，人判的、确认的是他看过的那一期）；结论、客户与披露内容都不在载荷里：结论由披露规则给，
 // 客户由包裹的当前已接受委托反查，内容取规则的快照。
 
 // CustomerDisclosureDecider 是两口转交的编排（application.DecideDisclosureHandler）。
@@ -39,48 +40,65 @@ func NewAuthorizeCustomerDisclosureEndpoint(intake CustomerDisclosureIntake, dec
 type CustomerDisclosurePayload struct {
 	Parcel     string `json:"parcel"`
 	SignalKind string `json:"signalKind"`
+	EpisodeID  string `json:"episodeId"`
+}
+
+type customerDisclosureTarget struct {
+	operator OperatorIdentity
+	parcel   domain.TrackedParcelReference
+	kind     domain.ExceptionSignalKindReference
+	episode  domain.EpisodeID
 }
 
 func (intake *OperatorDecisionIntake) customerDisclosureTarget(
 	ctx context.Context,
 	request *http.Request,
 	decision OperatorDecision,
-) (OperatorIdentity, domain.TrackedParcelReference, domain.ExceptionSignalKindReference, error) {
+) (customerDisclosureTarget, error) {
+	none := customerDisclosureTarget{}
 	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), decision)
 	if err != nil {
-		return OperatorIdentity{}, domain.TrackedParcelReference{}, domain.ExceptionSignalKindReference{}, err
+		return none, err
 	}
 	var payload CustomerDisclosurePayload
 	if err := decodeClosedDecision(request.Body, &payload); err != nil {
-		return OperatorIdentity{}, domain.TrackedParcelReference{}, domain.ExceptionSignalKindReference{}, err
+		return none, err
 	}
 	parcel, err := domain.NewTrackedParcelReference(payload.Parcel)
 	if err != nil {
-		return OperatorIdentity{}, domain.TrackedParcelReference{}, domain.ExceptionSignalKindReference{}, fmt.Errorf("%w: parcel: %v", ErrMalformedRequest, err)
+		return none, fmt.Errorf("%w: parcel: %v", ErrMalformedRequest, err)
 	}
 	kind, err := domain.NewExceptionSignalKindReference(payload.SignalKind)
 	if err != nil {
-		return OperatorIdentity{}, domain.TrackedParcelReference{}, domain.ExceptionSignalKindReference{}, fmt.Errorf("%w: signalKind: %v", ErrMalformedRequest, err)
+		return none, fmt.Errorf("%w: signalKind: %v", ErrMalformedRequest, err)
 	}
-	return operator, parcel, kind, nil
+	episode, err := domain.NewEpisodeID(payload.EpisodeID)
+	if err != nil {
+		return none, fmt.Errorf("%w: episodeId: %v", ErrMalformedRequest, err)
+	}
+	return customerDisclosureTarget{operator: operator, parcel: parcel, kind: kind, episode: episode}, nil
 }
 
 // IntakeCustomerDisclosureDecision 按披露判断这一种决定认证。
 func (intake *OperatorDecisionIntake) IntakeCustomerDisclosureDecision(ctx context.Context, request *http.Request) (application.DecideDisclosureCommand, error) {
-	operator, parcel, kind, err := intake.customerDisclosureTarget(ctx, request, OperatorDecisionCustomerDisclosureDecision)
+	target, err := intake.customerDisclosureTarget(ctx, request, OperatorDecisionCustomerDisclosureDecision)
 	if err != nil {
 		return application.DecideDisclosureCommand{}, err
 	}
-	return application.DecideDisclosureCommand{TenantID: operator.Tenant, Parcel: parcel, Kind: kind, Operator: operator.Operator}, nil
+	return application.DecideDisclosureCommand{
+		TenantID: target.operator.Tenant, Parcel: target.parcel, Kind: target.kind, Episode: target.episode, Operator: target.operator.Operator,
+	}, nil
 }
 
 // IntakeCustomerDisclosureAuthorization 按披露授权这一种决定认证。它与披露判断分开授予。
 func (intake *OperatorDecisionIntake) IntakeCustomerDisclosureAuthorization(ctx context.Context, request *http.Request) (application.AuthorizeDisclosureCommand, error) {
-	operator, parcel, kind, err := intake.customerDisclosureTarget(ctx, request, OperatorDecisionCustomerDisclosureAuthorization)
+	target, err := intake.customerDisclosureTarget(ctx, request, OperatorDecisionCustomerDisclosureAuthorization)
 	if err != nil {
 		return application.AuthorizeDisclosureCommand{}, err
 	}
-	return application.AuthorizeDisclosureCommand{TenantID: operator.Tenant, Parcel: parcel, Kind: kind, Operator: operator.Operator}, nil
+	return application.AuthorizeDisclosureCommand{
+		TenantID: target.operator.Tenant, Parcel: target.parcel, Kind: target.kind, Episode: target.episode, Operator: target.operator.Operator,
+	}, nil
 }
 
 func customerDisclosureEndpoint[C any](
@@ -111,6 +129,7 @@ func customerDisclosureEndpoint[C any](
 type customerDisclosureResponse struct {
 	Outcome    string `json:"outcome"`
 	Reason     string `json:"reason,omitempty"`
+	EpisodeID  string `json:"episodeId,omitempty"`
 	Conclusion string `json:"conclusion,omitempty"`
 	Customer   string `json:"customer,omitempty"`
 	Policy     string `json:"policy,omitempty"`
@@ -138,6 +157,7 @@ func writeCustomerDisclosureDecision(response http.ResponseWriter, result applic
 		}
 	}
 	if decision, present := result.Decision(); present {
+		body.EpisodeID = decision.Episode().String()
 		body.Conclusion = decision.Conclusion().String()
 		body.Customer = decision.Customer().String()
 		body.Policy = decision.Policy().String()

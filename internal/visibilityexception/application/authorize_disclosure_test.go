@@ -40,6 +40,24 @@ func (double *disclosureLedgerDouble) SaveAuthorization(_ context.Context, autho
 	return ports.DisclosureDecisionSaved, nil
 }
 
+// episodeByID 按标识在同一只发作期替身里找：标识对不上这件对象这一类信号的任何一期就答没有。
+type episodeByID struct{ episodes *episodeStoreDouble }
+
+func (lookup episodeByID) FindEpisode(_ context.Context, tenant domain.TenantID, parcel domain.TrackedParcelReference, kind domain.ExceptionSignalKindReference, id domain.EpisodeID) (*domain.SignalEpisode, bool, error) {
+	for key, episode := range lookup.episodes.latestKind {
+		if key.tenant == tenant && key.parcel == parcel && key.kind == kind && episode.ID() == id {
+			return episode, true, nil
+		}
+	}
+	for _, episode := range lookup.episodes.byID {
+		snapshot := episode.Snapshot()
+		if snapshot.Parcel == parcel && snapshot.Kind == kind && episode.ID() == id {
+			return episode, true, nil
+		}
+	}
+	return nil, false, nil
+}
+
 type authorizeFixture struct {
 	*decideFixture
 	ledger     *disclosureLedgerDouble
@@ -54,11 +72,12 @@ func newAuthorizeFixture(t *testing.T) *authorizeFixture {
 	base.rules.rule.AutoRelease = false
 	ledger := &disclosureLedgerDouble{decisions: base.decisions}
 	deps := application.DecideDisclosureDeps{
-		Episodes: base.episodes, Customers: base.customers, Rules: base.rules, Decisions: base.decisions, Ledger: ledger,
+		Episodes: base.episodes, EpisodeByID: episodeByID{base.episodes}, Customers: base.customers, Rules: base.rules, Decisions: base.decisions, Ledger: ledger,
 		Clock: fixedClock{at: disclosureEpisodeAt.Add(time.Hour)},
 	}
 	command := decideCommand(t)
 	command.Operator = "https://issuer#alice"
+	command.Episode = mustValue(t, domain.NewEpisodeID, "episode-1")
 	result, err := application.NewDecideDisclosureHandler(deps).Handle(context.Background(), command)
 	if err != nil || result.Outcome() != application.DisclosureDecided {
 		t.Fatalf("预置待授权决定：err=%v outcome=%q", err, result.Outcome())
@@ -70,7 +89,10 @@ func newAuthorizeFixture(t *testing.T) *authorizeFixture {
 func authorizeCommand(t *testing.T) application.AuthorizeDisclosureCommand {
 	t.Helper()
 	base := decideCommand(t)
-	return application.AuthorizeDisclosureCommand{TenantID: base.TenantID, Parcel: base.Parcel, Kind: base.Kind, Operator: "https://issuer#bob"}
+	return application.AuthorizeDisclosureCommand{
+		TenantID: base.TenantID, Parcel: base.Parcel, Kind: base.Kind,
+		Episode: mustValue(t, domain.NewEpisodeID, "episode-1"), Operator: "https://issuer#bob",
+	}
 }
 
 // Covers: `UC-VE-006` 步 5「默认等待授权角色确认」——经运营口判出的决定记下发起人；授权角色确认后形成一份新的`披露`
@@ -113,7 +135,7 @@ func TestOnlyAnAwaitingDecisionCanBeAuthorized(t *testing.T) {
 	undecided := newDecideFixture(t)
 	ledger := &disclosureLedgerDouble{decisions: undecided.decisions}
 	handler := application.NewDecideDisclosureHandler(application.DecideDisclosureDeps{
-		Episodes: undecided.episodes, Customers: undecided.customers, Rules: undecided.rules, Decisions: undecided.decisions,
+		Episodes: undecided.episodes, EpisodeByID: episodeByID{undecided.episodes}, Customers: undecided.customers, Rules: undecided.rules, Decisions: undecided.decisions,
 		Ledger: ledger, Clock: fixedClock{at: disclosureEpisodeAt.Add(2 * time.Hour)},
 	})
 	result, err := handler.Authorize(context.Background(), authorizeCommand(t))
@@ -180,5 +202,47 @@ func TestALostAuthorizationRaceReturnsTheWinner(t *testing.T) {
 	result, err = failing.authorizer.Authorize(context.Background(), authorizeCommand(t))
 	if err != nil || result.Outcome() != application.DecideDisclosureUndecided || result.UndecidedReason() != application.DisclosureDecisionStoreUnavailable {
 		t.Fatalf("决定册写不动：err=%v outcome=%q", err, result.Outcome())
+	}
+}
+
+// Covers: 人作的决定钉在他看过的那一期上。同一件包裹同一类信号因另一个原因又开了一期、成了「最近的那一期」之后，
+// 对原来那一期的确认仍然落在原来那一期；不指名哪一期的确认、经运营口不指名哪一期的判断都不受理；指名一期不属于这件
+// 包裹这一类信号的也不受理。
+func TestAuthorizationStaysOnTheNamedEpisodeWhenANewerOneOpens(t *testing.T) {
+	fixture := newAuthorizeFixture(t)
+	first := fixture.episodes.latestKind[episodeKey{
+		tenant: decideCommand(t).TenantID, parcel: decideCommand(t).Parcel, kind: decideCommand(t).Kind,
+	}]
+	fixture.episodes.byID = map[string]*domain.SignalEpisode{"episode-1": first}
+	later := raiseCommandFor(t, "movement-fact/parcel-1/MF-2", disclosureEpisodeAt.Add(30*time.Minute))
+	second, err := domain.OpenEpisode(mustValue(t, domain.NewEpisodeID, "episode-2"), domain.SignalHit{
+		Kind: later.Kind, Parcel: later.Parcel, Cause: later.Cause, Rule: later.Rule,
+		Confidence: later.Confidence, Basis: later.Basis, At: later.HitAt,
+	})
+	if err != nil {
+		t.Fatalf("open second episode: %v", err)
+	}
+	fixture.episodes.latestKind[episodeKey{tenant: decideCommand(t).TenantID, parcel: later.Parcel, kind: later.Kind}] = second
+
+	result, err := fixture.authorizer.Authorize(context.Background(), authorizeCommand(t))
+	decision, _ := result.Decision()
+	if err != nil || result.Outcome() != application.DisclosureAuthorized || decision.Episode().String() != "episode-1" {
+		t.Fatalf("确认原来那一期：err=%v outcome=%q episode=%q", err, result.Outcome(), decision.Episode())
+	}
+
+	unnamed := authorizeCommand(t)
+	unnamed.Episode = domain.EpisodeID{}
+	if result, err = fixture.authorizer.Authorize(context.Background(), unnamed); err != nil || result.Outcome() != application.DecideDisclosureNotAccepted {
+		t.Fatalf("不指名哪一期的确认：err=%v outcome=%q", err, result.Outcome())
+	}
+	stray := authorizeCommand(t)
+	stray.Episode = mustValue(t, domain.NewEpisodeID, "episode-of-another-parcel")
+	if result, err = fixture.authorizer.Authorize(context.Background(), stray); err != nil || result.Outcome() != application.DecideDisclosureNotAccepted {
+		t.Fatalf("指名别处的一期：err=%v outcome=%q", err, result.Outcome())
+	}
+	operatorWithoutEpisode := decideCommand(t)
+	operatorWithoutEpisode.Operator = "https://issuer#alice"
+	if result, err = fixture.authorizer.Handle(context.Background(), operatorWithoutEpisode); err != nil || result.Outcome() != application.DecideDisclosureNotAccepted {
+		t.Fatalf("经运营口不指名哪一期的判断：err=%v outcome=%q", err, result.Outcome())
 	}
 }
