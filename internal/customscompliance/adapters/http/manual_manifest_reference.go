@@ -68,7 +68,8 @@ func (manual manualManifestIntake) entry(ctx context.Context, request *http.Requ
 	if original == "" || len(original) > 500 || strings.IndexFunc(original, unicode.IsControl) >= 0 {
 		return OperatorIdentity{}, none, "", fmt.Errorf("%w: original is required for a manually entered manifest reference", ErrMalformedRequest)
 	}
-	carrier, err := domain.NewCarrierResponsibilityReference(rawCarrier)
+	// 人手录的标识去首尾空白再用：「CX 」与「CX」是同一家承运商，不去的话会在承运商系统那条引用旁边另起一条。
+	carrier, err := domain.NewCarrierResponsibilityReference(strings.TrimSpace(rawCarrier))
 	if err != nil {
 		return OperatorIdentity{}, none, "", fmt.Errorf("%w: carrier: %v", ErrMalformedRequest, err)
 	}
@@ -86,8 +87,8 @@ func (manual manualManifestIntake) IntakeManifestReference(ctx context.Context, 
 		return none, err
 	}
 	command, err := manifestReferenceDocument{
-		ManifestID: document.ManifestID, Version: document.Version, Procedure: document.Procedure,
-		Direction: document.Direction, Scope: document.Scope, SourceFact: original,
+		ManifestID: strings.TrimSpace(document.ManifestID), Version: strings.TrimSpace(document.Version), Procedure: strings.TrimSpace(document.Procedure),
+		Direction: document.Direction, Scope: strings.TrimSpace(document.Scope), SourceFact: original,
 	}.command(operator.Tenant, carrier, manual.now().UTC())
 	if err != nil {
 		return none, err
@@ -107,7 +108,7 @@ func (manual manualManifestIntake) IntakeManifestRevision(ctx context.Context, r
 		return none, err
 	}
 	command, err := manifestRevisionDocument{
-		ManifestID: document.ManifestID, Version: document.Version, Scope: document.Scope, SourceFact: original,
+		ManifestID: strings.TrimSpace(document.ManifestID), Version: strings.TrimSpace(document.Version), Scope: strings.TrimSpace(document.Scope), SourceFact: original,
 	}.command(operator.Tenant, carrier, manual.now().UTC())
 	if err != nil {
 		return none, err

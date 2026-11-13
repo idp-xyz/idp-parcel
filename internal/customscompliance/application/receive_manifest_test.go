@@ -512,6 +512,23 @@ func TestAManuallyEnteredManifestReferenceIsTheSameReferenceWithAnEntryTrailPerV
 		t.Fatalf("人工版本推进：err=%v outcome=%q 留痕 %+v", err, revised.Outcome(), ledger.entries)
 	}
 
+	// 同一版再推进：范围相同是重放；范围不同是内容冲突，不答已在册——后到的一方不该以为自己那一份落了。
+	if same, err := fixture.handler.Revise(ctx, revise); err != nil || same.Outcome() != application.ManifestExisting {
+		t.Fatalf("同一版同范围再推进：err=%v outcome=%q", err, same.Outcome())
+	}
+	fromCarrier := revise
+	fromCarrier.EnteredBy, fromCarrier.Original = "", ""
+	fromCarrier.Scope = mustValue(t, domain.NewDecisionScopeReference, "movement-other")
+	if conflict, err := fixture.handler.Revise(ctx, fromCarrier); err != nil || conflict.Outcome() != application.ManifestContentConflict || len(ledger.entries) != 2 {
+		t.Fatalf("承运商系统对同一版声明另一个范围：err=%v outcome=%q", err, conflict.Outcome())
+	}
+	// 推回先前录过的版本号：是又一次录入，再记一条留痕。
+	back := revise
+	back.Version, back.Original = mustValue(t, domain.NewManifestSourceVersion, "v1"), "SYN-CARRIER-MANIFEST-MAIL-3"
+	if again, err := fixture.handler.Revise(ctx, back); err != nil || again.Outcome() != application.ManifestRevised || len(ledger.entries) != 3 {
+		t.Fatalf("推回先前的版本号：err=%v outcome=%q 留痕 %d 条", err, again.Outcome(), len(ledger.entries))
+	}
+
 	for name, mutate := range map[string]func(*application.ReceiveManifestCommand){
 		"有录入人没有原件": func(command *application.ReceiveManifestCommand) { command.Original = " " },
 		"有原件没有录入人": func(command *application.ReceiveManifestCommand) { command.EnteredBy = "" },

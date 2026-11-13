@@ -46,7 +46,7 @@ func TestTheManualManifestFacesAuthenticateTheirKindAndTakeTheCarrierFromTheEntr
 		return response.Code
 	}
 
-	serve(receive, `{"manifestId":"SYN-MANIFEST-1","version":"v1","procedure":"SYN-PROC-EXPORT","direction":"EXPORT","scope":"SYN-MOVEMENT-1","carrier":"SYN-CARRIER-X","original":" SYN-MAIL-1 "}`)
+	serve(receive, `{"manifestId":" SYN-MANIFEST-1 ","version":" v1 ","procedure":"SYN-PROC-EXPORT","direction":"EXPORT","scope":"SYN-MOVEMENT-1","carrier":" SYN-CARRIER-X ","original":" SYN-MAIL-1 "}`)
 	serve(revise, `{"manifestId":"SYN-MANIFEST-1","version":"v2","scope":"SYN-MOVEMENT-2","carrier":"SYN-CARRIER-X","original":"SYN-MAIL-2"}`)
 	if len(handler.received) != 1 || len(handler.revised) != 1 || len(asked) != 2 || asked[0] != "EXTERNAL_MANIFEST_ENTRY" || asked[1] != "EXTERNAL_MANIFEST_ENTRY" {
 		t.Fatalf("received = %d, revised = %d, asked = %v", len(handler.received), len(handler.revised), asked)
@@ -54,7 +54,7 @@ func TestTheManualManifestFacesAuthenticateTheirKindAndTakeTheCarrierFromTheEntr
 	first := handler.received[0]
 	if first.TenantID.String() != "SYN-TENANT-01" || first.EnteredBy != "OPERATOR/https://issuer#alice" || first.Original != "SYN-MAIL-1" ||
 		first.Spec.Carrier.String() != "SYN-CARRIER-X" || first.Spec.SourceFact != "SYN-MAIL-1" || !first.Spec.AcceptedAt.Equal(now) ||
-		first.Spec.Manifest.String() != "SYN-MANIFEST-1" {
+		first.Spec.Manifest.String() != "SYN-MANIFEST-1" || first.Spec.Version.String() != "v1" {
 		t.Fatalf("首登命令 = %+v", first)
 	}
 	second := handler.revised[0]

@@ -100,7 +100,9 @@ func (handler *ReceiveManifestHandler) manualEntry(enteredBy, original string) (
 func (handler *ReceiveManifestHandler) recordManualEntry(ctx context.Context, tenant domain.TenantID, reference domain.ExternalManifestReference, enteredBy, original string) bool {
 	return handler.deps.ManualEntries.RecordManualManifestEntry(ctx, ports.ManualManifestEntry{
 		Tenant: tenant, Carrier: reference.Carrier(), Manifest: reference.Manifest(), Version: reference.Version(),
-		EnteredBy: strings.TrimSpace(enteredBy), Original: strings.TrimSpace(original), EnteredAt: handler.deps.Clock.Now(),
+		EnteredBy: strings.TrimSpace(enteredBy), Original: strings.TrimSpace(original),
+		// 取引用上的接受时刻：留痕凭它与在册的那一版对上，同一个版本号被别的来源重新立起来之后不会被读成人录的。
+		EnteredAt: reference.AcceptedAt(),
 	}) == nil
 }
 
@@ -226,6 +228,12 @@ func (handler *ReceiveManifestHandler) Revise(
 		return ManifestResult{outcome: ManifestNotFound}, nil
 	}
 	if current.Version() == command.Version {
+		if current.Scope() != command.Scope {
+			// 同一版、范围却不同：不当重放答已在册。人工录入与承运商系统共用这一条引用之后，这一格可能是两方对同一版各说
+			// 各的——答已在册会让后到的一方以为自己那一份落了，而在册的还是先到的那一份。与首登口同一条判法：内容冲突，
+			// 不覆盖，由人复核。
+			return ManifestResult{outcome: ManifestContentConflict}, nil
+		}
 		return ManifestResult{outcome: ManifestExisting, reference: current, hasRecord: true}, nil
 	}
 

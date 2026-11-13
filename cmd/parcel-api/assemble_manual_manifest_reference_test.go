@@ -97,9 +97,23 @@ func TestManuallyEnteredManifestReferencesRunThroughTheProductionAssembly(t *tes
 		t.Fatalf("人工版本推进 = %d %v", status, answer)
 	}
 
+	// 同一版再推进而范围不同：内容冲突，不答已在册。推回先前录过的版本号是又一次录入，不撞留痕的键。
+	if status, answer = post(reviseFace, clerk, `{"manifestId":"SYN-MANIFEST-MANUAL-1","version":"v2","scope":"SYN-MOVEMENT-OTHER","carrier":"SYN-CARRIER-X","original":"SYN-CARRIER-MANIFEST-MAIL-2"}`); status != http.StatusOK ||
+		answer["outcome"] != "CONTENT_CONFLICT" {
+		t.Fatalf("同一版换了范围再推进 = %d %v", status, answer)
+	}
+	if status, answer = post(reviseFace, clerk, `{"manifestId":"SYN-MANIFEST-MANUAL-1","version":"v1","scope":"SYN-MOVEMENT-1","carrier":" SYN-CARRIER-X ","original":"SYN-CARRIER-MANIFEST-MAIL-3"}`); status != http.StatusCreated ||
+		answer["outcome"] != "REVISED" {
+		t.Fatalf("推回先前的版本号 = %d %v", status, answer)
+	}
+	if status, answer = post(reviseFace, clerk, `{"manifestId":"SYN-MANIFEST-MANUAL-1","version":"v2","scope":"SYN-MOVEMENT-2","carrier":"SYN-CARRIER-X","original":"SYN-CARRIER-MANIFEST-MAIL-2"}`); status != http.StatusCreated ||
+		answer["outcome"] != "REVISED" {
+		t.Fatalf("再推进到 v2 = %d %v", status, answer)
+	}
+
 	rows, err := pool.Query(t.Context(),
 		`SELECT version_id || '|' || entered_by || '|' || original_ref FROM customs_compliance.external_manifest_manual_entry
-		  WHERE tenant_id = $1 AND carrier_ref = 'SYN-CARRIER-X' AND manifest_id = 'SYN-MANIFEST-MANUAL-1' ORDER BY version_id`, customsDecisionTenant)
+		  WHERE tenant_id = $1 AND carrier_ref = 'SYN-CARRIER-X' AND manifest_id = 'SYN-MANIFEST-MANUAL-1' ORDER BY entered_at`, customsDecisionTenant)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +127,8 @@ func TestManuallyEnteredManifestReferencesRunThroughTheProductionAssembly(t *tes
 		trail = append(trail, row)
 	}
 	who := "OPERATOR/" + customsDecisionIssuer + "#" + clerk
-	if len(trail) != 2 || trail[0] != "v1|"+who+"|SYN-CARRIER-MANIFEST-MAIL-1" || trail[1] != "v2|"+who+"|SYN-CARRIER-MANIFEST-MAIL-2" {
+	if len(trail) != 4 || trail[0] != "v1|"+who+"|SYN-CARRIER-MANIFEST-MAIL-1" || trail[1] != "v2|"+who+"|SYN-CARRIER-MANIFEST-MAIL-2" ||
+		trail[2] != "v1|"+who+"|SYN-CARRIER-MANIFEST-MAIL-3" || trail[3] != "v2|"+who+"|SYN-CARRIER-MANIFEST-MAIL-2" {
 		t.Fatalf("留痕 = %v", trail)
 	}
 	var references int

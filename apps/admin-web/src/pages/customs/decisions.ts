@@ -154,7 +154,7 @@ export const manifestEntryOutcomeLabels: Record<string, string> = {
   PENDING_ASSOCIATION: '已录入，暂时没有唯一匹配的报关批次，保持待关联',
   REVISED: '已录入新版本',
   EXISTING: '这一版已经在册',
-  CONTENT_CONFLICT: '同一版在册的内容不同，没有覆盖；请核对后走新版本',
+  CONTENT_CONFLICT: '同一版在册的内容不同，没有覆盖。请先核对是哪一方错了：在册的那份录错了，就用承运商实际给的版本号重新推进；不要自己编一个版本号',
   VERSION_CONFLICT: '在册的是另一个版本；换版本请用「录入外部舱单的新版本」',
   NOT_FOUND: '这家承运商名下找不到这份舱单',
   NOT_ACCEPTED: '内容不完整或不成立，没有受理',
