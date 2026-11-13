@@ -3,6 +3,7 @@ import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { objectNouns } from '../../vocabulary/objects';
+import { manualEntryWord } from '../../vocabulary/provenance';
 import { catalogueConditionsNarrow } from '../catalogue-query';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { pastFirstPage } from '../shipment-request/cursor-pager';
@@ -50,11 +51,11 @@ export function ETAPredictionsTable() {
   const conditions = { q: useSettledKeyword(search) };
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listETAPredictions);
   const rows = answer?.kind === 'outcome' ? answer.body.predictions.map(etaPredictionRowOf) : [];
-  const manual = rows.filter((row) => row.enteredAt !== '').length;
+  const manual = rows.filter((row) => row.entryWord === manualEntryWord).length;
   return (
     <ListPageTemplate<ETAPredictionRow>
       title="预计到达"
-      description="每个包裹到每一步的预计到达时间，显示当前登记的那一版：是承运商告知的还是我们自己估的，是人工录入的还是接口送来的。"
+      description="每个包裹到每一步、按口径各一行的预计到达时间，显示当前登记的那一版：是承运商告知的还是我们自己估的，是人工录入的还是接口送来的。这里是内部登记，客户能否看到由预计到达的展示规则另行判断，不要直接照此答复客户。"
       search={{ value: search, onChange: setSearch, placeholder: '搜包裹号、里程碑、预测版本…' }}
       filterSummary={answer?.kind === 'outcome' ? `本页 ${rows.length} 条 · 其中人工录入 ${manual} 条` : undefined}
       columns={columns}

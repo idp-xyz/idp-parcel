@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -410,6 +411,25 @@ func TestOperationsViewsListManifestReferencesAndTellManualVersions(t *testing.T
 	if empty, err := rowsOf(views.ListExternalManifestReferences(t.Context(), recordTenant(t, "SYN-TENANT-03"), 10,
 		firstPage(t, ports.ExternalManifestReferencePages))); err != nil || len(empty) != 0 {
 		t.Fatalf("空册应答空列表：%v %+v", err, empty)
+	}
+	// 游标翻页：行标识是两列（承运人、舱单号），页源带左连接——逐页取完三份，不重不漏。
+	var walked []string
+	after := url.Values{}
+	for range 4 {
+		page, err := views.ListExternalManifestReferences(t.Context(), tenant, 1, pageQuery(t, ports.ExternalManifestReferencePages, after))
+		if err != nil {
+			t.Fatalf("翻页：%v", err)
+		}
+		for _, row := range page.Rows {
+			walked = append(walked, row.Manifest)
+		}
+		if page.Next == "" {
+			break
+		}
+		after = url.Values{"after": {page.Next}}
+	}
+	if strings.Join(walked, ",") != "MF-MANUAL,MF-MOVED,MF-RESTATED" {
+		t.Fatalf("逐页走出来的次序 = %v", walked)
 	}
 	if _, err := views.ListExternalManifestReferences(t.Context(), tenant, 0, firstPage(t, ports.ExternalManifestReferencePages)); err == nil {
 		t.Fatal("页大小 0 没被拒")

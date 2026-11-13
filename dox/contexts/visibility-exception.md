@@ -170,7 +170,7 @@
 | 案件决定 | `/exception-case-take-ups` `/exception-case-closures` `/exception-case-merges` |
 | 证据决定 | `/evidence-submissions` `/evidence-appraisals` `/evidence-disclosure-preparations` |
 | 披露与通知 | `/customer-disclosure-decisions` `/customer-disclosure-authorizations` `/customer-exception-notifications` |
-| 运营只读 | `/tracking-projections` `/exception-triage-records` `/exception-case-records` `/claims-recovery-records` `/visibility-catalogues` |
+| 运营只读 | `/tracking-projections` `/eta-prediction-records` `/exception-triage-records` `/exception-case-records` `/claims-recovery-records` `/visibility-catalogues` |
 | 目录登记 | `/visibility-catalogue-<种类>-registrations`，种类为 `milestone-mapping` `triage-rule` `notification-policy` `claim-eligibility` `claim-authorization` `disclosure-policy` `exception-disclosure-rule` `conflict-signal-rule` |
 
 事件消费（`cmd/parcel-dispatch`）：节点收寄，场外揽收，运输交接，移动事实，有效交付，异常旅程，外部承运轨迹，出发门禁补问，关务案件建立，申报提交，关务外部结果，初始路由，接受决定，终局，以及本上下文自己的投影派生与 ETA 预测两种事件。撞号重驱也在这个进程里。

@@ -84,6 +84,29 @@ func TestListingCurrentETAPredictionsTellsManualVersionsFromSourceOnes(t *testin
 	if hit, err := rowsOf(fixture.etas.ListCurrentETAPredictions(ctx, tenant, 10, keyword)); err != nil || len(hit) != 1 || hit[0].Version != "ETAV-S2" {
 		t.Fatalf("q 收窄走样：%v %+v", err, hit)
 	}
+	// 游标翻页：页大小 1 逐页取完两条线，不重不漏。
+	var walked []string
+	after := url.Values{}
+	for range 3 {
+		query, err := ports.ETAPredictionPages.Decode(after)
+		if err != nil {
+			t.Fatalf("解游标：%v", err)
+		}
+		page, err := fixture.etas.ListCurrentETAPredictions(ctx, tenant, 1, query)
+		if err != nil {
+			t.Fatalf("翻页：%v", err)
+		}
+		for _, row := range page.Rows {
+			walked = append(walked, row.Version)
+		}
+		if page.Next == "" {
+			break
+		}
+		after = url.Values{"after": {page.Next}}
+	}
+	if len(walked) != 2 || walked[0] != "ETAV-M1" || walked[1] != "ETAV-S2" {
+		t.Fatalf("逐页走出来的次序 = %v", walked)
+	}
 	if _, err := fixture.etas.ListCurrentETAPredictions(ctx, tenant, 0, firstPage(t, ports.ETAPredictionPages)); err == nil {
 		t.Fatal("页大小 0 没被拒")
 	}
