@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/application"
@@ -127,7 +128,8 @@ func (intake *OperatorDecisionIntake) IntakeEvidenceDisclosurePreparation(ctx co
 	if err != nil {
 		return none, fmt.Errorf("%w: redactedDigest: %v", ErrMalformedRequest, err)
 	}
-	return application.PrepareEvidenceDisclosureCommand{TenantID: operator.Tenant, Evidence: id, Redacted: redacted, Scope: payload.Scope}, nil
+	// 披露范围去掉首尾空白再用：「甲」与「 甲」是同一个相对方，不该成两份披露版本。
+	return application.PrepareEvidenceDisclosureCommand{TenantID: operator.Tenant, Evidence: id, Redacted: redacted, Scope: strings.TrimSpace(payload.Scope)}, nil
 }
 
 // investigatedAppraisalFromWord 只收经调查的两种评价。`已收到`不是一次评价的结论——它是起点，写不进来。

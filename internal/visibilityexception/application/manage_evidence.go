@@ -173,6 +173,10 @@ func (handler *ManageEvidenceHandler) SubmitEvidence(
 		command.SubmittedAt.IsZero() {
 		return ManageEvidenceResult{outcome: ManageEvidenceNotAccepted}, nil
 	}
+	// 带了操作者却没有地方记登记人：不受理，不让这份证据不声不响地落成一项没有登记人的。
+	if strings.TrimSpace(command.Operator) != "" && handler.deps.Decisions == nil {
+		return ManageEvidenceResult{outcome: ManageEvidenceNotAccepted}, nil
+	}
 
 	existing, found, err := handler.deps.Evidence.FindByProviderDigest(ctx, command.TenantID, command.Provider, command.Digest)
 	if err != nil {
@@ -223,7 +227,7 @@ func (handler *ManageEvidenceHandler) Appraise(
 	command AppraiseEvidenceCommand,
 ) (ManageEvidenceResult, error) {
 	basis, operator := strings.TrimSpace(command.Basis), strings.TrimSpace(command.Operator)
-	if handler.deps.Decisions == nil || command.TenantID.String() == "" || command.Evidence.String() == "" ||
+	if handler.deps.Decisions == nil || handler.deps.Clock == nil || command.TenantID.String() == "" || command.Evidence.String() == "" ||
 		basis == "" || operator == "" ||
 		(command.Appraisal != domain.EvidenceCredited && command.Appraisal != domain.EvidenceDiscredited) {
 		return ManageEvidenceResult{outcome: ManageEvidenceNotAccepted}, nil
