@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"time"
 
@@ -30,6 +31,11 @@ const (
 	AdjustmentChargeNotConfirmed
 	AdjustmentNotAccepted
 	AdjustmentUndecided
+	// ChargeAdjustmentConflict：同一个调整标识下登的是另一笔内容（另一笔费用、种类、方向或金额）。不当重放交回——只看答复
+	// 名字的调用方会以为这次的金额落了。
+	ChargeAdjustmentConflict
+	// AdjustmentExceedsCharge：这笔贷项落下之后，费用连同它的全部调整会成负数。一笔让利最多让到零。
+	AdjustmentExceedsCharge
 )
 
 func (outcome RecordChargeAdjustmentOutcome) String() string {
@@ -42,6 +48,10 @@ func (outcome RecordChargeAdjustmentOutcome) String() string {
 		return "CHARGE_NOT_CONFIRMED"
 	case AdjustmentNotAccepted:
 		return "SOURCE_NOT_ACCEPTED"
+	case ChargeAdjustmentConflict:
+		return "ADJUSTMENT_CONFLICT"
+	case AdjustmentExceedsCharge:
+		return "ADJUSTMENT_EXCEEDS_CHARGE"
 	case AdjustmentUndecided:
 		return "ADJUSTMENT_UNDECIDED"
 	default:
@@ -116,6 +126,10 @@ type RecordChargeAdjustmentDeps struct {
 	Charges     ports.CustomerChargeStore
 	Adjustments ports.ChargeAdjustmentStore
 	Clock       ports.Clock
+	// Balances 与 Books 让调整落下之后重算客户作用域的已确认未结（与费用确认调用的是同一个函数）。生产装配必给；
+	// 不给时不重算，只供不关心余额的单元测试用。
+	Balances ports.OperationalBalanceAdvance
+	Books    ports.CustomerReceiptBooks
 }
 
 type RecordChargeAdjustmentHandler struct {
@@ -169,6 +183,45 @@ func (handler *RecordChargeAdjustmentHandler) Handle(
 	if err != nil {
 		return RecordChargeAdjustmentResult{outcome: AdjustmentNotAccepted}, nil
 	}
+	chargeCurrency, chargeMinor := charge.SettlementAmount()
+	adjustmentCurrency, adjustmentMinor := adjustment.SettlementAmount()
+	if adjustmentCurrency != chargeCurrency {
+		// 调整进的是费用所在的那个结算作用域：结算币种与费用不同的调整落下之后不进任何余额，登记的人却看到「已登记」。
+		return RecordChargeAdjustmentResult{outcome: AdjustmentNotAccepted}, nil
+	}
+
+	// 应收方向的费用：先锁它的客户作用域，再读既有调整、落这一笔、重算——同一账户上的调整与确认排成一列，两笔各自
+	// 不越界的贷项不会合起来把费用让成负数。
+	facts, _ := charge.ConfirmedFacts()
+	recompute := facts.Direction == domain.ChargeReceivable && handler.deps.Balances != nil && handler.deps.Books != nil
+	var scope domain.SettlementScope
+	if recompute {
+		if scope, err = domain.NewSettlementScope(facts.ResponsibleEntity, facts.SettlementAccount, chargeCurrency); err != nil {
+			return RecordChargeAdjustmentResult{}, fmt.Errorf("record charge adjustment: settlement scope: %w", err)
+		}
+		if err := handler.deps.Balances.LockOperationalBalanceScope(ctx, command.TenantID, scope); err != nil {
+			return handler.registerUndecided(command.AdjustmentID), nil
+		}
+	}
+
+	if existing, present, err := handler.deps.Adjustments.FindByKey(ctx, key); err != nil {
+		return handler.registerUndecided(command.AdjustmentID), nil
+	} else if present {
+		return replayOrConflict(existing.Adjustment, adjustment), nil
+	}
+
+	recorded, err := handler.deps.Adjustments.ListByCharge(ctx, command.TenantID, chargeID)
+	if err != nil {
+		return handler.registerUndecided(command.AdjustmentID), nil
+	}
+	net := chargeMinor + signedAdjustment(adjustment.Direction(), adjustmentMinor)
+	for _, record := range recorded {
+		_, minor := record.Adjustment.SettlementAmount()
+		net += signedAdjustment(record.Adjustment.Direction(), minor)
+	}
+	if net < 0 {
+		return RecordChargeAdjustmentResult{outcome: AdjustmentExceedsCharge}, nil
+	}
 
 	saved, err := handler.deps.Adjustments.Save(ctx, ports.ChargeAdjustmentRecord{
 		Key:        key,
@@ -184,17 +237,49 @@ func (handler *RecordChargeAdjustmentHandler) Handle(
 		if err != nil || !present {
 			return handler.registerUndecided(command.AdjustmentID), nil
 		}
-		return RecordChargeAdjustmentResult{
-			outcome:       ChargeAdjustmentReplayedOutcome,
-			adjustment:    existing.Adjustment,
-			hasAdjustment: true,
-		}, nil
+		return replayOrConflict(existing.Adjustment, adjustment), nil
+	}
+	if recompute {
+		// 重算失败（账不平、余额没推进）作错误交回：装配点整笔回滚，调整与余额同生同灭。
+		if _, err := recomputeCustomerScope(ctx, command.TenantID, scope, handler.deps.Balances, handler.deps.Books, handler.deps.Clock); err != nil {
+			return RecordChargeAdjustmentResult{}, fmt.Errorf("record charge adjustment: recompute: %w", err)
+		}
 	}
 	return RecordChargeAdjustmentResult{
 		outcome:       ChargeAdjustmentRecordedOutcome,
 		adjustment:    adjustment,
 		hasAdjustment: true,
 	}, nil
+}
+
+// signedAdjustment 把一笔调整折成对费用金额的增减：借项加、贷项减。
+func signedAdjustment(direction domain.AdjustmentDirection, minor int64) int64 {
+	if direction == domain.AdjustmentCredit {
+		return -minor
+	}
+	return minor
+}
+
+// replayOrConflict 判同一标识下库里那一份与这次要登的是不是同一笔：费用、种类、方向、依据与两格金额都相同即重放，
+// 否则是冲突。两种都交回库里那一份，操作者看得到自己撞上的是什么。形成时刻不比——它是服务端每次给的。
+func replayOrConflict(stored, submitted domain.ChargeAdjustment) RecordChargeAdjustmentResult {
+	storedEvaluation, _ := stored.Evaluation()
+	submittedEvaluation, _ := submitted.Evaluation()
+	storedAuthorization, _ := stored.Authorization()
+	submittedAuthorization, _ := submitted.Authorization()
+	storedOriginalCurrency, storedOriginalMinor := stored.OriginalAmount()
+	submittedOriginalCurrency, submittedOriginalMinor := submitted.OriginalAmount()
+	storedCurrency, storedMinor := stored.SettlementAmount()
+	submittedCurrency, submittedMinor := submitted.SettlementAmount()
+	same := stored.Charge() == submitted.Charge() && stored.Kind() == submitted.Kind() && stored.Direction() == submitted.Direction() &&
+		storedEvaluation == submittedEvaluation && storedAuthorization == submittedAuthorization &&
+		storedOriginalCurrency == submittedOriginalCurrency && storedOriginalMinor == submittedOriginalMinor &&
+		storedCurrency == submittedCurrency && storedMinor == submittedMinor
+	outcome := ChargeAdjustmentConflict
+	if same {
+		outcome = ChargeAdjustmentReplayedOutcome
+	}
+	return RecordChargeAdjustmentResult{outcome: outcome, adjustment: stored, hasAdjustment: true}
 }
 
 // form 把命令交给领域的形成门。三个引用各自可缺：缺哪个该拒由种类决定，判据在领域里，

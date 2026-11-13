@@ -63,9 +63,31 @@ func TestTheChargeAdjustmentFaceRecordsAnAdjustmentOnceUnderItsOwnGrant(t *testi
 		answer["authorization"] != "SYN-AUTH-CONCESSION-1" || answer["formedAt"] == nil {
 		t.Fatalf("登记让利 = %d %v", status, answer)
 	}
-	if status, answer = fixture.post(t, chargeAdjustmentFace, followUpAdjuster, concessionBody("SYN-ADJ-1", "999")); status != http.StatusOK ||
+	unsettled := func() string {
+		return fixture.text(t, `SELECT unsettled_minor::text FROM settlement_accounting.operational_balance WHERE tenant_id = $1`, decisionsTenant)
+	}
+	if got := unsettled(); got != "9000" {
+		t.Fatalf("让利 600 之后已确认未结 = %s，想要 9000：调整落下要重算余额", got)
+	}
+	if status, answer = fixture.post(t, chargeAdjustmentFace, followUpAdjuster, concessionBody("SYN-ADJ-1", "600")); status != http.StatusOK ||
 		answer["outcome"] != "ALREADY_RECORDED" || answer["settlementMinor"] != "600" {
-		t.Fatalf("同标识重投 = %d %v，想要交回原来那一笔", status, answer)
+		t.Fatalf("同标识同内容重投 = %d %v，想要交回原来那一笔", status, answer)
+	}
+	if status, answer = fixture.post(t, chargeAdjustmentFace, followUpAdjuster, concessionBody("SYN-ADJ-1", "999")); status != http.StatusOK ||
+		answer["outcome"] != "ADJUSTMENT_CONFLICT" || answer["settlementMinor"] != "600" {
+		t.Fatalf("同标识换金额重投 = %d %v，想要冲突并交回原来那一笔", status, answer)
+	}
+	// 贷项不能把费用让成负数：9600 的费用已让 600，再让 9001 越界。
+	if status, answer = fixture.post(t, chargeAdjustmentFace, followUpAdjuster, concessionBody("SYN-ADJ-BIG", "9001")); status != http.StatusOK || answer["outcome"] != "ADJUSTMENT_EXCEEDS_CHARGE" {
+		t.Fatalf("越界的贷项 = %d %v", status, answer)
+	}
+	// 结算币种与费用不同的调整不进任何余额，不受理。
+	usd := `{"adjustment":"SYN-ADJ-USD","charge":"` + decisionsCharge + `","kind":"COMMERCIAL_CONCESSION","direction":"CREDIT","authorization":"SYN-AUTH-1","originalCurrency":"USD","originalMinor":"100","settlementCurrency":"USD","settlementMinor":"100"}`
+	if status, answer = fixture.post(t, chargeAdjustmentFace, followUpAdjuster, usd); status != http.StatusOK || answer["outcome"] != "SOURCE_NOT_ACCEPTED" {
+		t.Fatalf("币种与费用不同的调整 = %d %v", status, answer)
+	}
+	if got := unsettled(); got != "9000" {
+		t.Fatalf("被拒的调整之后已确认未结 = %s，想要仍是 9000", got)
 	}
 	for name, body := range map[string]string{
 		"纠错不带新评价": `{"adjustment":"SYN-ADJ-2","charge":"` + decisionsCharge + `","kind":"PRICING_CORRECTION","direction":"DEBIT","originalCurrency":"CNY","originalMinor":"100","settlementCurrency":"CNY","settlementMinor":"100"}`,
@@ -183,5 +205,15 @@ func TestTheVoidFaceVoidsAStatementOnceEvenWhenTwoOperatorsRace(t *testing.T) {
 	if status, answer := fixture.post(t, statementVoidFace, followUpVoider, `{"statement":"`+fixture.published+`","basis":"SYN-VOID-BASIS-2"}`); status != http.StatusOK ||
 		answer["outcome"] != "ALREADY_VOIDED" || answer["voidBasis"] != "SYN-VOID-BASIS-1" {
 		t.Fatalf("再作废 = %d %v，想要交回原作废", status, answer)
+	}
+
+	// 作废之后不再往这张单上挂后续纳入。
+	if status, answer := fixture.post(t, chargeAdjustmentFace, followUpAdjuster, concessionBody("SYN-ADJ-AFTER-VOID", "100")); status != http.StatusCreated {
+		t.Fatalf("登记调整 = %d %v", status, answer)
+	}
+	if status, answer := fixture.post(t, adjustmentInclusionFace, followUpIncluder,
+		`{"inclusion":"SYN-INC-VOIDED","statement":"`+fixture.published+`","adjustment":"SYN-ADJ-AFTER-VOID","subsequentPeriod":"SYN-PERIOD-2026-12"}`); status != http.StatusOK ||
+		answer["outcome"] != "STATEMENT_VOIDED_TAKES_NO_INCLUSION" {
+		t.Fatalf("对已作废的单纳入调整 = %d %v", status, answer)
 	}
 }

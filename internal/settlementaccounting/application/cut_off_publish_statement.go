@@ -60,6 +60,9 @@ const (
 	// InclusionSubjectAlreadyIncluded：这笔后到费用或这笔调整已经在另一个纳入标识下纳入过后续账期。一笔只纳一次，再纳
 	// 一次会在后续账期里算两遍。
 	InclusionSubjectAlreadyIncluded
+	// InclusionOnVoidedStatement：原账单已作废，不再往它上面挂后续纳入——纳入关联的是一张仍然有效的原账单，要对着
+	// 替代单纳。
+	InclusionOnVoidedStatement
 	// DisputeOnVoidedStatement：对一张已作废的单登记争议（ADR-0354 决定三）。是答案不是故障：单已不应继续有效，异议要对着替代单提。
 	DisputeOnVoidedStatement
 	// StatementNumberingRuleCollision：发布对账单或登记争议时，单据编号规则跳号到上限仍撞上已用的号（ADR-0355 决定八）。是答案不是
@@ -105,6 +108,8 @@ func (outcome StatementOutcome) String() string {
 		return "DISPUTE_ALREADY_RESOLVED"
 	case StatementNotAccepted:
 		return "SOURCE_NOT_ACCEPTED"
+	case InclusionOnVoidedStatement:
+		return "STATEMENT_VOIDED_TAKES_NO_INCLUSION"
 	case InclusionSubjectAlreadyIncluded:
 		return "SUBJECT_ALREADY_INCLUDED"
 	case StatementUndecided:
@@ -779,11 +784,14 @@ func (handler *CutOffPublishStatementHandler) IncludeLateCharge(
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
 
-	for _, line := range statementRecord.Statement.Lines() {
-		if line.Charge == chargeID {
-			// 这笔费用就在原账单上：它已经出过账，不是后到费用。纳进后续账期等于再收一遍。
-			return StatementResult{outcome: StatementNotAccepted}, nil
-		}
+	if _, _, voided := statementRecord.Statement.Voided(); voided {
+		return StatementResult{outcome: InclusionOnVoidedStatement}, nil
+	}
+	// 这笔费用已经在某一张有效对账单上出过账（原账单或别的账期的单）：它不是后到费用，纳进后续账期等于再收一遍。
+	if _, billed, err := handler.deps.Billing.LockChargeBilling(ctx, command.TenantID, chargeID); err != nil {
+		return statementUndecided(StatementStoreUnavailable, command.ChargeID), nil
+	} else if billed {
+		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
 	inclusion, err := domain.IncludeLateChargeInSubsequentPeriod(
 		statementRecord.Statement, charge, inclusionRef, period, command.IncludedAt)
@@ -853,6 +861,9 @@ func (handler *CutOffPublishStatementHandler) IncludeAdjustment(
 		ports.ChargeAdjustmentKey{TenantID: command.TenantID, Adjustment: adjustmentID})
 	if err != nil {
 		return statementUndecided(AdjustmentViewUnavailable, command.AdjustmentID), nil
+	}
+	if _, _, voided := statementRecord.Statement.Voided(); voided {
+		return StatementResult{outcome: InclusionOnVoidedStatement}, nil
 	}
 	if !adjustmentFound {
 		// 指名了不存在的调整：提交矛盾，改单重来。调整还没形成不是「等」——形成它的是

@@ -199,13 +199,18 @@ func buildSettlementOrchestrations(db *bentopg.DB, issuer *docnumber.Assigner) (
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: cut-off publish statement: %w", err)
 	}
+	// 调整落下之后重算已确认未结，用的是与费用确认同一个求法、同一本账（occupationConversion 里那一只的同类）。
+	adjustmentPostings, err := sapostgres.NewCustomerReceiptPostings(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: customer receipt postings for adjustments: %w", err)
+	}
 	return settlementOrchestrations{
 		transactor: db.Transactor(),
 		moments:    moments,
 		confirm:    confirm,
 		cutoff:     cutoff,
 		adjust: saapplication.NewRecordChargeAdjustmentHandler(saapplication.RecordChargeAdjustmentDeps{
-			Charges: charges, Adjustments: adjustments, Clock: clock,
+			Charges: charges, Adjustments: adjustments, Clock: clock, Balances: adjustmentPostings, Books: adjustmentPostings,
 		}),
 		allocate: saapplication.NewAllocateCostsHandler(saapplication.AllocateCostsDeps{
 			Allocations: allocations, Results: results, Rules: rules, Downstream: operatingHandoff, Clock: clock,
