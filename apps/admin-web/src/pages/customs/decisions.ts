@@ -17,6 +17,8 @@ export type CustomsDecisionKind =
   | 'case-closure'
   | 'manual-lodgement'
   | 'external-result-entry'
+  | 'manifest-reference-entry'
+  | 'manifest-revision-entry'
   | 'regulatory-restriction'
   | 'regulatory-restriction-release';
 
@@ -28,6 +30,8 @@ export const customsDecisionEndpoints: Record<CustomsDecisionKind, string> = {
   'case-closure': '/customs-case-closures',
   'manual-lodgement': '/customs-declaration-manual-lodgements',
   'external-result-entry': '/customs-external-result-manual-registrations',
+  'manifest-reference-entry': '/customs-external-manifest-reference-manual-registrations',
+  'manifest-revision-entry': '/customs-external-manifest-reference-revision-manual-registrations',
   'regulatory-restriction': '/customs-regulatory-restrictions',
   'regulatory-restriction-release': '/customs-regulatory-restriction-releases',
 };
@@ -40,6 +44,8 @@ export const customsDecisionTitles: Record<CustomsDecisionKind, string> = {
   'case-closure': '关闭清关单',
   'manual-lodgement': '标记申报已线下递交',
   'external-result-entry': '录入海关结果',
+  'manifest-reference-entry': '录入外部舱单引用',
+  'manifest-revision-entry': '录入外部舱单的新版本',
   'regulatory-restriction': '建立监管限制',
   'regulatory-restriction-release': '解除监管限制',
 };
@@ -75,6 +81,15 @@ export const customsDecisionHints: Record<CustomsDecisionKind, string> = {
     '放行结果（layer 填 RELEASE_RESULT）必须另填 release，是一个对象：kind（FULL 完整放行 / PARTIAL 部分放行 / CONDITIONAL 附条件放行）、authority（放行机构）、' +
     'condition（附条件放行时填条件原文）。更正前一条时填 correctsSourceId。系统会在你填的标识前加上 MANUAL/，与接口送来的结果分开；' +
     '要更正一条人工录入的结果，correctsSourceId 填带 MANUAL/ 的那个标识。' +
+    identityNote,
+  'manifest-reference-entry':
+    '监管舱单由承运商在外部形成并提交，这里只记它的引用。没有对接承运商系统时，照承运商给的材料录入。请填 manifestId（舱单号）、version（版本）、' +
+    'procedure（监管程序）、direction（IMPORT 进口 / EXPORT 出口）、scope（范围）、carrier（责任承运商）、original（所凭原件的编号或存档引用，必填）。' +
+    '一份舱单只有一条引用：同一版重录答已在册，同一版内容不同答冲突，要换版本请用「录入外部舱单的新版本」。' +
+    identityNote,
+  'manifest-revision-entry':
+    '承运商更正、撤销、替代了舱单或改了范围时用这一个。请填 manifestId、version（新版本）、scope（新范围）、carrier（责任承运商）、' +
+    'original（所凭原件，必填）。程序与方向随在册的引用，不随版本改。' +
     identityNote,
   'regulatory-restriction':
     '请填 restrictionId（给这条限制起的标识）、decision（依据的那条海关结果的来源标识）、constrains（限制哪几步，数组，取值同放行检查的 action）。' +
@@ -133,6 +148,18 @@ export const externalResultEntryOutcomeLabels: Record<string, string> = {
   RESULT_UNDECIDED: '暂时定不了，原因见下',
 };
 
+/** 外部舱单引用两口的答复词。 */
+export const manifestEntryOutcomeLabels: Record<string, string> = {
+  ASSOCIATED: '已录入，并关联到了唯一匹配的报关批次',
+  PENDING_ASSOCIATION: '已录入，暂时没有唯一匹配的报关批次，保持待关联',
+  REVISED: '已录入新版本',
+  EXISTING: '这一版已经在册',
+  CONTENT_CONFLICT: '同一版在册的内容不同，没有覆盖；请核对后走新版本',
+  VERSION_CONFLICT: '在册的是另一个版本；换版本请用「录入外部舱单的新版本」',
+  NOT_FOUND: '这家承运商名下找不到这份舱单',
+  NOT_ACCEPTED: '内容不完整或不成立，没有受理',
+};
+
 /** 线下递交标记这一口自己的答复词。 */
 export const manualLodgementOutcomeLabels: Record<string, string> = {
   LODGEMENT_RECORDED: '已记为已递交，等待海关结果',
@@ -161,6 +188,17 @@ export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTa
       outcomeLabels: manualLodgementOutcomeLabels,
     };
   }
+  if (kind === 'manifest-reference-entry' || kind === 'manifest-revision-entry') {
+    return {
+      id: kind,
+      label: customsDecisionTitles[kind],
+      title: customsDecisionTitles[kind],
+      endpoint: `POST ${customsDecisionEndpoints[kind]}`,
+      snapshotHint: customsDecisionHints[kind],
+      submit: (snapshot: unknown) => submitCustomsDecision(kind, snapshot),
+      outcomeLabels: manifestEntryOutcomeLabels,
+    };
+  }
   if (kind === 'external-result-entry') {
     return {
       id: kind,
@@ -184,9 +222,19 @@ export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTa
   };
 }
 
-/** 清关单页「运营决定」签上的七个口，按一张清关单从建到关的顺序排；海关结果在没有对接时由人照回执录入。 */
+/** 清关单页「运营决定」签上的九个口，按一张清关单从建到关的顺序排；海关结果在没有对接时由人照回执录入。 */
 export const caseDecisionTargets: RegistrationTarget[] = (
-  ['case-establishment', 'submission-authorization', 'declaration-submission', 'manual-lodgement', 'external-result-entry', 'release-gate-verification', 'case-closure'] as const
+  [
+    'case-establishment',
+    'submission-authorization',
+    'declaration-submission',
+    'manual-lodgement',
+    'external-result-entry',
+    'manifest-reference-entry',
+    'manifest-revision-entry',
+    'release-gate-verification',
+    'case-closure',
+  ] as const
 ).map(customsDecisionTarget);
 
 /** 限制页登记签上追加的两个口。 */

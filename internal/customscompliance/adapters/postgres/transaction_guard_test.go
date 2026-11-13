@@ -172,6 +172,9 @@ func TestCaseAggregateWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := manifests.Save(ctx, domain.TenantID{}, domain.ExternalManifestReference{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务保存舱单应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if err := manifests.RecordManualManifestEntry(ctx, ports.ManualManifestEntry{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务记人工录入的舱单留痕应返回 ErrTransactionRequired，实得：%v", err)
+	}
 	if _, err := manifests.Update(ctx, domain.TenantID{}, domain.ExternalManifestReference{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务更新舱单应返回 ErrTransactionRequired，实得：%v", err)
 	}

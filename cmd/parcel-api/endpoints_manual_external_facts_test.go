@@ -8,5 +8,6 @@ func init() {
 		externalResults:                     unwiredResults{},
 		trackingEntries:                     unwiredTrackingAdopter{},
 		manualLodgement:                     unwiredManualLodgement{},
+		manifests:                           unwiredManifests{},
 	})
 }

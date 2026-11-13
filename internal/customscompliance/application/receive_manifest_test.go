@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -447,4 +448,86 @@ func (store staleReadStore) FindByManifest(
 	context.Context, domain.TenantID, domain.CarrierResponsibilityReference, domain.ExternalManifestID,
 ) (domain.ExternalManifestReference, bool, error) {
 	return store.stale, true, nil
+}
+
+type manualManifestLedgerDouble struct {
+	entries []ports.ManualManifestEntry
+	err     error
+}
+
+func (double *manualManifestLedgerDouble) RecordManualManifestEntry(_ context.Context, entry ports.ManualManifestEntry) error {
+	if double.err != nil {
+		return double.err
+	}
+	double.entries = append(double.entries, entry)
+	return nil
+}
+
+func manualManifestFixture(t *testing.T, ledger *manualManifestLedgerDouble) *manifestFixture {
+	t.Helper()
+	fixture := newManifestFixture(t)
+	fixture.handler = application.NewReceiveManifestHandler(application.ReceiveManifestDeps{
+		Candidates: fixture.candidates, Store: fixture.store, Downstream: &manifestDownstreamDouble{},
+		Clock: fixedClock{at: manifestAt}, ManualEntries: ledger,
+	})
+	return fixture
+}
+
+// Covers: dox/decisions.md「产品形态」——操作员照承运商给的材料录入外部舱单引用：进同一只编排、落同一条引用，首登与
+// 版本推进各记一条留痕（哪一版、谁录的、凭哪份原件）；原样重录是重放、不记第二条；承运商系统随后送来同一版同内容也是
+// 重放——一份舱单只有一条引用，不因谁录的分成两条。有录入人没有原件（或反过来）不受理；留痕落不下答未决；没接留痕册
+// 是装配缺陷、上抛。
+func TestAManuallyEnteredManifestReferenceIsTheSameReferenceWithAnEntryTrailPerVersion(t *testing.T) {
+	ledger := &manualManifestLedgerDouble{}
+	fixture := manualManifestFixture(t, ledger)
+	ctx := context.Background()
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	manual := application.ReceiveManifestCommand{TenantID: tenant, Spec: manifestSpec(t, "v1"),
+		EnteredBy: "OPERATOR/https://issuer#alice", Original: "SYN-CARRIER-MANIFEST-MAIL-1"}
+
+	received, err := fixture.handler.Receive(ctx, manual)
+	if err != nil || received.Outcome() != application.ManifestPendingAssociation || len(ledger.entries) != 1 {
+		t.Fatalf("人工首登：err=%v outcome=%q 留痕 %d 条", err, received.Outcome(), len(ledger.entries))
+	}
+	if entry := ledger.entries[0]; entry.Version.String() != "v1" || entry.Manifest.String() != "carrier-manifest-1" ||
+		entry.Carrier.String() != "carrier-responsibility-1" || entry.EnteredBy != "OPERATOR/https://issuer#alice" || entry.Original != "SYN-CARRIER-MANIFEST-MAIL-1" {
+		t.Fatalf("留痕 = %+v", entry)
+	}
+	if replay, err := fixture.handler.Receive(ctx, manual); err != nil || replay.Outcome() != application.ManifestExisting || len(ledger.entries) != 1 {
+		t.Fatalf("原样重录：err=%v outcome=%q 留痕 %d 条", err, replay.Outcome(), len(ledger.entries))
+	}
+	if fromCarrier, err := fixture.handler.Receive(ctx, application.ReceiveManifestCommand{TenantID: tenant, Spec: manifestSpec(t, "v1")}); err != nil ||
+		fromCarrier.Outcome() != application.ManifestExisting {
+		t.Fatalf("承运商系统送来同一版：err=%v outcome=%q", err, fromCarrier.Outcome())
+	}
+
+	revise := application.ReviseManifestCommand{
+		TenantID: tenant, Carrier: mustValue(t, domain.NewCarrierResponsibilityReference, "carrier-responsibility-1"),
+		Manifest: mustValue(t, domain.NewExternalManifestID, "carrier-manifest-1"), Version: mustValue(t, domain.NewManifestSourceVersion, "v2"),
+		Scope: mustValue(t, domain.NewDecisionScopeReference, "movement-2"), SourceFact: "SYN-CARRIER-MANIFEST-MAIL-2", At: manifestAt,
+		EnteredBy: "OPERATOR/https://issuer#bob", Original: "SYN-CARRIER-MANIFEST-MAIL-2",
+	}
+	if revised, err := fixture.handler.Revise(ctx, revise); err != nil || revised.Outcome() != application.ManifestRevised ||
+		len(ledger.entries) != 2 || ledger.entries[1].Version.String() != "v2" || ledger.entries[1].EnteredBy != "OPERATOR/https://issuer#bob" {
+		t.Fatalf("人工版本推进：err=%v outcome=%q 留痕 %+v", err, revised.Outcome(), ledger.entries)
+	}
+
+	for name, mutate := range map[string]func(*application.ReceiveManifestCommand){
+		"有录入人没有原件": func(command *application.ReceiveManifestCommand) { command.Original = " " },
+		"有原件没有录入人": func(command *application.ReceiveManifestCommand) { command.EnteredBy = "" },
+	} {
+		fresh := manualManifestFixture(t, &manualManifestLedgerDouble{})
+		command := manual
+		mutate(&command)
+		if refused, err := fresh.handler.Receive(ctx, command); err != nil || refused.Outcome() != application.ManifestNotAccepted || len(fresh.store.byManifest) != 0 {
+			t.Fatalf("%s：err=%v outcome=%q", name, err, refused.Outcome())
+		}
+	}
+	failing := manualManifestFixture(t, &manualManifestLedgerDouble{err: errors.New("ledger down")})
+	if undecided, err := failing.handler.Receive(ctx, manual); err != nil || undecided.Outcome() != application.ManifestUndecided {
+		t.Fatalf("留痕落不下：err=%v outcome=%q", err, undecided.Outcome())
+	}
+	if _, err := newManifestFixture(t).handler.Receive(ctx, manual); err == nil {
+		t.Fatal("没接留痕册的人工录入没有上抛")
+	}
 }

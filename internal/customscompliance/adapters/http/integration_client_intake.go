@@ -199,10 +199,17 @@ func (intake *IntegrationClientIntake) IntakeManifestReference(
 	if err := decodeClosedDocument(request.Body, &document); err != nil {
 		return none, err
 	}
+	return document.command(tenant, carrier, intake.clock.Now().UTC())
+}
+
+// command 把引用载荷译成接收命令。集成客户端口与操作员手工录入口共用这一份。
+func (document manifestReferenceDocument) command(tenant domain.TenantID, carrier domain.CarrierResponsibilityReference, acceptedAt time.Time) (application.ReceiveManifestCommand, error) {
+	none := application.ReceiveManifestCommand{}
+	var err error
 	spec := domain.ExternalManifestReferenceSpec{
 		Carrier:    carrier,
 		SourceFact: strings.TrimSpace(document.SourceFact),
-		AcceptedAt: intake.clock.Now().UTC(),
+		AcceptedAt: acceptedAt,
 	}
 	if spec.Manifest, err = domain.NewExternalManifestID(document.ManifestID); err != nil {
 		return none, fmt.Errorf("%w: manifestId: %v", ErrMalformedRequest, err)
@@ -238,11 +245,18 @@ func (intake *IntegrationClientIntake) IntakeManifestRevision(
 	if err := decodeClosedDocument(request.Body, &document); err != nil {
 		return none, err
 	}
+	return document.command(tenant, carrier, intake.clock.Now().UTC())
+}
+
+// command 把版本推进载荷译成推进命令。两个口共用这一份。
+func (document manifestRevisionDocument) command(tenant domain.TenantID, carrier domain.CarrierResponsibilityReference, at time.Time) (application.ReviseManifestCommand, error) {
+	none := application.ReviseManifestCommand{}
+	var err error
 	command := application.ReviseManifestCommand{
 		TenantID:   tenant,
 		Carrier:    carrier,
 		SourceFact: strings.TrimSpace(document.SourceFact),
-		At:         intake.clock.Now().UTC(),
+		At:         at,
 	}
 	if command.Manifest, err = domain.NewExternalManifestID(document.ManifestID); err != nil {
 		return none, fmt.Errorf("%w: manifestId: %v", ErrMalformedRequest, err)

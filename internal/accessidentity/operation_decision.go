@@ -256,6 +256,9 @@ const DecisionCustomsManualLodgement DecisionKind = "CUSTOMS_MANUAL_LODGEMENT"
 // 能替承运方记下「已接受」。
 const DecisionBookingAnswerEntry DecisionKind = "BOOKING_ANSWER_ENTRY"
 
+// DecisionExternalManifestEntry 是操作员照承运商给的材料把外部监管舱单的引用（及其版本推进）录进来。
+const DecisionExternalManifestEntry DecisionKind = "EXTERNAL_MANIFEST_ENTRY"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -294,6 +297,7 @@ var decisionKinds = []DecisionKind{
 	DecisionExternalTrackingEntry,
 	DecisionCustomsManualLodgement,
 	DecisionBookingAnswerEntry,
+	DecisionExternalManifestEntry,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,

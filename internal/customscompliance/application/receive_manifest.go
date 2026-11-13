@@ -61,6 +61,10 @@ func (outcome ManifestOutcome) String() string {
 type ReceiveManifestCommand struct {
 	TenantID domain.TenantID
 	Spec     domain.ExternalManifestReferenceSpec
+	// EnteredBy 与 Original 只在人工录入时给（dox/decisions.md「产品形态」）：承运商在外部形成并提交了舱单，没有对接时
+	// 由操作员照承运商给的材料把引用录进来——谁录的、凭的是哪份原件。两格同在或同缺。
+	EnteredBy string
+	Original  string
 }
 
 // ReviseManifestCommand 携带一次来源版本推进请求（承运商明确的更正、撤销、替代或
@@ -75,6 +79,29 @@ type ReviseManifestCommand struct {
 	Scope      domain.DecisionScopeReference
 	SourceFact string
 	At         time.Time
+	// EnteredBy 与 Original 同 ReceiveManifestCommand 的同名格。
+	EnteredBy string
+	Original  string
+}
+
+// manualEntry 核人工录入的两格：同在或同缺；在的时候留痕册必须接上。第二个返回值为 false 即不受理。
+func (handler *ReceiveManifestHandler) manualEntry(enteredBy, original string) (bool, bool, error) {
+	manual := strings.TrimSpace(enteredBy) != ""
+	if manual != (strings.TrimSpace(original) != "") {
+		return false, false, nil
+	}
+	if manual && handler.deps.ManualEntries == nil {
+		return false, false, fmt.Errorf("receive manifest: a manual entry arrived but no manual entry ledger is wired")
+	}
+	return manual, true, nil
+}
+
+// recordManualEntry 记一版引用是谁照着哪份原件录的。落不下交回 false：调用方答未决，装配点整笔回滚。
+func (handler *ReceiveManifestHandler) recordManualEntry(ctx context.Context, tenant domain.TenantID, reference domain.ExternalManifestReference, enteredBy, original string) bool {
+	return handler.deps.ManualEntries.RecordManualManifestEntry(ctx, ports.ManualManifestEntry{
+		Tenant: tenant, Carrier: reference.Carrier(), Manifest: reference.Manifest(), Version: reference.Version(),
+		EnteredBy: strings.TrimSpace(enteredBy), Original: strings.TrimSpace(original), EnteredAt: handler.deps.Clock.Now(),
+	}) == nil
 }
 
 type ManifestResult struct {
@@ -102,6 +129,8 @@ type ReceiveManifestDeps struct {
 	Store      ports.ManifestStore
 	Downstream ports.ManifestHandoff
 	Clock      ports.Clock
+	// ManualEntries 记人工录入的留痕。只有手工录入口用到；命令带了录入人而它不在是装配缺陷。
+	ManualEntries ports.ManualManifestLedger
 }
 
 type ReceiveManifestHandler struct {
@@ -121,6 +150,13 @@ func (handler *ReceiveManifestHandler) Receive(
 	command ReceiveManifestCommand,
 ) (ManifestResult, error) {
 	if strings.TrimSpace(command.TenantID.String()) == "" {
+		return ManifestResult{outcome: ManifestNotAccepted}, nil
+	}
+	manual, accepted, err := handler.manualEntry(command.EnteredBy, command.Original)
+	if err != nil {
+		return ManifestResult{}, err
+	}
+	if !accepted {
 		return ManifestResult{outcome: ManifestNotAccepted}, nil
 	}
 	reference, err := domain.AcceptManifestReference(command.Spec)
@@ -149,6 +185,9 @@ func (handler *ReceiveManifestHandler) Receive(
 	}
 	switch saved {
 	case ports.ManifestSaved:
+		if manual && !handler.recordManualEntry(ctx, command.TenantID, associated, command.EnteredBy, command.Original) {
+			return ManifestResult{outcome: ManifestUndecided}, nil
+		}
 		result := ManifestResult{outcome: outcome, reference: associated, hasRecord: true}
 		result.handoffRef = handler.handOffManifest(ctx, command.TenantID, associated)
 		return result, nil
@@ -170,6 +209,13 @@ func (handler *ReceiveManifestHandler) Revise(
 	command ReviseManifestCommand,
 ) (ManifestResult, error) {
 	if strings.TrimSpace(command.TenantID.String()) == "" {
+		return ManifestResult{outcome: ManifestNotAccepted}, nil
+	}
+	manual, accepted, err := handler.manualEntry(command.EnteredBy, command.Original)
+	if err != nil {
+		return ManifestResult{}, err
+	}
+	if !accepted {
 		return ManifestResult{outcome: ManifestNotAccepted}, nil
 	}
 	current, found, err := handler.deps.Store.FindByManifest(ctx, command.TenantID, command.Carrier, command.Manifest)
@@ -204,6 +250,9 @@ func (handler *ReceiveManifestHandler) Revise(
 		return ManifestResult{outcome: ManifestVersionConflict}, nil
 	default:
 		return ManifestResult{}, fmt.Errorf("%w: update %d", ErrUnexpectedManifestSave, updated)
+	}
+	if manual && !handler.recordManualEntry(ctx, command.TenantID, associated, command.EnteredBy, command.Original) {
+		return ManifestResult{outcome: ManifestUndecided}, nil
 	}
 	result := ManifestResult{outcome: ManifestRevised, reference: associated, hasRecord: true}
 	result.handoffRef = handler.handOffManifest(ctx, command.TenantID, associated)

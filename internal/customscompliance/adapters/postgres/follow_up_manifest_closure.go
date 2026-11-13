@@ -696,3 +696,24 @@ func obligationStateFrom(value string) (domain.ObligationItemState, error) {
 			fmt.Errorf("customs compliance postgres: unknown obligation state %q", value)
 	}
 }
+
+var _ ports.ManualManifestLedger = (*Manifests)(nil)
+
+// RecordManualManifestEntry 记一版外部舱单引用是谁照着哪份原件录的。只在事务里写：与那一版引用同笔。一版至多一条，
+// 撞键照错误上抛。
+func (repository *Manifests) RecordManualManifestEntry(ctx context.Context, entry ports.ManualManifestEntry) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("record manual manifest entry: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO customs_compliance.external_manifest_manual_entry
+			(tenant_id, carrier_ref, manifest_id, version_id, entered_by, original_ref, entered_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		entry.Tenant.String(), entry.Carrier.String(), entry.Manifest.String(), entry.Version.String(),
+		entry.EnteredBy, entry.Original, entry.EnteredAt.UTC(),
+	); err != nil {
+		return fmt.Errorf("record manual manifest entry: %w", err)
+	}
+	return nil
+}

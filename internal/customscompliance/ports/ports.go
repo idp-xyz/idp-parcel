@@ -446,6 +446,22 @@ const (
 // 自己编号空间里的号，两家承运商用到同一个号互不相干：键里不带承运商，一家就能占住另一家的号，首登口也成了探测别家
 // 舱单在不在册的口。来源版本推进走 Update（原引用与历史关联由领域在新引用内保留），且只在在册版本仍是新引用指回的
 // 前版时才落：并发的两笔推进后到的那一笔答版本已移动，不静默盖掉先到的。
+// ManualManifestEntry 是一条人工录入留痕：哪一版外部舱单引用是谁照着哪份原件录的。
+type ManualManifestEntry struct {
+	Tenant    domain.TenantID
+	Carrier   domain.CarrierResponsibilityReference
+	Manifest  domain.ExternalManifestID
+	Version   domain.ManifestSourceVersion
+	EnteredBy string
+	Original  string
+	EnteredAt time.Time
+}
+
+// ManualManifestLedger 记人工录入的外部舱单引用留痕，与引用同一事务落。承运商系统送来的版本没有这一条。
+type ManualManifestLedger interface {
+	RecordManualManifestEntry(ctx context.Context, entry ManualManifestEntry) error
+}
+
 type ManifestStore interface {
 	FindByManifest(
 		ctx context.Context,

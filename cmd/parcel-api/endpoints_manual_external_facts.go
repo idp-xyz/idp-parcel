@@ -17,6 +17,7 @@ type manualExternalFactsWiring struct {
 	externalResults                     customshttp.ResultHandler
 	trackingEntries                     tfhttp.TrackingMaterialAdopter
 	manualLodgement                     customshttp.ManualLodgementRecorder
+	manifests                           customshttp.ManifestHandler
 }
 
 func init() {
@@ -33,6 +34,12 @@ func init() {
 			},
 			"/customs-external-result-manual-registrations": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionCustomsExternalResultEntry),
+			},
+			"/customs-external-manifest-reference-manual-registrations": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionExternalManifestEntry),
+			},
+			"/customs-external-manifest-reference-revision-manual-registrations": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionExternalManifestEntry),
 			},
 			"/customs-declaration-manual-lodgements": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionCustomsManualLodgement),
@@ -62,7 +69,13 @@ func init() {
 				return manualExternalFactsWiring{}, err
 			}
 			lodgement, err := buildManualLodgement(sources.db)
+			if err != nil {
+				return manualExternalFactsWiring{}, err
+			}
+			// 外部舱单引用的手工录入进的是集成客户端口后面的同一只编排。
+			manifests, err := buildManifestReferencesOrchestration(sources.db)
 			return manualExternalFactsWiring{
+				manifests:                           manifests,
 				manualLodgement:                     lodgement,
 				trackingEntries:                     tracking,
 				externalResults:                     results,
@@ -86,6 +99,9 @@ func init() {
 				{Pattern: "/transport-fulfillment-external-tracking-manual-entries", Handler: tfhttp.NewManualTrackingEntriesEndpoint(channels.operatorDecisions.transport, wiring.trackingEntries, systemClock{}.Now)},
 				// 申报的线下递交标记口（dox/decisions.md「产品形态」）：没有对接报关行或单一窗口时，线下递交之后回来记一笔。
 				{Pattern: "/customs-declaration-manual-lodgements", Handler: customshttp.NewRecordManualLodgementEndpoint(channels.operatorDecisions.customs, wiring.manualLodgement)},
+				// 外部监管舱单引用的手工录入两口（dox/decisions.md「产品形态」）：首登与版本推进，承运商由录入的人照材料指名。
+				{Pattern: "/customs-external-manifest-reference-manual-registrations", Handler: customshttp.NewReceiveManifestReferenceEndpoint(customshttp.ManualManifestIntake(channels.operatorDecisions.customs, systemClock{}.Now), wiring.manifests)},
+				{Pattern: "/customs-external-manifest-reference-revision-manual-registrations", Handler: customshttp.NewReviseManifestReferenceEndpoint(customshttp.ManualManifestIntake(channels.operatorDecisions.customs, systemClock{}.Now), wiring.manifests)},
 			}
 		},
 	})

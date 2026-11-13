@@ -89,6 +89,8 @@ func buildManifestReferencesOrchestration(db *bentopg.DB) (customshttp.ManifestH
 		Store:      manifests,
 		Downstream: downstream,
 		Clock:      clock,
+		// 人工录入的留痕与引用是同一只适配器的两面；集成客户端那一路不带录入人，用不到它。
+		ManualEntries: manifests,
 	})
 	return transactionalManifests{transactor: db.Transactor(), inner: handler}, nil
 }
