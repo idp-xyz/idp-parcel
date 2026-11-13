@@ -85,8 +85,12 @@ func (repository *ExternalTrackingFacts) ListCurrentExternalTrackingFacts(
 }
 
 // manualTrackingEntryColumn 取这条事实最近一次人工录入的留痕。按事实取、不按当前版取：判断会在素材版之上另成一版，
-// 当前版自己没有留痕行，而「这条事实是人录的」不因判过有效时间就不成立。人工录入的事实标识自带前缀、轨迹源写不到它名下，
-// 所以一条事实的素材版要么全是人录的要么全不是，取最近一条即当前内容的来源。
+// 当前版自己没有留痕行，而「这条事实是人录的」不因判过有效时间就不成立。
+//
+// 取最近一条即当前内容的来源，靠的是「一条事实的素材版要么全是人录的要么全不是」：人工录入的源事件标识带人工前缀，
+// 更正按源事件标识找目标，所以人工更正只落得到人工录入的事实上。反过来那一半目前只靠「还没有轨迹源连接器」成立——
+// 没有东西拦着源素材的更正对象指向带人工前缀的事件。接上第一个连接器时要么在源那条路上拒掉这个前缀，
+// 要么把这里改成对最近一个素材版取留痕，否则源更正过的内容会被说成人录的。
 const manualTrackingEntryColumn = `(SELECT json_build_object(
 		        'enteredBy', entry.entered_by, 'original', entry.original_ref, 'enteredAt', entry.entered_at)
 		   FROM transport_fulfillment.external_tracking_manual_entry AS entry
