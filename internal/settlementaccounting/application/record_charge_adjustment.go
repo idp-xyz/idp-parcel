@@ -13,6 +13,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -208,7 +209,8 @@ func (handler *RecordChargeAdjustmentHandler) form(
 		Charge:    chargeID,
 		Kind:      command.Kind,
 		Direction: command.Direction,
-		FormedAt:  handler.deps.Clock.Now(),
+		// 截到微秒：库里的时刻只到微秒，登记的人与随后读回的人该看到同一个形成时刻。
+		FormedAt: handler.deps.Clock.Now().UTC().Truncate(time.Microsecond),
 	}
 	var err error
 	if strings.TrimSpace(command.Evaluation) != "" {

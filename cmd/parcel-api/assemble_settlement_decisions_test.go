@@ -86,7 +86,7 @@ func newSettlementDecisionsFixture(t *testing.T) *settlementDecisionsFixture {
 	}
 	endpoints := map[string]http.Handler{}
 	for _, feature := range endpointRegistry {
-		if feature.wiringKey != any((*settlementDecisionsWiring)(nil)) {
+		if feature.wiringKey != any((*settlementDecisionsWiring)(nil)) && feature.wiringKey != any((*settlementFollowUpWiring)(nil)) {
 			continue
 		}
 		mounted, err := feature.production(endpointSources{db: db, documentNumbers: numbers}, endpointChannels{operatorDecisions: decisions})

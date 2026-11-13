@@ -147,9 +147,9 @@
 - 金额文法：主张减免赔，不足记 0；按万分比向下取整；以限额封顶。算出 0 不形成金额。数值没登记不形成金额，全零是一份登记。
 - 实际代垫按税费义务、资金事实和金额范围形成不可覆盖的判断版本；回收成立与否独立判断，变化追加调整。
 
-**调整、分摊与经营结果（编排在，无入口，见末节）**
+**调整、分摊与经营结果（分摊与经营结果无入口，见末节）**
 
-- 普通客户费用的调整只有计价纠错与商业让利两类；商业让利必须引用有效授权。
+- 普通客户费用的调整只有计价纠错与商业让利两类；纠错必须引用新评价，商业让利必须引用有效授权。调整只挂在已确认费用上，同一调整标识重投交回原来那一笔。调整登记、对账单作废、后到费用纳入、调整纳入是四种分开授予的运营决定，时刻一律由服务端给；作废必带依据、只成立一次；一笔后到费用、一笔调整各只纳入后续账期一次，已在原账单上的费用不是后到费用，纳回原账期不受理。
 - 分法按租户与分摊规则版本登记，没登记答未配置，不默认按重、不均摊。已分摊金额与未分摊余额之和等于来源金额；尾差按最大余数分配，余数相同按目标标识升序；没有正权重时整笔未分摊。
 - 经营结果按口径成对采用组成：预估口径用客户预估费用与供应商预期成本，已确认口径用客户运营应收、审核应付与贷项，已结算口径只用核销分配。审核应付与贷项各按方向计入一次。
 
@@ -168,7 +168,7 @@
 
 | 做什么 | 路径 |
 |---|---|
-| 运营决定 | `/settlement-charge-confirmations` `/settlement-statement-publications` `/settlement-supplier-bill-receptions` `/settlement-supplier-bill-audits` `/settlement-statement-disputes` `/settlement-statement-dispute-resolutions` |
+| 运营决定 | `/settlement-charge-confirmations` `/settlement-statement-publications` `/settlement-supplier-bill-receptions` `/settlement-supplier-bill-audits` `/settlement-statement-disputes` `/settlement-statement-dispute-resolutions` `/settlement-charge-adjustments` `/settlement-statement-voids` `/settlement-late-charge-inclusions` `/settlement-adjustment-inclusions` |
 | 资金事实采用（集成客户端） | `/settlement-external-funds-fact-registrations` `/settlement-external-funds-fact-correction-registrations` |
 | 资金事实采用（人工） | `/settlement-external-funds-fact-manual-registrations` `/settlement-external-funds-fact-correction-manual-registrations` |
 | 只读 | `/settlement-charges` `/settlement-statements` `/settlement-disputed-statements` `/settlement-statement-lines` `/settlement-pre-acceptance-estimates` `/settlement-funds-applications` `/settlement-operating-results` `/settlement-supplier-bill-lines` `/settlement-audited-payables` |
@@ -185,7 +185,7 @@
 
 ## 旧文档写了、代码里还没有的
 
-- **有编排、没有生产入口**：下列用例方法在 `application/` 里有实现和测试，`cmd/` 下没有任何端点、消费者或子命令调用它们——费用调整（`RecordChargeAdjustmentHandler`）；成本分摊与经营结果的形成（`AllocateCostsHandler`，只读口 `/settlement-operating-results` 因此无数据来源）；赔付、应追偿、追偿认可及其调整（`SettleClaimAmountsHandler`）；实际代垫判断与客户代垫回收（`AssessAdvanceRecoveryHandler` 的 `Assess`、`FormRecovery`、`Adjust`）；对账单作废与后续对账纳入（`Void`、`IncludeAdjustment`、`IncludeLateCharge`）；供应商费用贷项（`Credit`）。
+- **有编排、没有生产入口**：下列用例方法在 `application/` 里有实现和测试，`cmd/` 下没有任何端点、消费者或子命令调用它们——成本分摊与经营结果的形成（`AllocateCostsHandler`，只读口 `/settlement-operating-results` 因此无数据来源）；赔付、应追偿、追偿认可及其调整（`SettleClaimAmountsHandler`）；实际代垫判断与客户代垫回收（`AssessAdvanceRecoveryHandler` 的 `Assess`、`FormRecovery`、`Adjust`）；供应商费用贷项（`Credit`）。
 - **SELL 评价按合同声明的有序计价范围列表选卡**：搜 `PricingScopes`、`PriceSource`、`ScopeList` 无结果。请求上只有单个 `PricingScope`，取自结算账户的采用登记。「合同显式声明不计销售价」同样没有。
 - **两本采用登记上同一结算账户的计价范围必须相同**：在 Go 代码与迁移里没找到跨册比对。
 - **仓储作业收费发生项那一路**（SELL 请求、仓储计费采用登记、`仓储作业已发生`确认依据、更正版本引起的计价纠错与全额贷记）：搜 `Warehouse`、`仓储` 无对应类型。属可选的仓配履约。

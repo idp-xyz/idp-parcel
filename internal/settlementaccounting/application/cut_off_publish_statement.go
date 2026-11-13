@@ -57,6 +57,9 @@ const (
 	StatementUndecided
 	StatementNoChargeInPeriod
 	StatementCutUnconfigured
+	// InclusionSubjectAlreadyIncluded：这笔后到费用或这笔调整已经在另一个纳入标识下纳入过后续账期。一笔只纳一次，再纳
+	// 一次会在后续账期里算两遍。
+	InclusionSubjectAlreadyIncluded
 	// DisputeOnVoidedStatement：对一张已作废的单登记争议（ADR-0354 决定三）。是答案不是故障：单已不应继续有效，异议要对着替代单提。
 	DisputeOnVoidedStatement
 	// StatementNumberingRuleCollision：发布对账单或登记争议时，单据编号规则跳号到上限仍撞上已用的号（ADR-0355 决定八）。是答案不是
@@ -102,6 +105,8 @@ func (outcome StatementOutcome) String() string {
 		return "DISPUTE_ALREADY_RESOLVED"
 	case StatementNotAccepted:
 		return "SOURCE_NOT_ACCEPTED"
+	case InclusionSubjectAlreadyIncluded:
+		return "SUBJECT_ALREADY_INCLUDED"
 	case StatementUndecided:
 		return "STATEMENT_UNDECIDED"
 	case StatementNoChargeInPeriod:
@@ -694,7 +699,13 @@ func (handler *CutOffPublishStatementHandler) Void(
 		return StatementResult{outcome: StatementAlreadyVoided, statement: existing, hasRecord: true}, nil
 	}
 
-	voidedStatement, err := existing.Statement.Void(basis, command.VoidedAt)
+	voidedAt := command.VoidedAt
+	if voidedAt.IsZero() {
+		// 运营决定口不带作废时刻：作废发生在登记它的这一刻，不由调用方声称。
+		// 截到微秒：库里的时刻只到微秒，带着纳秒答出去，作废的人与随后读回的人看到的就不是同一个时刻。
+		voidedAt = handler.deps.Clock.Now().UTC().Truncate(time.Microsecond)
+	}
+	voidedStatement, err := existing.Statement.Void(basis, voidedAt)
 	if err != nil {
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
@@ -705,6 +716,15 @@ func (handler *CutOffPublishStatementHandler) Void(
 		return statementUndecided(StatementStoreUnavailable, command.Number), nil
 	}
 	if !ok {
+		// 换值只在单还没作废时落：没落成多半是另一个人抢先作废了。读回来确认，是就答已作废并交回赢家那一份——答未受理
+		// 会让后到的人以为单号写错了。
+		winner, found, err := handler.deps.Statements.FindByKey(ctx, key)
+		if err != nil {
+			return statementUndecided(StatementStoreUnavailable, command.Number), nil
+		}
+		if _, _, voided := winner.Statement.Voided(); found && voided {
+			return StatementResult{outcome: StatementAlreadyVoided, statement: winner, hasRecord: true}, nil
+		}
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
 	result := StatementResult{outcome: StatementVoidedOutcome, statement: existing, hasRecord: true}
@@ -735,6 +755,14 @@ func (handler *CutOffPublishStatementHandler) IncludeLateCharge(
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
 
+	if command.IncludedAt.IsZero() {
+		stamped, err := handler.inclusionInstant(ctx, ports.InclusionKey{TenantID: command.TenantID, Inclusion: inclusionRef})
+		if err != nil {
+			return statementUndecided(InclusionStoreUnavailable, command.Inclusion), nil
+		}
+		command.IncludedAt = stamped
+	}
+
 	statementRecord, found, err := handler.deps.Statements.FindByKey(ctx,
 		ports.StatementKey{TenantID: command.TenantID, Number: number})
 	if err != nil {
@@ -751,6 +779,12 @@ func (handler *CutOffPublishStatementHandler) IncludeLateCharge(
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
 
+	for _, line := range statementRecord.Statement.Lines() {
+		if line.Charge == chargeID {
+			// 这笔费用就在原账单上：它已经出过账，不是后到费用。纳进后续账期等于再收一遍。
+			return StatementResult{outcome: StatementNotAccepted}, nil
+		}
+	}
 	inclusion, err := domain.IncludeLateChargeInSubsequentPeriod(
 		statementRecord.Statement, charge, inclusionRef, period, command.IncludedAt)
 	if errors.Is(err, domain.ErrInclusionBackfillsPeriod) {
@@ -799,6 +833,14 @@ func (handler *CutOffPublishStatementHandler) IncludeAdjustment(
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
 
+	if command.IncludedAt.IsZero() {
+		stamped, err := handler.inclusionInstant(ctx, ports.InclusionKey{TenantID: command.TenantID, Inclusion: inclusionRef})
+		if err != nil {
+			return statementUndecided(InclusionStoreUnavailable, command.Inclusion), nil
+		}
+		command.IncludedAt = stamped
+	}
+
 	statementRecord, found, err := handler.deps.Statements.FindByKey(ctx,
 		ports.StatementKey{TenantID: command.TenantID, Number: number})
 	if err != nil {
@@ -835,6 +877,21 @@ func (handler *CutOffPublishStatementHandler) IncludeAdjustment(
 		subject:     command.Inclusion,
 		formed:      AdjustmentIncluded,
 	})
+}
+
+// inclusionInstant 给不带纳入时刻的命令（运营决定口）定一个时刻：这个纳入标识已经在册就取册里那一份的时刻，否则取
+// 此刻。纳入时刻进内容指纹——每次都取此刻，同一标识的重放会因为时刻不同被读成冲突；取册里那一份，其余各格相同即
+// 重放、不同即冲突，判据仍是那一份指纹。
+func (handler *CutOffPublishStatementHandler) inclusionInstant(ctx context.Context, key ports.InclusionKey) (time.Time, error) {
+	existing, found, err := handler.deps.Inclusions.FindByKey(ctx, key)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if found {
+		return existing.Inclusion.IncludedAt(), nil
+	}
+	// 截到微秒：库里的时刻只到微秒，带着纳秒算指纹，重放时读回的那一份就对不上。
+	return handler.deps.Clock.Now().UTC().Truncate(time.Microsecond), nil
 }
 
 // inclusionCommit 是两种纳入（迟到费用、既有调整）越过提交边界前共有的那几件：幂等键、
@@ -883,8 +940,12 @@ func (handler *CutOffPublishStatementHandler) commitInclusion(
 		return result, nil
 	case ports.InclusionAlreadyRecorded:
 		winner, found, err := handler.deps.Inclusions.FindByKey(ctx, commit.key)
-		if err != nil || !found {
+		if err != nil {
 			return statementUndecided(InclusionStoreUnavailable, commit.subject), nil
+		}
+		if !found {
+			// 没落成，这个纳入标识下又没有行：撞的是「一笔费用、一笔调整只纳入一次」——它已经在另一个纳入标识下纳过了。
+			return StatementResult{outcome: InclusionSubjectAlreadyIncluded}, nil
 		}
 		result := StatementResult{outcome: InclusionExistingResult, inclusion: winner, hasRecord: true}
 		result.handoff = handler.handOff(ctx, ports.StatementIntent{Inclusion: winner}, commit.subject)

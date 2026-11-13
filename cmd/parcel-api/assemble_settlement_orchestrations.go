@@ -401,3 +401,68 @@ func occupationConversion(db *bentopg.DB, clock systemClock) (*saapplication.Con
 	}
 	return handler, nil
 }
+
+// errSettlementUndecided 只用来让事务回滚：未决不留下半截写入，答复照旧交回编排那一份。
+var errSettlementUndecided = errors.New("parcel-api: settlement follow-up undecided")
+
+// RecordAdjustment 在一笔事务里对一笔已确认费用登记调整。未决整笔回滚。
+func (orchestrations settlementOrchestrations) RecordAdjustment(
+	ctx context.Context,
+	command saapplication.RecordChargeAdjustmentCommand,
+) (saapplication.RecordChargeAdjustmentResult, error) {
+	var result saapplication.RecordChargeAdjustmentResult
+	err := orchestrations.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		recorded, handleErr := orchestrations.adjust.Handle(txCtx, command)
+		result = recorded
+		if handleErr == nil && recorded.Outcome() == saapplication.AdjustmentUndecided {
+			return errSettlementUndecided
+		}
+		return handleErr
+	})
+	if err != nil && !errors.Is(err, errSettlementUndecided) {
+		return saapplication.RecordChargeAdjustmentResult{}, err
+	}
+	return result, nil
+}
+
+// statementFollowUp 是作废与两种纳入共用的事务壳：未决、或意图没交出去（对账单的写入与它的意图同生共死）整笔回滚，
+// 再交回编排那一份答复。
+func (orchestrations settlementOrchestrations) statementFollowUp(
+	ctx context.Context,
+	handle func(context.Context) (saapplication.StatementResult, error),
+) (saapplication.StatementResult, error) {
+	var result saapplication.StatementResult
+	err := orchestrations.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		handled, handleErr := handle(txCtx)
+		result = handled
+		if handleErr == nil && (handled.Outcome() == saapplication.StatementUndecided || handled.StatementHandoffReference() != "") {
+			return errSettlementUndecided
+		}
+		return handleErr
+	})
+	if err != nil && !errors.Is(err, errSettlementUndecided) {
+		return saapplication.StatementResult{}, err
+	}
+	return result, nil
+}
+
+// VoidStatement 在一笔事务里依据作废整张对账单。
+func (orchestrations settlementOrchestrations) VoidStatement(ctx context.Context, command saapplication.VoidStatementCommand) (saapplication.StatementResult, error) {
+	return orchestrations.statementFollowUp(ctx, func(txCtx context.Context) (saapplication.StatementResult, error) {
+		return orchestrations.cutoff.Void(txCtx, command)
+	})
+}
+
+// IncludeLateCharge 在一笔事务里把后到的已确认费用纳入后续账期。
+func (orchestrations settlementOrchestrations) IncludeLateCharge(ctx context.Context, command saapplication.IncludeLateChargeCommand) (saapplication.StatementResult, error) {
+	return orchestrations.statementFollowUp(ctx, func(txCtx context.Context) (saapplication.StatementResult, error) {
+		return orchestrations.cutoff.IncludeLateCharge(txCtx, command)
+	})
+}
+
+// IncludeAdjustment 在一笔事务里把一笔既有调整纳入后续账期。
+func (orchestrations settlementOrchestrations) IncludeAdjustment(ctx context.Context, command saapplication.IncludeAdjustmentCommand) (saapplication.StatementResult, error) {
+	return orchestrations.statementFollowUp(ctx, func(txCtx context.Context) (saapplication.StatementResult, error) {
+		return orchestrations.cutoff.IncludeAdjustment(txCtx, command)
+	})
+}

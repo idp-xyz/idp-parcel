@@ -2451,3 +2451,21 @@ type unwiredCustomerExceptionNotification struct{}
 func (unwiredCustomerExceptionNotification) HandleSignal(context.Context, visibilityapp.NotifySignalCommand) (visibilityapp.NotifyCustomerResult, error) {
 	return visibilityapp.NotifyCustomerResult{}, errOrchestrationNotWired
 }
+
+type unwiredSettlementFollowUp struct{}
+
+func (unwiredSettlementFollowUp) RecordAdjustment(context.Context, settlementapp.RecordChargeAdjustmentCommand) (settlementapp.RecordChargeAdjustmentResult, error) {
+	return settlementapp.RecordChargeAdjustmentResult{}, errOrchestrationNotWired
+}
+
+func (unwiredSettlementFollowUp) VoidStatement(context.Context, settlementapp.VoidStatementCommand) (settlementapp.StatementResult, error) {
+	return settlementapp.StatementResult{}, errOrchestrationNotWired
+}
+
+func (unwiredSettlementFollowUp) IncludeLateCharge(context.Context, settlementapp.IncludeLateChargeCommand) (settlementapp.StatementResult, error) {
+	return settlementapp.StatementResult{}, errOrchestrationNotWired
+}
+
+func (unwiredSettlementFollowUp) IncludeAdjustment(context.Context, settlementapp.IncludeAdjustmentCommand) (settlementapp.StatementResult, error) {
+	return settlementapp.StatementResult{}, errOrchestrationNotWired
+}

@@ -231,6 +231,15 @@ const (
 // 披露授权分开授予——确认可以披露的人不因此是按下发送的人。
 const DecisionCustomerExceptionNotification DecisionKind = "CUSTOMER_EXCEPTION_NOTIFICATION"
 
+// 对账单发布之后的四种结算运营决定：对一笔已确认费用登记调整（计价纠错或商业让利）、依据作废整张对账单、把后到的已确认
+// 费用纳入后续账期、把一笔既有调整纳入后续账期。四种分开授予——能登记让利的不因此能作废整单。
+const (
+	DecisionChargeAdjustmentRegistration DecisionKind = "CHARGE_ADJUSTMENT_REGISTRATION"
+	DecisionStatementVoid                DecisionKind = "STATEMENT_VOID"
+	DecisionLateChargeInclusion          DecisionKind = "LATE_CHARGE_INCLUSION"
+	DecisionAdjustmentInclusion          DecisionKind = "ADJUSTMENT_INCLUSION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -264,6 +273,7 @@ var decisionKinds = []DecisionKind{
 	DecisionPostIntakeManualItemHandling,
 	DecisionSupplierBillDisputeDecision,
 	DecisionStatementDisputeRegistration, DecisionStatementDisputeResolution,
+	DecisionChargeAdjustmentRegistration, DecisionStatementVoid, DecisionLateChargeInclusion, DecisionAdjustmentInclusion,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,
