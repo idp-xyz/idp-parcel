@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { TrackingEntryPanel } from './TrackingEntryPanel';
 import { primaryActionClass } from '../../components/primary-action';
 import type { WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -179,7 +180,21 @@ export function EffectiveTimeJudgmentPage() {
     );
   };
 
-  return conditions === null ? render(null) : <FactCursor conditions={conditions}>{render}</FactCursor>;
+  return (
+    <Tabs defaultValue="facts" className="flex-1 flex flex-col overflow-hidden gap-0 bg-idpxyz-editor">
+      <TabsList className="px-4 shrink-0">
+        <TabsTrigger value="facts">轨迹</TabsTrigger>
+        <TabsTrigger value="entry">录入轨迹</TabsTrigger>
+      </TabsList>
+      <TabsContent value="facts" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+        {conditions === null ? render(null) : <FactCursor conditions={conditions}>{render}</FactCursor>}
+      </TabsContent>
+      <TabsContent value="entry" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+        {/* 没有对接承运商时，轨迹从这里录入或批量导入；录进来的与接口来的一样要经过时间确认。 */}
+        <TrackingEntryPanel />
+      </TabsContent>
+    </Tabs>
+  );
 }
 
 /** 一条轨迹的右栏：两个时间、确认方式与起算时间；能确认时摆「确认时间」，点开在栏内填。 */

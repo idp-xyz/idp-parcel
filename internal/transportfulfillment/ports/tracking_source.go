@@ -78,6 +78,10 @@ type TrackingMaterial struct {
 	CorrectionOf    string
 	PayloadDigest   string
 	Payload         []byte
+	// EnteredBy 与 Original 只在人工录入的素材上非空：谁照着哪一份原件（承运商官网截图、邮件、对账表的编号或存档
+	// 引用）录的。轨迹源适配器交来的素材两格都空。同在或同缺。
+	EnteredBy string
+	Original  string
 }
 
 // PullCursor 是「上次拉到哪」的不透明游标，由该源的适配器解释，空即从头。

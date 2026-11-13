@@ -196,4 +196,4 @@
 
 ## 证据限制
 
-轨迹源素材的认领编排（`AdoptTrackingMaterialHandler`）与有效时间规则都在，但认领没有生产入口：`adapters/trackingsource` 下只有一份合成替身，真源的拉取节拍还没立。外部承运轨迹事实这一条链目前只有 `S` 证据。
+轨迹的认领编排（`AdoptTrackingMaterialHandler`）现在有一个生产入口：手工录入口 `/transport-fulfillment-external-tracking-manual-entries`，操作员照承运商给的材料一次录一条或一批（至多 200 条），逐条认领、各自一笔事务；必带所凭原件，录入人与原件另记一本留痕，源事件标识加 `TRKMANUAL/` 前缀、没给事件号的按内容派生（重复导入认得出）。认领规则不变：凭证要先登记到载运对象上，原始状态词不解释，有效时间按规则或逐条确认。轨迹源适配器那一路仍没有入口：`adapters/trackingsource` 下只有合成替身，真源的拉取节拍还没立。

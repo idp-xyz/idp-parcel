@@ -6,5 +6,6 @@ func init() {
 		externalFundsFactCorrectionAdoption: unwiredExternalFundsFactCorrectionRegistration{},
 		regulatoryCredentialRegistration:    unwiredRegulatoryCredentialRegistration{},
 		externalResults:                     unwiredResults{},
+		trackingEntries:                     unwiredTrackingAdopter{},
 	})
 }

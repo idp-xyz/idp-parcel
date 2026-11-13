@@ -41,7 +41,7 @@
 | 路线规划 | 可用 | 每件包裹的运输路线怎么定、改过几次。 | 初始路由并列裁决、改路决定 | network-routing |
 | 网点作业 | 部分可用 | 网点收寄、集运与交接的作业记录。 | 能确认送站交接、做身份重核与处置；协作承接有接口没页面，集运作业只能离线导入 | node-operations |
 | 运输班次 | 只能看 | 班次、舱位与承运商交接的实际情况。 | 运输委托、订舱、容量、派送触发、收费发生项、段关闭等三十多个操作有接口、没有页面 | transport-fulfillment |
-| 外部轨迹时间确认 | 可用 | 承运商回传的轨迹从何时起算，由我们确认。 | 确认外部轨迹的有效时间 | transport-fulfillment |
+| 外部轨迹时间确认 | 可用 | 承运商回传的轨迹从何时起算，由我们确认。 | 确认外部轨迹的有效时间；「录入轨迹」签录入或批量导入承运商轨迹（填 JSON，不是引导式表单，还没有 Excel 上传） | transport-fulfillment |
 
 **客户**
 
@@ -121,7 +121,7 @@
 
 ## 有接口、没有页面的操作
 
-后端已经有生产入口，管理台没有任何一页调它，现在只能直接调接口或走演示脚本。清关、账务、异常三组的决定口已接进各自页面的「运营决定」签（照提示填 JSON 提交，不是引导式表单），不在下表。运营决定类 70 个里有 28 个、登记类 73 个里有 22 个是这样。
+后端已经有生产入口，管理台没有任何一页调它，现在只能直接调接口或走演示脚本。清关、账务、异常三组的决定口已接进各自页面的「运营决定」签（照提示填 JSON 提交，不是引导式表单），不在下表。运营决定类 71 个里有 28 个、登记类 73 个里有 22 个是这样。
 
 | 领域 | 没有页面的操作 |
 |---|---|
@@ -154,7 +154,7 @@
 
 完整词典在 `apps/admin-web/src/vocabulary/`。
 
-## 接口：272 个，按接入面分
+## 接口：273 个，按接入面分
 
 谁能调哪一类接口，由接入面定。每一面的授予在[接入与身份](./contexts/access-identity.md)里登记。
 
@@ -163,7 +163,7 @@
 | 客户接口 | 货主客户自己的系统。绑定一个客户账户，路径在 `/v1` 下 | 11 |
 | 集成客户端 | 外部系统回传事实：报关服务商、承运商、银行或财务系统 | 8 |
 | 作业事实登记 | 一线作业端用登记过的设备登事实：收寄、交接、揽收、派送、交付 | 18 |
-| 运营决定 | 操作员作出要留名的决定：复核、处置、裁决、确认、审核 | 70 |
+| 运营决定 | 操作员作出要留名的决定：复核、处置、裁决、确认、审核 | 71 |
 | 登记册配置写 | 操作员登记主数据与规则：合同、价卡、网络、目录 | 75 |
 | 主数据与运营查阅读 | 操作员查阅 | 83 |
 | 操作者与授予管理 | 管理员管谁能登录、持有哪几格授予 | 4 |
@@ -201,7 +201,7 @@
 ### 操作员与作业端接口
 
 其余各面的接口太多，不在这里逐条列；登记处就是完整清单。按路径前缀的数量：
-`transport` 50、`commercial` 43、`customs` 36、`pricing` 22、`settlement` 23、`node` 16、`visibility` 9、`network` 8、`shipment` 6、`reference` 5、`route` 5、`operator` 5、`document` 4、`post` 4、`cancellation` 2、`exception` 5、`evidence` 3、`customer` 3、`control` 2、`claims` 1、`channel` 1、`collection` 1、`governance` 1、`label` 1、`work` 1、`operators` 1、`acceptance` 1、`authorized` 1、`tracking` 1。
+`transport` 51、`commercial` 43、`customs` 36、`pricing` 22、`settlement` 23、`node` 16、`visibility` 9、`network` 8、`shipment` 6、`reference` 5、`route` 5、`operator` 5、`document` 4、`post` 4、`cancellation` 2、`exception` 5、`evidence` 3、`customer` 3、`control` 2、`claims` 1、`channel` 1、`collection` 1、`governance` 1、`label` 1、`work` 1、`operators` 1、`acceptance` 1、`authorized` 1、`tracking` 1。
 
 ## 离线登记命令
 

@@ -244,6 +244,10 @@ const (
 // 有对接的由外部系统推，没有对接的由人照原件录，录入人与原件记在结果上。
 const DecisionCustomsExternalResultEntry DecisionKind = "CUSTOMS_EXTERNAL_RESULT_ENTRY"
 
+// DecisionExternalTrackingEntry 是操作员照承运商给的材料把轨迹录进来或批量导入。认领规则与轨迹源适配器那一路相同，
+// 录入人与原件另记一本留痕。
+const DecisionExternalTrackingEntry DecisionKind = "EXTERNAL_TRACKING_ENTRY"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -279,6 +283,7 @@ var decisionKinds = []DecisionKind{
 	DecisionStatementDisputeRegistration, DecisionStatementDisputeResolution,
 	DecisionChargeAdjustmentRegistration, DecisionStatementVoid, DecisionLateChargeInclusion, DecisionAdjustmentInclusion,
 	DecisionCustomsExternalResultEntry,
+	DecisionExternalTrackingEntry,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,

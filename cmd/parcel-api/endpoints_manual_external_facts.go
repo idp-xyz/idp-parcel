@@ -7,6 +7,7 @@ import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
+	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
 type manualExternalFactsWiring struct {
@@ -14,6 +15,7 @@ type manualExternalFactsWiring struct {
 	externalFundsFactCorrectionAdoption settlementhttp.ExternalFundsFactCorrectionRegistrar
 	regulatoryCredentialRegistration    customshttp.RegulatoryCredentialRegistrar
 	externalResults                     customshttp.ResultHandler
+	trackingEntries                     tfhttp.TrackingMaterialAdopter
 }
 
 func init() {
@@ -31,6 +33,9 @@ func init() {
 			"/customs-external-result-manual-registrations": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionCustomsExternalResultEntry),
 			},
+			"/transport-fulfillment-external-tracking-manual-entries": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionExternalTrackingEntry),
+			},
 		},
 		build: func(sources endpointSources) (manualExternalFactsWiring, error) {
 			// 编排取集成客户端族那边的同一套构造（buildSettlementRegistrationOrchestration、buildCustomsRegistrationOrchestration）：两族只差
@@ -45,7 +50,12 @@ func init() {
 			}
 			// 海关外部结果的手工录入进的是集成客户端口后面的同一只接收编排。
 			results, err := buildExternalResultsOrchestration(sources.db)
+			if err != nil {
+				return manualExternalFactsWiring{}, err
+			}
+			tracking, err := buildManualTrackingAdopter(sources.db)
 			return manualExternalFactsWiring{
+				trackingEntries:                     tracking,
 				externalResults:                     results,
 				externalFundsFactAdoption:           settlement.externalFundsFact,
 				externalFundsFactCorrectionAdoption: settlement.externalFundsFactCorrection,
@@ -63,6 +73,8 @@ func init() {
 				// 海关外部结果的手工录入口（dox/decisions.md「产品形态」）：没有对接海关或报关行系统的租户，由关务人员照回执录入。
 				// 录入人与所凭原件记在结果上，与接口来的分得开。
 				{Pattern: "/customs-external-result-manual-registrations", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.ManualResultIntake(channels.operatorDecisions.customs, systemClock{}.Now), wiring.externalResults)},
+				// 承运商轨迹的手工录入口（dox/decisions.md「产品形态」）：一次一条或一批，逐条认领、各自一笔事务。
+				{Pattern: "/transport-fulfillment-external-tracking-manual-entries", Handler: tfhttp.NewManualTrackingEntriesEndpoint(channels.operatorDecisions.transport, wiring.trackingEntries, systemClock{}.Now)},
 			}
 		},
 	})

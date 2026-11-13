@@ -585,3 +585,72 @@ func TestEveryAdoptionOutcomeAndReasonHasAName(t *testing.T) {
 		}
 	}
 }
+
+type manualEntryLedgerDouble struct {
+	entries []ports.ManualTrackingEntry
+	err     error
+}
+
+func (double *manualEntryLedgerDouble) RecordManualEntry(_ context.Context, entry ports.ManualTrackingEntry) error {
+	if double.err != nil {
+		return double.err
+	}
+	double.entries = append(double.entries, entry)
+	return nil
+}
+
+func manualAdoptionFixture(ledger *manualEntryLedgerDouble) *adoptionFixture {
+	fixture := newAdoptionFixture(knownCredentials())
+	fixture.handler = application.NewAdoptTrackingMaterialHandler(application.AdoptTrackingMaterialDeps{
+		Facts: fixture.registry, Identities: fixture.identity, Credentials: knownCredentials(), Rules: fixture.rules,
+		Ledger: fixture.ledger, Downstream: fixture.handoff, Clock: trackingClock{at: trackingRecordedAt}, ManualEntries: ledger,
+	})
+	return fixture
+}
+
+// Covers: dox/decisions.md「产品形态」——人工录入的轨迹进的是同一只认领编排，认领出的那一版另记一条留痕：录入人与所凭
+// 原件。同一条再录一遍是重复投递、不记第二条留痕；有录入人没有原件（或反过来）不受理；留痕落不下答未决（装配点据此
+// 回滚，不留一版看不出是人录的事实）；源来的素材不记留痕。
+func TestAManuallyEnteredTrackingEventIsAdoptedByTheSameRulesAndLeavesAnEntryTrail(t *testing.T) {
+	ledger := &manualEntryLedgerDouble{}
+	fixture := manualAdoptionFixture(ledger)
+	manual := trackingMaterial(t, "MANUAL/evt-1")
+	manual.EnteredBy, manual.Original = "OPERATOR/https://issuer#alice", "SYN-CARRIER-MAIL-20261113"
+
+	result, err := fixture.handler.Adopt(context.Background(), manual)
+	record, has := result.Record()
+	if err != nil || result.Outcome() != application.TrackingFactAdoptedPendingJudgment || !has {
+		t.Fatalf("人工录入：err=%v outcome=%q", err, result.Outcome())
+	}
+	if len(ledger.entries) != 1 || ledger.entries[0].Key != record.Key || ledger.entries[0].EnteredBy != "OPERATOR/https://issuer#alice" ||
+		ledger.entries[0].Original != "SYN-CARRIER-MAIL-20261113" {
+		t.Fatalf("留痕 = %+v", ledger.entries)
+	}
+	if again, err := fixture.handler.Adopt(context.Background(), manual); err != nil || again.Outcome() != application.TrackingMaterialDuplicate || len(ledger.entries) != 1 {
+		t.Fatalf("再录一遍：err=%v outcome=%q 留痕 %d 条", err, again.Outcome(), len(ledger.entries))
+	}
+
+	for name, mutate := range map[string]func(*ports.TrackingMaterial){
+		"有录入人没有原件": func(material *ports.TrackingMaterial) { material.Original = "" },
+		"有原件没有录入人": func(material *ports.TrackingMaterial) { material.EnteredBy = "" },
+	} {
+		material := trackingMaterial(t, "MANUAL/evt-"+name)
+		material.EnteredBy, material.Original = "OPERATOR/https://issuer#alice", "SYN-ORIGINAL"
+		mutate(&material)
+		if refused, err := fixture.handler.Adopt(context.Background(), material); err != nil || refused.Outcome() != application.TrackingMaterialNotAccepted {
+			t.Fatalf("%s：err=%v outcome=%q", name, err, refused.Outcome())
+		}
+	}
+
+	failing := manualAdoptionFixture(&manualEntryLedgerDouble{err: errors.New("ledger down")})
+	other := trackingMaterial(t, "MANUAL/evt-2")
+	other.EnteredBy, other.Original = "OPERATOR/https://issuer#alice", "SYN-ORIGINAL"
+	if undecided, err := failing.handler.Adopt(context.Background(), other); err != nil || undecided.Outcome() != application.TrackingAdoptionUndecided {
+		t.Fatalf("留痕落不下：err=%v outcome=%q", err, undecided.Outcome())
+	}
+
+	fromSource := trackingMaterial(t, "evt-source-1")
+	if adopted, err := fixture.handler.Adopt(context.Background(), fromSource); err != nil || adopted.Outcome() != application.TrackingFactAdoptedPendingJudgment || len(ledger.entries) != 1 {
+		t.Fatalf("源来的素材：err=%v outcome=%q 留痕 %d 条", err, adopted.Outcome(), len(ledger.entries))
+	}
+}

@@ -35,11 +35,13 @@ const (
 type OperatorDecision string
 
 const (
-	OperatorDecisionSegmentClosure                      OperatorDecision = "SEGMENT_CLOSURE"
-	OperatorDecisionDispatchTaskRegistration            OperatorDecision = "DISPATCH_TASK_REGISTRATION"
-	OperatorDecisionLoadAssignment                      OperatorDecision = "LOAD_ASSIGNMENT"
-	OperatorDecisionParticipationTermination            OperatorDecision = "PARTICIPATION_TERMINATION"
-	OperatorDecisionEffectiveTimeJudgment               OperatorDecision = "EFFECTIVE_TIME_JUDGMENT"
+	OperatorDecisionSegmentClosure           OperatorDecision = "SEGMENT_CLOSURE"
+	OperatorDecisionDispatchTaskRegistration OperatorDecision = "DISPATCH_TASK_REGISTRATION"
+	OperatorDecisionLoadAssignment           OperatorDecision = "LOAD_ASSIGNMENT"
+	OperatorDecisionParticipationTermination OperatorDecision = "PARTICIPATION_TERMINATION"
+	OperatorDecisionEffectiveTimeJudgment    OperatorDecision = "EFFECTIVE_TIME_JUDGMENT"
+	// OperatorDecisionExternalTrackingEntry 是人工录入或批量导入承运商轨迹。
+	OperatorDecisionExternalTrackingEntry               OperatorDecision = "EXTERNAL_TRACKING_ENTRY"
 	OperatorDecisionCarrierFirstEffectivePickupJudgment OperatorDecision = "CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT"
 	OperatorDecisionTransportCommissionSubmission       OperatorDecision = "TRANSPORT_COMMISSION_SUBMISSION"
 	OperatorDecisionChargeOccurrenceRegistration        OperatorDecision = "TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION"

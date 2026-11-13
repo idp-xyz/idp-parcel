@@ -125,6 +125,8 @@ type AdoptTrackingMaterialDeps struct {
 	Ledger      ports.UnadoptedTrackingMaterialLedger
 	Downstream  ports.ExternalTrackingFactHandoff
 	Clock       ports.Clock
+	// ManualEntries 记人工录入的留痕。只有手工录入口后面的装配给它；素材带了录入人而它不在是装配缺陷。
+	ManualEntries ports.ManualTrackingEntryLedger
 }
 
 // AdoptTrackingMaterialHandler 是外部轨迹的收编执行器：把 TrackingSource 交来的一条原始素材
@@ -150,6 +152,14 @@ func (handler *AdoptTrackingMaterialHandler) Adopt(
 	shape, accepted := trackingShapeFrom(material)
 	if !accepted {
 		return AdoptTrackingMaterialResult{outcome: TrackingMaterialNotAccepted}, nil
+	}
+	manual := strings.TrimSpace(material.EnteredBy) != ""
+	if manual != (strings.TrimSpace(material.Original) != "") {
+		// 人工录入必带所凭原件；源来的素材不带录入人，也就不该带原件这一格。
+		return AdoptTrackingMaterialResult{outcome: TrackingMaterialNotAccepted}, nil
+	}
+	if manual && handler.deps.ManualEntries == nil {
+		return AdoptTrackingMaterialResult{}, fmt.Errorf("adopt tracking material: a manual entry arrived but no manual entry ledger is wired")
 	}
 
 	if shape.eventGiven {
@@ -231,6 +241,15 @@ func (handler *AdoptTrackingMaterialHandler) Adopt(
 		}
 		switch saved {
 		case ports.ExternalTrackingFactSaved:
+			if manual {
+				if err := handler.deps.ManualEntries.RecordManualEntry(ctx, ports.ManualTrackingEntry{
+					Key: record.Key, EnteredBy: strings.TrimSpace(material.EnteredBy), Original: strings.TrimSpace(material.Original),
+					EnteredAt: record.RecordedAt,
+				}); err != nil {
+					// 事实落了而留痕没落：答未决，装配点整笔回滚——不留一版看不出是人录的事实。
+					return trackingUndecided(TrackingFactRegistryUnavailable, material), nil
+				}
+			}
 			return handler.adopted(ctx, record), nil
 		case ports.ExternalTrackingFactAlreadyRegistered:
 			// 身份是刚签的，撞键说明另一方先落了：先按（源，源事件）读回，读得到就是同一条已被认领；读不到而本版

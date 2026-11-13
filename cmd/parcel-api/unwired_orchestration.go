@@ -2469,3 +2469,9 @@ func (unwiredSettlementFollowUp) IncludeLateCharge(context.Context, settlementap
 func (unwiredSettlementFollowUp) IncludeAdjustment(context.Context, settlementapp.IncludeAdjustmentCommand) (settlementapp.StatementResult, error) {
 	return settlementapp.StatementResult{}, errOrchestrationNotWired
 }
+
+type unwiredTrackingAdopter struct{}
+
+func (unwiredTrackingAdopter) Adopt(context.Context, tfports.TrackingMaterial) (tfapp.AdoptTrackingMaterialResult, error) {
+	return tfapp.AdoptTrackingMaterialResult{}, errOrchestrationNotWired
+}

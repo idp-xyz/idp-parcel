@@ -261,6 +261,9 @@ func TestExternalTrackingWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if err := repository.RecordUnadopted(t.Context(), ports.UnadoptedTrackingMaterial{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务留痕应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if err := repository.RecordManualEntry(t.Context(), ports.ManualTrackingEntry{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务记人工录入留痕应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }
 
 // TestExternalTrackingCheckConstraintsRejectRowsTheDomainCannotProduce 证库内 CHECK 是第二道门。

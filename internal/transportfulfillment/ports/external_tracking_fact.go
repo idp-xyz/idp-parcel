@@ -83,6 +83,20 @@ type ExternalTrackingIdentityFactory interface {
 	NextExternalTrackingFactVersion(ctx context.Context) (domain.ExternalTrackingFactVersion, error)
 }
 
+// ManualTrackingEntry 是一条人工录入留痕：哪一版事实是谁照着哪份原件录的。
+type ManualTrackingEntry struct {
+	Key       ExternalTrackingFactKey
+	EnteredBy string
+	Original  string
+	EnteredAt time.Time
+}
+
+// ManualTrackingEntryLedger 记人工录入的留痕，与事实版本同一事务落。它单立一本册而不往事实行上加格：轨迹源适配器认领
+// 的版本永远没有这两格，人录的与源来的靠「这本册里有没有它」分开。
+type ManualTrackingEntryLedger interface {
+	RecordManualEntry(ctx context.Context, entry ManualTrackingEntry) error
+}
+
 // UnadoptedReason 说一条素材为什么没有成为事实。两格的续办不同：源未给发生时间只能等源改
 // 报文；凭证不认识要去查凭证登记。
 type UnadoptedReason uint8

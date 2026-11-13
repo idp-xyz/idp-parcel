@@ -326,3 +326,24 @@ func effectiveTimeBasisFrom(raw string) (domain.EffectiveTimeBasis, error) {
 		return domain.EffectiveTimeBasisInvalid, fmt.Errorf("unknown effective time basis %q", raw)
 	}
 }
+
+var _ ports.ManualTrackingEntryLedger = (*ExternalTrackingFacts)(nil)
+
+// RecordManualEntry 记一版事实是谁照着哪份原件录的。与事实版本同一事务落；一版至多一条，撞键照错误上抛——同一版被
+// 记两次留痕是写入方违了不变量。
+func (repository *ExternalTrackingFacts) RecordManualEntry(ctx context.Context, entry ports.ManualTrackingEntry) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("record manual tracking entry: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO transport_fulfillment.external_tracking_manual_entry
+		     (tenant_id, fact_id, version_id, entered_by, original_ref, entered_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		entry.Key.TenantID.String(), entry.Key.Fact.String(), entry.Key.Version.String(),
+		entry.EnteredBy, entry.Original, entry.EnteredAt.UTC(),
+	); err != nil {
+		return fmt.Errorf("record manual tracking entry: %w", err)
+	}
+	return nil
+}
