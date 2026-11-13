@@ -1,0 +1,82 @@
+# idp-parcel 文档入口
+
+取证于 main `3dd72c42a`（2026-11-12）。
+
+`dox/` 是现行文档。`docs/` 与 `.scratch/` 是历史记录：迁进 `dox/` 的内容以这里为准，还没迁的暂时仍看那边，下面的表写明每一块现在看哪。
+
+## 这个目录的规矩
+
+1. **整份改写，不打补丁。** 规则变了就改那一句；来历看 `git log`。不写「补记」「更正」「此前」。
+2. **一条规则只有一个家。** 在它所属上下文的那一个文件里。别处要用就链过去，不抄。
+3. **不建子目录装决定和票。** 决定只在 [decisions.md](./decisions.md)，活只在 [work.md](./work.md)；做完的条目删掉。
+4. **有行数上限。** `contexts/` 下每个文件不过 200 行，其余每个不过 100 行。超了是写多了，删，不拆文件。
+5. **对着代码写。** 写进来的规则要在代码里找得到对应；文档走在代码前面的，单列在该文件末节。
+
+## 文件
+
+| 文件 | 回答什么 | 状态 |
+|---|---|---|
+| 本页 | 现状，以及每一块看哪 | 现行 |
+| [product.md](./product.md) | 产品是什么、首发范围、切片 | 待写 |
+| [contexts/](./contexts/) | 每个上下文一个文件：管什么、词、规则、生命周期、入口 | 试点一个 |
+| [decisions.md](./decisions.md) | 难逆转的取舍，每条一段 | 起了头 |
+| [work.md](./work.md) | 在做与待做 | 现行 |
+| [tenant.md](./tenant.md) | 一个租户上线要提供什么 | 待写 |
+
+## 一句话
+
+上线线已于 2026-10-28 达成；上线前与限量生产前必须做的票都已在 main。离第一家租户上线，产品这边没有欠着的代码，差的是租户取值与 PN-08 `Go`。现在唯一在做的是客户要求清单那一批（合同、价卡、计费、报价）。
+
+## 现在按什么规矩干活
+
+[AGENTS.md「交付模式」](../AGENTS.md#交付模式)：只做三种——冻结清单里必须做的、真实租户撞上的、用户点名的。
+
+## 各切片做到哪
+
+「机制半边」一栏照抄[开发主线「机制半边现状」](../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#机制半边现状)的定级；那张表之后的更正写在它下面的各条补记里，本页不复述。实例半边（某个租户能不能上生产）八个切片都还没有，只来自[参数登记册](../docs/product/PILOT-PARAMETER-REGISTER.md)的证据与 PN-08 `Go`。
+
+| 切片 | 是什么 | 主责上下文 | 机制半边 |
+|---|---|---|---|
+| PN-01 | 范围、责任与治理基础 | `pilotgovernance` | 达标 |
+| PN-02 | 商业权威、生产归属、委托与包裹身份 | `party-commercial`、`parcel-shipment`、`network-routing` | 达标（留待项已认可） |
+| PN-03 | 接受后路由、收寄与节点作业 | `network-routing`、`node-operations`、`transport-fulfillment` | 达标（留待项已认可） |
+| PN-04 | 取消与处置、运输履约、交付与终局 | `transport-fulfillment`、`parcel-shipment` | 达标 |
+| PN-05 | 关务合规控制 | `customs-compliance` | 达标 |
+| PN-06 | 追踪、异常与客户披露 | `visibility-exception` | 达标（留待项已认可） |
+| PN-07 | 计价、账单与运营结算 | `parcel-pricing`、`settlement-accounting` | 达标（留待项已认可） |
+| PN-08 | 端到端试点与阶段准入 | `pilotgovernance` | 达标；真实候选与证据包等租户 |
+| PN-09 | 仓配履约（可选，首发不含） | `warehouse-fulfillment` | 用例已写，main 上无生产代码；已搁置 |
+
+## 一条规则现在是什么，看哪
+
+已迁进 `dox/contexts/` 的上下文只看那一个文件。还没迁的，先看它在 `docs/domain/` 下的 `CONTEXT.md`；用例的输入、结果与失败边界看 `UC-*`；ADR 只在要追「为什么这样定」时读，并且先看它的 Status 行有没有被后来的 ADR 停掉。
+
+| 上下文 | 现行规则 | 用例 |
+|---|---|---|
+| 参与方与商业 | [CONTEXT](../docs/domain/party-commercial/CONTEXT.md) | [UC-PC](../docs/application/party-commercial/) |
+| 小包托运 | [CONTEXT](../docs/domain/parcel-shipment/CONTEXT.md) | [UC-PS](../docs/application/parcel-shipment/) |
+| 网络与路由 | [CONTEXT](../docs/domain/network-routing/CONTEXT.md) | [UC-NR](../docs/application/network-routing/) |
+| 节点作业 | [CONTEXT](../docs/domain/node-operations/CONTEXT.md) | [UC-NO](../docs/application/node-operations/) |
+| 运输履约 | [CONTEXT](../docs/domain/transport-fulfillment/CONTEXT.md) | [UC-TF](../docs/application/transport-fulfillment/) |
+| 关务与贸易合规 | [CONTEXT](../docs/domain/customs-compliance/CONTEXT.md) | [UC-CC](../docs/application/customs-compliance/) |
+| 全程追踪与异常 | [CONTEXT](../docs/domain/visibility-exception/CONTEXT.md) | [UC-VE](../docs/application/visibility-exception/) |
+| 小包计价 | [dox/contexts/parcel-pricing.md](./contexts/parcel-pricing.md)（试点，已迁） | 同左 |
+| 结算与经营核算 | [CONTEXT](../docs/domain/settlement-accounting/CONTEXT.md) | [UC-SA](../docs/application/settlement-accounting/) |
+| 代收与清分 | [CONTEXT](../docs/domain/collection-remittance/CONTEXT.md) | [UC-CR](../docs/application/collection-remittance/) |
+| 仓配履约（可选） | [CONTEXT](../docs/domain/warehouse-fulfillment/CONTEXT.md) | [UC-WF](../docs/application/warehouse-fulfillment/) |
+
+上下文之间谁拥有什么看 [CONTEXT-MAP](../docs/domain/CONTEXT-MAP.md)，跨上下文的词看 [GLOSSARY](../docs/domain/GLOSSARY.md)。
+
+## 在做、待做、搁置
+
+只在 [work.md](./work.md)。
+
+## 离第一家租户上线还差
+
+1. 一个真实租户的取值（服务商通道、账期等），登进[参数登记册](../docs/product/PILOT-PARAMETER-REGISTER.md)；产品在这些格上按设计答`未配置`。
+2. PN-08 阶段评审给出 `Go`（[交接](../docs/design/pn-08-end-to-end-pilot-and-stage-admission-development-handoff.md)）。
+3. [work.md](./work.md)「上线前要核的」那几条。
+
+## 怎么维护
+
+一笔进 main 的改动若让本页某一格变了，同一笔改这一格，并把顶上的 SHA 与日期换成当时的。

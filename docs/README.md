@@ -4,7 +4,7 @@
 
 ## 工作方式入口
 
-- [现状一页](./STATUS.md)：做到哪、在做什么、不做什么、离第一家租户上线还差什么，以及每个上下文的现行规则看哪个文件；只指路不定义，进 main 的改动让哪一格变了就同笔改哪一格。
+- [dox/](../dox/README.md)：现行文档入口与现状——做到哪、在做什么、每一块规则现在看哪个文件。迁进 `dox/` 的内容以那边为准。
 - 仓库根 [AGENTS.md](../AGENTS.md)：开发与 Agent 的开工顺序、红线、改文档规则与 skills 路由；不替代本目录下的产品/领域权威定义。
 - [Agent skills 接线](./agents/)：issue tracker（本地 `.scratch/`）、triage 标签、领域文档消费约定；供 `/triage`、`/to-spec`、`/to-tickets`、`/implement`、`/wayfinder` 读取。
 - [技能流程在本仓的落法](./agents/workflow.md)：通用技能流程与本仓 PN 切片、交接工作包、证据层级之间的绑定关系，哪些上游步骤本仓已用文档做过，以及进 main 的步骤（单会话与多会话同此）。
