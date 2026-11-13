@@ -208,12 +208,17 @@ func buildBookingFaces(db *bentopg.DB, numbers docnumbering.Components) (transac
 	if err != nil {
 		return transactionalBookingFaces{}, fmt.Errorf("parcel-api: transport schedules: %w", err)
 	}
+	manualAnswers, err := tfpostgres.NewBookingAnswerManualEntries(db)
+	if err != nil {
+		return transactionalBookingFaces{}, fmt.Errorf("parcel-api: manual booking answers: %w", err)
+	}
 	handler := tfapp.NewCommissionTransportHandler(tfapp.CommissionTransportDeps{
 		Commissions:          commissions,
 		Bookings:             bookings,
 		BookingsWithProvider: bookings,
 		Answers:              answers,
 		AnswerBounces:        bounces,
+		ManualAnswers:        manualAnswers,
 		Schedules:            schedules,
 		Clock:                systemClock{},
 		Numbers:              issuer,

@@ -210,6 +210,16 @@ type AnswerBookingCommand struct {
 	Quantity   int64
 	Basis      string
 	DecidedAt  time.Time
+	// EnteredBy 与 Original 只在人工录入时给（dox/decisions.md「产品形态」）：承运方用电话或邮件答复了订舱，操作员照着
+	// 录进来——谁录的、凭的是哪份原件。两格同在或同缺；给了它们，Source 必须留空：答复方就是这份订舱所属委托的服务提供方，
+	// 由编排从订舱上取，不由录入的人指名。
+	EnteredBy string
+	Original  string
+}
+
+// manual 报这条命令是不是人工录入。
+func (command AnswerBookingCommand) manual() bool {
+	return strings.TrimSpace(command.EnteredBy) != "" || strings.TrimSpace(command.Original) != ""
 }
 
 // CancelCommissionCommand 携带取消请求：只及未开始的运输意图。CancelledBy 是作出取消决定的操作者，可缺，只进审计（ADR-0303
@@ -290,10 +300,12 @@ type CommissionTransportDeps struct {
 	BookingsWithProvider ports.BookingWithProviderReader
 	Answers              ports.BookingAnswerLedger
 	AnswerBounces        ports.BookingAnswerBounceLedger
-	Schedules            ports.TransportScheduleReader
-	Agreements           ports.SupplierAgreementSource
-	Downstream           ports.TransportCommissionHandoff
-	Clock                ports.Clock
+	// ManualAnswers 记人工录入的承运答复留痕。只有手工录入口用到；命令带了录入人而它不在是装配缺陷。
+	ManualAnswers ports.ManualBookingAnswerLedger
+	Schedules     ports.TransportScheduleReader
+	Agreements    ports.SupplierAgreementSource
+	Downstream    ports.TransportCommissionHandoff
+	Clock         ports.Clock
 	// Numbers 与委托、订舱的号表只在开立委托或订舱的编排实例上装（ADR-0355 决定三）；取消、答复与采用不取号。
 	Numbers           ports.DocumentNumberIssuer
 	CommissionNumbers ports.TransportCommissionNumbers
@@ -554,7 +566,16 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 	ctx context.Context,
 	command AnswerBookingCommand,
 ) (CommissionResult, error) {
-	if strings.TrimSpace(command.Source) == "" {
+	manual := command.manual()
+	if manual {
+		if strings.TrimSpace(command.EnteredBy) == "" || strings.TrimSpace(command.Original) == "" || strings.TrimSpace(command.Source) != "" {
+			// 人工录入必带录入人与所凭原件，且不自报答复方。
+			return CommissionResult{outcome: CommissionNotAccepted}, nil
+		}
+		if handler.deps.ManualAnswers == nil {
+			return CommissionResult{}, fmt.Errorf("answer booking: a manual entry arrived but no manual answer ledger is wired")
+		}
+	} else if strings.TrimSpace(command.Source) == "" {
 		return CommissionResult{}, ErrAnswerSourceMissing
 	}
 	bookingRef, err := domain.NewBookingReference(command.Booking)
@@ -572,11 +593,19 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 		return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
 	}
 	if !found {
+		if manual {
+			// 挡回册记的是承运方交来而没被收下的答复；操作员填错订舱号不是那回事，如实答订舱不在册即可。
+			return CommissionResult{outcome: BookingNotFound}, nil
+		}
 		return handler.bounceAnswer(ctx, command, key, acceptanceRef, ports.BouncedBookingNotRegistered), nil
 	}
 	if !addressed.CommissionRegistered {
 		return CommissionResult{}, fmt.Errorf("%w: booking %s, commission %s", ErrBookingWithoutCommission,
 			bookingRef, addressed.Booking.Booking.Commission())
+	}
+	if manual {
+		// 操作员录的是服务提供方的答复：答复方取订舱所属委托的服务提供方。
+		command.Source = addressed.Provider.String()
 	}
 	if addressed.Provider.String() != command.Source {
 		return handler.bounceAnswer(ctx, command, key, acceptanceRef, ports.BouncedSourceNotServiceProvider), nil
@@ -628,6 +657,15 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 	}
 	switch saved {
 	case ports.BookingAnswerSaved:
+		if manual {
+			if err := handler.deps.ManualAnswers.RecordManualBookingAnswer(ctx, ports.ManualBookingAnswer{
+				Key: key, Acceptance: acceptanceRef, EnteredBy: strings.TrimSpace(command.EnteredBy),
+				Original: strings.TrimSpace(command.Original), EnteredAt: record.RecordedAt,
+			}); err != nil {
+				// 答复落了而留痕没落：答未决，装配点整笔回滚——不留一份看不出是人录的承运答复。
+				return commissionUndecided(AnswerStoreUnavailable, command.Booking), nil
+			}
+		}
 		return CommissionResult{outcome: BookingAnswered, answer: record, hasRecord: true}, nil
 	case ports.BookingAlreadyAnswered:
 		// 持锁之后仍撞约束，只能是不走本编排的写入先落：同一答复标识按摘要分重放与冲突；撞的是别的标识（另一份定局或

@@ -20,6 +20,7 @@ func init() {
 			"/transport-fulfillment-transport-commission-submissions": {method: http.MethodPost, face: decisionFace(accessidentity.DecisionTransportCommissionSubmission)},
 			"/transport-fulfillment-booking-request-submissions":      {method: http.MethodPost, face: decisionFace(accessidentity.DecisionBookingRequestSubmission)},
 			"/transport-fulfillment/booking-answers":                  {method: http.MethodPost, face: integrationClientFace(accessidentity.FactCarrierBookingAnswer)},
+			"/transport-fulfillment-booking-answer-manual-entries":    {method: http.MethodPost, face: decisionFace(accessidentity.DecisionBookingAnswerEntry)},
 		},
 		build: func(sources endpointSources) (transportCommissionWiring, error) {
 			submission, err := buildTransportCommissionSubmission(sources.db, sources.documentNumbers)
@@ -46,6 +47,9 @@ func init() {
 				// 承运订舱答复口（ADR-0202 决定二、五）：提交方是承运系统，挂集成客户端族的承运订舱答复一类；答复方的来源身份取自客户端
 				// 绑定、须等于订舱所属委托的服务提供方。发行方参数未设时答未配置；写开关换不了它（ADR-0150 决定三）。
 				{Pattern: "/transport-fulfillment/booking-answers", Handler: tfhttp.NewAnswerBookingEndpoint(tfhttp.BookingAnswerIntake(channels.integrationClients.transport), wiring.bookingAnswer)},
+				// 订舱答复的手工录入口（dox/decisions.md「产品形态」）：没有对接承运商系统时，操作员照承运方的电话或邮件录入。
+				// 同一只编排；答复方取订舱所属委托的服务提供方，录入人与所凭原件另记留痕。
+				{Pattern: "/transport-fulfillment-booking-answer-manual-entries", Handler: tfhttp.NewEnterBookingAnswerEndpoint(channels.operatorDecisions.transport, wiring.bookingAnswer, systemClock{}.Now)},
 			}
 		},
 	})

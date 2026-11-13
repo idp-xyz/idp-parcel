@@ -545,3 +545,104 @@ func TestAnAnswerRecoveryDiscipline(t *testing.T) {
 		})
 	}
 }
+
+type manualAnswerLedgerDouble struct {
+	entries []ports.ManualBookingAnswer
+	err     error
+}
+
+func (double *manualAnswerLedgerDouble) RecordManualBookingAnswer(_ context.Context, entry ports.ManualBookingAnswer) error {
+	if double.err != nil {
+		return double.err
+	}
+	double.entries = append(double.entries, entry)
+	return nil
+}
+
+// manualBookedFixture 是带人工录入留痕册的已订舱夹具：编排的其余依赖与 newBookedFixture 是同一组替身。
+func manualBookedFixture(t *testing.T, ledger *manualAnswerLedgerDouble) *commissionFixture {
+	t.Helper()
+	fixture := newBookedFixture(t)
+	fixture.handler = application.NewCommissionTransportHandler(application.CommissionTransportDeps{
+		Commissions: fixture.commissions, Bookings: fixture.bookings, BookingCancellations: fixture.bookings,
+		BookingsWithProvider: fixture.withProvider, Answers: fixture.answers, AnswerBounces: fixture.bounces,
+		Schedules: fixture.schedules, Agreements: fixture.agreements, Downstream: fixture.handoff,
+		Clock: commissionClock{at: commissionNowAt}, Numbers: fixture.numbers, CommissionNumbers: fixture.commissions,
+		BookingNumbers: fixture.bookings, ManualAnswers: ledger,
+	})
+	return fixture
+}
+
+func manualAnswerCommand(t *testing.T, outcome domain.CarrierAcceptanceOutcome) application.AnswerBookingCommand {
+	t.Helper()
+	command := answerBookingCommand(t, outcome)
+	command.Source, command.Acceptance = "", "BKGMANUAL/mail-1"
+	command.EnteredBy, command.Original = "OPERATOR/https://issuer#alice", "SYN-CARRIER-MAIL-20261019"
+	return command
+}
+
+// Covers: dox/decisions.md「产品形态」——操作员照承运方的电话或邮件录入订舱答复：进同一只编排，答复方取订舱所属委托的
+// 服务提供方（录入的人不指名）；落的是同一种答复，另记一条留痕（录入人与原件）；原样再录是重放、不记第二条；订舱已有
+// 定局之后承运系统再交一份是冲突——人录的那一份与系统交的受同一条「至多一份定局」约束。
+func TestAManuallyEnteredBookingAnswerIsTakenAsTheProvidersAnswerWithItsOwnTrail(t *testing.T) {
+	ledger := &manualAnswerLedgerDouble{}
+	fixture := manualBookedFixture(t, ledger)
+	ctx := context.Background()
+
+	result, err := fixture.handler.AnswerBooking(ctx, manualAnswerCommand(t, domain.BookingAccepted))
+	if err != nil || result.Outcome() != application.BookingAnswered || fixture.answers.answersOf("booking-1") != 1 {
+		t.Fatalf("人工录入：err=%v outcome=%q", err, result.Outcome())
+	}
+	if len(ledger.entries) != 1 || ledger.entries[0].EnteredBy != "OPERATOR/https://issuer#alice" || ledger.entries[0].Original != "SYN-CARRIER-MAIL-20261019" ||
+		ledger.entries[0].Acceptance.String() != "BKGMANUAL/mail-1" || ledger.entries[0].Key.Booking.String() != "booking-1" {
+		t.Fatalf("留痕 = %+v", ledger.entries)
+	}
+	if replay, err := fixture.handler.AnswerBooking(ctx, manualAnswerCommand(t, domain.BookingAccepted)); err != nil ||
+		replay.Outcome() != application.BookingAnswerExists || len(ledger.entries) != 1 {
+		t.Fatalf("原样再录：err=%v outcome=%q 留痕 %d 条", err, replay.Outcome(), len(ledger.entries))
+	}
+	if fromCarrier, err := fixture.handler.AnswerBooking(ctx, answerBookingCommand(t, domain.BookingRefused)); err != nil ||
+		fromCarrier.Outcome() != application.BookingAnswerConflict {
+		t.Fatalf("已有定局后承运系统再交一份：err=%v outcome=%q", err, fromCarrier.Outcome())
+	}
+}
+
+// Covers: 人工录入必带录入人与原件、不得自报答复方；订舱不在册如实答、不往挡回册里记（那本册记的是承运方交来而没被
+// 收下的答复）；留痕落不下答未决；没接留痕册是装配缺陷、上抛。
+func TestAManualBookingAnswerMustCarryItsOriginalAndNeverNamesTheAnsweringParty(t *testing.T) {
+	ctx := context.Background()
+	for name, mutate := range map[string]func(*application.AnswerBookingCommand){
+		"没有原件":  func(command *application.AnswerBookingCommand) { command.Original = " " },
+		"没有录入人": func(command *application.AnswerBookingCommand) { command.EnteredBy = "" },
+		"自报答复方": func(command *application.AnswerBookingCommand) { command.Source = "partner-1" },
+	} {
+		ledger := &manualAnswerLedgerDouble{}
+		fixture := manualBookedFixture(t, ledger)
+		command := manualAnswerCommand(t, domain.BookingAccepted)
+		mutate(&command)
+		result, err := fixture.handler.AnswerBooking(ctx, command)
+		if err != nil || result.Outcome() != application.CommissionNotAccepted || fixture.answers.answersOf("booking-1") != 0 || len(ledger.entries) != 0 {
+			t.Fatalf("%s：err=%v outcome=%q", name, err, result.Outcome())
+		}
+	}
+
+	ledger := &manualAnswerLedgerDouble{}
+	fixture := manualBookedFixture(t, ledger)
+	absent := manualAnswerCommand(t, domain.BookingAccepted)
+	absent.Booking = "booking-nowhere"
+	if result, err := fixture.handler.AnswerBooking(ctx, absent); err != nil || result.Outcome() != application.BookingNotFound ||
+		fixture.bounces.countOf("", "booking-nowhere", "BKGMANUAL/mail-1", ports.BouncedBookingNotRegistered) != 0 {
+		t.Fatalf("订舱不在册：err=%v outcome=%q", err, result.Outcome())
+	}
+
+	failing := manualBookedFixture(t, &manualAnswerLedgerDouble{err: errors.New("ledger down")})
+	if result, err := failing.handler.AnswerBooking(ctx, manualAnswerCommand(t, domain.BookingAccepted)); err != nil ||
+		result.Outcome() != application.CommissionUndecided {
+		t.Fatalf("留痕落不下：err=%v outcome=%q", err, result.Outcome())
+	}
+
+	unwired := newBookedFixture(t)
+	if _, err := unwired.handler.AnswerBooking(ctx, manualAnswerCommand(t, domain.BookingAccepted)); err == nil {
+		t.Fatal("没接留痕册的人工录入没有上抛")
+	}
+}

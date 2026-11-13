@@ -252,6 +252,10 @@ const DecisionExternalTrackingEntry DecisionKind = "EXTERNAL_TRACKING_ENTRY"
 // 版本的人不因此是递交它的人。
 const DecisionCustomsManualLodgement DecisionKind = "CUSTOMS_MANUAL_LODGEMENT"
 
+// DecisionBookingAnswerEntry 是操作员照承运方的电话或邮件把订舱答复录进来。它与订舱提交分开授予：提出订舱的人不因此
+// 能替承运方记下「已接受」。
+const DecisionBookingAnswerEntry DecisionKind = "BOOKING_ANSWER_ENTRY"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -289,6 +293,7 @@ var decisionKinds = []DecisionKind{
 	DecisionCustomsExternalResultEntry,
 	DecisionExternalTrackingEntry,
 	DecisionCustomsManualLodgement,
+	DecisionBookingAnswerEntry,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,

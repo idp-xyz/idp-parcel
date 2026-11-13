@@ -59,6 +59,20 @@ type BookingAnswerBounce struct {
 	BouncedAt  time.Time
 }
 
+// ManualBookingAnswer 是一条人工录入留痕：哪一份承运答复是谁照着哪份原件（邮件、通话记录的编号或存档引用）录的。
+type ManualBookingAnswer struct {
+	Key        BookingKey
+	Acceptance domain.CarrierAcceptanceReference
+	EnteredBy  string
+	Original   string
+	EnteredAt  time.Time
+}
+
+// ManualBookingAnswerLedger 记人工录入的承运答复留痕，与答复同一事务落。承运系统交来的答复没有这一条。
+type ManualBookingAnswerLedger interface {
+	RecordManualBookingAnswer(ctx context.Context, entry ManualBookingAnswer) error
+}
+
 // BookingAnswerBounceLedger 是承运答复挡回册的写口，与那一次答复同笔。
 type BookingAnswerBounceLedger interface {
 	// RecordBounce 记下一次挡回。同一（租户、答复方、订舱、答复标识、依据）再来一次不另起一行，只加次数、推后最近一次时刻。

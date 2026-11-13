@@ -1,5 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Button } from '@idpxyz/ui-primitives';
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { RegistrationPanel } from '../../components/registration';
+import {
+  bookingAnswerEntryEndpoint,
+  bookingAnswerEntryHint,
+  bookingAnswerEntryOutcomeLabels,
+  bookingAnswerEntryTitle,
+  submitBookingAnswerEntry,
+} from './booking-answer-entry';
+import { judgmentProblemNote } from './effective-time-judgment';
 import type { TemplateViewState } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusPill } from '../../components/StatusPill';
@@ -479,7 +488,36 @@ const loadTransportRecords = (
 // 订舱的状态词由读口按名下当前那一份承运答复派生（ports.BookingStanding*），不是筛选维：胶囊只筛本页。
 const bookingStandingOf = (row: ReviewRow) => row.values.standing;
 
+/**
+ * 运输班次页。「运输班次」签是原来的查阅面；「录入订舱答复」签给没有对接承运商系统的租户：承运方用电话或邮件答复订舱
+ * 之后，照着录进来。
+ */
 export function TransportFulfillmentReviewPage() {
+  return (
+    <Tabs defaultValue="review" className="flex-1 flex flex-col overflow-hidden gap-0 bg-idpxyz-editor">
+      <TabsList className="px-4 shrink-0">
+        <TabsTrigger value="review">运输班次</TabsTrigger>
+        <TabsTrigger value="booking-answer-entry">录入订舱答复</TabsTrigger>
+      </TabsList>
+      <TabsContent value="review" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+        <TransportFulfillmentReview />
+      </TabsContent>
+      <TabsContent value="booking-answer-entry" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+        <RegistrationPanel
+          moduleId="transport-fulfillment-review"
+          title={bookingAnswerEntryTitle}
+          endpoint={`POST ${bookingAnswerEntryEndpoint}`}
+          snapshotHint={bookingAnswerEntryHint}
+          submit={submitBookingAnswerEntry}
+          outcomeLabels={bookingAnswerEntryOutcomeLabels}
+          problemNote={judgmentProblemNote}
+        />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function TransportFulfillmentReview() {
   const [sectionId, setSectionId] = useState<SectionId>(sections[0].id);
   // 订舱区一行跳到挡回区时带过去的那一单；挡回区按它起筛，换签即作废。
   const [bounceSeed, setBounceSeed] = useState<BounceFilter | null>(null);
