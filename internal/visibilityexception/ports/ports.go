@@ -577,6 +577,12 @@ type NotificationChannelDirectory interface {
 	FindChannel(ctx context.Context, tenant domain.TenantID, channel domain.NotificationChannelReference) (domain.NotificationChannelEndpoint, bool, error)
 }
 
+// NotificationChannelPreflight 在生成通知之前问一句：这个渠道此刻发得出去吗。没登记交回 ErrNotificationChannelNotConfigured，
+// 凭据变量没有值交回 ErrNotificationChannelCredentialMissing。它不发任何东西。
+type NotificationChannelPreflight interface {
+	CheckChannel(ctx context.Context, channel domain.NotificationChannelReference) error
+}
+
 // NotificationSendLock 让同一份披露（租户+发作期+客户）上的发送一次只走一笔，锁随事务释放。没有它，两个人同时对一份
 // 失败过的通知重发，会各推一次、各自回填过程节点，后落的那一笔盖掉先落的。
 type NotificationSendLock interface {

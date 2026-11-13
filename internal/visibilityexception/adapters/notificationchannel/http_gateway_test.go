@@ -83,11 +83,11 @@ func TestTheGatewayPostsTheNotificationToTheRegisteredEndpoint(t *testing.T) {
 		response.WriteHeader(http.StatusAccepted)
 	}))
 	defer server.Close()
-	channels := &directory{endpoint: server.URL + "/hooks/exceptions", credential: "SYN_HOOK_TOKEN", registered: true}
+	channels := &directory{endpoint: server.URL + "/hooks/exceptions", credential: "IDP_PARCEL_NOTIFY_SYN_HOOK", registered: true}
 
 	if err := gateway(t, channels, func(name string) string {
-		if name == "SYN_HOOK_TOKEN" {
-			return "s3cret"
+		if name == "IDP_PARCEL_NOTIFY_SYN_HOOK" {
+			return "s3cret\n"
 		}
 		return ""
 	}).SubmitToChannel(t.Context(), notification(t)); err != nil {
@@ -134,9 +134,16 @@ func TestTheGatewayNamesUnconfiguredChannelsAndTreatsEverythingButSuccessAsNotSu
 	if err := gateway(t, &directory{}, noEnv).SubmitToChannel(t.Context(), notification(t)); !errors.Is(err, ports.ErrNotificationChannelNotConfigured) {
 		t.Fatalf("渠道没登记：%v", err)
 	}
-	withCredential := &directory{endpoint: server.URL, credential: "SYN_HOOK_TOKEN", registered: true}
+	withCredential := &directory{endpoint: server.URL, credential: "IDP_PARCEL_NOTIFY_SYN_HOOK", registered: true}
 	if err := gateway(t, withCredential, noEnv).SubmitToChannel(t.Context(), notification(t)); !errors.Is(err, ports.ErrNotificationChannelCredentialMissing) {
 		t.Fatalf("凭据变量没有值：%v", err)
+	}
+	blank := func(string) string { return " \n" }
+	if err := gateway(t, withCredential, blank).SubmitToChannel(t.Context(), notification(t)); !errors.Is(err, ports.ErrNotificationChannelCredentialMissing) {
+		t.Fatalf("凭据变量只有空白：%v", err)
+	}
+	if err := gateway(t, withCredential, noEnv).CheckChannel(t.Context(), notification(t).Channel()); !errors.Is(err, ports.ErrNotificationChannelCredentialMissing) {
+		t.Fatalf("预检凭据变量没有值：%v", err)
 	}
 	if hits != 0 {
 		t.Fatalf("没配好的渠道发出了 %d 次请求", hits)

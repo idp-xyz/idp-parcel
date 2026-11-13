@@ -47,9 +47,9 @@ func TestNotificationChannelsRoundTripPerTenantAndReRegistrationReplacesTheEndpo
 			t.Fatalf("登记渠道：%v", err)
 		}
 	}
-	register("https://hooks.syn.example/a", "SYN_HOOK_TOKEN")
+	register("https://hooks.syn.example/a", "IDP_PARCEL_NOTIFY_SYN_HOOK")
 	found, present, err := channels.FindChannel(ctx, tenant, reference)
-	if err != nil || !present || found.Endpoint() != "https://hooks.syn.example/a" || found.Credential() != "SYN_HOOK_TOKEN" {
+	if err != nil || !present || found.Endpoint() != "https://hooks.syn.example/a" || found.Credential() != "IDP_PARCEL_NOTIFY_SYN_HOOK" {
 		t.Fatalf("读回：err=%v present=%v %+v", err, present, found)
 	}
 	register("https://hooks.syn.example/b", "")
@@ -72,10 +72,19 @@ func TestNotificationChannelsRoundTripPerTenantAndReRegistrationReplacesTheEndpo
 // Covers: 端点只收 https，或回环地址上的 http。
 func TestNotificationChannelEndpointsMustBeHTTPSOrLoopback(t *testing.T) {
 	reference := build(t, domain.NewNotificationChannelReference, "SYN-customer-webhook")
-	for _, refused := range []string{"http://hooks.syn.example/a", "ftp://hooks.syn.example/a", "/relative", "", "https://"} {
+	for _, refused := range []string{"http://hooks.syn.example/a", "ftp://hooks.syn.example/a", "/relative", "", "https://", "https://:443/x", "https://user:pw@hooks.syn.example/a"} {
 		if _, err := domain.NewNotificationChannelEndpoint(reference, refused, ""); !errors.Is(err, domain.ErrInvalidNotificationChannel) {
 			t.Errorf("端点 %q 被收下了：%v", refused, err)
 		}
+	}
+	// 凭据变量名必带前缀：连接器会把它的值发到登记的端点，不限定名字就能把进程环境里的任何值发出去。
+	for _, refused := range []string{"IDP_PARCEL_POSTGRES_DSN", "PATH", "A B", "IDP_PARCEL_NOTIFY_", "idp_parcel_notify_x"} {
+		if _, err := domain.NewNotificationChannelEndpoint(reference, "https://hooks.syn.example/a", refused); !errors.Is(err, domain.ErrInvalidNotificationChannel) {
+			t.Errorf("凭据变量名 %q 被收下了：%v", refused, err)
+		}
+	}
+	if _, err := domain.NewNotificationChannelEndpoint(reference, "https://hooks.syn.example/a", "IDP_PARCEL_NOTIFY_ACME_HOOK"); err != nil {
+		t.Errorf("带前缀的凭据变量名被拒：%v", err)
 	}
 	for _, accepted := range []string{"https://hooks.syn.example/a", "http://127.0.0.1:8080/hook", "http://localhost/hook"} {
 		if _, err := domain.NewNotificationChannelEndpoint(reference, accepted, ""); err != nil {

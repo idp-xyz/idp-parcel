@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -80,22 +81,41 @@ type notificationBody struct {
 	Deadline       string `json:"deadline"`
 }
 
+var _ ports.NotificationChannelPreflight = (*HTTPGateway)(nil)
+
+// CheckChannel 只查渠道登记与凭据变量，不发任何东西。
+func (gateway *HTTPGateway) CheckChannel(ctx context.Context, channel domain.NotificationChannelReference) error {
+	_, _, err := gateway.resolve(ctx, channel)
+	return err
+}
+
+// resolve 找回渠道的端点与凭据的值。凭据的值去掉首尾空白再用：环境变量末尾常带一个换行，带着它连请求头都设不上；
+// 去掉之后是空的，按没有值算。
+func (gateway *HTTPGateway) resolve(ctx context.Context, reference domain.NotificationChannelReference) (domain.NotificationChannelEndpoint, string, error) {
+	none := domain.NotificationChannelEndpoint{}
+	channel, registered, err := gateway.directory.FindChannel(ctx, gateway.tenant, reference)
+	if err != nil {
+		return none, "", fmt.Errorf("notification channel: %w", err)
+	}
+	if !registered {
+		return none, "", fmt.Errorf("%w: %s", ports.ErrNotificationChannelNotConfigured, reference.String())
+	}
+	var token string
+	if name := channel.Credential(); name != "" {
+		if token = strings.TrimSpace(gateway.getenv(name)); token == "" {
+			return none, "", fmt.Errorf("%w: %s", ports.ErrNotificationChannelCredentialMissing, name)
+		}
+	}
+	return channel, token, nil
+}
+
 func (gateway *HTTPGateway) SubmitToChannel(ctx context.Context, notification *domain.CustomerNotification) error {
 	if notification == nil {
 		return errors.New("notification channel: notification is nil")
 	}
-	channel, registered, err := gateway.directory.FindChannel(ctx, gateway.tenant, notification.Channel())
+	channel, token, err := gateway.resolve(ctx, notification.Channel())
 	if err != nil {
-		return fmt.Errorf("notification channel: %w", err)
-	}
-	if !registered {
-		return fmt.Errorf("%w: %s", ports.ErrNotificationChannelNotConfigured, notification.Channel().String())
-	}
-	var token string
-	if name := channel.Credential(); name != "" {
-		if token = gateway.getenv(name); token == "" {
-			return fmt.Errorf("%w: %s", ports.ErrNotificationChannelCredentialMissing, name)
-		}
+		return err
 	}
 	disclosure := notification.Disclosure()
 	body, err := json.Marshal(notificationBody{

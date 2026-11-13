@@ -194,7 +194,7 @@ func TestTheProductionDisclosureFacesDecideAndAuthorizeOnceAgainstARealDatabase(
 	}))
 	defer customerSystem.Close()
 	notifier, err := buildCustomerExceptionNotificationFace(db, func(name string) string {
-		if name == "SYN_CUSTOMER_HOOK_TOKEN" {
+		if name == "IDP_PARCEL_NOTIFY_SYN_CUSTOMER" {
 			return "SYN-token"
 		}
 		return ""
@@ -247,12 +247,46 @@ func TestTheProductionDisclosureFacesDecideAndAuthorizeOnceAgainstARealDatabase(
 			t.Fatalf("登通知渠道：%v", err)
 		}
 	}
-	registerChannel("SYN_UNSET_VARIABLE")
+	registerChannel("IDP_PARCEL_NOTIFY_SYN_UNSET")
 	undecidedFor("凭据变量没有值", visibilityapp.NotificationChannelCredentialMissing)
-	registerChannel("SYN_CUSTOMER_HOOK_TOKEN")
+	registerChannel("IDP_PARCEL_NOTIFY_SYN_CUSTOMER")
 
-	// 客户系统答 500：记下`失败`节点，通知留着等重发。
-	sent, err := notifier.HandleSignal(t.Context(), notify)
+	// 调用方在客户系统收到推送之后断开（操作员关页面、反向代理超时）：推送那一笔不随它取消，节点照样记下。通知记录
+	// 先于推送提交，所以即使那一笔没落成，记录也在、标识不变。
+	var cancelCaller atomic.Value
+	cancelCaller.Store(context.CancelFunc(func() {}))
+	hangUp := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		cancelCaller.Load().(context.CancelFunc)()
+		response.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer hangUp.Close()
+	hangUpEndpoint, err := vedomain.NewNotificationChannelEndpoint(channelRef, hangUp.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		return channels.RegisterChannel(txCtx, tenant, hangUpEndpoint, time.Now())
+	}); err != nil {
+		t.Fatal(err)
+	}
+	callerCtx, cancel := context.WithCancel(t.Context())
+	cancelCaller.Store(cancel)
+	sent, err := notifier.HandleSignal(callerCtx, notify)
+	cancel()
+	if err != nil || sent.Outcome() != visibilityapp.NotificationSubmissionFailed || notificationRows() != 1 {
+		t.Fatalf("调用方中途断开：err=%v outcome=%q 通知 %d 行，想要记下失败节点", err, sent.Outcome(), notificationRows())
+	}
+	var firstID string
+	if err := pool.QueryRow(t.Context(), `SELECT notification_id FROM visibility_exception.customer_notification WHERE tenant_id = 'SYN-TENANT-01'`).Scan(&firstID); err != nil {
+		t.Fatal(err)
+	}
+	registerChannel("IDP_PARCEL_NOTIFY_SYN_CUSTOMER")
+
+	// 客户系统答 500：再记一个`失败`节点，通知留着等重发，标识不换。
+	sent, err = notifier.HandleSignal(t.Context(), notify)
+	if resent, _ := sent.Notification(); resent == nil || resent.ID().String() != firstID {
+		t.Fatalf("重发换了通知标识：%v，想要 %s", resent, firstID)
+	}
 	if err != nil || sent.Outcome() != visibilityapp.NotificationSubmissionFailed || notificationRows() != 1 || pushes.Load() != 1 {
 		t.Fatalf("客户系统答 500：err=%v outcome=%q 通知 %d 行 推送 %d 次", err, sent.Outcome(), notificationRows(), pushes.Load())
 	}

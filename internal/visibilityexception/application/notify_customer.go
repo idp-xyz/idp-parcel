@@ -136,6 +136,7 @@ type NotifyCustomerDeps struct {
 	EpisodeByID ports.SignalEpisodeLookup
 	Customers   ports.ParcelCustomerAccountView
 	SendLock    ports.NotificationSendLock
+	Preflight   ports.NotificationChannelPreflight
 }
 
 // NotifySignalCommand 是操作员指名「把这一期信号的披露通知客户」：包裹、信号类型与哪一期。客户不在命令里——由包裹的
@@ -148,42 +149,121 @@ type NotifySignalCommand struct {
 	Operator string
 }
 
-// HandleSignal 是 `UC-VE-006` 步 6 的运营入口：找到指名的那一期（标识不属于这件包裹这一类信号即未受理）→ 反查客户
-// 归属（不可确定即未决）→ 把这份披露上的发送排成一列 → 交给 Handle。
-func (handler *NotifyCustomerHandler) HandleSignal(ctx context.Context, command NotifySignalCommand) (NotifyCustomerResult, error) {
-	if command.TenantID.String() == "" || command.Parcel.String() == "" || command.Kind.String() == "" ||
-		command.Episode.String() == "" || command.Operator == "" {
-		return NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
-	}
-	if handler.deps.EpisodeByID == nil || handler.deps.Customers == nil || handler.deps.SendLock == nil {
-		return NotifyCustomerResult{}, fmt.Errorf("notify customer: the operator entry is not fully wired")
-	}
-	episode, found, err := handler.deps.EpisodeByID.FindEpisode(ctx, command.TenantID, command.Parcel, command.Kind, command.Episode)
-	if err != nil {
-		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationEpisodeStoreUnavailable}, nil
-	}
-	if !found || episode == nil {
-		return NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
-	}
-	customer, determinable, err := handler.deps.Customers.FindCustomerAccount(ctx, command.TenantID, command.Parcel)
-	if err != nil {
-		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationCustomerAccountUnavailable}, nil
-	}
-	if !determinable {
-		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationCustomerAccountUndeterminable}, nil
-	}
-	if err := handler.deps.SendLock.LockDisclosure(ctx, command.TenantID, episode.ID(), customer); err != nil {
-		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
-	}
-	return handler.Handle(ctx, NotifyCustomerCommand{TenantID: command.TenantID, Episode: episode.ID(), Customer: customer})
-}
-
 type NotifyCustomerHandler struct {
 	deps NotifyCustomerDeps
 }
 
 func NewNotifyCustomerHandler(deps NotifyCustomerDeps) *NotifyCustomerHandler {
 	return &NotifyCustomerHandler{deps: deps}
+}
+
+// 运营入口分两步走，各在自己的一笔事务里（装配点负责）：PrepareSignal 先把通知记录落下，HandleSignal 再推送并回填
+// 过程节点。分开的理由是「通知记录必须先于推送存在」：推送和记录同在一笔事务里时，推送成了而提交没成（调用方断开、
+// 进程退出），客户已经收到通知，本产品这边却查无出处；重发还会换一个通知标识。先落记录，之后无论推送那一步怎么断，
+// 记录都在、标识不变，重发凭幂等键与同一个标识被客户系统认出。
+
+// resolveSignal 找到命令指名的那一期与它的客户，并把这份披露上的发送排成一列。第二个返回值为 false 即已有终局答复。
+func (handler *NotifyCustomerHandler) resolveSignal(ctx context.Context, command NotifySignalCommand) (NotifyCustomerCommand, bool, NotifyCustomerResult, error) {
+	none := NotifyCustomerCommand{}
+	if command.TenantID.String() == "" || command.Parcel.String() == "" || command.Kind.String() == "" ||
+		command.Episode.String() == "" || command.Operator == "" {
+		return none, false, NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
+	}
+	if handler.deps.EpisodeByID == nil || handler.deps.Customers == nil || handler.deps.SendLock == nil || handler.deps.Preflight == nil {
+		return none, false, NotifyCustomerResult{}, fmt.Errorf("notify customer: the operator entry is not fully wired")
+	}
+	episode, found, err := handler.deps.EpisodeByID.FindEpisode(ctx, command.TenantID, command.Parcel, command.Kind, command.Episode)
+	if err != nil {
+		return none, false, NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationEpisodeStoreUnavailable}, nil
+	}
+	if !found || episode == nil {
+		return none, false, NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
+	}
+	customer, determinable, err := handler.deps.Customers.FindCustomerAccount(ctx, command.TenantID, command.Parcel)
+	if err != nil {
+		return none, false, NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationCustomerAccountUnavailable}, nil
+	}
+	if !determinable {
+		return none, false, NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationCustomerAccountUndeterminable}, nil
+	}
+	if err := handler.deps.SendLock.LockDisclosure(ctx, command.TenantID, episode.ID(), customer); err != nil {
+		return none, false, NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
+	}
+	return NotifyCustomerCommand{TenantID: command.TenantID, Episode: episode.ID(), Customer: customer}, true, NotifyCustomerResult{}, nil
+}
+
+// PrepareSignal 是运营入口的第一步：受理、确认有一份`披露`决定、确认渠道此刻发得出去，然后把通知记录（`已生成`）
+// 落下。它不推送。第二个返回值为 true 即记录已在、可以走 HandleSignal；为 false 时第一个返回值就是终局答复——未受理、
+// 未决（策略或渠道未配置时什么也不落），或这份通知此前已经提交过。
+func (handler *NotifyCustomerHandler) PrepareSignal(ctx context.Context, command NotifySignalCommand) (NotifyCustomerResult, bool, error) {
+	target, proceed, terminal, err := handler.resolveSignal(ctx, command)
+	if err != nil || !proceed {
+		return terminal, false, err
+	}
+	disclosure, found, err := handler.deps.Decisions.FindCurrent(ctx, target.TenantID, target.Episode, target.Customer)
+	if err != nil {
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationDecisionStoreUnavailable}, false, nil
+	}
+	if !found || disclosure.Conclusion() != domain.DiscloseToCustomer {
+		return NotifyCustomerResult{outcome: NotifyNotAccepted}, false, nil
+	}
+	existing, found, err := handler.deps.Notifications.FindByDisclosure(ctx, target.TenantID, disclosure)
+	if err != nil {
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, false, nil
+	}
+	if found && existing.ObligationMetBy(domain.NotificationSubmittedToChannel) {
+		return NotifyCustomerResult{outcome: NotificationExistingResult, notification: existing}, false, nil
+	}
+	var directive ports.NotificationDirective
+	channel := domain.NotificationChannelReference{}
+	if found {
+		// 已生成而没提交成的通知钉在它生成时的渠道上：渠道是通知的一格，重发不换。
+		channel = existing.Channel()
+	} else {
+		var configured bool
+		directive, configured, err = handler.deps.Policy.DirectNotification(ctx, disclosure)
+		if err != nil {
+			return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationPolicyUnavailable}, false, nil
+		}
+		if !configured {
+			return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationPolicyNotConfigured}, false, nil
+		}
+		channel = directive.Channel
+	}
+	if err := handler.deps.Preflight.CheckChannel(ctx, channel); err != nil {
+		switch {
+		case errors.Is(err, ports.ErrNotificationChannelNotConfigured):
+			return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationChannelNotConfigured}, false, nil
+		case errors.Is(err, ports.ErrNotificationChannelCredentialMissing):
+			return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationChannelCredentialMissing}, false, nil
+		}
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, false, nil
+	}
+	if found {
+		return NotifyCustomerResult{}, true, nil
+	}
+	notificationID, err := handler.deps.Identities.NextNotificationID(ctx)
+	if err != nil {
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationIdentityUnavailable}, false, nil
+	}
+	notification, err := domain.GenerateNotification(notificationID, disclosure, directive.Deadline, directive.Channel, directive.Obligation, handler.deps.Clock.Now())
+	if err != nil {
+		return NotifyCustomerResult{}, false, fmt.Errorf("generate customer notification: %w", err)
+	}
+	if _, err := handler.deps.Notifications.Save(ctx, target.TenantID, notification); err != nil {
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, false, nil
+	}
+	return NotifyCustomerResult{}, true, nil
+}
+
+// HandleSignal 是运营入口的第二步：重新找到那一期与客户、上锁，再交给 Handle——通知记录已由 PrepareSignal 落下，
+// Handle 找到它就推送并回填过程节点；另一个人抢先提交成了，就交回已有结果、不再推。
+func (handler *NotifyCustomerHandler) HandleSignal(ctx context.Context, command NotifySignalCommand) (NotifyCustomerResult, error) {
+	target, proceed, terminal, err := handler.resolveSignal(ctx, command)
+	if err != nil || !proceed {
+		return terminal, err
+	}
+	return handler.Handle(ctx, target)
 }
 
 // Handle 把一份已登记的`披露`结论决定推进到客户通知：受理（发作期与客户缺一即未受理）
@@ -309,7 +389,13 @@ func (handler *NotifyCustomerHandler) submit(
 		milestone = domain.NotificationFailed
 		outcome = NotificationSubmissionFailed
 	}
-	if err := notification.RecordMilestone(milestone, handler.deps.Clock.Now()); err != nil {
+	// 推送已经发生，这一格必须记得下来：本机时钟若落在上一个节点之前（换了一台时钟偏慢的实例来重发），取上一个节点
+	// 的时刻，不因为时间不倒流那条校验把一次已发生的推送丢掉。
+	at := handler.deps.Clock.Now()
+	if recorded := notification.RecordedAt(); len(recorded) > 0 && at.Before(recorded[len(recorded)-1]) {
+		at = recorded[len(recorded)-1]
+	}
+	if err := notification.RecordMilestone(milestone, at); err != nil {
 		return NotifyCustomerResult{}, fmt.Errorf("record notification milestone: %w", err)
 	}
 	saved, err := handler.deps.Notifications.Save(ctx, tenant, notification)

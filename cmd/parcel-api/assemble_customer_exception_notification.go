@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
+
+	bentoapp "go.idp.xyz/idp-bento-go/application"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -15,17 +19,67 @@ import (
 	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// customerExceptionNotificationFace 把一次客户异常通知包进一笔事务：通知册的写口按框架合同无事务即拒，同一份披露上的
-// 发送靠事务级的锁排成一列。未决整笔回滚——渠道没登记时连「已生成」也不留。
+// sendTransactionTimeout 是推送那一笔事务的上限：连接器等答复至多十五秒，再留出落库的时间。
+const sendTransactionTimeout = 30 * time.Second
+
+// customerExceptionNotificationFace 把一次客户异常通知分成两笔事务。第一笔受理并把通知记录落下（策略或渠道未配置时
+// 答未决、整笔回滚，什么也不留）；第二笔推送并回填过程节点。通知记录先于推送提交：推送那一笔无论怎么断，记录都在、
+// 通知标识不变，重发时客户系统凭幂等键认出是同一份。
 //
-// 推送发生在事务之内：推送成了而提交没成的那一笔会整笔回滚，重发时渠道凭幂等键（披露身份）认出是同一份。代价是推送
-// 等答复期间占着一条连接，上限是连接器的超时。
+// 第二笔不随调用方的取消而取消：操作员关掉页面、反向代理超时都不该让一次已经发出去的推送记不下来。同一份披露上的
+// 发送靠事务级的锁排成一列，两笔各取一次；两个人同时发，后到的在第二笔里读到已提交、不再推。
 type customerExceptionNotificationFace struct {
-	notification customsDecisionTransaction[visibilityapp.NotifySignalCommand, visibilityapp.NotifyCustomerResult]
+	transactor bentoapp.Transactor
+	handlerFor func(visibilityapp.NotifySignalCommand) (*visibilityapp.NotifyCustomerHandler, error)
 }
 
 func (face customerExceptionNotificationFace) HandleSignal(ctx context.Context, command visibilityapp.NotifySignalCommand) (visibilityapp.NotifyCustomerResult, error) {
-	return face.notification.Handle(ctx, command)
+	handler, err := face.handlerFor(command)
+	if err != nil {
+		return visibilityapp.NotifyCustomerResult{}, err
+	}
+	var (
+		result   visibilityapp.NotifyCustomerResult
+		prepared bool
+	)
+	if err := face.withinTransaction(ctx, &result, func(txCtx context.Context) (visibilityapp.NotifyCustomerResult, error) {
+		answer, ready, err := handler.PrepareSignal(txCtx, command)
+		prepared = ready
+		return answer, err
+	}); err != nil || !prepared {
+		return result, err
+	}
+	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sendTransactionTimeout)
+	defer cancel()
+	err = face.withinTransaction(sendCtx, &result, func(txCtx context.Context) (visibilityapp.NotifyCustomerResult, error) {
+		return handler.HandleSignal(txCtx, command)
+	})
+	return result, err
+}
+
+// errNotificationUndecided 只用来让事务回滚：未决不留下任何写入，答复照旧交回编排那一份。
+var errNotificationUndecided = errors.New("parcel-api: notification undecided")
+
+func (face customerExceptionNotificationFace) withinTransaction(
+	ctx context.Context,
+	result *visibilityapp.NotifyCustomerResult,
+	work func(context.Context) (visibilityapp.NotifyCustomerResult, error),
+) error {
+	err := face.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		answer, err := work(txCtx)
+		if err != nil {
+			return err
+		}
+		*result = answer
+		if answer.Outcome() == visibilityapp.NotifyUndecided {
+			return errNotificationUndecided
+		}
+		return nil
+	})
+	if errors.Is(err, errNotificationUndecided) {
+		return nil
+	}
+	return err
 }
 
 // noNotificationSubscribers 顶在通知交接那一格上：通知决定的下游（义务台账、升级判断）今天没有任何订阅者，往 Outbox
@@ -69,27 +123,20 @@ func buildCustomerExceptionNotificationFace(db *bentopg.DB, getenv func(string) 
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: notification identities: %w", err)
 	}
-	handle := func(ctx context.Context, command visibilityapp.NotifySignalCommand) (visibilityapp.NotifyCustomerResult, error) {
+	handlerFor := func(command visibilityapp.NotifySignalCommand) (*visibilityapp.NotifyCustomerHandler, error) {
 		policy, err := vepostgres.NewNotificationPolicies(db, command.TenantID)
 		if err != nil {
-			return visibilityapp.NotifyCustomerResult{}, fmt.Errorf("parcel-api: notification policy: %w", err)
+			return nil, fmt.Errorf("parcel-api: notification policy: %w", err)
 		}
 		gateway, err := vechannel.NewHTTPGateway(channels, command.TenantID, vechannel.Subject{Parcel: command.Parcel, Kind: command.Kind}, nil, getenv)
 		if err != nil {
-			return visibilityapp.NotifyCustomerResult{}, fmt.Errorf("parcel-api: notification channel gateway: %w", err)
+			return nil, fmt.Errorf("parcel-api: notification channel gateway: %w", err)
 		}
 		return visibilityapp.NewNotifyCustomerHandler(visibilityapp.NotifyCustomerDeps{
 			Decisions: decisions, Notifications: notifications, Policy: policy, Identities: identities,
 			Channel: gateway, Downstream: noNotificationSubscribers{}, Clock: systemClock{},
-			EpisodeByID: episodes, Customers: customers, SendLock: notifications,
-		}).HandleSignal(ctx, command)
+			EpisodeByID: episodes, Customers: customers, SendLock: notifications, Preflight: gateway,
+		}), nil
 	}
-	return customerExceptionNotificationFace{
-		notification: customsDecisionTransaction[visibilityapp.NotifySignalCommand, visibilityapp.NotifyCustomerResult]{
-			transactor: db.Transactor(), handle: handle,
-			rollBack: func(result visibilityapp.NotifyCustomerResult) bool {
-				return result.Outcome() == visibilityapp.NotifyUndecided
-			},
-		},
-	}, nil
+	return customerExceptionNotificationFace{transactor: db.Transactor(), handlerFor: handlerFor}, nil
 }
