@@ -345,8 +345,13 @@ func TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces(t *te
 			fixture.endpoints[candidate.Pattern] = candidate.Handler
 		}
 	}
-	lodgedAt := time.Now().UTC().Add(-30 * time.Minute).Truncate(time.Second)
-	lodgement := `{"version":"` + versionID + `","lodgedAt":"` + lodgedAt.Format(time.RFC3339) + `","reference":"SYN-CUSTOMS-ACK-001","original":"SYN-LODGEMENT-SLIP-1"}`
+	// 实际递交的时刻：晚于这一版成版、不晚于现在。早于成版的不受理。
+	lodgedAt := time.Now().UTC().Truncate(time.Microsecond)
+	lodgement := `{"version":"` + versionID + `","lodgedAt":"` + lodgedAt.Format(time.RFC3339Nano) + `","reference":"SYN-CUSTOMS-ACK-001","original":"SYN-LODGEMENT-SLIP-1"}`
+	if status, answer := fixture.post(t, lodgementFace, lodger, `{"version":"`+versionID+`","lodgedAt":"`+lodgedAt.Add(-time.Hour).Format(time.RFC3339Nano)+`","original":"SYN-LODGEMENT-SLIP-1"}`); status != http.StatusOK ||
+		answer["outcome"] != "SOURCE_NOT_ACCEPTED" {
+		t.Fatalf("递交时刻早于成版 = %d %v", status, answer)
+	}
 	if status, answer := fixture.post(t, lodgementFace, customsSubmitter, lodgement); status != http.StatusForbidden {
 		t.Fatalf("持提交授予的人标记递交 = %d %v，想要 403", status, answer)
 	}
@@ -370,7 +375,7 @@ func TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces(t *te
 	for range 2 {
 		reply := <-replies
 		outcomes[reply.answer["outcome"].(string)]++
-		if reply.answer["result"] != "PENDING_CONFIRMATION" || reply.answer["reference"] != "SYN-CUSTOMS-ACK-001" || reply.answer["sentAt"] != lodgedAt.Format(time.RFC3339Nano) {
+		if reply.answer["result"] != "PENDING_CONFIRMATION" || reply.answer["sentAt"] != lodgedAt.Format(time.RFC3339Nano) {
 			t.Fatalf("标记答复 = %d %v", reply.status, reply.answer)
 		}
 	}
@@ -378,11 +383,11 @@ func TestCustomsCaseAuthorizationAndSubmissionRunThroughTheProductionFaces(t *te
 		t.Fatalf("两人同时标记 = %v", outcomes)
 	}
 	if n := fixture.count(t, `SELECT count(*) FROM customs_compliance.submission_manual_lodgement
-		 WHERE tenant_id = $1 AND version_id = $2 AND original_ref = 'SYN-LODGEMENT-SLIP-1' AND lodged_by = $3`,
+		 WHERE tenant_id = $1 AND version_id = $2 AND original_ref = 'SYN-LODGEMENT-SLIP-1' AND reference = 'SYN-CUSTOMS-ACK-001' AND lodged_by = $3`,
 		customsDecisionTenant, versionID, "OPERATOR/"+customsDecisionIssuer+"#"+lodger); n != 1 {
 		t.Fatalf("线下递交留痕 = %d 条，想要 1", n)
 	}
-	if n := fixture.count(t, `SELECT count(*) FROM customs_compliance.submission_send_fact WHERE tenant_id = $1 AND version_id = $2`, customsDecisionTenant, versionID); n != 1 {
+	if n := fixture.count(t, `SELECT count(*) FROM customs_compliance.submission_send_fact WHERE tenant_id = $1 AND version_id = $2 AND channel_message IS NULL`, customsDecisionTenant, versionID); n != 1 {
 		t.Fatalf("发送事实 = %d 笔，想要 1", n)
 	}
 }

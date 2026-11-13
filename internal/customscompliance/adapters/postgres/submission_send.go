@@ -312,11 +312,29 @@ func (repository *SubmissionSends) RecordManualLodgement(ctx context.Context, lo
 	}
 	if _, err := executor.Exec(ctx, `
 		INSERT INTO customs_compliance.submission_manual_lodgement
-			(tenant_id, version_id, sequence, lodged_by, original_ref, recorded_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		lodgement.Tenant.String(), lodgement.Version.String(), lodgement.Sequence, lodgement.LodgedBy, lodgement.Original, lodgement.RecordedAt.UTC(),
+			(tenant_id, version_id, sequence, lodged_by, original_ref, reference, recorded_at)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7)`,
+		lodgement.Tenant.String(), lodgement.Version.String(), lodgement.Sequence, lodgement.LodgedBy, lodgement.Original, lodgement.Reference,
+		lodgement.RecordedAt.UTC(),
 	); err != nil {
 		return fmt.Errorf("record manual lodgement: %w", err)
+	}
+	return nil
+}
+
+var _ ports.SubmissionSendLock = (*SubmissionSends)(nil)
+
+// LockSubmissionSend 取一把随事务释放的咨询锁，键是（租户，提交版本）。发送事实在越过发送边界之前还不存在，没有行可锁。
+func (repository *SubmissionSends) LockSubmissionSend(ctx context.Context, tenant domain.TenantID, version domain.SubmissionVersionID) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock submission send: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('customs_compliance.submission_send.version'), hashtext($1 || chr(31) || $2))`,
+		tenant.String(), version.String(),
+	); err != nil {
+		return fmt.Errorf("lock submission send: %w", err)
 	}
 	return nil
 }

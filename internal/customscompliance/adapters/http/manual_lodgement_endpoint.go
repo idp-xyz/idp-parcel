@@ -52,7 +52,7 @@ func (intake *OperatorDecisionIntake) IntakeManualLodgement(ctx context.Context,
 	}
 	original, reference := strings.TrimSpace(payload.Original), strings.TrimSpace(payload.Reference)
 	hasControl := func(text string) bool { return strings.IndexFunc(text, unicode.IsControl) >= 0 }
-	if original == "" || len(original) > 500 || hasControl(original) || hasControl(reference) {
+	if original == "" || len(original) > 500 || len(reference) > 200 || hasControl(original) || hasControl(reference) {
 		return none, fmt.Errorf("%w: original is required for a manual lodgement record", ErrMalformedRequest)
 	}
 	command := application.RecordManualLodgementCommand{
@@ -70,16 +70,15 @@ func (intake *OperatorDecisionIntake) IntakeManualLodgement(ctx context.Context,
 }
 
 type manualLodgementResponse struct {
-	Outcome   string `json:"outcome"`
-	Version   string `json:"version,omitempty"`
-	Sequence  int    `json:"sequence,omitempty"`
-	Result    string `json:"result,omitempty"`
-	SentAt    string `json:"sentAt,omitempty"`
-	Reference string `json:"reference,omitempty"`
+	Outcome  string `json:"outcome"`
+	Version  string `json:"version,omitempty"`
+	Sequence int    `json:"sequence,omitempty"`
+	Result   string `json:"result,omitempty"`
+	SentAt   string `json:"sentAt,omitempty"`
 }
 
 // NewRecordManualLodgementEndpoint 交回线下递交标记口（POST /customs-declaration-manual-lodgements）。这次记下了答
-// 201；已发过、不再就绪、未受理、受理号已被占都是答案（200）；册读写不动是没形成答案。
+// 201；已发过、不再就绪、未受理都是答案（200）；册读写不动是没形成答案。
 func NewRecordManualLodgementEndpoint(intake ManualLodgementIntake, recorder ManualLodgementRecorder) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost {
@@ -107,7 +106,6 @@ func NewRecordManualLodgementEndpoint(intake ManualLodgementIntake, recorder Man
 			body.Version, body.Sequence = fact.Version().String(), fact.Sequence()
 			body.Result = fact.Outcome().String()
 			body.SentAt = fact.SentAt().UTC().Format(time.RFC3339Nano)
-			body.Reference = fact.ChannelMessage()
 		}
 		status := http.StatusOK
 		if result.Outcome() == application.ManualLodgementRecorded {

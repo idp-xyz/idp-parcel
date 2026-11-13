@@ -10,6 +10,8 @@ CREATE TABLE customs_compliance.submission_manual_lodgement (
     sequence     integer     NOT NULL,
     lodged_by    text        NOT NULL,
     original_ref text        NOT NULL,
+    -- 对方给的受理号，可缺。不记成发送事实的通道消息号：那是技术回执关联回来的键。
+    reference    text,
     recorded_at  timestamptz NOT NULL,
     PRIMARY KEY (tenant_id, version_id, sequence),
     CONSTRAINT submission_manual_lodgement_send_fact_exists

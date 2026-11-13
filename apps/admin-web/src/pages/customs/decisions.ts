@@ -63,7 +63,7 @@ export const customsDecisionHints: Record<CustomsDecisionKind, string> = {
   'case-closure': '请填 caseId（清关单）、cutoffAt（截点，RFC 3339 时间，例如 2026-11-13T08:00:00Z）。还有未了结的事项时答不能关闭并列出来。' + identityNote,
   'manual-lodgement':
     '没有对接报关行或单一窗口时用这一个：这一版申报你已经在线下递交了，在这里记一笔。请填 version（提交版本，取「提交申报」答复里的 versionId）、' +
-    'original（递交凭据：回单、邮件或受理单的编号或存档引用，必填）。可选：lodgedAt（实际递交的时间，RFC 3339，不能晚于现在；不填取现在）、' +
+    'original（递交凭据：回单、邮件或受理单的编号或存档引用，必填）。可选：lodgedAt（实际递交的时间，RFC 3339，不能晚于现在、不能早于这一版形成的时间；不填取现在）、' +
     'reference（对方给的受理号）。系统不发送任何东西；这一版记为「已递交、待确认」，海关的受理与放行随后用「录入海关结果」录进来。' +
     '登记之后申报准备或提交授权已经失效的，要先重新取得。' +
     identityNote,
@@ -138,8 +138,7 @@ export const manualLodgementOutcomeLabels: Record<string, string> = {
   LODGEMENT_RECORDED: '已记为已递交，等待海关结果',
   DECLARATION_ALREADY_SENT: '这一版此前已经发出或已经记过，没有再记一次',
   DECLARATION_SEND_HELD: '申报准备或提交授权已经失效，没有记；请先重新取得',
-  LODGEMENT_REFERENCE_TAKEN: '这个受理号已经记在另一版申报上',
-  SOURCE_NOT_ACCEPTED: '内容不完整或不成立（版本不在册、没有递交凭据或递交时间在未来），没有受理',
+  SOURCE_NOT_ACCEPTED: '内容不完整或不成立（版本不在册、没有递交凭据、递交时间在未来或早于这一版形成的时间），没有受理',
 };
 
 export const externalResultEntryUndecidedLabels: Record<string, string> = {

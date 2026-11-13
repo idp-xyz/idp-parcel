@@ -39,7 +39,7 @@ func declarationSendConsumer(db *bentopg.DB, inboxStore *inbox.Store, clock syst
 	}
 	sender, err := ccapplication.NewSendDeclarationHandler(ccapplication.SendDeclarationDeps{
 		Submissions: submissions, Channels: sends, SendFacts: sends, Readiness: readiness, Authority: authority,
-		Sender: ccchannel.NewHTTPSender(nil, nil), Clock: clock,
+		Sender: ccchannel.NewHTTPSender(nil, nil), Clock: clock, Lock: sends,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: send declaration: %w", err)

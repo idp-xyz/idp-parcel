@@ -61,7 +61,7 @@ func buildManualLodgement(db *bentopg.DB) (transactionalManualLodgement, error) 
 		return none, fmt.Errorf("parcel-api: submission authority view for manual lodgement: %w", err)
 	}
 	handler, err := customsapp.NewRecordManualLodgementHandler(customsapp.RecordManualLodgementDeps{
-		Submissions: submissions, SendFacts: sends, Readiness: readiness, Authority: authority, Lodgements: sends, Clock: systemClock{},
+		Submissions: submissions, SendFacts: sends, Readiness: readiness, Authority: authority, Lodgements: sends, Clock: systemClock{}, Lock: sends,
 	})
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: record manual lodgement: %w", err)

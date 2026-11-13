@@ -70,6 +70,9 @@ func TestSubmissionSendWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if err := sends.RecordManualLodgement(t.Context(), ports.ManualLodgement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务记线下递交留痕应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if err := sends.LockSubmissionSend(t.Context(), tenant, fact.Version()); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("无事务取发送锁应返回 ErrTransactionRequired，实得：%v", err)
+	}
 	if _, err := sends.SaveTechnicalReceipt(t.Context(), tenant, receipt, time.Now()); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveTechnicalReceipt err = %v", err)
 	}
@@ -164,5 +167,59 @@ func TestSendFactsAndReceiptsAppendWithoutOverwriting(t *testing.T) {
 	if err != nil || len(receipts) != 2 || receipts[0].Source() != "R-1" || receipts[0].Outcome() != domain.AttemptAcknowledged ||
 		receipts[1].Source() != "R-2" || !receipts[0].OccurredAt().Equal(sentAt) {
 		t.Fatalf("回执 = %+v err = %v", receipts, err)
+	}
+}
+
+// Covers: 系统发送与线下递交标记共用的那把锁真的把两笔事务排成一列——一笔持锁期间（系统那一路正等通道答复），另一笔
+// 取同一版的锁会等到前一笔结束；别的版本、别的租户不受牵连。
+func TestTheSubmissionSendLockSerialisesTwoTransactionsOnOneVersion(t *testing.T) {
+	sends, fixture := newSends(t)
+	tenant := declarationValue(t, domain.NewTenantID, "tenant-a")
+	version := declarationValue(t, domain.NewSubmissionVersionID, "v-lock-1")
+	other := declarationValue(t, domain.NewSubmissionVersionID, "v-lock-2")
+
+	held := make(chan struct{})
+	release := make(chan struct{})
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- fixture.db.Transactor().WithinTransaction(context.Background(), func(ctx context.Context) error {
+			if err := sends.LockSubmissionSend(ctx, tenant, version); err != nil {
+				return err
+			}
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	<-held
+
+	// 别的版本、别的租户立刻取得。
+	fixture.sendTx(t, t.Context(), func(ctx context.Context) error { return sends.LockSubmissionSend(ctx, tenant, other) })
+	fixture.sendTx(t, t.Context(), func(ctx context.Context) error {
+		return sends.LockSubmissionSend(ctx, declarationValue(t, domain.NewTenantID, "tenant-b"), version)
+	})
+
+	secondAcquired := make(chan error, 1)
+	go func() {
+		secondAcquired <- fixture.db.Transactor().WithinTransaction(context.Background(), func(ctx context.Context) error {
+			return sends.LockSubmissionSend(ctx, tenant, version)
+		})
+	}()
+	select {
+	case err := <-secondAcquired:
+		t.Fatalf("前一笔还持着锁，后一笔就取到了（err=%v）", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(release)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("前一笔：%v", err)
+	}
+	select {
+	case err := <-secondAcquired:
+		if err != nil {
+			t.Fatalf("后一笔：%v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("前一笔结束后，后一笔仍没取到锁")
 	}
 }

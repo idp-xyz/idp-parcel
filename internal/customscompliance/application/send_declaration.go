@@ -103,6 +103,9 @@ type SendDeclarationDeps struct {
 	Authority   ports.SubmissionAuthorityView
 	Sender      DeclarationSender
 	Clock       ports.Clock
+	// Lock 把同一版上的发送与线下递交标记排成一列（ports.SubmissionSendLock 头注）。生产装配必给；不给时不取锁，只供
+	// 不涉及并发的单元测试用。
+	Lock ports.SubmissionSendLock
 }
 
 type SendDeclarationHandler struct {
@@ -123,6 +126,11 @@ func (handler *SendDeclarationHandler) Send(
 	tenant domain.TenantID,
 	version domain.SubmissionVersionID,
 ) (SendDeclarationResult, error) {
+	if handler.deps.Lock != nil {
+		if err := handler.deps.Lock.LockSubmissionSend(ctx, tenant, version); err != nil {
+			return undecidedSend(fmt.Errorf("submission send lock: %w", err)), nil
+		}
+	}
 	record, found, err := handler.deps.Submissions.FindByVersion(ctx, tenant, version)
 	if err != nil {
 		return undecidedSend(fmt.Errorf("declaration submission store: %w", err)), nil

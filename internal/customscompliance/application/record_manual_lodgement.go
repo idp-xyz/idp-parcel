@@ -28,8 +28,6 @@ const (
 	ManualLodgementHeld
 	// ManualLodgementNotAccepted：提交版本不在册，或命令不成形（没有递交人、没有原件、递交时刻在未来）。
 	ManualLodgementNotAccepted
-	// ManualLodgementReferenceTaken：填的受理号已经记在另一份尝试上。
-	ManualLodgementReferenceTaken
 	// ManualLodgementUndecided：某一本册读写不动，重投即可。
 	ManualLodgementUndecided
 )
@@ -44,8 +42,6 @@ func (outcome ManualLodgementOutcome) String() string {
 		return "DECLARATION_SEND_HELD"
 	case ManualLodgementNotAccepted:
 		return "SOURCE_NOT_ACCEPTED"
-	case ManualLodgementReferenceTaken:
-		return "LODGEMENT_REFERENCE_TAKEN"
 	case ManualLodgementUndecided:
 		return "LODGEMENT_UNDECIDED"
 	default:
@@ -85,6 +81,8 @@ type RecordManualLodgementDeps struct {
 	Authority   ports.SubmissionAuthorityView
 	Lodgements  ports.ManualLodgementLedger
 	Clock       ports.Clock
+	// Lock 同 SendDeclarationDeps 的同名格：生产装配必给。
+	Lock ports.SubmissionSendLock
 }
 
 type RecordManualLodgementHandler struct {
@@ -116,11 +114,21 @@ func (handler *RecordManualLodgementHandler) Record(ctx context.Context, command
 	}
 	undecided := RecordManualLodgementResult{outcome: ManualLodgementUndecided}
 
+	if handler.deps.Lock != nil {
+		if err := handler.deps.Lock.LockSubmissionSend(ctx, command.TenantID, version); err != nil {
+			return undecided, nil
+		}
+	}
 	record, found, err := handler.deps.Submissions.FindByVersion(ctx, command.TenantID, version)
 	if err != nil {
 		return undecided, nil
 	}
 	if !found {
+		return RecordManualLodgementResult{outcome: ManualLodgementNotAccepted}, nil
+	}
+	if lodgedAt.Before(record.Version.FixedAt()) {
+		// 递交时刻早于这一版成版的时刻：这一版那时还不存在，多半是年份或日期填错了。发送事实不可改写，错的时刻落下去就
+		// 改不回来。
 		return RecordManualLodgementResult{outcome: ManualLodgementNotAccepted}, nil
 	}
 	attempt := record.Attempt
@@ -140,11 +148,11 @@ func (handler *RecordManualLodgementHandler) Record(ctx context.Context, command
 
 	// 截到微秒：库里的时刻只到微秒，重投同一份时读回的那一份才对得上。
 	lodgedAt = lodgedAt.UTC().Truncate(time.Microsecond)
+	// 通道消息号留空：受理号记在留痕上（ports.ManualLodgement 头注）。
 	fact, err := domain.RecordSubmissionSend(version, attempt.Sequence(), lodgedAt, domain.AttemptPendingConfirmation,
-		command.Reference, manualLodgementResponse)
+		"", manualLodgementResponse)
 	if err != nil {
-		// 受理号不成形（过长、带 NUL）：是调用方给的值的问题。
-		return RecordManualLodgementResult{outcome: ManualLodgementNotAccepted}, nil
+		return RecordManualLodgementResult{}, fmt.Errorf("record manual lodgement: %w", err)
 	}
 	saved, err := handler.deps.SendFacts.SaveSendFact(ctx, command.TenantID, fact, now)
 	if err != nil {
@@ -155,17 +163,17 @@ func (handler *RecordManualLodgementHandler) Record(ctx context.Context, command
 	case ports.SubmissionSendReplayed:
 		return RecordManualLodgementResult{outcome: ManualLodgementAlreadySent, fact: fact, hasFact: true}, nil
 	default:
-		// 没落成：要么另一方刚给这份尝试记了发送事实，要么受理号已经记在另一份尝试上。
-		if stored, found, err := handler.deps.SendFacts.FindSendFact(ctx, command.TenantID, version, attempt.Sequence()); err != nil {
+		// 没落成：另一方刚给这份尝试记了发送事实（锁在时到不了这里）。读回赢家。
+		if stored, found, err := handler.deps.SendFacts.FindSendFact(ctx, command.TenantID, version, attempt.Sequence()); err != nil || !found {
 			return undecided, nil
-		} else if found {
+		} else {
 			return RecordManualLodgementResult{outcome: ManualLodgementAlreadySent, fact: stored, hasFact: true}, nil
 		}
-		return RecordManualLodgementResult{outcome: ManualLodgementReferenceTaken}, nil
 	}
 	if err := handler.deps.Lodgements.RecordManualLodgement(ctx, ports.ManualLodgement{
 		Tenant: command.TenantID, Version: version, Sequence: attempt.Sequence(),
-		LodgedBy: strings.TrimSpace(command.LodgedBy), Original: strings.TrimSpace(command.Original), RecordedAt: now,
+		LodgedBy: strings.TrimSpace(command.LodgedBy), Original: strings.TrimSpace(command.Original),
+		Reference: strings.TrimSpace(command.Reference), RecordedAt: now,
 	}); err != nil {
 		// 发送事实落了而留痕没落：答未决，装配点整笔回滚——不留一笔看不出是线下递交的发送事实。
 		return undecided, nil
