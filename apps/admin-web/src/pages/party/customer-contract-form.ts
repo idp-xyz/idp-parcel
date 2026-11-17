@@ -21,11 +21,12 @@ import {
   type DeliveryConditionDraft,
 } from './delivery-condition-section';
 import { currentDisplayTimeZone } from '../moment';
-import type { ControlBindingRecord, CustomerContractRecord } from './api';
+import type { ControlBindingRecord, CustomerContractRecord, SellPriceArrangementRecord } from './api';
 import type {
   CommercialPublicationPayload,
   ControlBindingPayload,
   PreAcceptanceControlPayload,
+  SellPriceArrangementPayload,
 } from './publication-draft-api';
 import { wallMomentOf, wallMomentProblem } from './publication-form-shared';
 
@@ -41,6 +42,9 @@ export interface ControlBindingDraft {
 
 /** 合同级「要不要接受前财务控制」（Go `PreAcceptanceControlRequirement` 的 String() 原词）。`''` = 还没选。 */
 export type ControlRequirementDraft = '' | 'REQUIRED' | 'NOT_APPLICABLE';
+
+/** 销售价格约定的二选一。`''` = 还没选：这一格不进载荷，发出去的是没有销售价格约定的合同。 */
+export type SellPriceMode = '' | 'sources' | 'notPriced';
 
 export interface CustomerContractDraft {
   objectId: string;
@@ -63,6 +67,11 @@ export interface CustomerContractDraft {
   controlNotApplicableBasis: string;
   /** 合同层交付条件一节（票 25）；一格都没填即整节不进载荷。 */
   deliveryConditions: DeliveryConditionDraft;
+  /** 销售价格来源，按录入的顺序。只在 sellPriceMode 为 sources 时送。 */
+  sellPriceSources: string[];
+  sellPriceMode: SellPriceMode;
+  /** 显式不计销售价的依据。只在 sellPriceMode 为 notPriced 时送。 */
+  noSellPriceBasis: string;
 }
 
 /** 第三层在载荷里的根：这一节的各格路径都挂在它下面。 */
@@ -85,6 +94,9 @@ export function emptyCustomerContractDraft(): CustomerContractDraft {
     controlRequirement: '',
     controlNotApplicableBasis: '',
     deliveryConditions: emptyDeliveryConditionDraft(),
+    sellPriceSources: [''],
+    sellPriceMode: '',
+    noSellPriceBasis: '',
   };
 }
 
@@ -116,6 +128,7 @@ export function customerContractDraftFromRecord(record: CustomerContractRecord):
     objectId: record.objectId,
     scope: record.scope,
     deliveryConditions: deliveryConditionDraftFromRecord(record.deliveryConditions),
+    ...sellPriceDraftFromRecord(record.sellPriceArrangement),
   };
   if (!record.contentRegistered) return shell;
   return {
@@ -177,6 +190,8 @@ export function payloadOf(
   if (deliveryConditionDeclared(draft.deliveryConditions, 'contract')) {
     payload.customerContract!.deliveryConditions = deliveryConditionPayloadOf(draft.deliveryConditions, 'contract');
   }
+  const arrangement = sellPricePayloadOf(draft);
+  if (arrangement) payload.customerContract!.sellPriceArrangement = arrangement;
   return payload;
 }
 
@@ -220,6 +235,7 @@ export function customerContractFieldPaths(draft: CustomerContractDraft): string
     paths.push(row, `${row}.chargeScope`, `${row}.policy`, `${row}.inapplicabilityBasis`);
   });
   paths.push(...deliveryConditionFieldPaths(customerContractDeliveryConditionsPath, draft.deliveryConditions, 'contract'));
+  paths.push(...sellPriceFieldPaths(draft));
   return paths;
 }
 
@@ -245,5 +261,57 @@ export function customerContractRenderedPaths(draft: CustomerContractDraft): str
     paths.push(row, `${row}.chargeScope`, `${row}.policy`, `${row}.inapplicabilityBasis`);
   });
   paths.push(...deliveryConditionRenderedPaths(customerContractDeliveryConditionsPath, draft.deliveryConditions, 'contract'));
+  paths.push(...sellPriceRenderedPaths(draft));
   return paths;
+}
+
+export const noSellPriceArrangementNote = '本版合同没有销售价格约定，计价范围取自结算账户的采用登记';
+
+/** 详情与批准页用的一句。键缺席不是空列表。此刻有没有在用的卡不在这里判：价卡目录按页、按包含匹配，对不上一个范围名。 */
+export function sellPriceArrangementText(arrangement: SellPriceArrangementRecord | SellPriceArrangementPayload | undefined): string {
+  if (!arrangement) return noSellPriceArrangementNote;
+  if (arrangement.noSellPriceBasis) return `不计销售价（依据：${arrangement.noSellPriceBasis}）`;
+  const sources = arrangement.sources ?? [];
+  if (sources.length === 0) return '销售价格来源（还没有填写范围）';
+  return sources.map((source, index) => `${index + 1}. ${source.pricingScope}`).join('；');
+}
+
+function sellPriceDraftFromRecord(arrangement: SellPriceArrangementRecord | undefined): Pick<CustomerContractDraft, 'sellPriceMode' | 'sellPriceSources' | 'noSellPriceBasis'> {
+  if (!arrangement) return { sellPriceMode: '', sellPriceSources: [''], noSellPriceBasis: '' };
+  if (arrangement.noSellPriceBasis) {
+    return { sellPriceMode: 'notPriced', sellPriceSources: [''], noSellPriceBasis: arrangement.noSellPriceBasis };
+  }
+  return {
+    sellPriceMode: 'sources',
+    sellPriceSources: arrangement.sources.length > 0 ? arrangement.sources.map((source) => source.pricingScope) : [''],
+    noSellPriceBasis: '',
+  };
+}
+
+function sellPricePayloadOf(draft: CustomerContractDraft): SellPriceArrangementPayload | undefined {
+  if (draft.sellPriceMode === 'sources') {
+    return { sources: draft.sellPriceSources.map((pricingScope) => ({ pricingScope })) };
+  }
+  if (draft.sellPriceMode === 'notPriced') return { noSellPriceBasis: draft.noSellPriceBasis };
+  return undefined;
+}
+
+export function moveSellPriceSource(sources: readonly string[], index: number, delta: -1 | 1): string[] {
+  const next = index + delta;
+  if (index < 0 || next < 0 || index >= sources.length || next >= sources.length) return [...sources];
+  const copy = [...sources];
+  const [moved] = copy.splice(index, 1);
+  copy.splice(next, 0, moved!);
+  return copy;
+}
+
+function sellPriceFieldPaths(draft: CustomerContractDraft): string[] {
+  const root = 'customerContract.sellPriceArrangement';
+  const paths = [root, `${root}.noSellPriceBasis`];
+  draft.sellPriceSources.forEach((_, index) => paths.push(`${root}.sources[${index}].pricingScope`));
+  return paths;
+}
+
+function sellPriceRenderedPaths(draft: CustomerContractDraft): string[] {
+  return sellPriceFieldPaths(draft);
 }

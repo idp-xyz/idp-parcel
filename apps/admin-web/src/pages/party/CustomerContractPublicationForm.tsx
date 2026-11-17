@@ -20,11 +20,13 @@ import {
   customerContractLocalProblems,
   emptyBindingDraft,
   emptyCustomerContractDraft,
+  moveSellPriceSource,
   payloadOf,
   type BindingMode,
   type ControlBindingDraft,
   type ControlRequirementDraft,
   type CustomerContractDraft,
+  type SellPriceMode,
 } from './customer-contract-form';
 
 const loadKnownVersions = () => listCustomerContracts();
@@ -105,6 +107,7 @@ export function CustomerContractPublicationForm({ onPublished, start }: Customer
             controlPolicies={controlPolicies}
           />
           <PreAcceptanceControlFields draft={draft} patch={patch} form={form} />
+          <SellPriceFields draft={draft} patch={patch} form={form} />
           <DeliveryConditionFields
             root={customerContractDeliveryConditionsPath}
             layer="contract"
@@ -428,6 +431,71 @@ type ObjectCandidates =
 const loadRulePackages = commercialPolicyLoaders.ACCEPTANCE_RULE_PACKAGE;
 
 const loadControlPolicies = commercialPolicyLoaders.PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY;
+
+function SellPriceFields({
+  draft,
+  patch,
+  form,
+}: {
+  draft: CustomerContractDraft;
+  patch: (change: Partial<CustomerContractDraft>) => void;
+  form: PublicationFormContext;
+}) {
+  const locked = form.locked;
+  const root = 'customerContract.sellPriceArrangement';
+  const setMode = (sellPriceMode: SellPriceMode) => patch({ sellPriceMode });
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className={sectionTitle}>销售价格约定</h3>
+      <p className="type-caption text-idpxyz-textMuted">
+        二选一。来源按这里的顺序取价，顺序就是先后。不预填任何范围。还没选就先不送这一格，发出去的是没有销售价格约定的合同。
+      </p>
+      <Field
+        label="怎么约定 *"
+        path={root}
+        alsoPaths={[`${root}.noSellPriceBasis`, ...draft.sellPriceSources.map((_, index) => `${root}.sources[${index}].pricingScope`)]}
+        problems={form.problems}
+      >
+        <select className={selectClass} value={draft.sellPriceMode} disabled={locked} onChange={(event) => setMode(event.target.value as SellPriceMode)}>
+          <option value="">还没选</option>
+          <option value="sources">按顺序指名计价范围</option>
+          <option value="notPriced">不计销售价</option>
+        </select>
+      </Field>
+      {draft.sellPriceMode === 'sources' ? (
+        <div className="flex flex-col gap-2">
+          {draft.sellPriceSources.map((scope, index) => (
+            <div key={index} className="grid grid-cols-[auto_1fr_auto] items-end gap-2">
+              <span className="type-caption text-idpxyz-textMuted pb-2">{index + 1}</span>
+              <Field label={index === 0 ? '计价范围' : '计价范围'} path={`${root}.sources[${index}].pricingScope`} problems={form.problems}>
+                <Input value={scope} disabled={locked} onChange={(event) => patch({ sellPriceSources: draft.sellPriceSources.map((item, at) => (at === index ? event.target.value : item)) })} />
+              </Field>
+              <div className="flex gap-1 pb-0.5">
+                <Button type="button" variant="outline" disabled={locked || index === 0} onClick={() => patch({ sellPriceSources: moveSellPriceSource(draft.sellPriceSources, index, -1) })}>
+                  上移
+                </Button>
+                <Button type="button" variant="outline" disabled={locked || index === draft.sellPriceSources.length - 1} onClick={() => patch({ sellPriceSources: moveSellPriceSource(draft.sellPriceSources, index, 1) })}>
+                  下移
+                </Button>
+                <Button type="button" variant="outline" disabled={locked} onClick={() => patch({ sellPriceSources: draft.sellPriceSources.filter((_, at) => at !== index) })}>
+                  删除
+                </Button>
+              </div>
+            </div>
+          ))}
+          <Button type="button" variant="outline" disabled={locked} onClick={() => patch({ sellPriceSources: [...draft.sellPriceSources, ''] })}>
+            加一个来源
+          </Button>
+        </div>
+      ) : null}
+      {draft.sellPriceMode === 'notPriced' ? (
+        <Field label="不计销售价的依据 *" path={`${root}.noSellPriceBasis`} problems={form.problems}>
+          <Input value={draft.noSellPriceBasis} disabled={locked} onChange={(event) => patch({ noSellPriceBasis: event.target.value })} />
+        </Field>
+      ) : null}
+    </section>
+  );
+}
 
 function useObjectCandidates(load: () => Promise<ApiResult<CommercialPolicyListResponseBody>>): ObjectCandidates {
   const answer = useLoaded(load);

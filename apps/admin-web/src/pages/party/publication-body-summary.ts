@@ -22,6 +22,7 @@ import {
   settlementMethodLabels,
   taxDispositionLabels,
 } from './presentation';
+import { sellPriceArrangementText } from './customer-contract-form';
 import type {
   AcceptanceRulePackageBodyPayload,
   CommercialPublicationPayload,
@@ -77,6 +78,7 @@ function contractFacts(body: CustomerContractBodyPayload | undefined): Publicati
       value: `${labelOf(controlRequirementLabels, preAcceptanceControl.requirement)}${basis}`,
     });
   }
+  facts.push({ label: '销售价格约定', value: sellPriceArrangementText(body.sellPriceArrangement) });
   return [...facts, ...deliveryConditionFacts(body.deliveryConditions, '合同层交付条件')];
 }
 
@@ -145,6 +147,10 @@ function priceFacts(body: PricePolicyBodyPayload | undefined, timeZone: string):
     { label: '政策方向', value: labelOf(commercialDirectionLabels, body.direction) },
     { label: '价格方案', value: `${body.pricingPlan}（方案方向 ${labelOf(commercialDirectionLabels, body.planDirection)}）` },
     { label: '方案转换', value: labelOf(planBindingConversionLabels, body.conversion) },
+    {
+      label: '定价方案绑定',
+      value: '这是留痕，不决定选卡。包裹的销售价按客户合同的销售价格来源选卡。',
+    },
     { label: '政策适用范围', value: body.scope },
     { label: '政策有效区间', value: range(body.effectiveStartsAt, body.effectiveEndsAt, timeZone) },
   ];

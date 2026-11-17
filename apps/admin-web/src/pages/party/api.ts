@@ -302,6 +302,16 @@ export interface CustomerContractRecord extends VersionClosureEcho {
   bindings: ControlBindingRecord[];
   /** 合同层交付条件（第三层，票 25），与 0012 正文各自可缺：键缺席即这一版没有合同层声明，不由 contentRegistered 推。 */
   deliveryConditions?: DeliveryConditionRecord;
+  /**
+   * 销售价格约定（ADR-0380）。键缺席即这一版合同没有这一格（旧规范化版本）：页面写「计价范围取自结算账户的采用登记」，
+   * 不拿空列表去推。sources 按合同声明的顺序；noSellPriceBasis 在场即显式不计销售价。
+   */
+  sellPriceArrangement?: SellPriceArrangementRecord;
+}
+
+export interface SellPriceArrangementRecord {
+  sources: { pricingScope: string }[];
+  noSellPriceBasis?: string;
 }
 
 export interface CustomerContractListResponseBody {

@@ -9,7 +9,10 @@ import {
   customerContractLocalProblems,
   emptyBindingDraft,
   emptyCustomerContractDraft,
+  moveSellPriceSource,
+  noSellPriceArrangementNote,
   payloadOf,
+  sellPriceArrangementText,
   type CustomerContractDraft,
 } from './customer-contract-form';
 
@@ -345,3 +348,28 @@ test('基于此版本预填：可缺的键缺席时不崩也不硬塞', () => {
     { ...emptyBindingDraft(), chargeScope: 'SYN-CHARGE-BOTH' },
   ]);
 });
+
+test('销售价格约定：还没选不进载荷；两个来源按录入顺序送；调序之后顺序跟着变', () => {
+  equal('sellPriceArrangement' in payloadOf(filled()).customerContract!, false);
+  const ordered = payloadOf(filled({ sellPriceMode: 'sources', sellPriceSources: ['SYN-SCOPE-M', 'SYN-SCOPE-Z'] }));
+  deepEqual(ordered.customerContract!.sellPriceArrangement, {
+    sources: [{ pricingScope: 'SYN-SCOPE-M' }, { pricingScope: 'SYN-SCOPE-Z' }],
+  });
+  const swapped = payloadOf(filled({ sellPriceMode: 'sources', sellPriceSources: ['SYN-SCOPE-Z', 'SYN-SCOPE-M'] }));
+  deepEqual(swapped.customerContract!.sellPriceArrangement?.sources, [{ pricingScope: 'SYN-SCOPE-Z' }, { pricingScope: 'SYN-SCOPE-M' }]);
+});
+
+test('显式不计销售价只送依据，不把来源列表一起送上去', () => {
+  const payload = payloadOf(filled({ sellPriceMode: 'notPriced', noSellPriceBasis: 'SYN-NO-SELL-PRICE-01', sellPriceSources: ['SYN-SCOPE-M'] }));
+  deepEqual(payload.customerContract!.sellPriceArrangement, { noSellPriceBasis: 'SYN-NO-SELL-PRICE-01' });
+});
+
+test('旧合同没有这一格：详情写取自采用登记，不写成空列表；带两个来源的合同按顺序写出来；调序是纯函数', () => {
+  equal(sellPriceArrangementText(undefined), noSellPriceArrangementNote);
+  equal(
+    sellPriceArrangementText({ sources: [{ pricingScope: 'SYN-SCOPE-M' }, { pricingScope: 'SYN-SCOPE-Z' }] }),
+    '1. SYN-SCOPE-M；2. SYN-SCOPE-Z',
+  );
+  deepEqual(moveSellPriceSource(['SYN-SCOPE-M', 'SYN-SCOPE-Z'], 1, -1), ['SYN-SCOPE-Z', 'SYN-SCOPE-M']);
+});
+

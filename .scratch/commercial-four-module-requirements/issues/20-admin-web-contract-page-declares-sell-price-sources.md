@@ -1,7 +1,7 @@
 # 20 管理台：合同页录入与显示销售价格来源，逐个来源标出此刻有没有在用的卡
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-20-contract-sell-price-page`（worktree `idp-parcel-cfmr20`），基线 `6156f4b43`。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md)
 地盘：`apps/admin-web/**`。diff 全在这里时照 `docs/agents/workflow.md`「前端切片」一节，一人在 `main` 上直接做
@@ -34,3 +34,6 @@ Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arra
 
 - 2026-11-12：由票 15 拆出。
 - 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。仍等票 16。
+- 2026-11-17（认领，票 16 已进 main）：共享树不在 `main` 上，`main` 又已被 `idp-parcel-land` 检出，所以这一票放在自己的工作树里做，不挪那两棵树。
+- 2026-11-17（读口先核了）：价卡目录 `GET /pricing-price-cards` 按页、`q` 是包含匹配，方向能筛，在用与否由页面拿这一页现算。它答不出「这一个范围名此刻有没有在用的 SELL 卡」。本票不在前端猜。逐个来源标卡这一条先不做，等有按范围名点读在用卡的口。
+- 2026-11-17（先做了不靠那口的一半）：录入二选一、来源可增删调序；详情与批准页按顺序写出来，没有这一格的合同写「本版合同没有销售价格约定，计价范围取自结算账户的采用登记」；价格政策发布页写明定价方案绑定是留痕、不决定选卡。

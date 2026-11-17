@@ -64,6 +64,7 @@ test('客户合同：约定行按「策略 / 不适用 + 依据」复述，合�
   equal(valueOf(facts, '货主客户账户'), 'ACC-1');
   equal(valueOf(facts, '费用范围约定'), 'COD → 控制策略 FC-1；FREIGHT → 不适用（依据：BASIS-1）');
   equal(valueOf(facts, '合同级受理前财务控制'), '不适用（不适用依据：B2）');
+  equal(valueOf(facts, '销售价格约定'), '本版合同没有销售价格约定，计价范围取自结算账户的采用登记');
 });
 
 test('供应商协议、结算政策、信用政策：关键格与区间（显示时区加持续有效）', () => {

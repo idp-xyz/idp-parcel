@@ -343,6 +343,13 @@ export interface CustomerContractBodyPayload {
   preAcceptanceControl?: PreAcceptanceControlPayload;
   /** 合同层交付条件（第三层，票 25），可缺：这一版没有合同层声明就是没有，不默认沿用产品层。 */
   deliveryConditions?: DeliveryConditionPayload;
+  /** 销售价格约定（ADR-0380）。可缺：缺键即这一版没有这一格。在场时 sources 与 noSellPriceBasis 恰一，由服务端裁。 */
+  sellPriceArrangement?: SellPriceArrangementPayload;
+}
+
+export interface SellPriceArrangementPayload {
+  sources?: { pricingScope: string }[];
+  noSellPriceBasis?: string;
 }
 
 export interface ContractContentPayload {

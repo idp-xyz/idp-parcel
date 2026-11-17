@@ -183,6 +183,7 @@ function PricePolicyFields({
           政策方向说明这条政策定的是买价、卖价还是内部价；定价方案从价卡目录<strong>选</strong>。
           <strong>方案方向照目录行上显示的方向填</strong>
           ，表单不会替你推断。绑定转换：两个方向相同时选「不转换」；方向不同时，只有卖价政策可以引用一次已冻结的采购评价。组合是否成立由服务端在预览时检查，并说明原因。
+          定价方案绑定是留痕，不决定选卡；包裹的销售价按客户合同的销售价格来源选卡。
         </p>
         <div className="grid grid-cols-2 gap-3">
           {closedSet('pricePolicy.direction', '政策方向 *', 'direction', priceDirectionOptions)}

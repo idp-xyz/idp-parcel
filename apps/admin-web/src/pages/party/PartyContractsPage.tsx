@@ -49,6 +49,7 @@ import { loadCustomerAccountSuggestions } from './reference-inputs';
 import { useLoaded } from './PublicationFormFields';
 import { StatusPill } from '../../components/StatusPill';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
+import { sellPriceArrangementText } from './customer-contract-form';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
   listBusinessParties,
@@ -123,6 +124,11 @@ const columns: WorkbenchColumn<CustomerContractRecord>[] = [
     header: '接单前财务控制',
     hideWhenDetailOpen: true,
     render: (row) => <ControlBindings row={row} />,
+  },
+  {
+    key: 'sell-price',
+    header: '销售价格来源',
+    render: (row) => <span className="type-body leading-4">{sellPriceArrangementText(row.sellPriceArrangement)}</span>,
   },
   {
     // 合同层交付条件（0030，票 admin-write-faces/25）：与正文是两层各自可缺，这一格不看 contentRegistered，只看键在不在。
