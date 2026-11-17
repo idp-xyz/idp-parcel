@@ -32,4 +32,5 @@ Blocked by: 票 [19](./19-settlement-requests-sell-evaluations-with-the-contract
 
 - 2026-11-12：由票 15 拆出。
 - 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。仍等票 19、20。
-- 2026-11-17（认领）：票 19、20 已进 `main`（`6156f4b43`、`45e22ecdb`）。不改 `SYN-CONTRACT-01` / `02`：给已登记客户换列表要发新版，解析键锚点那一步在 `product-strategy-boundary/06` 解冻之前走不通。新开 `SYN-ACCOUNT-21`（只声明 `SYN-SCOPE-01`）与 `SYN-ACCOUNT-22`（`SYN-SCOPE-EXCL-01` 在前、`SYN-SCOPE-01` 在后）。专属卡 `SYN-PLAN-CN-SG-EXCL-01` 只写 Z1，目录仍是 `SYN-CAT-ZONE-CN-SG`。两户采用册不带计价范围。干净库重灌与 `check-sell-price-sources.sh` 已过。还没做：灌完的库上跑一件专属线路与一件没谈到的线路，核对解释里的范围；两位客户各对一次受理前估价与预估客户费用同额；管理台页面点开看这两份列表。
+- 2026-11-17（认领）：票 19、20 已进 `main`（`6156f4b43`、`45e22ecdb`）。不改 `SYN-CONTRACT-01` / `02`。新开 `SYN-ACCOUNT-21`（只声明 `SYN-SCOPE-01`）与 `SYN-ACCOUNT-22`（`SYN-SCOPE-EXCL-01` 在前、`SYN-SCOPE-01` 在后）。专属卡 `SYN-PLAN-CN-SG-EXCL-01` 只写 Z1，目录仍是 `SYN-CAT-ZONE-CN-SG`，不绑燃油序列。两户采用册不带计价范围。
+- 2026-11-17（走查）：`check-sell-price-sources.sh` 在灌完的库上核对名单，并跑 `TestDemoSellPriceWalk`。邮编 018 用专属卡；邮编 238 目录解出 Z2、运费表没有这一格，落到公共卡，解释写 `sell price source SYN-SCOPE-EXCL-01: BASE_RATE_NOT_IN_TABLE` 与公共范围那一格。两位客户各把同一件的两次形成对成同额。探针在看运费表之前先补目录读数，否则绑了目录的卡看不见缺格、不会问下一个范围。管理台页面没有点开。

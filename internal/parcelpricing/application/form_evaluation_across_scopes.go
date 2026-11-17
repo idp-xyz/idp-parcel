@@ -61,7 +61,7 @@ func (handler *FormEvaluationFromRequestHandler) formAcrossSellPriceSources(
 				return FormEvaluationFromRequestResult{}, fmt.Errorf("record service product %s on the pricing input: %w", product, err)
 			}
 		}
-		probed, err := probeScope(resolution.Plan, input, command.Evidence)
+		probed, err := handler.probeResolvedScope(ctx, resolution.Plan, input, command.Evidence)
 		if err != nil {
 			return FormEvaluationFromRequestResult{}, err
 		}
@@ -94,12 +94,23 @@ func (command FormEvaluationFromRequestCommand) walksSellPriceSources() bool {
 	return len(command.Scopes) > 1 && command.sellCustomerCharge()
 }
 
-func probeScope(plan domain.PricingPlanVersion, input domain.PricingInputSnapshot, evidence domain.EvidenceKind) (domain.PricingEvaluation, error) {
+// probeResolvedScope 在看运费表之前先按这张卡补齐目录与序列读数。目录还没解出分区时，探针看不到运费表缺格，
+// 没谈到的线路就不会去问下一个范围；目录解不出则仍是待判断，停在这一格（ADR-0380 决定三）。
+func (handler *FormEvaluationFromRequestHandler) probeResolvedScope(
+	ctx context.Context,
+	plan domain.PricingPlanVersion,
+	input domain.PricingInputSnapshot,
+	evidence domain.EvidenceKind,
+) (domain.PricingEvaluation, error) {
 	id, err := domain.NewEvaluationID("EVAL-PROBE")
 	if err != nil {
 		return domain.PricingEvaluation{}, fmt.Errorf("probe sell price source: %w", err)
 	}
 	request, err := domain.NewEvaluationRequest(id, plan, input, evidence)
+	if err != nil {
+		return domain.PricingEvaluation{}, fmt.Errorf("probe sell price source: %w", err)
+	}
+	request, _, err = handler.deps.Evaluate.completion().complete(ctx, request)
 	if err != nil {
 		return domain.PricingEvaluation{}, fmt.Errorf("probe sell price source: %w", err)
 	}

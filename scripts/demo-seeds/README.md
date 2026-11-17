@@ -531,4 +531,4 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 
 ## 销售价格来源
 
-步骤 `118-sell-price-contracts.sh`、`175-sell-price-exclusive-card.sh`、`505-sell-price-settlement.sh`（票 commercial-four-module-requirements/21）。演示租户另开两位客户，合同从开户起就带销售价格约定，不改 `SYN-CONTRACT-01` / `02`。`SYN-ACCOUNT-21` 只声明公共范围 `SYN-SCOPE-01`；`SYN-ACCOUNT-22` 把专属范围 `SYN-SCOPE-EXCL-01` 排在前面、公共范围排在后面。专属卡 `SYN-PLAN-CN-SG-EXCL-01` 只写谈下来的 Z1，分区目录仍是 `SYN-CAT-ZONE-CN-SG`。两户的估价采用与计费时点采用不登计价范围。灌完后 `check-sell-price-sources.sh` 核对这几格。取值都是合成的，证据记 `S`。
+步骤 `118-sell-price-contracts.sh`、`175-sell-price-exclusive-card.sh`、`505-sell-price-settlement.sh`（票 commercial-four-module-requirements/21）。演示租户另开两位客户，合同从开户起就带销售价格约定，不改 `SYN-CONTRACT-01` / `02`。`SYN-ACCOUNT-21` 只声明公共范围 `SYN-SCOPE-01`；`SYN-ACCOUNT-22` 把专属范围 `SYN-SCOPE-EXCL-01` 排在前面、公共范围排在后面。专属卡 `SYN-PLAN-CN-SG-EXCL-01` 只写谈下来的 Z1，分区目录仍是 `SYN-CAT-ZONE-CN-SG`。两户的估价采用与计费时点采用不登计价范围。专属卡不绑燃油序列。灌完后 `check-sell-price-sources.sh` 核对名单与价表，并跑 `sellpricewalk`：邮编 018 走专属卡，邮编 238 因运费表没有 Z2 落到公共卡，解释里写出来源；两位客户各把同一件的受理前估价与预估客户费用对成同额。取值都是合成的，证据记 `S`。

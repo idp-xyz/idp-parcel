@@ -19,7 +19,7 @@ func TestTheExclusiveDemoCardPricesOnlyTheNegotiatedZone(t *testing.T) {
 		t.Fatalf("重建专属卡：%v", err)
 	}
 	plan := card.Plan()
-	if plan.ContentDigest() != "0612286f07f346efc4d87cf935e141c2dc9dee23930b4d88c49aacd4107587c9" {
+	if plan.ContentDigest() != "2f12fa95f6be62fdd5da512a1accc84c8ce9e8e7f6caafcd84c9dcb1b6f7af7b" {
 		t.Fatalf("内容摘要 %s", plan.ContentDigest())
 	}
 	if plan.Scope().String() != "SYN-SCOPE-EXCL-01" {

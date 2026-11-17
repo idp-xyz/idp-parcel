@@ -92,3 +92,11 @@ END $$;
 SQL
 
 echo "销售价格来源种子核对通过：合同 21 只有公共范围，合同 22 专属在前，旧合同没有约定，新户采用册不带范围，专属卡只有 Z1。"
+
+if [[ -x /usr/local/go/bin/go ]]; then
+  export PATH="/usr/local/go/bin:${PATH}"
+fi
+export IDP_PARCEL_DEMO_CHECK=1
+repo="$(cd "$(dirname "$0")/../.." && pwd)"
+(cd "$repo" && go test -count=1 -run TestDemoSellPriceWalk ./scripts/demo-seeds/sellpricewalk/)
+
