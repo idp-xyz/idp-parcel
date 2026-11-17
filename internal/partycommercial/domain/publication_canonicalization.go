@@ -47,12 +47,15 @@ var (
 const publicationCanonicalizationVersion = "PCC-1"
 
 // supplierChargeConditionCanonicalizationVersion 是 PCC-1 加供应商协议一节里的收费发生条件（ADR-0209）。只有带
-// 这一节的文档写成这一版；其余一切文档仍按 PCC-1 写，字节不变。本构建两版都认、都能折回。
+// 这一节的文档写成这一版；其余一切文档仍按 PCC-1 写，字节不变。本构建认得的各版（另见
+// contractSellPriceCanonicalizationVersion）都能折回。
 const supplierChargeConditionCanonicalizationVersion = "PCC-2"
 
 // supportedPublicationCanonicalization 答本构建认不认这一版形状：认的才能折回、才能拿来对账。
 func supportedPublicationCanonicalization(version string) bool {
-	return version == publicationCanonicalizationVersion || version == supplierChargeConditionCanonicalizationVersion
+	return version == publicationCanonicalizationVersion ||
+		version == supplierChargeConditionCanonicalizationVersion ||
+		version == contractSellPriceCanonicalizationVersion
 }
 
 // canonicalizationOfContent 答一份正文面按哪一版形状写。一份正文只有一种字节：折回的文档若声称的版本不是它的
@@ -60,6 +63,9 @@ func supportedPublicationCanonicalization(version string) bool {
 func canonicalizationOfContent(content PublicationContent) string {
 	if content.SupplierAgreement != nil {
 		return canonicalizationOfSupplierAgreement(*content.SupplierAgreement)
+	}
+	if content.CustomerContract != nil {
+		return canonicalizationOfCustomerContract(*content.CustomerContract)
 	}
 	return publicationCanonicalizationVersion
 }
@@ -170,9 +176,9 @@ func (canonical CanonicalPublicationContent) Document() []byte {
 func RehydratePublicationContent(canonicalization string, document []byte) (PublicationContent, error) {
 	none := PublicationContent{}
 	if !supportedPublicationCanonicalization(canonicalization) {
-		return none, fmt.Errorf("%w: document canonicalized as %q, this build canonicalizes %s and %s",
+		return none, fmt.Errorf("%w: document canonicalized as %q, this build canonicalizes %s, %s and %s",
 			ErrCanonicalizationUnsupported, canonicalization, publicationCanonicalizationVersion,
-			supplierChargeConditionCanonicalizationVersion)
+			supplierChargeConditionCanonicalizationVersion, contractSellPriceCanonicalizationVersion)
 	}
 	var decoded canonicalPublicationDocument
 	if err := json.Unmarshal(document, &decoded); err != nil {
@@ -206,9 +212,22 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 		}
 		return content, nil
 	}
+	if decoded.CustomerContract != nil {
+		body, err := decoded.CustomerContract.body()
+		if err != nil {
+			return none, fmt.Errorf("rehydrate publication content: customer contract: %w", err)
+		}
+		content.CustomerContract = &body
+		// 合同一册今天有两版形状：带销售价格约定的写 PCC-3，其余写 PCC-1。标签与形状对不上的不是本构建写下的。
+		if written := canonicalizationOfContent(content); written != canonicalization {
+			return none, fmt.Errorf("rehydrate publication content: %w: a document of shape %s is labelled %s",
+				ErrCanonicalizationUnsupported, written, canonicalization)
+		}
+		return content, nil
+	}
 	if canonicalization != publicationCanonicalizationVersion {
-		// PCC-2 只多供应商协议那一节；别的册标着 PCC-2，就不是本构建写下的文档。
-		return none, fmt.Errorf("rehydrate publication content: %w: only a supplier agreement with charge conditions is written as %s",
+		// PCC-2 只多供应商协议那一节，PCC-3 只多客户合同那一节；别的册标着它们，就不是本构建写下的文档。
+		return none, fmt.Errorf("rehydrate publication content: %w: no register other than the supplier agreement and the customer contract is written as %s",
 			ErrCanonicalizationUnsupported, canonicalization)
 	}
 	if decoded.ServiceProduct != nil {
@@ -217,14 +236,6 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 			return none, fmt.Errorf("rehydrate publication content: service product: %w", err)
 		}
 		content.ServiceProduct = &body
-		return content, nil
-	}
-	if decoded.CustomerContract != nil {
-		body, err := decoded.CustomerContract.body()
-		if err != nil {
-			return none, fmt.Errorf("rehydrate publication content: customer contract: %w", err)
-		}
-		content.CustomerContract = &body
 		return content, nil
 	}
 	if decoded.AuthorizationRule != nil {
@@ -361,7 +372,7 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 			return none, err
 		}
 		return canonicalDigestOf(canonicalPublicationDocument{
-			Canonicalization: publicationCanonicalizationVersion,
+			Canonicalization: canonicalizationOfCustomerContract(*content.CustomerContract),
 			Kind:             content.Kind.String(),
 			CustomerContract: canonicalCustomerContractBodyOf(*content.CustomerContract),
 		})
@@ -411,7 +422,8 @@ func IsRegisterCanonicalized(kind CommercialObjectKind) bool {
 	}
 }
 
-// canonicalPublicationDocument 是 PCC-1 的文档形状，PCC-2 只在供应商协议一节里多一键（见 canonicalSupplierAgreementBody）。字段顺序由结构体钉死——json.Marshal 按声明顺序
+// canonicalPublicationDocument 是 PCC-1 的文档形状，PCC-2 只在供应商协议一节里多一键（见 canonicalSupplierAgreementBody），
+// PCC-3 只在客户合同一节里多一键（见 canonicalCustomerContractBody）。字段顺序由结构体钉死——json.Marshal 按声明顺序
 // 输出，这就是「规范化」的全部：同一份正文只有一种字节。各册一格、缺席省略，让文档的字节只由
 // 在场的那一册决定。
 type canonicalPublicationDocument struct {
