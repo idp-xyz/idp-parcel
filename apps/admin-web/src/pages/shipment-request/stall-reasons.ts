@@ -36,6 +36,7 @@ const settlementStallWords: Record<string, StallWords> = {
   'SA-CREDIT_RATIO_BASE_NOT_ESTABLISHED': financial('比例额度的基数还没有事实（未登记运营余额或还没有有效对账单）'),
   'SA-CONTROL_AMOUNT_NOT_CONFIGURED': estimate('这户没有登记受理前估价采用'),
   'SA-ESTIMATE_ADOPTION_UNAVAILABLE': estimate('受理前估价采用读不到'),
+  'SA-ESTIMATE_SELL_PRICE_ARRANGEMENT_UNAVAILABLE': estimate('销售价格约定读不到'),
   'SA-ESTIMATE_TRIALS_UNAVAILABLE': estimate('试算调不通'),
   'SA-ESTIMATE_TRACE_UNAVAILABLE': estimate('估价留痕读写不通'),
   'SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED': priceCardSide('没有在用价卡'),
