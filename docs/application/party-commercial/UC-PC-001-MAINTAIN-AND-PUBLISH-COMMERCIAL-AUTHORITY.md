@@ -208,7 +208,7 @@
 
 参与方资料（ADR-0369）落在独立的参与方资料登记册：领域校验与法人资料共用，写口一个、读口一个，受控 CLI 暂不加子命令；对账单取哪位联系人与哪个地址归对账单开立的实施。
 
-客户合同版本的销售价格约定（PC CONTEXT「客户合同版本」词条，[ADR-0380](../../adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 决定一）代码尚未做到：合同正文、规范化文档、受控批文与待批准发布的录入面都没有这一格；加这一格是形状变更，换规范化版本号（ADR-0267）。承接：[commercial-four-module-requirements/16](../../../.scratch/commercial-four-module-requirements/issues/16-the-customer-contract-body-carries-the-sell-price-arrangement.md)，管理台 [20](../../../.scratch/commercial-four-module-requirements/issues/20-admin-web-contract-page-declares-sell-price-sources.md)。
+客户合同版本的销售价格约定（PC CONTEXT「客户合同版本」词条，[ADR-0380](../../adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 决定一）落在客户合同一册的正文里，是与合同级接受前控制声明、合同层交付条件并列的一层：受控批文与录入载荷的键是 `sellPriceArrangement`，随发布经自己的声明通道落库，客户合同目录与按身份读回逐行带出，来源的顺序原样保存。加这一层是形状变更（ADR-0267）：带它的合同文档写成 `PCC-3`，不带的仍是 `PCC-1`、逐字节不变。商业发布这一侧今天没有按规范化版本设的部署开关（`PCC-2` 同此），计价那一侧的开关（ADR-0352）不管这里。管理台的录入与显示尚未做到，承接：[commercial-four-module-requirements/20](../../../.scratch/commercial-four-module-requirements/issues/20-admin-web-contract-page-declares-sell-price-sources.md)。
 
 实现按业务对象提供语义化命令与 Repository，不建立一个可以修改任意商业表的通用配置接口；不预置真实商业默认值。PC 的发布、收尾与登记各册已有 PostgreSQL 持久化并接进 `cmd/parcel-api` 与 `parcel-commercial`，演示租户 `SYN-TENANT-01` 由种子登 `SYN-` 取值、证据只记 `S`；真实租户的主数据与证据（`PN02-W01/W03`）属租户上线时的实施。
 

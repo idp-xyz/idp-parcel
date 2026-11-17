@@ -178,8 +178,38 @@ type customerContractBody struct {
 	DeclaredAt         string                 `json:"declaredAt,omitempty"`
 	Bindings           []controlBindingBody   `json:"bindings"`
 	DeliveryConditions *deliveryConditionBody `json:"deliveryConditions,omitempty"`
+	// SellPriceArrangement 是销售价格约定那一节（0049；ADR-0380 决定一）：缺键即这一版合同没有销售价格约定，不由
+	// contentRegistered 推，也不拿空列表顶。键名镜像受控批文与录入载荷。
+	SellPriceArrangement *sellPriceArrangementBody `json:"sellPriceArrangement,omitempty"`
 
 	versionClosureBody
+}
+
+// sellPriceArrangementBody 里 sources 恒为数组、按合同声明的顺序；noSellPriceBasis 只在合同显式不计销售价时在场，
+// 此时 sources 为空数组。
+type sellPriceArrangementBody struct {
+	Sources          []sellPriceSourceBody `json:"sources"`
+	NoSellPriceBasis string                `json:"noSellPriceBasis,omitempty"`
+	DeclaredAt       string                `json:"declaredAt"`
+}
+
+type sellPriceSourceBody struct {
+	PricingScope string `json:"pricingScope"`
+}
+
+func sellPriceArrangementBodyOf(row *ports.SellPriceArrangementCatalogueRow) *sellPriceArrangementBody {
+	if row == nil {
+		return nil
+	}
+	body := &sellPriceArrangementBody{
+		Sources:          make([]sellPriceSourceBody, 0, len(row.Sources)),
+		NoSellPriceBasis: row.NoSellPriceBasis,
+		DeclaredAt:       rfc3339(row.DeclaredAt),
+	}
+	for _, source := range row.Sources {
+		body.Sources = append(body.Sources, sellPriceSourceBody{PricingScope: source})
+	}
+	return body
 }
 
 // controlBindingBody 里 policyId 与 basis 恰有一个在场,与库上 CHECK 同形;装载口
@@ -202,6 +232,7 @@ func customerContractBodyOf(row ports.CustomerContractCatalogueRow) customerCont
 		Bindings:           make([]controlBindingBody, 0, len(row.Bindings)),
 		DeliveryConditions: deliveryConditionBodyOf(row.DeliveryConditions),
 	}
+	body.SellPriceArrangement = sellPriceArrangementBodyOf(row.SellPrice)
 	body.versionClosureBody = closureBodyOf(row.HasSelectionCut, row.SelectionEndsAt, row.Successor, row.RetiredAt)
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
