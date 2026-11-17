@@ -1,7 +1,7 @@
 # 16 客户合同版本的正文带销售价格约定：有序的销售价格来源，或显式不计销售价
 
 Category: enhancement
-Status: in-progress——2026-11-12 Cursor 会话认领，分支 `cursor/cfmr-16-contract-sell-price-arrangement-r2`（worktree `idp-parcel-cfmr16`），基线 `9bf6e8603`。它是 2026-11-13 重切的一版：原分支 `cursor/cfmr-16-contract-sell-price-arrangement` 从 `2130a37b2` 起，其间 `main` 进了票 declared-goods-lines/11 对客户合同正文的改动，重切时并进。此前 ready-for-agent
+Status: resolved——2026-11-17 进 `main` `bdba71e9d`，见「进 main 记录」。此前 in-progress——2026-11-12 Cursor 会话认领，分支 `cursor/cfmr-16-contract-sell-price-arrangement-r2`（worktree `idp-parcel-cfmr16`），基线 `9bf6e8603`。它是 2026-11-13 重切的一版：原分支 `cursor/cfmr-16-contract-sell-price-arrangement` 从 `2130a37b2` 起，其间 `main` 进了票 declared-goods-lines/11 对客户合同正文的改动，重切时并进。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 无
 地盘：`internal/partycommercial`（领域、规范化、发布与受控批文）、`cmd/parcel-commercial`、`docs/application/party-commercial`
@@ -35,6 +35,20 @@ Blocked by: 无
 - 一份带销售价格约定的合同版本经录入、批准、发布后读回，列表顺序与录入相同；摘要随列表的内容与顺序变。
 - 旧规范化版本的合同读回不变，摘要不变。
 - `UC-PC-001`「给开发的交接」里讲销售价格约定的那一段随之删去或改成现状。
+
+## 进 main 记录
+
+2026-11-17，照 `docs/agents/workflow.md`「进 main 的步骤」与 `AGENTS.md`「交付模式」。用户此前在问题卡上定过：评审无阻断就跑全量测试与种子并落 `main`。推送方就是作者会话（Cursor）。
+
+- **`main` 上的 SHA**：`566309193`、`5618fe40f`、`99cf36a99`、`7f32f4f5a`、`2c59eb672`、`61e826497`、`3184950ce`、`5ad63492f`、`bdba71e9d`，底是 `2da964d63`。推的是核过的那个 SHA 本身，非强推；推后 `git ls-remote origin refs/heads/main` 答 `bdba71e9d`。
+- **出处**：分支 `cursor/cfmr-16-contract-sell-price-arrangement-r2`。落地时 `main` 仍是它的底，重放是空操作，进 `main` 的就是分支上的这几笔，SHA 没有换。从旧底起的原分支 `cursor/cfmr-16-contract-sell-price-arrangement` 留在远端，没有进 `main`。
+- **非作者评审**：两轴隔离子代理，评审基点 `2da964d63`。钉 `2c59eb672` 两轴无阻断；复核钉 `61e826497` 两轴无阻断；Standards 轴再钉 `3184950ce` 给整票无阻断。逐条见 Comments。其后的 `5ad63492f`（票面措辞）与 `bdba71e9d`（改 `dox/`、撤回对 `docs/` 的改动）自审。
+- **生成物**：没有重生成。机制清点、ADR 索引与 AT 盘点计数的门已从 CI 摘掉。
+- **全量真库测试**：在 `bdba71e9d` 的干净检出上跑 `scripts/test-full.sh`，退 0；176 个包通过，没有失败。
+- **灌一次性库**：`scripts/demo-seeds/seed.sh` 灌进一只专用的一次性库，退 0，库用后已删。迁移 `0049` 施加成功；种子里的三版客户合同不带销售价格约定，摘要仍是 `PCC-1`。
+- **CI**：`bdba71e9d` 那一次推送的 Parcel CI 全部作业成功（静态检查、管理台、各测试分片）。
+- **收口这一笔**：只改本票与 `spec.md` 的子票表，自审。
+- **还开着的**：这条链余下的票 17 至 21，见 `dox/work.md`「在做」；合同上登的销售价格约定在票 17、19 落地之前不决定计费。`dox/work.md`「评审留下、不挡上线的」里有本票留下的两行。
 
 ## Comments
 
