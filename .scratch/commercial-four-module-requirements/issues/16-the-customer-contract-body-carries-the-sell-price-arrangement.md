@@ -74,7 +74,7 @@ Blocked by: 无
   1. **第一轮钉 `2c59eb672`，两轴都无阻断。**
      - Standards 非阻断五条：新写的跨文件计数注释；加了这一层之后失实的「三键」「三层」「另两层」；一条旧测试拿 `PCC-3` 当本构建不认的版本；同一个词有 `SellPrice` 与 `SellPriceArrangement` 两种叫法；折回时的标签核对抄了一份。
      - Spec 非阻断三条：不加部署开关的后果没记全——票 17、19 落地之前带销售价格约定的合同已能发布，而结算仍读采用登记；没有立领域级点读口，判为不算缺口，建议记到票 17；来源按原串判重，带尾空格的同名不算同一范围。
-  2. **修订 `61e826497`，八条都改了。** 改名之后，上面两条记录里的 `DeclareContractSellPrice` 现在叫 `DeclareContractSellPriceArrangement`，通道 `CONTRACT_SELL_PRICE` 现在叫 `CONTRACT_SELL_PRICE_ARRANGEMENT`，正文与目录行上的字段叫 `SellPriceArrangement`；JSON 键一个没动。来源判重那一条的改法是让 `NewPricingScopeReference` 拒带首尾空白的名字（先红后绿）：计价一侧的范围标识本来就不带首尾空白。这是票面之外新加的一条领域规则，会话定的。部署开关的后果写进了 `UC-PC-001` 交接段；点读口与窗口内固定的解析记在票 17 的 Comments。
+  2. **修订 `61e826497`，八条都改了。** 改名之后，完工那一条记录里的 `DeclareContractSellPrice` 现在叫 `DeclareContractSellPriceArrangement`，通道 `CONTRACT_SELL_PRICE` 现在叫 `CONTRACT_SELL_PRICE_ARRANGEMENT`，正文与目录行上的字段叫 `SellPriceArrangement`；JSON 键一个没动。来源判重那一条的改法是让 `NewPricingScopeReference` 拒带首尾空白的名字（先红后绿）：计价一侧的范围标识本来就不带首尾空白。这是票面之外新加的一条领域规则，会话定的。部署开关的后果写进了 `UC-PC-001` 交接段；点读口与窗口内固定的解析记在票 17 的 Comments。
   3. **复核钉 `61e826497`（增量 `2c59eb672..61e826497`），两轴都无阻断。** 第一轮各条判为已解决，只有改名漏了一处：迁移 `0049` 头注里还是旧名。新的非阻断：`NewPricingScopeReference` 的注释对本包别处作了一句不成立的全称断言；`UC-PC-001` 新句里有一处对别处的计数，且只说了来源不起作用、没说显式不计销售价同样不起作用；范围名的判据在两个上下文各写了一份，只靠注释相连。
   4. **再修的一笔（本条所在的提交）。** 迁移头注改成新名；那句注释改成点名 `NewPricingScopeID` 与 `NewExternalReference`；`UC-PC-001` 那句去掉计数并补上不计销售价。范围名判据各写一份没有改：领域包之间互不导入，要钉在一起得进架构门，记在票 17 的 Comments 里留给读口那张票。
   5. **评审者自报没做的。** 两轴都没跑真库用例；Standards 轴没跑测试，只对相关包跑过 `go vet`；Spec 轴只跑了不连库的几个包。「结算仍读采用登记上的计价范围」与票 17 Comments 里对窗口的推演，Standards 轴没有对着结算代码核，Spec 轴判为属实。
