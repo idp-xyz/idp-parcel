@@ -103,7 +103,7 @@ Q4 至 Q6 是用户自己的决定。
 | 15 | [「哪位客户用哪套价」由哪一处说了算，与客户价的结构](./issues/15-one-authority-for-which-price-a-customer-uses-and-the-customer-price-structure.md) | 无 | resolved（[ADR-0380](../../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md) 2026-11-12 进 `main`，实现拆成 16 至 21） |
 | 16 | [客户合同版本的正文带销售价格约定](./issues/16-the-customer-contract-body-carries-the-sell-price-arrangement.md) | 无 | resolved（2026-11-17 进 `main`） |
 | 17 | [销售价格来源随接受时固定的商业解析一起固定，结算有口读它](./issues/17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md) | 16 | resolved（2026-11-17 进 `main`） |
-| 18 | [计价按请求带来的有序计价范围列表选卡，只在两种落空时转问下一个](./issues/18-pricing-selects-the-price-card-across-an-ordered-scope-list.md) | 无 | ready-for-agent |
+| 18 | [计价按请求带来的有序计价范围列表选卡，只在两种落空时转问下一个](./issues/18-pricing-selects-the-price-card-across-an-ordered-scope-list.md) | 无 | resolved（2026-11-17 进 `main`） |
 | 19 | [结算两条发起路按合同声明的销售价格来源请计价，两本采用册不再说计价范围](./issues/19-settlement-requests-sell-evaluations-with-the-contract-declared-scope-list.md) | 17、18 | ready-for-agent |
 | 20 | [管理台：合同页录入与显示销售价格来源](./issues/20-admin-web-contract-page-declares-sell-price-sources.md) | 16 | ready-for-agent |
 | 21 | [演示租户的种子合同声明销售价格来源，演示动线走通](./issues/21-demo-seeds-and-walkthrough-for-contract-declared-sell-price-sources.md) | 19、20 | ready-for-agent |

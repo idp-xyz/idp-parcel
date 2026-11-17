@@ -1,7 +1,7 @@
 # 18 计价按请求带来的有序计价范围列表选卡，只在两种落空时转问下一个
 
 Category: enhancement
-Status: in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-18-ordered-sell-price-scope-list`（worktree `idp-parcel-cfmr18`），基线 `e51a02b26`。此前 ready-for-agent
+Status: resolved——2026-11-17 进 `main` `e151b4513`，见「进 main 记录」。此前 in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-18-ordered-sell-price-scope-list`（worktree `idp-parcel-cfmr18`），基线 `e51a02b26`。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 无
 地盘：`internal/parcelpricing`（领域、应用与受理前试算口）、`docs/application/parcel-pricing`。读结算评价请求记录的那只适配器怎样译出列表，随票 19 的请求记录形状做，不在本票
@@ -41,6 +41,20 @@ Blocked by: 无
 - 全部落空：答最后一个范围的那一格——最后一格是没有在用价卡时交「评价未形成」，是基础运费表缺格时形成待判断评价；两种都带出全部范围各自的那一格。
 - 只带一个范围的请求，结果与今天逐字节相同；同一请求回放得到同一个范围。
 - `UC-PP-001`「给开发的交接」里讲有序列表的那一条随之删去或改成现状。
+
+## 进 main 记录
+
+2026-11-17，照 `docs/agents/workflow.md`「进 main 的步骤」与 `AGENTS.md`「交付模式」。这条链怎样落，用户在票 16 上定过：评审无阻断就跑全量测试与种子并落 `main`。本票评审有一处阻断，改完才落；落之前没有再问。推送方就是作者会话（Cursor）。
+
+- **`main` 上的 SHA**：`da705a8eb`、`9a2d4787a`、`e151b4513`，底是 `e51a02b26`。推的是验过的那个 SHA 本身，非强推；推后 `origin/main` 答 `e151b4513`。
+- **出处**：分支 `cursor/cfmr-18-ordered-sell-price-scope-list`。落地时 `main` 仍是它的底，重放是空操作，SHA 没有换。
+- **非作者评审**：一轮，两轴隔离子代理，评审基点 `e51a02b26`，钉 `9a2d4787a`。Standards 轴一处阻断，已在 `e151b4513` 改掉；Spec 轴无阻断。逐条见 Comments。`e151b4513` 自审，没有再送评审。
+- **生成物**：没有重生成，门已从 CI 摘掉。
+- **全量真库测试**：在 `e151b4513` 上跑 `scripts/test-full.sh`，退 0；176 个包通过，没有失败。
+- **灌一次性库**：`scripts/demo-seeds/seed.sh` 灌进一只专用的一次性库，退 0，库用后已删。本票没有迁移，也没有动种子。
+- **CI**：`e151b4513` 那一次推送的 Parcel CI 全部作业成功（静态检查、管理台、各测试分片）。
+- **收口这一笔**：只改本票与 `spec.md` 的子票表，自审；全量测试与种子未跑。
+- **还开着的**：票 19、20、21，见 `dox/work.md`「在做」。形成评价与受理前试算已经能按列表问；结算的请求仍只带一个范围，合同上登的来源在票 19 落地之前不决定计费。
 
 ## Comments
 
