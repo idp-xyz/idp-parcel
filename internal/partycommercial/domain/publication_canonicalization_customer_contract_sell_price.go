@@ -7,10 +7,10 @@ import "fmt"
 // declarations 下的 sellPriceArrangement，与 contractContent / preAcceptanceControl / deliveryConditions 并列；
 // 文档里的键名镜像批文。
 
-// contractSellPriceCanonicalizationVersion 是 PCC-1 加客户合同一节里的销售价格约定。只有带这一层的合同文档写成
-// 这一版；本构建认 PCC-1、PCC-2 与它，都能折回。结算与计价按「合同版本带不带销售价格约定」分新旧两种读法
+// contractSellPriceArrangementCanonicalizationVersion 是 PCC-1 加客户合同一节里的销售价格约定。只有带这一层的合同文档写成
+// 这一版；本构建认得的各版都能折回。结算与计价按「合同版本带不带销售价格约定」分新旧两种读法
 // （ADR-0380 决定七），分的就是这一版与 PCC-1。
-const contractSellPriceCanonicalizationVersion = "PCC-3"
+const contractSellPriceArrangementCanonicalizationVersion = "PCC-3"
 
 // SellPriceArrangementBody 是销售价格约定的输入面：来源列表与不计销售价的依据两格，恰一在场由 validate 判。
 // Sources 的顺序是正文的一部分，折成文档时原样写出、不排序——换顺序就是换了取价的先后。
@@ -67,8 +67,8 @@ func (document canonicalSellPriceArrangement) body() (SellPriceArrangementBody, 
 
 // canonicalizationOfCustomerContract 答一份合同正文按哪一版形状写：带销售价格约定的写 PCC-3，其余仍是 PCC-1。
 func canonicalizationOfCustomerContract(body CustomerContractBody) string {
-	if body.SellPrice != nil {
-		return contractSellPriceCanonicalizationVersion
+	if body.SellPriceArrangement != nil {
+		return contractSellPriceArrangementCanonicalizationVersion
 	}
 	return publicationCanonicalizationVersion
 }

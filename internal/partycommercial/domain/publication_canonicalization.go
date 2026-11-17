@@ -48,14 +48,14 @@ const publicationCanonicalizationVersion = "PCC-1"
 
 // supplierChargeConditionCanonicalizationVersion 是 PCC-1 加供应商协议一节里的收费发生条件（ADR-0209）。只有带
 // 这一节的文档写成这一版；其余一切文档仍按 PCC-1 写，字节不变。本构建认得的各版（另见
-// contractSellPriceCanonicalizationVersion）都能折回。
+// contractSellPriceArrangementCanonicalizationVersion）都能折回。
 const supplierChargeConditionCanonicalizationVersion = "PCC-2"
 
 // supportedPublicationCanonicalization 答本构建认不认这一版形状：认的才能折回、才能拿来对账。
 func supportedPublicationCanonicalization(version string) bool {
 	return version == publicationCanonicalizationVersion ||
 		version == supplierChargeConditionCanonicalizationVersion ||
-		version == contractSellPriceCanonicalizationVersion
+		version == contractSellPriceArrangementCanonicalizationVersion
 }
 
 // canonicalizationOfContent 答一份正文面按哪一版形状写。一份正文只有一种字节：折回的文档若声称的版本不是它的
@@ -178,7 +178,7 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 	if !supportedPublicationCanonicalization(canonicalization) {
 		return none, fmt.Errorf("%w: document canonicalized as %q, this build canonicalizes %s, %s and %s",
 			ErrCanonicalizationUnsupported, canonicalization, publicationCanonicalizationVersion,
-			supplierChargeConditionCanonicalizationVersion, contractSellPriceCanonicalizationVersion)
+			supplierChargeConditionCanonicalizationVersion, contractSellPriceArrangementCanonicalizationVersion)
 	}
 	var decoded canonicalPublicationDocument
 	if err := json.Unmarshal(document, &decoded); err != nil {
@@ -206,9 +206,8 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 			return none, fmt.Errorf("rehydrate publication content: supplier agreement: %w", err)
 		}
 		content.SupplierAgreement = &body
-		if written := canonicalizationOfContent(content); written != canonicalization {
-			return none, fmt.Errorf("rehydrate publication content: %w: a document of shape %s is labelled %s",
-				ErrCanonicalizationUnsupported, written, canonicalization)
+		if err := labelledAsWritten(content, canonicalization); err != nil {
+			return none, err
 		}
 		return content, nil
 	}
@@ -218,10 +217,8 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 			return none, fmt.Errorf("rehydrate publication content: customer contract: %w", err)
 		}
 		content.CustomerContract = &body
-		// 合同一册今天有两版形状：带销售价格约定的写 PCC-3，其余写 PCC-1。标签与形状对不上的不是本构建写下的。
-		if written := canonicalizationOfContent(content); written != canonicalization {
-			return none, fmt.Errorf("rehydrate publication content: %w: a document of shape %s is labelled %s",
-				ErrCanonicalizationUnsupported, written, canonicalization)
+		if err := labelledAsWritten(content, canonicalization); err != nil {
+			return none, err
 		}
 		return content, nil
 	}
@@ -295,6 +292,16 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 		return none, ErrPublicationContentAbsent
 	}
 	return content, nil
+}
+
+// labelledAsWritten 核折回的正文该写成的那一版与文档声称的是不是同一版。按内容分版的册（见 canonicalizationOfContent）
+// 才用得着它：标着旧版却带着新键、或标着新版却不带，都不是本构建写下的文档，答不认这一版，不猜着折。
+func labelledAsWritten(content PublicationContent, canonicalization string) error {
+	if written := canonicalizationOfContent(content); written != canonicalization {
+		return fmt.Errorf("rehydrate publication content: %w: a document of shape %s is labelled %s",
+			ErrCanonicalizationUnsupported, written, canonicalization)
+	}
+	return nil
 }
 
 // CommercialObjectKindNamed 按 String() 的原词反查类别：规范化文档里的 kind、运营操作者面载荷里的 kind 都是那一个词，

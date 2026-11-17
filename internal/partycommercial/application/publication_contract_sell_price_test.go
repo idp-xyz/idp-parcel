@@ -19,9 +19,9 @@ func (double *publicationRegistryDouble) SaveContractSellPriceArrangement(
 	arrangement domain.ContractSellPriceArrangement,
 ) (ports.DeclarationSaveOutcome, error) {
 	if double.declarationErr == nil {
-		double.savedSellPrice = append(double.savedSellPrice, arrangement)
+		double.savedSellPriceArrangements = append(double.savedSellPriceArrangements, arrangement)
 	}
-	return double.declarationAnswer("contract-sell-price")
+	return double.declarationAnswer("contract-sell-price-arrangement")
 }
 
 func sellPriceScopes(t *testing.T, names ...string) []domain.PricingScopeReference {
@@ -42,7 +42,7 @@ func contractWithSellPrice(
 	declarations := contractDeclarations(t, "rules-1")
 	declarations.SellPriceArrangement = &arrangement
 	content := customerContractContent(t, declarations)
-	content.CustomerContract.SellPrice = &domain.SellPriceArrangementBody{
+	content.CustomerContract.SellPriceArrangement = &domain.SellPriceArrangementBody{
 		Sources:          arrangement.Sources,
 		NoSellPriceBasis: arrangement.NoSellPriceBasis,
 	}
@@ -83,14 +83,14 @@ func TestACustomerContractPublishesItsSellPriceArrangementUnderTheSameDigest(t *
 		if result.Outcome() != application.CommercialVersionPublishedEffective {
 			t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
 		}
-		if len(registry.savedSellPrice) != 1 {
-			t.Fatalf("saved sell price arrangements = %#v", registry.savedSellPrice)
+		if len(registry.savedSellPriceArrangements) != 1 {
+			t.Fatalf("saved sell price arrangements = %#v", registry.savedSellPriceArrangements)
 		}
-		sources, priced := registry.savedSellPrice[0].Sources()
+		sources, priced := registry.savedSellPriceArrangements[0].Sources()
 		if !priced || len(sources) != 2 || sources[0].String() != "SYN-SCOPE-EXCLUSIVE" || sources[1].String() != "SYN-SCOPE-STANDARD" {
 			t.Fatalf("saved sources = %v priced = %v", sources, priced)
 		}
-		if !strings.Contains(strings.Join(registry.declarationLog, ","), "contract-sell-price") {
+		if !strings.Contains(strings.Join(registry.declarationLog, ","), "contract-sell-price-arrangement") {
 			t.Fatalf("declaration log = %v, want the sell price channel", registry.declarationLog)
 		}
 		if !strings.HasPrefix(registry.savedVersions[0].ContentDigest().String(), "PCC-3:") {
@@ -98,12 +98,12 @@ func TestACustomerContractPublishesItsSellPriceArrangementUnderTheSameDigest(t *
 		}
 		reported := false
 		for _, report := range result.Declarations() {
-			if report.Channel == application.ContractSellPriceChannel {
-				reported = report.Outcome == ports.DeclarationSaved && report.Channel.String() == "CONTRACT_SELL_PRICE"
+			if report.Channel == application.ContractSellPriceArrangementChannel {
+				reported = report.Outcome == ports.DeclarationSaved && report.Channel.String() == "CONTRACT_SELL_PRICE_ARRANGEMENT"
 			}
 		}
 		if !reported {
-			t.Fatalf("declaration reports = %#v, want CONTRACT_SELL_PRICE saved", result.Declarations())
+			t.Fatalf("declaration reports = %#v, want CONTRACT_SELL_PRICE_ARRANGEMENT saved", result.Declarations())
 		}
 	})
 
@@ -127,7 +127,7 @@ func TestACustomerContractPublishesItsSellPriceArrangementUnderTheSameDigest(t *
 		if _, computed, ok := result.DigestReconciliation(); !ok || !strings.HasPrefix(computed, "PCC-3:") {
 			t.Fatalf("computed digest = %q (%v), want a PCC-3 digest", computed, ok)
 		}
-		if len(registry.savedVersions) != 0 || len(registry.savedSellPrice) != 0 {
+		if len(registry.savedVersions) != 0 || len(registry.savedSellPriceArrangements) != 0 {
 			t.Fatal("未受理写了库")
 		}
 	})
@@ -182,10 +182,10 @@ func TestACustomerContractDraftCarriesItsSellPriceArrangementThroughApprovalAndP
 		if len(registry.savedVersions) != 1 || registry.savedVersions[0].ContentDigest() != stored.Canonical().Digest() {
 			t.Fatalf("入册摘要与载体摘要不一致：%#v vs %s", registry.savedVersions, stored.Canonical().Digest())
 		}
-		if len(registry.savedSellPrice) != 1 {
-			t.Fatalf("saved sell price arrangements = %#v", registry.savedSellPrice)
+		if len(registry.savedSellPriceArrangements) != 1 {
+			t.Fatalf("saved sell price arrangements = %#v", registry.savedSellPriceArrangements)
 		}
-		sources, priced := registry.savedSellPrice[0].Sources()
+		sources, priced := registry.savedSellPriceArrangements[0].Sources()
 		if !priced || len(sources) != 2 || sources[0].String() != "SYN-SCOPE-EXCLUSIVE" || sources[1].String() != "SYN-SCOPE-STANDARD" {
 			t.Fatalf("published sources = %v priced = %v, want the submitted order", sources, priced)
 		}
@@ -195,10 +195,10 @@ func TestACustomerContractDraftCarriesItsSellPriceArrangementThroughApprovalAndP
 		registry, _ := publish(t, application.SellPriceArrangementDeclaration{
 			NoSellPriceBasis: pcValue(t, domain.NewNoSellPriceBasis, "SYN-NO-SELL-PRICE-01"),
 		})
-		if len(registry.savedSellPrice) != 1 {
-			t.Fatalf("saved sell price arrangements = %#v", registry.savedSellPrice)
+		if len(registry.savedSellPriceArrangements) != 1 {
+			t.Fatalf("saved sell price arrangements = %#v", registry.savedSellPriceArrangements)
 		}
-		basis, notPriced := registry.savedSellPrice[0].NoSellPriceBasis()
+		basis, notPriced := registry.savedSellPriceArrangements[0].NoSellPriceBasis()
 		if !notPriced || basis.String() != "SYN-NO-SELL-PRICE-01" {
 			t.Fatalf("published basis = %q notPriced = %v", basis, notPriced)
 		}
@@ -247,7 +247,7 @@ func TestASellPriceArrangementThatDoesNotStandIsRefusedBeforeAnythingIsWritten(t
 		if !errors.Is(err, domain.ErrUnusableContract) {
 			t.Fatalf("err = %v, want ErrUnusableContract", err)
 		}
-		if len(registry.savedVersions) != 0 || len(registry.savedSellPrice) != 0 {
+		if len(registry.savedVersions) != 0 || len(registry.savedSellPriceArrangements) != 0 {
 			t.Fatal("挂错拥有者的约定写了库")
 		}
 	})
@@ -265,7 +265,7 @@ func TestASellPriceArrangementThatDoesNotStandIsRefusedBeforeAnythingIsWritten(t
 		if err != nil || result.Outcome() != application.CommercialVersionPublishedEffective {
 			t.Fatalf("outcome = %q, %v", result.Outcome(), err)
 		}
-		if len(registry.savedSellPrice) != 0 || strings.Contains(strings.Join(registry.declarationLog, ","), "contract-sell-price") {
+		if len(registry.savedSellPriceArrangements) != 0 || strings.Contains(strings.Join(registry.declarationLog, ","), "contract-sell-price-arrangement") {
 			t.Fatalf("没有销售价格约定的合同写了这一通道：%v", registry.declarationLog)
 		}
 		if !strings.HasPrefix(registry.savedVersions[0].ContentDigest().String(), "PCC-1:") {

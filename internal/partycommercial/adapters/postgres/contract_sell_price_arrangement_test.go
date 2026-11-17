@@ -26,7 +26,7 @@ func sellPriceOf(t *testing.T, contract domain.CommercialVersion, basis string, 
 	if basis != "" {
 		noSellPrice = pcValue(t, domain.NewNoSellPriceBasis, basis)
 	}
-	arrangement, err := domain.DeclareContractSellPrice(contract, sources, noSellPrice)
+	arrangement, err := domain.DeclareContractSellPriceArrangement(contract, sources, noSellPrice)
 	if err != nil {
 		t.Fatalf("销售价格约定：%v", err)
 	}
@@ -65,32 +65,32 @@ func TestCustomerContractCatalogueReadsSellPriceSourcesBackInTheDeclaredOrder(t 
 		t.Fatalf("上列 = %d 行，次序或数量不对", len(rows))
 	}
 
-	if rows[2].SellPrice == nil {
+	if rows[2].SellPriceArrangement == nil {
 		t.Fatal("声明过销售价格来源的合同那一格为 nil")
 	}
-	if got := strings.Join(rows[2].SellPrice.Sources, ","); got != "SYN-SCOPE-M,SYN-SCOPE-Z,SYN-SCOPE-A" {
+	if got := strings.Join(rows[2].SellPriceArrangement.Sources, ","); got != "SYN-SCOPE-M,SYN-SCOPE-Z,SYN-SCOPE-A" {
 		t.Fatalf("来源 = %s，want 合同声明的顺序 SYN-SCOPE-M,SYN-SCOPE-Z,SYN-SCOPE-A", got)
 	}
-	if rows[2].SellPrice.NoSellPriceBasis != "" || rows[2].SellPrice.DeclaredAt.IsZero() {
-		t.Fatalf("有来源的约定：basis=%q declaredAt=%v", rows[2].SellPrice.NoSellPriceBasis, rows[2].SellPrice.DeclaredAt)
+	if rows[2].SellPriceArrangement.NoSellPriceBasis != "" || rows[2].SellPriceArrangement.DeclaredAt.IsZero() {
+		t.Fatalf("有来源的约定：basis=%q declaredAt=%v", rows[2].SellPriceArrangement.NoSellPriceBasis, rows[2].SellPriceArrangement.DeclaredAt)
 	}
 	if len(rows[2].Bindings) != 2 {
 		t.Fatalf("来源行把约定行数重了：bindings=%d", len(rows[2].Bindings))
 	}
 
-	if rows[1].SellPrice == nil || rows[1].SellPrice.NoSellPriceBasis != "SYN-NO-SELL-PRICE-01" || len(rows[1].SellPrice.Sources) != 0 {
-		t.Fatalf("不计销售价的约定 = %#v", rows[1].SellPrice)
+	if rows[1].SellPriceArrangement == nil || rows[1].SellPriceArrangement.NoSellPriceBasis != "SYN-NO-SELL-PRICE-01" || len(rows[1].SellPriceArrangement.Sources) != 0 {
+		t.Fatalf("不计销售价的约定 = %#v", rows[1].SellPriceArrangement)
 	}
-	if rows[0].SellPrice != nil {
-		t.Fatalf("没有销售价格约定的合同那一格 = %#v，want nil", rows[0].SellPrice)
+	if rows[0].SellPriceArrangement != nil {
+		t.Fatalf("没有销售价格约定的合同那一格 = %#v，want nil", rows[0].SellPriceArrangement)
 	}
 
 	found, present, err := catalogue.FindCustomerContract(ctx, pcTenant(t, "tenant-1"), priced.ObjectID(), priced.Version())
 	if err != nil || !present {
 		t.Fatalf("按身份读回：present=%v err=%v", present, err)
 	}
-	if found.SellPrice == nil || strings.Join(found.SellPrice.Sources, ",") != "SYN-SCOPE-M,SYN-SCOPE-Z,SYN-SCOPE-A" {
-		t.Fatalf("按身份读回的约定 = %#v", found.SellPrice)
+	if found.SellPriceArrangement == nil || strings.Join(found.SellPriceArrangement.Sources, ",") != "SYN-SCOPE-M,SYN-SCOPE-Z,SYN-SCOPE-A" {
+		t.Fatalf("按身份读回的约定 = %#v", found.SellPriceArrangement)
 	}
 
 	foreign, err := rowsOf(catalogue.ListCustomerContracts(ctx, pcTenant(t, "tenant-2"), 10, firstPage(t, ports.CustomerContractPages)))
@@ -113,7 +113,7 @@ func TestAContractDraftWithSellPriceSourcesRoundTripsThroughTheRehydrationGate(t
 	content := domain.PublicationContent{Kind: domain.CustomerContractObject, CustomerContract: &domain.CustomerContractBody{
 		CustomerAccount: pcValue(t, domain.NewCustomerAccountID, "customer-1"),
 		RulePackage:     pcValue(t, domain.NewCommercialObjectID, "rules-1"),
-		SellPrice: &domain.SellPriceArrangementBody{Sources: []domain.PricingScopeReference{
+		SellPriceArrangement: &domain.SellPriceArrangementBody{Sources: []domain.PricingScopeReference{
 			pcValue(t, domain.NewPricingScopeReference, "SYN-SCOPE-M"),
 			pcValue(t, domain.NewPricingScopeReference, "SYN-SCOPE-Z"),
 			pcValue(t, domain.NewPricingScopeReference, "SYN-SCOPE-A"),
@@ -135,7 +135,7 @@ func TestAContractDraftWithSellPriceSourcesRoundTripsThroughTheRehydrationGate(t
 	if stored.Canonical().Canonicalization() != "PCC-3" || stored.Canonical().Digest() != submitted.Canonical().Digest() {
 		t.Fatalf("读回的载体 = %s，want 录入的那份 %s", stored.Canonical().Digest(), submitted.Canonical().Digest())
 	}
-	arrangement := stored.Content().CustomerContract.SellPrice
+	arrangement := stored.Content().CustomerContract.SellPriceArrangement
 	if arrangement == nil || len(arrangement.Sources) != 3 {
 		t.Fatalf("读回的销售价格约定 = %#v", arrangement)
 	}
@@ -187,17 +187,17 @@ func TestAContractSellPriceArrangementIsNeverOverwritten(t *testing.T) {
 	save(sellPriceOf(t, notPriced, "", "SYN-SCOPE-STANDARD"), ports.DeclarationContentConflict)
 
 	first, present, err := catalogue.FindCustomerContract(ctx, pcTenant(t, "tenant-1"), priced.ObjectID(), priced.Version())
-	if err != nil || !present || first.SellPrice == nil {
-		t.Fatalf("读回先登的那一份：present=%v err=%v row=%#v", present, err, first.SellPrice)
+	if err != nil || !present || first.SellPriceArrangement == nil {
+		t.Fatalf("读回先登的那一份：present=%v err=%v row=%#v", present, err, first.SellPriceArrangement)
 	}
-	if got := strings.Join(first.SellPrice.Sources, ","); got != "SYN-SCOPE-EXCLUSIVE,SYN-SCOPE-STANDARD" || first.SellPrice.NoSellPriceBasis != "" {
-		t.Fatalf("冲突的写入改了册上的约定：sources=%s basis=%q", got, first.SellPrice.NoSellPriceBasis)
+	if got := strings.Join(first.SellPriceArrangement.Sources, ","); got != "SYN-SCOPE-EXCLUSIVE,SYN-SCOPE-STANDARD" || first.SellPriceArrangement.NoSellPriceBasis != "" {
+		t.Fatalf("冲突的写入改了册上的约定：sources=%s basis=%q", got, first.SellPriceArrangement.NoSellPriceBasis)
 	}
 	second, present, err := catalogue.FindCustomerContract(ctx, pcTenant(t, "tenant-1"), notPriced.ObjectID(), notPriced.Version())
-	if err != nil || !present || second.SellPrice == nil {
-		t.Fatalf("读回不计销售价的那一份：present=%v err=%v row=%#v", present, err, second.SellPrice)
+	if err != nil || !present || second.SellPriceArrangement == nil {
+		t.Fatalf("读回不计销售价的那一份：present=%v err=%v row=%#v", present, err, second.SellPriceArrangement)
 	}
-	if second.SellPrice.NoSellPriceBasis != "SYN-NO-SELL-PRICE-01" || len(second.SellPrice.Sources) != 0 {
-		t.Fatalf("冲突的写入改了册上的约定：%#v", second.SellPrice)
+	if second.SellPriceArrangement.NoSellPriceBasis != "SYN-NO-SELL-PRICE-01" || len(second.SellPriceArrangement.Sources) != 0 {
+		t.Fatalf("冲突的写入改了册上的约定：%#v", second.SellPriceArrangement)
 	}
 }

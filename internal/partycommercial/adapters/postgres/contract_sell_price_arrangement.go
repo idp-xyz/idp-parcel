@@ -153,8 +153,8 @@ func (scan *sellPriceArrangementScan) targets() []any {
 
 // row 把扫到的一节折成目录行上的可缺格：父行缺席答 nil（这一版合同没有销售价格约定），在场则照字面转写。
 //
-// 父子对不上要上抛而不是照样交回（判据同 controlBindingRowsFromJSON）：有依据又有来源、或两者皆无的约定，两个
-// 构造门都造不出它，读回这样的行说明写口被绕开了——把它当成一份如实的约定，读的人会按一份不存在的声明去定价。
+// 父子对不上要上抛而不是照样交回（判据同 controlBindingRowsFromJSON）：有依据又有来源、或两者皆无的约定，领域的
+// 构造门造不出它，读回这样的行说明写口被绕开了——把它当成一份如实的约定，读的人会按一份不存在的声明去定价。
 func (scan sellPriceArrangementScan) row() (*ports.SellPriceArrangementCatalogueRow, error) {
 	if len(scan.arrangementJSON) == 0 {
 		return nil, nil

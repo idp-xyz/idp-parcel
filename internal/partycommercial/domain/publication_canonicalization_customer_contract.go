@@ -8,8 +8,9 @@ import (
 // 本文件是客户合同册接进服务端规范化的那一格（加册不换号，仍是 PCC-1——ADR-0126 Decision 一；票
 // admin-write-faces/10）。合同版本的正文是两层声明（ADR-0115）：0012 的正文（接单规则包 + 按费用范围的
 // 财务控制约定）与 0007 的合同级「要不要接受前财务控制」声明，加上 0030 的合同层交付条件（ADR-0133 决定四，
-// 票 admin-write-faces/25）。受控批文把它们写成 declarations 下并列的 contractContent / preAcceptanceControl /
-// deliveryConditions 三键；这里把三层折进本册一格，键名镜像批文。
+// 票 admin-write-faces/25）与 0049 的销售价格约定（ADR-0380 决定一）。受控批文把它们写成 declarations 下并列的
+// contractContent / preAcceptanceControl / deliveryConditions / sellPriceArrangement 各键；这里把各层折进本册一格，
+// 键名镜像批文。
 
 // CustomerContractBody 是客户合同版本的正文输入面，以领域值对象给出：NewCustomerContract、
 // DeclarePreAcceptanceControl 与 DeclareContractDeliveryConditions 各收的那几项，只是不带拥有它们的（已生效）
@@ -25,8 +26,8 @@ type CustomerContractBody struct {
 	Bindings           []FinancialControlBinding
 	Control            *PreAcceptanceControlBody
 	DeliveryConditions *DeliveryConditionBody
-	// SellPrice 是销售价格约定一层（ADR-0380 决定一），可缺：缺席即这一版合同没有销售价格约定，文档仍是 PCC-1。
-	SellPrice *SellPriceArrangementBody
+	// SellPriceArrangement 是销售价格约定一层（ADR-0380 决定一），可缺：缺席即这一版合同没有销售价格约定，文档仍是 PCC-1。
+	SellPriceArrangement *SellPriceArrangementBody
 }
 
 // PreAcceptanceControlBody 是合同级声明的输入面：要求二值，加只在`不适用`时在场的依据。
@@ -50,8 +51,8 @@ func (body CustomerContractBody) validate() error {
 			return err
 		}
 	}
-	if body.SellPrice != nil {
-		if err := body.SellPrice.validate(); err != nil {
+	if body.SellPriceArrangement != nil {
+		if err := body.SellPriceArrangement.validate(); err != nil {
 			return err
 		}
 	}
@@ -61,8 +62,8 @@ func (body CustomerContractBody) validate() error {
 	return nil
 }
 
-// canonicalCustomerContractBody 镜像批文 declarations 下 contractContent / preAcceptanceControl / deliveryConditions
-// 三键的形状。约定表按费用范围排序写出：合同把约定按范围成表（FinancialControlFor 按范围取、Bindings() 按范围序
+// canonicalCustomerContractBody 镜像批文 declarations 下 contractContent / preAcceptanceControl / deliveryConditions /
+// sellPriceArrangement 各键的形状。约定表按费用范围排序写出：合同把约定按范围成表（FinancialControlFor 按范围取、Bindings() 按范围序
 // 交出），表单里换行序不是换正文，摘要不该跟着变。
 type canonicalCustomerContractBody struct {
 	ContractContent      canonicalContractContent       `json:"contractContent"`
@@ -125,8 +126,8 @@ func canonicalCustomerContractBodyOf(body CustomerContractBody) *canonicalCustom
 	if body.DeliveryConditions != nil {
 		document.DeliveryConditions = canonicalDeliveryConditionsOf(*body.DeliveryConditions)
 	}
-	if body.SellPrice != nil {
-		document.SellPriceArrangement = canonicalSellPriceArrangementOf(*body.SellPrice)
+	if body.SellPriceArrangement != nil {
+		document.SellPriceArrangement = canonicalSellPriceArrangementOf(*body.SellPriceArrangement)
 	}
 	return document
 }
@@ -177,7 +178,7 @@ func (document canonicalCustomerContractBody) body() (CustomerContractBody, erro
 		if err != nil {
 			return CustomerContractBody{}, fmt.Errorf("sellPriceArrangement.%w", err)
 		}
-		body.SellPrice = &arrangement
+		body.SellPriceArrangement = &arrangement
 	}
 	if err := body.validate(); err != nil {
 		return CustomerContractBody{}, err

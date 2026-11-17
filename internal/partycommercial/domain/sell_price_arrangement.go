@@ -1,6 +1,9 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 // 本文件是客户合同版本的销售价格约定（CONTEXT「客户合同版本」，ADR-0380 决定一）：包裹的 SELL 客户费用按哪几个
 // 计价范围、依什么顺序取价，由合同在这里声明。它与合同级接受前控制声明、合同层交付条件一样，是合同版本正文的一层，
@@ -13,6 +16,9 @@ var (
 	// ErrDuplicateSellPriceSource 单列一格：同一计价范围在列表里出现两次，后一次永远问不到，写的人多半是想写另一个
 	// 范围——这与「没写全」要人做的事不同。
 	ErrDuplicateSellPriceSource = errors.New("party commercial: one pricing scope appears twice in the sell price sources")
+	// ErrPricingScopeReferenceNotExact 是计价范围引用带着首尾空白。它与「没填」不同：填了，但填的这个名字指不到
+	// 任何计价范围，恢复动作是把空白去掉重填。
+	ErrPricingScopeReferenceNotExact = errors.New("party commercial: pricing scope reference carries surrounding whitespace")
 )
 
 // PricingScopeReference 指名计价一侧价卡登记册选卡键上的计价范围。
@@ -21,9 +27,18 @@ var (
 // CommercialScopeReference 不是一回事：后者是商业版本自己的适用范围，不是选卡键。
 type PricingScopeReference struct{ requiredValue }
 
+// NewPricingScopeReference 不收带首尾空白的名字，也不替写的人去掉：计价一侧的计价范围标识不带首尾空白，带着空白的
+// 名字指不到任何范围；收下它，「同一范围不出现两次」就能被一个空格绕过。本包其余开放引用照原串收，这一格更严，是
+// 因为它要逐字对上另一个上下文的标识。
 func NewPricingScopeReference(value string) (PricingScopeReference, error) {
 	required, err := newRequiredValue("pricing scope reference", value)
-	return PricingScopeReference{required}, err
+	if err != nil {
+		return PricingScopeReference{}, err
+	}
+	if strings.TrimSpace(value) != value {
+		return PricingScopeReference{}, ErrPricingScopeReferenceNotExact
+	}
+	return PricingScopeReference{required}, nil
 }
 
 // NoSellPriceBasis 指名合同凭什么说本合同不计销售价。
@@ -45,9 +60,9 @@ type ContractSellPriceArrangement struct {
 	basis    NoSellPriceBasis
 }
 
-// DeclareContractSellPrice 把销售价格约定绑定到客户合同版本上。sources 的顺序就是取价的顺序，原样保留、不排序：
+// DeclareContractSellPriceArrangement 把销售价格约定绑定到客户合同版本上。sources 的顺序就是取价的顺序，原样保留、不排序：
 // 回退只在这份顺序里发生，重排它等于改了合同。
-func DeclareContractSellPrice(
+func DeclareContractSellPriceArrangement(
 	contract CommercialVersion,
 	sources []PricingScopeReference,
 	basis NoSellPriceBasis,

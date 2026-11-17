@@ -314,7 +314,7 @@ const (
 	SourceDataAmendmentChannel
 	DeliveryConditionChannel
 	AuthorityGrantChannel
-	ContractSellPriceChannel
+	ContractSellPriceArrangementChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -359,8 +359,8 @@ func (channel DeclarationChannel) String() string {
 		return "DELIVERY_CONDITION"
 	case AuthorityGrantChannel:
 		return "AUTHORITY_GRANT"
-	case ContractSellPriceChannel:
-		return "CONTRACT_SELL_PRICE"
+	case ContractSellPriceArrangementChannel:
+		return "CONTRACT_SELL_PRICE_ARRANGEMENT"
 	default:
 		return ""
 	}
@@ -707,7 +707,7 @@ func publicationContentOf(
 		return content, true
 	case domain.CustomerContractObject:
 		// 正文在不在场看 0012 那一层（contractContent）：只带合同级声明或只带交付条件、不带正文的项没有可比对象，照今天
-		// 登记声明的串——批文里各键各自可缺是既有语义（ADR-0126 边界：不改受控批文既有字段语义）。正文在场时另两层一并
+		// 登记声明的串——批文里各键各自可缺是既有语义（ADR-0126 边界：不改受控批文既有字段语义）。正文在场时其余各层一并
 		// 折进同一个摘要。
 		if declarations.ContractContent == nil {
 			return content, false
@@ -727,7 +727,7 @@ func publicationContentOf(
 			content.CustomerContract.DeliveryConditions = deliveryConditionBodyOf(*declarations.DeliveryConditions)
 		}
 		if declarations.SellPriceArrangement != nil {
-			content.CustomerContract.SellPrice = &domain.SellPriceArrangementBody{
+			content.CustomerContract.SellPriceArrangement = &domain.SellPriceArrangementBody{
 				Sources:          declarations.SellPriceArrangement.Sources,
 				NoSellPriceBasis: declarations.SellPriceArrangement.NoSellPriceBasis,
 			}
@@ -1208,13 +1208,13 @@ func declarationWrites(
 	if declarations.SellPriceArrangement != nil {
 		// 归属与两格恰一由领域构造门把守（ADR-0380 决定一）：挂在客户合同之外的版本上、两种都没声明或都声明、
 		// 同一计价范围两次，都在这里拒，不静默丢弃。
-		arrangement, err := domain.DeclareContractSellPrice(
+		arrangement, err := domain.DeclareContractSellPriceArrangement(
 			version, declarations.SellPriceArrangement.Sources, declarations.SellPriceArrangement.NoSellPriceBasis)
 		if err != nil {
 			return nil, fmt.Errorf("sell price arrangement: %w", err)
 		}
 		writes = append(writes, declarationWrite{
-			channel: ContractSellPriceChannel,
+			channel: ContractSellPriceArrangementChannel,
 			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
 				return registry.SaveContractSellPriceArrangement(ctx, arrangement)
 			},

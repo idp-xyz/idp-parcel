@@ -42,7 +42,7 @@ func TestCustomerContractPayloadCarriesTheSellPriceArrangementInTheSubmittedOrde
 	if err != nil {
 		t.Fatalf("publication: %v", err)
 	}
-	arrangement := content.CustomerContract.SellPrice
+	arrangement := content.CustomerContract.SellPriceArrangement
 	if arrangement == nil || len(arrangement.Sources) != 2 ||
 		arrangement.Sources[0].String() != "SYN-SCOPE-Z" || arrangement.Sources[1].String() != "SYN-SCOPE-A" ||
 		arrangement.NoSellPriceBasis.String() != "" {
@@ -70,17 +70,17 @@ func TestCustomerContractPayloadCarriesTheSellPriceArrangementInTheSubmittedOrde
 	if err != nil {
 		t.Fatalf("publication (not priced): %v", err)
 	}
-	if notPriced := content.CustomerContract.SellPrice; notPriced == nil || len(notPriced.Sources) != 0 ||
+	if notPriced := content.CustomerContract.SellPriceArrangement; notPriced == nil || len(notPriced.Sources) != 0 ||
 		notPriced.NoSellPriceBasis.String() != "SYN-NO-SELL-PRICE-01" {
-		t.Fatalf("not-priced arrangement = %#v", content.CustomerContract.SellPrice)
+		t.Fatalf("not-priced arrangement = %#v", content.CustomerContract.SellPriceArrangement)
 	}
 
 	_, content, err = decodePublication(t, customerContractPayload).Publication(tenant)
 	if err != nil {
 		t.Fatalf("publication (no arrangement): %v", err)
 	}
-	if content.CustomerContract.SellPrice != nil {
-		t.Fatalf("没给这一节却折出了一份约定：%#v", content.CustomerContract.SellPrice)
+	if content.CustomerContract.SellPriceArrangement != nil {
+		t.Fatalf("没给这一节却折出了一份约定：%#v", content.CustomerContract.SellPriceArrangement)
 	}
 }
 
@@ -146,8 +146,8 @@ func TestCustomerContractsEndpointEchoesTheSellPriceArrangement(t *testing.T) {
 			HasContent: true, RulePackageID: "rules-1", CustomerAccountID: "account-1", DeclaredAt: catBaseAt}
 	}
 	priced, notPriced, silent := shell("contract-1"), shell("contract-2"), shell("contract-3")
-	priced.SellPrice = &ports.SellPriceArrangementCatalogueRow{Sources: []string{"SYN-SCOPE-Z", "SYN-SCOPE-A"}, DeclaredAt: catBaseAt}
-	notPriced.SellPrice = &ports.SellPriceArrangementCatalogueRow{Sources: []string{}, NoSellPriceBasis: "SYN-NO-SELL-PRICE-01", DeclaredAt: catBaseAt}
+	priced.SellPriceArrangement = &ports.SellPriceArrangementCatalogueRow{Sources: []string{"SYN-SCOPE-Z", "SYN-SCOPE-A"}, DeclaredAt: catBaseAt}
+	notPriced.SellPriceArrangement = &ports.SellPriceArrangementCatalogueRow{Sources: []string{}, NoSellPriceBasis: "SYN-NO-SELL-PRICE-01", DeclaredAt: catBaseAt}
 	reader := &relationReaderDouble{
 		tenant:    query.Scope.Tenant(),
 		contracts: []ports.CustomerContractCatalogueRow{priced, notPriced, silent},

@@ -1906,9 +1906,9 @@ type CustomerContractCatalogueRow struct {
 	HasContent         bool
 	Bindings           []ControlBindingRow
 	DeliveryConditions *DeliveryConditionCatalogueRow
-	// SellPrice 是这一版的销售价格约定（0049；ADR-0380 决定一），nil 即这一版合同没有销售价格约定——加这一层之前
+	// SellPriceArrangement 是这一版的销售价格约定（0049；ADR-0380 决定一），nil 即这一版合同没有销售价格约定——加这一层之前
 	// 发布的合同都是这一种。目录如实交回 nil，不补默认，也不拿空列表顶。
-	SellPrice *SellPriceArrangementCatalogueRow
+	SellPriceArrangement *SellPriceArrangementCatalogueRow
 
 	// 收尾回显，含义同 SupplierAgreementCatalogueRow 的同名四格（ADR-0233 决定五）：原区间仍在 Effective* 两格，不被覆盖。
 	SelectionEndsAt time.Time

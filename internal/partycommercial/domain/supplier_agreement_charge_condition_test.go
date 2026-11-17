@@ -230,8 +230,8 @@ func TestBothShapesRehydrateAndAMislabelledDocumentIsRefused(t *testing.T) {
 	if _, err := domain.RehydratePublicationContent("PCC-2", []byte(creditAsPCC2)); !errors.Is(err, domain.ErrCanonicalizationUnsupported) {
 		t.Fatalf("信用政策标 PCC-2 err = %v", err)
 	}
-	if _, err := domain.RehydratePublicationContent("PCC-3", pcc2.Document()); !errors.Is(err, domain.ErrCanonicalizationUnsupported) {
-		t.Fatalf("PCC-3 err = %v", err)
+	if _, err := domain.RehydratePublicationContent("PCC-9", pcc2.Document()); !errors.Is(err, domain.ErrCanonicalizationUnsupported) {
+		t.Fatalf("本构建不认的版本 err = %v", err)
 	}
 }
 

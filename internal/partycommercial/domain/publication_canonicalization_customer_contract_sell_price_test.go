@@ -23,7 +23,7 @@ func contractBodyWithSellPrice(t *testing.T, arrangement *domain.SellPriceArrang
 	t.Helper()
 	body := customerContractBody(t, notApplicableControl(t),
 		appliedControl(t, "charge-prepaid"), inapplicableControl(t, "charge-cod", "COD-NA-01"))
-	body.SellPrice = arrangement
+	body.SellPriceArrangement = arrangement
 	return body
 }
 
@@ -102,13 +102,13 @@ func TestAContractDocumentWithASellPriceArrangementRehydratesToTheSameBody(t *te
 	if err != nil {
 		t.Fatalf("rehydrate: %v", err)
 	}
-	if content.CustomerContract == nil || content.CustomerContract.SellPrice == nil {
+	if content.CustomerContract == nil || content.CustomerContract.SellPriceArrangement == nil {
 		t.Fatalf("rehydrated content = %#v", content)
 	}
-	sources := content.CustomerContract.SellPrice.Sources
+	sources := content.CustomerContract.SellPriceArrangement.Sources
 	if len(sources) != 2 || sources[0].String() != "SYN-SCOPE-EXCLUSIVE" || sources[1].String() != "SYN-SCOPE-STANDARD" ||
-		content.CustomerContract.SellPrice.NoSellPriceBasis.String() != "" {
-		t.Fatalf("sell price arrangement = %#v", content.CustomerContract.SellPrice)
+		content.CustomerContract.SellPriceArrangement.NoSellPriceBasis.String() != "" {
+		t.Fatalf("sell price arrangement = %#v", content.CustomerContract.SellPriceArrangement)
 	}
 	recomputed, err := domain.CanonicalizePublicationContent(content)
 	if err != nil || recomputed.Digest() != ordered.Digest() {
@@ -120,14 +120,14 @@ func TestAContractDocumentWithASellPriceArrangementRehydratesToTheSameBody(t *te
 	if err != nil {
 		t.Fatalf("rehydrate not priced: %v", err)
 	}
-	if arrangement := content.CustomerContract.SellPrice; arrangement == nil || len(arrangement.Sources) != 0 ||
+	if arrangement := content.CustomerContract.SellPriceArrangement; arrangement == nil || len(arrangement.Sources) != 0 ||
 		arrangement.NoSellPriceBasis.String() != "SYN-NO-SELL-PRICE-01" {
-		t.Fatalf("not-priced arrangement = %#v", content.CustomerContract.SellPrice)
+		t.Fatalf("not-priced arrangement = %#v", content.CustomerContract.SellPriceArrangement)
 	}
 
 	without := canonicalCustomerContract(t, contractBodyWithSellPrice(t, nil))
 	content, err = domain.RehydratePublicationContent(without.Canonicalization(), without.Document())
-	if err != nil || content.CustomerContract == nil || content.CustomerContract.SellPrice != nil {
+	if err != nil || content.CustomerContract == nil || content.CustomerContract.SellPriceArrangement != nil {
 		t.Fatalf("an absent arrangement must rehydrate to nil, got %#v (%v)", content.CustomerContract, err)
 	}
 

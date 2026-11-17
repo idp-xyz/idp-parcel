@@ -20,7 +20,7 @@ func pricingScopes(t *testing.T, names ...string) []domain.PricingScopeReference
 // Covers: CONTEXT「客户合同版本」销售价格约定（ADR-0380 决定一）——合同声明一份有序的销售价格来源，每项指名一个
 // 计价范围；读回的顺序就是声明的顺序，回退只在这份顺序里发生，所以顺序本身是正文。
 func TestAContractDeclaresItsSellPriceSourcesInOrder(t *testing.T) {
-	declared, err := domain.DeclareContractSellPrice(
+	declared, err := domain.DeclareContractSellPriceArrangement(
 		contractVersion(t, "contract-1"),
 		pricingScopes(t, "SYN-SCOPE-EXCLUSIVE", "SYN-SCOPE-STANDARD"),
 		domain.NoSellPriceBasis{},
@@ -45,7 +45,7 @@ func TestAContractDeclaresItsSellPriceSourcesInOrder(t *testing.T) {
 // Covers: ADR-0380 决定一「或者显式声明本合同不计销售价并留依据」——不计销售价是一句带依据的声明，读回时没有来源
 // 列表；它与「合同没说」是两件事，后者根本立不成一份约定。
 func TestAContractMayExplicitlyDeclareNoSellPriceWithItsBasis(t *testing.T) {
-	declared, err := domain.DeclareContractSellPrice(
+	declared, err := domain.DeclareContractSellPriceArrangement(
 		contractVersion(t, "contract-1"),
 		nil,
 		commercialValue(t, domain.NewNoSellPriceBasis, "SYN-NO-SELL-PRICE-01"),
@@ -93,11 +93,29 @@ func TestASellPriceArrangementDeclaresExactlyOneOfSourcesOrNoSellPrice(t *testin
 	}
 	for name, refusal := range refusals {
 		t.Run(name, func(t *testing.T) {
-			_, err := domain.DeclareContractSellPrice(contractVersion(t, "contract-1"), refusal.sources, refusal.basis)
+			_, err := domain.DeclareContractSellPriceArrangement(contractVersion(t, "contract-1"), refusal.sources, refusal.basis)
 			if !errors.Is(err, refusal.want) {
 				t.Fatalf("err = %v, want %v", err, refusal.want)
 			}
 		})
+	}
+}
+
+// Covers: ADR-0380 决定一「每项指名一个计价范围，同一范围不出现两次」——计价范围引用指名的是计价一侧选卡键上的
+// 范围，那一侧的标识不带首尾空白：带着空白的名字指不到任何范围，还会让「不出现两次」被一个空格绕过，所以在构造门
+// 就拒。只有空白的串照旧答必填；名字中间的空白原样保留。
+func TestAPricingScopeReferenceCarriesNoSurroundingWhitespace(t *testing.T) {
+	for _, raw := range []string{" SYN-SCOPE-STANDARD", "SYN-SCOPE-STANDARD ", "SYN-SCOPE-STANDARD\n"} {
+		if _, err := domain.NewPricingScopeReference(raw); !errors.Is(err, domain.ErrPricingScopeReferenceNotExact) {
+			t.Fatalf("%q: err = %v, want ErrPricingScopeReferenceNotExact", raw, err)
+		}
+	}
+	if _, err := domain.NewPricingScopeReference("   "); !errors.Is(err, domain.ErrBlankValue) {
+		t.Fatalf("blank: err = %v, want ErrBlankValue", err)
+	}
+	scope, err := domain.NewPricingScopeReference("SYN SCOPE 01")
+	if err != nil || scope.String() != "SYN SCOPE 01" {
+		t.Fatalf("a name with inner whitespace must be kept as given: %q, %v", scope, err)
 	}
 }
 
@@ -107,7 +125,7 @@ func TestASellPriceArrangementNeedsAUsableCustomerContractVersion(t *testing.T) 
 	sources := pricingScopes(t, "SYN-SCOPE-STANDARD")
 
 	draft := commercialDraft(t, domain.CustomerContractObject, "contract-x", "v1", "sha256:x")
-	if _, err := domain.DeclareContractSellPrice(draft, sources, domain.NoSellPriceBasis{}); !errors.Is(err, domain.ErrUnusableContract) {
+	if _, err := domain.DeclareContractSellPriceArrangement(draft, sources, domain.NoSellPriceBasis{}); !errors.Is(err, domain.ErrUnusableContract) {
 		t.Fatalf("draft: err = %v, want ErrUnusableContract", err)
 	}
 
@@ -116,7 +134,7 @@ func TestASellPriceArrangementNeedsAUsableCustomerContractVersion(t *testing.T) 
 	if err != nil {
 		t.Fatalf("take effect: %v", err)
 	}
-	if _, err := domain.DeclareContractSellPrice(policy, sources, domain.NoSellPriceBasis{}); !errors.Is(err, domain.ErrUnusableContract) {
+	if _, err := domain.DeclareContractSellPriceArrangement(policy, sources, domain.NoSellPriceBasis{}); !errors.Is(err, domain.ErrUnusableContract) {
 		t.Fatalf("another kind: err = %v, want ErrUnusableContract", err)
 	}
 }

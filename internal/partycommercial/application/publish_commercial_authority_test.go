@@ -73,7 +73,7 @@ type publicationRegistryDouble struct {
 
 	savedDeliveryConditions []domain.DeliveryConditionContent
 
-	savedSellPrice []domain.ContractSellPriceArrangement
+	savedSellPriceArrangements []domain.ContractSellPriceArrangement
 }
 
 func (double *publicationRegistryDouble) SaveDeliveryConditions(

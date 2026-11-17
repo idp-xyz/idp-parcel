@@ -232,7 +232,7 @@ func customerContractBodyOf(row ports.CustomerContractCatalogueRow) customerCont
 		Bindings:           make([]controlBindingBody, 0, len(row.Bindings)),
 		DeliveryConditions: deliveryConditionBodyOf(row.DeliveryConditions),
 	}
-	body.SellPriceArrangement = sellPriceArrangementBodyOf(row.SellPrice)
+	body.SellPriceArrangement = sellPriceArrangementBodyOf(row.SellPriceArrangement)
 	body.versionClosureBody = closureBodyOf(row.HasSelectionCut, row.SelectionEndsAt, row.Successor, row.RetiredAt)
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)

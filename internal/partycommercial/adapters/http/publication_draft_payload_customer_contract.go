@@ -6,9 +6,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
 
-// 本文件是客户合同册在运营操作者面载荷里的那一格（票 admin-write-faces/10）。一格三层：0012 的正文
-// （contractContent）、0007 的合同级接受前控制声明（preAcceptanceControl）与 0030 的合同层交付条件（deliveryConditions，
-// 票 admin-write-faces/25），键名镜像受控批文 declarations 下的三键与规范化文档——同一册在三处（批文、载荷、文档）说
+// 本文件是客户合同册在运营操作者面载荷里的那一格（票 admin-write-faces/10）。一格几层：0012 的正文
+// （contractContent）、0007 的合同级接受前控制声明（preAcceptanceControl）、0030 的合同层交付条件（deliveryConditions，
+// 票 admin-write-faces/25）与 0049 的销售价格约定（sellPriceArrangement，ADR-0380 决定一），键名镜像受控批文
+// declarations 下的同名各键与规范化文档——同一册在三处（批文、载荷、文档）说
 // 同一套词。
 
 // CustomerContractBodyPayload 是客户合同册的正文载荷。contractContent 是指针，是为了让「整节没给」与「给了但规则包
@@ -109,7 +110,7 @@ func (payload CustomerContractBodyPayload) body(problems *PublicationPayloadProb
 	}
 	if payload.SellPriceArrangement != nil {
 		arrangement := payload.SellPriceArrangement.body(problems)
-		body.SellPrice = &arrangement
+		body.SellPriceArrangement = &arrangement
 	}
 	return body
 }

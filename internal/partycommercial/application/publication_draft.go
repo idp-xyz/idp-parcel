@@ -579,10 +579,10 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 			declarations.DeliveryConditions = deliveryConditionDeclarationOf(*body.DeliveryConditions)
 		}
 		// 销售价格约定同理：载体上没有这一层就不交这一通道，发布用例不替它补一份列表。
-		if body.SellPrice != nil {
+		if body.SellPriceArrangement != nil {
 			declarations.SellPriceArrangement = &SellPriceArrangementDeclaration{
-				Sources:          body.SellPrice.Sources,
-				NoSellPriceBasis: body.SellPrice.NoSellPriceBasis,
+				Sources:          body.SellPriceArrangement.Sources,
+				NoSellPriceBasis: body.SellPriceArrangement.NoSellPriceBasis,
 			}
 		}
 	}

@@ -815,7 +815,7 @@ func scanCustomerContract(rows pgx.Rows) (ports.CustomerContractCatalogueRow, er
 	if row.DeliveryConditions, err = delivery.row(); err != nil {
 		return row, err
 	}
-	if row.SellPrice, err = sellPrice.row(); err != nil {
+	if row.SellPriceArrangement, err = sellPrice.row(); err != nil {
 		return row, err
 	}
 	return row, nil
