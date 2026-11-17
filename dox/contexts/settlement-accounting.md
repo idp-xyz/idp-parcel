@@ -186,7 +186,7 @@
 ## 旧文档写了、代码里还没有的
 
 - **有编排、没有生产入口**：下列用例方法在 `application/` 里有实现和测试，`cmd/` 下没有任何端点、消费者或子命令调用它们——成本分摊与经营结果的形成（`AllocateCostsHandler`，只读口 `/settlement-operating-results` 因此无数据来源）；赔付、应追偿、追偿认可及其调整（`SettleClaimAmountsHandler`）；实际代垫判断与客户代垫回收（`AssessAdvanceRecoveryHandler` 的 `Assess`、`FormRecovery`、`Adjust`）；供应商费用贷项（`Credit`）。
-- **SELL 评价按合同声明的有序计价范围列表选卡**：搜 `PricingScopes`、`PriceSource`、`ScopeList` 无结果。请求上只有单个 `PricingScope`，取自结算账户的采用登记。「合同显式声明不计销售价」同样没有。
+- **SELL 评价按合同声明的有序计价范围列表选卡**：按已固定的商业解析读合同销售价格约定的口已有（`AdoptedSellPriceArrangementView`，答有序来源、显式不计销售价或这一版合同没有约定），`cmd/` 下没有任何编排调用它。请求上只有单个 `PricingScope`，取自结算账户的采用登记；「合同显式声明不计销售价」时不发起评价同样没有。在做，见 [work.md](../work.md)。
 - **两本采用登记上同一结算账户的计价范围必须相同**：在 Go 代码与迁移里没找到跨册比对。
 - **仓储作业收费发生项那一路**（SELL 请求、仓储计费采用登记、`仓储作业已发生`确认依据、更正版本引起的计价纠错与全额贷记）：搜 `Warehouse`、`仓储` 无对应类型。属可选的仓配履约。
 - **低毛利提示**：搜 `Margin`、`毛利提示` 无对应。
