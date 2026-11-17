@@ -85,3 +85,49 @@ func TestPreAcceptanceParcelsCanLandOnDifferentSellPriceSources(t *testing.T) {
 		t.Fatalf("重件的来源 = %+v，想要先落空再选中后一个", second.SourceTrail)
 	}
 }
+
+// Covers: 一件已经在前一个范围评出、另一件问到最后仍没有在用卡。整份不改口成缺申报；没评出的那件答案是没有在用卡。
+func TestAParcelThatFindsNoCardDoesNotMakeTheEstimateLookIncomplete(t *testing.T) {
+	light := weightBandPlan(t, "SYN-SCOPE-A", "SYN-PLAN-A", "2")
+	cards := &scopedPriceCards{byScope: map[string]ports.PriceCardInForceResolution{
+		"SYN-SCOPE-A": inForceCard(light),
+	}}
+	one := mustWeight(t, "1")
+	five := mustWeight(t, "5")
+	declarations := &submissionDeclarationDouble{found: true, declaration: ports.SubmissionDeclaration{Parcels: []ports.DeclaredParcel{
+		{Parcel: "SYN-PARCEL-1", Weight: &one},
+		{Parcel: "SYN-PARCEL-2", Weight: &five},
+	}}}
+	handler, err := application.NewFormPreAcceptanceEstimatesHandler(application.FormPreAcceptanceEstimatesDeps{
+		PriceCards:   cards,
+		Declarations: declarations,
+		Estimates:    newPlanGivenHandler(t, application.FormPlanGivenEstimateEvaluationsDeps{}),
+		Evidence:     domain.EvidenceSynthetic,
+	})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	command := preAcceptanceCommand(t)
+	command.Scope = mustValue(t, domain.NewPricingScopeID, "SYN-SCOPE-A")
+	command.Scopes = []domain.PricingScopeID{
+		command.Scope,
+		mustValue(t, domain.NewPricingScopeID, "SYN-SCOPE-B"),
+	}
+	command.Zone = "Z1"
+
+	result, err := handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome != application.PreAcceptanceEstimatesFormed {
+		t.Fatalf("outcome = %s，没有在用卡不该被说成缺申报", result.Outcome)
+	}
+	if result.Estimates[0].Scope.String() != "SYN-SCOPE-A" || result.Estimates[0].Evaluation.Status() != domain.EvaluationCompleted {
+		t.Fatalf("轻件 = %+v", result.Estimates[0])
+	}
+	heavy := result.Estimates[1]
+	if heavy.Answer == application.EstimateCandidateEvaluated || len(heavy.SourceTrail) != 2 ||
+		heavy.SourceTrail[1].Kind != application.SellPriceSourceNoCard {
+		t.Fatalf("重件 = %+v trail = %+v，想要基础运费表落空之后没有在用卡", heavy, heavy.SourceTrail)
+	}
+}

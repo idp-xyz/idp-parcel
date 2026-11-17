@@ -124,7 +124,9 @@ func (handler *FormPreAcceptanceEstimatesHandler) estimateAcrossSellPriceSources
 	}
 	result := FormPreAcceptanceEstimatesResult{Outcome: PreAcceptanceEstimatesFormed, Estimates: estimates}
 	for _, estimate := range estimates {
-		if estimate.Answer != EstimateCandidateEvaluated {
+		// 只把缺测量或邮编、分区算成申报不全。问到最后一格仍没有在用卡的件，答案在它的来源列表上，
+		// 不把整份改口成缺申报。
+		if estimate.Answer == EstimateCandidateInputIncomplete {
 			result.Outcome = PreAcceptanceDeclarationIncomplete
 		}
 	}
