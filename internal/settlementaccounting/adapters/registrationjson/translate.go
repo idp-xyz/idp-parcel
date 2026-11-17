@@ -215,6 +215,14 @@ func refuseSelfReportedTenant(raw []byte) error {
 }
 
 // decodeStrict 拒未知字段：打错的键静默丢弃，会让操作员以为登进去的比实际多。
+// optionalPricingScope 把登记面上可缺的计价范围译回来。空串是不带范围的行；写了却是空白仍拒，不把空白收成缺席。
+func optionalPricingScope(value string) (domain.EstimatePricingScope, error) {
+	if value == "" {
+		return domain.EstimatePricingScope{}, nil
+	}
+	return domain.NewEstimatePricingScope(value)
+}
+
 func decodeStrict(raw []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()

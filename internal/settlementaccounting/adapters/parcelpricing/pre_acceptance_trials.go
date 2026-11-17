@@ -45,6 +45,17 @@ func (adapter *PreAcceptanceTrials) FormPreAcceptanceTrials(
 	if err != nil {
 		return none, fmt.Errorf("%w: pricing scope: %v", ErrUntranslatablePreAcceptanceTrial, err)
 	}
+	var scopes []ppdomain.PricingScopeID
+	if len(query.Scopes) > 1 {
+		scopes = make([]ppdomain.PricingScopeID, 0, len(query.Scopes))
+		for _, source := range query.Scopes {
+			translated, err := ppdomain.NewPricingScopeID(source.String())
+			if err != nil {
+				return none, fmt.Errorf("%w: sell price source: %v", ErrUntranslatablePreAcceptanceTrial, err)
+			}
+			scopes = append(scopes, translated)
+		}
+	}
 	currency, err := ppdomain.NewCurrency(query.Currency.String())
 	if err != nil {
 		return none, fmt.Errorf("%w: currency: %v", ErrUntranslatablePreAcceptanceTrial, err)
@@ -52,6 +63,7 @@ func (adapter *PreAcceptanceTrials) FormPreAcceptanceTrials(
 	result, err := adapter.estimates.Handle(ctx, ppapplication.FormPreAcceptanceEstimatesCommand{
 		Tenant:            tenant,
 		Scope:             scope,
+		Scopes:            scopes,
 		ShipmentRequest:   query.ShipmentRequest,
 		SubmissionVersion: query.SubmissionVersion,
 		At:                query.At,
@@ -60,7 +72,7 @@ func (adapter *PreAcceptanceTrials) FormPreAcceptanceTrials(
 	if err != nil {
 		return none, fmt.Errorf("form pre-acceptance trials: %w", err)
 	}
-	priceCard := versionReferenceLiteral(result.Plan)
+	priceCard := trialPriceCard(result)
 	switch result.Outcome {
 	case ppapplication.PreAcceptanceEstimatesFormed:
 	case ppapplication.PreAcceptanceDeclarationIncomplete:
@@ -162,7 +174,36 @@ func trialOf(estimate ppapplication.PreAcceptanceParcelEstimate) (sadomain.PreAc
 	if err != nil {
 		return sadomain.PreAcceptanceTrial{}, err
 	}
-	return withDetail(trial, evaluation), nil
+	trial = withDetail(trial, evaluation)
+	if estimate.Scope.String() != "" {
+		source, err := sadomain.NewEstimatePricingScope(estimate.Scope.String())
+		if err != nil {
+			return sadomain.PreAcceptanceTrial{}, fmt.Errorf("%w: sell price source: %v", ErrUntranslatablePreAcceptanceTrial, err)
+		}
+		card := versionReferenceLiteral(evaluation.PlanReference())
+		if card == "" {
+			return sadomain.PreAcceptanceTrial{}, fmt.Errorf("%w: parcel %s names a sell price source without a price card",
+				ErrUntranslatablePreAcceptanceTrial, estimate.Parcel)
+		}
+		trial, err = trial.WithSellPriceSource(source, card)
+		if err != nil {
+			return sadomain.PreAcceptanceTrial{}, err
+		}
+	}
+	return trial, nil
+}
+
+// trialPriceCard 取估价头上的价卡字面。按列表逐件问时结果头上可能没有一张共同的卡，就取第一件已经形成的评价自己的卡。
+func trialPriceCard(result ppapplication.FormPreAcceptanceEstimatesResult) string {
+	if card := versionReferenceLiteral(result.Plan); card != "" {
+		return card
+	}
+	for _, estimate := range result.Estimates {
+		if card := versionReferenceLiteral(estimate.Evaluation.PlanReference()); card != "" {
+			return card
+		}
+	}
+	return ""
 }
 
 // withDetail 补记计价重量（进位之后的那一个，评价据它查表）与费用行。补记只作留痕，任何一格译不出都只是那一格不记、不报错：留痕

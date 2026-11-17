@@ -24,6 +24,14 @@ import (
 
 const estimateFuelSeries = "SYN-SERIES-FUEL-01"
 
+type estimateNotDeclaredSellPrices struct{}
+
+func (estimateNotDeclaredSellPrices) LoadAdoptedSellPriceArrangement(
+	context.Context, sadomain.TenantID, sadomain.CommercialResolutionReference,
+) (sadomain.AdoptedSellPriceArrangement, error) {
+	return sadomain.NewNotDeclaredSellPriceArrangement(), nil
+}
+
 // fuelAndZoneBoundCard 是 zoneBoundCard 再加一条燃油附加费：按基础运费的百分比计收，百分比取绑定的燃油序列、乘卡上系数 1。
 // Z1 一行 0–30 千克每件 12.50；燃油序列当期 20（百分比），所以每件 12.50 + 2.50 = 15.00。
 func fuelAndZoneBoundCard(t *testing.T, currency string) ppdomain.PricingPlanVersion {
@@ -318,6 +326,7 @@ func newEstimateControl(t *testing.T, trials saports.PreAcceptanceTrialSource) e
 		Exposures:   inMemoryExposures{ledger: sadomain.NewCreditExposureLedger()},
 		ScopeLock:   singlePathLock{},
 		Clock:       trialClock{},
+		SellPrices:  estimateNotDeclaredSellPrices{},
 	})
 	if err != nil {
 		t.Fatalf("apply handler: %v", err)

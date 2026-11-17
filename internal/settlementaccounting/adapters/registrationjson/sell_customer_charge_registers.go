@@ -14,8 +14,8 @@ type sellBillingMomentAdoptionDocument struct {
 	PricingScopeID string `json:"pricingScopeId"`
 }
 
-// SellBillingMomentAdoptionFromJSON 译装一行 SELL 计费时点采用（ADR-0190 决定三）。各格都没有缺席这一态；时点不在封闭
-// 词表内在这里就拒并指名字段——不默认成任何一种，没写就是没写。
+// SellBillingMomentAdoptionFromJSON 译装一行 SELL 计费时点采用（ADR-0190 决定三、ADR-0380 决定七）。时点必填，没写就是没写，
+// 不默认成任何一种。计价范围可缺：空串是不带范围的行，空白仍拒。
 func SellBillingMomentAdoptionFromJSON(raw []byte) (application.RegisterSellBillingMomentAdoptionCommand, error) {
 	none := application.RegisterSellBillingMomentAdoptionCommand{}
 	var document sellBillingMomentAdoptionDocument
@@ -34,7 +34,7 @@ func SellBillingMomentAdoptionFromJSON(raw []byte) (application.RegisterSellBill
 	if err != nil {
 		return none, fmt.Errorf("billingMoment：%w", err)
 	}
-	scope, err := domain.NewEstimatePricingScope(document.PricingScopeID)
+	scope, err := optionalPricingScope(document.PricingScopeID)
 	if err != nil {
 		return none, fmt.Errorf("pricingScopeId：%w", err)
 	}

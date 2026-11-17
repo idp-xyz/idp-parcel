@@ -189,6 +189,23 @@ func (handler *ResumeStalledEvaluationHandler) Handle(
 // waitsFor 答一个停因与它上次续办凭的依据，在不在等这一次续办。凭同一个依据续办过的不再推：同一封信重投、同一条运营
 // 命令重跑，都不该把续办出来又停下的那一件再推一代。这里只在本事务里再核链头；整条代次链上有没有哪一代凭过这个依据，
 // 由队列的口径（StalledEvaluationQuery.ExcludeBasis）筛过一遍。
+// sellRequestWaits 在请求记下了逐来源停因时，按命中的那个来源自己的那一格核名单，不对请求答出来的那一格核。
+// 没有逐来源停因时，仍按请求的停因核，与只带一个范围的请求相同。范围是不是问到过的，由取队列的条件筛过。
+func sellRequestWaits(command ResumeStalledEvaluationCommand, record ports.SellEvaluationRequestRecord) bool {
+	if len(record.SourceStops) == 0 {
+		return waitsFor(command, record.StopCause, record.Request.ResumeBasis())
+	}
+	if record.Request.ResumeBasis() == command.Basis {
+		return false
+	}
+	for _, stop := range record.SourceStops {
+		if waitsFor(command, stop.Cause(), domain.ResumeBasis{}) {
+			return true
+		}
+	}
+	return false
+}
+
 func waitsFor(command ResumeStalledEvaluationCommand, cause domain.EvaluationStopCause, lastBasis domain.ResumeBasis) bool {
 	if lastBasis == command.Basis {
 		return false
@@ -334,7 +351,7 @@ func (handler *ResumeStalledEvaluationHandler) resumeSellRequest(
 	if !found {
 		return ResumeStalledEvaluationResult{}, fmt.Errorf("%w: sell request %s", ErrStalledEvaluationVanished, key.Request)
 	}
-	if record.StopCause == domain.EvaluationStopCauseInvalid || !waitsFor(command, record.StopCause, record.Request.ResumeBasis()) {
+	if record.StopCause == domain.EvaluationStopCauseInvalid || !sellRequestWaits(command, record) {
 		return ResumeStalledEvaluationResult{outcome: StalledEvaluationNotWaiting}, nil
 	}
 	if successor, has, err := handler.deps.SellSuccessors.FindSuccessor(ctx, key); err != nil {

@@ -27,6 +27,8 @@ type SellEvaluationRequestRecord struct {
 	State        domain.SellEvaluationRequestState
 	FormedCharge domain.CustomerChargeID
 	StopCause    domain.EvaluationStopCause
+	// SourceStops 是问到过的每一个销售价格来源各自的停因。空即这份请求只带一个范围，停因就是 StopCause。
+	SourceStops []domain.SellPriceSourceStop
 }
 
 // SellEvaluationRequestRegistry 是 SELL 评价请求的登记面。Save 的写入代数与 BUY 那本同一条（ADR-0031），所以共用

@@ -204,15 +204,15 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	switch adoption.Outcome {
 	case ports.SellEvaluationCompleted:
 	case ports.SellEvaluationPending:
-		return handler.stop(ctx, key, pendingJudgmentCauseOf(adoption.PendingCause))
+		return handler.stop(ctx, key, pendingJudgmentCauseOf(adoption.PendingCause), adoption.SourceTrail)
 	case ports.SellEvaluationAmountUndeclared:
-		return handler.stop(ctx, key, domain.StopAmountRoundingUndeclared)
+		return handler.stop(ctx, key, domain.StopAmountRoundingUndeclared, adoption.SourceTrail)
 	case ports.SellEvaluationUnratable:
-		return handler.stop(ctx, key, domain.StopEvaluationUnratable)
+		return handler.stop(ctx, key, domain.StopEvaluationUnratable, adoption.SourceTrail)
 	case ports.SellEvaluationConflict:
-		return handler.stop(ctx, key, domain.StopEvaluationConflict)
+		return handler.stop(ctx, key, domain.StopEvaluationConflict, adoption.SourceTrail)
 	case ports.SellEvaluationNotFormed:
-		return handler.stop(ctx, key, domain.StopEvaluationFailed)
+		return handler.stop(ctx, key, domain.StopEvaluationFailed, adoption.SourceTrail)
 	default:
 		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: %d", ErrUnexpectedSellEvaluationOutcome, adoption.Outcome)
 	}
@@ -226,7 +226,7 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 		return undecidedEstimatedCharge(FeeItemMappingViewUnavailable, err), nil
 	}
 	if !mapped {
-		return handler.stop(ctx, key, domain.StopFeeItemMappingIncomplete)
+		return handler.stop(ctx, key, domain.StopFeeItemMappingIncomplete, adoption.SourceTrail)
 	}
 
 	charge := record.Request.EstimatedCustomerChargeID()
@@ -246,7 +246,11 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	case SellChargeFormed, SellChargeAlreadyFormed:
 		// 已形成那一格也跟进：费用行早已在册而请求仍是`已提交`时才走到这里，那一笔的事实与依据有没有落不知道，跟进同键重放
 		// 无害。
-		if err := handler.deps.FollowUp.AfterEstimatedChargeFormed(ctx, command.TenantID, record.Request, charge); err != nil {
+		usedScope, err := usedSellPriceScope(adoption.PricingScope)
+		if err != nil {
+			return EstimatedCustomerChargeResult{}, err
+		}
+		if err := handler.deps.FollowUp.AfterEstimatedChargeFormed(ctx, command.TenantID, record.Request, charge, usedScope); err != nil {
 			if errors.Is(err, ErrConfirmationFollowUpUnavailable) {
 				return undecidedEstimatedCharge(ConfirmationFollowUpUndecided, err), nil
 			}
@@ -307,17 +311,33 @@ func pendingJudgmentCauseOf(cause domain.EvaluationStopCause) domain.EvaluationS
 	return domain.StopEvaluationPendingJudgment
 }
 
-// stop 记一个停因作结论，状态格由停因推出。
+// stop 记一个停因作结论，状态格由停因推出。问到过的来源各自的那一格随结论记下。
 func (handler *FormEstimatedCustomerChargeHandler) stop(
 	ctx context.Context,
 	key ports.SellEvaluationRequestKey,
 	cause domain.EvaluationStopCause,
+	trail []ports.SellPriceSourceStep,
 ) (EstimatedCustomerChargeResult, error) {
 	conclusion, err := domain.NewStoppedSellEvaluationRequestConclusion(cause, handler.deps.Clock.Now())
 	if err != nil {
 		return EstimatedCustomerChargeResult{}, err
 	}
+	conclusion, err = conclusionWithSourceStops(conclusion, trail, cause)
+	if err != nil {
+		return EstimatedCustomerChargeResult{}, err
+	}
 	return handler.conclude(ctx, key, conclusion)
+}
+
+func usedSellPriceScope(value string) (domain.EstimatePricingScope, error) {
+	if value == "" {
+		return domain.EstimatePricingScope{}, nil
+	}
+	scope, err := domain.NewEstimatePricingScope(value)
+	if err != nil {
+		return domain.EstimatePricingScope{}, fmt.Errorf("sell evaluation pricing scope: %w", err)
+	}
+	return scope, nil
 }
 
 // conclude 在请求册上记结论。另有结论不覆盖，作错误整笔回滚——见 ErrSellEvaluationRequestConcludedOtherwise。

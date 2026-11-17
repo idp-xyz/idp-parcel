@@ -101,3 +101,21 @@ func TestParcelsPricedForDifferentServiceProductsRecordNoProduct(t *testing.T) {
 		t.Fatalf("一件申报一件没有却记了 %q", product)
 	}
 }
+
+// Covers: ADR-0380 决定三——逐件问到的来源与这一件评价自己的价卡，译进试算，不丢。
+func TestAParcelKeepsTheSellPriceSourceItLandedOn(t *testing.T) {
+	estimate := evaluatedFor(t, "")[0]
+	scope, err := ppdomain.NewPricingScopeID("SYN-SCOPE-B")
+	if err != nil {
+		t.Fatal(err)
+	}
+	estimate.Scope = scope
+	trial, err := trialOf(estimate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotScope, card, present := trial.SellPriceSource()
+	if !present || gotScope.String() != "SYN-SCOPE-B" || card == "" {
+		t.Fatalf("来源 = %s %q present=%t，want SYN-SCOPE-B 和这一件的价卡", gotScope, card, present)
+	}
+}

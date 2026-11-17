@@ -73,3 +73,28 @@ CREATE TABLE settlement_accounting.sell_evaluation_request_pricing_scope (
     CONSTRAINT sell_evaluation_request_pricing_scope_text_present
         CHECK (btrim(pricing_scope_id) <> '')
 );
+
+-- 请求停下时，除了答出来的那一格，另逐个记下问到过的每一个来源各自的那一格。
+-- 续办按命中的来源自己的停因核，不按请求的停因核；没问到的来源没有行，它上面的登记不续办。
+-- 只带一个范围的请求没有这些行，续办仍只看请求自己的停因和 pricing_scope_id。
+
+CREATE TABLE settlement_accounting.sell_evaluation_request_source_stop (
+    tenant_id        text    NOT NULL,
+    request_id       text    NOT NULL,
+    ordinal          integer NOT NULL,
+    pricing_scope_id text    NOT NULL,
+    stop_cause       text    NOT NULL,
+
+    CONSTRAINT sell_evaluation_request_source_stop_pkey
+        PRIMARY KEY (tenant_id, request_id, ordinal),
+
+    CONSTRAINT sell_evaluation_request_source_stop_request_fkey
+        FOREIGN KEY (tenant_id, request_id)
+        REFERENCES settlement_accounting.sell_evaluation_request (tenant_id, request_id),
+
+    CONSTRAINT sell_evaluation_request_source_stop_ordinal_positive
+        CHECK (ordinal >= 1),
+
+    CONSTRAINT sell_evaluation_request_source_stop_text_present
+        CHECK (btrim(pricing_scope_id) <> '' AND btrim(stop_cause) <> '')
+);

@@ -323,6 +323,9 @@ func mustHandler(t *testing.T, deps application.ApplyPreAcceptanceControlDeps) *
 	if deps.ScopeLock == nil {
 		deps.ScopeLock = &scopeLockDouble{}
 	}
+	if deps.SellPrices == nil {
+		deps.SellPrices = notDeclaredSellPrices{}
+	}
 	handler, err := application.NewApplyPreAcceptanceControlHandler(deps)
 	if err != nil {
 		t.Fatalf("new apply pre-acceptance control handler: %v", err)

@@ -535,3 +535,77 @@ func TestAnUntranslatableTrialAnswerIsAProgrammingError(t *testing.T) {
 		})
 	}
 }
+
+func estimateWithSellPrices(t *testing.T, prices ports.AdoptedSellPriceArrangementView, adoptions *adoptionViewDouble, trials *trialSourceDouble) *application.ApplyPreAcceptanceControlHandler {
+	t.Helper()
+	deps := estimateDeps(t, requiredPolicy(t), adoptions, trials, &traceDouble{},
+		&balanceDouble{balance: balanceWith(t, 10_000)}, &ledgerDouble{ledger: domain.NewFreezeLedger()})
+	deps.SellPrices = prices
+	return mustHandler(t, deps)
+}
+
+func bareEstimateAdoption(t *testing.T) *adoptionViewDouble {
+	t.Helper()
+	adoption, err := domain.NewPreAcceptanceEstimateAdoption(
+		value(t, domain.NewSettlementAccountID, freezeScope.account),
+		domain.PerParcelSellTrialSum,
+		domain.EstimatePricingScope{},
+	)
+	if err != nil {
+		t.Fatalf("new pre-acceptance estimate adoption: %v", err)
+	}
+	return &adoptionViewDouble{adoption: adoption}
+}
+
+// Covers: ADR-0380 决定二、七——合同有有序列表时，估价按这份列表问，不读采用册上的范围。
+func TestTheEstimateAsksTheContractSellPriceSources(t *testing.T) {
+	first := value(t, domain.NewEstimatePricingScope, "SYN-SCOPE-A")
+	second := value(t, domain.NewEstimatePricingScope, "SYN-SCOPE-B")
+	arranged, err := domain.NewOrderedSellPriceSources([]domain.EstimatePricingScope{first, second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trials := estimating(t, 1_250)
+	handler := estimateWithSellPrices(t, fixedSellPrices{arrangement: arranged}, adopted(t), trials)
+	if _, err := handler.Handle(context.Background(), command(t)); err != nil {
+		t.Fatal(err)
+	}
+	query := trials.askedWith
+	if query.PricingScope != first || len(query.Scopes) != 2 || query.Scopes[1] != second {
+		t.Fatalf("试算问法 = %+v，want 合同列表，第一项作主键", query)
+	}
+}
+
+// Covers: ADR-0380 决定七——合同声明不计销售价时，估价答未配置，不拿零顶，也不去问试算。
+func TestAnExplicitNoSellPriceAnswersUnconfigured(t *testing.T) {
+	basis := value(t, domain.NewNoSellPriceBasis, "合同写明不计销售价")
+	arranged, err := domain.NewExplicitlyNotPricedSellPrice(basis)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trials := estimating(t, 1_250)
+	handler := estimateWithSellPrices(t, fixedSellPrices{arrangement: arranged}, adopted(t), trials)
+	result, err := handler.Handle(context.Background(), command(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome() != application.ControlNotFormed || result.NotFormedReason() != application.ControlAmountNotConfigured {
+		t.Fatalf("outcome/reason = %q/%q，want 未配置", result.Outcome(), result.NotFormedReason())
+	}
+	if _, formed := result.Estimate(); formed || trials.asked != 0 {
+		t.Fatalf("formed = %t asked = %d，不计销售价不该形成估价、也不该问试算", formed, trials.asked)
+	}
+}
+
+// Covers: ADR-0380 决定七——旧合同遇到不带计价范围的采用行，估价答未配置。
+func TestAnOldContractWithoutAnAdoptionScopeAnswersUnconfigured(t *testing.T) {
+	trials := estimating(t, 1_250)
+	handler := estimateWithSellPrices(t, notDeclaredSellPrices{}, bareEstimateAdoption(t), trials)
+	result, err := handler.Handle(context.Background(), command(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome() != application.ControlNotFormed || result.NotFormedReason() != application.ControlAmountNotConfigured || trials.asked != 0 {
+		t.Fatalf("outcome/reason = %q/%q asked = %d，want 未配置、不问试算", result.Outcome(), result.NotFormedReason(), trials.asked)
+	}
+}

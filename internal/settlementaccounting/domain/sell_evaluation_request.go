@@ -315,11 +315,30 @@ func SellRequestStateOf(cause EvaluationStopCause) SellEvaluationRequestState {
 // 连同停因。停下时状态格由停因推出，不另收——分开收就能写出「不可计价却记着映射不全」。库上的 CHECK 守同一组配对。
 // `已提交`不是结论：那是登记时的起点，结论不会把请求改回去。
 type SellEvaluationRequestConclusion struct {
-	state     SellEvaluationRequestState
-	charge    CustomerChargeID
-	cause     EvaluationStopCause
-	stoppedAt time.Time
+	state       SellEvaluationRequestState
+	charge      CustomerChargeID
+	cause       EvaluationStopCause
+	stoppedAt   time.Time
+	sourceStops []SellPriceSourceStop
 }
+
+// SellPriceSourceStop 是一份停下的请求问到过的一个销售价格来源自己的那一格（ADR-0380 决定三）。
+// 停因是这一格落空或停住的原因，不是请求答出来的那一格的复本。排在停住的来源之后的没有问到，不在这里。
+type SellPriceSourceStop struct {
+	scope EstimatePricingScope
+	cause EvaluationStopCause
+}
+
+// NewSellPriceSourceStop 收下一个问到过的来源和它自己的停因。发起之前的停因不收：那一拍还没有请求，也就没有来源列表。
+func NewSellPriceSourceStop(scope EstimatePricingScope, cause EvaluationStopCause) (SellPriceSourceStop, error) {
+	if !scope.valid() || !cause.OccursIn(SellEvaluationDirection) || cause.Stage() == StopBeforeRequest {
+		return SellPriceSourceStop{}, fmt.Errorf("%w: sell price source stop", ErrInvalidSellEvaluationRequest)
+	}
+	return SellPriceSourceStop{scope: scope, cause: cause}, nil
+}
+
+func (stop SellPriceSourceStop) Scope() EstimatePricingScope { return stop.scope }
+func (stop SellPriceSourceStop) Cause() EvaluationStopCause  { return stop.cause }
 
 // NewFormedSellEvaluationRequestConclusion 是`已形成`那一格，必须带费用标识。
 func NewFormedSellEvaluationRequestConclusion(charge CustomerChargeID) (SellEvaluationRequestConclusion, error) {
@@ -363,6 +382,20 @@ func (conclusion SellEvaluationRequestConclusion) FormedCharge() (CustomerCharge
 // StopCause 交回停下时的停因；`已形成`与`负向结束（零额）`第二个返回值为假。
 func (conclusion SellEvaluationRequestConclusion) StopCause() (EvaluationStopCause, bool) {
 	return conclusion.cause, conclusion.cause != EvaluationStopCauseInvalid
+}
+
+// WithSourceStops 交回记下问到过的每一个来源各自那一格的副本。只收停下的结论：已形成与零额没有来源停因。
+func (conclusion SellEvaluationRequestConclusion) WithSourceStops(stops []SellPriceSourceStop) (SellEvaluationRequestConclusion, error) {
+	if _, stopped := conclusion.StopCause(); !stopped {
+		return SellEvaluationRequestConclusion{}, fmt.Errorf("%w: source stops belong on a stopped conclusion", ErrInvalidSellEvaluationRequest)
+	}
+	conclusion.sourceStops = append([]SellPriceSourceStop(nil), stops...)
+	return conclusion, nil
+}
+
+// SourceStops 按询问顺序交回问到过的来源各自的停因。没有另记时为空：请求只带一个范围，停因就是结论上的那一格。
+func (conclusion SellEvaluationRequestConclusion) SourceStops() []SellPriceSourceStop {
+	return append([]SellPriceSourceStop(nil), conclusion.sourceStops...)
 }
 
 // Same 比两份结论的状态格、费用标识与停因。册上已是同一份结论时，再记一次是重放。

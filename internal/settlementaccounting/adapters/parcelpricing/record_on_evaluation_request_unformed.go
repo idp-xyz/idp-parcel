@@ -8,6 +8,7 @@ import (
 	sainbox "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/inbox"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // ErrEvaluationUnformedRecordingUndecided 是「评价未形成」那一路唯一的未决哨兵：请求册答不出，停因记没记下未知，整笔回滚
@@ -70,6 +71,9 @@ func (adapter *RecordOnEvaluationRequestUnformedAdapter) HandleUnformedEvaluatio
 		return fmt.Errorf("%w: unformed cause %q", ErrUntranslatableAnswer, unformed.Cause)
 	}
 	command := saapplication.RecordEvaluationUnformedCommand{TenantID: tenant, Direction: direction, Cause: cause}
+	for _, source := range unformed.Sources {
+		command.SourceTrail = append(command.SourceTrail, saports.SellPriceSourceStep{Scope: source.Scope, Kind: source.Kind})
+	}
 	switch direction {
 	case sadomain.SellEvaluationDirection:
 		if command.SellRequest, err = sadomain.NewSellEvaluationRequestID(unformed.Request); err != nil {

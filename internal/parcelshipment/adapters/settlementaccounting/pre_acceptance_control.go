@@ -501,6 +501,7 @@ func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAccep
 		// 等的是事实出现（运营余额、有效对账单），不是一次登记。
 		return psports.PreAcceptanceControlNotFormed, nil
 	case saapplication.EstimateAdoptionUnavailable,
+		saapplication.EstimateSellPriceArrangementUnavailable,
 		saapplication.EstimateTrialsUnavailable,
 		saapplication.EstimateTraceUnavailable:
 		return psports.PreAcceptanceControlNotFormed, nil

@@ -51,7 +51,7 @@ func (repository *PreAcceptanceEstimateAdoptions) SaveAdoption(
 		tenant.String(),
 		adoption.Account().String(),
 		adoption.Form().String(),
-		adoption.PricingScope().String(),
+		optionalScope(adoption.PricingScope().String()),
 		at.UTC(),
 	)
 	if err == nil {
@@ -101,7 +101,8 @@ func (repository *PreAcceptanceEstimateAdoptions) find(
 	tenant domain.TenantID,
 	account domain.SettlementAccountID,
 ) (domain.PreAcceptanceEstimateAdoption, bool, error) {
-	var accountID, form, scope string
+	var accountID, form string
+	var scope *string
 	err := querier.QueryRow(ctx, `
 		SELECT account_id, form, pricing_scope_id
 		  FROM settlement_accounting.pre_acceptance_estimate_adoption
@@ -122,7 +123,7 @@ func (repository *PreAcceptanceEstimateAdoptions) find(
 	if err != nil {
 		return domain.PreAcceptanceEstimateAdoption{}, false, err
 	}
-	storedScope, err := domain.NewEstimatePricingScope(scope)
+	storedScope, err := optionalEstimateScope(scope)
 	if err != nil {
 		return domain.PreAcceptanceEstimateAdoption{}, false, err
 	}

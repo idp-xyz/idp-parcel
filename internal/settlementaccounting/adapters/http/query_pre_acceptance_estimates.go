@@ -55,6 +55,8 @@ type estimateParcelBody struct {
 	Currency      string                   `json:"currency"`
 	PricingWeight *estimatePricingWeight   `json:"pricingWeight,omitempty"`
 	ChargeLines   []estimateChargeLineBody `json:"chargeLines,omitempty"`
+	PricingScope  string                   `json:"pricingScope,omitempty"`
+	PriceCard     string                   `json:"priceCard,omitempty"`
 }
 
 type estimatePricingWeight struct {
@@ -140,6 +142,7 @@ func preAcceptanceEstimateBodyOf(entry ports.PreAcceptanceEstimateEntry) preAcce
 		row := estimateParcelBody{
 			Parcel: parcel.Parcel, Evaluation: parcel.Evaluation,
 			TotalAmount: minorAmount(parcel.TotalMinor), Currency: parcel.Currency,
+			PricingScope: parcel.PricingScope, PriceCard: parcel.PriceCard,
 		}
 		if parcel.PricingWeight != nil {
 			row.PricingWeight = &estimatePricingWeight{Value: parcel.PricingWeight.Value, Unit: parcel.PricingWeight.Unit}

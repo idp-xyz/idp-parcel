@@ -40,6 +40,9 @@ type estimateTrialRow struct {
 	Currency      string                       `json:"currency"`
 	PricingWeight *estimateTrialWeightRow      `json:"pricingWeight,omitempty"`
 	ChargeLines   []estimateTrialChargeLineRow `json:"chargeLines,omitempty"`
+	// PricingScope 与 PriceCard 只在这一件按有序列表落到自己的来源时才有。缺键即估价头上的那一格就是这一件的。
+	PricingScope string `json:"pricingScope,omitempty"`
+	PriceCard    string `json:"priceCard,omitempty"`
 }
 
 type estimateTrialWeightRow struct {
@@ -159,6 +162,9 @@ func estimateTrialRows(estimate domain.PreAcceptanceEstimate) ([]estimateTrialRo
 		}
 		if weight, weighed := trial.PricingWeight(); weighed {
 			row.PricingWeight = &estimateTrialWeightRow{Value: weight.Value(), Unit: weight.Unit()}
+		}
+		if scope, card, present := trial.SellPriceSource(); present {
+			row.PricingScope, row.PriceCard = scope.String(), card
 		}
 		if lines, listed := trial.ChargeLines(); listed {
 			row.ChargeLines = make([]estimateTrialChargeLineRow, 0, len(lines))
@@ -314,6 +320,7 @@ func estimateParcelsOf(raw []byte) ([]ports.PreAcceptanceEstimateParcel, error) 
 	for _, row := range rows {
 		parcel := ports.PreAcceptanceEstimateParcel{
 			Parcel: row.Parcel, Evaluation: row.Evaluation, TotalMinor: row.TotalMinor, Currency: row.Currency,
+			PricingScope: row.PricingScope, PriceCard: row.PriceCard,
 		}
 		if row.PricingWeight != nil {
 			parcel.PricingWeight = &ports.PreAcceptanceParcelPricingWeight{Value: row.PricingWeight.Value, Unit: row.PricingWeight.Unit}

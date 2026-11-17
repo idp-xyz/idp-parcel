@@ -207,6 +207,7 @@ func newSynRSettlementControl(t *testing.T, db *bentopg.DB) *synRSettlementContr
 		Exposures:   exposures,
 		ScopeLock:   scopeLocks,
 		Clock:       systemClock{},
+		SellPrices:  synRNotDeclaredSellPrices{},
 	})
 	if err != nil {
 		t.Fatalf("构造 SA 施加编排：%v", err)
@@ -375,4 +376,12 @@ func synRReceivableAccount(t *testing.T) sadomain.SettlementAccount {
 		t.Fatalf("结算账户：%v", err)
 	}
 	return account
+}
+
+type synRNotDeclaredSellPrices struct{}
+
+func (synRNotDeclaredSellPrices) LoadAdoptedSellPriceArrangement(
+	context.Context, sadomain.TenantID, sadomain.CommercialResolutionReference,
+) (sadomain.AdoptedSellPriceArrangement, error) {
+	return sadomain.NewNotDeclaredSellPriceArrangement(), nil
 }

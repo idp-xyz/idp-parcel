@@ -712,3 +712,60 @@ func TestTheStalledQueueNarrowsByDirectionReasonAndAccountAndSkipsClosedStalls(t
 	expect("户 A 再停一次", ports.StalledEvaluationQuery{Causes: adoptionCauses},
 		"SELL_INITIATION/SYN-PARCEL-A", "SELL_INITIATION/SYN-PARCEL-B")
 }
+
+// Covers: ADR-0380 决定三——全部来源落空时，问到过的任何一个范围登了卡都续办；停在中间时，没问到的范围上登卡不续办，
+// 问到过且解得开它自己那一格的才续办。
+func TestAPriceCardResumesOnlyAnAskedSellPriceSource(t *testing.T) {
+	fixture := newResumptionFixture(t)
+	first := saValue(t, domain.NewEstimatePricingScope, "SYN-SCOPE-A")
+	second := saValue(t, domain.NewEstimatePricingScope, "SYN-SCOPE-B")
+	request, err := domain.SubmitSellEvaluationRequest(domain.SellEvaluationRequestSpec{
+		ID:                 saValue(t, domain.NewSellEvaluationRequestID, "SELLREQ-SYN-LIST"),
+		Parcel:             saValue(t, domain.NewParcelReference, "SYN-PARCEL-LIST"),
+		Account:            saValue(t, domain.NewSettlementAccountID, "SYN-ACCT-1"),
+		SettlementCurrency: saValue(t, domain.NewCurrencyCode, "XTS"),
+		PricingScope:       first, PricingScopes: []domain.EstimatePricingScope{first, second},
+		Moment:         domain.BillingMomentNetworkIntakeAdopted,
+		Source:         saValue(t, domain.NewSourceFactReference, "SYN-SOURCE-LIST"),
+		PricingBasisAt: sellRequestBasisAt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := ports.SellEvaluationRequestRecord{
+		Key:     ports.SellEvaluationRequestKey{TenantID: fixture.tenant, Request: request.ID()},
+		Request: request, RecordedAt: sellRequestRecordedAt, State: domain.SellRequestSubmitted,
+	}
+	saveSellEvaluationRequest(t, fixture.db.Transactor(), fixture.sellRequests, record)
+	missed, err := domain.NewSellPriceSourceStop(first, domain.StopPriceCardNotConfigured)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stopped, err := domain.NewSellPriceSourceStop(second, domain.StopPricingInputUnavailable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conclusion, err := domain.NewStoppedSellEvaluationRequestConclusion(domain.StopPricingInputUnavailable, resumptionAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conclusion, err = conclusion.WithSourceStops([]domain.SellPriceSourceStop{missed, stopped})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.within(t, func(ctx context.Context) error {
+		_, err := fixture.sellRequests.RecordConclusion(ctx, record.Key, conclusion)
+		return err
+	})
+	priceCard := domain.EvaluationStopCausesResumedBy(domain.ParameterPriceCard)
+	asked := fixture.list(t, ports.StalledEvaluationQuery{Causes: priceCard, PricingScope: "SYN-SCOPE-A"})
+	if len(asked) != 1 || asked[0].SellRequest != request.ID() {
+		t.Fatalf("问到过、没卡的范围 = %+v", asked)
+	}
+	if got := fixture.list(t, ports.StalledEvaluationQuery{Causes: priceCard, PricingScope: "SYN-SCOPE-B"}); len(got) != 0 {
+		t.Fatalf("停在输入不可得的范围上登卡 = %+v，不该续办", got)
+	}
+	if got := fixture.list(t, ports.StalledEvaluationQuery{Causes: priceCard, PricingScope: "SYN-SCOPE-C"}); len(got) != 0 {
+		t.Fatalf("没问到的范围 = %+v，不该续办", got)
+	}
+}

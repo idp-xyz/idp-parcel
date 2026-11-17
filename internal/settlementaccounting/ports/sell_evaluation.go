@@ -86,6 +86,16 @@ type SellEvaluationAdoption struct {
 	SettlementCurrency domain.CurrencyCode
 	SettlementMinor    int64
 	Conversion         domain.ConversionStepReference
+	// PricingScope 是这份评价实际用上的销售价格来源。请求带列表时，确认事实的主要计费范围取它，不取列表的第一项。
+	PricingScope string
+	// SourceTrail 是解释里记下的、这次问到过的每一个来源各自的那一格。只带一个范围时为空。
+	SourceTrail []SellPriceSourceStep
+}
+
+// SellPriceSourceStep 是有序范围列表里问到的一格，词与计价写下的解释行同形。
+type SellPriceSourceStep struct {
+	Scope string
+	Kind  string
 }
 
 // ErrNotASellEvaluation 表示指名的评价不是 SELL·CUSTOMER_CHARGE。提供方对 BUY、SELL 发同一种评价已记录信封，SELL 消费门

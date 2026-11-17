@@ -17,9 +17,10 @@ type RegisterSellBillingMomentAdoptionCommand struct {
 // RegisterSellBillingMomentAdoptionHandler 把一行采用交给采用册，并在同一事务里交出「评价参数已登记」信封：没登记时到来的
 // 那一拍停在发起停办册上，补登之后由它续办（ADR-0229 决定四、五）。落库时刻由时钟给出。
 type RegisterSellBillingMomentAdoptionHandler struct {
-	adoptions ports.SellBillingMomentAdoptionRegister
-	handoff   ports.EvaluationParameterRegisteredHandoff
-	clock     ports.Clock
+	adoptions      ports.SellBillingMomentAdoptionRegister
+	handoff        ports.EvaluationParameterRegisteredHandoff
+	clock          ports.Clock
+	estimateScopes ports.PreAcceptanceEstimateAdoptionView
 }
 
 // NewRegisterSellBillingMomentAdoptionHandler 三件都不许为 nil：交接口缺席时登记照样成功，停着的那一拍却再也等不来续办——
@@ -35,12 +36,23 @@ func NewRegisterSellBillingMomentAdoptionHandler(
 	return &RegisterSellBillingMomentAdoptionHandler{adoptions: adoptions, handoff: handoff, clock: clock}, nil
 }
 
+// CompareEstimateScopes 让这一户后登的计费时点采用，在两本册都带计价范围时核是不是同一个范围（ADR-0280，经 ADR-0380 收窄）。
+// 任一本不带范围就不核。不接这只读口，登记照旧只写自己那一本。
+func (handler *RegisterSellBillingMomentAdoptionHandler) CompareEstimateScopes(view ports.PreAcceptanceEstimateAdoptionView) {
+	handler.estimateScopes = view
+}
+
 func (handler *RegisterSellBillingMomentAdoptionHandler) Register(
 	ctx context.Context,
 	command RegisterSellBillingMomentAdoptionCommand,
 ) (ports.CatalogueRegistrationEffect, error) {
 	if command.Tenant.String() == "" || command.Adoption.Account().String() == "" {
 		return 0, fmt.Errorf("%w: sell billing moment adoption command", domain.ErrBlankValue)
+	}
+	if disagree, err := estimateScopeDisagrees(ctx, handler.estimateScopes, command.Tenant, command.Adoption.Account(), command.Adoption.PricingScope()); err != nil {
+		return 0, fmt.Errorf("register sell billing moment adoption: %w", err)
+	} else if disagree {
+		return ports.CatalogueConflict, nil
 	}
 	registeredAt := handler.clock.Now()
 	effect, err := handler.adoptions.SaveSellBillingMomentAdoption(ctx, command.Tenant, command.Adoption, registeredAt)

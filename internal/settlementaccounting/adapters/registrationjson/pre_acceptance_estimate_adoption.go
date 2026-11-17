@@ -14,8 +14,8 @@ type preAcceptanceEstimateAdoptionDocument struct {
 	PricingScopeID string `json:"pricingScopeId"`
 }
 
-// PreAcceptanceEstimateAdoptionFromJSON 译装一行受理前估价采用（ADR-0179 决定五）。四格都没有缺席这一态；形态不在封闭词表内
-// 由领域门拒——不默认成唯一那一种，没写就是没写。
+// PreAcceptanceEstimateAdoptionFromJSON 译装一行受理前估价采用（ADR-0179 决定五、ADR-0380 决定七）。形态必填，没写就是没写，
+// 不默认成唯一那一种。计价范围可缺：空串是不带范围的行，空白仍拒。
 func PreAcceptanceEstimateAdoptionFromJSON(raw []byte) (application.RegisterPreAcceptanceEstimateAdoptionCommand, error) {
 	none := application.RegisterPreAcceptanceEstimateAdoptionCommand{}
 	var document preAcceptanceEstimateAdoptionDocument
@@ -34,7 +34,7 @@ func PreAcceptanceEstimateAdoptionFromJSON(raw []byte) (application.RegisterPreA
 	if err != nil {
 		return none, fmt.Errorf("form：%w", err)
 	}
-	scope, err := domain.NewEstimatePricingScope(document.PricingScopeID)
+	scope, err := optionalPricingScope(document.PricingScopeID)
 	if err != nil {
 		return none, fmt.Errorf("pricingScopeId：%w", err)
 	}

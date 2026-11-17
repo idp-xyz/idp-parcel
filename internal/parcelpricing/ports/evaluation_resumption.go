@@ -33,12 +33,20 @@ func (cause EvaluationRequestUnformedCause) String() string {
 
 // EvaluationRequestUnformedIntent 是一次「评价未形成」：哪个租户、哪份请求（连同它的价格方向，结算按方向找请求册）、
 // 停在哪一格，以及给人读的说明（冲突的候选、缺的读口或事实）。评价不存在，所以没有评价标识。
+// UnformedSellPriceSource 是有序范围列表里问到的一格。Kind 用计价写下的词（NO_CARD 等），结算按它记这一格自己的停因。
+type UnformedSellPriceSource struct {
+	Scope string
+	Kind  string
+}
+
 type EvaluationRequestUnformedIntent struct {
 	Tenant    domain.TenantID
 	Request   domain.EvaluationRequestReference
 	Direction domain.PricingDirection
 	Cause     EvaluationRequestUnformedCause
 	Detail    []string
+	// Sources 是这次问到过的每一个销售价格来源。只带一个范围时为空。
+	Sources []UnformedSellPriceSource
 }
 
 // ErrEvaluationRequestUnformedHandoffRejected 表示「评价未形成」信封被框架的确定性校验拒收。同一份重交永远同一个结果。

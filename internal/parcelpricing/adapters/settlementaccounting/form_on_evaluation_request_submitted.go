@@ -126,13 +126,13 @@ func foldFormation(
 			fmt.Sprintf("no price card in force for scope %s %s/%s at %s%s",
 				command.Scope, command.Direction, command.Purpose, command.BasisAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 				forServiceProduct(result.ServiceProduct)),
-		})
+		}, result.ScopeTrail)
 	case ppapplication.RequestPriceCardApplicabilityConflict:
 		return handOffUnformed(ctx, unformed, command, ppports.UnformedPriceCardApplicabilityConflict, []string{
 			"candidates " + describeCandidates(result.Candidates) + forServiceProduct(result.ServiceProduct),
-		})
+		}, result.ScopeTrail)
 	case ppapplication.RequestPricingInputUnavailable:
-		return handOffUnformed(ctx, unformed, command, ppports.UnformedPricingInputUnavailable, result.Missing)
+		return handOffUnformed(ctx, unformed, command, ppports.UnformedPricingInputUnavailable, result.Missing, result.ScopeTrail)
 	case ppapplication.RequestEvaluationUndecided:
 		return fmt.Errorf("%w: %s", ErrEvaluationFormationUndecided, result.Reason)
 	case ppapplication.RequestEvaluationNotAccepted:
@@ -150,13 +150,19 @@ func handOffUnformed(
 	command ppapplication.FormEvaluationFromRequestCommand,
 	cause ppports.EvaluationRequestUnformedCause,
 	detail []string,
+	trail []ppapplication.SellPriceSourceStep,
 ) error {
+	sources := make([]ppports.UnformedSellPriceSource, 0, len(trail))
+	for _, step := range trail {
+		sources = append(sources, ppports.UnformedSellPriceSource{Scope: step.Scope.String(), Kind: step.Kind})
+	}
 	err := unformed.HandOffEvaluationRequestUnformed(ctx, ppports.EvaluationRequestUnformedIntent{
 		Tenant:    command.Tenant,
 		Request:   command.Request,
 		Direction: command.Direction,
 		Cause:     cause,
 		Detail:    append([]string(nil), detail...),
+		Sources:   sources,
 	})
 	switch {
 	case err == nil:

@@ -78,6 +78,8 @@ const (
 	// 登记行同一事务交信封来重驱；不默认形态，不拿零顶。三个 *Unavailable 是采用册、试算与留痕读写不通，等重试。
 	ControlAmountNotConfigured
 	EstimateAdoptionUnavailable
+	// EstimateSellPriceArrangementUnavailable：这次控制所凭的商业解析读不出销售价格约定。等重试，不读成未配置。
+	EstimateSellPriceArrangementUnavailable
 	EstimateTrialsUnavailable
 	EstimateTraceUnavailable
 	// 试算答了、估价没形成，按停在哪一格分开：选卡两格、提交版本不可见、缺件，以及合计那一步的各格（决定二的停法，外加单份为负与
@@ -122,6 +124,8 @@ func (reason NotFormedReason) String() string {
 		return "CONTROL_AMOUNT_NOT_CONFIGURED"
 	case EstimateAdoptionUnavailable:
 		return "ESTIMATE_ADOPTION_UNAVAILABLE"
+	case EstimateSellPriceArrangementUnavailable:
+		return "ESTIMATE_SELL_PRICE_ARRANGEMENT_UNAVAILABLE"
 	case EstimateTrialsUnavailable:
 		return "ESTIMATE_TRIALS_UNAVAILABLE"
 	case EstimateTraceUnavailable:
@@ -329,6 +333,7 @@ type ApplyPreAcceptanceControlHandler struct {
 	adoptions   ports.PreAcceptanceEstimateAdoptionView
 	trials      ports.PreAcceptanceTrialSource
 	traces      ports.PreAcceptanceEstimateTraces
+	sellPrices  ports.AdoptedSellPriceArrangementView
 	balance     ports.OperationalBalanceView
 	ledger      ports.FreezeLedgerRepository
 	credit      ports.CreditStandingView
@@ -346,10 +351,12 @@ type ApplyPreAcceptanceControlHandler struct {
 // 依赖同一道构造门。Adoptions、Trials、Traces 是估价那一口（ADR-0179）：两条路都要金额，金额只从
 // 估价来。ScopeLock 让同一作用域上的控制排队：没有它，并发两路各按自己读到的账判够、各把自己的快照整册写回。
 type ApplyPreAcceptanceControlDeps struct {
-	Policy      ports.PreAcceptanceControlPolicyView
-	Adoptions   ports.PreAcceptanceEstimateAdoptionView
-	Trials      ports.PreAcceptanceTrialSource
-	Traces      ports.PreAcceptanceEstimateTraces
+	Policy    ports.PreAcceptanceControlPolicyView
+	Adoptions ports.PreAcceptanceEstimateAdoptionView
+	Trials    ports.PreAcceptanceTrialSource
+	Traces    ports.PreAcceptanceEstimateTraces
+	// SellPrices 点读这次控制所凭的那一份解析采用的合同版本上的销售价格约定（ADR-0380 决定二）。
+	SellPrices  ports.AdoptedSellPriceArrangementView
 	Balance     ports.OperationalBalanceView
 	Freezes     ports.FreezeLedgerRepository
 	Credit      ports.CreditStandingView
@@ -377,6 +384,7 @@ func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) (*A
 		{"pre-acceptance estimate adoption view", deps.Adoptions == nil},
 		{"pre-acceptance trial source", deps.Trials == nil},
 		{"pre-acceptance estimate traces", deps.Traces == nil},
+		{"adopted sell price arrangement", deps.SellPrices == nil},
 		{"operational balance view", deps.Balance == nil},
 		{"freeze ledger repository", deps.Freezes == nil},
 		{"credit standing view", deps.Credit == nil},
@@ -395,6 +403,7 @@ func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) (*A
 		adoptions:   deps.Adoptions,
 		trials:      deps.Trials,
 		traces:      deps.Traces,
+		sellPrices:  deps.SellPrices,
 		balance:     deps.Balance,
 		ledger:      deps.Freezes,
 		credit:      deps.Credit,
@@ -546,11 +555,19 @@ func (handler *ApplyPreAcceptanceControlHandler) formEstimate(
 	if !adopted {
 		return none, handler.haltNotFormed(command, ControlAmountNotConfigured), nil
 	}
+	scope, scopes, halted, err := handler.estimateSellPriceSources(ctx, command, adoption)
+	if err != nil {
+		return none, nil, err
+	}
+	if halted != nil {
+		return none, halted, nil
+	}
 
 	at := command.AsOf.At()
 	answer, err := handler.trials.FormPreAcceptanceTrials(ctx, ports.PreAcceptanceTrialQuery{
 		Tenant:            command.TenantID,
-		PricingScope:      adoption.PricingScope(),
+		PricingScope:      scope,
+		Scopes:            scopes,
 		ShipmentRequest:   command.ShipmentRequest,
 		SubmissionVersion: command.SubmissionVersion,
 		At:                at,
@@ -618,6 +635,35 @@ func (handler *ApplyPreAcceptanceControlHandler) formEstimate(
 	default:
 		return none, nil, fmt.Errorf("form pre-acceptance estimate: unhandled trace effect %d", effect)
 	}
+}
+
+// estimateSellPriceSources 决定这次估价按哪几个范围问。合同有有序列表就用它，不读采用册上的范围。
+// 显式不计销售价，以及旧合同遇到不带范围的采用行，都答未配置，不拿零顶。
+func (handler *ApplyPreAcceptanceControlHandler) estimateSellPriceSources(
+	ctx context.Context,
+	command ApplyPreAcceptanceControlCommand,
+	adoption domain.PreAcceptanceEstimateAdoption,
+) (domain.EstimatePricingScope, []domain.EstimatePricingScope, *ApplyPreAcceptanceControlResult, error) {
+	arrangement, err := handler.sellPrices.LoadAdoptedSellPriceArrangement(ctx, command.TenantID, command.Resolution)
+	if err != nil {
+		return domain.EstimatePricingScope{}, nil, handler.haltNotFormed(command, EstimateSellPriceArrangementUnavailable), nil
+	}
+	if _, notPriced := arrangement.NoSellPriceBasis(); notPriced {
+		return domain.EstimatePricingScope{}, nil, handler.haltNotFormed(command, ControlAmountNotConfigured), nil
+	}
+	if sources, ordered := arrangement.Sources(); ordered {
+		if len(sources) < 2 {
+			return sources[0], nil, nil, nil
+		}
+		return sources[0], sources, nil, nil
+	}
+	if !arrangement.NotDeclared() {
+		return domain.EstimatePricingScope{}, nil, nil, fmt.Errorf("form pre-acceptance estimate: sell price arrangement is the zero value")
+	}
+	if adoption.PricingScope().String() == "" {
+		return domain.EstimatePricingScope{}, nil, handler.haltNotFormed(command, ControlAmountNotConfigured), nil
+	}
+	return adoption.PricingScope(), nil, nil, nil
 }
 
 // trialStopReason 把试算那一侧的格逐一落到未形成原因上；已形成交回 stopped=false。逐取值列出、default 报错（ADR-0025）。

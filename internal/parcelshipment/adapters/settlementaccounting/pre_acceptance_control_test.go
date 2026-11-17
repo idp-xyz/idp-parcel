@@ -336,7 +336,18 @@ func (fixture *controlFixture) estimateViews(deps saapplication.ApplyPreAcceptan
 	deps.Trials = fixture.trials
 	deps.Traces = fixture.traces
 	deps.ScopeLock = scopeLockDouble{}
+	if deps.SellPrices == nil {
+		deps.SellPrices = controlNotDeclaredSellPrices{}
+	}
 	return deps
+}
+
+type controlNotDeclaredSellPrices struct{}
+
+func (controlNotDeclaredSellPrices) LoadAdoptedSellPriceArrangement(
+	context.Context, sadomain.TenantID, sadomain.CommercialResolutionReference,
+) (sadomain.AdoptedSellPriceArrangement, error) {
+	return sadomain.NewNotDeclaredSellPriceArrangement(), nil
 }
 
 func settlementScope(t *testing.T) sadomain.SettlementScope {

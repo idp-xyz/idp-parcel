@@ -169,6 +169,7 @@ func newRaceRig(t *testing.T, book raceBook, capacity int64) *raceRig {
 		Exposures:   exposures,
 		ScopeLock:   locks,
 		Clock:       fixedRaceClock{at: raceControlAt},
+		SellPrices:  raceNotDeclaredSellPrices{},
 	})
 	if err != nil {
 		t.Fatalf("构造施加编排：%v", err)
@@ -494,6 +495,14 @@ type raceAdoption struct {
 
 func (double raceAdoption) FindAdoption(context.Context, domain.TenantID, domain.SettlementAccountID) (domain.PreAcceptanceEstimateAdoption, bool, error) {
 	return double.adoption, true, nil
+}
+
+type raceNotDeclaredSellPrices struct{}
+
+func (raceNotDeclaredSellPrices) LoadAdoptedSellPriceArrangement(
+	context.Context, domain.TenantID, domain.CommercialResolutionReference,
+) (domain.AdoptedSellPriceArrangement, error) {
+	return domain.NewNotDeclaredSellPriceArrangement(), nil
 }
 
 type raceTrials struct {

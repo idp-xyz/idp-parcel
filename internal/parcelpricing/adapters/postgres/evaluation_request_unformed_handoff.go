@@ -25,11 +25,17 @@ func evaluationRequestUnformedPartitionKey(tenant, direction, request string) st
 }
 
 type evaluationRequestUnformedPayload struct {
-	TenantID            string   `json:"tenantId"`
-	EvaluationRequestID string   `json:"evaluationRequestId"`
-	Direction           string   `json:"direction"`
-	Cause               string   `json:"cause"`
-	Detail              []string `json:"detail,omitempty"`
+	TenantID            string                            `json:"tenantId"`
+	EvaluationRequestID string                            `json:"evaluationRequestId"`
+	Direction           string                            `json:"direction"`
+	Cause               string                            `json:"cause"`
+	Detail              []string                          `json:"detail,omitempty"`
+	Sources             []evaluationRequestUnformedSource `json:"sources,omitempty"`
+}
+
+type evaluationRequestUnformedSource struct {
+	Scope string `json:"scope"`
+	Kind  string `json:"kind"`
 }
 
 // HandOffEvaluationRequestUnformed 把一次「评价未形成」入队。ID 取（租户 / 方向 / 请求）的定长指纹：一份请求至多一封，
@@ -43,12 +49,17 @@ func (handoffs *OutboxEvaluationResumptionHandoffs) HandOffEvaluationRequestUnfo
 	if tenant == "" || request == "" || direction == "" || intent.Cause.String() == "" {
 		return fmt.Errorf("hand off evaluation request unformed: tenant, request, direction and cause are required")
 	}
+	sources := make([]evaluationRequestUnformedSource, 0, len(intent.Sources))
+	for _, source := range intent.Sources {
+		sources = append(sources, evaluationRequestUnformedSource{Scope: source.Scope, Kind: source.Kind})
+	}
 	payload, err := json.Marshal(evaluationRequestUnformedPayload{
 		TenantID:            tenant,
 		EvaluationRequestID: request,
 		Direction:           direction,
 		Cause:               intent.Cause.String(),
 		Detail:              intent.Detail,
+		Sources:             sources,
 	})
 	if err != nil {
 		return fmt.Errorf("hand off evaluation request unformed: %w", err)

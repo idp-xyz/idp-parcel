@@ -246,6 +246,9 @@ func (registry *SellEvaluationRequests) RecordConclusion(
 		return none, fmt.Errorf("record sell evaluation request conclusion: %w", err)
 	}
 	if tag.RowsAffected() == 1 {
+		if err := insertSellPriceSourceStops(ctx, executor, key.TenantID.String(), key.Request.String(), conclusion.SourceStops()); err != nil {
+			return none, err
+		}
 		return ports.SellEvaluationRequestConcluded, nil
 	}
 
@@ -256,7 +259,7 @@ func (registry *SellEvaluationRequests) RecordConclusion(
 	if !found {
 		return none, fmt.Errorf("record sell evaluation request conclusion: request %s is not in the register", key.Request)
 	}
-	if conclusion.Same(stored.State, stored.FormedCharge, stored.StopCause) {
+	if conclusion.Same(stored.State, stored.FormedCharge, stored.StopCause) && sameSellPriceSourceStops(stored.SourceStops, conclusion.SourceStops()) {
 		return ports.SellEvaluationRequestConclusionReplayed, nil
 	}
 	return ports.SellEvaluationRequestConcludedOtherwise, nil
@@ -354,7 +357,79 @@ func (registry *SellEvaluationRequests) findOne(
 	if err != nil {
 		return ports.SellEvaluationRequestRecord{}, false, fmt.Errorf("find sell evaluation request: %w", err)
 	}
+	record.SourceStops, err = loadSellPriceSourceStops(ctx, querier, tenant.String(), columns.requestID)
+	if err != nil {
+		return ports.SellEvaluationRequestRecord{}, false, fmt.Errorf("find sell evaluation request: %w", err)
+	}
 	return record, true, nil
+}
+
+func insertSellPriceSourceStops(
+	ctx context.Context,
+	executor bentopg.Executor,
+	tenant, requestID string,
+	stops []domain.SellPriceSourceStop,
+) error {
+	for index, stop := range stops {
+		if _, err := executor.Exec(ctx,
+			`INSERT INTO settlement_accounting.sell_evaluation_request_source_stop
+				(tenant_id, request_id, ordinal, pricing_scope_id, stop_cause)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			tenant, requestID, index+1, stop.Scope().String(), stop.Cause().String(),
+		); err != nil {
+			return fmt.Errorf("save sell price source stops: %w", err)
+		}
+	}
+	return nil
+}
+
+func loadSellPriceSourceStops(ctx context.Context, querier bentopg.Querier, tenant, requestID string) ([]domain.SellPriceSourceStop, error) {
+	rows, err := querier.Query(ctx,
+		`SELECT pricing_scope_id, stop_cause
+		   FROM settlement_accounting.sell_evaluation_request_source_stop
+		  WHERE tenant_id = $1 AND request_id = $2
+		  ORDER BY ordinal`,
+		tenant, requestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var stops []domain.SellPriceSourceStop
+	for rows.Next() {
+		var scopeName, causeName string
+		if err := rows.Scan(&scopeName, &causeName); err != nil {
+			return nil, err
+		}
+		scope, err := domain.NewEstimatePricingScope(scopeName)
+		if err != nil {
+			return nil, err
+		}
+		cause, err := domain.EvaluationStopCauseFromName(causeName)
+		if err != nil {
+			return nil, err
+		}
+		stop, err := domain.NewSellPriceSourceStop(scope, cause)
+		if err != nil {
+			return nil, err
+		}
+		stops = append(stops, stop)
+	}
+	return stops, rows.Err()
+}
+
+func sameSellPriceSourceStops(stored, wanted []domain.SellPriceSourceStop) bool {
+	if len(wanted) == 0 {
+		return len(stored) == 0
+	}
+	if len(stored) != len(wanted) {
+		return false
+	}
+	for index := range wanted {
+		if stored[index].Scope() != wanted[index].Scope() || stored[index].Cause() != wanted[index].Cause() {
+			return false
+		}
+	}
+	return true
 }
 
 // sellEvaluationRequestColumns 是一行 SELL 评价请求的原样取值。customer_charge_id 是唯一可空的列，读成空串：

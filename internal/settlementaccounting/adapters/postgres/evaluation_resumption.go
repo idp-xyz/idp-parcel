@@ -347,12 +347,26 @@ SELECT kind, stop_cause, first_key, second_key, stopped_at FROM (
 	UNION ALL
 	SELECT 'SELL_REQUEST', q.stop_cause, q.request_id, '', q.stopped_at
 	  FROM settlement_accounting.sell_evaluation_request q
-	 WHERE q.tenant_id = $1 AND q.stop_cause = ANY($2)
+	 WHERE q.tenant_id = $1
+	   AND (
+	         (
+	           NOT EXISTS (
+	             SELECT 1 FROM settlement_accounting.sell_evaluation_request_source_stop cell
+	              WHERE cell.tenant_id = q.tenant_id AND cell.request_id = q.request_id)
+	           AND q.stop_cause = ANY($2)
+	           AND ($4::text IS NULL OR q.pricing_scope_id = $4)
+	         )
+	         OR EXISTS (
+	           SELECT 1 FROM settlement_accounting.sell_evaluation_request_source_stop cell
+	            WHERE cell.tenant_id = q.tenant_id AND cell.request_id = q.request_id
+	              AND cell.stop_cause = ANY($2)
+	              AND ($4::text IS NULL OR cell.pricing_scope_id = $4)
+	         )
+	       )
 	   AND ($3::text IS NULL OR NOT EXISTS (
 	         SELECT 1 FROM settlement_accounting.sell_evaluation_request c
 	          WHERE c.tenant_id = q.tenant_id AND c.parcel_id = q.parcel_id
 	            AND c.billing_moment = q.billing_moment AND c.resume_basis = $3))
-	   AND ($4::text IS NULL OR q.pricing_scope_id = $4)
 	   AND $6::text IS NULL AND $14::text IS NULL
 	   AND ($13::text IS NULL OR $13 = 'SELL')
 	   AND ($15::text IS NULL OR q.account_id = $15)

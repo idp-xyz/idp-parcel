@@ -21,6 +21,10 @@ type PreAcceptanceTrial struct {
 	weight     PreAcceptanceTrialPricingWeight
 	hasWeight  bool
 	lines      []PreAcceptanceTrialChargeLine
+	// sellScope 与 sellCard 是这一件最终用上的销售价格来源和价卡版本字面。只在按有序列表逐件问时才有：
+	// 只带一个范围的估价，范围与卡在估价头上，这里保持缺席，留痕的逐件形状与此前相同。
+	sellScope EstimatePricingScope
+	sellCard  string
 }
 
 // NewPreAcceptanceTrial 造一份有合计的试算。件、评价与币种不许空白；版本清单原样保存，复算靠它（决定六）。
@@ -74,6 +78,20 @@ func (trial PreAcceptanceTrial) PricingWeight() (PreAcceptanceTrialPricingWeight
 // ChargeLines 的第二个返回值为假即这一份没记费用行。
 func (trial PreAcceptanceTrial) ChargeLines() ([]PreAcceptanceTrialChargeLine, bool) {
 	return append([]PreAcceptanceTrialChargeLine(nil), trial.lines...), len(trial.lines) > 0
+}
+
+// WithSellPriceSource 交回记下这一件所用销售价格来源与价卡版本字面的副本。只在逐件落到不同来源时调用。
+func (trial PreAcceptanceTrial) WithSellPriceSource(scope EstimatePricingScope, priceCard string) (PreAcceptanceTrial, error) {
+	if !scope.valid() || priceCard == "" {
+		return PreAcceptanceTrial{}, fmt.Errorf("%w: pre-acceptance trial sell price source", ErrBlankValue)
+	}
+	trial.sellScope, trial.sellCard = scope, priceCard
+	return trial, nil
+}
+
+// SellPriceSource 交回这一件所用的销售价格来源与价卡版本字面。第三个返回值为假即这一件没另记：范围与卡在估价头上。
+func (trial PreAcceptanceTrial) SellPriceSource() (EstimatePricingScope, string, bool) {
+	return trial.sellScope, trial.sellCard, trial.sellScope.valid() && trial.sellCard != ""
 }
 
 // PreAcceptanceTrialPricingWeight 是一份试算评价的计价重量：值与单位照计价交来的原文。本上下文不比较、不换算它，只留痕。
@@ -303,9 +321,20 @@ func FormPerParcelSellTrialSum(
 	if total <= 0 {
 		return PreAcceptanceEstimate{}, PreAcceptanceEstimateNotPositive, nil
 	}
+	// 新形状的合同采用行不带计价范围。各件自己记下用的来源时，估价头上的那一格取第一件的来源，
+	// 留痕列仍要一个非空范围；各件真正用的来源在试算上，不在这一格。
+	scope := adoption.PricingScope()
+	if scope.String() == "" {
+		if trialScope, _, present := trials[0].SellPriceSource(); present {
+			scope = trialScope
+		}
+	}
+	if scope.String() == "" {
+		return PreAcceptanceEstimate{}, PreAcceptanceEstimateGapInvalid, fmt.Errorf("%w: pre-acceptance estimate pricing scope", ErrBlankValue)
+	}
 	return PreAcceptanceEstimate{
 		form:       adoption.Form(),
-		scope:      adoption.PricingScope(),
+		scope:      scope,
 		plan:       priceCard,
 		trials:     append([]PreAcceptanceTrial(nil), trials...),
 		totalMinor: total,

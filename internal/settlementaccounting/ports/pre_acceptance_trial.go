@@ -17,6 +17,9 @@ type PreAcceptanceTrialQuery struct {
 	SubmissionVersion string
 	At                time.Time
 	Currency          domain.CurrencyCode
+	// Scopes 是合同声明的有序销售价格来源。空或一项时不看它，试算仍按 PricingScope 给全部件用同一张卡。
+	// 多于一项时 PricingScope 是第一项，每一件各自按这个顺序问。
+	Scopes []domain.EstimatePricingScope
 }
 
 // PreAcceptanceTrialOutcome 是试算那一侧的封闭答复，按计价侧的格原样分开（选卡三格、不可见、缺件），本上下文全都答未形成。

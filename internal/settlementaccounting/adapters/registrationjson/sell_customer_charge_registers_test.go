@@ -40,7 +40,7 @@ func TestSellBillingMomentAdoptionFromJSONRejectsBadShapeVocabularyAndBlanks(t *
 		"词表外的时点":     {strings.Replace(sellBillingMomentAdoptionDocument, "EFFECTIVE_DELIVERY_FINALIZED", "COMMISSION_ACCEPTED", 1), "billingMoment"},
 		"没给时点":       {strings.Replace(sellBillingMomentAdoptionDocument, `"billingMoment": "EFFECTIVE_DELIVERY_FINALIZED",`, "", 1), "billingMoment"},
 		"空白账户":       {strings.Replace(sellBillingMomentAdoptionDocument, "SYN-ACCT-1", " ", 1), "accountId"},
-		"空白计价范围":     {strings.Replace(sellBillingMomentAdoptionDocument, "SYN-SCOPE-SELL-1", "", 1), "pricingScopeId"},
+		"空白计价范围":     {strings.Replace(sellBillingMomentAdoptionDocument, "SYN-SCOPE-SELL-1", " ", 1), "pricingScopeId"},
 		"空白租户":       {strings.Replace(sellBillingMomentAdoptionDocument, "SYN-T1", "", 1), "tenantId"},
 		"不是 JSON 对象": {`[]`, "形状"},
 	}

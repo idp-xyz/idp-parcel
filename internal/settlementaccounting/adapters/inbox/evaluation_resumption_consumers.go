@@ -32,6 +32,13 @@ type UnformedEvaluationRequest struct {
 	Request   string
 	Direction string
 	Cause     string
+	Sources   []UnformedSellPriceSource
+}
+
+// UnformedSellPriceSource 是载荷里问到过的一个销售价格来源。Scope 与 Kind 原样，由处理方译成停因。
+type UnformedSellPriceSource struct {
+	Scope string
+	Kind  string
 }
 
 // UnformedEvaluationRequestHandler 是本消费者转交的处理方。
@@ -79,6 +86,10 @@ func decodeUnformedEvaluationRequest(payload []byte) (UnformedEvaluationRequest,
 		Request   string `json:"evaluationRequestId"`
 		Direction string `json:"direction"`
 		Cause     string `json:"cause"`
+		Sources   []struct {
+			Scope string `json:"scope"`
+			Kind  string `json:"kind"`
+		} `json:"sources"`
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return UnformedEvaluationRequest{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
@@ -86,7 +97,16 @@ func decodeUnformedEvaluationRequest(payload []byte) (UnformedEvaluationRequest,
 	if body.TenantID == "" || body.Request == "" || body.Direction == "" || body.Cause == "" {
 		return UnformedEvaluationRequest{}, fmt.Errorf("%w: missing unformed evaluation request fields", ErrPoisonEnvelope)
 	}
-	return UnformedEvaluationRequest(body), nil
+	decoded := UnformedEvaluationRequest{
+		TenantID: body.TenantID, Request: body.Request, Direction: body.Direction, Cause: body.Cause,
+	}
+	for _, source := range body.Sources {
+		if source.Scope == "" || source.Kind == "" {
+			return UnformedEvaluationRequest{}, fmt.Errorf("%w: a sell price source is missing its scope or kind", ErrPoisonEnvelope)
+		}
+		decoded.Sources = append(decoded.Sources, UnformedSellPriceSource{Scope: source.Scope, Kind: source.Kind})
+	}
+	return decoded, nil
 }
 
 // —— 参数已登记 ——

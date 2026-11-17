@@ -232,7 +232,7 @@ func TestTheSellGateRefusesNilDependencies(t *testing.T) {
 type gateFollowUp struct{}
 
 func (gateFollowUp) AfterEstimatedChargeFormed(
-	context.Context, domain.TenantID, domain.SellEvaluationRequest, domain.CustomerChargeID,
+	context.Context, domain.TenantID, domain.SellEvaluationRequest, domain.CustomerChargeID, domain.EstimatePricingScope,
 ) error {
 	return nil
 }

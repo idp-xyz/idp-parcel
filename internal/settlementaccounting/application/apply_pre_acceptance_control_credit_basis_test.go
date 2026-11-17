@@ -332,10 +332,12 @@ func TestAnyNilDependencyIsRefusedAtConstruction(t *testing.T) {
 			Exposures:   &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
 			ScopeLock:   &scopeLockDouble{},
 			Clock:       fixedClock{at: controlAt},
+			SellPrices:  notDeclaredSellPrices{},
 		}
 	}
 	strip := map[string]func(*application.ApplyPreAcceptanceControlDeps){
 		"policy":       func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Policy = nil },
+		"sell prices":  func(deps *application.ApplyPreAcceptanceControlDeps) { deps.SellPrices = nil },
 		"adoptions":    func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Adoptions = nil },
 		"trials":       func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Trials = nil },
 		"traces":       func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Traces = nil },

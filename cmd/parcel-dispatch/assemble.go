@@ -1213,11 +1213,20 @@ func acceptanceFinancialControl(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance estimate traces: %w", err)
 	}
+	sellPriceRows, err := pcpostgres.NewContractSellPriceArrangements(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: contract sell price arrangements for estimates: %w", err)
+	}
+	sellPrices, err := sapartycommercial.NewAdoptedSellPriceArrangement(resolutions, sellPriceRows)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: adopted sell price arrangement for estimates: %w", err)
+	}
 	apply, err := saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
 		Policy:      policy,
 		Adoptions:   adoptions,
 		Trials:      trials,
 		Traces:      traces,
+		SellPrices:  sellPrices,
 		Balance:     balances,
 		Freezes:     freezes,
 		Credit:      standings,

@@ -345,6 +345,7 @@ func TestAFailedFollowUpLeavesTheRequestUnconcluded(t *testing.T) {
 type followUpDouble struct {
 	charges  []string
 	requests []string
+	scopes   []string
 	err      error
 }
 
@@ -353,7 +354,9 @@ func (double *followUpDouble) AfterEstimatedChargeFormed(
 	_ domain.TenantID,
 	request domain.SellEvaluationRequest,
 	charge domain.CustomerChargeID,
+	usedScope domain.EstimatePricingScope,
 ) error {
+	double.scopes = append(double.scopes, usedScope.String())
 	double.charges = append(double.charges, charge.String())
 	double.requests = append(double.requests, request.ID().String())
 	return double.err

@@ -72,6 +72,9 @@ type PreAcceptanceEstimateParcel struct {
 	Currency      string
 	PricingWeight *PreAcceptanceParcelPricingWeight
 	ChargeLines   []PreAcceptanceParcelChargeLine
+	// PricingScope 与 PriceCard 是这一件最终用的销售价格来源和价卡版本字面。空即没另记，估价头上的那一格就是这一件的。
+	PricingScope string
+	PriceCard    string
 }
 
 type PreAcceptanceParcelPricingWeight struct {

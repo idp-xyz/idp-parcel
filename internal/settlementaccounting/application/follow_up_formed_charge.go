@@ -27,6 +27,8 @@ type EstimatedChargeFollowUp interface {
 		tenant domain.TenantID,
 		request domain.SellEvaluationRequest,
 		charge domain.CustomerChargeID,
+		// usedScope 是评价实际用上的销售价格来源。零值表示请求只带一个范围，主要计费范围仍取请求上的那一格。
+		usedScope domain.EstimatePricingScope,
 	) error
 }
 
@@ -64,6 +66,7 @@ func (followUp *FormedChargeConfirmationFollowUp) AfterEstimatedChargeFormed(
 	tenant domain.TenantID,
 	request domain.SellEvaluationRequest,
 	charge domain.CustomerChargeID,
+	usedScope domain.EstimatePricingScope,
 ) error {
 	account, found, err := followUp.deps.Accounts.FindByID(ctx, tenant, request.Account())
 	if err != nil {
@@ -72,7 +75,7 @@ func (followUp *FormedChargeConfirmationFollowUp) AfterEstimatedChargeFormed(
 	if !found {
 		return fmt.Errorf("%w: request %s account %s", ErrSellRequestAccountMissing, request.ID(), request.Account())
 	}
-	registration, err := confirmationFactsOf(charge, request, account)
+	registration, err := confirmationFactsOf(charge, request, account, usedScope)
 	if err != nil {
 		return err
 	}
@@ -108,12 +111,18 @@ func confirmationFactsOf(
 	charge domain.CustomerChargeID,
 	request domain.SellEvaluationRequest,
 	account domain.SettlementAccount,
+	usedScope domain.EstimatePricingScope,
 ) (domain.ChargeConfirmationFactRegistration, error) {
 	contract, err := domain.NewContractBasisReference(account.Responsibility().String())
 	if err != nil {
 		return domain.ChargeConfirmationFactRegistration{}, fmt.Errorf("account responsibility basis: %w", err)
 	}
-	scope, err := domain.NewChargingScopeReference(request.PricingScope().String())
+	// 请求带列表时，主要计费范围取评价实际用上的那一个来源，不取列表的第一项（ADR-0380 决定九）。
+	pricingScope := request.PricingScope().String()
+	if usedScope.String() != "" {
+		pricingScope = usedScope.String()
+	}
+	scope, err := domain.NewChargingScopeReference(pricingScope)
 	if err != nil {
 		return domain.ChargeConfirmationFactRegistration{}, fmt.Errorf("request pricing scope: %w", err)
 	}

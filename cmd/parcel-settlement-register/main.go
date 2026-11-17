@@ -374,6 +374,8 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造 SELL 计费时点采用登记：%w", err)
 	}
+	adoptionHandler.CompareSellBillingMomentScopes(sellMomentStore)
+	sellMomentHandler.CompareEstimateScopes(adoptionStore)
 	feeItemMappingStore, err := sapostgres.NewFeeItemMappings(db)
 	if err != nil {
 		return none, fmt.Errorf("构造费用项目映射册：%w", err)

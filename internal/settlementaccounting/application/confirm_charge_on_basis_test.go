@@ -331,7 +331,7 @@ func TestTheFollowUpRegistersTheSevenFactsFromTheRequestAndItsAccount(t *testing
 	tenant := confirmCommand(t).TenantID
 
 	if err := fixture.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t),
-		billValue(t, domain.NewCustomerChargeID, "charge-1")); err != nil {
+		billValue(t, domain.NewCustomerChargeID, "charge-1"), domain.EstimatePricingScope{}); err != nil {
 		t.Fatal(err)
 	}
 	if len(fixture.facts.saved) != 1 {
@@ -354,6 +354,19 @@ func TestTheFollowUpRegistersTheSevenFactsFromTheRequestAndItsAccount(t *testing
 	}
 }
 
+// Covers: ADR-0380 决定九——请求带列表时，确认事实的主要计费范围是评价实际用上的那一个来源，不是列表的第一项。
+func TestThePrimaryChargingScopeIsTheScopeTheEvaluationUsed(t *testing.T) {
+	fixture := newFollowUpFixture(t)
+	used := billValue(t, domain.NewEstimatePricingScope, "SYN-SCOPE-B")
+	if err := fixture.followUp.AfterEstimatedChargeFormed(t.Context(), confirmCommand(t).TenantID, followUpRequest(t),
+		billValue(t, domain.NewCustomerChargeID, "charge-1"), used); err != nil {
+		t.Fatal(err)
+	}
+	if got := fixture.facts.saved[0].Facts().PrimaryChargingScope.String(); got != "SYN-SCOPE-B" {
+		t.Fatalf("主要计费范围 = %q，want 评价用上的 SYN-SCOPE-B，不是请求上的第一项", got)
+	}
+}
+
 // Covers: AT-SA-219（ADR-0336 决定二）——费用在终局之后才形成：形成那一笔回读到已终局的有效交付，补记依据并按时点确认。
 func TestAChargeFormedAfterTheFinalOutcomeIsConfirmedOnFormation(t *testing.T) {
 	fixture := newFollowUpFixture(t)
@@ -361,7 +374,7 @@ func TestAChargeFormedAfterTheFinalOutcomeIsConfirmedOnFormation(t *testing.T) {
 	fixture.finals.basis = finalBasis(t).Reference
 
 	if err := fixture.followUp.AfterEstimatedChargeFormed(t.Context(), confirmCommand(t).TenantID, followUpRequest(t),
-		billValue(t, domain.NewCustomerChargeID, "charge-1")); err != nil {
+		billValue(t, domain.NewCustomerChargeID, "charge-1"), domain.EstimatePricingScope{}); err != nil {
 		t.Fatal(err)
 	}
 	if len(fixture.basis.bases.recorded) != 1 || fixture.basis.confirm.store.charges["charge-1"].Stage() != domain.ChargeConfirmed {
@@ -378,7 +391,7 @@ func TestFollowUpFailuresAreReturned(t *testing.T) {
 
 	missing := newFollowUpFixture(t)
 	missing.accounts.found = false
-	if err := missing.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t), charge); !errors.Is(err, application.ErrSellRequestAccountMissing) ||
+	if err := missing.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t), charge, domain.EstimatePricingScope{}); !errors.Is(err, application.ErrSellRequestAccountMissing) ||
 		errors.Is(err, application.ErrConfirmationFollowUpUnavailable) {
 		t.Fatalf("账户不在册 err = %v，want 矛盾、不当等依赖", err)
 	}
@@ -394,7 +407,7 @@ func TestFollowUpFailuresAreReturned(t *testing.T) {
 	} {
 		fixture := newFollowUpFixture(t)
 		arrange(fixture)
-		if err := fixture.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t), charge); !errors.Is(err, application.ErrConfirmationFollowUpUnavailable) {
+		if err := fixture.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t), charge, domain.EstimatePricingScope{}); !errors.Is(err, application.ErrConfirmationFollowUpUnavailable) {
 			t.Fatalf("%s读写不动 err = %v，want 等依赖", name, err)
 		}
 	}
@@ -430,7 +443,7 @@ func TestBothEndsSerializeOnTheParcelBeforeReadingTheOtherSide(t *testing.T) {
 
 	followUp := newFollowUpFixture(t)
 	if err := followUp.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t),
-		billValue(t, domain.NewCustomerChargeID, "charge-1")); err != nil {
+		billValue(t, domain.NewCustomerChargeID, "charge-1"), domain.EstimatePricingScope{}); err != nil {
 		t.Fatal(err)
 	}
 	if len(followUp.basis.locks.parcels) != 1 || followUp.basis.locks.parcels[0] != "SYN-PARCEL-1" {
@@ -438,7 +451,7 @@ func TestBothEndsSerializeOnTheParcelBeforeReadingTheOtherSide(t *testing.T) {
 	}
 	followUp.basis.locks.err = errors.New("synthetic lock down")
 	if err := followUp.followUp.AfterEstimatedChargeFormed(t.Context(), tenant, followUpRequest(t),
-		billValue(t, domain.NewCustomerChargeID, "charge-1")); !errors.Is(err, application.ErrConfirmationFollowUpUnavailable) {
+		billValue(t, domain.NewCustomerChargeID, "charge-1"), domain.EstimatePricingScope{}); !errors.Is(err, application.ErrConfirmationFollowUpUnavailable) {
 		t.Fatalf("取不到锁 err = %v", err)
 	}
 }

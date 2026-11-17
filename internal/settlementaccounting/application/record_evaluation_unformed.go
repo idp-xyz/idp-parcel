@@ -28,6 +28,8 @@ type RecordEvaluationUnformedCommand struct {
 	SellRequest domain.SellEvaluationRequestID
 	BuyRequest  domain.EvaluationRequestID
 	Cause       domain.EvaluationStopCause
+	// SourceTrail 是这次问到过的每一个销售价格来源各自的那一格。只带一个范围时为空。
+	SourceTrail []ports.SellPriceSourceStep
 }
 
 // RecordEvaluationUnformedOutcome 是本编排的答案。
@@ -127,6 +129,10 @@ func (handler *RecordEvaluationUnformedHandler) recordSell(
 	if err != nil {
 		return RecordEvaluationUnformedResult{outcome: EvaluationUnformedNotAccepted}, nil
 	}
+	conclusion, err = conclusionWithSourceStops(conclusion, command.SourceTrail, command.Cause)
+	if err != nil {
+		return RecordEvaluationUnformedResult{outcome: EvaluationUnformedNotAccepted}, nil
+	}
 	effect, err := handler.deps.SellConclusions.RecordConclusion(ctx, key, conclusion)
 	if err != nil {
 		return RecordEvaluationUnformedResult{outcome: EvaluationUnformedUndecided, cause: err}, nil
@@ -139,6 +145,58 @@ func (handler *RecordEvaluationUnformedHandler) recordSell(
 			ErrUnformedEvaluationRequestConcluded, command.SellRequest, command.Cause)
 	default:
 		return RecordEvaluationUnformedResult{}, fmt.Errorf("%w: %d", ErrUnexpectedSellRequestConclusionEffect, effect)
+	}
+}
+
+// conclusionWithSourceStops 把问到过的来源各自的那一格附在停下的结论上。空列表原样交回。
+// SELECTED 与 UNDECIDED 不是停因，不记。STOPPED 用请求答出来的那一格：解释只说停住了，没说停在哪一种。
+func conclusionWithSourceStops(
+	conclusion domain.SellEvaluationRequestConclusion,
+	trail []ports.SellPriceSourceStep,
+	fallback domain.EvaluationStopCause,
+) (domain.SellEvaluationRequestConclusion, error) {
+	if len(trail) == 0 {
+		return conclusion, nil
+	}
+	stops := make([]domain.SellPriceSourceStop, 0, len(trail))
+	for _, step := range trail {
+		cause, keep := sellPriceSourceStopCause(step.Kind, fallback)
+		if !keep {
+			continue
+		}
+		scope, err := domain.NewEstimatePricingScope(step.Scope)
+		if err != nil {
+			return domain.SellEvaluationRequestConclusion{}, fmt.Errorf("sell price source %q: %w", step.Scope, err)
+		}
+		stop, err := domain.NewSellPriceSourceStop(scope, cause)
+		if err != nil {
+			return domain.SellEvaluationRequestConclusion{}, err
+		}
+		stops = append(stops, stop)
+	}
+	if len(stops) == 0 {
+		return conclusion, nil
+	}
+	return conclusion.WithSourceStops(stops)
+}
+
+func sellPriceSourceStopCause(kind string, fallback domain.EvaluationStopCause) (domain.EvaluationStopCause, bool) {
+	switch kind {
+	case "NO_CARD":
+		return domain.StopPriceCardNotConfigured, true
+	case "BASE_RATE_NOT_IN_TABLE":
+		return domain.StopEvaluationRateNotFound, true
+	case "APPLICABILITY_CONFLICT":
+		return domain.StopPriceCardApplicabilityConflict, true
+	case "INPUT_UNAVAILABLE":
+		return domain.StopPricingInputUnavailable, true
+	case "STOPPED":
+		if fallback.String() == "" || fallback.Stage() == domain.StopBeforeRequest {
+			return domain.EvaluationStopCauseInvalid, false
+		}
+		return fallback, true
+	default:
+		return domain.EvaluationStopCauseInvalid, false
 	}
 }
 

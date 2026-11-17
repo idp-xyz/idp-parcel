@@ -84,13 +84,13 @@
 | `NOT_FORMED` 未形成 | 评价失败，或计价没形成评价 | 带停因 |
 | `ZERO_TOTAL` 负向结束（零额） | 评价已完成而合计为零 | 不建费用行，不带停因，不续办 |
 
-停因（BUY 与 SELL 共用）：`SETTLEMENT_POLICY_NOT_ADOPTED` `SETTLEMENT_ACCOUNT_NOT_REGISTERED` `SELL_BILLING_MOMENT_NOT_ADOPTED` `PARCEL_HAS_NO_COMMERCIAL_RESOLUTION` `OCCURRENCE_REASON_NOT_REGISTERED` `FEE_ITEM_NOT_REGISTERED` `PRICE_CARD_NOT_CONFIGURED` `PRICE_CARD_APPLICABILITY_CONFLICT` `PRICING_INPUT_UNAVAILABLE` `EVALUATION_PENDING_JUDGMENT` `EVALUATION_UNRATABLE` `EVALUATION_CONFLICT` `EVALUATION_FAILED` `AMOUNT_ROUNDING_UNDECLARED` `CONVERSION_STEP_MISSING` `FEE_ITEM_MAPPING_INCOMPLETE` `EVALUATION_CATALOGUE_UNRESOLVED` `EVALUATION_SERIES_UNRESOLVED` `EVALUATION_RATE_NOT_FOUND` `EVALUATION_INPUT_INCOMPLETE` `PENDING_JUDGMENT_CAUSE_UNRECORDED`。
+停因（BUY 与 SELL 共用）：`SETTLEMENT_POLICY_NOT_ADOPTED` `SETTLEMENT_ACCOUNT_NOT_REGISTERED` `SELL_BILLING_MOMENT_NOT_ADOPTED` `SELL_BILLING_MOMENT_SCOPE_ABSENT` `PARCEL_HAS_NO_COMMERCIAL_RESOLUTION` `OCCURRENCE_REASON_NOT_REGISTERED` `FEE_ITEM_NOT_REGISTERED` `PRICE_CARD_NOT_CONFIGURED` `PRICE_CARD_APPLICABILITY_CONFLICT` `PRICING_INPUT_UNAVAILABLE` `EVALUATION_PENDING_JUDGMENT` `EVALUATION_UNRATABLE` `EVALUATION_CONFLICT` `EVALUATION_FAILED` `AMOUNT_ROUNDING_UNDECLARED` `CONVERSION_STEP_MISSING` `FEE_ITEM_MAPPING_INCOMPLETE` `EVALUATION_CATALOGUE_UNRESOLVED` `EVALUATION_SERIES_UNRESOLVED` `EVALUATION_RATE_NOT_FOUND` `EVALUATION_INPUT_INCOMPLETE` `PENDING_JUDGMENT_CAUSE_UNRECORDED`。
 
 ## 规则
 
 **评价请求与续办**
 
-- 包裹的 SELL 评价按包裹计费时点发起，时点由结算账户采用；没采用不发起。计价范围取自该结算账户的采用登记。
+- 包裹的 SELL 评价按包裹计费时点发起，时点由结算账户采用；没采用不发起。合同有销售价格来源列表时，请求带这份列表，不读采用册上的范围；显式不计销售价不发起、不记停办。没有这一格的旧合同仍读采用册，采用行没登范围就记发起停办，任何登记都不续办。受理前估价读同一次控制所凭的解析：有列表就按列表问，不计销售价或旧合同没登范围答未配置。请求停下时另记下问到过的每个来源自己的停因；带范围的登记只续办问到过、且解得开那一格的来源。确认事实的主要计费范围取评价实际用上的来源。两本采用册的计价范围可缺；两本都带范围时，后登的一本范围不同即冲突。
 - BUY 评价由运输履约的发生项已形成信封发起：协议取自发生项，费用项目取 BUY 触发册上那个原因的一行；册上没有就不发起。
 - 请求停下了不改写。租户补登解得开它的参数后，结算只续办这一次登记解得开的那几件：另起新一代、回指前一代，前一代原样留着。
 - `未配置`照实答，不替租户填默认值。缺的事实不在任何参数册上的，由运营点名一件包裹或一版发生项续办。
@@ -186,8 +186,6 @@
 ## 旧文档写了、代码里还没有的
 
 - **有编排、没有生产入口**：下列用例方法在 `application/` 里有实现和测试，`cmd/` 下没有任何端点、消费者或子命令调用它们——成本分摊与经营结果的形成（`AllocateCostsHandler`，只读口 `/settlement-operating-results` 因此无数据来源）；赔付、应追偿、追偿认可及其调整（`SettleClaimAmountsHandler`）；实际代垫判断与客户代垫回收（`AssessAdvanceRecoveryHandler` 的 `Assess`、`FormRecovery`、`Adjust`）；供应商费用贷项（`Credit`）。
-- **SELL 评价按合同声明的有序计价范围列表选卡**：按已固定的商业解析读合同销售价格约定的口已有（`AdoptedSellPriceArrangementView`，答有序来源、显式不计销售价或这一版合同没有约定），`cmd/` 下没有任何编排调用它。请求上只有单个 `PricingScope`，取自结算账户的采用登记；「合同显式声明不计销售价」时不发起评价同样没有。在做，见 [work.md](../work.md)。
-- **两本采用登记上同一结算账户的计价范围必须相同**：在 Go 代码与迁移里没找到跨册比对。
 - **仓储作业收费发生项那一路**（SELL 请求、仓储计费采用登记、`仓储作业已发生`确认依据、更正版本引起的计价纠错与全额贷记）：搜 `Warehouse`、`仓储` 无对应类型。属可选的仓配履约。
 - **低毛利提示**：搜 `Margin`、`毛利提示` 无对应。
 - **自动核销**（未指定范围时先精确匹配、再按到期日与账期顺序）：核销只按命令写全的分配形成。
