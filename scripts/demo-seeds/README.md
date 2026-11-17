@@ -528,3 +528,7 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
   证据只记 `S`。
   这一步不幂等：跨秒重跑各落一笔委托；同一 UTC 秒内重跑撞同一来源键，提交口答 `200`
   `EXISTING_RESULT`，脚本因要求 `201` 失败退出，不落第二笔。
+
+## 销售价格来源
+
+步骤 `118-sell-price-contracts.sh`、`175-sell-price-exclusive-card.sh`、`505-sell-price-settlement.sh`（票 commercial-four-module-requirements/21）。演示租户另开两位客户，合同从开户起就带销售价格约定，不改 `SYN-CONTRACT-01` / `02`。`SYN-ACCOUNT-21` 只声明公共范围 `SYN-SCOPE-01`；`SYN-ACCOUNT-22` 把专属范围 `SYN-SCOPE-EXCL-01` 排在前面、公共范围排在后面。专属卡 `SYN-PLAN-CN-SG-EXCL-01` 只写谈下来的 Z1，分区目录仍是 `SYN-CAT-ZONE-CN-SG`。两户的估价采用与计费时点采用不登计价范围。灌完后 `check-sell-price-sources.sh` 核对这几格。取值都是合成的，证据记 `S`。

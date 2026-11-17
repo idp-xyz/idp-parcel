@@ -1,0 +1,65 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "businessParties": [
+    {
+      "partyId": "SYN-PARTY-SHIPPER-21",
+      "name": "合成货主三号（演示，单一销售价格来源）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-SHIPPER-21",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-SHIPPER-22",
+      "name": "合成货主四号（演示，专属价在前）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-SHIPPER-22",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "customerAccounts": [
+    {
+      "accountId": "SYN-ACCOUNT-21",
+      "customerPartyId": "SYN-PARTY-SHIPPER-21",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-ACCOUNT-21",
+      "effectiveFrom": "2026-01-02T00:00:00Z"
+    },
+    {
+      "accountId": "SYN-ACCOUNT-22",
+      "customerPartyId": "SYN-PARTY-SHIPPER-22",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-ACCOUNT-22",
+      "effectiveFrom": "2026-01-02T00:00:00Z"
+    }
+  ],
+  "relationships": [
+    {
+      "relationshipId": "SYN-REL-CUSTOMER-21",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-21",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-01",
+      "basis": "SYN-CONTRACT-21",
+      "effectiveStartsAt": "2026-01-05T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-REL-21",
+        "approvedAt": "2026-01-04T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-CUSTOMER-22",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-22",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-01",
+      "basis": "SYN-CONTRACT-22",
+      "effectiveStartsAt": "2026-01-05T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-REL-22",
+        "approvedAt": "2026-01-04T00:00:00Z"
+      }
+    }
+  ]
+}
