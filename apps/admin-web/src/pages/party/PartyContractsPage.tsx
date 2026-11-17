@@ -49,7 +49,8 @@ import { loadCustomerAccountSuggestions } from './reference-inputs';
 import { useLoaded } from './PublicationFormFields';
 import { StatusPill } from '../../components/StatusPill';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
-import { sellPriceArrangementText } from './customer-contract-form';
+import { sellPriceArrangementText, sellPriceScopeMark } from './customer-contract-form';
+import { readSellPriceScope } from '../pricing/api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
   listBusinessParties,
@@ -363,7 +364,8 @@ function CustomerContractsWorkbench({
         renderDetail={(key) => {
           const row = pool.find((candidate) => keyOf(candidate) === key);
           return row ? (
-            <VersionDetailPanel<CustomerContractRecord>
+            <>
+              <VersionDetailPanel<CustomerContractRecord>
               row={row}
               columns={contractColumns}
               title={(record) => ({ objectId: record.objectId, version: record.version })}
@@ -408,6 +410,8 @@ function CustomerContractsWorkbench({
               )}
               onClose={() => setSelectedKey(null)}
             />
+              <SellPriceScopeMarks arrangement={row.sellPriceArrangement} />
+            </>
           ) : null;
         }}
         viewState={catalogueViewState(answer, contracts.length, retry, {
@@ -420,6 +424,36 @@ function CustomerContractsWorkbench({
       />
       <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={retry} />
     </>
+  );
+}
+
+function SellPriceScopeMarks({ arrangement }: { arrangement?: CustomerContractRecord['sellPriceArrangement'] }) {
+  const sources = arrangement?.noSellPriceBasis ? [] : (arrangement?.sources ?? []);
+  const [marks, setMarks] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (sources.length === 0) return;
+    let cancelled = false;
+    for (const source of sources) {
+      void readSellPriceScope(source.pricingScope).then((result) => {
+        if (cancelled) return;
+        const text = result.kind === 'outcome' ? sellPriceScopeMark(result.body.cards) : '在用的卡读不到';
+        setMarks((current) => ({ ...current, [source.pricingScope]: text }));
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [arrangement]);
+  if (sources.length === 0) return null;
+  return (
+    <ul className="mt-3 space-y-1">
+      {sources.map((source) => (
+        <li key={source.pricingScope} className="type-body leading-4">
+          <span className="font-mono">{source.pricingScope}</span>
+          <span className="text-idpxyz-textMuted"> · {marks[source.pricingScope] ?? sellPriceScopeMark(undefined)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

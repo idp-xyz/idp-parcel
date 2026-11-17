@@ -14,6 +14,7 @@ import (
 type pricingCatalogueWiring struct {
 	priceCards               pricinghttp.PriceCardCatalogueReader
 	priceCardContent         pricinghttp.PriceCardContentReader
+	sellPriceScopes          pricinghttp.SellPriceScopeReader
 	priceCardTemplateSpec    pricinghttp.PriceCardTemplateSpecReader
 	referenceSeries          pricinghttp.ReferenceSeriesCatalogueReader
 	referenceSeriesCoverage  pricinghttp.ReferenceSeriesCoverageReader
@@ -30,6 +31,10 @@ func init() {
 			"/pricing-price-cards/content": {
 				method: http.MethodGet, face: operationsReadFace(),
 				probe: "/pricing-price-cards/content?id=SYN-PLAN-CN-SG-01&version=v1",
+			},
+			"/pricing-sell-price-scope": {
+				method: http.MethodGet, face: operationsReadFace(),
+				probe: "/pricing-sell-price-scope?scope=SYN-SCOPE-1",
 			},
 			"/pricing-reference-series":           {method: http.MethodGet, face: operationsReadFace()},
 			"/pricing-reference-series-coverage":  {method: http.MethodGet, face: operationsReadFace()},
@@ -73,6 +78,7 @@ func init() {
 			return pricingCatalogueWiring{
 				priceCards:               pricingCatalog,
 				priceCardContent:         priceCardContent,
+				sellPriceScopes:          priceCardContent,
 				priceCardTemplateSpec:    priceCardTemplateSpec,
 				referenceSeries:          pricingCatalog,
 				referenceSeriesCoverage:  referenceSeriesCoverage,
@@ -85,6 +91,7 @@ func init() {
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricingCatalogueIntake, wiring.priceCards)},
 				{Pattern: "/pricing-price-cards/content", Handler: pricinghttp.NewQueryPriceCardContentEndpoint(pricingCatalogueIntake, wiring.priceCardContent)},
+				{Pattern: "/pricing-sell-price-scope", Handler: pricinghttp.NewQuerySellPriceScopeEndpoint(pricingCatalogueIntake, wiring.sellPriceScopes, systemClock{})},
 				{Pattern: "/pricing-price-card-template/spec", Handler: pricinghttp.NewQueryPriceCardTemplateSpecEndpoint(pricingCatalogueIntake, wiring.priceCardTemplateSpec)},
 				{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, wiring.referenceSeries)},
 				// 覆盖地平线（票 pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」）：一条序列一行，

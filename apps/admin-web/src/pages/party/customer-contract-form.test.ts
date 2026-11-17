@@ -13,6 +13,7 @@ import {
   noSellPriceArrangementNote,
   payloadOf,
   sellPriceArrangementText,
+  sellPriceScopeMark,
   type CustomerContractDraft,
 } from './customer-contract-form';
 
@@ -370,6 +371,9 @@ test('旧合同没有这一格：详情写取自采用登记，不写成空列�
     sellPriceArrangementText({ sources: [{ pricingScope: 'SYN-SCOPE-M' }, { pricingScope: 'SYN-SCOPE-Z' }] }),
     '1. SYN-SCOPE-M；2. SYN-SCOPE-Z',
   );
-  deepEqual(moveSellPriceSource(['SYN-SCOPE-M', 'SYN-SCOPE-Z'], 1, -1), ['SYN-SCOPE-Z', 'SYN-SCOPE-M']);
+  equal(sellPriceScopeMark(undefined), '在用的卡还没读到');
+  equal(sellPriceScopeMark(0), '没有在用的卡');
+  equal(sellPriceScopeMark(1), '有在用的卡');
+  equal(sellPriceScopeMark(2), '有 2 张在用的卡');
 });
 

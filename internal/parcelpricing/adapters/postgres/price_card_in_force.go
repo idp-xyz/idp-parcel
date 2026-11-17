@@ -97,3 +97,54 @@ func (catalog *PriceCards) ResolveInForce(
 		return ports.PriceCardInForceResolution{Outcome: ports.PriceCardApplicabilityConflict, Candidates: candidates}, nil
 	}
 }
+
+// CountCardsInForceRegardlessOfProduct 数这个范围在这一刻有几张在用的卡，不按服务产品收层。
+// 合同页要标的是「这个范围名此刻有没有卡」，不是「某一票货会选中哪一张」：只数不声明产品的卡，会把只卖某个产品的卡标成没有。
+// 截止与退役的折法同 ResolveInForce。不重建方案：坏快照不把「有几张」报成读失败，那一版在评价时仍会自己失败。
+func (catalog *PriceCards) CountCardsInForceRegardlessOfProduct(
+	ctx context.Context,
+	tenant domain.TenantID,
+	scope domain.PricingScopeID,
+	direction domain.PricingDirection,
+	purpose domain.PricingPurpose,
+	at time.Time,
+) (int, error) {
+	if tenant.String() == "" || scope.String() == "" || direction.String() == "" || purpose.String() == "" || at.IsZero() {
+		return 0, fmt.Errorf("count in-force price cards: tenant, scope, direction, purpose and at are required")
+	}
+	querier, err := catalog.db.ReadExecutor(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count in-force price cards: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT `+priceCardRowColumns+`, `+priceCardClosureColumns+`
+		   FROM parcel_pricing.price_card_version v
+		  WHERE tenant_id = $1 AND scope = $2 AND direction = $3 AND purpose = $4
+		    AND effective_from <= $5
+		    AND (effective_to IS NULL OR effective_to > $5)
+		  ORDER BY plan_id, plan_version`,
+		tenant.String(), scope.String(), direction.String(), purpose.String(), at.UTC(),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("count in-force price cards: %w", err)
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		selectable, err := scanSelectablePriceCardRow(rows)
+		if err != nil {
+			return 0, fmt.Errorf("count in-force price cards: %w", err)
+		}
+		selects, err := selectable.selectsAt(at)
+		if err != nil {
+			return 0, fmt.Errorf("count in-force price cards: %w", err)
+		}
+		if selects {
+			count++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("count in-force price cards: %w", err)
+	}
+	return count, nil
+}

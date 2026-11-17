@@ -267,6 +267,14 @@ export function customerContractRenderedPaths(draft: CustomerContractDraft): str
 
 export const noSellPriceArrangementNote = '本版合同没有销售价格约定，计价范围取自结算账户的采用登记';
 
+/** 详情上一个来源旁边的那句。cards 还没读到是另一句，不把没读到写成没有卡。 */
+export function sellPriceScopeMark(cards: number | undefined): string {
+  if (cards === undefined) return '在用的卡还没读到';
+  if (cards <= 0) return '没有在用的卡';
+  if (cards === 1) return '有在用的卡';
+  return `有 ${cards} 张在用的卡`;
+}
+
 /** 详情与批准页用的一句。键缺席不是空列表。此刻有没有在用的卡不在这里判：价卡目录按页、按包含匹配，对不上一个范围名。 */
 export function sellPriceArrangementText(arrangement: SellPriceArrangementRecord | SellPriceArrangementPayload | undefined): string {
   if (!arrangement) return noSellPriceArrangementNote;

@@ -566,6 +566,17 @@ export function listPriceCards(conditions: CatalogueConditions = {}, after: stri
   return exchangeMasterData<PriceCardListResponseBody>(catalogueRequestPath('/pricing-price-cards', conditions, after));
 }
 
+export interface SellPriceScopeBody {
+  outcome: 'SELL_PRICE_SCOPE_IN_FORCE' | 'SELL_PRICE_SCOPE_NOT_CONFIGURED';
+  scope: string;
+  cards: number;
+}
+
+/** 一个范围名此刻有几张在用的 SELL·客户费用卡。合同详情用来标来源，不翻价卡目录。 */
+export function readSellPriceScope(scope: string) {
+  return exchangeMasterData<SellPriceScopeBody>(`/pricing-sell-price-scope?scope=${encodeURIComponent(scope)}`);
+}
+
 /**
  * 价卡内容查阅（GET /pricing-price-cards/content?id=&version=）：一版已登记价卡的规范化文档与登记元数据。
  * `document` 是服务端原样交出的 JSON，形状随规范化版本变，所以这里不给它类型——翻成人话的解析在
