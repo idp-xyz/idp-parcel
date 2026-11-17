@@ -1,7 +1,7 @@
 # 20 管理台：合同页录入与显示销售价格来源，逐个来源标出此刻有没有在用的卡
 
 Category: enhancement
-Status: in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-20-contract-sell-price-page`（worktree `idp-parcel-cfmr20`），基线 `6156f4b43`。此前 ready-for-agent
+Status: resolved——2026-11-17 进 `main`，见「进 main 记录」。此前 in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-20-contract-sell-price-page`（worktree `idp-parcel-cfmr20`），基线 `6156f4b43`。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md)
 地盘：`apps/admin-web/**`。diff 全在这里时照 `docs/agents/workflow.md`「前端切片」一节，一人在 `main` 上直接做
@@ -30,6 +30,19 @@ Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arra
 - 其中一个范围没有在用的卡时，详情页标得出来。
 - 旧规范化版本的合同显示第 2 条那一句，不显示空列表。
 
+## 进 main 记录
+
+2026-11-17，照 `docs/agents/workflow.md`「进 main 的步骤」与 `AGENTS.md`「交付模式」。用户在问题卡上选定「真库验过再评审、进 main」。评审有一处挡上线的，改完才跑全量；全量又撞上一处空指针，改完重跑才落。推送方就是作者会话（Cursor）。
+
+- **验过的代码**：`3a58ab582`，底是 `6156f4b43`。落地时 `main` 仍是它的底，重放是空操作。收口这一笔只改本票、`spec.md` 的子票表、`dox/work.md`「在做」与 `dox/surfaces.md` 那一句，全量与种子没有再跑。推 `main` 的是收口这一笔（快进，含 `3a58ab582`）。
+- **出处**：分支 `cursor/cfmr-20-contract-sell-price-page`。
+- **非作者评审**：一轮，两轴隔离子代理，评审基点 `6156f4b43`，钉 `cd57f0dff`。Spec 轴有阻断，已在 `0f742a7e9` 改掉。Standards 轴没有阻断。没有开第二轮。逐条见 Comments。
+- **生成物**：没有重生成，门已从 CI 摘掉。
+- **全量真库测试**：在 `3a58ab582` 上跑 `scripts/test-full.sh`，退 0；176 个包通过，没有失败。此前在 `0f742a7e9` 上跑过一次，`cmd/parcel-api` 两条装配探针空指针，见 Comments。
+- **灌一次性库**：`scripts/demo-seeds/seed.sh` 灌进 `55432` 上的专用库 `cfmr20_seed`，退 0，库用后已删。
+- **完成判据**：录入顺序、调序、旧合同那一句、点读把 0 写成「没有在用的卡」，都有测试。详情与对象页用同一列，标写在详情栏里面。演示租户上点一遍录入、批准、发布留给票 21。
+- **还开着的**：票 21，见 `dox/work.md`「在做」。
+
 ## Comments
 
 - 2026-11-12：由票 15 拆出。
@@ -37,4 +50,8 @@ Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arra
 - 2026-11-17（认领，票 16 已进 main）：共享树不在 `main` 上，`main` 又已被 `idp-parcel-land` 检出，所以这一票放在自己的工作树里做，不挪那两棵树。
 - 2026-11-17（读口先核了）：价卡目录 `GET /pricing-price-cards` 按页、`q` 是包含匹配，方向能筛，在用与否由页面拿这一页现算。它答不出「这一个范围名此刻有没有在用的 SELL 卡」。本票不在前端猜。逐个来源标卡这一条先不做，等有按范围名点读在用卡的口。
 - 2026-11-17（先做了不靠那口的一半）：录入二选一、来源可增删调序；详情与批准页按顺序写出来，没有这一格的合同写「本版合同没有销售价格约定，计价范围取自结算账户的采用登记」；价格政策发布页写明定价方案绑定是留痕、不决定选卡。
-- 2026-11-17（补上点读）：`GET /pricing-sell-price-scope?scope=` 按范围名精确数此刻在用的 SELL·客户费用卡，不按服务产品收窄。详情里每个来源旁标「没有在用的卡 / 有在用的卡 / 有 N 张」。还没进 `main`。
+- 2026-11-17（补上点读）：`GET /pricing-sell-price-scope?scope=` 按范围名精确数此刻在用的 SELL·客户费用卡，不按服务产品收窄。详情里每个来源旁标「没有在用的卡 / 有在用的卡 / 有 N 张」。
+- 2026-11-17（非作者评审，一轮）：两个隔离子代理，评审基点 `6156f4b43`，钉 `cd57f0dff`。照交付模式只评这一轮、只修挡上线的。
+  1. **Spec 轴有阻断，已改（`0f742a7e9`）。** 在用的卡标写在详情栏外面，栏是满高且 `overflow-hidden`，打开详情看不见。改到「销售价格来源」这一列；详情栏与对象页都用这一列。同一笔把调序测试真正叫了 `moveSellPriceSource`（Standards 轴说标题写了调序、正文没叫；非阻断，顺手改了）。
+  2. **非阻断，没有另改。** 点读不按产品收窄，比「另立后端票」多做了；用户在问题卡上选定把这个口做进本票。价卡目录仍不能当这一问的读口。
+- 2026-11-17（全量）：`0f742a7e9` 上 `scripts/test-full.sh` 里，授予齐备的查阅探针打到没接上的点读口，空指针。未接线占位补上，交回没接线的错误，答复落在 `NO_ANSWER_FORMED`（`3a58ab582`）。两条探针与其后的全量都退 0。
