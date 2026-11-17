@@ -27,9 +27,9 @@ var (
 // CommercialScopeReference 不是一回事：后者是商业版本自己的适用范围，不是选卡键。
 type PricingScopeReference struct{ requiredValue }
 
-// NewPricingScopeReference 不收带首尾空白的名字，也不替写的人去掉：计价一侧的计价范围标识不带首尾空白，带着空白的
-// 名字指不到任何范围；收下它，「同一范围不出现两次」就能被一个空格绕过。本包其余开放引用照原串收，这一格更严，是
-// 因为它要逐字对上另一个上下文的标识。
+// NewPricingScopeReference 不收带首尾空白的名字，也不替写的人去掉：这个名字要逐字对上计价一侧的计价范围标识，而
+// 那边的构造门（parcelpricing 领域的 NewPricingScopeID）不收首尾空白，带着空白的名字指不到任何范围；收下它，「同一
+// 范围不出现两次」就能被一个空格绕过。判据同 NewExternalReference：要与对方逐字比对的码不带首尾空白。
 func NewPricingScopeReference(value string) (PricingScopeReference, error) {
 	required, err := newRequiredValue("pricing scope reference", value)
 	if err != nil {
