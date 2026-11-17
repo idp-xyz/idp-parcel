@@ -72,6 +72,8 @@ type publicationRegistryDouble struct {
 	savedSourceDataAmendments []domain.SourceDataAmendmentAllowanceContent
 
 	savedDeliveryConditions []domain.DeliveryConditionContent
+
+	savedSellPrice []domain.ContractSellPriceArrangement
 }
 
 func (double *publicationRegistryDouble) SaveDeliveryConditions(

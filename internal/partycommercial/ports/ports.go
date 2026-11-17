@@ -905,6 +905,13 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		contract domain.CustomerContract,
 	) (DeclarationSaveOutcome, error)
+	// SaveContractSellPriceArrangement 登记一份客户合同版本的销售价格约定（ADR-0380 决定一）：一份有序的销售价格
+	// 来源，或显式不计销售价并带依据。它不代替 SaveVersion，只能跟在它后面。来源的顺序是正文：同一组计价范围换了
+	// 顺序是内容冲突，不是重放。
+	SaveContractSellPriceArrangement(
+		ctx context.Context,
+		arrangement domain.ContractSellPriceArrangement,
+	) (DeclarationSaveOutcome, error)
 	SaveIntakeQualification(
 		ctx context.Context,
 		content domain.IntakeQualificationContent,
@@ -1899,12 +1906,24 @@ type CustomerContractCatalogueRow struct {
 	HasContent         bool
 	Bindings           []ControlBindingRow
 	DeliveryConditions *DeliveryConditionCatalogueRow
+	// SellPrice 是这一版的销售价格约定（0049；ADR-0380 决定一），nil 即这一版合同没有销售价格约定——加这一层之前
+	// 发布的合同都是这一种。目录如实交回 nil，不补默认，也不拿空列表顶。
+	SellPrice *SellPriceArrangementCatalogueRow
 
 	// 收尾回显，含义同 SupplierAgreementCatalogueRow 的同名四格（ADR-0233 决定五）：原区间仍在 Effective* 两格，不被覆盖。
 	SelectionEndsAt time.Time
 	HasSelectionCut bool
 	RetiredAt       time.Time
 	Successor       string
+}
+
+// SellPriceArrangementCatalogueRow 是一份客户合同版本的销售价格约定在目录上的转写。Sources 按合同声明的顺序，
+// 不按范围名排——顺序就是取价的先后；NoSellPriceBasis 非空即合同显式声明不计销售价，此时 Sources 为空。两格恰有
+// 一个在场，读回两者皆有或皆无即坏数据，由装载方上抛。
+type SellPriceArrangementCatalogueRow struct {
+	Sources          []string
+	NoSellPriceBasis string
+	DeclaredAt       time.Time
 }
 
 // SupplierAgreementCatalogueRow 是供应商协议目录上列的一行:一份已入册的供应商

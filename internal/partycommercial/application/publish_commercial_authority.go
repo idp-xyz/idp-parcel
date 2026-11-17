@@ -101,6 +101,17 @@ type CommercialDeclarations struct {
 	// AuthorityGrant 挂在授权规则版本上（ADR-0312）：这一版授予谁（法人 × 等级）在哪个范围、哪段区间内做哪个动作。
 	// 一个版本一条（授权册主键即版本）。等级是租户登记的串，本上下文不认任何具体值。
 	AuthorityGrant *AuthorityGrantDeclaration
+	// SellPriceArrangement 挂在客户合同版本上（ADR-0380 决定一）：包裹的 SELL 客户费用按哪几个计价范围、依什么
+	// 顺序取价，或显式不计销售价。它是合同正文的一层，随 ContractContent 折进同一个内容摘要；整节缺席就是这一版
+	// 合同没有销售价格约定。是指针不是切片：不计销售价的约定没有来源，len 表达不了在不在场。
+	SellPriceArrangement *SellPriceArrangementDeclaration
+}
+
+// SellPriceArrangementDeclaration 是销售价格约定的声明输入：来源列表与不计销售价的依据两格，恰一在场由领域构造门
+// 判，用例不代选。Sources 的顺序原样交给领域——顺序就是取价的先后。
+type SellPriceArrangementDeclaration struct {
+	Sources          []domain.PricingScopeReference
+	NoSellPriceBasis domain.NoSellPriceBasis
 }
 
 // AuthorityGrantDeclaration 是授予的声明输入：Authorize 逐字匹配的那五格，版本由发布的版本带。
@@ -132,7 +143,8 @@ func (declarations CommercialDeclarations) empty() bool {
 		len(declarations.ContractDelegations) == 0 &&
 		declarations.SourceDataAmendment == nil &&
 		declarations.DeliveryConditions == nil &&
-		declarations.AuthorityGrant == nil
+		declarations.AuthorityGrant == nil &&
+		declarations.SellPriceArrangement == nil
 }
 
 // AcceptanceContentDeclaration 是接单规则包的接受内容声明输入（ADR-0042）。
@@ -302,6 +314,7 @@ const (
 	SourceDataAmendmentChannel
 	DeliveryConditionChannel
 	AuthorityGrantChannel
+	ContractSellPriceChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -346,6 +359,8 @@ func (channel DeclarationChannel) String() string {
 		return "DELIVERY_CONDITION"
 	case AuthorityGrantChannel:
 		return "AUTHORITY_GRANT"
+	case ContractSellPriceChannel:
+		return "CONTRACT_SELL_PRICE"
 	default:
 		return ""
 	}
@@ -710,6 +725,12 @@ func publicationContentOf(
 		}
 		if declarations.DeliveryConditions != nil {
 			content.CustomerContract.DeliveryConditions = deliveryConditionBodyOf(*declarations.DeliveryConditions)
+		}
+		if declarations.SellPriceArrangement != nil {
+			content.CustomerContract.SellPrice = &domain.SellPriceArrangementBody{
+				Sources:          declarations.SellPriceArrangement.Sources,
+				NoSellPriceBasis: declarations.SellPriceArrangement.NoSellPriceBasis,
+			}
 		}
 		return content, true
 	case domain.AuthorizationRuleObject:
@@ -1180,6 +1201,22 @@ func declarationWrites(
 			channel: DeliveryConditionChannel,
 			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
 				return registry.SaveDeliveryConditions(ctx, content)
+			},
+		})
+	}
+
+	if declarations.SellPriceArrangement != nil {
+		// 归属与两格恰一由领域构造门把守（ADR-0380 决定一）：挂在客户合同之外的版本上、两种都没声明或都声明、
+		// 同一计价范围两次，都在这里拒，不静默丢弃。
+		arrangement, err := domain.DeclareContractSellPrice(
+			version, declarations.SellPriceArrangement.Sources, declarations.SellPriceArrangement.NoSellPriceBasis)
+		if err != nil {
+			return nil, fmt.Errorf("sell price arrangement: %w", err)
+		}
+		writes = append(writes, declarationWrite{
+			channel: ContractSellPriceChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				return registry.SaveContractSellPriceArrangement(ctx, arrangement)
 			},
 		})
 	}
