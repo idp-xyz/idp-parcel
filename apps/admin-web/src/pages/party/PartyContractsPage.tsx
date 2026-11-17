@@ -129,7 +129,12 @@ const columns: WorkbenchColumn<CustomerContractRecord>[] = [
   {
     key: 'sell-price',
     header: '销售价格来源',
-    render: (row) => <span className="type-body leading-4">{sellPriceArrangementText(row.sellPriceArrangement)}</span>,
+    render: (row) => (
+      <div className="type-body leading-4">
+        <div>{sellPriceArrangementText(row.sellPriceArrangement)}</div>
+        <SellPriceScopeMarks arrangement={row.sellPriceArrangement} />
+      </div>
+    ),
   },
   {
     // 合同层交付条件（0030，票 admin-write-faces/25）：与正文是两层各自可缺，这一格不看 contentRegistered，只看键在不在。
@@ -364,8 +369,7 @@ function CustomerContractsWorkbench({
         renderDetail={(key) => {
           const row = pool.find((candidate) => keyOf(candidate) === key);
           return row ? (
-            <>
-              <VersionDetailPanel<CustomerContractRecord>
+            <VersionDetailPanel<CustomerContractRecord>
               row={row}
               columns={contractColumns}
               title={(record) => ({ objectId: record.objectId, version: record.version })}
@@ -410,8 +414,6 @@ function CustomerContractsWorkbench({
               )}
               onClose={() => setSelectedKey(null)}
             />
-              <SellPriceScopeMarks arrangement={row.sellPriceArrangement} />
-            </>
           ) : null;
         }}
         viewState={catalogueViewState(answer, contracts.length, retry, {
