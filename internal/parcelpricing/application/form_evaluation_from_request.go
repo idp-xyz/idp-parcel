@@ -117,6 +117,9 @@ type FormEvaluationFromRequestCommand struct {
 	Sources    ports.EligibleSourceReferences
 	Settlement domain.Currency
 	Evidence   domain.EvidenceKind
+	// Scopes 是有序的销售价格来源（ADR-0380 决定三）。空或只有一项时不看它，请求只按 Scope 走，结果与今天
+	// 逐字节相同。多于一项时只对 SELL·客户费用按这个顺序问；Scope 必须是第一项。
+	Scopes []domain.PricingScopeID
 }
 
 // FormEvaluationFromRequestResult 是入口的答复。字段导出、不设访问器，形状随 ReplayPricingEvaluationResult：
@@ -137,7 +140,27 @@ type FormEvaluationFromRequestResult struct {
 	ServiceProduct domain.ServiceProductReference
 	// Missing 只在输入不可得时有值：缺的读口或事实，一条一件，文字给人读。
 	Missing []string
+	// ScopeTrail 是这次问到过的每一个销售价格来源各自的那一格，按询问顺序。只带一个范围时为空：
+	// 那一格就是 Outcome 自己。排在停住的来源之后的没有问到，不在这里。
+	ScopeTrail []SellPriceSourceStep
 }
+
+// SellPriceSourceStep 是有序范围列表里问到的一格（ADR-0380 决定三）。Kind 是这一格的结论：
+// 没有在用卡、基础运费表没有这一格、或停住的那一格（适用冲突、输入不可得、附加费表缺档、已形成等）。
+type SellPriceSourceStep struct {
+	Scope domain.PricingScopeID
+	Kind  string
+}
+
+const (
+	SellPriceSourceNoCard           = "NO_CARD"
+	SellPriceSourceBaseRateMissing  = "BASE_RATE_NOT_IN_TABLE"
+	SellPriceSourceConflict         = "APPLICABILITY_CONFLICT"
+	SellPriceSourceInputUnavailable = "INPUT_UNAVAILABLE"
+	SellPriceSourceUndecided        = "UNDECIDED"
+	SellPriceSourceStopped          = "STOPPED"
+	SellPriceSourceSelected         = "SELECTED"
+)
 
 // FormEvaluationFromRequestDeps 是入口的依赖。除 Inputs 外都必备：回指读口守「同一请求一份评价」、解析读口是第 ① 步、
 // 铸造口签评价标识、既有评价编排是第 ③ 步；ServiceProducts 是 SELL 请求选卡前读委托申报产品的那一口（ADR-0382 决定三）。
@@ -213,6 +236,20 @@ func (handler *FormEvaluationFromRequestHandler) Handle(
 	if err != nil {
 		return undecidedFormation(RequestServiceProductUnavailable), nil
 	}
+	if command.walksSellPriceSources() {
+		return handler.formAcrossSellPriceSources(ctx, command, product)
+	}
+	return handler.formOneScope(ctx, command, product, nil)
+}
+
+// formOneScope 是原来的单范围形成：解析这一格的在用卡、造快照、铸标识、交既有评价编排。notes 只在有序列表问过
+// 不止一格时有内容，写进解释、不进摘要。
+func (handler *FormEvaluationFromRequestHandler) formOneScope(
+	ctx context.Context,
+	command FormEvaluationFromRequestCommand,
+	product domain.ServiceProductReference,
+	notes []string,
+) (FormEvaluationFromRequestResult, error) {
 	resolution, err := handler.deps.PriceCards.ResolveInForce(ctx, command.Tenant, command.Scope, command.Direction, command.Purpose, command.BasisAt,
 		product)
 	if err != nil {
@@ -256,6 +293,7 @@ func (handler *FormEvaluationFromRequestHandler) Handle(
 	if err != nil {
 		return FormEvaluationFromRequestResult{Outcome: RequestEvaluationNotAccepted}, nil
 	}
+	request = request.WithSellPriceSourceNotes(notes...)
 
 	formed, err := handler.deps.Evaluate.Handle(ctx, EvaluatePricingCommand{Request: request})
 	if err != nil {
@@ -338,6 +376,24 @@ func (command FormEvaluationFromRequestCommand) accepted() bool {
 	if command.Tenant.String() == "" || command.Request.String() == "" || command.Scope.String() == "" ||
 		command.BasisAt.IsZero() {
 		return false
+	}
+	if len(command.Scopes) > 0 {
+		if command.Scopes[0] != command.Scope {
+			return false
+		}
+		seen := make(map[domain.PricingScopeID]struct{}, len(command.Scopes))
+		for _, scope := range command.Scopes {
+			if scope.String() == "" {
+				return false
+			}
+			if _, repeated := seen[scope]; repeated {
+				return false
+			}
+			seen[scope] = struct{}{}
+		}
+		if len(command.Scopes) > 1 && !command.sellCustomerCharge() {
+			return false
+		}
 	}
 	if !command.Sources.OccurrenceReferenced() && !command.Sources.ParcelReferenced() {
 		return false

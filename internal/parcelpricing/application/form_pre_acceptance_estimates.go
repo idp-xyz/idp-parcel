@@ -92,6 +92,12 @@ type FormPreAcceptanceEstimatesCommand struct {
 	SubmissionVersion string
 	At                time.Time
 	Settlement        domain.Currency
+	// Scopes 是有序的销售价格来源（ADR-0380 决定三）。空或一项时不看它，仍按 Scope 给全部件用同一张卡。
+	// 多于一项时每件各自按这个顺序问；Scope 必须是第一项。
+	Scopes []domain.PricingScopeID
+	// Zone 是调用方已经定下的分区。只在按有序列表逐件问、且价卡不绑分区目录时用；空则仍只按申报的邮编路线。
+	// 只带一个范围的路不读它。
+	Zone string
 }
 
 // PreAcceptanceParcelEstimate 是一件声明包裹的结果。Answer 与缺项码沿用 UC-PP-001 逐卡那一格的词（EstimateCandidateAnswer、
@@ -101,6 +107,10 @@ type PreAcceptanceParcelEstimate struct {
 	Answer     EstimateCandidateAnswer
 	Evaluation domain.PricingEvaluation
 	Missing    []string
+	// Scope 是这一件最终用的销售价格来源。只带一个范围时为零：那一格就是命令上的 Scope，卡在结果的 Plan 上。
+	Scope domain.PricingScopeID
+	// SourceTrail 是这一件问到过的每一个来源各自的那一格。只带一个范围时为空。
+	SourceTrail []SellPriceSourceStep
 }
 
 // FormPreAcceptanceEstimatesResult 是入口的答复。Plan 在选到卡之后的各格都有值；Estimates 在已形成与缺件两格有值；Conflict 只在
@@ -161,6 +171,9 @@ func (handler *FormPreAcceptanceEstimatesHandler) Handle(
 	}
 	if !found || len(declaration.Parcels) == 0 {
 		return FormPreAcceptanceEstimatesResult{Outcome: PreAcceptanceSubmissionNotVisible}, nil
+	}
+	if len(command.Scopes) > 1 {
+		return handler.estimateAcrossSellPriceSources(ctx, command, declaration)
 	}
 
 	resolution, err := handler.deps.PriceCards.ResolveInForce(ctx, command.Tenant, command.Scope,
@@ -277,12 +290,28 @@ func preAcceptanceSubject(command FormPreAcceptanceEstimatesCommand, parcel stri
 // accepted 是受理门：租户、计价范围、两个引用、时点与结算币种都在，引用不带两侧空白。币种不给默认——估价按哪个币种出，是控制
 // 作用域说的话。
 func (command FormPreAcceptanceEstimatesCommand) accepted() bool {
-	return command.Tenant.String() != "" &&
-		command.Scope.String() != "" &&
-		trimmedReference(command.ShipmentRequest) &&
-		trimmedReference(command.SubmissionVersion) &&
-		!command.At.IsZero() &&
-		command.Settlement.String() != ""
+	if command.Tenant.String() == "" || command.Scope.String() == "" ||
+		!trimmedReference(command.ShipmentRequest) || !trimmedReference(command.SubmissionVersion) ||
+		command.At.IsZero() || command.Settlement.String() == "" {
+		return false
+	}
+	if len(command.Scopes) == 0 {
+		return true
+	}
+	if command.Scopes[0] != command.Scope {
+		return false
+	}
+	seen := make(map[domain.PricingScopeID]struct{}, len(command.Scopes))
+	for _, scope := range command.Scopes {
+		if scope.String() == "" {
+			return false
+		}
+		if _, repeated := seen[scope]; repeated {
+			return false
+		}
+		seen[scope] = struct{}{}
+	}
+	return true
 }
 
 func trimmedReference(reference string) bool {

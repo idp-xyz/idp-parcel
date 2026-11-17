@@ -187,6 +187,9 @@ type EvaluationRequest struct {
 	expectedContentDigest    string
 	expectedCanonicalization string
 	seriesNotes              []string
+	// sellPriceSourceNotes 是按有序范围列表问过的每一格（ADR-0380 决定三）。只进解释，不进语义摘要：
+	// 只带一个范围的请求不写它，解释与摘要都与今天逐字节相同。
+	sellPriceSourceNotes []string
 	// requestReference 是这份评价为哪一份 SA 评价请求而形成（票 sa-cc/11 裁决 2），可缺席：PP 内部或测试路径
 	// 形成的评价没有它。它不是计算输入，与 replayOf 同一族——随评价入册、供读口按它取，不进任何摘要。
 	requestReference *EvaluationRequestReference
@@ -226,7 +229,23 @@ func (request EvaluationRequest) WithInput(input PricingInputSnapshot) (Evaluati
 	copyOfRequest := request
 	copyOfRequest.input = copyInputSnapshot(input)
 	copyOfRequest.seriesNotes = append([]string(nil), request.seriesNotes...)
+	copyOfRequest.sellPriceSourceNotes = append([]string(nil), request.sellPriceSourceNotes...)
 	return copyOfRequest, nil
+}
+
+// WithSellPriceSourceNotes 带上有序范围列表里问到过的每一格。空笔记原样交回。只进解释，不进语义摘要。
+func (request EvaluationRequest) WithSellPriceSourceNotes(notes ...string) EvaluationRequest {
+	if len(notes) == 0 {
+		return request
+	}
+	copyOfRequest := request
+	copyOfRequest.sellPriceSourceNotes = append([]string(nil), request.sellPriceSourceNotes...)
+	for _, note := range notes {
+		if trimmed(note) {
+			copyOfRequest.sellPriceSourceNotes = append(copyOfRequest.sellPriceSourceNotes, note)
+		}
+	}
+	return copyOfRequest
 }
 
 // WithSeriesResolutionNotes 带上编排层在解析在用序列版本时留下的说明（无已登记版本 /
@@ -236,6 +255,7 @@ func (request EvaluationRequest) WithInput(input PricingInputSnapshot) (Evaluati
 func (request EvaluationRequest) WithSeriesResolutionNotes(notes ...string) EvaluationRequest {
 	copyOfRequest := request
 	copyOfRequest.seriesNotes = append([]string(nil), request.seriesNotes...)
+	copyOfRequest.sellPriceSourceNotes = append([]string(nil), request.sellPriceSourceNotes...)
 	for _, note := range notes {
 		if trimmed(note) {
 			copyOfRequest.seriesNotes = append(copyOfRequest.seriesNotes, note)
@@ -339,7 +359,10 @@ type PricingEvaluation struct {
 	unitConversions []UnitConversionStep
 	issues          []EvaluationIssue
 	explanation     []string
-	semanticDigest  string
+	// baseRateTableMiss 只给「按有序范围列表问下一个」用：基础运费表没有这一格。不进语义摘要，
+	// 只带一个范围的评价摘要因此一个字节不动（ADR-0380 决定三）。
+	baseRateTableMiss bool
+	semanticDigest    string
 }
 
 // amountPrecisionUndeclaredIssue 是 ADR-0107 Decision 四那条结构化问题项的编码：卡没声明金额取整
@@ -544,6 +567,12 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 
 	matchedRate, err := request.plan.rateTable.Lookup(zone, pricingWeight.rounded)
 	if err != nil {
+		// 基础运费表缺这一格与附加费表缺档今天都是 ErrNoMatchingRate。落空只认基础运费表这一次查表
+		// （ADR-0380 决定三），所以在这里包一层；Error 仍是查表原来的文字，问题码仍是 RATE_NOT_FOUND，
+		// 只带一个范围的评价摘要因此不变。附加费表的查表不包，缺档停在这张卡上。
+		if errors.Is(err, ErrNoMatchingRate) {
+			err = baseRateTableMiss{err}
+		}
 		return evaluation.withCalculationError(err)
 	}
 	evaluation.matchedRate = &matchedRate
@@ -1189,7 +1218,7 @@ func baseEvaluation(request EvaluationRequest) PricingEvaluation {
 		planContentDigest:    request.plan.contentDigest,
 		planCanonicalization: request.plan.canonicalization,
 		manifest:             composeEvaluationManifest(request.plan, request.input),
-		explanation:          append([]string(nil), request.seriesNotes...),
+		explanation:          append(append([]string(nil), request.sellPriceSourceNotes...), request.seriesNotes...),
 	}
 }
 
@@ -1212,7 +1241,14 @@ func composeEvaluationManifest(plan PricingPlanVersion, input PricingInputSnapsh
 	return manifest
 }
 
+// baseRateTableMiss 只包基础运费表那一次查表的 ErrNoMatchingRate。Error 用内层的原文，问题项的文字不变。
+type baseRateTableMiss struct{ error }
+
+func (miss baseRateTableMiss) Unwrap() error { return miss.error }
+
 func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvaluation {
+	var baseMiss baseRateTableMiss
+	missedBaseRate := errors.As(err, &baseMiss)
 	switch {
 	case errors.Is(err, ErrMissingDimensions):
 		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("DIMENSIONS_REQUIRED", err.Error()))
@@ -1220,7 +1256,9 @@ func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvalu
 	case errors.Is(err, ErrAddressNatureRequired):
 		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("ADDRESS_NATURE_REQUIRED", err.Error()))
 	case errors.Is(err, ErrNoMatchingRate):
-		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("RATE_NOT_FOUND", err.Error()))
+		evaluation = evaluation.withOutcome(EvaluationPending, newEvaluationIssue("RATE_NOT_FOUND", err.Error()))
+		evaluation.baseRateTableMiss = missedBaseRate
+		return evaluation
 	// 分区 / 档位两格分开（ADR-0109 Decision 四）：前者影响基础运费查表，后者只影响一类附加费，续办不同。
 	case errors.Is(err, ErrZoneUnresolved):
 		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("ZONE_UNRESOLVED", err.Error()))
@@ -1242,6 +1280,12 @@ func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvalu
 	default:
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("CALCULATION_FAILED", err.Error()))
 	}
+}
+
+// BaseRateTableMiss 答这份评价是不是停在基础运费表没有这一格上。附加费表缺档也是 RATE_NOT_FOUND，
+// 这里为假：那是这张卡自己的空档，不算换下一个范围的落空（ADR-0380 决定三）。这一格不进语义摘要。
+func (evaluation PricingEvaluation) BaseRateTableMiss() bool {
+	return evaluation.baseRateTableMiss
 }
 
 // unresolvedSeriesIssue 把「缺一期序列取值」译成带主体的问题项（ADR-0105 Decision 一）：错误里带着绑定时填

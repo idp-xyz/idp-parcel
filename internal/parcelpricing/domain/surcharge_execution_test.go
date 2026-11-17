@@ -143,6 +143,32 @@ func TestTableLookupSurchargeWithNoBandForTheZoneStaysPending(t *testing.T) {
 	if evaluation.Status() != domain.EvaluationPending {
 		t.Fatalf("status = %s, issues = %#v, want PENDING", evaluation.Status(), evaluation.Issues())
 	}
+	if evaluation.BaseRateTableMiss() {
+		t.Fatal("附加费表缺档被当成基础运费表落空")
+	}
+}
+
+// Covers: ADR-0380 决定三第 2 种落空只认基础运费表。同一份「没有这一格」的错，基础运费表标成落空，
+// 问题码仍是 RATE_NOT_FOUND。
+func TestABaseRateTableGapIsASellPriceSourceMiss(t *testing.T) {
+	plan := planWithStructures(t, declaredSurcharges(t))
+	request, err := domain.NewEvaluationRequest(
+		mustValue(t, domain.NewEvaluationID, "eval-base-rate-gap"),
+		plan,
+		syntheticInput(t, "5", "Z9"),
+		domain.EvidenceSynthetic,
+	)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	evaluation := domain.EvaluatePricing(request)
+	if !evaluation.BaseRateTableMiss() {
+		t.Fatalf("status = %s issues = %#v，want 基础运费表落空", evaluation.Status(), evaluation.Issues())
+	}
+	issues := evaluation.Issues()
+	if len(issues) != 1 || issues[0].Code() != "RATE_NOT_FOUND" {
+		t.Fatalf("issues = %#v，want 仍是 RATE_NOT_FOUND", issues)
+	}
 }
 
 func tableSurcharge(t testing.TB, zone, amount string) domain.SurchargeCalculation {
