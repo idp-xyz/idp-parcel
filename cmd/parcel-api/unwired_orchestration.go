@@ -827,6 +827,21 @@ func (unwiredPriceCardContent) ReadPriceCardContent(
 	return pricingports.PriceCardContent{}, false, errOrchestrationNotWired
 }
 
+// unwiredSellPriceScope 是按范围名点读在用售价卡的占位。生产上这一口与价卡内容共用一只 PriceCards，
+// 占位仍分开：并进内容占位会让装配测试盖不住「这一口没接」。
+type unwiredSellPriceScope struct{}
+
+func (unwiredSellPriceScope) CountCardsInForceRegardlessOfProduct(
+	context.Context,
+	pricingdomain.TenantID,
+	pricingdomain.PricingScopeID,
+	pricingdomain.PricingDirection,
+	pricingdomain.PricingPurpose,
+	time.Time,
+) (int, error) {
+	return 0, errOrchestrationNotWired
+}
+
 // unwiredPriceCardTemplateSpec 是价卡导入模板规格读口的占位。生产装配点上它是进程内的静态规格、读它不会失败；占位如实答没接线，
 // 装配测试因此核得到这一行「接线是否到位」，而不是因为内容静态就从核对里缺席。
 type unwiredPriceCardTemplateSpec struct{}
