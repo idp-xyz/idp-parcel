@@ -98,5 +98,5 @@ if [[ -x /usr/local/go/bin/go ]]; then
 fi
 export IDP_PARCEL_DEMO_CHECK=1
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
-(cd "$repo" && go test -count=1 -run TestDemoSellPriceWalk ./scripts/demo-seeds/sellpricewalk/)
+(cd "$repo" && go test -count=1 -v -run TestDemoSellPriceWalk ./scripts/demo-seeds/sellpricewalk/)
 
