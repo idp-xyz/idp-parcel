@@ -1,7 +1,7 @@
 # 17 销售价格来源随接受时固定的商业解析一起固定，结算有口读它
 
 Category: enhancement
-Status: in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-17-sell-price-sources-fixed-with-resolution`（worktree `idp-parcel-cfmr17`），基线 `7d6fcabea`。此前 ready-for-agent
+Status: resolved——2026-11-17 进 `main` `f6753ecd7`，见「进 main 记录」。此前 in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-17-sell-price-sources-fixed-with-resolution`（worktree `idp-parcel-cfmr17`），基线 `7d6fcabea`。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 无。票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md) 已于 2026-11-17 进 `main` `bdba71e9d`。
 地盘：`internal/partycommercial`（闭包、快照与读口）、`internal/settlementaccounting/adapters/partycommercial`
@@ -28,6 +28,20 @@ Blocked by: 无。票 [16](./16-the-customer-contract-body-carries-the-sell-pric
 - 三种答复各有一条测试；跨租户读不到。
 - 领域包不依赖 HTTP 与 `pgx`；结算一侧只经它自己的消费侧端口读。
 - `UC-PC-002`「给开发的交接」里讲销售价格约定的那一段随之删去或改成现状。
+
+## 进 main 记录
+
+2026-11-17，照 `docs/agents/workflow.md`「进 main 的步骤」与 `AGENTS.md`「交付模式」。这条链怎样落，用户在票 16 上定过：评审无阻断就跑全量测试与种子并落 `main`；本票照同一条办，落之前没有再问。推送方就是作者会话（Cursor）。
+
+- **`main` 上的 SHA**：`a8b2b6600`、`2ad4a88b8`、`7431d6d8c`、`f6753ecd7`，底是 `7d6fcabea`。推的是验过的那个 SHA 本身，非强推；推后 `git ls-remote origin refs/heads/main` 答 `f6753ecd7`。
+- **出处**：分支 `cursor/cfmr-17-sell-price-sources-fixed-with-resolution`。落地时 `main` 仍是它的底，重放是空操作，SHA 没有换。
+- **非作者评审**：一轮，两轴隔离子代理，评审基点 `7d6fcabea`，钉 `7431d6d8c`，两轴无阻断。逐条见 Comments。其后的 `f6753ecd7`（一句注释、`dox/work.md` 两行与票面）自审。
+- **生成物**：没有重生成，门已从 CI 摘掉。
+- **全量真库测试**：在 `f6753ecd7` 的干净检出上跑 `scripts/test-full.sh`，退 0；176 个包通过，没有失败。
+- **灌一次性库**：`scripts/demo-seeds/seed.sh` 灌进一只专用的一次性库，退 0，库用后已删。本票没有迁移，也没有动种子。
+- **CI**：`f6753ecd7` 那一次推送的 Parcel CI 全部作业成功（静态检查、管理台、各测试分片）。
+- **收口这一笔**：只改本票与 `spec.md` 的子票表，自审；全量测试与种子未跑。
+- **还开着的**：这条链余下的票 18 至 21，见 `dox/work.md`「在做」；读约定的口还没有调用方，合同上登的销售价格约定在票 19 落地之前不决定计费。`dox/work.md`「评审留下、不挡上线的」里有本票留下的两行。
 
 ## Comments
 
