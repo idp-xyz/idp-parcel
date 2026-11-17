@@ -400,6 +400,7 @@ type pcPersistence struct {
 	resolutions  *pcpostgres.CommercialResolutions
 	contents     *pcpostgres.PreAcceptanceFinancialControlPolicyContents
 	publications *pcpostgres.CommercialPublications
+	arrangements *pcpostgres.ContractSellPriceArrangements
 	transactor   bentoapp.Transactor
 	pool         *pgxpool.Pool
 }
@@ -427,11 +428,16 @@ func newPersistence(t *testing.T) pcPersistence {
 	if err != nil {
 		t.Fatalf("构造发布写口：%v", err)
 	}
+	arrangements, err := pcpostgres.NewContractSellPriceArrangements(db)
+	if err != nil {
+		t.Fatalf("构造销售价格约定读口：%v", err)
+	}
 	return pcPersistence{
 		declarations: declarations,
 		resolutions:  resolutions,
 		contents:     contents,
 		publications: publications,
+		arrangements: arrangements,
 		transactor:   db.Transactor(),
 		pool:         pool,
 	}
