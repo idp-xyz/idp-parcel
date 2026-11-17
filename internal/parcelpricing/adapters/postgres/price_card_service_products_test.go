@@ -379,3 +379,38 @@ func TestAnExpiredNamedCardFallsThroughToTheUnnamedCard(t *testing.T) {
 		}
 	}
 }
+
+// Covers: 合同页点读数的是这个范围名此刻有几张在用的售价卡，不按服务产品收层。只指名产品的卡，不申报产品的解析答没有，这里仍数到。
+func TestTheContractPageCountsAProductNamedCardTheUnnamedResolverMisses(t *testing.T) {
+	catalog, transactor := newPriceCards(t)
+	ctx := t.Context()
+	registerCard(t, catalog, transactor, ctx, cardRegistration(t, "tenant-a", sellCard(t, "plan-fba", productFBA)))
+	if got := resolveForProduct(t, catalog, ""); got.Outcome != ports.PriceCardNotConfigured {
+		t.Fatalf("不申报产品时 outcome = %s，want NOT_CONFIGURED", got.Outcome)
+	}
+	if got := countSellCards(t, catalog, "tenant-a", "scope-1"); got != 1 {
+		t.Fatalf("只指名产品的卡 count = %d，want 1", got)
+	}
+	registerCard(t, catalog, transactor, ctx, cardRegistration(t, "tenant-a", sellCard(t, "plan-rest")))
+	if got := countSellCards(t, catalog, "tenant-a", "scope-1"); got != 2 {
+		t.Fatalf("加上不声明产品的卡 count = %d，want 2", got)
+	}
+	if got := countSellCards(t, catalog, "tenant-b", "scope-1"); got != 0 {
+		t.Fatalf("他租户 count = %d，want 0", got)
+	}
+	if got := countSellCards(t, catalog, "tenant-a", "scope-nobody"); got != 0 {
+		t.Fatalf("没有这个范围 count = %d，want 0", got)
+	}
+}
+
+func countSellCards(t *testing.T, catalog *adapter.PriceCards, tenant, scope string) int {
+	t.Helper()
+	count, err := catalog.CountCardsInForceRegardlessOfProduct(t.Context(),
+		evaluationValue(t, domain.NewTenantID, tenant),
+		evaluationValue(t, domain.NewPricingScopeID, scope),
+		domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, catalogAsOf)
+	if err != nil {
+		t.Fatalf("数在用的售价卡：%v", err)
+	}
+	return count
+}
