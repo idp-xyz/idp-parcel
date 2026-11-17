@@ -86,9 +86,9 @@ func (adapter *AdoptedSellPriceArrangement) LoadAdoptedSellPriceArrangement(
 	return sellPriceArrangementFrom(arrangement)
 }
 
-// sellPriceArrangementFrom 是两侧约定之间的全函数。来源名照原串交：计价范围引用要逐字对上，这里再规整一次，
-// 两边的构造门就会各认各的（票 16 留给本票的第 3 条）。两格都不是的形状领域构造门造不出，走到这里是提供方
-// 阶段契约被打破。
+// sellPriceArrangementFrom 是两侧约定之间的全函数。来源名照原串交：这个名字要逐字对上计价一侧的计价范围标识，
+// 这里再规整一次，参与方与商业收下的名字与交到计价手里的就不是同一个串。两格都不是的形状领域构造门造不出，
+// 走到这里是提供方阶段契约被打破。
 func sellPriceArrangementFrom(
 	arrangement pcdomain.ContractSellPriceArrangement,
 ) (sadomain.AdoptedSellPriceArrangement, error) {
