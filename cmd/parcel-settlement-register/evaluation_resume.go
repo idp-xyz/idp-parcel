@@ -41,6 +41,14 @@ func buildEvaluationResume(db *bentopg.DB, outboxStore *outbox.Store) (*applicat
 	if err != nil {
 		return nil, fmt.Errorf("构造结算政策读口：%w", err)
 	}
+	sellPriceRows, err := pcpostgres.NewContractSellPriceArrangements(db)
+	if err != nil {
+		return nil, fmt.Errorf("构造销售价格约定读口：%w", err)
+	}
+	sellPrices, err := sapartycommercial.NewAdoptedSellPriceArrangement(closures, sellPriceRows)
+	if err != nil {
+		return nil, fmt.Errorf("构造销售价格约定适配器：%w", err)
+	}
 	accounts, err := sapostgres.NewSettlementAccounts(db)
 	if err != nil {
 		return nil, fmt.Errorf("构造结算账户册：%w", err)
@@ -64,6 +72,7 @@ func buildEvaluationResume(db *bentopg.DB, outboxStore *outbox.Store) (*applicat
 	sellMoments, err := application.NewRequestSellEvaluationOnParcelMomentHandler(application.RequestSellEvaluationOnParcelMomentDeps{
 		Resolutions: resolutions, Terms: terms, Accounts: accounts, Adoptions: moments,
 		Registry: sellRequests, Identity: sellIdentities, Downstream: sellHandoff, Stalls: stalls, Clock: clock,
+		SellPrices: sellPrices,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("构造 SELL 发起编排：%w", err)

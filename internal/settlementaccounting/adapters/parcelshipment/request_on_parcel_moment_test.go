@@ -194,6 +194,7 @@ func newRequesterFixture(t *testing.T, adopted sadomain.ParcelBillingMoment) *re
 		Downstream:  fixture.handoff,
 		Stalls:      chainStalls{},
 		Clock:       chainClock{},
+		SellPrices:  chainNotDeclaredSellPrices{},
 	})
 	if err != nil {
 		t.Fatalf("构造发起编排：%v", err)
@@ -203,6 +204,16 @@ func newRequesterFixture(t *testing.T, adopted sadomain.ParcelBillingMoment) *re
 }
 
 // --- 提供方读口替身。
+
+type chainNotDeclaredSellPrices struct{}
+
+func (chainNotDeclaredSellPrices) LoadAdoptedSellPriceArrangement(
+	context.Context,
+	sadomain.TenantID,
+	sadomain.CommercialResolutionReference,
+) (sadomain.AdoptedSellPriceArrangement, error) {
+	return sadomain.NewNotDeclaredSellPriceArrangement(), nil
+}
 
 type intakeAdoptionsDouble struct {
 	records map[psports.IntakeAdoptionKey]psports.IntakeAdoptionRecord

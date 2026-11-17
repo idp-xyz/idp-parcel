@@ -23,6 +23,7 @@ func TestEvaluationStopCausesSitOnTheirStageAndDirection(t *testing.T) {
 		{domain.StopSettlementPolicyNotAdopted, domain.StopBeforeRequest, false, true},
 		{domain.StopSettlementAccountNotRegistered, domain.StopBeforeRequest, false, true},
 		{domain.StopSellBillingMomentNotAdopted, domain.StopBeforeRequest, false, true},
+		{domain.StopSellBillingMomentScopeAbsent, domain.StopBeforeRequest, false, true},
 		{domain.StopParcelCommercialResolutionAbsent, domain.StopBeforeRequest, false, true},
 		{domain.StopOccurrenceReasonNotRegistered, domain.StopBeforeRequest, true, false},
 		{domain.StopTriggerFeeItemNotRegistered, domain.StopBeforeRequest, true, false},

@@ -28,6 +28,8 @@ const (
 	SellEvaluationRequestParcelUnresolved
 	SellEvaluationRequestNotAccepted
 	SellEvaluationRequestUndecided
+	// SellEvaluationNotPriced：合同显式不计销售价。不发起、不记发起停办，调用方入账不重投。
+	SellEvaluationNotPriced
 )
 
 func (outcome SellEvaluationRequestOutcome) String() string {
@@ -44,6 +46,8 @@ func (outcome SellEvaluationRequestOutcome) String() string {
 		return "SELL_EVALUATION_REQUEST_NOT_ACCEPTED"
 	case SellEvaluationRequestUndecided:
 		return "SELL_EVALUATION_REQUEST_UNDECIDED"
+	case SellEvaluationNotPriced:
+		return "SELL_EVALUATION_NOT_PRICED"
 	default:
 		return ""
 	}
@@ -60,6 +64,8 @@ const (
 	SellRequestSettlementAccountNotRegistered
 	SellRequestBillingMomentNotAdopted
 	SellRequestBillingMomentDiffers
+	// SellRequestBillingMomentScopeAbsent：旧合同要读采用册上的计价范围，这一行没登。
+	SellRequestBillingMomentScopeAbsent
 )
 
 func (reason SellEvaluationRequestUnconfiguredReason) String() string {
@@ -72,6 +78,8 @@ func (reason SellEvaluationRequestUnconfiguredReason) String() string {
 		return "SELL_BILLING_MOMENT_NOT_ADOPTED"
 	case SellRequestBillingMomentDiffers:
 		return "SELL_BILLING_MOMENT_DIFFERS"
+	case SellRequestBillingMomentScopeAbsent:
+		return "SELL_BILLING_MOMENT_SCOPE_ABSENT"
 	default:
 		return ""
 	}
@@ -90,6 +98,7 @@ const (
 	SellRequestIdentityUnavailable
 	SellRequestHandoffUnavailable
 	SellRequestStallRegisterUnavailable
+	SellRequestSellPriceArrangementUnavailable
 )
 
 func (reason SellEvaluationRequestUndecidedReason) String() string {
@@ -110,6 +119,8 @@ func (reason SellEvaluationRequestUndecidedReason) String() string {
 		return "SELL_EVALUATION_REQUEST_HANDOFF_UNAVAILABLE"
 	case SellRequestStallRegisterUnavailable:
 		return "SELL_EVALUATION_INITIATION_STALL_REGISTER_UNAVAILABLE"
+	case SellRequestSellPriceArrangementUnavailable:
+		return "SELL_PRICE_ARRANGEMENT_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -176,6 +187,8 @@ type RequestSellEvaluationOnParcelMomentDeps struct {
 	Downstream  ports.SellEvaluationRequestHandoff
 	Stalls      ports.SellEvaluationInitiationStallRegister
 	Clock       ports.Clock
+	// SellPrices 按已固定的解析读合同的销售价格约定。缺了会把「不计销售价」答成去读采用册。
+	SellPrices ports.AdoptedSellPriceArrangementView
 }
 
 type RequestSellEvaluationOnParcelMomentHandler struct {
@@ -200,6 +213,7 @@ func NewRequestSellEvaluationOnParcelMomentHandler(
 		{"sell evaluation request handoff", deps.Downstream == nil},
 		{"sell evaluation initiation stall register", deps.Stalls == nil},
 		{"clock", deps.Clock == nil},
+		{"adopted sell price arrangement view", deps.SellPrices == nil},
 	} {
 		if dependency.missing {
 			return nil, fmt.Errorf("%w: %s", ErrNilDependency, dependency.name)
@@ -248,6 +262,14 @@ func (handler *RequestSellEvaluationOnParcelMomentHandler) Handle(
 		return handler.existingRequest(ctx, existing)
 	}
 
+	scope, scopes, halted, err := handler.sellPriceSources(ctx, command, account, adoption)
+	if err != nil {
+		return RequestSellEvaluationOnParcelMomentResult{}, err
+	}
+	if halted != nil {
+		return *halted, nil
+	}
+
 	id, err := handler.deps.Identity.MintSellEvaluationRequestID(ctx)
 	if err != nil {
 		return sellRequestUndecided(SellRequestIdentityUnavailable), nil
@@ -259,7 +281,8 @@ func (handler *RequestSellEvaluationOnParcelMomentHandler) Handle(
 		Parcel:             command.Parcel,
 		Account:            account,
 		SettlementCurrency: currency,
-		PricingScope:       adoption.PricingScope(),
+		PricingScope:       scope,
+		PricingScopes:      scopes,
 		Moment:             command.Moment,
 		Source:             command.Source,
 		PricingBasisAt:     command.PricingBasisAt,
@@ -346,9 +369,54 @@ func sellInitiationStopCauseOf(result RequestSellEvaluationOnParcelMomentResult)
 			return domain.StopSettlementAccountNotRegistered, true
 		case SellRequestBillingMomentNotAdopted:
 			return domain.StopSellBillingMomentNotAdopted, true
+		case SellRequestBillingMomentScopeAbsent:
+			return domain.StopSellBillingMomentScopeAbsent, true
 		}
 	}
 	return domain.EvaluationStopCauseInvalid, false
+}
+
+// sellPriceSources 决定这份请求带哪几个计价范围。合同有有序列表就用它，不读采用册上的范围；显式不计销售价
+// 不发起、不记停办；没有约定的旧合同读采用册，没登范围就记发起停办，任何登记都不续办。
+func (handler *RequestSellEvaluationOnParcelMomentHandler) sellPriceSources(
+	ctx context.Context,
+	command RequestSellEvaluationOnParcelMomentCommand,
+	account domain.SettlementAccountID,
+	adoption domain.SellBillingMomentAdoption,
+) (domain.EstimatePricingScope, []domain.EstimatePricingScope, *RequestSellEvaluationOnParcelMomentResult, error) {
+	none := domain.EstimatePricingScope{}
+	resolution, resolved, err := handler.deps.Resolutions.LoadParcelCommercialResolution(ctx, command.TenantID, command.Parcel)
+	if err != nil {
+		halted := sellRequestUndecided(SellRequestCommercialResolutionUnavailable)
+		return none, nil, &halted, nil
+	}
+	if !resolved {
+		halted := RequestSellEvaluationOnParcelMomentResult{outcome: SellEvaluationRequestParcelUnresolved}
+		return none, nil, &halted, nil
+	}
+	arrangement, err := handler.deps.SellPrices.LoadAdoptedSellPriceArrangement(ctx, command.TenantID, resolution)
+	if err != nil {
+		halted := sellRequestUndecided(SellRequestSellPriceArrangementUnavailable)
+		return none, nil, &halted, nil
+	}
+	if _, notPriced := arrangement.NoSellPriceBasis(); notPriced {
+		halted := RequestSellEvaluationOnParcelMomentResult{outcome: SellEvaluationNotPriced}
+		return none, nil, &halted, nil
+	}
+	if sources, ordered := arrangement.Sources(); ordered {
+		return sources[0], sources, nil, nil
+	}
+	if !arrangement.NotDeclared() {
+		return none, nil, nil, fmt.Errorf("request sell evaluation: sell price arrangement is not one of the three answers")
+	}
+	if adoption.PricingScope().String() == "" {
+		halted, err := handler.recordStall(ctx, command, account, sellRequestUnconfigured(SellRequestBillingMomentScopeAbsent))
+		if err != nil {
+			return none, nil, nil, err
+		}
+		return none, nil, &halted, nil
+	}
+	return adoption.PricingScope(), nil, nil, nil
 }
 
 // recordStall 在发起停办册上记下停在发起之前的这一拍（ADR-0229 决定四），答案原样交回。记不下就答`未决`让调用方整笔

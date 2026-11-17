@@ -51,6 +51,17 @@ func TranslateSellEvaluationRequest(
 	if err != nil {
 		return none, fmt.Errorf("%w: pricing scope: %v", ErrUntranslatableAnswer, err)
 	}
+	var scopes []ppdomain.PricingScopeID
+	if listed, ordered := request.PricingScopes(); ordered {
+		scopes = make([]ppdomain.PricingScopeID, 0, len(listed))
+		for _, source := range listed {
+			translated, err := ppdomain.NewPricingScopeID(source.String())
+			if err != nil {
+				return none, fmt.Errorf("%w: sell price source %q: %v", ErrUntranslatableAnswer, source.String(), err)
+			}
+			scopes = append(scopes, translated)
+		}
+	}
 	settlement, err := ppdomain.NewCurrency(request.SettlementCurrency().String())
 	if err != nil {
 		return none, fmt.Errorf("%w: settlement currency %q: %v", ErrUntranslatableAnswer, request.SettlementCurrency().String(), err)
@@ -59,6 +70,7 @@ func TranslateSellEvaluationRequest(
 		Tenant:     tenant,
 		Request:    reference,
 		Scope:      scope,
+		Scopes:     scopes,
 		Direction:  ppdomain.PricingDirectionSell,
 		Purpose:    ppdomain.PricingPurposeCustomerCharge,
 		BasisAt:    request.PricingBasisAt(),

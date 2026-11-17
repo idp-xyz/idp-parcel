@@ -236,12 +236,23 @@ func newParcelMomentFixture(t *testing.T, adopted domain.ParcelBillingMoment) *p
 		Downstream:  fixture.handoff,
 		Stalls:      fixture.stalls,
 		Clock:       fixedClock{at: parcelMomentNow},
+		SellPrices:  notDeclaredSellPrices{},
 	})
 	if err != nil {
 		t.Fatalf("构造发起编排：%v", err)
 	}
 	fixture.handler = handler
 	return fixture
+}
+
+type notDeclaredSellPrices struct{}
+
+func (notDeclaredSellPrices) LoadAdoptedSellPriceArrangement(
+	context.Context,
+	domain.TenantID,
+	domain.CommercialResolutionReference,
+) (domain.AdoptedSellPriceArrangement, error) {
+	return domain.NewNotDeclaredSellPriceArrangement(), nil
 }
 
 func parcelMomentCommand(t *testing.T, moment domain.ParcelBillingMoment, source string, basis time.Time) application.RequestSellEvaluationOnParcelMomentCommand {
@@ -546,5 +557,112 @@ func TestTheSellMomentRequestHandlerRefusesAMissingDependency(t *testing.T) {
 	_, err := application.NewRequestSellEvaluationOnParcelMomentHandler(application.RequestSellEvaluationOnParcelMomentDeps{})
 	if !errors.Is(err, application.ErrNilDependency) {
 		t.Fatalf("err = %v, want ErrNilDependency", err)
+	}
+}
+
+type fixedSellPrices struct {
+	arrangement domain.AdoptedSellPriceArrangement
+}
+
+func (prices fixedSellPrices) LoadAdoptedSellPriceArrangement(
+	context.Context,
+	domain.TenantID,
+	domain.CommercialResolutionReference,
+) (domain.AdoptedSellPriceArrangement, error) {
+	return prices.arrangement, nil
+}
+
+func (fixture *parcelMomentFixture) withSellPrices(t *testing.T, prices ports.AdoptedSellPriceArrangementView) {
+	t.Helper()
+	handler, err := application.NewRequestSellEvaluationOnParcelMomentHandler(application.RequestSellEvaluationOnParcelMomentDeps{
+		Resolutions: fixture.resolutions,
+		Terms:       fixture.terms,
+		Accounts:    fixture.accounts,
+		Adoptions:   fixture.adoptions,
+		Registry:    fixture.registry,
+		Identity:    fixture.identity,
+		Downstream:  fixture.handoff,
+		Stalls:      fixture.stalls,
+		Clock:       fixedClock{at: parcelMomentNow},
+		SellPrices:  prices,
+	})
+	if err != nil {
+		t.Fatalf("构造发起编排：%v", err)
+	}
+	fixture.handler = handler
+}
+
+// Covers: 合同有有序来源时，请求带这份列表，不读采用册上的范围。续办照抄列表。
+func TestTheRequestCarriesTheContractSellPriceSourcesNotTheAdoptionScope(t *testing.T) {
+	fixture := newParcelMomentFixture(t, domain.BillingMomentNetworkIntakeAdopted)
+	first := value(t, domain.NewEstimatePricingScope, "SYN-SCOPE-A")
+	second := value(t, domain.NewEstimatePricingScope, "SYN-SCOPE-B")
+	arrangement, err := domain.NewOrderedSellPriceSources([]domain.EstimatePricingScope{first, second})
+	if err != nil {
+		t.Fatalf("来源：%v", err)
+	}
+	fixture.withSellPrices(t, fixedSellPrices{arrangement: arrangement})
+
+	result := fixture.handle(t, parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "SYN-SOURCE-1", parcelMomentNow))
+	if result.Outcome() != application.SellEvaluationRequested {
+		t.Fatalf("outcome = %s", result.Outcome())
+	}
+	record, ok := result.Request()
+	if !ok {
+		t.Fatal("没有请求")
+	}
+	scopes, ordered := record.Request.PricingScopes()
+	if !ordered || len(scopes) != 2 || scopes[0] != first || scopes[1] != second || record.Request.PricingScope() != first {
+		t.Fatalf("scopes = %v primary = %s", scopes, record.Request.PricingScope())
+	}
+	basis, err := domain.NewOperatorResumeBasis("SYN-RESUME-1")
+	if err != nil {
+		t.Fatalf("依据：%v", err)
+	}
+	next, err := record.Request.Resume(value(t, domain.NewSellEvaluationRequestID, "SYN-SELL-REQ-2"), basis)
+	if err != nil {
+		t.Fatalf("续办：%v", err)
+	}
+	copied, ordered := next.PricingScopes()
+	if !ordered || len(copied) != 2 || copied[0] != first || copied[1] != second {
+		t.Fatalf("下一代的列表 = %v，想要照抄前一代", copied)
+	}
+}
+
+// Covers: 合同显式不计销售价——不发起、不记发起停办。
+func TestAnExplicitNoSellPriceDoesNotRequestOrStall(t *testing.T) {
+	fixture := newParcelMomentFixture(t, domain.BillingMomentNetworkIntakeAdopted)
+	basis := value(t, domain.NewNoSellPriceBasis, "SYN-NO-SELL-PRICE-01")
+	arrangement, err := domain.NewExplicitlyNotPricedSellPrice(basis)
+	if err != nil {
+		t.Fatalf("不计销售价：%v", err)
+	}
+	fixture.withSellPrices(t, fixedSellPrices{arrangement: arrangement})
+	result := fixture.handle(t, parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "SYN-SOURCE-1", parcelMomentNow))
+	if result.Outcome() != application.SellEvaluationNotPriced {
+		t.Fatalf("outcome = %s", result.Outcome())
+	}
+	if _, stalled := result.StopCause(); stalled {
+		t.Fatal("不计销售价记了发起停办")
+	}
+	fixture.assertNothingRequested(t)
+}
+
+// Covers: 旧合同遇到没登计价范围的采用行，记发起停办，这一格没有登记解得开。
+func TestAnOldContractWithNoAdoptionScopeStallsAndNothingResumesIt(t *testing.T) {
+	fixture := newParcelMomentFixture(t, domain.BillingMomentNetworkIntakeAdopted)
+	account := value(t, domain.NewSettlementAccountID, "SYN-ACCT-1")
+	bare, err := domain.NewSellBillingMomentAdoption(account, domain.BillingMomentNetworkIntakeAdopted, domain.EstimatePricingScope{})
+	if err != nil {
+		t.Fatalf("采用行：%v", err)
+	}
+	fixture.adoptions.adoptions[account.String()] = bare
+	result := fixture.handle(t, parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "SYN-SOURCE-1", parcelMomentNow))
+	cause, stalled := result.StopCause()
+	if result.Outcome() != application.SellEvaluationRequestUnconfigured || !stalled || cause != domain.StopSellBillingMomentScopeAbsent {
+		t.Fatalf("outcome = %s stalled = %v cause = %s", result.Outcome(), stalled, cause)
+	}
+	if cause.ResumedBy(domain.ParameterPriceCard) || cause.ResumedBy(domain.ParameterSellBillingMomentAdoption) {
+		t.Fatal("没登范围的停办被某一类登记解开了")
 	}
 }

@@ -32,8 +32,9 @@ func TestAPreAcceptanceEstimateAdoptionTakesOnlyTheBuiltInForm(t *testing.T) {
 	if _, err := domain.NewPreAcceptanceEstimateAdoption(account, domain.PreAcceptanceEstimateFormInvalid, scope); !errors.Is(err, domain.ErrBlankValue) {
 		t.Fatalf("没给形态 err = %v, 想要拒", err)
 	}
-	if _, err := domain.NewPreAcceptanceEstimateAdoption(account, domain.PerParcelSellTrialSum, domain.EstimatePricingScope{}); !errors.Is(err, domain.ErrBlankValue) {
-		t.Fatalf("没给计价范围 err = %v, 想要拒", err)
+	withoutScope, err := domain.NewPreAcceptanceEstimateAdoption(account, domain.PerParcelSellTrialSum, domain.EstimatePricingScope{})
+	if err != nil || withoutScope.PricingScope().String() != "" || withoutScope.SameRegistration(adoption) {
+		t.Fatalf("没登计价范围 = %+v err = %v，想要收下且与有范围的不是同一份", withoutScope, err)
 	}
 	if _, err := domain.NewEstimatePricingScope(" "); err == nil {
 		t.Fatal("空白计价范围被收下了")

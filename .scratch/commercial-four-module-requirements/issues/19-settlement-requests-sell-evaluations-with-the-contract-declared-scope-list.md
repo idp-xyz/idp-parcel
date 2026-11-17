@@ -1,7 +1,7 @@
 # 19 结算两条发起路按合同声明的销售价格来源请计价，两本采用册不再说计价范围
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-19-sell-evaluation-uses-contract-scope-list`（worktree `idp-parcel-cfmr19`），基线 `3243f281e`。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [17](./17-sell-price-sources-are-fixed-with-the-acceptance-time-closure-and-read-by-settlement.md)、票 [18](./18-pricing-selects-the-price-card-across-an-ordered-scope-list.md)
 地盘：`internal/settlementaccounting`（两条发起路、评价请求、停因与续办、两本采用册的登记）、`internal/parcelpricing/adapters/settlementaccounting`（计价读结算评价请求记录的那只适配器，只动它把列表译给计价的那一段；计价的领域与应用归票 18）、`cmd/parcel-settlement-register`、`docs/application/settlement-accounting`
@@ -49,4 +49,7 @@ Blocked by: 票 [17](./17-sell-price-sources-are-fixed-with-the-acceptance-time-
 ## Comments
 
 - 2026-11-12：由票 15 拆出。
-- 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。仍等票 17、18。冻结清单「记录」里 2026-10-27 讲两本采用册登同一个范围的那一行，同笔注明：ADR-0380 之后那一项只对旧规范化版本合同的账户还要核，代码由本票承接。
+- 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。仍等票 17、18。冻结清单「记录」里 2026-10-27 讲两本采用册登同一个范围的那一行，同笔注明：ADR-0380 之后那一项只对旧规范化版本合同的账户还要核，代码由本票承接。票 17、18 已进 `main`（`e51a02b26`、`3243f281e`），阻塞解除。
+- 2026-11-17（做到这里，未收口）：包裹计费时点这一条发起路接上了合同的三种答复。
+  1. **已做。** 合同有有序列表时，请求带这份列表，不读采用册上的范围（`TestTheRequestCarriesTheContractSellPriceSourcesNotTheAdoptionScope`）。续办照抄列表。显式不计销售价不发起、不记停办（`TestAnExplicitNoSellPriceDoesNotRequestOrStall`），消费侧入账不重投。旧合同仍读采用册；没登范围记发起停办 `SELL_BILLING_MOMENT_SCOPE_ABSENT`，任何登记都不续办（`TestAnOldContractWithNoAdoptionScopeStallsAndNothingResumesIt`）。请求的自然键没加列表。多于一项的列表落在 `sell_evaluation_request_pricing_scope`（迁移 `0059`），`pricing_scope_id` 仍是第一项；只带一个范围的行没有子行。计价读这份记录的适配器把列表译进 `Scopes`。两本采用册的计价范围改为可缺。生产装配接上了销售价格约定读口。
+  2. **还没做，所以这张票不能收口。** 受理前估价仍只读采用册上的范围，没读合同，也还没把列表交给试算。逐来源记停因、以及「问到过的范围登了卡才续办、没问到的不续办」没做。估价留痕还不是逐件带范围与卡。确认事实的主要计费范围仍取请求上的那一个范围，不是评价实际用上的那一个。旧合同的包裹「行为与今天相同」只在计费时点这一条、且采用行仍带着范围时成立。

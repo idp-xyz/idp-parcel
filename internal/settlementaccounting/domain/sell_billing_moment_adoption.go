@@ -17,7 +17,8 @@ func NewSellBillingMomentAdoption(
 	moment ParcelBillingMoment,
 	scope EstimatePricingScope,
 ) (SellBillingMomentAdoption, error) {
-	if !account.valid() || !scope.valid() {
+	// 计价范围可缺：合同带销售价格约定时采用册上的范围不被读；旧合同遇到没登范围的行，发起路另答。
+	if !account.valid() {
 		return SellBillingMomentAdoption{}, fmt.Errorf("%w: sell billing moment adoption", ErrBlankValue)
 	}
 	if !moment.valid() {

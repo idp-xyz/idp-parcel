@@ -31,9 +31,6 @@ func TestASellBillingMomentAdoptionIsAnImmutableTupleOfBuiltInMoment(t *testing.
 		"词表外的计费时点": func() (domain.SellBillingMomentAdoption, error) {
 			return domain.NewSellBillingMomentAdoption(account, domain.ParcelBillingMoment(99), scope)
 		},
-		"缺计价范围": func() (domain.SellBillingMomentAdoption, error) {
-			return domain.NewSellBillingMomentAdoption(account, domain.BillingMomentNetworkIntakeAdopted, domain.EstimatePricingScope{})
-		},
 	} {
 		if _, err := build(); !errors.Is(err, domain.ErrBlankValue) {
 			t.Fatalf("%s err = %v，想要登记时拒", name, err)
@@ -46,6 +43,10 @@ func TestASellBillingMomentAdoptionIsAnImmutableTupleOfBuiltInMoment(t *testing.
 		mustRef(t, domain.NewEstimatePricingScope, "SYN-SCOPE-SELL-2"))
 	otherAccount, _ := domain.NewSellBillingMomentAdoption(mustRef(t, domain.NewSettlementAccountID, "SYN-ACCT-2"),
 		domain.BillingMomentNetworkIntakeAdopted, scope)
+	withoutScope, err := domain.NewSellBillingMomentAdoption(account, domain.BillingMomentNetworkIntakeAdopted, domain.EstimatePricingScope{})
+	if err != nil || withoutScope.PricingScope().String() != "" || withoutScope.SameRegistration(adoption) {
+		t.Fatalf("没登计价范围 = %+v err = %v，想要收下且与有范围的不是同一份", withoutScope, err)
+	}
 	if !adoption.SameRegistration(same) {
 		t.Fatal("同内容的两份不算同一份登记")
 	}

@@ -52,7 +52,7 @@ func (repository *SellBillingMomentAdoptions) SaveSellBillingMomentAdoption(
 		tenant.String(),
 		adoption.Account().String(),
 		adoption.Moment().String(),
-		adoption.PricingScope().String(),
+		optionalScope(adoption.PricingScope().String()),
 		at.UTC(),
 	)
 	if err == nil {
@@ -102,7 +102,8 @@ func findSellBillingMomentAdoption(
 	tenant domain.TenantID,
 	account domain.SettlementAccountID,
 ) (domain.SellBillingMomentAdoption, bool, error) {
-	var accountID, moment, scope string
+	var accountID, moment string
+	var scope *string
 	err := querier.QueryRow(ctx, `
 		SELECT account_id, billing_moment, pricing_scope_id
 		  FROM settlement_accounting.sell_billing_moment_adoption
@@ -123,7 +124,7 @@ func findSellBillingMomentAdoption(
 	if err != nil {
 		return domain.SellBillingMomentAdoption{}, false, err
 	}
-	storedScope, err := domain.NewEstimatePricingScope(scope)
+	storedScope, err := optionalEstimateScope(scope)
 	if err != nil {
 		return domain.SellBillingMomentAdoption{}, false, err
 	}

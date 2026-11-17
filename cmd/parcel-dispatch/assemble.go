@@ -2829,6 +2829,14 @@ func sellEvaluationRequester(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: adopted settlement terms: %w", err)
 	}
+	sellPriceRows, err := pcpostgres.NewContractSellPriceArrangements(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: contract sell price arrangements: %w", err)
+	}
+	sellPrices, err := sapartycommercial.NewAdoptedSellPriceArrangement(closures, sellPriceRows)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: adopted sell price arrangement: %w", err)
+	}
 	accounts, err := sapostgres.NewSettlementAccounts(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: settlement accounts: %w", err)
@@ -2863,6 +2871,7 @@ func sellEvaluationRequester(
 		Downstream:  handoff,
 		Stalls:      stalls,
 		Clock:       clock,
+		SellPrices:  sellPrices,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: request sell evaluation on parcel moment: %w", err)

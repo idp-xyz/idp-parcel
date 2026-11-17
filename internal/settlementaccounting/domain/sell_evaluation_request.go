@@ -50,12 +50,15 @@ type SellEvaluationRequestSpec struct {
 	Account            SettlementAccountID
 	SettlementCurrency CurrencyCode
 	PricingScope       EstimatePricingScope
-	Moment             ParcelBillingMoment
-	Source             SourceFactReference
-	PricingBasisAt     time.Time
-	Generation         int
-	Previous           SellEvaluationRequestID
-	ResumeBasis        ResumeBasis
+	// PricingScopes 是合同声明的有序销售价格来源。空或一项时不看它，请求只带 PricingScope，与只认一个范围时相同。
+	// 多于一项时第一项必须是 PricingScope。列表不进自然键。
+	PricingScopes  []EstimatePricingScope
+	Moment         ParcelBillingMoment
+	Source         SourceFactReference
+	PricingBasisAt time.Time
+	Generation     int
+	Previous       SellEvaluationRequestID
+	ResumeBasis    ResumeBasis
 }
 
 // SellEvaluationRequest 是结算向 parcel-pricing 提出的一次 SELL·客户费用评价：哪件包裹、哪个结算账户与它的结算币种、
@@ -67,6 +70,7 @@ type SellEvaluationRequest struct {
 	account            SettlementAccountID
 	settlementCurrency CurrencyCode
 	pricingScope       EstimatePricingScope
+	pricingScopes      []EstimatePricingScope
 	source             SourceFactReference
 	pricingBasisAt     time.Time
 	generation         int
@@ -82,6 +86,10 @@ func SubmitSellEvaluationRequest(spec SellEvaluationRequestSpec) (SellEvaluation
 		!spec.PricingScope.valid() || !spec.Moment.valid() || !spec.Source.valid() || spec.PricingBasisAt.IsZero() {
 		return SellEvaluationRequest{}, ErrInvalidSellEvaluationRequest
 	}
+	scopes, err := sellPriceScopes(spec.PricingScope, spec.PricingScopes)
+	if err != nil {
+		return SellEvaluationRequest{}, err
+	}
 	generation, err := normalizeLineage(spec.Generation, spec.Previous.valid(), spec.ResumeBasis)
 	if err != nil {
 		return SellEvaluationRequest{}, fmt.Errorf("%w: %w", ErrInvalidSellEvaluationRequest, err)
@@ -95,6 +103,7 @@ func SubmitSellEvaluationRequest(spec SellEvaluationRequestSpec) (SellEvaluation
 		account:            spec.Account,
 		settlementCurrency: spec.SettlementCurrency,
 		pricingScope:       spec.PricingScope,
+		pricingScopes:      scopes,
 		source:             spec.Source,
 		pricingBasisAt:     spec.PricingBasisAt.UTC(),
 		generation:         generation,
@@ -114,6 +123,7 @@ func (request SellEvaluationRequest) Resume(id SellEvaluationRequestID, basis Re
 		Account:            request.account,
 		SettlementCurrency: request.settlementCurrency,
 		PricingScope:       request.pricingScope,
+		PricingScopes:      append([]EstimatePricingScope(nil), request.pricingScopes...),
 		Moment:             request.naturalKey.Moment,
 		Source:             request.source,
 		PricingBasisAt:     request.pricingBasisAt,
@@ -134,6 +144,37 @@ func (request SellEvaluationRequest) SettlementCurrency() CurrencyCode {
 }
 
 func (request SellEvaluationRequest) PricingScope() EstimatePricingScope { return request.pricingScope }
+
+// PricingScopes 按合同声明的顺序交回销售价格来源。第二个返回值为假即这份请求只带一个范围（PricingScope），
+// 没有另立一份列表。
+func (request SellEvaluationRequest) PricingScopes() ([]EstimatePricingScope, bool) {
+	if len(request.pricingScopes) < 2 {
+		return nil, false
+	}
+	return append([]EstimatePricingScope(nil), request.pricingScopes...), true
+}
+
+// sellPriceScopes 核有序列表。空或一项就是只带一个范围，不另存。多于一项时第一项必须是主键上的那个范围，
+// 同一范围不出现两次。
+func sellPriceScopes(primary EstimatePricingScope, scopes []EstimatePricingScope) ([]EstimatePricingScope, error) {
+	if len(scopes) < 2 {
+		return nil, nil
+	}
+	if scopes[0] != primary {
+		return nil, fmt.Errorf("%w: the first sell price source is not the request pricing scope", ErrInvalidSellEvaluationRequest)
+	}
+	seen := make(map[EstimatePricingScope]struct{}, len(scopes))
+	for _, scope := range scopes {
+		if !scope.valid() {
+			return nil, fmt.Errorf("%w: sell price source", ErrInvalidSellEvaluationRequest)
+		}
+		if _, repeated := seen[scope]; repeated {
+			return nil, fmt.Errorf("%w: one pricing scope appears twice", ErrInvalidSellEvaluationRequest)
+		}
+		seen[scope] = struct{}{}
+	}
+	return append([]EstimatePricingScope(nil), scopes...), nil
+}
 
 func (request SellEvaluationRequest) Moment() ParcelBillingMoment { return request.naturalKey.Moment }
 

@@ -58,7 +58,8 @@ func NewPreAcceptanceEstimateAdoption(
 	form PreAcceptanceEstimateForm,
 	scope EstimatePricingScope,
 ) (PreAcceptanceEstimateAdoption, error) {
-	if !account.valid() || !scope.valid() {
+	// 计价范围可缺，理由同包裹计费时点采用。形态仍必填。
+	if !account.valid() {
 		return PreAcceptanceEstimateAdoption{}, fmt.Errorf("%w: pre-acceptance estimate adoption", ErrBlankValue)
 	}
 	if !form.valid() {

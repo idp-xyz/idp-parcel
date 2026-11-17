@@ -100,7 +100,84 @@ func (registry *SellEvaluationRequests) Save(
 	if tag.RowsAffected() == 0 {
 		return ports.EvaluationRequestAlreadyRequested, nil
 	}
+	if err := insertSellPriceScopes(ctx, executor, record.Key.TenantID.String(), record.Key.Request.String(), request); err != nil {
+		return ports.EvaluationRequestSaveOutcomeInvalid, err
+	}
 	return ports.EvaluationRequestSaved, nil
+}
+
+func insertSellPriceScopes(
+	ctx context.Context,
+	executor bentopg.Executor,
+	tenant, requestID string,
+	request domain.SellEvaluationRequest,
+) error {
+	scopes, ordered := request.PricingScopes()
+	if !ordered {
+		return nil
+	}
+	for index, scope := range scopes {
+		if _, err := executor.Exec(ctx,
+			`INSERT INTO settlement_accounting.sell_evaluation_request_pricing_scope
+				(tenant_id, request_id, ordinal, pricing_scope_id)
+			 VALUES ($1, $2, $3, $4)`,
+			tenant, requestID, index+1, scope.String(),
+		); err != nil {
+			return fmt.Errorf("save sell evaluation request sources: %w", err)
+		}
+	}
+	return nil
+}
+
+func loadSellPriceScopeIDs(ctx context.Context, querier bentopg.Querier, tenant, requestID string) ([]string, error) {
+	rows, err := querier.Query(ctx,
+		`SELECT pricing_scope_id
+		   FROM settlement_accounting.sell_evaluation_request_pricing_scope
+		  WHERE tenant_id = $1 AND request_id = $2
+		  ORDER BY ordinal`,
+		tenant, requestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var scopes []string
+	for rows.Next() {
+		var scope string
+		if err := rows.Scan(&scope); err != nil {
+			return nil, err
+		}
+		scopes = append(scopes, scope)
+	}
+	return scopes, rows.Err()
+}
+
+func sellPriceScopesFrom(raw []string) ([]domain.EstimatePricingScope, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	scopes := make([]domain.EstimatePricingScope, 0, len(raw))
+	for _, value := range raw {
+		scope, err := domain.NewEstimatePricingScope(value)
+		if err != nil {
+			return nil, err
+		}
+		scopes = append(scopes, scope)
+	}
+	return scopes, nil
+}
+
+func optionalScope(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
+
+func optionalEstimateScope(value *string) (domain.EstimatePricingScope, error) {
+	if value == nil {
+		return domain.EstimatePricingScope{}, nil
+	}
+	return domain.NewEstimatePricingScope(*value)
 }
 
 // sellRequestLineageColumns 交回前一代与依据两列的写值；首代与没有依据的那一格写 NULL，不写空串——库上的 CHECK 拒空串。
@@ -264,6 +341,14 @@ func (registry *SellEvaluationRequests) findOne(
 	columns.previous = derefText(previous)
 	columns.basis = derefText(basis)
 	columns.cause = derefText(cause)
+	columns.pricingScopes, err = loadSellPriceScopeIDs(ctx, querier, tenant.String(), columns.requestID)
+	if err != nil {
+		return ports.SellEvaluationRequestRecord{}, false, fmt.Errorf("find sell evaluation request: %w", err)
+	}
+	columns.decodedScopes, err = sellPriceScopesFrom(columns.pricingScopes)
+	if err != nil {
+		return ports.SellEvaluationRequestRecord{}, false, fmt.Errorf("find sell evaluation request: %w", err)
+	}
 
 	record, err := rebuildSellEvaluationRequest(tenant, columns)
 	if err != nil {
@@ -280,6 +365,8 @@ type sellEvaluationRequestColumns struct {
 	account        string
 	currency       string
 	pricingScope   string
+	pricingScopes  []string
+	decodedScopes  []domain.EstimatePricingScope
 	moment         string
 	source         string
 	pricingBasisAt time.Time
@@ -359,6 +446,7 @@ func rebuildSellEvaluationRequest(
 		Account:            account,
 		SettlementCurrency: currency,
 		PricingScope:       scope,
+		PricingScopes:      columns.decodedScopes,
 		Moment:             moment,
 		Source:             source,
 		PricingBasisAt:     columns.pricingBasisAt,

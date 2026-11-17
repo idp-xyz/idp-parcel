@@ -78,6 +78,9 @@ const (
 	StopSettlementPolicyNotAdopted
 	StopSettlementAccountNotRegistered
 	StopSellBillingMomentNotAdopted
+	// StopSellBillingMomentScopeAbsent：旧合同要读采用册上的计价范围，这一行没登。任何登记都解不开，
+	// 要补的是这一行的范围，本上下文不把「补登范围」当成一类会续办的参数。
+	StopSellBillingMomentScopeAbsent
 	StopParcelCommercialResolutionAbsent
 	// 发起之前·BUY：BUY 触发册没登这个原因，或登了却没登费用项目。
 	StopOccurrenceReasonNotRegistered
@@ -110,6 +113,7 @@ var allEvaluationStopCauses = []EvaluationStopCause{
 	StopSettlementPolicyNotAdopted,
 	StopSettlementAccountNotRegistered,
 	StopSellBillingMomentNotAdopted,
+	StopSellBillingMomentScopeAbsent,
 	StopParcelCommercialResolutionAbsent,
 	StopOccurrenceReasonNotRegistered,
 	StopTriggerFeeItemNotRegistered,
@@ -138,6 +142,8 @@ func (cause EvaluationStopCause) String() string {
 		return "SETTLEMENT_ACCOUNT_NOT_REGISTERED"
 	case StopSellBillingMomentNotAdopted:
 		return "SELL_BILLING_MOMENT_NOT_ADOPTED"
+	case StopSellBillingMomentScopeAbsent:
+		return "SELL_BILLING_MOMENT_SCOPE_ABSENT"
 	case StopParcelCommercialResolutionAbsent:
 		return "PARCEL_HAS_NO_COMMERCIAL_RESOLUTION"
 	case StopOccurrenceReasonNotRegistered:
@@ -194,7 +200,8 @@ func EvaluationStopCauseFromName(name string) (EvaluationStopCause, error) {
 func (cause EvaluationStopCause) Stage() EvaluationStopStage {
 	switch cause {
 	case StopSettlementPolicyNotAdopted, StopSettlementAccountNotRegistered, StopSellBillingMomentNotAdopted,
-		StopParcelCommercialResolutionAbsent, StopOccurrenceReasonNotRegistered, StopTriggerFeeItemNotRegistered:
+		StopSellBillingMomentScopeAbsent, StopParcelCommercialResolutionAbsent, StopOccurrenceReasonNotRegistered,
+		StopTriggerFeeItemNotRegistered:
 		return StopBeforeRequest
 	case StopPriceCardNotConfigured, StopPriceCardApplicabilityConflict, StopPricingInputUnavailable:
 		return StopInPricing
@@ -226,7 +233,8 @@ func (cause EvaluationStopCause) PendingJudgmentOfEvaluation() bool {
 func (cause EvaluationStopCause) OccursIn(direction EvaluationDirection) bool {
 	switch cause {
 	case StopSettlementPolicyNotAdopted, StopSettlementAccountNotRegistered, StopSellBillingMomentNotAdopted,
-		StopParcelCommercialResolutionAbsent, StopFeeItemMappingIncomplete, StopPendingJudgmentCauseUnrecorded:
+		StopSellBillingMomentScopeAbsent, StopParcelCommercialResolutionAbsent, StopFeeItemMappingIncomplete,
+		StopPendingJudgmentCauseUnrecorded:
 		return direction == SellEvaluationDirection
 	case StopOccurrenceReasonNotRegistered, StopTriggerFeeItemNotRegistered, StopConversionStepMissing:
 		return direction == BuyEvaluationDirection
@@ -472,7 +480,7 @@ type SellEvaluationInitiationStall struct {
 func NewSellEvaluationInitiationStall(spec SellEvaluationInitiationStallSpec) (SellEvaluationInitiationStall, error) {
 	if !spec.Parcel.valid() || !spec.Moment.valid() || !spec.Source.valid() || spec.PricingBasisAt.IsZero() ||
 		spec.StoppedAt.IsZero() || spec.Cause.Stage() != StopBeforeRequest || !spec.Cause.OccursIn(SellEvaluationDirection) ||
-		(spec.Cause == StopSellBillingMomentNotAdopted) != spec.Account.valid() {
+		(spec.Cause == StopSellBillingMomentNotAdopted || spec.Cause == StopSellBillingMomentScopeAbsent) != spec.Account.valid() {
 		return SellEvaluationInitiationStall{}, fmt.Errorf("%w: sell evaluation initiation stall", ErrInvalidEvaluationResumption)
 	}
 	return SellEvaluationInitiationStall{
