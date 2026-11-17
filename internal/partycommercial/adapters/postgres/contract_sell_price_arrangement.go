@@ -94,7 +94,7 @@ func (repository *CommercialPublications) SaveContractSellPriceArrangement(
 // scanSellPriceSources 按声明的位置读回一份约定的来源。
 func scanSellPriceSources(
 	ctx context.Context,
-	executor bentopg.Executor,
+	executor bentopg.Querier,
 	tenant string, kind uint8, objectID, label string,
 ) ([]string, error) {
 	rows, err := executor.Query(ctx,

@@ -96,6 +96,23 @@ type PreAcceptanceControlDeclarationView interface {
 	) (domain.PreAcceptanceControlDeclaration, bool, error)
 }
 
+// ContractSellPriceArrangementView 按已唯一选出的客户合同版本点读销售价格约定（0049；ADR-0380 决定一、二）。
+// 它与 CustomerContractContentView、客户合同目录行上的那一节分开：前者答财务控制约定与规则包，目录行是给管理台的；
+// 本口是结算从已固定闭包点读正文的那一扇（票 commercial-four-module-requirements/17）——闭包快照只钉版本身份，约定正文
+// 按这把身份取，合同之后发新版不改已固定解析的口。
+//
+// found=false = 这一版合同没有销售价格约定（旧规范化版本，或从未登记）。读取失败与坏数据（来源与不计销售价依据不是
+// 恰一在场）走 error，不得折成 found=false——那会把一份损坏的约定伪装成「没有约定」。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。显式租户必须与合同版本同一身份。
+type ContractSellPriceArrangementView interface {
+	LoadContractSellPriceArrangement(
+		ctx context.Context,
+		tenant domain.TenantID,
+		contract domain.CommercialVersion,
+	) (domain.ContractSellPriceArrangement, bool, error)
+}
+
 // CustomerContractContentView 取已唯一选出的客户合同版本的正文：它引用哪个接单规则包，
 // 以及按费用范围对财务控制作了什么约定。
 //
