@@ -237,6 +237,14 @@ func (handler *RequestSellEvaluationOnParcelMomentHandler) Handle(
 		return RequestSellEvaluationOnParcelMomentResult{outcome: SellEvaluationRequestNotAccepted}, nil
 	}
 
+	// 显式不计销售价在记任何发起停办之前就结束这一拍。账户没登、时点没采用都不改这一句：
+	// 这一拍本来就不发起，记了停办也没有登记解得开。
+	if halted, err := handler.notPricedBeforeInitiation(ctx, command); err != nil {
+		return RequestSellEvaluationOnParcelMomentResult{}, err
+	} else if halted != nil {
+		return *halted, nil
+	}
+
 	account, currency, halted := handler.settlementAccountOf(ctx, command)
 	if halted != nil {
 		return handler.recordStall(ctx, command, domain.SettlementAccountID{}, *halted)
@@ -374,6 +382,35 @@ func sellInitiationStopCauseOf(result RequestSellEvaluationOnParcelMomentResult)
 		}
 	}
 	return domain.EvaluationStopCauseInvalid, false
+}
+
+// notPricedBeforeInitiation 只在合同显式不计销售价，或销售价格约定读不回时，交回要直接结束的那一格。
+// 没有解析、有列表、旧合同都交回 nil，后面的链照旧走。
+func (handler *RequestSellEvaluationOnParcelMomentHandler) notPricedBeforeInitiation(
+	ctx context.Context,
+	command RequestSellEvaluationOnParcelMomentCommand,
+) (*RequestSellEvaluationOnParcelMomentResult, error) {
+	resolution, resolved, err := handler.deps.Resolutions.LoadParcelCommercialResolution(ctx, command.TenantID, command.Parcel)
+	if err != nil {
+		halted := sellRequestUndecided(SellRequestCommercialResolutionUnavailable)
+		return &halted, nil
+	}
+	if !resolved {
+		return nil, nil
+	}
+	arrangement, err := handler.deps.SellPrices.LoadAdoptedSellPriceArrangement(ctx, command.TenantID, resolution)
+	if err != nil {
+		halted := sellRequestUndecided(SellRequestSellPriceArrangementUnavailable)
+		return &halted, nil
+	}
+	if _, notPriced := arrangement.NoSellPriceBasis(); notPriced {
+		halted := RequestSellEvaluationOnParcelMomentResult{outcome: SellEvaluationNotPriced}
+		return &halted, nil
+	}
+	if _, ordered := arrangement.Sources(); !ordered && !arrangement.NotDeclared() {
+		return nil, fmt.Errorf("request sell evaluation: sell price arrangement is not one of the three answers")
+	}
+	return nil, nil
 }
 
 // sellPriceSources 决定这份请求带哪几个计价范围。合同有有序列表就用它，不读采用册上的范围；显式不计销售价

@@ -648,6 +648,26 @@ func TestAnExplicitNoSellPriceDoesNotRequestOrStall(t *testing.T) {
 	fixture.assertNothingRequested(t)
 }
 
+// Covers: 合同显式不计销售价——账户还没登、时点也没采用，这一拍仍然不发起、不记发起停办。
+func TestAnExplicitNoSellPriceDoesNotStallWhenTheAccountIsMissing(t *testing.T) {
+	fixture := newParcelMomentFixture(t, domain.ParcelBillingMomentInvalid)
+	fixture.accounts.accounts = map[string]domain.SettlementAccountID{}
+	basis := value(t, domain.NewNoSellPriceBasis, "SYN-NO-SELL-PRICE-01")
+	arrangement, err := domain.NewExplicitlyNotPricedSellPrice(basis)
+	if err != nil {
+		t.Fatalf("不计销售价：%v", err)
+	}
+	fixture.withSellPrices(t, fixedSellPrices{arrangement: arrangement})
+	result := fixture.handle(t, parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "SYN-SOURCE-1", parcelMomentNow))
+	if result.Outcome() != application.SellEvaluationNotPriced {
+		t.Fatalf("outcome = %s", result.Outcome())
+	}
+	if _, stalled := result.StopCause(); stalled || len(fixture.stalls.sell) != 0 {
+		t.Fatal("账户没登、时点没采用，不计销售价仍记了发起停办")
+	}
+	fixture.assertNothingRequested(t)
+}
+
 // Covers: 旧合同遇到没登计价范围的采用行，记发起停办，这一格没有登记解得开。
 func TestAnOldContractWithNoAdoptionScopeStallsAndNothingResumesIt(t *testing.T) {
 	fixture := newParcelMomentFixture(t, domain.BillingMomentNetworkIntakeAdopted)

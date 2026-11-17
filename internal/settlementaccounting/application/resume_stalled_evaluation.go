@@ -38,8 +38,8 @@ const (
 	StalledEvaluationAlreadyResumed
 	// StalledEvaluationNotWaiting：它不在等这个依据——没有停因、停因不在这次续办的名单里，或凭的正是这个依据续办过。
 	StalledEvaluationNotWaiting
-	// StalledEvaluationClosed：SELL 发起停办重跑之后这一户答`采用了别的时点`——那一拍本就不计费，不是停下，发起停办落
-	// 终止、不再进队列。
+	// StalledEvaluationClosed：SELL 发起停办重跑之后这一拍本就不计费——这一户答`采用了别的时点`，或合同显式不计销售价。
+	// 不是停下，发起停办落终止、不再进队列。
 	StalledEvaluationClosed
 	// StalledEvaluationNotAccepted：命令立不住，或记下的输入重跑时被发起编排拒收。
 	StalledEvaluationNotAccepted
@@ -262,6 +262,16 @@ func (handler *ResumeStalledEvaluationHandler) rerunSellInitiation(
 				ErrUnexpectedResumedInitiationOutcome, result.Outcome(), result.UnconfiguredReason())
 		}
 		// 不落终止，这一行会一直满足「等着」的口径：每来一次能解开计费时点没采用的登记就再重跑它一次、再答一次同样的话。
+		closed, err := handler.deps.SellStalls.CloseSellInitiationStall(ctx, command.TenantID, key, handler.deps.Clock.Now())
+		if err != nil {
+			return undecidedResumption("SELL_INITIATION_STALL_REGISTER", err), nil
+		}
+		if !closed {
+			return ResumeStalledEvaluationResult{}, fmt.Errorf("%w: sell initiation %s/%s",
+				ErrStalledEvaluationVanished, key.Parcel, key.Moment)
+		}
+		return ResumeStalledEvaluationResult{outcome: StalledEvaluationClosed}, nil
+	case SellEvaluationNotPriced:
 		closed, err := handler.deps.SellStalls.CloseSellInitiationStall(ctx, command.TenantID, key, handler.deps.Clock.Now())
 		if err != nil {
 			return undecidedResumption("SELL_INITIATION_STALL_REGISTER", err), nil
