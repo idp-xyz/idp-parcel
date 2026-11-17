@@ -45,11 +45,15 @@ func (adapter *SellEvaluationAdapter) LoadSellEvaluation(
 		return saports.SellEvaluationAdoption{}, false, fmt.Errorf("%w: %s / %s", saports.ErrNotASellEvaluation, evaluation.Direction(), evaluation.Purpose())
 	}
 	outcome := sellOutcomeOf(evaluation.Status())
+	sourceSteps, err := sellPriceSourceSteps(evaluation.Explanation())
+	if err != nil {
+		return saports.SellEvaluationAdoption{}, false, err
+	}
 	adoption := saports.SellEvaluationAdoption{
 		Evaluation:   reference,
 		Outcome:      outcome,
 		PricingScope: evaluation.Input().Scope().String(),
-		SourceTrail:  sellPriceSourceSteps(evaluation.Explanation()),
+		SourceTrail:  sourceSteps,
 	}
 	if outcome == saports.SellEvaluationOutcomeInvalid {
 		return saports.SellEvaluationAdoption{}, false, fmt.Errorf("%w: evaluation status %q", ErrUntranslatableAnswer, evaluation.Status())
@@ -124,7 +128,7 @@ func (adapter *SellEvaluationAdapter) LoadSellEvaluation(
 
 // sellPriceSourceSteps 从评价解释里摘出按有序列表问过的每一格。解释行由计价写成
 // 「sell price source <范围>: <这一格>」，范围原样、不去空白。没有这种行就是只带一个范围。
-func sellPriceSourceSteps(explanation []string) []saports.SellPriceSourceStep {
+func sellPriceSourceSteps(explanation []string) ([]saports.SellPriceSourceStep, error) {
 	const prefix = "sell price source "
 	var steps []saports.SellPriceSourceStep
 	for _, line := range explanation {
@@ -134,11 +138,11 @@ func sellPriceSourceSteps(explanation []string) []saports.SellPriceSourceStep {
 		}
 		scope, kind, found := strings.Cut(rest, ": ")
 		if !found || scope == "" || kind == "" {
-			continue
+			return nil, fmt.Errorf("%w: sell price source line %q", ErrUntranslatableAnswer, line)
 		}
 		steps = append(steps, saports.SellPriceSourceStep{Scope: scope, Kind: kind})
 	}
-	return steps
+	return steps, nil
 }
 
 func sellOutcomeOf(status ppdomain.EvaluationStatus) saports.SellEvaluationOutcome {

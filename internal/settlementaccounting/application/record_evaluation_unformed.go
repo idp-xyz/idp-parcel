@@ -160,7 +160,10 @@ func conclusionWithSourceStops(
 	}
 	stops := make([]domain.SellPriceSourceStop, 0, len(trail))
 	for _, step := range trail {
-		cause, keep := sellPriceSourceStopCause(step.Kind, fallback)
+		cause, keep, err := sellPriceSourceStopCause(step.Kind, fallback)
+		if err != nil {
+			return domain.SellEvaluationRequestConclusion{}, err
+		}
 		if !keep {
 			continue
 		}
@@ -180,23 +183,27 @@ func conclusionWithSourceStops(
 	return conclusion.WithSourceStops(stops)
 }
 
-func sellPriceSourceStopCause(kind string, fallback domain.EvaluationStopCause) (domain.EvaluationStopCause, bool) {
+// SELECTED 与 UNDECIDED 不是停因，不记。STOPPED 用请求答出来的那一格：解释只说停住了，没说停在哪一种。
+// 其余没见过的词是翻译对不上，不静默丢掉。
+func sellPriceSourceStopCause(kind string, fallback domain.EvaluationStopCause) (domain.EvaluationStopCause, bool, error) {
 	switch kind {
 	case "NO_CARD":
-		return domain.StopPriceCardNotConfigured, true
+		return domain.StopPriceCardNotConfigured, true, nil
 	case "BASE_RATE_NOT_IN_TABLE":
-		return domain.StopEvaluationRateNotFound, true
+		return domain.StopEvaluationRateNotFound, true, nil
 	case "APPLICABILITY_CONFLICT":
-		return domain.StopPriceCardApplicabilityConflict, true
+		return domain.StopPriceCardApplicabilityConflict, true, nil
 	case "INPUT_UNAVAILABLE":
-		return domain.StopPricingInputUnavailable, true
+		return domain.StopPricingInputUnavailable, true, nil
 	case "STOPPED":
 		if fallback.String() == "" || fallback.Stage() == domain.StopBeforeRequest {
-			return domain.EvaluationStopCauseInvalid, false
+			return domain.EvaluationStopCauseInvalid, false, nil
 		}
-		return fallback, true
+		return fallback, true, nil
+	case "SELECTED", "UNDECIDED":
+		return domain.EvaluationStopCauseInvalid, false, nil
 	default:
-		return domain.EvaluationStopCauseInvalid, false
+		return domain.EvaluationStopCauseInvalid, false, fmt.Errorf("unknown sell price source kind %q", kind)
 	}
 }
 

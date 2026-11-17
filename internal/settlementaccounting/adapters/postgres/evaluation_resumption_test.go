@@ -768,4 +768,11 @@ func TestAPriceCardResumesOnlyAnAskedSellPriceSource(t *testing.T) {
 	if got := fixture.list(t, ports.StalledEvaluationQuery{Causes: priceCard, PricingScope: "SYN-SCOPE-C"}); len(got) != 0 {
 		t.Fatalf("没问到的范围 = %+v，不该续办", got)
 	}
+	answered := []domain.EvaluationStopCause{domain.StopPricingInputUnavailable}
+	if got := fixture.list(t, ports.StalledEvaluationQuery{Causes: answered}); len(got) != 1 {
+		t.Fatalf("不带范围、解请求答出来的那一格 = %+v，want 这一件", got)
+	}
+	if got := fixture.list(t, ports.StalledEvaluationQuery{Causes: []domain.EvaluationStopCause{domain.StopFeeItemMappingIncomplete}}); len(got) != 0 {
+		t.Fatalf("不带范围、解不开请求那一格 = %+v，不该因为前面的来源没卡而续办", got)
+	}
 }

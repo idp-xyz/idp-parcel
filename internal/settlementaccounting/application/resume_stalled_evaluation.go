@@ -186,14 +186,12 @@ func (handler *ResumeStalledEvaluationHandler) Handle(
 	}
 }
 
-// waitsFor 答一个停因与它上次续办凭的依据，在不在等这一次续办。凭同一个依据续办过的不再推：同一封信重投、同一条运营
-// 命令重跑，都不该把续办出来又停下的那一件再推一代。这里只在本事务里再核链头；整条代次链上有没有哪一代凭过这个依据，
-// 由队列的口径（StalledEvaluationQuery.ExcludeBasis）筛过一遍。
-// sellRequestWaits 在请求记下了逐来源停因时，按命中的那个来源自己的那一格核名单，不对请求答出来的那一格核。
-// 没有逐来源停因时，仍按请求的停因核，与只带一个范围的请求相同。范围是不是问到过的，由取队列的条件筛过。
+// sellRequestWaits 核这一次续办还推不推这份请求。请求答出来的那一格始终参与：不带计价范围的登记
+// （费用项目映射、取整未声明）解的是这一格，有逐来源停因也不改。逐来源的格子另算：带计价范围的登记
+// 解得开问到过的某个来源自己的那一格时也推。范围是不是问到过的，由取队列的条件筛。
 func sellRequestWaits(command ResumeStalledEvaluationCommand, record ports.SellEvaluationRequestRecord) bool {
-	if len(record.SourceStops) == 0 {
-		return waitsFor(command, record.StopCause, record.Request.ResumeBasis())
+	if waitsFor(command, record.StopCause, record.Request.ResumeBasis()) {
+		return true
 	}
 	if record.Request.ResumeBasis() == command.Basis {
 		return false

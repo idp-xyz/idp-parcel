@@ -22,7 +22,7 @@ type PreAcceptanceTrial struct {
 	hasWeight  bool
 	lines      []PreAcceptanceTrialChargeLine
 	// sellScope 与 sellCard 是这一件最终用上的销售价格来源和价卡版本字面。只在按有序列表逐件问时才有：
-	// 只带一个范围的估价，范围与卡在估价头上，这里保持缺席，留痕的逐件形状与此前相同。
+	// 只带一个范围的估价，范围与卡在估价头上，逐件留痕不重复写。
 	sellScope EstimatePricingScope
 	sellCard  string
 }

@@ -356,11 +356,18 @@ SELECT kind, stop_cause, first_key, second_key, stopped_at FROM (
 	           AND q.stop_cause = ANY($2)
 	           AND ($4::text IS NULL OR q.pricing_scope_id = $4)
 	         )
-	         OR EXISTS (
-	           SELECT 1 FROM settlement_accounting.sell_evaluation_request_source_stop cell
-	            WHERE cell.tenant_id = q.tenant_id AND cell.request_id = q.request_id
-	              AND cell.stop_cause = ANY($2)
-	              AND ($4::text IS NULL OR cell.pricing_scope_id = $4)
+	         OR (
+	           EXISTS (
+	             SELECT 1 FROM settlement_accounting.sell_evaluation_request_source_stop cell
+	              WHERE cell.tenant_id = q.tenant_id AND cell.request_id = q.request_id)
+	           AND (
+	             ($4::text IS NULL AND q.stop_cause = ANY($2))
+	             OR ($4::text IS NOT NULL AND EXISTS (
+	               SELECT 1 FROM settlement_accounting.sell_evaluation_request_source_stop cell
+	                WHERE cell.tenant_id = q.tenant_id AND cell.request_id = q.request_id
+	                  AND cell.stop_cause = ANY($2)
+	                  AND cell.pricing_scope_id = $4))
+	           )
 	         )
 	       )
 	   AND ($3::text IS NULL OR NOT EXISTS (
