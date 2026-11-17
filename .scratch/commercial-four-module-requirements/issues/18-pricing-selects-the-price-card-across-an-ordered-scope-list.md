@@ -1,7 +1,7 @@
 # 18 计价按请求带来的有序计价范围列表选卡，只在两种落空时转问下一个
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-18-ordered-sell-price-scope-list`（worktree `idp-parcel-cfmr18`），基线 `e51a02b26`。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 无
 地盘：`internal/parcelpricing`（领域、应用与受理前试算口）、`docs/application/parcel-pricing`。读结算评价请求记录的那只适配器怎样译出列表，随票 19 的请求记录形状做，不在本票
@@ -46,3 +46,16 @@ Blocked by: 无
 
 - 2026-11-12：由票 15 拆出。
 - 2026-11-12（激活）：用户在问题卡上选定激活票 16 至 21，本票转 `ready-for-agent`；此前 `draft`，等 ADR-0380 进 `main`（已在 `486a4e8fe` 进）。
+- 2026-11-17（完工，待评审）：Cursor 会话在分支 `cursor/cfmr-18-ordered-sell-price-scope-list` 上做完，基线 `e51a02b26`。
+  1. **落点。** 形成评价的命令与受理前试算的命令可以带 `Scopes`。空或一项时不看它，仍按原来的单范围路走。多于一项时只对 SELL·客户费用按顺序问。基础运费表缺格在领域里标成 `BaseRateTableMiss`，问题码仍是 `RATE_NOT_FOUND`，不进语义摘要。问到过的每一格在结果的 `ScopeTrail` 上；形成了评价的，也写进解释、不进摘要。读结算请求记录的适配器没改，仍只交一个范围，那是票 19。
+  2. **完成判据逐条。**
+     - 前一个没有卡、后一个有 ✅ `TestTheSecondScopeIsUsedWhenTheFirstHasNoCard`。
+     - 前一个基础运费表没有这一格，落到后一个 ✅ `TestABaseRateGapFallsThroughAndAConflictStops` 的前一半。
+     - 前一个适用冲突，停住不问后一个 ✅ 同一条测试的后一半。
+     - 前一个基础运费表有这一格、附加费表缺档，停住 ✅ 信号在 `TestTableLookupSurchargeWithNoBandForTheZoneStaysPending`（`BaseRateTableMiss` 为假）；列表只在这个信号为真时才问下一个，所以附加费表缺档停在该范围。没有把一张带附加费表的卡放进列表里再跑一遍。
+     - 受理前试算两件落在不同范围 ✅ `TestPreAcceptanceParcelsCanLandOnDifferentSellPriceSources`。
+     - 全部落空答最后一格 ✅ `TestEveryScopeMissingAnswersTheLastScope`：最后一格没有卡时不形成评价，是基础运费表缺格时形成待判断评价，两种都带出全部范围。
+     - 只带一个范围，语义摘要与不列列表相同；单范围不写来源说明 ✅ `TestOneScopeStaysOnTheExistingPath`。回放得到同一个范围，靠摘要里的输入范围就是用上的那一个，没有另写回放测试。
+     - `UC-PP-001`：`docs/` 已冻结，改为改 `dox/contexts/parcel-pricing.md`。
+  3. **票面之外定的。** 列表多于一项而方向不是 SELL·客户费用，命令不受理。同一范围出现两次不受理。受理前试算的多范围路可以把命令上的分区交给不绑分区目录的卡；空则仍只走申报的邮编路线。
+  4. **自验。** `internal/parcelpricing/domain` 与 `application` 全部通过。全量真库测试未跑，属进 `main` 的步骤。
