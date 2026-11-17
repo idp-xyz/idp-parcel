@@ -1,7 +1,7 @@
 # 21 演示租户的种子合同声明销售价格来源，演示动线走通「专属价没谈到的线路落到标准价」
 
 Category: enhancement
-Status: in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-21-demo-sell-price-sources`（worktree `idp-parcel-cfmr21`），基线 `45e22ecdb`。此前 ready-for-agent
+Status: resolved——2026-11-17 进 `main`，见「进 main 记录」。此前 in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-21-demo-sell-price-sources`（worktree `idp-parcel-cfmr21`），基线 `45e22ecdb`。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [19](./19-settlement-requests-sell-evaluations-with-the-contract-declared-scope-list.md)、票 [20](./20-admin-web-contract-page-declares-sell-price-sources.md)
 地盘：`scripts/demo-seeds`
@@ -27,6 +27,19 @@ Blocked by: 票 [19](./19-settlement-requests-sell-evaluations-with-the-contract
 
 - 干净库上重灌种子成功；上面第 2、4 条在灌完的库上各有一条可重复的核对。
 - 管理台合同页上看得到两位客户各自的列表与每个来源此刻有没有在用的卡。
+
+## 进 main 记录
+
+2026-11-17。用户选定「全量测试后进 main」。推送方就是作者会话。本次会话不调用 MCP。
+
+- **验过的代码**：`131c06668`，底是 `45e22ecdb`。落地时 `main` 仍是它的底，重放是空操作。收口这一笔只改本票、`spec.md` 的子票表与 `dox/work.md`「在做」，全量与种子没有再跑。
+- **出处**：分支 `cursor/cfmr-21-demo-sell-price-sources`。
+- **评审**：用户这一步没有再开一轮。走查与全量是作者跑的。
+- **生成物**：没有重生成。
+- **全量真库测试**：在 `131c06668` 上跑 `scripts/test-full.sh`，退 0。`sellpricewalk` 因没设 `IDP_PARCEL_DEMO_CHECK` 跳过，那条核对另在灌完的库上跑。
+- **灌一次性库**：`scripts/demo-seeds/seed.sh` 灌进 `55432` 上的专用库 `cfmr21_seed`，退 0，随后 `check-sell-price-sources.sh` 退 0，库用后已删。客户 21 同额 78 CNY；客户 22 专属线路同额 78 CNY；没谈到的线路落到公共卡 68 CNY。
+- **完成判据**：干净库重灌、专属线路与没谈到的线路、两位客户同额，都有可重复的核对。管理台页面没有点开；名单在库里，页面读的是这一份。
+- **还留着的**：老客户换列表要等 `product-strategy-boundary/06` 解冻，种子没有走那一步。
 
 ## Comments
 
