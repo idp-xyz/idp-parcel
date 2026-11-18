@@ -50,6 +50,9 @@ const (
 	// SchemaDocumentNumbering 归单据编号规则册所有（ADR-0355 决定六）。它是编号技术组件的配置，不是限界上下文，
 	// 但册的数据归本仓，不放进平台库的 schema——那里的资产只能由平台库发版改。
 	SchemaDocumentNumbering = "document_numbering"
+	// SchemaWarehouseFulfillment 归 warehouse-fulfillment 的业务表所有。仓配开关关着的部署也创建它、施加它的迁移，
+	// 表是空的（ADR-0375 决定四）。
+	SchemaWarehouseFulfillment = "warehouse_fulfillment"
 	// SchemaHistory 归 Parcel 的迁移历史所有，既不是框架 schema 也不是业务 schema。
 	SchemaHistory = "parcel_migration"
 )
@@ -160,6 +163,10 @@ func Plan() ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
+	warehouse, err := businessSteps(migrations.WarehouseFulfillment, SchemaWarehouseFulfillment)
+	if err != nil {
+		return nil, err
+	}
 	steps = append(steps, platform...)
 	steps = append(steps, shipment...)
 	steps = append(steps, routing...)
@@ -174,6 +181,7 @@ func Plan() ([]Step, error) {
 	steps = append(steps, collection...)
 	steps = append(steps, access...)
 	steps = append(steps, numbering...)
+	steps = append(steps, warehouse...)
 	return steps, nil
 }
 
@@ -185,7 +193,7 @@ func Schemas() []string {
 		SchemaParcelShipment, SchemaNetworkRouting, SchemaNodeOperations, SchemaVisibilityException,
 		SchemaSettlementAccounting, SchemaCustomsCompliance, SchemaTransportFulfillment,
 		SchemaPilotGovernance, SchemaPartyCommercial, SchemaParcelPricing,
-		SchemaCollectionRemittance, SchemaAccessIdentity, SchemaDocumentNumbering,
+		SchemaCollectionRemittance, SchemaAccessIdentity, SchemaDocumentNumbering, SchemaWarehouseFulfillment,
 	}
 }
 
