@@ -154,6 +154,8 @@ type ConfirmChargeDeps struct {
 	Clock        ports.Clock
 	// Supersessions 缺席时不拦确认。生产装配要装上，被替代的预估才不会再确认。
 	Supersessions ports.ChargeSupersessionStore
+	// ChargeLock 让这笔费用上的确认与复磅形成那一头的记替代排成一列，必装，见 ports.ChargeStageLock。
+	ChargeLock ports.ChargeStageLock
 }
 
 type ConfirmChargeHandler struct {
@@ -163,15 +165,19 @@ type ConfirmChargeHandler struct {
 // NewConfirmChargeHandler 在装配时核齐依赖：缺件在这里报，不等到确认那一刻才撞空指针。
 func NewConfirmChargeHandler(deps ConfirmChargeDeps) (*ConfirmChargeHandler, error) {
 	if deps.Charges == nil || deps.Conditions == nil || deps.Facts == nil || deps.Attributions == nil ||
-		deps.Downstream == nil || deps.Occupation == nil || deps.Clock == nil {
+		deps.Downstream == nil || deps.Occupation == nil || deps.Clock == nil || deps.ChargeLock == nil {
 		return nil, fmt.Errorf("%w: confirm charge", ErrNilDependency)
 	}
 	return &ConfirmChargeHandler{deps: deps}, nil
 }
 
-// Handle 把一笔预估/暂估费用推进到确认：找回费用 → 已确认即重放返原确认不二确 →
+// Handle 把一笔预估/暂估费用推进到确认：锁费用行 → 找回费用 → 已确认即重放返原确认不二确 →
 // 条件核对（未配置→未决不默认转正；未满足→专格带缺口）→ CustomerCharge.Confirm
 // （金额不改，领域已钉，本编排连金额输入都没有）→ 提交 → 发布意图。
+//
+// 先锁费用行、再读阶段与替代关系：复磅形成那一头在这笔费用上记替代也取同一把锁，两头排成一列，后到的读到先到者已提交的
+// 样子——替代先提交，这里答`被替代`、不落确认；确认先提交，那一头读到已确认、只记差额。各条确认入口都汇到这里，锁就取在
+// 这里而不是各入口自己取；管理台手工确认手里没有包裹，也只能锁这一行（取锁先后见 ports.ChargeStageLock）。
 func (handler *ConfirmChargeHandler) Handle(
 	ctx context.Context,
 	command ConfirmChargeCommand,
@@ -184,6 +190,9 @@ func (handler *ConfirmChargeHandler) Handle(
 		return ConfirmChargeResult{outcome: ConfirmNotAccepted}, nil
 	}
 
+	if err := handler.deps.ChargeLock.LockChargeStage(ctx, command.TenantID, chargeID); err != nil {
+		return chargeStoreUndecided(command.ChargeID), nil
+	}
 	charge, found, err := handler.deps.Charges.FindByID(ctx, command.TenantID, chargeID)
 	if err != nil {
 		return chargeStoreUndecided(command.ChargeID), nil

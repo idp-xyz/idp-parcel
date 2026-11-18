@@ -191,6 +191,7 @@ type reweighFormation struct {
 	supersessions *supersessionDouble
 	adjustments   *chargeAdjustmentStoreDouble
 	locks         *serializerDouble
+	chargeLocks   *chargeLockDouble
 }
 
 // stopSecondAndSubmitThird 把第二代改成停下（没有费用），再起第三代作为这一次要形成的那一代。
@@ -240,6 +241,19 @@ func (fixture *reweighFormation) resumeAs(t *testing.T, from domain.SellEvaluati
 }
 
 func newReweighFormation(t *testing.T, stage domain.ChargeStage, nextMinor int64, adopted bool) *reweighFormation {
+	t.Helper()
+	return newReweighFormationWith(t, stage, nextMinor, adopted, nil)
+}
+
+// newReweighFormationWith 在装配形成编排之前让 rewire 改一遍整组依赖：要在包裹锁、费用行锁与读费用之间记先后的用例，
+// 把这几只依赖换成记先后的包装。
+func newReweighFormationWith(
+	t *testing.T,
+	stage domain.ChargeStage,
+	nextMinor int64,
+	adopted bool,
+	rewire func(*application.FormEstimatedCustomerChargeDeps),
+) *reweighFormation {
 	t.Helper()
 	base := newEstimatedChargeFixture(t, map[string]string{
 		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
@@ -293,6 +307,7 @@ func newReweighFormation(t *testing.T, stage domain.ChargeStage, nextMinor int64
 	supersessions := &supersessionDouble{}
 	adjustments := newChargeAdjustmentStore()
 	locks := &serializerDouble{}
+	chargeLocks := &chargeLockDouble{}
 	reweigh := application.NewRecordChargeAdjustmentHandler(application.RecordChargeAdjustmentDeps{
 		Charges: prior, Adjustments: adjustments, Clock: fixedClock{at: estimatedChargeAt},
 	})
@@ -300,16 +315,22 @@ func newReweighFormation(t *testing.T, stage domain.ChargeStage, nextMinor int64
 	if err != nil {
 		t.Fatalf("形成本体：%v", err)
 	}
-	handler, err := application.NewFormEstimatedCustomerChargeHandler(application.FormEstimatedCustomerChargeDeps{
+	deps := application.FormEstimatedCustomerChargeDeps{
 		Requests: base.requests, Conclusions: base.requests, Mappings: base.mappings,
 		Charges: charges, FollowUp: base.followUp, Clock: fixedClock{at: estimatedChargeAt},
 		PriorCharges: prior, Supersessions: supersessions,
 		ReweighAdoptions: reweighAdoptionDouble{adopted: adopted}, Reweigh: reweigh,
-		Successors: base.requests, Serializer: locks,
-	})
+		Successors: base.requests, Serializer: locks, ChargeLock: chargeLocks,
+	}
+	if rewire != nil {
+		rewire(&deps)
+	}
+	handler, err := application.NewFormEstimatedCustomerChargeHandler(deps)
 	if err != nil {
 		t.Fatalf("形成外层：%v", err)
 	}
 	base.handler = handler
-	return &reweighFormation{estimatedChargeFixture: base, supersessions: supersessions, adjustments: adjustments, locks: locks}
+	return &reweighFormation{
+		estimatedChargeFixture: base, supersessions: supersessions, adjustments: adjustments, locks: locks, chargeLocks: chargeLocks,
+	}
 }

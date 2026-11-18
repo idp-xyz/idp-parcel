@@ -68,7 +68,7 @@ func chargeConfirmationOnBasis(
 	}
 	confirm, err := saapplication.NewConfirmChargeHandler(saapplication.ConfirmChargeDeps{
 		Charges: charges, Conditions: conditions, Facts: catalogues, Attributions: attributions,
-		Downstream: handoff, Occupation: occupation, Clock: clock, Supersessions: supersessions,
+		Downstream: handoff, Occupation: occupation, Clock: clock, Supersessions: supersessions, ChargeLock: charges,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: confirm charge: %w", err)

@@ -17,8 +17,10 @@ func (handler *FormEstimatedCustomerChargeHandler) reweighWired() bool {
 // reweighPreviousCharge 让这一代的评价对着这条代次链上已有的费用办。交回的 settled 为真时这一代已有结论，调用方照答。
 //
 // 先取包裹确认锁：同一件包裹的各代形成与终局那一头的确认排成一列，之后读到的链是别人提交之后的样子。
-// 这一代已被更晚的一代越过，就不再动钱。否则往回找链上最近的一笔费用：已确认的在这里结清差额；仍是预估或暂估的，
-// 交回它的标识，等这一代的新预估落下之后记替代。链上一笔费用都没有，这一代照旧形成首笔预估。
+// 这一代已被更晚的一代越过，就不再动钱。否则往回找链上最近的一笔费用，再锁它的行、锁到手才判阶段：已确认的在这里结清
+// 差额；仍是预估或暂估的，交回它的标识，等这一代的新预估落下之后记替代。锁不能省，也不能挪到判阶段之后——管理台手工
+// 确认不经包裹，若只靠包裹锁，它可以夹在「读到仍是预估」与「记替代」之间把这笔费用确认掉，同一件包裹两笔都算数。
+// 链上一笔费用都没有，这一代照旧形成首笔预估。
 func (handler *FormEstimatedCustomerChargeHandler) reweighPreviousCharge(
 	ctx context.Context,
 	command FormEstimatedCustomerChargeCommand,
@@ -49,6 +51,10 @@ func (handler *FormEstimatedCustomerChargeHandler) reweighPreviousCharge(
 	}
 	if !found {
 		return none, false, EstimatedCustomerChargeResult{}, nil
+	}
+	// 判阶段之前先锁这一行：手工确认入口不经包裹锁，只有这把锁能让它与这里排成一列。锁到事务结束，下面记替代时仍握着。
+	if err := handler.deps.ChargeLock.LockChargeStage(ctx, command.TenantID, earlier); err != nil {
+		return none, true, undecidedEstimatedCharge(SellChargeFormationUndecided, err), nil
 	}
 	charge, found, err := handler.deps.PriorCharges.FindByID(ctx, command.TenantID, earlier)
 	if err != nil {

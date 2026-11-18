@@ -149,13 +149,14 @@ type FormEstimatedCustomerChargeDeps struct {
 	Clock    ports.Clock
 	// 下面这一组一起装才处理代次链上已有的费用，只装一部分构造时即拒。全缺席时每一代只形成自己的预估，不看链上
 	// 别的代：那只给不经过实测变化的单元测试用，生产装配必给。Successors 找这一代之后的各代，Serializer 让同一件
-	// 包裹的各代形成排成一列。
+	// 包裹的各代形成排成一列，ChargeLock 让链上前一笔费用的阶段判断与它的确认排成一列。
 	PriorCharges     ports.CustomerChargeStore
 	Supersessions    ports.ChargeSupersessionStore
 	ReweighAdoptions ports.ReweighAdjustmentAdoptionView
 	Reweigh          *RecordChargeAdjustmentHandler
 	Successors       ports.SellEvaluationRequestSuccessorView
 	Serializer       ports.ParcelConfirmationSerializer
+	ChargeLock       ports.ChargeStageLock
 }
 
 // FormEstimatedCustomerChargeHandler 是 ADR-0190 决定五的形成编排外层：SELL·客户费用评价已记录之后，按评价回指读回
@@ -170,16 +171,17 @@ func NewFormEstimatedCustomerChargeHandler(deps FormEstimatedCustomerChargeDeps)
 		deps.Clock == nil {
 		return nil, fmt.Errorf("%w: estimated customer charge", ErrNilDependency)
 	}
-	wired := 0
-	for _, present := range []bool{
+	earlierChargeWiring := []bool{
 		deps.PriorCharges != nil, deps.Supersessions != nil, deps.ReweighAdoptions != nil,
-		deps.Reweigh != nil, deps.Successors != nil, deps.Serializer != nil,
-	} {
+		deps.Reweigh != nil, deps.Successors != nil, deps.Serializer != nil, deps.ChargeLock != nil,
+	}
+	wired := 0
+	for _, present := range earlierChargeWiring {
 		if present {
 			wired++
 		}
 	}
-	if wired != 0 && wired != 6 {
+	if wired != 0 && wired != len(earlierChargeWiring) {
 		return nil, fmt.Errorf("%w: estimated customer charge: the earlier-charge dependencies are wired in part", ErrNilDependency)
 	}
 	return &FormEstimatedCustomerChargeHandler{deps: deps}, nil

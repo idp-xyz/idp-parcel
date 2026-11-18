@@ -2649,6 +2649,7 @@ func formEstimatedCustomerChargeOnSellEvaluationConsumer(
 		Reweigh:          reweigh,
 		Successors:       requests,
 		Serializer:       parcelLocks,
+		ChargeLock:       charges,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form estimated customer charge: %w", err)

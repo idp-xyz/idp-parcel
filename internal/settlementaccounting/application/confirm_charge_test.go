@@ -176,8 +176,20 @@ type confirmClock struct{ at time.Time }
 
 func (clock confirmClock) Now() time.Time { return clock.at }
 
+// chargeLockDouble 记下取了哪几笔费用行的锁；err 非空时让取锁失败。
+type chargeLockDouble struct {
+	locked []string
+	err    error
+}
+
+func (double *chargeLockDouble) LockChargeStage(_ context.Context, _ domain.TenantID, charge domain.CustomerChargeID) error {
+	double.locked = append(double.locked, charge.String())
+	return double.err
+}
+
 type confirmFixture struct {
 	store        *chargeStoreDouble
+	lock         *chargeLockDouble
 	forms        *attributionFormsDouble
 	arrangements *arrangementsDouble
 	conditions   *conditionViewDouble
@@ -187,18 +199,10 @@ type confirmFixture struct {
 	handler      *application.ConfirmChargeHandler
 }
 
-func newConfirmFixture(t *testing.T) *confirmFixture {
+// deps 给出这份夹具装的整组依赖，要换其中某几只的用例从这里改。
+func (fixture *confirmFixture) deps(t *testing.T) application.ConfirmChargeDeps {
 	t.Helper()
-	fixture := &confirmFixture{
-		store:        newChargeStore(),
-		forms:        newAttributionFormsDouble(),
-		arrangements: newArrangementsDouble(),
-		conditions:   &conditionViewDouble{configured: true, met: true},
-		facts:        &factsViewDouble{configured: true, facts: registeredFacts(t)},
-		handoff:      &confirmationHandoffDouble{},
-		occupation:   &occupationConversionDouble{},
-	}
-	handler, err := application.NewConfirmChargeHandler(application.ConfirmChargeDeps{
+	return application.ConfirmChargeDeps{
 		Charges:      fixture.store,
 		Conditions:   fixture.conditions,
 		Facts:        fixture.facts,
@@ -206,7 +210,23 @@ func newConfirmFixture(t *testing.T) *confirmFixture {
 		Downstream:   fixture.handoff,
 		Occupation:   fixture.occupation,
 		Clock:        confirmClock{at: chargeConfirmedAt},
-	})
+		ChargeLock:   fixture.lock,
+	}
+}
+
+func newConfirmFixture(t *testing.T) *confirmFixture {
+	t.Helper()
+	fixture := &confirmFixture{
+		store:        newChargeStore(),
+		lock:         &chargeLockDouble{},
+		forms:        newAttributionFormsDouble(),
+		arrangements: newArrangementsDouble(),
+		conditions:   &conditionViewDouble{configured: true, met: true},
+		facts:        &factsViewDouble{configured: true, facts: registeredFacts(t)},
+		handoff:      &confirmationHandoffDouble{},
+		occupation:   &occupationConversionDouble{},
+	}
+	handler, err := application.NewConfirmChargeHandler(fixture.deps(t))
 	if err != nil {
 		t.Fatal(err)
 	}

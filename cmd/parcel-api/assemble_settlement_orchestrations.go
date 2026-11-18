@@ -190,7 +190,7 @@ func buildSettlementOrchestrations(db *bentopg.DB, issuer *docnumber.Assigner) (
 	}
 	confirm, err := saapplication.NewConfirmChargeHandler(saapplication.ConfirmChargeDeps{
 		Charges: charges, Conditions: conditions, Facts: catalogues, Attributions: attributions,
-		Downstream: confirmHandoff, Occupation: occupation, Clock: clock, Supersessions: supersessions,
+		Downstream: confirmHandoff, Occupation: occupation, Clock: clock, Supersessions: supersessions, ChargeLock: charges,
 	})
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: confirm charge: %w", err)

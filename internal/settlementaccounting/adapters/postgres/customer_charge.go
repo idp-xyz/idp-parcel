@@ -19,6 +19,8 @@ type CustomerCharges struct {
 	db *bentopg.DB
 }
 
+var _ ports.ChargeStageLock = (*CustomerCharges)(nil)
+
 func NewCustomerCharges(db *bentopg.DB) (*CustomerCharges, error) {
 	if db == nil {
 		return nil, fmt.Errorf("settlement accounting postgres: db is nil")
@@ -183,6 +185,29 @@ func (repository *CustomerCharges) SaveConfirmed(
 		return ports.ChargeAlreadyConfirmed, nil
 	}
 	return ports.ChargeSaved, nil
+}
+
+// LockChargeStage 以 FOR NO KEY UPDATE 锁住费用行，选这一档而不是 FOR UPDATE 的理由见 ports.ChargeStageLock。锁与随后的读
+// 分两句：并成一句时，等锁的那一路只在行上重验被锁的那一行，读不到对方刚提交的替代行。
+func (repository *CustomerCharges) LockChargeStage(
+	ctx context.Context,
+	tenant domain.TenantID,
+	id domain.CustomerChargeID,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("lock charge stage: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT 1
+		   FROM settlement_accounting.customer_charge
+		  WHERE tenant_id = $1
+		    AND charge_id = $2
+		    FOR NO KEY UPDATE`,
+		tenant.String(), id.String()); err != nil {
+		return fmt.Errorf("lock charge stage: %w", err)
+	}
+	return nil
 }
 
 // SaveEstimated 写下尚未确认的客户费用。七项确认事实留空。已有同一标识则不覆盖。
