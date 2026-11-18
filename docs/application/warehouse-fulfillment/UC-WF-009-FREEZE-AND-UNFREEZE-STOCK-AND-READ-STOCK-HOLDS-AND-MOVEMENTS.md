@@ -173,7 +173,7 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 冻结口、解冻口与两个面的读口 | 未做。冻结与解冻挂「运营决定」能力面；运营的读口挂主数据与运营查阅读；货主的读口挂首方客户渠道 | PN-09 开发交接划包 |
-| `AT-WF-132`、`AT-WF-135`、`AT-WF-136`，预占与分配 | 预占的原子判定、分配与它们在读口上的内容归出库的用例，还没有写；带批号、效期或贴标别名条件的预占在各部分上占了多少、读口上怎么带，随它定 | 票 [warehouse-fulfillment/09](../../../.scratch/warehouse-fulfillment/issues/09-write-the-outbound-use-cases.md) |
+| `AT-WF-132`、`AT-WF-135`、`AT-WF-136`，预占与分配 | 预占的判定、分配与读口上的内容在 UC-WF-012、UC-WF-013。带条件的预占在各部分上占了多少，读口照 UC-WF-012 的结果语义契约答 | 已写成 |
 | 冻结与仓租 | 冻结不改在库量，冻结着的货照在库计；仓租发生项要不要带出冻结没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
 | 首方客户 API 契约 | 库存、占用、可用量与流水的读口还没有写进契约；读口不带库位、冻结的原因与操作者（`BD-WF-027`） | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | 接入词：运营决定种类「库存冻结」，客户面能力「仓配查阅」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
