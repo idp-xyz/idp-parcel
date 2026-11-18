@@ -33,6 +33,8 @@ type memoryMeasurements struct {
 	measurements  map[string]ports.ActualMeasurementRecord
 	invalidations map[string]ports.MeasurementInvalidationRecord
 	voided        map[string]string
+	// calls 按先后记下对册的每一次调用，供「先取锁、再读另一类、最后才写」的顺序断言。
+	calls []string
 }
 
 func newMemoryMeasurements() *memoryMeasurements {
@@ -47,10 +49,16 @@ func measurementKey(key ports.ActualMeasurementKey) string {
 	return key.TenantID.String() + "\x00" + key.SourceID
 }
 
+func (store *memoryMeasurements) SerializeSourceIdentity(_ context.Context, key ports.ActualMeasurementKey) error {
+	store.calls = append(store.calls, "lock "+key.TenantID.String()+"/"+key.SourceID)
+	return nil
+}
+
 func (store *memoryMeasurements) FindMeasurement(
 	_ context.Context,
 	key ports.ActualMeasurementKey,
 ) (ports.ActualMeasurementRecord, bool, error) {
+	store.calls = append(store.calls, "find-measurement")
 	record, found := store.measurements[measurementKey(key)]
 	return record, found, nil
 }
@@ -59,6 +67,7 @@ func (store *memoryMeasurements) SaveMeasurement(
 	_ context.Context,
 	record ports.ActualMeasurementRecord,
 ) (ports.ActualMeasurementSaveOutcome, error) {
+	store.calls = append(store.calls, "save-measurement")
 	key := measurementKey(record.Key)
 	if _, found := store.measurements[key]; found {
 		return ports.ActualMeasurementAlreadyRecorded, nil
@@ -90,6 +99,7 @@ func (store *memoryMeasurements) FindInvalidation(
 	_ context.Context,
 	key ports.ActualMeasurementKey,
 ) (ports.MeasurementInvalidationRecord, bool, error) {
+	store.calls = append(store.calls, "find-invalidation")
 	record, found := store.invalidations[measurementKey(key)]
 	return record, found, nil
 }
@@ -98,6 +108,7 @@ func (store *memoryMeasurements) SaveInvalidation(
 	_ context.Context,
 	record ports.MeasurementInvalidationRecord,
 ) (ports.MeasurementInvalidationSaveOutcome, error) {
+	store.calls = append(store.calls, "save-invalidation")
 	target := record.Key.TenantID.String() + "\x00" + record.Invalidation.TargetSourceID()
 	if _, found := store.measurements[target]; !found {
 		return ports.MeasurementInvalidationTargetMissing, nil

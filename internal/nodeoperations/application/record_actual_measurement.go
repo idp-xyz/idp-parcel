@@ -119,6 +119,13 @@ func (handler *RecordActualMeasurementHandler) Handle(
 		ContentDigest: measurement.ContentDigest(),
 		RecordedAt:    handler.clock.Now(),
 	}
+	taken, err := handler.invalidationHoldsSource(ctx, record.Key)
+	if err != nil {
+		return RecordActualMeasurementResult{}, err
+	}
+	if taken {
+		return RecordActualMeasurementResult{outcome: ActualMeasurementSourceConflict}, nil
+	}
 	saved, err := handler.measurements.SaveMeasurement(ctx, record)
 	if err != nil {
 		return RecordActualMeasurementResult{}, err
@@ -248,6 +255,25 @@ func workFactSource(sourceID, performedBy, evidence string, occurredAt time.Time
 	return domain.NewWorkFactSource(sourceID, party, proof, occurredAt)
 }
 
+// invalidationHoldsSource 与 measurementHoldsSource 守测量与作废共用的来源身份空间（缘由见 ports.ActualMeasurementKey）：先取
+// （租户，来源身份）的锁，再看另一类的册上有没有这个来源身份。锁必须取在读之前：先读后锁，并发到的两条路都读到「没有」。
+// 同类之内的判重仍由各自的写口认。
+func (handler *RecordActualMeasurementHandler) invalidationHoldsSource(ctx context.Context, key ports.ActualMeasurementKey) (bool, error) {
+	if err := handler.measurements.SerializeSourceIdentity(ctx, key); err != nil {
+		return false, err
+	}
+	_, held, err := handler.measurements.FindInvalidation(ctx, key)
+	return held, err
+}
+
+func (handler *RecordActualMeasurementHandler) measurementHoldsSource(ctx context.Context, key ports.ActualMeasurementKey) (bool, error) {
+	if err := handler.measurements.SerializeSourceIdentity(ctx, key); err != nil {
+		return false, err
+	}
+	_, held, err := handler.measurements.FindMeasurement(ctx, key)
+	return held, err
+}
+
 func measurementTenant(raw string) domain.TenantID {
 	tenant, err := domain.NewTenantID(raw)
 	if err != nil {
@@ -337,6 +363,13 @@ func (handler *RecordActualMeasurementHandler) Invalidate(
 		Invalidation:  invalidation,
 		ContentDigest: invalidation.ContentDigest(),
 		RecordedAt:    handler.clock.Now(),
+	}
+	taken, err := handler.measurementHoldsSource(ctx, record.Key)
+	if err != nil {
+		return InvalidateActualMeasurementResult{}, err
+	}
+	if taken {
+		return InvalidateActualMeasurementResult{outcome: MeasurementInvalidationSourceConflict}, nil
 	}
 	saved, err := handler.measurements.SaveInvalidation(ctx, record)
 	if err != nil {

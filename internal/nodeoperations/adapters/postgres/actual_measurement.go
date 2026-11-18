@@ -25,6 +25,23 @@ func NewActualMeasurements(db *bentopg.DB) (*ActualMeasurements, error) {
 	return &ActualMeasurements{db: db}, nil
 }
 
+// SerializeSourceIdentity 取（租户，来源身份）的事务级咨询锁。测量与作废是两张表、各有各的主键，库里没有任何一处挡「同一来源身份
+// 既是测量又是作废」；挡它的是编排：先取这把锁，再读另一张表。锁名与类别无关，所以一条测量与一条作废带同一个来源身份并发到时
+// 也排同一个队，后一条读得到前一条已提交的行。事务的隔离级别是读已提交，取锁之后的读才看得见对方的提交。
+func (repository *ActualMeasurements) SerializeSourceIdentity(ctx context.Context, key ports.ActualMeasurementKey) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("serialize measurement source identity: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('node_operations.measurement.source_identity'), hashtext($1 || chr(31) || $2))`,
+		key.TenantID.String(), key.SourceID,
+	); err != nil {
+		return fmt.Errorf("serialize measurement source identity: 取来源身份锁：%w", err)
+	}
+	return nil
+}
+
 func (repository *ActualMeasurements) FindMeasurement(
 	ctx context.Context,
 	key ports.ActualMeasurementKey,

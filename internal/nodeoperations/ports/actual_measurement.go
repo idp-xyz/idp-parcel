@@ -7,7 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 )
 
-// ActualMeasurementKey 是一条实际测量的幂等键：租户加上现场给的来源身份。
+// ActualMeasurementKey 是一条实际测量或一条作废的幂等键：租户加上现场给的来源身份。测量与作废共用一个来源身份空间：
+// 变化事件的标识与下游续办的依据都由来源身份定，一条测量与一条作废带同一个来源身份，后到的那次变化会被当成已经办过。
 type ActualMeasurementKey struct {
 	TenantID domain.TenantID
 	SourceID string
@@ -85,6 +86,9 @@ func (outcome MeasurementInvalidationSaveOutcome) String() string {
 // ActualMeasurementStore 是实际测量登记册。ListStillValid 只答没有作废指过来的那些。
 // 从多条里取出当前有效实测不在这只写口上，见 MeasurementSelectionAdoptionStore。
 type ActualMeasurementStore interface {
+	// SerializeSourceIdentity 在当前事务里取（租户，来源身份）的锁，事务结束即放；事务外调用被拒。测量与作废共用这一把：
+	// 登记与作废在读另一类有没有同一来源身份之前先取它，并发到的一条测量与一条作废才不会都读到「没有」而各写各的。
+	SerializeSourceIdentity(ctx context.Context, key ActualMeasurementKey) error
 	FindMeasurement(ctx context.Context, key ActualMeasurementKey) (ActualMeasurementRecord, bool, error)
 	SaveMeasurement(ctx context.Context, record ActualMeasurementRecord) (ActualMeasurementSaveOutcome, error)
 	ListStillValid(
