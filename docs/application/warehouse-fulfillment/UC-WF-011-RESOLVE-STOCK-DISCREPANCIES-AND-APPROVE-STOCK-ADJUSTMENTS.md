@@ -204,8 +204,8 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 库存调整的提交口、批准口、驳回口、批准职责规则登记口与读口 | 未做。提交、批准与驳回挂「运营决定」能力面；批准职责规则挂登记册配置写面，在线口与受控批量口消费同一登记用例（ADR-0085 决定一）；读口挂主数据与运营查阅读。三种对象的批准与驳回开一个口还是各开一个，随划包定 | PN-09 开发交接划包 |
-| 实拣与分配不符、出库复核不符形成的库存差异 | 形成的口归出库的用例，还没有写；批准与驳回已在本用例，提交人取那条作业事实的操作者 | 票 [warehouse-fulfillment/09](../../../.scratch/warehouse-fulfillment/issues/09-write-the-outbound-use-cases.md) |
-| 出库确认不成立之后的回补；待出库库区里的账实不符 | CONTEXT 写不成立的「库存经批准以调增流水回补」；判不成立的口、回补落在哪个库位、归哪个入库批次都没有写。本用例的调整不收所指库位在待出库库区的行 | 票 [warehouse-fulfillment/09](../../../.scratch/warehouse-fulfillment/issues/09-write-the-outbound-use-cases.md) |
+| 实拣与分配不符、出库复核不符形成的库存差异 | 形成的口在 UC-WF-013，记在待出库库区里该件所在的格；批准与驳回已在本用例，提交人取那条作业事实的操作者 | 已写成 |
+| 出库确认不成立之后的回补；待出库库区里的账实不符 | 回补的口、库位与入库批次在 UC-WF-015：落在出库确认之前的待出库库位，批次取这次消耗的那一个。本用例的调整仍不收所指库位在待出库库区的行。复核不符的差异记在待出库该件所在的格，形成口在 UC-WF-013 | 已写成 |
 | `AT-WF-166`，销毁与收费发生项 | CONTEXT 写销毁发生项「在销毁入账时形成」，来源事实是本用例批准成立的那一笔；发生项的计量、明细行与作业属性没有写。回库处置的销毁走不走本用例的调整也没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
 | `AT-WF-175`，更正收错的收货与入库作业发生项 | 入库作业发生项在收货确认时形成；以库存调整更正收错的收货算不算它的来源事实被更正、要不要追加更正版本，没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
 | `AT-WF-164`，调增与仓租 | 盘盈与调增记入已有的入库批次，库龄随那个批次；入账之前的那些天补不补仓租没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
