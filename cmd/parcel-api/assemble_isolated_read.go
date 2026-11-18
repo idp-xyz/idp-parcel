@@ -24,10 +24,13 @@ const (
 	isolatedReadLimit          = 200
 )
 
-// isolatedReadCustomerAccount 是委托查阅（AuthorizedQueryScope）的可见客户账户维。
-// 演示动线票的事实链种子必须用同一账户提交委托，否则灌进去的行在页面上不可见——
+// isolatedReadCustomerAccounts 是委托查阅（AuthorizedQueryScope）的可见客户账户维。
+// 演示动线票的事实链种子必须用这里列的账户提交委托，否则灌进去的行在页面上不可见——
 // 扩账户在这里加，不另设输入。
-const isolatedReadCustomerAccount = "SYN-ACCOUNT-01"
+//
+// SYN-ACCOUNT-21、-22 是合同上声明销售价格来源的两位演示客户（票 commercial-four-module-requirements/21）：它们的委托
+// 要走到预估客户费用形成，动线按委托查阅等接受，页面上也要看得见。
+var isolatedReadCustomerAccounts = []string{"SYN-ACCOUNT-01", "SYN-ACCOUNT-21", "SYN-ACCOUNT-22"}
 
 // isolatedReadIntakes 携带 ADR-0078 放行面的注入式 Intake：委托查阅及其子集视图共用的那个变量。它们的读口按可见客户
 // 账户切，操作者信封给不出，换口与开关整体退场归票 operator-channel/53。nil 指针表示未启用。
@@ -52,7 +55,7 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 		)
 	}
 	shipmentViews, err := shipmenthttp.NewIsolatedOperationsReadIntake(
-		isolatedReadScopeReference, tenant, []string{isolatedReadCustomerAccount}, isolatedReadLimit)
+		isolatedReadScopeReference, tenant, append([]string(nil), isolatedReadCustomerAccounts...), isolatedReadLimit)
 	if err != nil {
 		return nil, err
 	}

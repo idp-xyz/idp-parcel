@@ -33,6 +33,12 @@ ch_submit() {
   [[ "$(jget "$LAST" parcels.0.parcelId)" == "$PARCEL" && "$(jget "$LAST" parcels.0.customerParcelReference)" == "$PREF" \
     && "$(jget "$LAST" page.total)" == 1 && -z "$(jget "$LAST" parcels.1)" ]] \
     || { printf '[失败] 按运单号 %s 列出的件对不上提交答复（%s / %s）：\n' "$DOCNUM" "$PARCEL" "$PREF" >&2; cat "$LAST" >&2; exit 1; }
+  # CH_SUBMIT_STOP_AFTER_ACCEPTANCE 非空时停在已接受，不等初始路由与运输准备：只看受理与收寄计费的段用（段六里走 Z2 的那一件，
+  # 演示网络的成本卡只有 Z1，它的候选路线算不出成本，初始路由形不成）。PLAN、SCHED1、SCHED2 不设，后面各段不能接着走。
+  if [[ -n "${CH_SUBMIT_STOP_AFTER_ACCEPTANCE:-}" ]]; then
+    printf '%-34s → 不等（只走到收寄计费）\n' "初始路由与运输准备"
+    return 0
+  fi
   _routed() { curl -s -H "Authorization: Bearer $OP" "$API_BASE/route-plans?register=initial-route" > "$LAST"; [[ "$(jsel "$LAST" judgments declaredParcelId "$PARCEL" conclusion)" == ROUTE_FORMED ]]; }
   poll "初始路由" 90 _routed
   printf '%-34s → ROUTE_FORMED plan=%s\n' "初始路由" "$(jsel "$LAST" judgments declaredParcelId "$PARCEL" planVersion)"

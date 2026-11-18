@@ -531,4 +531,18 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 
 ## 销售价格来源
 
-步骤 `118-sell-price-contracts.sh`、`175-sell-price-exclusive-card.sh`、`505-sell-price-settlement.sh`（票 commercial-four-module-requirements/21）。演示租户另开两位客户，合同从开户起就带销售价格约定，不改 `SYN-CONTRACT-01` / `02`。`SYN-ACCOUNT-21` 只声明公共范围 `SYN-SCOPE-01`；`SYN-ACCOUNT-22` 把专属范围 `SYN-SCOPE-EXCL-01` 排在前面、公共范围排在后面。专属卡 `SYN-PLAN-CN-SG-EXCL-01` 只写谈下来的 Z1，分区目录仍是 `SYN-CAT-ZONE-CN-SG`。两户的估价采用与计费时点采用不登计价范围。专属卡不绑燃油序列。灌完后 `check-sell-price-sources.sh` 核对名单与价表，并跑 `sellpricewalk`：邮编 018 走专属卡，邮编 238 因运费表没有 Z2 落到公共卡，解释里写出来源；两位客户各把同一件的受理前估价与预估客户费用对成同额。取值都是合成的，证据记 `S`。
+票 commercial-four-module-requirements/21。演示租户另开两位客户，合同从开户起就带销售价格约定，不改 `SYN-CONTRACT-01` / `02`——那两份仍是没有约定的旧形状，计价范围照旧由采用册说。取值都是合成的，证据记 `S`。
+
+| 步骤 | 灌什么 |
+|---|---|
+| `118-sell-price-contracts.sh` | 两份合同与各自的结算政策、解析键、参与方与账户。`SYN-ACCOUNT-21` 只声明公共范围 `SYN-SCOPE-01`；`SYN-ACCOUNT-22` 把专属范围 `SYN-SCOPE-EXCL-01` 排在前面、公共范围排在后面 |
+| `175-sell-price-exclusive-card.sh` | 专属卡 `SYN-PLAN-CN-SG-EXCL-01`（`seedgen/exclusive_card.go` 生成）：只写谈下来的 Z1，首重 50、续重 16，公共卡是 55、18；分区目录与燃油序列和公共卡绑同一份 |
+| `489-access-sell-price-customer-clients.sh` | 两户各一台首方客户端 `syn-customer-client-21`、`-22` 与提交、预报、查追踪的授予。发行方配置在 `operator-channel/integration-dex.yaml` |
+| `505-sell-price-settlement.sh` | 两户的结算账户与两本采用册，采用行不登计价范围 |
+
+两种核对，都可重复跑：
+
+- **`check-sell-price-sources.sh`**（只要灌好的库，不要在跑的服务）：经结算读合同约定的那只点读口读回两份合同的来源与顺序，旧合同读回没有约定；采用册带不带范围；同一件包裹分别走受理前估价与正式 SELL 评价两条编排，要选到同一张卡、算出同一个金额。箱子与下面动线提交的那一件相同，金额按手算钉住：公共卡 Z1 96、专属卡 Z1 87、专属卡没有 Z2 落到公共卡 83。
+- **`demo-run/60-sell-price-sources.sh`**（要 `up.sh` 起好的环境）：两位客户各自的客户端真提交三件，走到预估客户费用形成，对受理前估价与费用同额、费用的主要计费范围、评价解释里逐个来源的那几行。走 Z2 的那一件不等初始路由，原因写在脚本头上。
+
+专属卡 `SYN-PLAN-CN-SG-EXCL-01` v1 的内容在这张票的后续修订里换过（原先是手改的 JSON、不绑燃油序列、价与公共卡相同），版本号没换。在 `560b00fde` 上灌过的库重跑会答版本内容冲突、`seed.sh` 中止，库里仍是旧卡；用 `--reset`。

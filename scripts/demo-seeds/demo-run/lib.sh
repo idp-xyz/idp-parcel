@@ -52,7 +52,11 @@ operator_token() {
   "$SEEDS_DIR/operator-channel/operator-token.sh" "${1:-syn-operator-config-01@syn-tenant-01.example.invalid}"
 }
 integration_token() { "$SEEDS_DIR/operator-channel/integration-token.sh" "$1" "$2"; }
-customer_token() { "$SEEDS_DIR/operator-channel/customer-token.sh"; }
+# 缺省是 SYN-ACCOUNT-01 那一台；要替别的客户账户取令牌，先设 DEMO_CUSTOMER_CLIENT 与 DEMO_CUSTOMER_SECRET（段六）。
+customer_token() {
+  "$SEEDS_DIR/operator-channel/customer-token.sh" \
+    "${DEMO_CUSTOMER_CLIENT:-syn-customer-client-01}" "${DEMO_CUSTOMER_SECRET:-syn-customer-client-secret}"
+}
 
 # jget FILE 点路径：从 JSON 文件取一个值（数组下标用数字），缺失打空串。
 jget() {

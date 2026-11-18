@@ -1,0 +1,21 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "clients": [
+    {
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTIx",
+      "customerAccountId": "SYN-ACCOUNT-21",
+      "credentialRef": "SYN-CREDENTIAL-STORE/integration-dex/syn-customer-client-21",
+      "certificateBoundTokenRequired": false,
+      "basis": "SYN-CUSTOMER-CLIENT-BASIS-21"
+    },
+    {
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTIy",
+      "customerAccountId": "SYN-ACCOUNT-22",
+      "credentialRef": "SYN-CREDENTIAL-STORE/integration-dex/syn-customer-client-22",
+      "certificateBoundTokenRequired": false,
+      "basis": "SYN-CUSTOMER-CLIENT-BASIS-22"
+    }
+  ]
+}

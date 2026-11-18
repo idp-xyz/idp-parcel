@@ -1,0 +1,69 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-SUBMISSION-21",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTIx",
+      "capability": "SHIPMENT_REQUEST_SUBMISSION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-21"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-PRE-ADVICE-SUBMISSION-21",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTIx",
+      "capability": "DELIVERY_PRE_ADVICE_SUBMISSION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-21"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-TRACKING-VIEW-QUERY-21",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTIx",
+      "capability": "CUSTOMER_TRACKING_VIEW_QUERY",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-21"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-SHIPMENT-TRACKING-QUERY-21",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTIx",
+      "capability": "CUSTOMER_SHIPMENT_TRACKING_QUERY",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-21"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-SUBMISSION-22",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTIy",
+      "capability": "SHIPMENT_REQUEST_SUBMISSION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-22"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-PRE-ADVICE-SUBMISSION-22",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTIy",
+      "capability": "DELIVERY_PRE_ADVICE_SUBMISSION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-22"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-TRACKING-VIEW-QUERY-22",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTIy",
+      "capability": "CUSTOMER_TRACKING_VIEW_QUERY",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-22"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-SHIPMENT-TRACKING-QUERY-22",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTIy",
+      "capability": "CUSTOMER_SHIPMENT_TRACKING_QUERY",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-22"
+    }
+  ]
+}

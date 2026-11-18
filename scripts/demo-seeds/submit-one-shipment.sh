@@ -49,7 +49,11 @@ ref="SYN-CUSTREF-${stamp}"
 parcel_ref="SYN-PCLREF-${stamp}"
 access_request="SYN-ACCESS-REQUEST-${stamp}"
 
-body="$(python3 - "$ref" "$parcel_ref" "$access_request" <<'PY'
+# 收件邮编缺省 018000（分区目录里的 Z1）。IDP_PARCEL_DEMO_RECIPIENT_POSTAL_CODE 可改，例如 238000 是 Z2：销售价格来源那一段
+# 用它发一件走专属卡没谈到的线路的包裹（demo-run/60-sell-price-sources.sh）。
+recipient_postal="${IDP_PARCEL_DEMO_RECIPIENT_POSTAL_CODE:-018000}"
+
+body="$(python3 - "$ref" "$parcel_ref" "$access_request" "$recipient_postal" <<'PY'
 import json, sys
 print(json.dumps({
     "accessRequestId": sys.argv[3],
@@ -61,7 +65,7 @@ print(json.dumps({
     "senderCountryCode": "CN",
     "recipientRelation": "SYN-RECIPIENT-01",
     "recipientAddress": "合成收件地址",
-    "recipientPostalCode": "018000",
+    "recipientPostalCode": sys.argv[4],
     "recipientCountryCode": "SG",
     "destinationServiceScope": "SYN-DEST/SG",
     "parcels": [{

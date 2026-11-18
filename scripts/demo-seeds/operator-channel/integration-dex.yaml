@@ -66,10 +66,28 @@ staticClients:
       - http://127.0.0.1/unused
     trustedPeers:
       - syn-customer-client-01
+      - syn-customer-client-21
+      - syn-customer-client-22
   # 一个首方客户端只代表一个客户账户（accessidentity.CustomerClientBinding）：合成货主 SYN-ACCOUNT-01 的系统。
   - id: syn-customer-client-01
     name: 合成货主系统 01
     secret: syn-customer-client-secret
+    redirectURIs:
+      - http://127.0.0.1/unused
+    grantTypes:
+      - client_credentials
+  # 合同上声明销售价格来源的两位客户各一台（票 commercial-four-module-requirements/21）：SYN-ACCOUNT-21 只声明公共范围，
+  # SYN-ACCOUNT-22 把专属范围排在前面。演示动线 demo-run/60-sell-price-sources.sh 用它们各自提交委托。
+  - id: syn-customer-client-21
+    name: 合成货主系统 21
+    secret: syn-customer-client-21-secret
+    redirectURIs:
+      - http://127.0.0.1/unused
+    grantTypes:
+      - client_credentials
+  - id: syn-customer-client-22
+    name: 合成货主系统 22
+    secret: syn-customer-client-22-secret
     redirectURIs:
       - http://127.0.0.1/unused
     grantTypes:
