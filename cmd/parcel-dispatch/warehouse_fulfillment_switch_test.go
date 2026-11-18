@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,6 +71,66 @@ func TestTheWarehouseFulfillmentSwitchDoesNotWaiveARequiredSetting(t *testing.T)
 	environment[warehouseswitch.EnabledEnv] = "true"
 	if _, err := settingsFromEnv(lookupIn(environment)); err == nil {
 		t.Fatal("开关为 true 时缺 DSN 仍装配出了配置")
+	}
+}
+
+// warehouseSwitchLines 取日志里带开关环境变量名的那几行的正文。
+func warehouseSwitchLines(t *testing.T, raw []byte) []string {
+	t.Helper()
+	var messages []string
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		if line == "" {
+			continue
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(line), &decoded); err != nil {
+			t.Fatalf("日志行不是 JSON：%q：%v", line, err)
+		}
+		if decoded["env"] == warehouseswitch.EnabledEnv {
+			message, _ := decoded["msg"].(string)
+			messages = append(messages, message)
+		}
+	}
+	return messages
+}
+
+// Covers: ADR-0375 决定四「各进程在启动时读一次、带启动日志」——派发进程的装配点在开池之前把开关写进启动日志，开与关各一条。
+// 库不可达时装配在连库那一步失败，日志已经先出了声；写出的正文与共享件对同一个取值写的一字不差，证明交给日志的是
+// settingsFromEnv 读出的那个值。不需要真实 PostgreSQL。
+func TestAssemblyAnnouncesTheWarehouseFulfillmentSwitchBeforeTheDatabaseIsReached(t *testing.T) {
+	for _, test := range []struct {
+		value   string
+		enabled bool
+	}{{value: "", enabled: false}, {value: "true", enabled: true}} {
+		var reference bytes.Buffer
+		warehouseswitch.LogStartup(slog.New(slog.NewJSONHandler(&reference, nil)), test.enabled)
+		want := warehouseSwitchLines(t, reference.Bytes())
+		if len(want) != 1 {
+			t.Fatalf("共享件对 enabled=%v 写了 %d 条，本用例的参照失效", test.enabled, len(want))
+		}
+
+		base := startupEnv("postgres://parcel:parcel@127.0.0.1:1/postgres?sslmode=disable")
+		getenv := func(name string) string {
+			if name == warehouseswitch.EnabledEnv {
+				return test.value
+			}
+			return base(name)
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		var logged bytes.Buffer
+		beat, cleanup, err := assembleDispatcher(ctx, getenv, slog.New(slog.NewJSONHandler(&logged, nil)))
+		cancel()
+		if err == nil {
+			if cleanup != nil {
+				cleanup()
+			}
+			t.Fatalf("库不可达却装配成功了，交回了一拍：%v", beat)
+		}
+
+		got := warehouseSwitchLines(t, logged.Bytes())
+		if len(got) != 1 || got[0] != want[0] {
+			t.Fatalf("开关 %q：装配点写的启动日志 = %q，want 恰好一条 %q", test.value, got, want)
+		}
 	}
 }
 
