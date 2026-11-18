@@ -1990,10 +1990,10 @@
 | `AT-WF-087` | 移入的库区须与库存状态相容，移入次品库区的同笔转为次品 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
 | `AT-WF-088` | 拣选位补货在同一笔里带形态转换，两头折成基本单位相等 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
 | `AT-WF-089` | 所报的比账上多时照记：取得走的入账，没入账的成库存差异记在移入的那一格、另记源头与账上不够的数量，余额不为负 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
-| `AT-WF-090` | 已分配、被冻结或在盘点中的数量不被移走，其余的成库存差异并记下因占用取不走的数量 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-090` | 已分配、被冻结或在盘点中的数量当时不被移走并记下因占用取不走的数量；冻结与分配随补入账走，作业锁定不跟 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
 | `AT-WF-091` | 把货移出可分配库存不得挤占已成立的预占 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
 | `AT-WF-092` | 没点名入库批次的从早到晚取、被占着的部分跳过，点名的只从那一格取，入库批次随货移入 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
-| `AT-WF-093` | 整箱按箱移动，不在账上、被预占或冻结的箱不入账、一箱成一份库存差异 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
+| `AT-WF-093` | 整箱按箱移动：只被箱号预占的照常入账；不在账上的记箱号对不上；已分配或冻结的不入账、一箱一份差异 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
 | `AT-WF-094` | 停用的库位、库区与仓照记移入的事实，不比发生时间与停用谁先 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
 | `AT-WF-095` | 库内作业事实整条不成立答作业内容不合，不落册、不占事实身份 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
 | `AT-WF-096` | 形态转换登记：两头折成基本单位相等才成立，取得走的数量里两头都折得成整数个单位的部分入账、入库批次不变，其余成库存差异记在转成的那一格 | UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md |
@@ -2068,8 +2068,8 @@
 | `AT-WF-165` | 批准时照那一刻的账重判，被占着、已移走或库位停用的整份不入账、留在待批准 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
 | `AT-WF-166` | 销毁必带货主授权的依据引用，批准后以销毁流水出账，货主在流水读口看得到 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
 | `AT-WF-167` | 整箱的调减、销毁与调增按箱入账，调增只对在这个仓在过库的箱 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
-| `AT-WF-168` | 批准库存差异：盘点差异以盘盈、盘亏流水，搬动与转换形成的从源头补入账，其余以调增、调减流水，照形成时记下的格与差额 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
-| `AT-WF-169` | 库存差异批准时已不成立的留在待处理，源头不够或被占着的不改成调增；驳回必带原因、不改账；状态不符、重放与查无此差异 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-168` | 批准库存差异：盘盈盘亏、从源头补入账，冻结与分配在同一笔里跟着货走，其余以调增调减，照形成时记下的格与差额 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-169` | 作业锁定未解除、源头从来没有、箱号对不上的批准不成立；同一数量先批准的一份入账、后一份不成立；箱号入账后再批准才移；驳回不改账 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
 | `AT-WF-170` | 批准职责规则没登记时批准答未配置、不自动调账，驳回照常 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
 | `AT-WF-171` | 批准职责规则按租户登记、只追加修订，登记不判准入范围 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
 | `AT-WF-172` | 规则写明须不同主体时提交人批准自己的那一份答职责规则不放行，两个身份每一笔都记下 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
