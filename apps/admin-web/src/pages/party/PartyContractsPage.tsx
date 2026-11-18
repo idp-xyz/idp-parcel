@@ -49,8 +49,7 @@ import { loadCustomerAccountSuggestions } from './reference-inputs';
 import { useLoaded } from './PublicationFormFields';
 import { StatusPill } from '../../components/StatusPill';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
-import { sellPriceArrangementText, sellPriceScopeMark } from './customer-contract-form';
-import { readSellPriceScope } from '../pricing/api';
+import { detailColumnsOf, sellPriceListColumn } from './contract-sell-price-columns';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
   listBusinessParties,
@@ -126,16 +125,7 @@ const columns: WorkbenchColumn<CustomerContractRecord>[] = [
     hideWhenDetailOpen: true,
     render: (row) => <ControlBindings row={row} />,
   },
-  {
-    key: 'sell-price',
-    header: '销售价格来源',
-    render: (row) => (
-      <div className="type-body leading-4">
-        <div>{sellPriceArrangementText(row.sellPriceArrangement)}</div>
-        <SellPriceScopeMarks arrangement={row.sellPriceArrangement} />
-      </div>
-    ),
-  },
+  sellPriceListColumn,
   {
     // 合同层交付条件（0030，票 admin-write-faces/25）：与正文是两层各自可缺，这一格不看 contentRegistered，只看键在不在。
     key: 'delivery-conditions',
@@ -260,7 +250,7 @@ function CustomerContractObjectPage({ objectId, version }: VersionObjectAddress)
         objectId={objectId}
         version={version}
         row={row}
-        columns={contractColumns}
+        columns={detailColumnsOf(contractColumns)}
         status={(record) => record.status}
         technical={(record) => [
           { label: '合同标识', value: record.objectId },
@@ -371,7 +361,7 @@ function CustomerContractsWorkbench({
           return row ? (
             <VersionDetailPanel<CustomerContractRecord>
               row={row}
-              columns={contractColumns}
+              columns={detailColumnsOf(contractColumns)}
               title={(record) => ({ objectId: record.objectId, version: record.version })}
               subtitle={(record) => `客户合同 · ${labelOf(contractStatusNotes, record.status)}`}
               technical={(record) => [
@@ -426,36 +416,6 @@ function CustomerContractsWorkbench({
       />
       <VersionClosureDialog target={closing} onClose={() => setClosing(null)} onClosed={retry} />
     </>
-  );
-}
-
-function SellPriceScopeMarks({ arrangement }: { arrangement?: CustomerContractRecord['sellPriceArrangement'] }) {
-  const sources = arrangement?.noSellPriceBasis ? [] : (arrangement?.sources ?? []);
-  const [marks, setMarks] = useState<Record<string, string>>({});
-  useEffect(() => {
-    if (sources.length === 0) return;
-    let cancelled = false;
-    for (const source of sources) {
-      void readSellPriceScope(source.pricingScope).then((result) => {
-        if (cancelled) return;
-        const text = result.kind === 'outcome' ? sellPriceScopeMark(result.body.cards) : '在用的卡读不到';
-        setMarks((current) => ({ ...current, [source.pricingScope]: text }));
-      });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [arrangement]);
-  if (sources.length === 0) return null;
-  return (
-    <ul className="mt-3 space-y-1">
-      {sources.map((source) => (
-        <li key={source.pricingScope} className="type-body leading-4">
-          <span className="font-mono">{source.pricingScope}</span>
-          <span className="text-idpxyz-textMuted"> · {marks[source.pricingScope] ?? sellPriceScopeMark(undefined)}</span>
-        </li>
-      ))}
-    </ul>
   );
 }
 
