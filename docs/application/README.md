@@ -117,3 +117,8 @@ PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-
 | `UC-WF-009` | [冻结、解冻并查阅库存](./warehouse-fulfillment/UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；冻结的原子判定与解冻，库存账、占用、可用量与流水的读口已形成，预占与分配归出库的用例，仓的业务时区与授予待租户提供 |
 | `UC-WF-010` | [盘点](./warehouse-fulfillment/UC-WF-010-COUNT-STOCK.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；静盘的作业锁定、按库位的清点结果、完成时逐格比出库存差异与作废已形成，授予待租户提供 |
 | `UC-WF-011` | [处理库存差异并批准库存调整](./warehouse-fulfillment/UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；库存调整的提交，库存差异、库存调整与建账导入的批准与驳回，批准时重判与批准职责规则的登记已形成，批准职责规则与授予待租户提供 |
+| `UC-WF-012` | [受理出库请求并预占](./warehouse-fulfillment/UC-WF-012-ACCEPT-AND-RESERVE-AN-OUTBOUND-REQUEST.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；提交、预占、缺货处置与拆单已形成，缺货处置与代录授予待租户提供 |
+| `UC-WF-013` | [波次分配、拣货、复核与打包](./warehouse-fulfillment/UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；分配、拣货、复核、破损、出库前贴标与装箱记录已形成，分配策略与预取的三格待租户提供 |
+| `UC-WF-014` | [代办仓配出库的委托](./warehouse-fulfillment/UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；以货主名义提交与消费小包托运的信封已形成，代办授予待租户提供 |
+| `UC-WF-015` | [确认出库并更正](./warehouse-fulfillment/UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；三支出库确认、离线照记与不成立的回补已形成，面单本体待租户提供 |
+| `UC-WF-016` | [出库截单](./warehouse-fulfillment/UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；按阶段释放预占、回库与晚到的拣货已形成，代录授予待租户提供 |

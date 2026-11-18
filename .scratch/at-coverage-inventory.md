@@ -2081,6 +2081,54 @@
 | `AT-WF-178` | 一个仓都没登记时提交库存调整答查无所指的仓，批准、驳回与规则登记答未配置 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
 | `AT-WF-179` | 库存调整各口的授予、自带身份格与准入范围 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
 | `AT-WF-180` | 部署开关关着时库存调整的提交、批准、驳回、规则登记口与读口不提供业务答复，其他上下文答复不变 | UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md |
+| `AT-WF-181` | 出库请求可用量够则已预占并取得单据号；同一键重投答已有结果，换内容答冲突 | UC-WF-012-ACCEPT-AND-RESERVE-AN-OUTBOUND-REQUEST.md |
+| `AT-WF-182` | 缺货时按部分预占或拒绝给结果，没占齐不进波次 | UC-WF-012-ACCEPT-AND-RESERVE-AN-OUTBOUND-REQUEST.md |
+| `AT-WF-183` | 缺货处置没选定则停在待预占（未配置），可用量变了也不再判 | UC-WF-012-ACCEPT-AND-RESERVE-AN-OUTBOUND-REQUEST.md |
+| `AT-WF-184` | 按组件出的组合商品在受理时展开，按组件预占 | UC-WF-012-ACCEPT-AND-RESERVE-AN-OUTBOUND-REQUEST.md |
+| `AT-WF-185` | 尚未分配的请求可以拆单，数量必须守恒；已分配的不拆 | UC-WF-012-ACCEPT-AND-RESERVE-AN-OUTBOUND-REQUEST.md |
+| `AT-WF-186` | 代录新建要有依据引用与授予；指名在册的请求不从载荷再带货主 | UC-WF-012-ACCEPT-AND-RESERVE-AN-OUTBOUND-REQUEST.md |
+| `AT-WF-187` | 停用的仓照常受理出库；代理仓转入已转代理仓；没登记的仓答查无所指 | UC-WF-012-ACCEPT-AND-RESERVE-AN-OUTBOUND-REQUEST.md |
+| `AT-WF-188` | 部署开关关着时出库请求的提交、代录、拆单与读口不提供业务答复 | UC-WF-012-ACCEPT-AND-RESERVE-AN-OUTBOUND-REQUEST.md |
+| `AT-WF-189` | 波次释放按已采用的策略分配，合计不超过预占 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-190` | 分配策略没采用时放波次答未配置，不生成拣货任务 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-191` | 拣入待出库之后，这部分预占不再计入可分配库存上的占用之和 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-192` | 实拣不足的部分撤销分配、保留预占，差额成库存差异 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-193` | 分配已随补入账改到新格的，拣货在新格进行 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-194` | 出库复核不符不打包；破损的退出分配并转为次品 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-195` | 出库前该贴的标没贴完不出复核，贴上时不另立商品换标指令 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-196` | 打包写下按包裹序号的装箱记录，此时委托还没提交 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-197` | 预取只在三格都已登记时按一个包裹提交；平台备货不预取 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-198` | 一个仓都没登记时放波次与拣货答未配置 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-199` | 部署开关关着时波次、拣货、复核与打包不提供业务答复 | UC-WF-013-RELEASE-A-WAVE-PICK-CHECK-AND-PACK.md |
+| `AT-WF-200` | 本产品网络按（出库请求，包裹序号）以货主名义提交一份委托 | UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md |
+| `AT-WF-201` | 平台备货整份提交一份委托，键带提交轮次，不预取面单 | UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md |
+| `AT-WF-202` | 预取的声明测量在打包后不同的要更正，更正没采用不出库确认 | UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md |
+| `AT-WF-203` | 接受决定推进装箱记录；来源不是仓配出库的信封入账收工 | UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md |
+| `AT-WF-204` | 委托待受控补充由仓配转向货主再提交；开关关着时走收工路 | UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md |
+| `AT-WF-205` | 资料版本已形成按待补充、冲突或等待处理；时限没登记答未配置 | UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md |
+| `AT-WF-206` | 面单本体没配置答未配置；归属未决时原样重发同一来源请求 | UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md |
+| `AT-WF-207` | 委托被拒绝或撤回的不出库确认，来源键不复用；平台备货整份办 | UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md |
+| `AT-WF-208` | 一个仓都没登记时没有出库请求可提交，提交答未配置 | UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md |
+| `AT-WF-209` | 部署开关关着时代办提交口与四类信封不提供业务答复 | UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md |
+| `AT-WF-210` | 放行条件齐备时出库确认按分配消耗，不等节点收寄 | UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md |
+| `AT-WF-211` | 在线交出时缺面单或出了有效区间的不交出，不消耗 | UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md |
+| `AT-WF-212` | 离线缺条件仍然交出的照记出库确认，并记下缺的格 | UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md |
+| `AT-WF-213` | 自备面单张数对上才出库确认，对不上交货主补正或截单 | UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md |
+| `AT-WF-214` | 自提凭证核对通过才出库确认 | UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md |
+| `AT-WF-215` | 出库确认更正为不成立后，回补到原待出库库位；普通调整仍不能指向那里 | UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md |
+| `AT-WF-216` | 出库确认之后不再受理截单 | UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md |
+| `AT-WF-217` | 代理仓的交接结果把请求标成已发出，不消耗自营库存 | UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md |
+| `AT-WF-218` | 一个仓都没登记时出库确认答未配置 | UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md |
+| `AT-WF-219` | 部署开关关着时出库确认与更正不提供业务答复 | UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md |
+| `AT-WF-220` | 尚未分配的出库请求整份撤回，预占释放 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
+| `AT-WF-221` | 已分配未拣的整份撤回，撤销分配并释放预占 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
+| `AT-WF-222` | 已拣出未提交委托的包裹撤回后回库，预占在回到可分配库区时重新计入 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
+| `AT-WF-223` | 委托撤回被放行才拆包回库；不放行则截单不成立 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
+| `AT-WF-224` | 打包后逐包裹截单；已出库确认的包裹不回库存 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
+| `AT-WF-225` | 截单已撤销分配后才到的拣货照记并生成回库任务，不算库存差异 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
+| `AT-WF-226` | 代录截单要有依据引用与授予；指名在册的请求不从载荷再带货主 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
+| `AT-WF-227` | 一个仓都没登记时截单答未配置 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
+| `AT-WF-228` | 部署开关关着时截单口不提供业务答复 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
 
 ## 重盘变化摘要（0cddbba）
 
@@ -2387,3 +2435,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-11-12 追记（票 warehouse-fulfillment/07，ADR-0375）：`warehouse-fulfillment` 此前没有 UC，新立 UC-WF-001 至 UC-WF-006（主数据与入库），`AT-WF-001`–`084`。`internal/` 下还没有仓配履约的包，都未实现、没有测试点名，入④，等 PN-09 的实施票。总览计数未重算，由推送方重算。
 
 2026-11-12 追记（票 warehouse-fulfillment/08）：新立 UC-WF-007 至 UC-WF-011（库内作业、加工与商品换标、冻结与库存查阅、盘点、库存差异与库存调整），`AT-WF-085`–`180`。`internal/` 下还没有仓配履约的包，都未实现、没有测试点名，入④，等 PN-09 的实施票。总览计数未重算，由推送方重算。
+
+2026-11-18 追记（票 warehouse-fulfillment/09）：新立 UC-WF-012 至 UC-WF-016（受理与预占、波次拣货打包、代办委托、出库确认、出库截单），`AT-WF-181`–`228`。`internal/` 下还没有仓配履约的包，都未实现、没有测试点名，入④。总览计数未重算，由推送方重算。
