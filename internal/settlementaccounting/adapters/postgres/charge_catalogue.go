@@ -98,6 +98,9 @@ const (
 		        (SELECT superseded_by_charge_id
 		           FROM settlement_accounting.customer_charge_supersession
 		          WHERE tenant_id = c.tenant_id AND charge_id = c.charge_id),
+		        EXISTS (SELECT 1
+		                  FROM settlement_accounting.customer_charge_supersession
+		                 WHERE tenant_id = c.tenant_id AND charge_id = c.charge_id),
 		        (SELECT COALESCE(json_agg(json_build_object(
 		                    'adjustment', adjustment_id,
 		                    'kind', kind,
@@ -166,6 +169,7 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 			&requiredBasisKind,
 			&basesJSON,
 			&supersededBy,
+			&row.Superseded,
 			&adjustmentsJSON,
 		); err != nil {
 			return fail(err)

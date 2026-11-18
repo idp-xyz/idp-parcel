@@ -80,7 +80,9 @@ type CustomerChargeCatalogueRow struct {
 	// AttributionDate 是已形成的结算归属日（YYYY-MM-DD），没形成为空。BilledOn 是这笔费用所在的未作废对账单号，没出账为空。
 	AttributionDate string
 	BilledOn        string
-	// SupersededBy 是替代了这一笔预估的后一代费用。空串表示没有被替代。
+	// Superseded 为真表示这一笔预估已被替代、不再确认。SupersededBy 是替代了它的后一代费用；新一代评价合计为零时没有新预估，
+	// 这一笔照样被替代，只有 Superseded 为真、SupersededBy 为空串。两格都空表示没有被替代。
+	Superseded   bool
 	SupersededBy string
 	// Adjustments 是挂在这一笔上的调整，按形成时点。空切片表示没有。
 	Adjustments []CustomerChargeAdjustmentEntry

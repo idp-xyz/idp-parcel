@@ -98,7 +98,7 @@
 **费用形成与确认**
 
 - 已完成且合计不为零的 SELL 评价形成预估客户费用，金额整组出自该评价。BUY 评价不形成客户费用。
-- 实测变化为包裹的销售评价另起一代。新评价对着这条代次链上最近的一笔费用办，中间停下的各代没有费用、跳过：那笔费用还没确认，新预估替代它，被替代的不再确认；已确认，不另建费用，这一户采用了「实测差异自动调整」才记一笔计价纠错，没采用就停下。差额按结算币判：新评价的结算币金额减去费用加已有计价纠错的净额，商业让利不算在内，结算币差额为零不记；新评价的原币种与费用及既有计价纠错的原币种都相同、原币差额不为零且与结算币差额同号时，连原币差额一并记，否则这一笔按结算币记，原币即结算币、不带换算依据。已被更晚一代办过钱的旧一代不再动钱，照记那一代的结论。
+- 实测变化为包裹的销售评价另起一代。新评价对着这条代次链上最近的一笔费用办，中间停下的各代没有费用、跳过：那笔费用还没确认，新预估替代它，被替代的不再确认；新评价合计为零时没有新预估，那笔费用同样记为被替代、不再确认，之后的一代形成新预估时补为它的后继；已确认，不另建费用，这一户采用了「实测差异自动调整」才记一笔计价纠错，没采用就停下。差额按结算币判：新评价的结算币金额减去费用加已有计价纠错的净额，商业让利不算在内，结算币差额为零不记；新评价的原币种与费用及既有计价纠错的原币种都相同、原币差额不为零且与结算币差额同号时，连原币差额一并记，否则这一笔按结算币记，原币即结算币、不带换算依据。已被更晚一代办过钱的旧一代不再动钱，照记那一代的结论。
 - 原币金额、合同结算币金额、换算依据是从同一个评价采用来的一组；同币种时两额必须相等且没有换算步骤。换算已在评价内完成，本上下文不重算。
 - 确认前，责任法人、结算相对方、收付方向、结算账户、依据、主要计费范围、来源事实登在确认事实册上；册上没有这一行，确认停在未决。
 - 确认条件按费用项目点名要哪一种确认依据；用哪种依据确认哪个费用项目是租户取值。依据记下后，这一户采用了确认时点就当场确认，没采用只记依据。
@@ -180,7 +180,7 @@
 
 - 资金：`external-funds-fact` `external-funds-fact-correction` `funds-mapping` `funds-application` `funds-application-reversal`。映射、核销与撤销只有这一路。
 - 账户与对账：`settlement-account` `statement-arrangement` `statement-cycle` `charge-attribution` `settlement-moment`。
-- 评价与费用：`sell-billing-moment-adoption` `pre-acceptance-estimate-adoption` `fee-item-mapping` `buy-evaluation-trigger` `sell-evaluation-trigger` `charge-confirmation-facts` `charge-confirmation-condition`。
+- 评价与费用：`sell-billing-moment-adoption` `pre-acceptance-estimate-adoption` `fee-item-mapping` `buy-evaluation-trigger` `sell-evaluation-trigger` `charge-confirmation-facts` `charge-confirmation-condition` `reweigh-adjustment-adoption`（结算账户采用「实测差异自动调整」）。
 - 审核与金额规则：`supplier-audit-authority` `supplier-payable-account` `audit-escalation-ceiling` `accounting-connector` `claim-amount-rule` `amount-grammar` `allocation-form` `periodic-fee`。
 - 运维：`evaluation-resume`（运营续办）`expected-cost-supplier-backfill`（给还没记供应商的预期成本补上）。
 

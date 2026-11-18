@@ -89,7 +89,9 @@ export interface CustomerChargeRecord {
   attributionDate?: string;
   /** 所在的未作废对账单号；缺席即还没出账。登记争议时按它列出一张单上的费用。 */
   billedOn?: string;
-  /** 后一代预估替代了这一笔时在场。 */
+  /** 这一笔预估已被替代、不再确认时为 true，否则整键不出现。 */
+  superseded?: boolean;
+  /** 后一代预估替代了这一笔时在场。新评价合计为零而没有后继时只有 superseded 在场。 */
   supersededBy?: string;
   adjustments: CustomerChargeAdjustment[];
   /** 计价重量：评价进位之后、据以查表的那一个。不是实重。 */

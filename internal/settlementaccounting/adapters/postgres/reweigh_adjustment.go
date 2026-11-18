@@ -38,15 +38,42 @@ func (repository *ChargeSupersessions) SaveSupersession(
 	if err != nil {
 		return fmt.Errorf("save charge supersession: %w", err)
 	}
+	// 已有行的后继为空（新评价合计为零时先记的没有后继的替代）才补上后继；已有后继的不覆盖，recorded_at 也留着最初被替代的那一刻。
 	_, err = executor.Exec(ctx, `
-		INSERT INTO settlement_accounting.customer_charge_supersession (
+		INSERT INTO settlement_accounting.customer_charge_supersession AS supersession (
 			tenant_id, charge_id, superseded_by_charge_id, recorded_at
 		) VALUES ($1, $2, $3, $4)
-		ON CONFLICT ON CONSTRAINT customer_charge_supersession_pkey DO NOTHING`,
+		ON CONFLICT ON CONSTRAINT customer_charge_supersession_pkey
+		DO UPDATE SET superseded_by_charge_id = EXCLUDED.superseded_by_charge_id
+		 WHERE supersession.superseded_by_charge_id IS NULL`,
 		tenant.String(), charge.String(), supersededBy.String(), at.UTC(),
 	)
 	if err != nil {
 		return fmt.Errorf("save charge supersession: %w", err)
+	}
+	return nil
+}
+
+func (repository *ChargeSupersessions) SaveSupersessionWithoutSuccessor(
+	ctx context.Context,
+	tenant domain.TenantID,
+	charge domain.CustomerChargeID,
+	at time.Time,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save charge supersession without successor: %w", err)
+	}
+	// 已有替代的不动：后继已补上的不能被抹回空，重复记没有后继的也还是同一行。
+	_, err = executor.Exec(ctx, `
+		INSERT INTO settlement_accounting.customer_charge_supersession (
+			tenant_id, charge_id, superseded_by_charge_id, recorded_at
+		) VALUES ($1, $2, NULL, $3)
+		ON CONFLICT ON CONSTRAINT customer_charge_supersession_pkey DO NOTHING`,
+		tenant.String(), charge.String(), at.UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("save charge supersession without successor: %w", err)
 	}
 	return nil
 }

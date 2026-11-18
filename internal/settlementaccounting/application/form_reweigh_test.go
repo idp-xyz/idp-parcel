@@ -11,8 +11,20 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
+// supersessionDouble 记下两种替代：带后继的（saved）与没有后继的（withoutSuccessor，新评价合计为零）。Superseded 只认记下过的。
 type supersessionDouble struct {
-	saved [][2]string
+	saved            [][2]string
+	withoutSuccessor []string
+}
+
+func (double *supersessionDouble) SaveSupersessionWithoutSuccessor(
+	_ context.Context,
+	_ domain.TenantID,
+	charge domain.CustomerChargeID,
+	_ time.Time,
+) error {
+	double.withoutSuccessor = append(double.withoutSuccessor, charge.String())
+	return nil
 }
 
 func (double *supersessionDouble) SaveSupersession(
@@ -26,7 +38,17 @@ func (double *supersessionDouble) SaveSupersession(
 	return nil
 }
 
-func (double *supersessionDouble) Superseded(context.Context, domain.TenantID, domain.CustomerChargeID) (bool, error) {
+func (double *supersessionDouble) Superseded(_ context.Context, _ domain.TenantID, charge domain.CustomerChargeID) (bool, error) {
+	for _, withoutSuccessor := range double.withoutSuccessor {
+		if withoutSuccessor == charge.String() {
+			return true, nil
+		}
+	}
+	for _, pair := range double.saved {
+		if pair[0] == charge.String() {
+			return true, nil
+		}
+	}
 	return false, nil
 }
 
@@ -226,6 +248,125 @@ func TestAnEstimateBehindAStoppedGenerationIsSuperseded(t *testing.T) {
 	}
 	if fixture.adjustments.saves != 0 {
 		t.Fatalf("未确认的费用上记了 %d 笔调整", fixture.adjustments.saves)
+	}
+}
+
+// Covers: 新评价合计为零、前一笔费用还没确认：复核结果整体取代预估，那笔费用照样被替代、不再确认，只是没有后继；这一代
+// 记负向结束（零额），不建新费用、不记调整。
+func TestAZeroTotalSupersedesTheUnconfirmedPredecessorWithoutASuccessor(t *testing.T) {
+	fixture := newReweighFormation(t, domain.ChargeEstimated, 0, false)
+	result, err := fixture.handle(t)
+	if err != nil || result.Outcome() != application.EstimatedCustomerChargeConcluded || result.State() != domain.SellRequestZeroTotal {
+		t.Fatalf("结果 = %s / %s err = %v，want 记负向结束（零额）", result.Outcome(), result.State(), err)
+	}
+	if _, has := result.Charge(); has {
+		t.Fatal("零额带了费用标识")
+	}
+	if len(fixture.supersessions.withoutSuccessor) != 1 || fixture.supersessions.withoutSuccessor[0] != "SELLCC-SELLREQ-SYN-1" {
+		t.Fatalf("没有后继的替代 = %v，want 前一笔预估被替代", fixture.supersessions.withoutSuccessor)
+	}
+	if len(fixture.supersessions.saved) != 0 || len(fixture.charges.saved) != 0 || fixture.adjustments.saves != 0 {
+		t.Fatalf("零额之外还写了：带后继的替代 %v，预估 %v，调整 %d 笔",
+			fixture.supersessions.saved, fixture.charges.saved, fixture.adjustments.saves)
+	}
+	if stored := fixture.requests.records[fixture.tenant.String()+"/SELLREQ-SYN-2"]; stored.State != domain.SellRequestZeroTotal {
+		t.Fatalf("这一代的状态 = %s，want 负向结束（零额）", stored.State)
+	}
+	if len(fixture.chargeLocks.locked) != 1 || fixture.chargeLocks.locked[0] != "SELLCC-SELLREQ-SYN-1" {
+		t.Fatalf("费用行锁 = %v，want 记替代之前锁住前一笔", fixture.chargeLocks.locked)
+	}
+}
+
+// Covers: 链上没有费用（前一代停下、没有费用）时新评价合计为零：没有可替代的，不记替代，只记零额。
+func TestAZeroTotalWithNoEarlierChargeRecordsNoSupersession(t *testing.T) {
+	fixture := newReweighFormation(t, domain.ChargeEstimated, 0, false)
+	index := fixture.tenant.String() + "/" + sellRequestID
+	first := fixture.requests.records[index]
+	first.State, first.StopCause, first.FormedCharge = domain.SellRequestPendingJudgment, domain.StopEvaluationInputIncomplete, domain.CustomerChargeID{}
+	fixture.requests.records[index] = first
+	result, err := fixture.handle(t)
+	if err != nil || result.State() != domain.SellRequestZeroTotal {
+		t.Fatalf("结果 = %s err = %v，want 负向结束（零额）", result.State(), err)
+	}
+	if len(fixture.supersessions.withoutSuccessor) != 0 || len(fixture.supersessions.saved) != 0 {
+		t.Fatalf("链上没有费用却记了替代：%v %v", fixture.supersessions.withoutSuccessor, fixture.supersessions.saved)
+	}
+}
+
+// Covers: 前一笔已确认时新评价合计为零，行为不变：不记替代、不记零额，走差额——差额就是把净额全数贷记；这一代已形成，
+// 指向原来那笔已确认费用。
+func TestAZeroTotalOnAConfirmedPredecessorCreditsTheWholeNetThroughTheDifference(t *testing.T) {
+	fixture := newReweighFormation(t, domain.ChargeConfirmed, 0, true)
+	result, err := fixture.handle(t)
+	if err != nil || result.State() != domain.SellRequestFormed {
+		t.Fatalf("结果 = %s err = %v，want 已形成", result.State(), err)
+	}
+	if charge, has := result.Charge(); !has || charge.String() != "SELLCC-SELLREQ-SYN-1" {
+		t.Fatalf("结论费用 = %q %v，want 原来那笔已确认费用", charge, has)
+	}
+	if len(fixture.supersessions.withoutSuccessor) != 0 || len(fixture.supersessions.saved) != 0 {
+		t.Fatalf("已确认的费用被记了替代：%v %v", fixture.supersessions.withoutSuccessor, fixture.supersessions.saved)
+	}
+	credit, found := fixture.adjustments.records["REWEIGH-"+sellEvaluationID]
+	if _, minor := credit.Adjustment.SettlementAmount(); !found || credit.Adjustment.Direction() != domain.AdjustmentCredit || minor != 12000 {
+		t.Fatalf("调整 = %v %s %d，want 贷项 12000（净额全数贷记）", found, credit.Adjustment.Direction(), minor)
+	}
+}
+
+// Covers: 被零额替代的那笔预估再去确认，答 CHARGE_SUPERSEDED，不落确认：确认编排读到的替代关系里没有后继也算数。
+func TestAnEstimateSupersededByAZeroTotalIsNotConfirmedAfterwards(t *testing.T) {
+	var prior *chargeStoreDouble
+	fixture := newReweighFormationWith(t, domain.ChargeEstimated, 0, false, func(deps *application.FormEstimatedCustomerChargeDeps) {
+		prior = deps.PriorCharges.(*chargeStoreDouble)
+	})
+	if result, err := fixture.handle(t); err != nil || result.State() != domain.SellRequestZeroTotal {
+		t.Fatalf("零额 = %s err = %v", result.State(), err)
+	}
+
+	confirmation := newConfirmFixture(t)
+	deps := confirmation.deps(t)
+	deps.Charges, deps.Supersessions = prior, fixture.supersessions
+	// 确认时刻不能早于这笔预估的形成时刻，否则领域的确认门先拒，盖住替代关系这一道。
+	deps.Clock = confirmClock{at: estimatedChargeAt}
+	handler, err := application.NewConfirmChargeHandler(deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := handler.Handle(t.Context(), application.ConfirmChargeCommand{TenantID: fixture.tenant, ChargeID: "SELLCC-SELLREQ-SYN-1"})
+	if err != nil || result.Outcome() != application.ChargeSuperseded {
+		t.Fatalf("确认 = %s err = %v，want CHARGE_SUPERSEDED", result.Outcome(), err)
+	}
+	if prior.saves != 0 || prior.charges["SELLCC-SELLREQ-SYN-1"].Stage() == domain.ChargeConfirmed {
+		t.Fatalf("被零额替代的预估落了确认：写入 %d 次", prior.saves)
+	}
+	if len(confirmation.handoff.intents) != 0 || len(confirmation.occupation.charges) != 0 {
+		t.Fatalf("被替代的费用发了确认意图 %d 份、收口占用 %d 次", len(confirmation.handoff.intents), len(confirmation.occupation.charges))
+	}
+}
+
+// Covers: 零额那一代之后再有一代算出非零金额、形成新预估：链上最近一笔费用仍是被零额替代的那笔预估（零额那一代没有费用，
+// 跳过），新预估补成这条替代关系的后继。
+func TestTheEstimateAfterAZeroTotalGenerationBecomesTheSuccessorOfTheSupersededCharge(t *testing.T) {
+	fixture := newReweighFormation(t, domain.ChargeEstimated, 15000, false)
+	index := fixture.tenant.String() + "/SELLREQ-SYN-2"
+	second := fixture.requests.records[index]
+	second.State = domain.SellRequestZeroTotal
+	fixture.requests.records[index] = second
+	fixture.supersessions.withoutSuccessor = []string{"SELLCC-SELLREQ-SYN-1"}
+	third := fixture.resumeAs(t, second.Request, "SELLREQ-SYN-3")
+	fixture.requests.records[fixture.tenant.String()+"/SELLREQ-SYN-3"] = ports.SellEvaluationRequestRecord{
+		Key:     ports.SellEvaluationRequestKey{TenantID: fixture.tenant, Request: third.ID()},
+		Request: third,
+		State:   domain.SellRequestSubmitted,
+	}
+	fixture.adoption.Request = third.ID()
+
+	result, err := fixture.handle(t)
+	if err != nil || result.State() != domain.SellRequestFormed {
+		t.Fatalf("结果 = %s err = %v，want 已形成", result.State(), err)
+	}
+	if len(fixture.supersessions.saved) != 1 || fixture.supersessions.saved[0] != [2]string{"SELLCC-SELLREQ-SYN-1", "SELLCC-SELLREQ-SYN-3"} {
+		t.Fatalf("替代 = %v，want 新预估补成前一笔预估的后继", fixture.supersessions.saved)
 	}
 }
 

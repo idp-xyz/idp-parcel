@@ -6,6 +6,7 @@ import {
   parcelFromRef,
   pricedWeightText,
   sourceFactLabel,
+  supersededByText,
   weightBasisText,
 } from './ops-refs';
 
@@ -57,6 +58,14 @@ test('计价重量只认读口给的那一格，不拿实重顶上', () => {
     undefined,
   );
   equal(pricedWeightText({}), undefined);
+});
+
+// Covers: 被替代的预估有两种：后一代预估接替它（有后继费用号），或新评价合计为零（没有后继）。后者必须看得见——不显示的话
+// 运营会以为这笔预估还能确认。
+test('被替代为：有后继显示后继费用号；已被替代而没有后继写明重估为零额；没被替代不显示', () => {
+  equal(supersededByText({ superseded: true, supersededBy: 'SELLCC-SELLREQ-SYN-2' }), 'SELLCC-SELLREQ-SYN-2');
+  equal(supersededByText({ superseded: true }), '重估为零额，不再确认');
+  equal(supersededByText({}), undefined);
 });
 
 test('来源一格写明出自实测还是申报、实重与尺寸；申报没报尺寸写「未报尺寸」', () => {

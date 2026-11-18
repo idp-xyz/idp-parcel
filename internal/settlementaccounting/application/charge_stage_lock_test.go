@@ -86,6 +86,16 @@ func (store *orderedSupersessions) SaveSupersession(
 	return nil
 }
 
+func (store *orderedSupersessions) SaveSupersessionWithoutSuccessor(
+	_ context.Context,
+	_ domain.TenantID,
+	charge domain.CustomerChargeID,
+	_ time.Time,
+) error {
+	store.order.add("记无后继替代 " + charge.String())
+	return nil
+}
+
 func (store *orderedSupersessions) Superseded(_ context.Context, _ domain.TenantID, charge domain.CustomerChargeID) (bool, error) {
 	store.order.add("读替代 " + charge.String())
 	return store.superseded, nil

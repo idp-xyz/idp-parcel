@@ -24,7 +24,7 @@ import { MultiRegistrationPanel } from '../../components/registration';
 import { chargeDecisionTargets } from './decisions';
 import { problemNote } from './presentation';
 import { AmountCell, TwoLine, technicalRows } from './ops-ui';
-import { feeItemLabel, parcelFromRef, pricedWeightText, sourceFactLabel, weightBasisText } from './ops-refs';
+import { feeItemLabel, parcelFromRef, pricedWeightText, sourceFactLabel, supersededByText, weightBasisText } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
 
 // 费用与计费页（主责上下文 settlement-accounting：费用项目、费用明细与费用调整的版本与依据）。
@@ -98,7 +98,7 @@ function customerChargeTechnicalRows(row: CustomerChargeRecord) {
     // 前后看着一样，金额却变了。
     { label: '计价重量', value: pricedWeightText(row) },
     { label: '重量与尺寸来源', value: weightBasisText(row, labelFor) },
-    { label: '被替代为', value: row.supersededBy },
+    { label: '被替代为', value: supersededByText(row) },
     {
       label: '调整',
       value: row.adjustments

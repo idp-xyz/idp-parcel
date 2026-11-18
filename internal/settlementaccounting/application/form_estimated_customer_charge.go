@@ -196,7 +196,8 @@ func NewFormEstimatedCustomerChargeHandler(deps FormEstimatedCustomerChargeDeps)
 //   - 不可计价、冲突——照记那一格（AT-SA-175：不形成任何费用行，不转待判断反复重试）。
 //   - 失败——记`未形成`，停因是评价失败。评价不可变，重投也不会变。
 //   - 已完成而合计为零——形成门不成行，记`负向结束（零额）`，不带停因（ADR-0306 决定二）。判在币种核对与映射之后：币种
-//     对不上仍是矛盾，映射不全仍记`待判断`——零额由形成门一处判，本编排不碰金额。
+//     对不上仍是矛盾，映射不全仍记`待判断`——零额由形成门一处判，本编排不碰金额。链上前一笔费用还没确认的，同时记它被替代
+//     而没有后继；已确认的走差额，不在此列。
 //
 // 两侧说法矛盾的格上抛错误、不入账：回指的请求不在册上，结算币种对不上请求快照。
 func (handler *FormEstimatedCustomerChargeHandler) Handle(
@@ -294,6 +295,14 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 		}
 		return handler.conclude(ctx, key, conclusion)
 	case SellChargeZeroTotal:
+		// 复核结果整体取代预估，复核为零就按零收：链上前一笔仍未确认的费用同样被替代、不再确认，只是没有新预估可指为后继。
+		// 不记的话那笔旧预估仍能按旧金额确认。前一笔的行锁在 reweighPreviousCharge 里已取到，同一事务内。
+		if supersede.String() != "" {
+			if err := handler.deps.Supersessions.SaveSupersessionWithoutSuccessor(
+				ctx, command.TenantID, supersede, handler.deps.Clock.Now()); err != nil {
+				return EstimatedCustomerChargeResult{}, err
+			}
+		}
 		return handler.conclude(ctx, key, domain.NewZeroTotalSellEvaluationRequestConclusion())
 	case SellChargeUndecided:
 		return undecidedEstimatedCharge(SellChargeFormationUndecided, fmt.Errorf("sell charge formation: %s", formed.UndecidedReason())), nil

@@ -44,21 +44,6 @@ const (
 	registrySupplierExpectedCost = "supplier-expected-cost"
 )
 
-// NewQuerySettlementChargesEndpoint 交回费用与计费页两本册子的 HTTP 入口
-// （GET /settlement-charges，票 admin-skeleton-closure-batch/04）。
-//
-// 两册共用一个端点按 `registry` 分派，各自成形：客户费用与供应商预期成本的行形状
-// 互不相同（前者有阶段与确认依据、无价卡版本，后者有版本链与纠错原因、无阶段），
-// 共享壳要么空出半数字段、要么把强类型折成 any（判据逐字同 visibilityhttp 的六种
-// 目录行）。CONTEXT 另把两者立为两个词条并明禁「内部预期伪装成供应商主张」——合成
-// 一张表，栏目里就再没有东西说得出这一行是内部预期。
-//
-// 全部行原样上列，**不下推确认条件、账期或口径参数**：哪笔该确认、该进哪个账期、
-// 按哪个口径采用是各自唯一创建用例伺候的判断输入，查阅面收下判断参数就等于让目录
-// 读口长出第二种「处置」语义（裁决同 /customs-ports-paths 不收评估时点那条）。翻页、
-// 排序、阶段筛选与 q 由端点按各册的声明（ports.CustomerChargePages、ports.SupplierExpectedCostPages）
-// 解码（ADR-0144 决定六）；按 registry 分派与解码都排在 Intake 之后（catalogue-read-pagination-rollout spec「端点先
-// Intake、后解码查询参数」）。
 // PricingWeightSourceReader 按评价标识回答一笔费用的计价重量与它的来源。缺席时费用册仍列出，这几格空着；在场而读不回
 // 时整份答未形成。
 type PricingWeightSourceReader interface {
@@ -84,6 +69,21 @@ type PricingWeightOrigin struct {
 	DimensionUnit    string
 }
 
+// NewQuerySettlementChargesEndpoint 交回费用与计费页两本册子的 HTTP 入口
+// （GET /settlement-charges，票 admin-skeleton-closure-batch/04）。
+//
+// 两册共用一个端点按 `registry` 分派，各自成形：客户费用与供应商预期成本的行形状
+// 互不相同（前者有阶段与确认依据、无价卡版本，后者有版本链与纠错原因、无阶段），
+// 共享壳要么空出半数字段、要么把强类型折成 any（判据逐字同 visibilityhttp 的六种
+// 目录行）。CONTEXT 另把两者立为两个词条并明禁「内部预期伪装成供应商主张」——合成
+// 一张表，栏目里就再没有东西说得出这一行是内部预期。
+//
+// 全部行原样上列，**不下推确认条件、账期或口径参数**：哪笔该确认、该进哪个账期、
+// 按哪个口径采用是各自唯一创建用例伺候的判断输入，查阅面收下判断参数就等于让目录
+// 读口长出第二种「处置」语义（裁决同 /customs-ports-paths 不收评估时点那条）。翻页、
+// 排序、阶段筛选与 q 由端点按各册的声明（ports.CustomerChargePages、ports.SupplierExpectedCostPages）
+// 解码（ADR-0144 决定六）；按 registry 分派与解码都排在 Intake 之后（catalogue-read-pagination-rollout spec「端点先
+// Intake、后解码查询参数」）。
 func NewQuerySettlementChargesEndpoint(
 	intake CatalogueQueryIntake,
 	reader ChargeCatalogueReader,
@@ -191,6 +191,7 @@ func serveCustomerCharges(
 			ConfirmationBases:    bases,
 			AttributionDate:      row.AttributionDate,
 			BilledOn:             row.BilledOn,
+			Superseded:           row.Superseded,
 			SupersededBy:         row.SupersededBy,
 			Adjustments:          adjustments,
 			WeightSource:         origin.Kind,
@@ -301,8 +302,11 @@ type customerChargeBody struct {
 	ConfirmationBases    []chargeConfirmationBasisBody `json:"confirmationBases"`
 	AttributionDate      string                        `json:"attributionDate,omitempty"`
 	BilledOn             string                        `json:"billedOn,omitempty"`
-	SupersededBy         string                        `json:"supersededBy,omitempty"`
-	Adjustments          []chargeAdjustmentBody        `json:"adjustments"`
+	// superseded 为真表示这笔预估已被替代、不再确认，为假时整键不出现；supersededBy 只在有后继时给。新评价合计为零时没有
+	// 后继，那笔预估照样被替代——只有 superseded 在场，页面据此分得清「被后一代接替」与「重估为零额」。
+	Superseded   bool                   `json:"superseded,omitempty"`
+	SupersededBy string                 `json:"supersededBy,omitempty"`
+	Adjustments  []chargeAdjustmentBody `json:"adjustments"`
 	// 计价重量与它的来源（见 PricingWeightOrigin）。读口没答的评价这几键整个不出现。
 	PricedWeight     string   `json:"pricedWeight,omitempty"`
 	PricedWeightUnit string   `json:"pricedWeightUnit,omitempty"`

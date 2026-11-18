@@ -26,7 +26,7 @@ const (
 	ConfirmChargeOutcomeInvalid ConfirmChargeOutcome = iota
 	ChargeConfirmedOutcome
 	ChargeAlreadyConfirmedOutcome
-	// ChargeSuperseded：这笔预估已经被后一代预估替代，不再确认。
+	// ChargeSuperseded：这笔预估已经被后一代替代，不再确认——后一代形成了新预估，或后一代评价合计为零而没有新预估。
 	ChargeSuperseded
 	ConfirmationConditionNotMet
 	ConfirmNotAccepted

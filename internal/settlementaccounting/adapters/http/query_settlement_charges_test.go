@@ -243,6 +243,44 @@ func TestCustomerChargeQueryKeepsUnconfiguredConditionApartFromMissingBasis(t *t
 	}
 }
 
+// Covers: 被替代的预估在报文上看得见——有后继时 superseded 与 supersededBy 都在；新评价合计为零、没有后继时只有 superseded 在，
+// supersededBy 整键不出现；没被替代的行两键都不出现（为假时省略）。
+func TestCustomerChargeQueryShowsASupersessionWithoutASuccessor(t *testing.T) {
+	row := func(charge string) ports.CustomerChargeCatalogueRow {
+		return ports.CustomerChargeCatalogueRow{
+			Charge: charge, FeeItem: "SYN-FEE-01", Evaluation: "SYN-EVAL-01", Stage: "ESTIMATED",
+			OriginalCurrency: "SYN-CUR-01", OriginalMinor: 1000, SettlementCurrency: "SYN-CUR-01", SettlementMinor: 1000,
+			FormedAt: catalogueBaseAt,
+		}
+	}
+	replaced, zeroed, current := row("SYN-CHG-REPLACED"), row("SYN-CHG-ZEROED"), row("SYN-CHG-CURRENT")
+	replaced.Superseded, replaced.SupersededBy = true, "SYN-CHG-NEXT"
+	zeroed.Superseded = true
+	register := &stubChargeCatalogue{charges: []ports.CustomerChargeCatalogueRow{replaced, zeroed, current}}
+	response := serveGet(chargesEndpoint(register), "/settlement-charges?registry=customer-charge")
+
+	var body struct {
+		Charges []map[string]json.RawMessage `json:"charges"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || len(body.Charges) != 3 {
+		t.Fatalf("decode %s: %v", response.Body.String(), err)
+	}
+	if string(body.Charges[0]["superseded"]) != "true" || string(body.Charges[0]["supersededBy"]) != `"SYN-CHG-NEXT"` {
+		t.Fatalf("有后继的替代走样：%v", body.Charges[0])
+	}
+	if string(body.Charges[1]["superseded"]) != "true" {
+		t.Fatalf("没有后继的替代没有 superseded：%v", body.Charges[1])
+	}
+	if _, present := body.Charges[1]["supersededBy"]; present {
+		t.Fatalf("没有后继时 supersededBy 不该出现：%v", body.Charges[1])
+	}
+	for _, absent := range []string{"superseded", "supersededBy"} {
+		if _, present := body.Charges[2][absent]; present {
+			t.Fatalf("没被替代的行不该带 %q：%v", absent, body.Charges[2])
+		}
+	}
+}
+
 // Covers: 版本链 — 首版的 priorVersion/correctionReason 成对缺席，纠错版本两者成对
 // 在场；原版本保留，一份成本的历史是多行而不是一行被改写。`AT-SA-236`（读口半边）：记了供应商的带 supplier，没记的整键不出现。
 func TestSupplierExpectedCostQueryKeepsTheVersionChain(t *testing.T) {

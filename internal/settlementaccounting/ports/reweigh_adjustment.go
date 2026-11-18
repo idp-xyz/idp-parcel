@@ -7,8 +7,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// ChargeSupersessionStore 记下后一代预估替代了前一代仍未确认的费用。确认口据此不再确认被替代的那一笔。
+// ChargeSupersessionStore 记下后一代评价替代了前一代仍未确认的费用。确认口据此不再确认被替代的那一笔。
+//
+// 替代有两种：后一代形成了新预估，指名它为后继（SaveSupersession）；后一代评价合计为零，没有新预估可指，那笔费用照样
+// 被替代、不再确认（SaveSupersessionWithoutSuccessor）。分成两个方法而不是让后继可缺席：缺后继是一种业务情形，不是一个
+// 没填的参数，调用处读得出自己在记哪一种。之后一代形成新预估时，同一笔费用上的 SaveSupersession 把它补成后继。
 type ChargeSupersessionStore interface {
+	// SaveSupersession 记下 charge 被 supersededBy 替代。这笔费用已有没有后继的替代时补上后继；已有后继的不覆盖。
 	SaveSupersession(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -16,6 +21,14 @@ type ChargeSupersessionStore interface {
 		supersededBy domain.CustomerChargeID,
 		at time.Time,
 	) error
+	// SaveSupersessionWithoutSuccessor 记下 charge 被替代而没有后继。这笔费用已有替代（无论有没有后继）时不改。
+	SaveSupersessionWithoutSuccessor(
+		ctx context.Context,
+		tenant domain.TenantID,
+		charge domain.CustomerChargeID,
+		at time.Time,
+	) error
+	// Superseded 问这笔费用是否已被替代，有没有后继都答是。
 	Superseded(ctx context.Context, tenant domain.TenantID, charge domain.CustomerChargeID) (bool, error)
 }
 

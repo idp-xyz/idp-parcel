@@ -79,6 +79,22 @@ export function pricedWeightText(row: PricedWeightFields): string | undefined {
   return [row.pricedWeight, row.pricedWeightUnit].filter(Boolean).join(' ');
 }
 
+/** 一笔费用上「被替代」的两格。读口照册转写，没被替代时两格都缺席。 */
+export type SupersessionFields = {
+  superseded?: boolean;
+  supersededBy?: string;
+};
+
+/**
+ * 「被替代为」：有后继显示后继费用号；已被替代而没有后继，是新评价合计为零、没有新预估可接，写明不再确认——留空的话
+ * 运营会以为这笔预估还能确认。没被替代答 undefined。
+ */
+export function supersededByText(row: SupersessionFields): string | undefined {
+  if (row.supersededBy) return row.supersededBy;
+  if (row.superseded) return '重估为零额，不再确认';
+  return undefined;
+}
+
 /**
  * 计价重量从哪来：评价用的实重与尺寸，以及这两样出自实测还是申报。sourceLabel 把来源码翻成中文。尺寸三边由长到短。
  * 申报没报尺寸时写「未报尺寸」而不是留空——留空分不清是没报还是读口没给。评价没有测量事实（没有来源码）答 undefined。
