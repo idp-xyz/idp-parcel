@@ -96,4 +96,4 @@
 
 ## 搁置
 
-等用户点名：`cursor/reporting-source-adr`、`shelved/company-subject-profile`（都在 origin）。仓配票 08、09 的用例已进 main，仍无代码；票 10 至 12 未写。冻结的票见[冻结清单](../.scratch/launch-line-freeze-2026-10-27.md)。
+等用户点名：`cursor/reporting-source-adr`、`shelved/company-subject-profile`（都在 origin）。仓配文档票 08 至 12 已进 main，仍无代码。冻结的票见[冻结清单](../.scratch/launch-line-freeze-2026-10-27.md)。

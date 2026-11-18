@@ -1,7 +1,7 @@
 # 12 PN-09 开发交接与合成任务包
 
 Category: docs
-Status: in-progress（2026-11-18 认领，分支 `cursor/wf-return-charge`）
+Status: resolved（2026-11-18 进 main，用户说「全部完成吧」；见「进 main 记录」）
 Blocked by: 06、07、08、09、10、11
 
 依据：[workflow.md](../../../docs/agents/workflow.md)「本仓已经做过的上游步骤」——切片的工作包与阻塞关系写在 `docs/design/*handoff*`，实现直接认领工作包；ADR-0375 决定二「它的演示动线是仓配自己的一条，由 PN-09 的开发交接定义」。
@@ -58,4 +58,12 @@ Blocked by: 06、07、08、09、10、11
 
 - 写成 `docs/design/pn-09-warehouse-fulfillment-development-handoff.md`。开发主线的 PN-09 现状与 docs/README 入口已改。
 - 邻接用例的承接改指到包。
-- 只改 `.md`。还没评审，还没进 main。代码没写。
+- 只改 `.md`。代码没写。
+
+## 评审记录
+
+与票 10 同一轮。没有单独的非作者交卷。交接不写生产代码，费用调整入口没有解冻。
+
+## 进 main 记录
+
+与票 10、票 11 同一笔。内容在 `e457f7901`。出处 `cursor/wf-return-charge` 的 `d8c002cdf`。生成物不重算。全量测试与种子灌库未跑。

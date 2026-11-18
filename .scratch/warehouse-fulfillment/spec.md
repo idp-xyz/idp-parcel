@@ -1,7 +1,7 @@
 # 仓配履约（PN-09）：从领域文档到可开工
 
 Category: enhancement
-Status: in-progress
+Status: resolved（2026-11-18，文档子票 01 至 12 进 main。实现按开发交接另做，不在本 spec）
 
 依据：领域已定——[ADR-0368](../../docs/adr/0368-commodity-inventory-and-warehouse-fulfillment-join-the-product-as-a-new-context-and-node-operations-stays-non-wms.md)、[ADR-0370](../../docs/adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md)、[ADR-0371](../../docs/adr/0371-warehouse-fulfillment-acts-for-the-owner-on-warehouse-outbound-requests-and-every-decision-path-hands-off-the-acceptance-decision.md) 与[仓配履约 CONTEXT](../../docs/domain/warehouse-fulfillment/CONTEXT.md)（票 01 至 04）；切片与「可选能力」的口径见 [ADR-0375](../../docs/adr/0375-warehouse-fulfillment-is-an-optional-capability-on-its-own-pn-09-slice-off-per-deployment-unless-switched-on-and-unconfigured-per-tenant-until-registered.md)（票 05）；仓储作业费的计价与结算见 [ADR-0377](../../docs/adr/0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md)（票 06）。
 
@@ -34,9 +34,9 @@ PN-09 的机制半边可以开工：切片已立，仓储作业费的计价与�
 | [07](./issues/07-write-the-inbound-use-cases.md) | `UC-WF`：主数据与入库 | 05 | resolved |
 | [08](./issues/08-write-the-in-warehouse-use-cases.md) | `UC-WF`：库内作业、冻结、盘点与差异 | 05 | resolved |
 | [09](./issues/09-write-the-outbound-use-cases.md) | `UC-WF`：出库请求到出库确认 | 05；平台备货一节另等 declared-goods-lines/01 进 main | resolved |
-| [10](./issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) | `UC-WF`：退货、代理仓与收费发生项 | 05、06、07、08、09 | in-progress |
-| [11](./issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) | 首方客户面、一线作业端与接入词表 | 07、08、09、10 | in-progress |
-| [12](./issues/12-write-the-pn-09-development-handoff-and-synthetic-task-pack.md) | PN-09 开发交接与合成任务包 | 06、07、08、09、10、11 | in-progress |
+| [10](./issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) | `UC-WF`：退货、代理仓与收费发生项 | 05、06、07、08、09 | resolved |
+| [11](./issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) | 首方客户面、一线作业端与接入词表 | 07、08、09、10 | resolved |
+| [12](./issues/12-write-the-pn-09-development-handoff-and-synthetic-task-pack.md) | PN-09 开发交接与合成任务包 | 06、07、08、09、10、11 | resolved |
 
 06 与 07、08、09 互不依赖，可以并行。用例编号是各票的建议，以写成的 `UC-WF-*` 为准。
 

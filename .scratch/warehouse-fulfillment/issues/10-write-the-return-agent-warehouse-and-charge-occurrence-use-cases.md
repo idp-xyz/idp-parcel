@@ -1,7 +1,7 @@
 # 10 写 `UC-WF`：退货、代理仓与收费发生项
 
 Category: docs
-Status: in-progress（2026-11-18 认领，分支 `cursor/wf-return-charge`）
+Status: resolved（2026-11-18 进 main，用户说「全部完成吧」；见「进 main 记录」）
 Blocked by: 05、06、07、08、09（收费发生项挂在票 07 至 09 写成的作业事实上，并要回填它们的指针）
 
 依据：[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md) 的「退货」「代理仓」「收费发生项」词条与规则，「退货入库」「代理仓库存声明」两条生命周期；ADR-0370 决定三；[ADR-0377](../../../docs/adr/0377-warehouse-charge-occurrences-are-a-fifth-evaluation-subject-priced-by-measure-fee-rules-and-settlement-requests-a-sell-evaluation-on-the-occurrence-formed-envelope.md)（收费发生项怎样被计价与结算消费，决定十二是它替仓配履约定下的几条）。
@@ -80,4 +80,12 @@ CONTEXT 没写、要在本票定下的：
 
 - 新增 UC-WF-017 至 UC-WF-019。CONTEXT 补了退货执行、收费发生项与按种类的词表。验收 `AT-WF-229` 至 `AT-WF-259`。
 - 回填了 UC-WF-002 至 UC-WF-011、UC-WF-013、UC-WF-016 里本票已经定了的交接。UC-SA-002 仓储那一行改指 UC-WF-019。
-- 只改 `.md`。还没评审，还没进 main。
+- 只改 `.md`。
+
+## 评审记录
+
+2026-11-18 在隔离树对 `cecd0ccef` 起过一次非作者评审，子代理没交卷。作者落地前核过：验收 `AT-WF-229` 至 `AT-WF-259` 在用例表与盘点里各一行；发生项不带金额。用户同日说「全部完成吧」。不另开一轮。
+
+## 进 main 记录
+
+内容在 `e457f7901`，与票 11、票 12 同一笔进 main。收口是随后这一笔。出处是分支 `cursor/wf-return-charge` 的 `d8c002cdf`。重放四笔，不带合并提交，cherry-pick 无冲突。生成物不重算。全量测试与种子灌库未跑，只改了 `.md`。
