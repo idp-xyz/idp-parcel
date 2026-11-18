@@ -89,7 +89,7 @@ void_measurement() {
     "201:INVALIDATION_RECORDED,200:EXISTING_RESULT"
 }
 
-# 只报重量、不报尺寸的那一条不收：重量与尺寸都是必填字段，口上答 400 并点名缺的那一格。
+# 只报重量、不报尺寸的那一条不收：重量与尺寸都是必填字段，口上答 400（`MALFORMED_REQUEST`），响应不带是哪一格。
 step "只称重不量方（不收）" "$OP" POST /node-operations/manual-measurements \
   "$(pj sourceId="SYN-WEIGH-${STAMP}-ONLY" objectKind=HANDLING_UNIT objectId="$UNIT" node=SYN-NODE-SHA-HUB \
       location=SYN-BENCH-01 basis="$PARCEL" performedBy=SYN-SCALE-01 evidenceRef="WEIGH/SYN-WEIGH-${STAMP}-ONLY" \

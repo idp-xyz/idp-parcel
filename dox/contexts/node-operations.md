@@ -61,7 +61,7 @@
 | 绑定结论／途径 | `CONFIRMED` `DENIED`／`CUSTOMER_CHANNEL` `OPERATION_DECISION` |
 | 授权交付答复 | `AUTHORIZED` `NOT_AUTHORIZED` `NOT_CONFIGURED` |
 | 控制成立方式／转移结果 | `NODE_INTAKE` `HANDOVER_IN`／`ADVANCED` `NOT_ADVANCED` |
-| 交接对象／测量对象种类 | `PARCEL` `CONSOLIDATION_UNIT`／`HANDLING_UNIT` `CONSOLIDATION_UNIT` |
+| 交接对象 | `PARCEL` `CONSOLIDATION_UNIT` |
 | 集运动作 | `OPEN_UNIT` `ADD_MEMBER` `REMOVE_MEMBER` `SEAL_UNIT` `UNSEAL_UNIT` `CLOSE_UNIT` |
 | 集运单元阶段 | `OPEN` `SEALED` `CLOSED` |
 | 方向依据的格／答复 | `IDENTITY` `SERVICE_RESULT` `ROUTING`／`ESTABLISHED` `MISSING` `NOT_CONFIGURED` `UNREADABLE` `NOT_JUDGED` |
@@ -144,7 +144,7 @@
 
 **实际测量**
 
-- 一条测量（`ActualMeasurement`）是一次称重量方，带对象（作业实物或集运单元，种类与标识分两格）、节点、位置引用、作业依据、执行方与证据。毛重与长、宽、高都必填：毛重带重量单位，三边共用一个长度单位，缺一样不收；数字须是正数，单位须在产品内置单位目录上，数字原样留下，不换算。位置只存现场报的引用，不解释它指向哪里。
+- 一条测量（`ActualMeasurement`）是一次称重量方，带对象（作业实物 `HANDLING_UNIT` 或集运单元 `CONSOLIDATION_UNIT`，种类与标识分两格）、节点、位置引用、作业依据、执行方与证据。毛重与长、宽、高都必填：毛重带重量单位，三边共用一个长度单位，缺一样不收；数字须是正数，单位须在产品内置单位目录上，数字原样留下，不换算。位置只存现场报的引用，不解释它指向哪里。
 - 落下不改。复测是再登一条完整的；旧的要撤就作废。作废（`MeasurementInvalidation`）是另一条事实，指回被作废那条的来源身份，必带原因，自己的来源身份不得与被作废那条相同，不改原行；被作废的须在册，一条测量至多被作废一次。仍有效就是没有作废指过来。
 - 测量与作废各按自己的来源身份判重：同一来源身份同内容重报答原结果，内容不同答冲突、不改已有记录。发生时间是现场报的，按微秒记（形成处截到微秒，见 `measurementSourceAtRegisterInstant`）；记录时刻由服务端另记，不进内容。写下时同一事务内发变化事件（名见入口）；原样重投也再发一次，事件标识由租户与来源身份定，不会重复。
 - 作业端的登记与作废走作业事实面，租户与节点取自认证出的作业范围（种类须是 `NODE`），不取载荷。手工录入是要留名的运营决定（登记与作废同一种，`MANUAL_MEASUREMENT_ENTRY`，授予见 [access-identity.md](./access-identity.md)）：必带所凭原件，录入人取出示的操作者，录入人与原件成对——设备上报两格都空，手工录入两格都在，缺一格不收；租户取操作者，节点取载荷。

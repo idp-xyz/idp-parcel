@@ -131,7 +131,7 @@ func (intake *OperatorDecisionIntake) IntakeManualMeasurementInvalidation(ctx co
 }
 
 // measurementDocument 是一次称重量方的载荷。重量与长宽高都必填，没有「只报其中一项」的写法：缺了哪一格，
-// 口上答坏请求并点名那一格。复测是带新来源标识再报一条完整的。
+// 口上都拒成载荷不成形。复测是带新来源标识再报一条完整的。
 type measurementDocument struct {
 	SourceID         string `json:"sourceId"`
 	ObjectKind       string `json:"objectKind"`
@@ -176,8 +176,9 @@ func measurementCommand(
 	if err != nil {
 		return none, fmt.Errorf("%w: occurredAt is not an RFC 3339 instant: %v", ErrMalformedRequest, err)
 	}
-	// 重量与长宽高是必填字段：缺了哪一格在这里点名，调用方不必从 NOT_ACCEPTED 里猜是哪一格。数字是不是正数、
-	// 单位在不在产品内置目录上，仍由领域与编排判。
+	// 重量与长宽高是必填字段：缺格在口上就拒成载荷不成形，到不了编排，与到领域才形成不了的 NOT_ACCEPTED 分开。
+	// 缺的是哪一格只在服务端的错误文本里，这一族的响应形状不带 detail。数字是不是正数、单位在不在产品内置目录上，
+	// 仍由领域与编排判。
 	for _, field := range []struct{ name, value string }{
 		{"weightValue", document.WeightValue},
 		{"weightUnit", document.WeightUnit},

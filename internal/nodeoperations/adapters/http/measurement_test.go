@@ -13,7 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 )
 
-// 本文件证称重量方登记口的载荷：重量与长宽高都是必填字段，缺哪一格答坏请求并点名那一格；复测是带新来源标识
+// 本文件证称重量方登记口的载荷：重量与长宽高都是必填字段，缺哪一格都在口上拒成载荷不成形；复测是带新来源标识
 // 再报一条完整的。编排是替身，只记下译出的命令。夹具全为合成（S 级）。
 
 type measurementDecisionAuthenticator struct{}
@@ -46,7 +46,8 @@ const validMeasurement = `{"sourceId":"SYN-WEIGH-1","objectKind":"HANDLING_UNIT"
 	`"occurredAt":"2026-11-17T10:00:00+08:00","weightValue":"2.10","weightUnit":"KG",` +
 	`"length":"30","width":"25","height":"20","dimensionUnit":"CM","originalDocument":"SYN-DOC-1"}`
 
-// Covers: 重量与长宽高都是必填字段。只称重不量方、只量方不称重、缺一边、缺单位，都答坏请求并点名缺的那一格；
+// Covers: 重量与长宽高都是必填字段。只称重不量方、只量方不称重、缺一边、缺单位，都拒成 ErrMalformedRequest，
+// 错误文本里点名缺的那一格——点名只在服务端，这一族的响应形状不带 detail；
 // 旧的「测量项」一格不再是载荷的一部分，带了就拒。
 func TestTheMeasurementPayloadRequiresBothTheWeightAndTheDimensions(t *testing.T) {
 	intake, err := nodeopshttp.NewOperatorDecisionIntake(measurementDecisionAuthenticator{})
