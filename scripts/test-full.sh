@@ -15,9 +15,48 @@
 #   scripts/test-full.sh                      # go test -count=1 -p 8 ./...
 #   scripts/test-full.sh -run Foo ./cmd/...   # 有参数时整串替换 ./...，包路径要自己写上
 #   PARALLEL=4 scripts/test-full.sh           # 改包并发度
+#   scripts/test-full.sh --detach             # 交给用户级 systemd，立刻返回；日志见下面的固定路径
+#
+# --detach 是给「Cursor 收掉 wsl.exe 时，前台这一跑会跟着死、专用库也被 EXIT 陷阱停掉」用的。
+# 服务名 idp-parcel-test-full.service，日志 /tmp/idp-parcel-test-full.log，末行 FULL-EXIT=。
+# 前台跑法的退出码仍是 go test 的，不印那一行。
 set -euo pipefail
 
+log=/tmp/idp-parcel-test-full.log
+unit=idp-parcel-test-full.service
+
+detach=0
+if [[ "${1:-}" == "--detach" ]]; then
+  detach=1
+  shift
+fi
+
 cd "$(dirname "$0")/.."
+
+# 非登录的 wsl 与 systemd --user 都不带这只 Go。本机就装在这里。
+if [[ -x /usr/local/go/bin/go ]]; then
+  export PATH="/usr/local/go/bin:$PATH"
+fi
+
+if [[ "$detach" == 1 ]]; then
+  if systemctl --user is-active --quiet "$unit"; then
+    echo "已有一跑在进行：$unit，日志 $log" >&2
+    exit 1
+  fi
+  systemctl --user reset-failed "$unit" 2>/dev/null || true
+  : >"$log"
+  # 用户级 systemd 是这台机器上一直活着的 init。Cursor 杀掉发起这次调用的 wsl.exe 时，服务不在那棵进程树上。
+  systemd-run --user --collect --unit="${unit%.service}" \
+    --working-directory="$PWD" \
+    --setenv=IDP_PARCEL_TEST_FULL_MARK_EXIT=1 \
+    --setenv="PARALLEL=${PARALLEL:-8}" \
+    --setenv="PATH=$PATH" \
+    --property="StandardOutput=append:$log" \
+    --property="StandardError=append:$log" \
+    bash "$PWD/scripts/test-full.sh" "$@"
+  echo "日志 $log"
+  exit 0
+fi
 
 # 与 compose.yaml、ci.yml 钉同一个补丁号：三处分叉时，本地绿而 CI 红就成了版本差异。
 IMAGE=postgres:16.14
@@ -37,6 +76,8 @@ cleanup() {
   docker stop -t 10 "$name" >/dev/null 2>&1 || docker rm -f "$name" >/dev/null 2>&1 || true
   rm -rf "$base" 2>/dev/null || true
 }
+# 挂断不收尾：发起它的终端掉了，这一跑还要继续。INT/TERM 仍收尾，那是人要停。
+trap '' HUP
 trap cleanup EXIT INT TERM
 
 docker run -d --rm --name "$name" \
@@ -70,4 +111,19 @@ export IDP_PARCEL_POSTGRES_DSN="postgres://parcel:parcel@/postgres?host=${sock}&
 if [ "$#" -eq 0 ]; then
   set -- ./...
 fi
-go test -count=1 -p "$PARALLEL" "$@"
+
+# go test 在管道上按块缓冲，Cursor 的采集要等块满才看得到下一个包。pty 上它逐行刷。
+# script 的记录文件丢掉，只要它的刷新和子进程退出码。
+set +e
+if command -v script >/dev/null 2>&1; then
+  script -qefc "$(printf '%q ' go test -count=1 -p "$PARALLEL" "$@")" /dev/null
+  status=$?
+else
+  go test -count=1 -p "$PARALLEL" "$@"
+  status=$?
+fi
+set -e
+if [[ "${IDP_PARCEL_TEST_FULL_MARK_EXIT:-}" == 1 ]]; then
+  echo "FULL-EXIT=$status"
+fi
+exit "$status"
