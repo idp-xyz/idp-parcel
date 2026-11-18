@@ -1,7 +1,7 @@
 # 09 写 `UC-WF`：出库请求到出库确认
 
 Category: docs
-Status: in-progress（2026-11-18 认领，分支 `cursor/wf-outbound`，从 `cursor/wf-in-warehouse` 的 `7eb267c6f` 开出）
+Status: resolved（2026-11-18 进 main `a6278ff02`，用户给 `docs/` 开了例外；见「进 main 记录」）
 Blocked by: 05；平台备货一节另等 declared-goods-lines/01 进 main（ADR-0374 把平台备货改为整份出库请求提交一份委托）
 
 依据：[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md) 的「出库请求与发出」词条与规则、「出库请求」「装箱记录」两条生命周期；ADR-0370 决定一、二、五、六；ADR-0371 决定一至六；小包托运 CONTEXT 里来源「仓配出库」与代办的各条。
@@ -79,3 +79,6 @@ Blocked by: 05；平台备货一节另等 declared-goods-lines/01 进 main（ADR
 - 非阻断一并改了：拆单不再用「拆单不成立」这个新名字，数量不合答坏载荷，已分配答状态不符。UC-WF-010、UC-WF-011 里已经写成的交接，不再写「还没有写」。
 - 没升成阻断的：拣货等口没在最低语义里写仓；开关从没打开时收工路两句叠在一起的边界。留下。
 
+## 进 main 记录
+
+与票 08 同一笔内容进 main，SHA `a6278ff02`。收口是随后这一笔。重放、生成物与测试见票 08「进 main 记录」。评审钉 `e4219cc69`，三处阻断改在 `15d877ece`，改完的稿没有再评一轮。
