@@ -32,14 +32,14 @@
 | 触发 | 声明到达；UC-WF-012 把请求转入已转代理仓 |
 | 起始边界 | 代理仓已登记；连接器的凭据是租户取值 |
 | 成功结束 | 声明有效或已被取代；出库请求已拒绝，或交接结果已作为出库确认 |
-| 未决结束 | 连接器没登记：转出答未配置，声明口不收 |
+| 未决结束 | 连接器没登记：转出答未配置。指名的仓没登记：答查无所指的仓 |
 
 ## 权威依据
 
 | 引用键 | 权威内容 | 来源 |
 |---|---|---|
 | `WF-LANG` | 代理仓库存声明、代理仓出库 | [仓配履约：Language](../../domain/warehouse-fulfillment/CONTEXT.md#language) |
-| `WF-RULE` | 「代理仓」各条 | [仓配履约：Rules and invariants](../../domain/warehouse-fulfillment/CONTEXT.md#rules-and-invariants) |
+| `WF-RULE` | 「代理仓」各条；「主数据登记」里指名的仓没登记答查无所指的仓 | [仓配履约：Rules and invariants](../../domain/warehouse-fulfillment/CONTEXT.md#rules-and-invariants) |
 | `WF-LIFE` | 「代理仓库存声明」「出库请求」 | [仓配履约：Lifecycles](../../domain/warehouse-fulfillment/CONTEXT.md#lifecycles) |
 | `ADR-0370` | 连接器照公开规范或模拟源；凭据是租户取值 | [ADR-0370](../../adr/0370-warehouse-outbound-dispatches-by-product-network-owner-label-or-owner-pickup-and-the-remaining-warehouse-gaps-are-decided.md) |
 | `ADR-OPT` | 部署开关 | [ADR-0375](../../adr/0375-warehouse-fulfillment-is-an-optional-capability-on-its-own-pn-09-slice-off-per-deployment-unless-switched-on-and-unconfigured-per-tenant-until-registered.md) |
@@ -56,7 +56,7 @@
 
 - 部署已打开仓配开关。关着时各口不提供业务答复。
 - 接哪家、协议与凭据没登记，转出答未配置（`WF-RULE`，ADR-0370 决定三）。
-- 一个仓都没登记时，转出与声明都答未配置。
+- 指名的仓没登记答查无所指的仓。一个仓都没登记时，声明与转出都指名了仓，同样答查无所指的仓。
 
 ## 输入语义契约
 
@@ -74,7 +74,8 @@
 | 已被取代 | 同一来源对同一格有更新的声明 | 旧的不再当当前 | 旧的不删 |
 | 已拒绝 | 代理仓答缺货或拒绝 | 出库请求终结 | 货主可以改从别的仓发 |
 | 已转出 | 请求已交给代理仓 | 来源事实 | 本上下文没有拣货流水 |
-| 未配置 | 连接器或仓没登记 | 不转出 | 不选一家默认代理仓 |
+| 未配置 | 连接器没登记 | 不转出 | 不选一家默认代理仓 |
+| 查无所指的仓 | 指名的仓没登记 | 不落册 | 不建默认仓 |
 
 ## 应用流程
 
@@ -108,7 +109,7 @@
 | `AT-WF-239` | 代理仓答缺货；另一种答拒绝 | 出库请求都已拒绝。货主可以另从自营仓提交 |
 | `AT-WF-240` | 本产品网络：装箱结果报来，随后交接结果报来 | 装箱结果原样保全，再由 UC-WF-014 提交委托，测量取报来的数。交接结果即出库确认，自营库存账不变 |
 | `AT-WF-241` | 自备面单的请求转给代理仓 | 面单经连接器转出。不形成小包托运委托 |
-| `AT-WF-242` | 连接器没登记就转出；一个仓都没登记时收声明 | 都答未配置 |
+| `AT-WF-242` | 连接器没登记就转出；仓没登记时收声明 | 转出答未配置。声明答查无所指的仓 |
 | `AT-WF-243` | 向代理仓提交库预报或退货预报 | 答仓不受理 |
 | `AT-WF-244` | 部署没打开仓配开关：声明、转出与读口；同一部署跑其他上下文的全套用例 | 各口不提供业务答复。其他上下文的答复与信封不变（`ADR-OPT` 决定一、四） |
 

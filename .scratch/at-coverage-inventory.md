@@ -2142,7 +2142,7 @@
 | `AT-WF-239` | 代理仓缺货或拒绝则出库请求终结 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
 | `AT-WF-240` | 装箱结果后再提交委托，交接结果即出库确认且不消耗自营账 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
 | `AT-WF-241` | 自备面单经连接器转给代理仓，不形成委托 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
-| `AT-WF-242` | 连接器或仓没登记时转出与声明答未配置 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
+| `AT-WF-242` | 连接器没登记就转出答未配置；仓没登记时声明答查无所指 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
 | `AT-WF-243` | 向代理仓提交库或退货预报答仓不受理 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
 | `AT-WF-244` | 部署开关关着时代理仓各口不提供业务答复 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
 | `AT-WF-245` | 收货确认形成入库作业发生项，不带金额 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
@@ -2154,9 +2154,12 @@
 | `AT-WF-251` | 口径登记前的日子不补仓租；晚跑只补当时已齐的日子 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
 | `AT-WF-252` | 单位不同不折算；补测才重述；再测一版不改旧发生项 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
 | `AT-WF-253` | 没有库位类型带「无」；冻结只记有无，不减在库数量 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
-| `AT-WF-254` | 调整更正收货则重述入库作业发生项；收货不成立则作废 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-254` | 调整更正收货则重述；收货或出库确认不成立则作废，回补调增不形成入库作业 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
 | `AT-WF-255` | 换标按登记的项目形成；没登记的开箱不形成；拍照完成不改账 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
 | `AT-WF-256` | 一个仓都没登记或开关关着时不形成收费发生项 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-257` | 入库作业带票件箱与到仓方式，收货行带重量体积，不设托与柜型 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-258` | 拣货复核打包不另形成；截单不形成出库作业；回库按移库形成增值服务 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-259` | 退货入库与上架各形成一份退货处理；销毁只形成销毁 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
 
 ## 重盘变化摘要（0cddbba）
 
@@ -2467,3 +2470,4 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-11-18 追记（票 warehouse-fulfillment/09）：新立 UC-WF-012 至 UC-WF-016（受理与预占、波次拣货打包、代办委托、出库确认、出库截单），`AT-WF-181`–`228`。`internal/` 下还没有仓配履约的包，都未实现、没有测试点名，入④。总览计数未重算，由推送方重算。
 
 2026-11-18 追记（票 warehouse-fulfillment/10）：新立 UC-WF-017 至 UC-WF-019（退货、代理仓、收费发生项），`AT-WF-229`–`256`。都未实现，入④。总览计数未重算。
+2026-11-18 追记（同一票补词表）：`AT-WF-257`–`259`。都未实现，入④。总览计数未重算。

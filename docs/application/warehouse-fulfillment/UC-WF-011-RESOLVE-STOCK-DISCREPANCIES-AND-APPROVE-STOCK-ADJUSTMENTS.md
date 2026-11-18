@@ -206,9 +206,9 @@
 | 库存调整的提交口、批准口、驳回口、批准职责规则登记口与读口 | 未做。提交、批准与驳回挂「运营决定」能力面；批准职责规则挂登记册配置写面，在线口与受控批量口消费同一登记用例（ADR-0085 决定一）；读口挂主数据与运营查阅读。三种对象的批准与驳回开一个口还是各开一个，随划包定 | PN-09 开发交接划包 |
 | 实拣与分配不符、出库复核不符形成的库存差异 | 形成的口在 UC-WF-013，记在待出库库区里该件所在的格；批准与驳回已在本用例，提交人取那条作业事实的操作者 | 已写成 |
 | 出库确认不成立之后的回补；待出库库区里的账实不符 | 回补的口、库位与入库批次在 UC-WF-015：落在出库确认之前的待出库库位，批次取这次消耗的那一个。本用例的调整仍不收所指库位在待出库库区的行。复核不符的差异记在待出库该件所在的格，形成口在 UC-WF-013 | 已写成 |
-| `AT-WF-166`，销毁与收费发生项 | CONTEXT 写销毁发生项「在销毁入账时形成」，来源事实是本用例批准成立的那一笔；发生项的计量、明细行与作业属性没有写。回库处置的销毁走不走本用例的调整也没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
-| `AT-WF-175`，更正收错的收货与入库作业发生项 | 入库作业发生项在收货确认时形成；以库存调整更正收错的收货算不算它的来源事实被更正、要不要追加更正版本，没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
-| `AT-WF-164`，调增与仓租 | 盘盈与调增记入已有的入库批次，库龄随那个批次；入账之前的那些天补不补仓租没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
+| `AT-WF-166`，销毁与收费发生项 | 来源是本用例批准成立的那笔销毁流水。计量、属性与「无明细行」见 UC-WF-019 所引的词表。回库处置选销毁的走本用例，不另形成退货处理 | 已写成 |
+| `AT-WF-175`，更正收错的收货与入库作业发生项 | 对那笔入库作业发生项追加重述。调整不以所引收货差异的结论为成立依据。见 UC-WF-019 | 已写成 |
+| `AT-WF-164`，调增与仓租 | 盘盈与调增记入已有的入库批次，库龄随那个批次。入账之前的日子不补仓租。见 UC-WF-019 | 已写成 |
 | 接入词：运营决定种类「库存调整提交」「库存调整批准」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | `AT-WF-172`，两个身份可比 | 提交人来自运营决定面或作业事实登记面，批准人来自运营决定面；两个面上的操作者身份是不是同一个可比的标识，要在接入词表的 ADR 里写明 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | 提交从载荷收货主客户账户 | 库存调整新建一份调整，没有在册的对象可以取货主，只能由载荷指名；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
