@@ -127,7 +127,7 @@
 
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
-| 回库任务的作业端下发 | 任务怎样交到一线、离线边界没有写 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 回库任务的作业端下发 | 任务怎样交到一线、离线边界没有写 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | 截单与回库计不计费 | 截单不形成出库作业。回库是库内移动，登记了「移库」才形成增值服务。见 UC-WF-019 | 已写成 |
 
 待定格按三类归：

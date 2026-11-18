@@ -209,9 +209,9 @@
 | `AT-WF-166`，销毁与收费发生项 | 来源是本用例批准成立的那笔销毁流水。计量、属性与「无明细行」见 UC-WF-019 所引的词表。回库处置选销毁的走本用例，不另形成退货处理 | 已写成 |
 | `AT-WF-175`，更正收错的收货与入库作业发生项 | 对那笔入库作业发生项追加重述。调整不以所引收货差异的结论为成立依据。见 UC-WF-019 | 已写成 |
 | `AT-WF-164`，调增与仓租 | 盘盈与调增记入已有的入库批次，库龄随那个批次。入账之前的日子不补仓租。见 UC-WF-019 | 已写成 |
-| 接入词：运营决定种类「库存调整提交」「库存调整批准」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| `AT-WF-172`，两个身份可比 | 提交人来自运营决定面或作业事实登记面，批准人来自运营决定面；两个面上的操作者身份是不是同一个可比的标识，要在接入词表的 ADR 里写明 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| 提交从载荷收货主客户账户 | 库存调整新建一份调整，没有在册的对象可以取货主，只能由载荷指名；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 接入词：运营决定种类「库存调整提交」「库存调整批准」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
+| `AT-WF-172`，两个身份可比 | 提交人来自运营决定面或作业事实登记面，批准人来自运营决定面；两个面上的操作者身份是不是同一个可比的标识，要在接入词表的 ADR 里写明 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
+| 提交从载荷收货主客户账户 | 库存调整新建一份调整，没有在册的对象可以取货主，只能由载荷指名；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | 批准职责规则在参数登记册里的行；演示种子 | 批准职责规则是租户取值，参数登记册里还没有它的行（`ADR-DUTY` 决定六对审批职责规则要求登记其实例）。演示租户要先灌这条规则，建账导入才批准得了 | 票 [warehouse-fulfillment/12](../../../.scratch/warehouse-fulfillment/issues/12-write-the-pn-09-development-handoff-and-synthetic-task-pack.md) |
 | 准入范围 | 提交、批准与驳回照运营决定面判；仓配的写落在治理登记册的哪个对象范围没有定，随 `ADR-OPT` 越权风险点 7 一起定：那一点问的是某个租户怎样经 PN-08 的阶段准入启用仓配，任何生产部署打开开关之前要有答案 | 产品 owner 与试点治理 owner |
 | `AT-WF-180`，部署开关关着时端点怎么答 | `ADR-OPT` 决定四留给第一张落仓配端点的实施票；两种做法都不得折成 404 | 第一张落仓配端点的实施票 |

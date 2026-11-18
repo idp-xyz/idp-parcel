@@ -192,9 +192,9 @@
 | `AT-WF-145`，未完成的拣货任务 | 「未完成」指还没记完成、也没因出库截单撤销的那一份，见 UC-WF-013 启动条件 | 已写成 |
 | 待出库库区不在盘点范围 | 那里的账实不符在出库复核发现，差异记在该件所在的格，见 UC-WF-013；批准在 UC-WF-011 | 已写成 |
 | 盘点与收费发生项 | 租户登记了「盘点」才在盘点完成时形成增值服务，没登记不形成。见 UC-WF-019 | 已写成 |
-| 接入词：运营决定种类「盘点」，作业事实类型「盘点清点」，作业范围种类「仓」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| 盘点的范围与清点行从载荷收货主客户账户 | 库存账的一格以货主为一维，只能由载荷指名；`ADR-OPS` 决定二写的是身份格不从请求体收，创建这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| 一线作业端读盘点中的盘点与所涉库位 | 下发的内容、有效区间与离线边界没有写；清点时给不给作业人员看账面数没有定；「盘点状态不符」怎样呈现也没有写 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 接入词：运营决定种类「盘点」，作业事实类型「盘点清点」，作业范围种类「仓」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
+| 盘点的范围与清点行从载荷收货主客户账户 | 库存账的一格以货主为一维，只能由载荷指名；`ADR-OPS` 决定二写的是身份格不从请求体收，创建这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
+| 一线作业端读盘点中的盘点与所涉库位 | 下发盘点中的盘点与所涉库位，不给账面数。「盘点状态不符」在屏上指出现在的状态，不把这一笔当成已经做完。见一线简报「仓内作业」 | 已写成 |
 | 准入范围 | 两个面的写照各族判；仓配的写落在治理登记册的哪个对象范围没有定，随 `ADR-OPT` 越权风险点 7 一起定：那一点问的是某个租户怎样经 PN-08 的阶段准入启用仓配，任何生产部署打开开关之前要有答案 | 产品 owner 与试点治理 owner |
 | `AT-WF-158`，部署开关关着时端点怎么答 | `ADR-OPT` 决定四留给第一张落仓配端点的实施票；两种做法都不得折成 404 | 第一张落仓配端点的实施票 |
 | `ADR-OPT` Consequences 给实施票的验收 | 「开关关着时其他上下文的答复不变」由 `AT-WF-158` 守；本用例不消费、也不交出任何信封，「开着时对不属于仓配的信封入账收工」在这里没有对应的路 | 随实现 |

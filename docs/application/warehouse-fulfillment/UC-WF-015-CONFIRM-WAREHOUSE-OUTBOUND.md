@@ -129,6 +129,7 @@
 |---|---|---|
 | 交给全程追踪的事实 | UC-VE-002 还没有 `warehouse-outbound-confirmed` 的消费门 | 票 [warehouse-fulfillment/12](../../../.scratch/warehouse-fulfillment/issues/12-write-the-pn-09-development-handoff-and-synthetic-task-pack.md) 与全程追踪的实施票 |
 | 回补的批准 | 用 UC-WF-011 的批准职责规则与批准授予。不新增一种指向待出库的调整提交 | 已写成 |
+| 自备面单对不上时货主补交 | 货主经首方契约的 `owner-labels` 口补交，或走截单。本用例仍只在包裹数与面单数对上时出库确认 | 已写成 |
 
 待定格按三类归：
 

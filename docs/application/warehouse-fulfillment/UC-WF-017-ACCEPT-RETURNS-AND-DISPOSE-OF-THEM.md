@@ -129,7 +129,7 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 退货各口 | 未做 | 票 [warehouse-fulfillment/12](../../../.scratch/warehouse-fulfillment/issues/12-write-the-pn-09-development-handoff-and-synthetic-task-pack.md) |
-| 「退货代录」词 | 暂名 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 「退货代录」词 | 暂名 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 
 待定格按三类归：
 

@@ -180,7 +180,7 @@
 
 | ID | 待确认决策 | 归类 | 当前建议 | 影响 |
 |---|---|---|---|---|
-| `BD-WF-012` | 要不要向货主公开待认领到货，让货主自己认领 | 产品策略 | 首版不公开：只在操作者面，由运营认领；公开会把一个货主的到货线索露给别的货主 | 不公开的代价是货主在自己的读口看不到「货到了、正等认领」，只能在系统外问仓。公开的话要定露哪些格（跟踪号露几位之类）与货主认领的口；折中是只对由收货事实转来的到货，在原预报的读口上标出「另有到货待认领」 |
+| `BD-WF-012` | 要不要向货主公开待认领到货，让货主自己认领 | 产品策略 | 首版不公开待认领本身。由收货事实转来的，在原预报读口上只标「另有到货待认领」（`AT-WF-260`） | 公开待认领内容会把线索露给别的货主。只标有无，不带内容 |
 | `BD-WF-013` | 登记错了的到货观察能不能更正 | 产品策略 | 首版不设更正口：到货登记之后观察不改，登错了的由运营在撤销原因或处置说明里写明 | 设的话要定更正的留痕 |
 
 ## 给开发的交接
@@ -192,10 +192,10 @@
 | 到货登记口、认领口、撤销口、处置口、处置规则登记口与读口 | 未做。到货登记挂「作业事实登记」能力面，要定一版带形状版本的规范化形状，同一事实身份的重放与内容冲突按它比（ADR-0149 决定四）；认领、撤销与处置挂「运营决定」能力面；处置规则挂登记册配置写面，在线口与受控批量口消费同一登记用例（ADR-0085 决定一） | PN-09 开发交接划包 |
 | `AT-WF-061`，退件的认领之后按退货入库入账；退货入库认不出货主时转来 | 见 UC-WF-017：认不出的建待认领到货；认领之后的入库引用那一件 | 已写成 |
 | 处置的实物执行与收费 | 处置只记决定。待认领到货不在账上，不形成销毁发生项；租户把该处置登记成增值服务项目才形成。见 UC-WF-019 | 已写成 |
-| 接入词：作业事实类型「待认领到货登记」，作业范围种类「仓」，运营决定种类「待认领到货认领」「待认领到货处置」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 接入词：作业事实类型「待认领到货登记」，作业范围种类「仓」，运营决定种类「待认领到货认领」「待认领到货处置」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | 处置规则在参数登记册里的行 | 处置规则是租户取值，参数登记册里还没有它的行 | 票 [warehouse-fulfillment/12](../../../.scratch/warehouse-fulfillment/issues/12-write-the-pn-09-development-handoff-and-synthetic-task-pack.md) |
-| 认领从载荷收货主客户账户 | 待认领到货不属于任何货主，认领只能由载荷指名货主；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| `BD-WF-012`，由收货事实转来的到货要不要在原预报的读口上标出 | 首版不向货主公开待认领到货。由收货事实转来的那一种，原预报是货主自己的，在它的读口上只标「另有到货待认领」不露别的货主的线索；要不要做没有定 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 认领从载荷收货主客户账户 | 待认领到货不属于任何货主，认领只能由载荷指名货主；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
+| `BD-WF-012`，由收货事实转来的到货要不要在原预报的读口上标出 | 要标。只标「另有到货待认领」，不带那件到货的内容。见 UC-WF-003 `AT-WF-260` | 已写成 |
 | 准入范围 | 到货登记、认领、撤销与处置照各族判；仓配的写落在治理登记册的哪个对象范围没有定，随 `ADR-OPT` 越权风险点 7 一起定：那一点问的是某个租户怎样经 PN-08 的阶段准入启用仓配，任何生产部署打开开关之前要有答案 | 产品 owner 与试点治理 owner |
 | `AT-WF-068`，部署开关关着时端点怎么答 | `ADR-OPT` 决定四留给第一张落仓配端点的实施票；两种做法都不得折成 404 | 第一张落仓配端点的实施票 |
 | `ADR-OPT` Consequences 给实施票的验收 | 「开关关着时其他上下文的答复不变」由 `AT-WF-068` 守；本用例不消费、也不交出任何信封，「开着时对不属于仓配的信封入账收工」在这里没有对应的路 | 随实现 |

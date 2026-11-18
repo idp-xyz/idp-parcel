@@ -143,7 +143,7 @@
 |---|---|---|
 | 出库请求的提交、预占、拆单与读口 | 未做。货主口挂首方客户渠道，代录挂运营决定 | PN-09 开发交接划包 |
 | 预占与分配在 UC-WF-009 读口上的内容 | 读口的形状以本用例「结果语义契约」为准 | 已写成，实现随本用例 |
-| 接入词「出库请求代录」 | 暂名，定名归接入词表 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 接入词「出库请求代录」 | 暂名，定名归接入词表 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 
 待定格按三类归：
 
