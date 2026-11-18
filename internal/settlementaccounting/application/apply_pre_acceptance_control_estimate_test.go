@@ -577,8 +577,8 @@ func TestTheEstimateAsksTheContractSellPriceSources(t *testing.T) {
 }
 
 // Covers: ADR-0380 决定二、七——合同只声明一个来源、采用行不带计价范围（新形状合同的账户就是这样登的）时，估价照样形成，
-// 头上的计价范围是合同的那一个来源。试算只带这一个范围去问，不带列表。演示动线上第一位这样的客户曾在这里整条受理链失败：
-// 领域回头去读采用行上的范围，读到空。
+// 头上的计价范围是合同的那一个来源。试算只带这一个范围去问，不带列表，各件因此不另记来源：头上那一格若回头去读采用行，
+// 读到的是空，整条受理链会停在这里。
 func TestAContractWithOneSellPriceSourceFormsTheEstimateWithoutAnAdoptionScope(t *testing.T) {
 	only := value(t, domain.NewEstimatePricingScope, "SYN-SCOPE-ONLY")
 	arranged, err := domain.NewOrderedSellPriceSources([]domain.EstimatePricingScope{only})
