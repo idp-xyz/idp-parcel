@@ -72,6 +72,9 @@ func main() {
 	// FBA 头程售价卡（范围 SYN-SCOPE-01，见 fba_card.go）：指名 SYN-PROD-CN-SG-FBA，与上面那张不声明产品的售价卡同范围并存，
 	// 各计各的产品（ADR-0382）。与上面各份互不改动，重跑 seedgen 时上面各份逐字节不变。
 	write(outDir, "price-card-cn-sg-fba.json", fbaSellCardSnapshot())
+	// 专属售价卡（范围 SYN-SCOPE-EXCL-01，见 exclusive_card.go）：只写谈下来的 Z1，绑上面已登记并复核的分区目录与燃油序列。
+	// 与上面各份互不改动，重跑 seedgen 时上面各份逐字节不变。
+	write(outDir, "price-card-cn-sg-exclusive.json", exclusiveSellCardSnapshot())
 }
 
 // reviewDutyRuleDocument 产出 parcel-pricing-register -kind reference-review-duty-rule 吃的规则文档：演示租户要求复核者
