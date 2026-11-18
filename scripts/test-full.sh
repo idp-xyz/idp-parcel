@@ -17,7 +17,8 @@
 #   PARALLEL=4 scripts/test-full.sh           # 改包并发度
 #   scripts/test-full.sh --detach             # 交给用户级 systemd，立刻返回；日志见下面的固定路径
 #
-# --detach 是给「Cursor 收掉 wsl.exe 时，前台这一跑会跟着死、专用库也被 EXIT 陷阱停掉」用的。
+# --detach 让这一跑不挂在发起它的终端上。前台跑法在 Cursor 的终端里丢过两次：进程没了，专用库随 EXIT
+# 陷阱停掉，没有退出码，原因没查清。交给用户级 systemd 之后，终端那头怎样都不影响它。
 # 服务名 idp-parcel-test-full.service，日志 /tmp/idp-parcel-test-full.log，末行 FULL-EXIT=。
 # 前台跑法的退出码仍是 go test 的，不印那一行。
 set -euo pipefail
@@ -45,7 +46,7 @@ if [[ "$detach" == 1 ]]; then
   fi
   systemctl --user reset-failed "$unit" 2>/dev/null || true
   : >"$log"
-  # 用户级 systemd 是这台机器上一直活着的 init。Cursor 杀掉发起这次调用的 wsl.exe 时，服务不在那棵进程树上。
+  # 用户级 systemd 一直活着，服务不在发起这次调用的那棵进程树上：那头的 wsl.exe 没了，这一跑照常跑完。
   systemd-run --user --collect --unit="${unit%.service}" \
     --working-directory="$PWD" \
     --setenv=IDP_PARCEL_TEST_FULL_MARK_EXIT=1 \
@@ -76,8 +77,6 @@ cleanup() {
   docker stop -t 10 "$name" >/dev/null 2>&1 || docker rm -f "$name" >/dev/null 2>&1 || true
   rm -rf "$base" 2>/dev/null || true
 }
-# 挂断不收尾：发起它的终端掉了，这一跑还要继续。INT/TERM 仍收尾，那是人要停。
-trap '' HUP
 trap cleanup EXIT INT TERM
 
 docker run -d --rm --name "$name" \
@@ -112,16 +111,11 @@ if [ "$#" -eq 0 ]; then
   set -- ./...
 fi
 
-# go test 在管道上按块缓冲，Cursor 的采集要等块满才看得到下一个包。pty 上它逐行刷。
-# script 的记录文件丢掉，只要它的刷新和子进程退出码。
+# go test 按包的先后打印结果，不按跑完的先后：排在前面的 cmd/parcel-api 要跑一分钟上下，
+# 它出结果之前后面的包都不显示。日志这段时间只有头两行是正常的，不是卡住。
 set +e
-if command -v script >/dev/null 2>&1; then
-  script -qefc "$(printf '%q ' go test -count=1 -p "$PARALLEL" "$@")" /dev/null
-  status=$?
-else
-  go test -count=1 -p "$PARALLEL" "$@"
-  status=$?
-fi
+go test -count=1 -p "$PARALLEL" "$@"
+status=$?
 set -e
 if [[ "${IDP_PARCEL_TEST_FULL_MARK_EXIT:-}" == 1 ]]; then
   echo "FULL-EXIT=$status"
