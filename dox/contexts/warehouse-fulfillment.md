@@ -9,7 +9,7 @@
 - 可选能力，首发不含，已搁置。
 - main 上没有生产代码：`internal/` 下没有 `warehousefulfillment` 目录，`cmd/` 下没有它的进程或登记口，也没有部署开关。
 - 在 `internal/` 与 `cmd/` 里搜 `warehouse`（不分大小写）：命中全在测试里，是夹具取值（`customer-warehouse-1`、`SYN-WAREHOUSE-1`、`RETURN_TO_BONDED_WAREHOUSE`）和一条被拒的 `"target_kind":"WAREHOUSE"` 用例，都与本上下文无关。搜「仓储」命中的是持久化仓储（repository）的意思。搜「仓配」只有下面「留的缝」一节那两处注释。
-- 文档只写了主数据与入库六篇用例。库内作业的用例与改到一半的旧 `CONTEXT.md` 在 origin 分支 `cursor/wf-in-warehouse` 上，没有并入 main；那个分支只有文档，没有代码。
+- 文档只写了主数据与入库六篇用例。库内作业的用例与跟着改过的旧 `CONTEXT.md` 在 origin 分支 `cursor/wf-in-warehouse` 上，没有并入 main；那个分支只有文档，没有代码，用例只评过一部分，没评到的记在分支上票 08 的票面里。
 
 入库、库内、出库、平台备货与代理仓各段的设计概览见 [scenarios.md](../scenarios.md)「仓配履约」。
 
