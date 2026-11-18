@@ -32,6 +32,26 @@ func (double *supersessionDouble) Superseded(context.Context, domain.TenantID, d
 
 type reweighAdoptionDouble struct{ adopted bool }
 
+// crossCurrencyEstimatedCharge 形成一笔跨币种的预估费用：原币 USD 1700、结算币 CNY 12000，带换算依据。
+func crossCurrencyEstimatedCharge(t *testing.T, id domain.CustomerChargeID) domain.CustomerCharge {
+	t.Helper()
+	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
+		ID: id, FeeItem: mustFeeItem("SYN-FEE-FREIGHT"),
+		Evaluation:         mustAccountValue(t, domain.NewSellEvaluationReference, "SYN-EVAL-SELL-0"),
+		OriginalCurrency:   mustAccountValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:      1700,
+		SettlementCurrency: mustAccountValue(t, domain.NewCurrencyCode, "CNY"),
+		SettlementMinor:    12000,
+		Conversion:         mustAccountValue(t, domain.NewConversionStepReference, "SYN-FX-0"),
+		Stage:              domain.ChargeEstimated,
+		FormedAt:           estimatedChargeAt.Add(-2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("跨币种旧费用：%v", err)
+	}
+	return charge
+}
+
 func (double reweighAdoptionDouble) ReweighAdjustmentAdopted(
 	context.Context, domain.TenantID, domain.SettlementAccountID,
 ) (bool, error) {
@@ -92,6 +112,80 @@ func TestAnAdoptedReweighRecordsTheDeltaOnTheConfirmedCharge(t *testing.T) {
 	}
 	if fixture.adjustments.saves != 1 {
 		t.Fatalf("调整笔数 = %d，want 1", fixture.adjustments.saves)
+	}
+}
+
+// crossCurrencyConfirmedPredecessor 把链上前一笔费用换成跨币种的已确认费用，见 crossCurrencyEstimatedCharge。
+func crossCurrencyConfirmedPredecessor(t *testing.T) *reweighFormation {
+	t.Helper()
+	var prior *chargeStoreDouble
+	fixture := newReweighFormationWith(t, domain.ChargeConfirmed, 12000, true, func(deps *application.FormEstimatedCustomerChargeDeps) {
+		prior = deps.PriorCharges.(*chargeStoreDouble)
+	})
+	oldID := mustAccountValue(t, domain.NewCustomerChargeID, "SELLCC-SELLREQ-SYN-1")
+	confirmed, err := crossCurrencyEstimatedCharge(t, oldID).Confirm(
+		registeredFacts(t),
+		mustAccountValue(t, domain.NewConfirmationBasisReference, "delivery-confirmed-1"),
+		estimatedChargeAt.Add(-time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("确认跨币种旧费用：%v", err)
+	}
+	prior.charges[oldID.String()] = confirmed
+	return fixture
+}
+
+// Covers: 前一笔已确认费用跨币种，差额按结算币判，不管原币那一格长什么样，这一代都有结论——已形成、指向同一笔费用，不上抛错误
+// 让它一直重投：原币种与费用不同或原币差额记不成时按结算币记（原币种取结算币种、两额相等、无换算依据）；结算币差额为零
+// 不记；原币可比且同号时照旧连原币差额一起记，换算依据取新评价的。
+func TestAConfirmedCrossCurrencyPredecessorIsSettledOnTheSettlementCurrencyDifference(t *testing.T) {
+	cases := []struct {
+		name                         string
+		originalCurrency             string
+		originalMinor, settlementNew int64
+		wantAdjustments              int
+		wantOriginalCurrency         string
+		wantOriginalMinor            int64
+		wantConversion               string
+	}{
+		{"原币种与费用不同", "EUR", 2000, 15000, 1, "CNY", 3000, ""},
+		{"结算币差额为零而原币差额不为零", "USD", 1800, 12000, 0, "", 0, ""},
+		{"原币差额为零", "USD", 1700, 15000, 1, "CNY", 3000, ""},
+		{"两个差额异号", "USD", 1800, 11000, 1, "CNY", 1000, ""},
+		{"原币可比且同号", "USD", 2100, 15000, 1, "USD", 400, "SYN-FX-1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := crossCurrencyConfirmedPredecessor(t)
+			fixture.adoption.OriginalCurrency = mustAccountValue(t, domain.NewCurrencyCode, tc.originalCurrency)
+			fixture.adoption.OriginalMinor = tc.originalMinor
+			fixture.adoption.SettlementMinor = tc.settlementNew
+			fixture.adoption.Conversion = mustAccountValue(t, domain.NewConversionStepReference, "SYN-FX-1")
+			result, err := fixture.handle(t)
+			if err != nil || result.State() != domain.SellRequestFormed {
+				t.Fatalf("结果 = %s err = %v，want 已形成", result.State(), err)
+			}
+			if charge, has := result.Charge(); !has || charge.String() != "SELLCC-SELLREQ-SYN-1" {
+				t.Fatalf("结论费用 = %q %v，want 原来那笔已确认费用", charge, has)
+			}
+			if len(fixture.charges.saved) != 0 || len(fixture.supersessions.saved) != 0 || fixture.adjustments.saves != tc.wantAdjustments {
+				t.Fatalf("预估 %v、替代 %v、调整 %d 笔，want 调整 %d 笔", fixture.charges.saved, fixture.supersessions.saved,
+					fixture.adjustments.saves, tc.wantAdjustments)
+			}
+			if tc.wantAdjustments == 0 {
+				return
+			}
+			recorded, found := fixture.adjustments.records["REWEIGH-"+sellEvaluationID]
+			if !found {
+				t.Fatalf("册上没有 REWEIGH-%s", sellEvaluationID)
+			}
+			currency, minor := recorded.Adjustment.OriginalAmount()
+			conversion, _ := recorded.Adjustment.Conversion()
+			if currency.String() != tc.wantOriginalCurrency || minor != tc.wantOriginalMinor || conversion.String() != tc.wantConversion {
+				t.Fatalf("调整原币 = %s %d 换算依据 %q，want %s %d %q",
+					currency, minor, conversion, tc.wantOriginalCurrency, tc.wantOriginalMinor, tc.wantConversion)
+			}
+		})
 	}
 }
 
