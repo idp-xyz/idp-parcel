@@ -136,7 +136,7 @@
 |---|---|---|
 | 拣货差额的批准 | 形成在本用例，批准在 UC-WF-011，以调增或调减在差异所在的格入账 | 已写成 |
 | 未完成的拣货任务 | 判据在本用例「启动条件」。UC-WF-010 的盘点开始照它 | 已写成 |
-| 收费发生项 | 拣货、打包、贴标计不计费没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
+| 收费发生项 | 拣货、出库复核与打包不另形成，这三个名字登记了也不另形成。出库复核前的贴标与「贴标」同一项目名，登记了才形成。见 UC-WF-019 | 已写成 |
 
 待定格按三类归：
 
