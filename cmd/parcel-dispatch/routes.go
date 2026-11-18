@@ -72,6 +72,31 @@ func registerRoutes(build func(dispatchSources) ([]routeLeg, error)) {
 	routeRegistry = append(routeRegistry, build)
 }
 
+// registerWarehouseFulfillmentRoutes 是仓配履约各路登进 routeRegistry 的唯一入口（ADR-0375 决定四）：开关关着时展开处交回
+// 零路，并且不调用构造函数——构造函数要开仓配自己的适配器，关着的部署不该为此付装配代价，更不该因它而失败。开着时原样
+// 交回构造函数的路与错误。仓配的路不得绕过它直接调 registerRoutes，否则关着的部署里就登进了仓配的路。
+//
+// 它今天没有生产调用方，这是预期的：仓配的路随各自的实施票落地，开关与登记的这一道门先立。
+func registerWarehouseFulfillmentRoutes(build func(dispatchSources) ([]routeLeg, error)) {
+	registerRoutes(gatedByWarehouseFulfillmentSwitch(build))
+}
+
+// gatedByWarehouseFulfillmentSwitch 给构造函数包上开关那一道门。拆出来是为了不碰包级的 routeRegistry 就能测。
+// 开关取自 sources.settings，在展开时才判：登记发生在 init，那时部署参数还没读。
+//
+// 构造函数为空时交回空，让 registerRoutes 在登记那一刻按它自己的护栏 panic，而不是包成一个闭包、拖到开关打开才炸。
+func gatedByWarehouseFulfillmentSwitch(build func(dispatchSources) ([]routeLeg, error)) func(dispatchSources) ([]routeLeg, error) {
+	if build == nil {
+		return nil
+	}
+	return func(sources dispatchSources) ([]routeLeg, error) {
+		if !sources.settings.warehouseFulfillment {
+			return nil, nil
+		}
+		return build(sources)
+	}
+}
+
 // assembleRoutes 展开登记处：逐特性构造各路，再交 routeTable 排成路由表。
 func assembleRoutes(sources dispatchSources) (map[eventing.EventType]dispatch.Consumer, error) {
 	var legs []routeLeg

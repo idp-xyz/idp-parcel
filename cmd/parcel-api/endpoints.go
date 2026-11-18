@@ -150,6 +150,9 @@ type endpointSources struct {
 	customerClientMinter *accessidentity.CustomerClientMinter
 	// registerNewerCanonicalization 是登记较新规范化版本价卡的部署开关（ADR-0352），价卡登记口与草稿发布口共读这一格。
 	registerNewerCanonicalization bool
+	// warehouseFulfillment 是仓配履约的部署开关（ADR-0375 决定四）：关着时仓配的端点不向任何调用方提供业务答复。仓配的特性从
+	// 这一格取，不另读环境；今天还没有任何仓配端点消费它。
+	warehouseFulfillment bool
 	// documentNumbers 是编号组件（ADR-0355 决定四、六）：规则册各口与各类单据的开立取同一套，规则册、序列与开立事务
 	// 都在上面那个 db 上。
 	documentNumbers docnumbering.Components

@@ -14,6 +14,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
+	"go.idp.xyz/idp-parcel/cmd/internal/warehouseswitch"
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
@@ -135,6 +136,12 @@ func run(logger *slog.Logger) error {
 			"env", pricingRegisterNewerCanonicalizationEnv)
 	}
 
+	// 仓配履约的部署开关（ADR-0375 决定四）与各族信任锚同处开池之前：读一次、带启动日志，开没开都出声。关着时仓配的端点不向任何
+	// 调用方提供业务答复，启动日志是事后查得出这一次启动是开是关的第一处。值经 startupChannels 交给 endpointSources，特性从那里取，
+	// 不另读环境。
+	warehouseFulfillment := warehouseswitch.Enabled(os.Getenv)
+	warehouseswitch.LogStartup(logger, warehouseFulfillment)
+
 	// 单据号加扰密钥（ADR-0355 决定五）与各族信任锚同处开池之前：配了而读不动或不合规要带原因退出。读法与出声在
 	// docnumbering 一处，各取号进程读的是同一项配置。
 	scrambleSecrets, err := docnumbering.LoadScrambleSecrets(os.Getenv, os.ReadFile, logger)
@@ -164,6 +171,7 @@ func run(logger *slog.Logger) error {
 		customerClientVerifier:        customerClientVerifier,
 		registerNewerCanonicalization: registerNewerCanonicalization,
 		scrambleSecrets:               scrambleSecrets,
+		warehouseFulfillment:          warehouseFulfillment,
 	})
 	if err != nil {
 		return err
@@ -202,7 +210,7 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
-// startupChannels 是开池之前就解析好的部署参数：两道隔离开关、本产品权威串、三族核验方、价卡登记的版本开关与单据号加扰密钥表。它们在 run 里带启动日志解析，
+// startupChannels 是开池之前就解析好的部署参数：两道隔离开关、本产品权威串、三族核验方、价卡登记的版本开关、单据号加扰密钥表与仓配履约开关。它们在 run 里带启动日志解析，
 // 参数不合规时在开池之前就带原因退出。
 type startupChannels struct {
 	isolatedRead     *isolatedReadIntakes
@@ -217,6 +225,8 @@ type startupChannels struct {
 	registerNewerCanonicalization bool
 	// scrambleSecrets 是单据号加扰密钥表（ADR-0355 决定五），在 run 里带启动日志读一次；零值即没配。
 	scrambleSecrets docnumber.SecretTable
+	// warehouseFulfillment 是仓配履约的部署开关（ADR-0375 决定四），在 run 里带启动日志读一次；缺省为关。
+	warehouseFulfillment bool
 }
 
 // assembleProductionEndpoints 是开池之后的那一段生产装配：先建各族接入渠道，再装只为启动即查的几只编排，最后展开端点
@@ -322,6 +332,7 @@ func assembleProductionEndpoints(db *bentopg.DB, startup startupChannels) ([]htt
 		operatorMinter:                operatorMinter,
 		customerClientMinter:          customerClientMinter,
 		registerNewerCanonicalization: startup.registerNewerCanonicalization,
+		warehouseFulfillment:          startup.warehouseFulfillment,
 		documentNumbers:               documentNumbers,
 	}, endpointChannels{
 		isolatedRead:       startup.isolatedRead,

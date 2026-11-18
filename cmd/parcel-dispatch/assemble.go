@@ -16,6 +16,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
+	"go.idp.xyz/idp-parcel/cmd/internal/warehouseswitch"
 	ccinbox "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/inbox"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccsettlement "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/settlementaccounting"
@@ -103,6 +104,9 @@ type dispatchSettings struct {
 	// scrambleSecrets 是单据号加扰密钥（ADR-0355 决定五），与 parcel-api 读同一项实例配置；零值即一个租户都没配，
 	// 不是必填——没配时用加扰模板的租户登记不进来，默认模板不用加扰。
 	scrambleSecrets docnumber.SecretTable
+	// warehouseFulfillment 是仓配履约的部署开关（ADR-0375 决定四），在 settingsFromEnv 里读一次。它不是必填：产品不带仓配
+	// 也是完整的，缺省为关；关着时仓配的路一路都不登记（registerWarehouseFulfillmentRoutes）。
+	warehouseFulfillment bool
 }
 
 const (
@@ -150,6 +154,8 @@ func settingsFromEnv(getenv func(string) string) (dispatchSettings, error) {
 		return dispatchSettings{}, err
 	}
 	settings.config.MaxAttempts = uint32(attempts)
+	// 开关不是必填项，读法在 warehouseswitch 一处：parcel-api 读的是同一个变量、同一条规则。
+	settings.warehouseFulfillment = warehouseswitch.Enabled(getenv)
 	return settings, nil
 }
 
@@ -215,6 +221,9 @@ func assembleDispatcher(
 	if settings.scrambleSecrets, err = docnumbering.LoadScrambleSecrets(getenv, os.ReadFile, logger); err != nil {
 		return nil, nil, fmt.Errorf("parcel-dispatch: %w", err)
 	}
+	// 仓配开关开没开都出声（ADR-0375 决定四），同样排在开池之前：关着时派发一路仓配的路都不登记，启动日志是事后查得出
+	// 这一次启动是开是关的第一处。
+	warehouseswitch.LogStartup(logger, settings.warehouseFulfillment)
 	pool, err := pgxpool.New(ctx, settings.databaseDSN)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parcel-dispatch: connect: %w", err)
