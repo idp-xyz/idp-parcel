@@ -61,9 +61,13 @@ func (handler *FormEvaluationFromRequestHandler) formAcrossSellPriceSources(
 				return FormEvaluationFromRequestResult{}, fmt.Errorf("record service product %s on the pricing input: %w", product, err)
 			}
 		}
-		probed, err := handler.probeResolvedScope(ctx, resolution.Plan, input, command.Evidence)
+		probed, undecided, err := handler.probeResolvedScope(ctx, resolution.Plan, input, command.Evidence)
 		if err != nil {
 			return FormEvaluationFromRequestResult{}, err
+		}
+		if undecided {
+			return trailed(undecidedFormation(RequestEvaluationFormationUndecided),
+				append(trail, SellPriceSourceStep{Scope: scope, Kind: SellPriceSourceUndecided})), nil
 		}
 		if probed.BaseRateTableMiss() && index != last {
 			trail = append(trail, SellPriceSourceStep{Scope: scope, Kind: SellPriceSourceBaseRateMissing})
@@ -94,27 +98,35 @@ func (command FormEvaluationFromRequestCommand) walksSellPriceSources() bool {
 	return len(command.Scopes) > 1 && command.sellCustomerCharge()
 }
 
-// probeResolvedScope 在看运费表之前先按这张卡补齐目录与序列读数。目录还没解出分区时，探针看不到运费表缺格，
-// 没谈到的线路就不会去问下一个范围；目录解不出则仍是待判断，停在这一格（ADR-0380 决定三）。
+// probeResolvedScope 先按这张卡补齐目录与序列读数，再算一份不入册的评价，只为看它是不是停在基础运费表缺格上。
+// 不补读数时，绑了分区目录的卡在看运费表之前就因没有分区落待判断，没谈到的线路不会去问下一个范围；目录解不出分区
+// 仍是待判断，停在这一格（ADR-0380 决定三）。
+//
+// 补读数时依赖故障答 undecided，不上抛：在用与否未知，不能当成这一格的结论，也不能当成硬失败——正式形成那一步
+// 读不回时答的是未决，消费侧按未决重投。半套装配是装配错误，照 EvaluatePricingHandler.Handle 上抛。
 func (handler *FormEvaluationFromRequestHandler) probeResolvedScope(
 	ctx context.Context,
 	plan domain.PricingPlanVersion,
 	input domain.PricingInputSnapshot,
 	evidence domain.EvidenceKind,
-) (domain.PricingEvaluation, error) {
+) (domain.PricingEvaluation, bool, error) {
+	completion := handler.deps.Evaluate.completion()
+	if err := completion.halfWired(); err != nil {
+		return domain.PricingEvaluation{}, false, err
+	}
 	id, err := domain.NewEvaluationID("EVAL-PROBE")
 	if err != nil {
-		return domain.PricingEvaluation{}, fmt.Errorf("probe sell price source: %w", err)
+		return domain.PricingEvaluation{}, false, fmt.Errorf("probe sell price source: %w", err)
 	}
 	request, err := domain.NewEvaluationRequest(id, plan, input, evidence)
 	if err != nil {
-		return domain.PricingEvaluation{}, fmt.Errorf("probe sell price source: %w", err)
+		return domain.PricingEvaluation{}, false, fmt.Errorf("probe sell price source: %w", err)
 	}
-	request, _, err = handler.deps.Evaluate.completion().complete(ctx, request)
+	request, _, err = completion.complete(ctx, request)
 	if err != nil {
-		return domain.PricingEvaluation{}, fmt.Errorf("probe sell price source: %w", err)
+		return domain.PricingEvaluation{}, true, nil
 	}
-	return domain.EvaluatePricing(request), nil
+	return domain.EvaluatePricing(request), false, nil
 }
 
 func sellPriceSourceNotes(trail []SellPriceSourceStep) []string {

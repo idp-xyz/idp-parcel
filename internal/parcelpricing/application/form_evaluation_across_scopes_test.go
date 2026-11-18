@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -248,6 +249,198 @@ func TestOneScopeStaysOnTheExistingPath(t *testing.T) {
 	}
 	if len(second.ScopeTrail) != 0 {
 		t.Fatalf("trail = %v，单范围不该有", second.ScopeTrail)
+	}
+}
+
+// 以下三条钉绑了分区目录的卡。分区不由调用方给，要等目录读数补齐才有：探针不先补读数，这类卡在看运费表之前就落
+// 待判断，运费表缺格永远看不到。上面几条的夹具不带目录，补不补读数它们都过，所以另立。
+
+// catalogueBoundSellPlan 是 sellScopePlan 加一条分区目录绑定：卡不再读调用方给的分区。
+func catalogueBoundSellPlan(t *testing.T, scope, zone, planID string) domain.PricingPlanVersion {
+	t.Helper()
+	base := sellScopePlan(t, scope, zone, planID)
+	link, err := domain.NewReferenceCatalogueLink(domain.CatalogueKindZone, "SYN-CAT-ZONE")
+	if err != nil {
+		t.Fatalf("link: %v", err)
+	}
+	structures, err := (domain.PricingPlanStructures{}).WithReferenceCatalogues(link)
+	if err != nil {
+		t.Fatalf("structures: %v", err)
+	}
+	plan, err := domain.NewPricingPlanVersion(
+		base.Reference(), base.Scope(), base.Direction(), base.Purpose(), base.BaseChargeCode(),
+		base.EffectivePeriod(), base.RateTable(), base.WeightPolicy(), nil, structures,
+	)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	return plan
+}
+
+// postalSellInput 是只带邮编路线、不带分区的输入，与生产上按包裹造的快照同形。
+func postalSellInput(t *testing.T, scope, destination string) domain.PricingInputSnapshot {
+	t.Helper()
+	subject, err := domain.NewAcceptedPackageSubject(mustValue(t, domain.NewPackageID, "SYN-PKG-1"))
+	if err != nil {
+		t.Fatalf("subject: %v", err)
+	}
+	actual, err := domain.NewWeight(mustValue(t, domain.ParseDecimal, "5"), domain.WeightUnitKilogram)
+	if err != nil {
+		t.Fatalf("weight: %v", err)
+	}
+	route, err := domain.NewPostalRoute("", destination)
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	input, err := domain.NewPostalPricingInputSnapshot(
+		mustValue(t, domain.NewTenantID, "tenant-1"), mustValue(t, domain.NewPricingScopeID, scope),
+		subject, route, actual, nil, requestBasisAt)
+	if err != nil {
+		t.Fatalf("input: %v", err)
+	}
+	return input
+}
+
+// catalogueListFixture 给有序范围夹具的评价编排装上目录那一对口。目录取 zoneChartVersion：目的前缀 902 是 Z1。
+func catalogueListFixture(
+	t *testing.T,
+	cards map[string]ports.PriceCardInForceResolution,
+	destination string,
+	inForce *catalogueInForceDouble,
+) (*formFixture, *scopedPriceCards) {
+	t.Helper()
+	fixture := newFormFixture(t, nil)
+	scoped := &scopedPriceCards{byScope: cards}
+	fixture.priceCards = nil
+	inputs := map[string]domain.PricingInputSnapshot{}
+	for scope := range cards {
+		inputs[scope] = postalSellInput(t, scope, destination)
+	}
+	handler, err := application.NewFormEvaluationFromRequestHandler(application.FormEvaluationFromRequestDeps{
+		Evaluations: fixture.byRequest,
+		PriceCards:  scoped,
+		Identity:    fixture.identity,
+		Evaluate: application.NewEvaluatePricingHandler(application.EvaluatePricingDeps{
+			Store:            fixture.store,
+			Downstream:       fixture.downstream,
+			Clock:            fixedClock{at: requestBasisAt},
+			CatalogueInForce: inForce,
+			Catalogues: &catalogueReadingDouble{registrations: map[string]domain.ReferenceCatalogueRegistration{
+				"v2": zoneChartVersion(t, "v2"),
+			}},
+		}),
+		Inputs:          &scopedInputs{byScope: inputs},
+		ServiceProducts: fixture.products,
+	})
+	if err != nil {
+		t.Fatalf("construct handler: %v", err)
+	}
+	fixture.handler = handler
+	return fixture, scoped
+}
+
+func zoneCatalogueInForce(t *testing.T) *catalogueInForceDouble {
+	t.Helper()
+	return &catalogueInForceDouble{reference: catalogueVersion(t, "v2"), outcome: ports.CatalogueVersionInForce}
+}
+
+// Covers: ADR-0380 决定三在绑了分区目录的卡上——分区由目录解出；靠前的卡运费表没有这一格，落到后一个范围，落空的
+// 那一格不入册。靠前的卡有这一格时就用它，后一个范围不问。
+func TestACatalogueBoundCardFallsThroughOnABaseRateGap(t *testing.T) {
+	gap := catalogueBoundSellPlan(t, "SYN-SCOPE-A", "Z9", "SYN-PLAN-A")
+	hit := catalogueBoundSellPlan(t, "SYN-SCOPE-B", "Z1", "SYN-PLAN-B")
+	fixture, _ := catalogueListFixture(t, map[string]ports.PriceCardInForceResolution{
+		"SYN-SCOPE-A": inForce(gap),
+		"SYN-SCOPE-B": inForce(hit),
+	}, "90210", zoneCatalogueInForce(t))
+
+	result, err := fixture.handler.Handle(context.Background(), sellListCommand(t, "SYN-SCOPE-A", "SYN-SCOPE-B"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome != application.RequestEvaluationFormed || result.Evaluation.Status() != domain.EvaluationCompleted {
+		t.Fatalf("outcome = %s status = %s issues = %v", result.Outcome, result.Evaluation.Status(), result.Evaluation.Issues())
+	}
+	if got := trailKinds(result.ScopeTrail); got != "SYN-SCOPE-A:BASE_RATE_NOT_IN_TABLE,SYN-SCOPE-B:SELECTED" {
+		t.Fatalf("trail = %s", got)
+	}
+	if result.Evaluation.PlanReference().ID() != "SYN-PLAN-B" {
+		t.Fatalf("plan = %s，应出自后一个范围的卡", result.Evaluation.PlanReference().ID())
+	}
+	if fixture.identity.minted != 1 || fixture.store.saved != 1 {
+		t.Fatalf("minted = %d saved = %d，落空的那一格不该入册", fixture.identity.minted, fixture.store.saved)
+	}
+
+	first := catalogueBoundSellPlan(t, "SYN-SCOPE-A", "Z1", "SYN-PLAN-A")
+	negotiated, cards := catalogueListFixture(t, map[string]ports.PriceCardInForceResolution{
+		"SYN-SCOPE-A": inForce(first),
+		"SYN-SCOPE-B": inForce(hit),
+	}, "90210", zoneCatalogueInForce(t))
+	result, err = negotiated.handler.Handle(context.Background(), sellListCommand(t, "SYN-SCOPE-A", "SYN-SCOPE-B"))
+	if err != nil {
+		t.Fatalf("negotiated: %v", err)
+	}
+	if got := trailKinds(result.ScopeTrail); got != "SYN-SCOPE-A:SELECTED" || result.Evaluation.PlanReference().ID() != "SYN-PLAN-A" {
+		t.Fatalf("trail = %s plan = %s，谈下来的线路应停在靠前的卡上", got, result.Evaluation.PlanReference().ID())
+	}
+	for _, asked := range cards.asked {
+		if asked == "SYN-SCOPE-B" {
+			t.Fatalf("asked = %v，靠前的卡有这一格时不该问后一个范围", cards.asked)
+		}
+	}
+}
+
+// Covers: ADR-0380 越权风险点 4——目录解不出分区是目录未决，停在问到的这一格，不回退到后一个范围。
+func TestAnUnresolvedCatalogueStopsOnTheScopeAsked(t *testing.T) {
+	first := catalogueBoundSellPlan(t, "SYN-SCOPE-A", "Z1", "SYN-PLAN-A")
+	second := catalogueBoundSellPlan(t, "SYN-SCOPE-B", "Z1", "SYN-PLAN-B")
+	fixture, cards := catalogueListFixture(t, map[string]ports.PriceCardInForceResolution{
+		"SYN-SCOPE-A": inForce(first),
+		"SYN-SCOPE-B": inForce(second),
+	}, "10001", zoneCatalogueInForce(t))
+
+	result, err := fixture.handler.Handle(context.Background(), sellListCommand(t, "SYN-SCOPE-A", "SYN-SCOPE-B"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome != application.RequestEvaluationFormed || result.Evaluation.Status() != domain.EvaluationPending ||
+		result.Evaluation.BaseRateTableMiss() {
+		t.Fatalf("outcome = %s status = %s baseMiss = %v，目录解不出应形成待判断评价，且不算运费表缺格",
+			result.Outcome, result.Evaluation.Status(), result.Evaluation.BaseRateTableMiss())
+	}
+	if got := trailKinds(result.ScopeTrail); got != "SYN-SCOPE-A:STOPPED" {
+		t.Fatalf("trail = %s", got)
+	}
+	for _, asked := range cards.asked {
+		if asked == "SYN-SCOPE-B" {
+			t.Fatalf("asked = %v，目录未决不该回退到后一个范围", cards.asked)
+		}
+	}
+}
+
+// Covers: 探针补读数时依赖故障答未决并点名这一格，不上抛成硬失败，也不入册、不铸标识。
+func TestAReadingFailureDuringTheProbeAnswersUndecided(t *testing.T) {
+	first := catalogueBoundSellPlan(t, "SYN-SCOPE-A", "Z1", "SYN-PLAN-A")
+	second := catalogueBoundSellPlan(t, "SYN-SCOPE-B", "Z1", "SYN-PLAN-B")
+	broken := zoneCatalogueInForce(t)
+	broken.err = errors.New("catalogue register unreachable")
+	fixture, _ := catalogueListFixture(t, map[string]ports.PriceCardInForceResolution{
+		"SYN-SCOPE-A": inForce(first),
+		"SYN-SCOPE-B": inForce(second),
+	}, "90210", broken)
+
+	result, err := fixture.handler.Handle(context.Background(), sellListCommand(t, "SYN-SCOPE-A", "SYN-SCOPE-B"))
+	if err != nil {
+		t.Fatalf("handle: %v，补读数读不回应答未决", err)
+	}
+	if result.Outcome != application.RequestEvaluationUndecided || result.Reason != application.RequestEvaluationFormationUndecided {
+		t.Fatalf("outcome = %s reason = %s", result.Outcome, result.Reason)
+	}
+	if got := trailKinds(result.ScopeTrail); got != "SYN-SCOPE-A:UNDECIDED" {
+		t.Fatalf("trail = %s", got)
+	}
+	if fixture.identity.minted != 0 || fixture.store.saved != 0 {
+		t.Fatalf("minted = %d saved = %d，未决不该铸标识、不该入册", fixture.identity.minted, fixture.store.saved)
 	}
 }
 
