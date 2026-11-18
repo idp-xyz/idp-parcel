@@ -2160,6 +2160,7 @@
 | `AT-WF-257` | 入库作业带票件箱与到仓方式，收货行带重量体积，不设托与柜型 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
 | `AT-WF-258` | 拣货复核打包不另形成；截单不形成出库作业；回库按移库形成增值服务 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
 | `AT-WF-259` | 退货入库与上架各形成一份退货处理；销毁只形成销毁 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-260` | 收货转待认领时，原预报读口只标另有到货待认领 | UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md |
 
 ## 重盘变化摘要（0cddbba）
 
@@ -2471,3 +2472,4 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 
 2026-11-18 追记（票 warehouse-fulfillment/10）：新立 UC-WF-017 至 UC-WF-019（退货、代理仓、收费发生项），`AT-WF-229`–`256`。都未实现，入④。总览计数未重算。
 2026-11-18 追记（同一票补词表）：`AT-WF-257`–`259`。都未实现，入④。总览计数未重算。
+2026-11-18 追记（票 warehouse-fulfillment/11）：`AT-WF-260` 预报读口标另有到货待认领。未实现，入④。总览计数未重算。

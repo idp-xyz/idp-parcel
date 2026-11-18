@@ -195,9 +195,9 @@
 | 分配还指着已经搬走的货 | 补入账把分配改到新格，未完成的拣货在新格拣；同一数量先批准的一份入账。拣货差额的形成在 UC-WF-013 | 已写成 |
 | 从退货暂存库区移出与回库处置 | 没有处置就把货移出的，本用例照记。处置只指名去向，见 UC-WF-017 | 已写成 |
 | 库内作业与收费发生项 | 上架不另形成发生项。移库、补货、形态转换与次品转良品，租户登记了同名增值服务项目才形成。见 UC-WF-019 | 已写成 |
-| 接入词：作业事实类型「库内移动登记」「形态转换登记」「状态转换登记」「短少登记」，作业范围种类「仓」，运营决定种类「次品转良品」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| 各口从载荷收货主客户账户 | 库存账的一格以货主为一维，作业事实的行与次品转良品只能由载荷指名货主；`ADR-OPS` 决定二写的是身份格不从请求体收，次品转良品这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| 一线作业端读在库的格、占用与可选的移入目标 | 下发的内容、有效区间与离线边界没有写；离线记下的事实到达时只入账了一部分，设备怎样把逐行结果与形成的差异呈现给作业人员也没有写 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 接入词：作业事实类型「库内移动登记」「形态转换登记」「状态转换登记」「短少登记」，作业范围种类「仓」，运营决定种类「次品转良品」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
+| 各口从载荷收货主客户账户 | 库存账的一格以货主为一维，作业事实的行与次品转良品只能由载荷指名货主；`ADR-OPS` 决定二写的是身份格不从请求体收，次品转良品这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
+| 一线作业端读在库的格、占用与可选的移入目标 | 下发的内容、有效区间与离线边界没有写；离线记下的事实到达时只入账了一部分，设备怎样把逐行结果与形成的差异呈现给作业人员也没有写 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | 准入范围 | 两个面的写照各族判；仓配的写落在治理登记册的哪个对象范围没有定，随 `ADR-OPT` 越权风险点 7 一起定：那一点问的是某个租户怎样经 PN-08 的阶段准入启用仓配，任何生产部署打开开关之前要有答案 | 产品 owner 与试点治理 owner |
 | `AT-WF-105`，部署开关关着时端点怎么答 | `ADR-OPT` 决定四留给第一张落仓配端点的实施票；两种做法都不得折成 404 | 第一张落仓配端点的实施票 |
 | `ADR-OPT` Consequences 给实施票的验收 | 「开关关着时其他上下文的答复不变」由 `AT-WF-105` 守；本用例不消费、也不交出任何信封，「开着时对不属于仓配的信封入账收工」在这里没有对应的路 | 随实现 |

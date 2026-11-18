@@ -122,3 +122,36 @@
 - **唯一性**以（账户、批次、项）为自然键（ADR-0310 取舍 F）。同一对（批次、项）再次到达：申请人、合同、目标、类型都相同当重放，答 `200 CLAIM_EXISTING_RESULT` 并回显原项；任一不同答 `200 NOT_ACCEPTED`，带 `notAcceptedReason: CLAIM_CONTENT_DIFFERS_FROM_ACCEPTED`、不带原项，原项不被覆盖；`accessRequestId` 只管传输重放，不进任何判据。已在案的（批次、项）若属于同租户的另一个账户，答 `200 NOT_ACCEPTED`、不带原项。
 - **引用核对**：`target` 须是信封账户当前已接受委托声明的包裹，`contract` 须登记在信封账户名下；不属于、不存在、多份委托同时声明同一包裹都答 `404 CLAIM_REFERENCE_NOT_FOUND`，字节相同，不泄露别的账户的引用存在与否。`applicant` 不在这里核：授权名单按（租户、账户）登记，由资格审核的授权维核，名单外的申请人形成不予受理，不是请求错误。
 - **答复**：受理 `201 CLAIM_RECEIVED`，回执只带 `batch`、`item`、`documentNumber`、`submittedAt`，资格与责任结论字段结构上不存在。`documentNumber` 是记录提交时取得的索赔单据号（[ADR-0355](../adr/0355-a-document-number-is-separate-from-internal-identity-and-is-assigned-in-the-issuing-transaction-under-built-in-rules-a-tenant-may-override.md)，新增字段），重放答原号；`batch` 与 `item` 是调用方自己的批次与项，照旧回显。没有单据号时回执不带 `documentNumber`（不答空串），改带 `documentNumberAbsence`：`NUMBERING_TIME_ZONE_NOT_CONFIGURED`（承运方还没登记单据编号时区，索赔照常记下）或 `ISSUED_BEFORE_NUMBERING`（重放的是开始编号之前记下的索赔）。`200 NUMBERING_RULE_COLLISION` 不带回执：承运方的编号规则与已用的号冲突，这一次提交没有记下，承运方改规则之前原样重发还会撞，按「不认识的 `outcome`」那一条出队交人。`401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED`、`403 CUSTOMER_CLIENT_NOT_GRANTED`、`403 OUTSIDE_ADMISSION_SCOPE`（索赔提交在铸造侧判准入范围）、`503 IDENTITY_DEPENDENCY_UNAVAILABLE` 都是问题详情，不带 `outcome`。
+
+## 仓配口
+
+仓配履约的货主口走同一套版本、状态码、问题详情、身份与重放。业务 `outcome` 以对应 `UC-WF-*` 的结果语义为准，本文不另起一套。词与命令前缀以 [ADR-0384](../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md) 为准。代录、认领、建账导入、盘点、库存调整不在本契约。
+
+| 方法与路径 | 用例 | 能力授予 | 命令前缀 |
+|---|---|---|---|
+| `POST /v1/warehouse/goods` | [UC-WF-002](../application/warehouse-fulfillment/UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md) | `GOODS_MAINTENANCE` | `goods:` |
+| `POST /v1/warehouse/inbound-pre-advices` | [UC-WF-003](../application/warehouse-fulfillment/UC-WF-003-ACCEPT-INBOUND-PRE-ADVICE.md) | `INBOUND_PRE_ADVICE_SUBMISSION` | `inbound-pre-advice:` |
+| `POST /v1/warehouse/inbound-pre-advices/arrival-notices` | UC-WF-003 告知更新 | `INBOUND_PRE_ADVICE_ARRIVAL_NOTICE` | `inbound-arrival-notice:` |
+| `POST /v1/warehouse/inbound-pre-advices/withdrawals` | UC-WF-003 撤回 | `INBOUND_PRE_ADVICE_WITHDRAWAL` | `inbound-withdrawal:` |
+| `POST /v1/warehouse/receipt-discrepancy-conclusions` | [UC-WF-004](../application/warehouse-fulfillment/UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md) | `RECEIPT_DISCREPANCY_CONCLUSION` | `receipt-discrepancy:` |
+| `POST /v1/warehouse/outbound-requests` | [UC-WF-012](../application/warehouse-fulfillment/UC-WF-012-ACCEPT-AND-RESERVE-AN-OUTBOUND-REQUEST.md) | `OUTBOUND_REQUEST_SUBMISSION` | `outbound-request:` |
+| `POST /v1/warehouse/outbound-cancellations` | [UC-WF-016](../application/warehouse-fulfillment/UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md) | `OUTBOUND_CANCELLATION` | `outbound-cancellation:` |
+| `POST /v1/warehouse/outbound-requests/owner-labels` | [UC-WF-015](../application/warehouse-fulfillment/UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md) 自备面单对不上时的补交 | `OWNER_LABEL_SUPPLEMENT` | `owner-label:` |
+| `POST /v1/warehouse/return-pre-advices` | [UC-WF-017](../application/warehouse-fulfillment/UC-WF-017-ACCEPT-RETURNS-AND-DISPOSE-OF-THEM.md) | `RETURN_PRE_ADVICE_SUBMISSION` | `return-pre-advice:` |
+| `POST /v1/warehouse/return-dispositions` | UC-WF-017 回库处置 | `RETURN_DISPOSITION` | `return-disposition:` |
+| `POST /v1/warehouse/processing-instructions` | [UC-WF-008](../application/warehouse-fulfillment/UC-WF-008-PROCESS-AND-RELABEL-GOODS-ON-INSTRUCTION-AND-UNBOX-CARTONS.md) | `PROCESSING_INSTRUCTION_SUBMISSION` | `processing-instruction:` |
+| `POST /v1/warehouse/processing-instructions/withdrawals` | UC-WF-008 撤回 | `PROCESSING_INSTRUCTION_WITHDRAWAL` | `processing-withdrawal:` |
+| `POST /v1/warehouse/relabel-instructions` | UC-WF-008 | `RELABEL_INSTRUCTION_SUBMISSION` | `relabel-instruction:` |
+| `POST /v1/warehouse/relabel-instructions/withdrawals` | UC-WF-008 撤回 | `RELABEL_INSTRUCTION_WITHDRAWAL` | `relabel-withdrawal:` |
+| `POST /v1/warehouse/value-added-services` | [UC-WF-019](../application/warehouse-fulfillment/UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md) 不关联库存的服务 | `VALUE_ADDED_SERVICE_SUBMISSION` | `value-added-service:` |
+| `GET /v1/warehouse/reads/...` | 决定一「客户面读什么」所列各读 | `WAREHOUSE_READ` | 读口不取来源请求键 |
+
+读口的路径在落端点时按对象拆开，能力词不拆。拆开的每一口仍回指上表里的那个用例。
+
+- 租户与货主客户账户只取自册上绑定。载荷里自报租户或账户，答 `400`。这与决定四那些从载荷收货主的运营口不是同一族：那些口不在本契约。
+- 接入请求标识不得以上表前缀，也不得以 `withdrawal:`、`parcel-cancellation:`、`source-data-amendment:`、`supplement:`、`claim:` 开头。提交口收到这样的标识仍答 400。
+- **告知更新是整组替换。** 预计到仓时间、到货线索与货主参考号三格一起替换，没带的线索或参考号就是清空。成功答复回显现行那一版。代录可以盖过货主刚交的；货主读到的现行版就是后到的那一版。
+- **收货差异结论**指名差异，不指名预报。开箱形成的差异在开箱记录上读，结论走同一口，途径一并带出。
+- **入库预报的读**在由收货事实转来待认领到货时，只多一格「另有到货待认领」，不带那件到货的内容（UC-WF-003 `AT-WF-260`）。
+- 单据号的有无、无号原因与编号规则撞号，照本文委托与送站预报已经写的那一套：有号就带 `documentNumber`，没有就不出现该键，改带 `documentNumberAbsence`。哪些对象取号以仓配履约 CONTEXT 为准。
+- 部署没打开仓配开关时，上表各口不提供业务答复，也不折成 404。问题详情用哪一格，第一张落端点的实施票在 ADR-0384 决定七的两种里选。

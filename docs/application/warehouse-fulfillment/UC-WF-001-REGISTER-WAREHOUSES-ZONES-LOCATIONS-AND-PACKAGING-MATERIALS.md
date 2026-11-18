@@ -168,9 +168,9 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 五册的登记口、查阅口与受控批量口 | 未做。登记口挂登记册配置写面，在线口与受控批量口消费同一登记用例、同一答案代数（ADR-0085 决定一）；查阅口挂主数据与运营查阅读（ADR-0077）；货主查仓挂首方客户渠道的查阅口 | PN-09 开发交接划包 |
-| 客户面能力「仓配查阅」 | 这个词是本用例的暂名。客户面能力词进 `internal/accessidentity`，粒度与定名归接入词表的 ADR；仓配的登记要不要另开能力面（`ADR-OPT` 越权风险点 5）同在那里定：今天持有登记册配置写的操作者能登记、也能停用任何一个仓，而停用会挡住这个仓新的入库预报、退货预报与建账导入 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 客户面能力「仓配查阅」 | 这个词是本用例的暂名。客户面能力词进 `internal/accessidentity`，粒度与定名归接入词表的 ADR；仓配的登记要不要另开能力面（`ADR-OPT` 越权风险点 5）同在那里定：今天持有登记册配置写的操作者能登记、也能停用任何一个仓，而停用会挡住这个仓新的入库预报、退货预报与建账导入 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | `AT-WF-012`，部署开关关着时端点怎么答 | `ADR-OPT` 决定四把它留给第一张落仓配端点的实施票：沿用「接入渠道未配置」那一格，还是按恢复动作另立一格；两种都不得折成 404 | 第一张落仓配端点的实施票 |
-| `AT-WF-008`，读可选的移入目标 | 向一线作业端下发库区与库位的内容、有效区间与离线边界没有写 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| `AT-WF-008`，读可选的移入目标 | 向一线作业端下发库区与库位的内容、有效区间与离线边界没有写 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | `AT-WF-008`，迟到的移入事实照记 | 把货移入库位的口（上架、移库）写在 [UC-WF-007](./UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md)，「照记，不拒」这一半由它的 `AT-WF-094` 验；两头都还没有实现 | PN-09 开发交接划包 |
 | `ADR-OPT` Consequences 给实施票的验收 | 「开关关着时其他上下文的答复不变」由 `AT-WF-012` 守；「开着时对不属于仓配的信封入账收工」在本用例没有对应的路：本用例不消费、也不交出任何信封 | 随实现 |
 

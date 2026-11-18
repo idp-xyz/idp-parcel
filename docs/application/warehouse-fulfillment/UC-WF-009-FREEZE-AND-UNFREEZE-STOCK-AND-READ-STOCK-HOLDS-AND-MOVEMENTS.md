@@ -175,10 +175,10 @@
 | 冻结口、解冻口与两个面的读口 | 未做。冻结与解冻挂「运营决定」能力面；运营的读口挂主数据与运营查阅读；货主的读口挂首方客户渠道 | PN-09 开发交接划包 |
 | `AT-WF-132`、`AT-WF-135`、`AT-WF-136`，预占与分配 | 预占的判定、分配与读口上的内容在 UC-WF-012、UC-WF-013。带条件的预占在各部分上占了多少，读口照 UC-WF-012 的结果语义契约答 | 已写成 |
 | 冻结与仓租 | 冻结不减在库数量。仓租入库批次行带有无冻结，取值「有」或「无」。见 UC-WF-019 | 已写成 |
-| 首方客户 API 契约 | 库存、占用、可用量与流水的读口还没有写进契约；读口不带库位、冻结的原因与操作者（`BD-WF-027`） | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| 接入词：运营决定种类「库存冻结」，客户面能力「仓配查阅」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| 冻结从载荷收货主客户账户 | 库存账的一格以货主为一维，冻结只能由载荷指名货主；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| 一线作业端读在库的格与占用 | 作业端要读到哪些格被冻结、被作业锁定才知道哪些货不能动；下发的内容、有效区间与离线边界没有写 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 首方客户 API 契约 | 库存、占用、可用量与流水的读口还没有写进契约；读口不带库位、冻结的原因与操作者（`BD-WF-027`） | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
+| 接入词：运营决定种类「库存冻结」，客户面能力「仓配查阅」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
+| 冻结从载荷收货主客户账户 | 库存账的一格以货主为一维，冻结只能由载荷指名货主；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
+| 一线作业端读在库的格与占用 | 作业端要读到哪些格被冻结、被作业锁定才知道哪些货不能动；下发的内容、有效区间与离线边界没有写 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | 准入范围 | 冻结与解冻照运营决定面判；仓配的写落在治理登记册的哪个对象范围没有定，随 `ADR-OPT` 越权风险点 7 一起定：那一点问的是某个租户怎样经 PN-08 的阶段准入启用仓配，任何生产部署打开开关之前要有答案 | 产品 owner 与试点治理 owner |
 | `AT-WF-141`，部署开关关着时端点怎么答 | `ADR-OPT` 决定四留给第一张落仓配端点的实施票；两种做法都不得折成 404 | 第一张落仓配端点的实施票 |
 | `ADR-OPT` Consequences 给实施票的验收 | 「开关关着时其他上下文的答复不变」由 `AT-WF-141` 守；本用例不消费、也不交出任何信封，「开着时对不属于仓配的信封入账收工」在这里没有对应的路 | 随实现 |

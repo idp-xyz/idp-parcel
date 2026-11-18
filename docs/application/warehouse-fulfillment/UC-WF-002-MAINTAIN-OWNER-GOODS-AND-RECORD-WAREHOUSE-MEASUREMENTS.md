@@ -180,14 +180,14 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 商品维护口、商品代录口、仓测登记口与读口 | 未做。货主口挂首方客户渠道，要定一版带形状版本的规范化形状（ADR-0139 决定八），来源请求键的命令前缀进首方族的保留前缀表（ADR-0310 决定一）；代录口挂「运营决定」能力面；仓测挂「作业事实登记」能力面；两个写口写同一条修订序列 | PN-09 开发交接划包 |
-| 接入词：客户面能力「商品维护」「仓配查阅」，运营决定种类「商品代录」，作业范围种类「仓」，作业事实类型「仓测登记」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR。作业范围种类今天是一个封闭集（`WorkScopeKind`），里面没有仓；一台设备只登记在一个作业范围上（登记在别处的答 `ErrDeviceNotInUse`）。添「仓」之后，仓与物流节点同址时一台设备怎么兼两边，那份 ADR 要答 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 接入词：客户面能力「商品维护」「仓配查阅」，运营决定种类「商品代录」，作业范围种类「仓」，作业事实类型「仓测登记」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR。作业范围种类今天是一个封闭集（`WorkScopeKind`），里面没有仓；一台设备只登记在一个作业范围上（登记在别处的答 `ErrDeviceNotInUse`）。添「仓」之后，仓与物流节点同址时一台设备怎么兼两边，那份 ADR 要答 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | 准入范围 | 三个面的写照各族判；仓配的写落在治理登记册的哪个对象范围没有定，随 `ADR-OPT` 越权风险点 7 一起定：那一点问的是某个租户怎样经 PN-08 的阶段准入启用仓配，任何生产部署打开开关之前要有答案 | 产品 owner 与试点治理 owner |
 | `AT-WF-020`，代录核货主客户账户 | 经本上下文的消费侧适配器问 `party-commercial`；依赖方向照 `ADR-OPT` 决定三，`party-commercial` 不读仓配履约 | 随实现 |
-| 代录口从载荷收货主客户账户 | 商品的身份带货主，代录时货主客户账户只能随载荷来、作业务内容；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 代录口从载荷收货主客户账户 | 商品的身份带货主，代录时货主客户账户只能随载荷来、作业务内容；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | 已仓测的商品再测一版，对此前已形成的收费发生项的作用 | 已有一版再测，不更正此前的发生项。只有此前未测量、后来补测的才追加重述。见 UC-WF-019 | 已写成 |
 | 仓测的单位与仓登记的计量单位不同 | 不折算。该计量答未测量，并标明仓测原值与原单位。见 UC-WF-019 | 已写成 |
-| 向一线作业端下发商品、别名与包装层级 | 没有写；`WF-RULE` 只定了服务端按事实发生那一刻的指向解析 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| 按箱仓测，那一箱须在这个仓在库 | 按哪一刻判没有写。照「应用流程」是到达时核：离线测完、上传之前那一箱已经出库的，会答仓测未受理；要不要改按事实发生那一刻判，随一线作业端的离线边界一并定 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
+| 向一线作业端下发商品、别名与包装层级 | 下发这一仓的商品、别名与包装层级。服务端仍按事实发生那一刻的指向解析。见一线简报「仓内作业」 | 已写成 |
+| 按箱仓测，那一箱须在这个仓在库 | 在事实到达服务端时核。离线测完、上传之前那一箱已经出库的，答仓测未受理。不改按设备上的发生时刻判 | 已写成 |
 | `AT-WF-025`，部署开关关着时端点怎么答 | `ADR-OPT` 决定四留给第一张落仓配端点的实施票；两种做法都不得折成 404 | 第一张落仓配端点的实施票 |
 | `ADR-OPT` Consequences 给实施票的验收 | 「开关关着时其他上下文的答复不变」由 `AT-WF-025` 守；本用例不消费、也不交出任何信封，「开着时对不属于仓配的信封入账收工」在这里没有对应的路 | 随实现 |
 
