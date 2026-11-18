@@ -168,3 +168,88 @@ func TestAnInvalidationPointsBackWithoutCopyingTheQuantity(t *testing.T) {
 		t.Fatal("作废用了被作废那条自己的来源身份")
 	}
 }
+
+// 带纳秒的发生时间与同一时刻截到微秒后的样子。接入口按 RFC 3339 能收到纳秒，而库列只存到微秒。
+var (
+	nanosecondOccurrence  = time.Date(2026, 11, 17, 2, 0, 0, 123456789, time.UTC)
+	microsecondOccurrence = time.Date(2026, 11, 17, 2, 0, 0, 123456000, time.UTC)
+)
+
+func measurementSourceAt(t *testing.T, sourceID string, occurredAt time.Time) domain.WorkFactSource {
+	t.Helper()
+	source, err := domain.NewWorkFactSource(
+		sourceID,
+		mustValue(t, domain.NewPerformingPartyReference, "scale-7"),
+		mustValue(t, domain.NewExecutionEvidenceReference, "WEIGH/7"),
+		occurredAt,
+	)
+	if err != nil {
+		t.Fatalf("来源：%v", err)
+	}
+	return source
+}
+
+// Covers: 实际测量在形成处把发生时间折成册上的样子（UTC、微秒）。库列只存到微秒，读回时用行上的值重算摘要；形成时不截，
+// 同一条测量落册前后的摘要就差几个纳秒。来源上的发生时间、摘要都用折过的那一个时刻，微秒以内仍分得开。
+func TestAMeasurementIsFormedAtTheRegisterInstantOfItsOccurrence(t *testing.T) {
+	nanos := measurementSpec(t)
+	nanos.Source = measurementSourceAt(t, "measure-1", nanosecondOccurrence)
+	formed, err := domain.NewActualMeasurement(nanos)
+	if err != nil {
+		t.Fatalf("形成带纳秒的测量：%v", err)
+	}
+	occurred := formed.Source().OccurredAt()
+	if !occurred.Equal(microsecondOccurrence) || occurred.Nanosecond()%1000 != 0 || occurred.Location() != time.UTC {
+		t.Fatalf("发生时间 = %s（纳秒 %d），want %s", occurred.Format(time.RFC3339Nano), occurred.Nanosecond(), microsecondOccurrence.Format(time.RFC3339Nano))
+	}
+	if nanos.Source.OccurredAt().Nanosecond() != nanosecondOccurrence.Nanosecond() {
+		t.Fatal("折叠改了调用方手里的那份来源")
+	}
+
+	micros := measurementSpec(t)
+	micros.Source = measurementSourceAt(t, "measure-1", microsecondOccurrence)
+	atMicros, err := domain.NewActualMeasurement(micros)
+	if err != nil {
+		t.Fatalf("形成截到微秒的测量：%v", err)
+	}
+	if formed.ContentDigest() != atMicros.ContentDigest() {
+		t.Fatalf("带纳秒的摘要 %s ≠ 同一时刻截到微秒的摘要 %s", formed.ContentDigest(), atMicros.ContentDigest())
+	}
+
+	later := measurementSpec(t)
+	later.Source = measurementSourceAt(t, "measure-1", microsecondOccurrence.Add(time.Microsecond))
+	atLater, err := domain.NewActualMeasurement(later)
+	if err != nil {
+		t.Fatalf("形成晚一微秒的测量：%v", err)
+	}
+	if formed.ContentDigest() == atLater.ContentDigest() {
+		t.Fatal("晚一微秒的测量摘要没变，折叠截得太粗")
+	}
+}
+
+// Covers: 作废与测量同理，形成处折到微秒；作废的摘要里有发生时间，不折就在库里读不回来。
+func TestAnInvalidationIsFormedAtTheRegisterInstantOfItsOccurrence(t *testing.T) {
+	form := func(occurredAt time.Time) domain.MeasurementInvalidation {
+		t.Helper()
+		invalidation, err := domain.NewMeasurementInvalidation(domain.MeasurementInvalidationSpec{
+			Source:         measurementSourceAt(t, "void-1", occurredAt),
+			TargetSourceID: "measure-1",
+			Reason:         "称错件",
+		})
+		if err != nil {
+			t.Fatalf("作废：%v", err)
+		}
+		return invalidation
+	}
+	formed := form(nanosecondOccurrence)
+	occurred := formed.Source().OccurredAt()
+	if !occurred.Equal(microsecondOccurrence) || occurred.Nanosecond()%1000 != 0 || occurred.Location() != time.UTC {
+		t.Fatalf("发生时间 = %s（纳秒 %d），want %s", occurred.Format(time.RFC3339Nano), occurred.Nanosecond(), microsecondOccurrence.Format(time.RFC3339Nano))
+	}
+	if formed.ContentDigest() != form(microsecondOccurrence).ContentDigest() {
+		t.Fatal("带纳秒的作废摘要与同一时刻截到微秒的不同")
+	}
+	if formed.ContentDigest() == form(microsecondOccurrence.Add(time.Microsecond)).ContentDigest() {
+		t.Fatal("晚一微秒的作废摘要没变，折叠截得太粗")
+	}
+}

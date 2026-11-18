@@ -300,3 +300,176 @@ func TestTheRegisterRefusesAMeasurementWithoutItsDimensions(t *testing.T) {
 		t.Fatalf("重量与尺寸齐全的那一行应当写得进：%v", err)
 	}
 }
+
+// savedInvalidation 是一条作废：指回 target，来源与发生时间由用例给。
+func savedInvalidation(t *testing.T, sourceID, target string, occurred time.Time) ports.MeasurementInvalidationRecord {
+	t.Helper()
+	source, err := domain.NewWorkFactSource(
+		sourceID,
+		ref(t, domain.NewPerformingPartyReference, "scale-7"),
+		ref(t, domain.NewExecutionEvidenceReference, "WEIGH/8"),
+		occurred,
+	)
+	if err != nil {
+		t.Fatalf("作废来源：%v", err)
+	}
+	invalidation, err := domain.NewMeasurementInvalidation(domain.MeasurementInvalidationSpec{
+		Source: source, TargetSourceID: target, Reason: "称错件",
+	})
+	if err != nil {
+		t.Fatalf("作废：%v", err)
+	}
+	return ports.MeasurementInvalidationRecord{
+		Key:           ports.ActualMeasurementKey{TenantID: ref(t, domain.NewTenantID, "tenant-a"), SourceID: sourceID},
+		Invalidation:  invalidation,
+		ContentDigest: invalidation.ContentDigest(),
+		RecordedAt:    occurred.Add(time.Minute),
+	}
+}
+
+// Covers: 发生时间带纳秒的称重量方，登记之后读得回来。库列只存到微秒，读回时用行上的值重算摘要并与存下的比对；形成处不截到
+// 微秒，这一条登记成功后就再也读不回来，同一件实物上其余测量的仍有效清单也一并读不出。
+func TestAMeasurementWithNanosecondsReadsBackAndIsListedAsStillValid(t *testing.T) {
+	measurements, transactor := newActualMeasurements(t)
+	ctx := context.Background()
+	occurred := time.Date(2026, 11, 17, 2, 0, 0, 123456789, time.UTC)
+	nanos := savedMeasurement(t, "nanos-1", "2.10", [3]string{"20", "15", "10"}, occurred)
+	whole := savedMeasurement(t, "whole-1", "2.40", [3]string{"20", "15", "10"}, time.Date(2026, 11, 17, 3, 0, 0, 0, time.UTC))
+	err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.ActualMeasurementRecord{nanos, whole} {
+			outcome, err := measurements.SaveMeasurement(txCtx, record)
+			if err != nil {
+				return err
+			}
+			if outcome != ports.ActualMeasurementSaved {
+				return fmt.Errorf("%s 写入 %s", record.Key.SourceID, outcome)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("登记：%v", err)
+	}
+
+	// 三问各自成一格：读回、清单、重放分别失败时，输出里各自可见。
+	t.Run("按来源身份读回", func(t *testing.T) {
+		found, present, err := measurements.FindMeasurement(ctx, nanos.Key)
+		if err != nil || !present {
+			t.Fatalf("按来源身份读回 = present %v, err %v", present, err)
+		}
+		if found.ContentDigest != nanos.ContentDigest {
+			t.Fatalf("读回的摘要 %s ≠ 形成时的 %s", found.ContentDigest, nanos.ContentDigest)
+		}
+		readBack := found.Measurement.Source().OccurredAt()
+		if !readBack.Equal(nanos.Measurement.Source().OccurredAt()) || !readBack.Equal(occurred.Truncate(time.Microsecond)) {
+			t.Fatalf("读回的发生时间 = %s，册上与形成时应是同一个截到微秒的时刻", readBack.Format(time.RFC3339Nano))
+		}
+	})
+
+	t.Run("仍有效清单", func(t *testing.T) {
+		still, err := measurements.ListStillValid(ctx, nanos.Key.TenantID, domain.HandlingUnitObject, "unit-1")
+		if err != nil {
+			t.Fatalf("仍有效清单：%v", err)
+		}
+		if len(still) != 2 || still[0].Key.SourceID != "nanos-1" || still[1].Key.SourceID != "whole-1" {
+			t.Fatalf("仍有效清单 = %v，want 带纳秒的那条与整秒的那条都在", still)
+		}
+	})
+
+	// 重放：同来源身份、同内容再报一次，落册答已登记，读回的摘要与这次形成的摘要相同，编排据此答已有结果而不是冲突。
+	t.Run("重放", func(t *testing.T) {
+		replay := savedMeasurement(t, "nanos-1", "2.10", [3]string{"20", "15", "10"}, occurred)
+		err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			outcome, err := measurements.SaveMeasurement(txCtx, replay)
+			if err != nil {
+				return err
+			}
+			if outcome != ports.ActualMeasurementAlreadyRecorded {
+				return fmt.Errorf("重放写入 %s", outcome)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("重放：%v", err)
+		}
+		again, present, err := measurements.FindMeasurement(ctx, nanos.Key)
+		if err != nil || !present || again.ContentDigest != replay.ContentDigest {
+			t.Fatalf("重放之后读回 = present %v, err %v, 摘要 %s ≠ 重放形成的 %s", present, err, again.ContentDigest, replay.ContentDigest)
+		}
+	})
+}
+
+// Covers: 发生时间带纳秒的作废，登记之后读得回来；被作废的那条（发生时间也带纳秒）离开仍有效清单，仍可按来源身份读到，
+// 同一条作废再报一次答已登记。
+func TestAnInvalidationWithNanosecondsReadsBackAndTakesItsTargetOutOfTheStillValidList(t *testing.T) {
+	measurements, transactor := newActualMeasurements(t)
+	ctx := context.Background()
+	target := savedMeasurement(t, "nanos-1", "2.10", [3]string{"20", "15", "10"}, time.Date(2026, 11, 17, 2, 0, 0, 123456789, time.UTC))
+	kept := savedMeasurement(t, "whole-1", "2.40", [3]string{"20", "15", "10"}, time.Date(2026, 11, 17, 3, 0, 0, 0, time.UTC))
+	voidedAt := time.Date(2026, 11, 17, 4, 0, 0, 987654321, time.UTC)
+	void := savedInvalidation(t, "void-1", "nanos-1", voidedAt)
+	err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.ActualMeasurementRecord{target, kept} {
+			if _, err := measurements.SaveMeasurement(txCtx, record); err != nil {
+				return err
+			}
+		}
+		outcome, err := measurements.SaveInvalidation(txCtx, void)
+		if err != nil {
+			return err
+		}
+		if outcome != ports.MeasurementInvalidationSaved {
+			return fmt.Errorf("作废写入 %s", outcome)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("登记与作废：%v", err)
+	}
+
+	t.Run("作废读回", func(t *testing.T) {
+		found, present, err := measurements.FindInvalidation(ctx, void.Key)
+		if err != nil || !present {
+			t.Fatalf("作废读回 = present %v, err %v", present, err)
+		}
+		if found.ContentDigest != void.ContentDigest {
+			t.Fatalf("读回的作废摘要 %s ≠ 形成时的 %s", found.ContentDigest, void.ContentDigest)
+		}
+		readBack := found.Invalidation.Source().OccurredAt()
+		if !readBack.Equal(void.Invalidation.Source().OccurredAt()) || !readBack.Equal(voidedAt.Truncate(time.Microsecond)) {
+			t.Fatalf("读回的作废发生时间 = %s，册上与形成时应是同一个截到微秒的时刻", readBack.Format(time.RFC3339Nano))
+		}
+	})
+
+	t.Run("被作废的那条仍读得到", func(t *testing.T) {
+		if _, present, err := measurements.FindMeasurement(ctx, target.Key); err != nil || !present {
+			t.Fatalf("被作废的那条仍应按来源身份读得到 = present %v, err %v", present, err)
+		}
+	})
+
+	t.Run("仍有效清单", func(t *testing.T) {
+		still, err := measurements.ListStillValid(ctx, target.Key.TenantID, domain.HandlingUnitObject, "unit-1")
+		if err != nil {
+			t.Fatalf("仍有效清单：%v", err)
+		}
+		if len(still) != 1 || still[0].Key.SourceID != "whole-1" {
+			t.Fatalf("仍有效清单 = %v，want 只剩整秒的那条", still)
+		}
+	})
+
+	t.Run("重放", func(t *testing.T) {
+		err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			outcome, err := measurements.SaveInvalidation(txCtx, savedInvalidation(t, "void-1", "nanos-1", voidedAt))
+			if err != nil {
+				return err
+			}
+			if outcome != ports.MeasurementInvalidationAlreadyRecorded {
+				return fmt.Errorf("重放写入 %s", outcome)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("作废重放：%v", err)
+		}
+	})
+}

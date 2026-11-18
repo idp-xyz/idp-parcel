@@ -75,6 +75,18 @@ func NewMeasurementOriginalDocument(value string) (MeasurementOriginalDocument, 
 	return MeasurementOriginalDocument{required}, err
 }
 
+// measurementSourceAtRegisterInstant 在测量与作废形成处，把来源上的发生时间折成 registerInstant 的样子（UTC、微秒）。
+// 接入口按 RFC 3339 能收到纳秒，而登记册的时间列只存到微秒，读回时又用行上的值重算内容摘要去比存下的：不在形成处截，
+// 一条带纳秒的事实落册前后摘要就差几个纳秒，登记成功之后再也读不回来，重放也被判成别的内容。截在这里，来源上的
+// 发生时间、摘要、落册、读回，以及据此发出的变化通知，用的是同一个时刻。
+//
+// 折叠只落在这两类事实上，不改 NewWorkFactSource：它被收寄、集运等别的作业事实共用，那些册上已有的行与它们的
+// 重放比对不能跟着动。来源是值，这里改的是副本，调用方手里的那份不变。
+func measurementSourceAtRegisterInstant(source WorkFactSource) WorkFactSource {
+	source.occurredAt = registerInstant(source.occurredAt)
+	return source
+}
+
 // ActualMeasurementSpec 是形成一条实际测量所需的全部输入。单位只要求被指名；对产品
 // 内置单位目录的核对在入口做，这里不换算、不改写数字。
 type ActualMeasurementSpec struct {
@@ -117,12 +129,13 @@ type ActualMeasurement struct {
 // 反过来也不收——计价重量取实重与体积重的较大者，缺一样这条测量就算不出计价重量。录入人与原件要么都在、要么
 // 都不在——设备上报没有录入人，手工录入缺一格就说不清这份数字是谁照哪张原件写的。
 func NewActualMeasurement(spec ActualMeasurementSpec) (ActualMeasurement, error) {
-	if !spec.Source.valid() || !spec.ObjectKind.valid() || strings.TrimSpace(spec.ObjectID) == "" ||
+	source := measurementSourceAtRegisterInstant(spec.Source)
+	if !source.valid() || !spec.ObjectKind.valid() || strings.TrimSpace(spec.ObjectID) == "" ||
 		!spec.Node.valid() || !spec.Location.valid() || !spec.Basis.valid() {
 		return ActualMeasurement{}, ErrInvalidActualMeasurement
 	}
 	measurement := ActualMeasurement{
-		source:        spec.Source,
+		source:        source,
 		objectKind:    spec.ObjectKind,
 		objectID:      spec.ObjectID,
 		node:          spec.Node,
@@ -238,9 +251,10 @@ type MeasurementInvalidation struct {
 // NewMeasurementInvalidation 收下一条作废。原因去掉首尾空白后必须还在；作废自己的来源
 // 身份不得与被作废那条相同，否则一次上报会同时是测量又是作废。
 func NewMeasurementInvalidation(spec MeasurementInvalidationSpec) (MeasurementInvalidation, error) {
+	source := measurementSourceAtRegisterInstant(spec.Source)
 	reason := strings.TrimSpace(spec.Reason)
-	if !spec.Source.valid() || strings.TrimSpace(spec.TargetSourceID) == "" || reason == "" ||
-		spec.Source.SourceID() == spec.TargetSourceID {
+	if !source.valid() || strings.TrimSpace(spec.TargetSourceID) == "" || reason == "" ||
+		source.SourceID() == spec.TargetSourceID {
 		return MeasurementInvalidation{}, ErrInvalidMeasurementInvalidation
 	}
 	enteredBy := strings.TrimSpace(spec.EnteredBy)
@@ -248,7 +262,7 @@ func NewMeasurementInvalidation(spec MeasurementInvalidationSpec) (MeasurementIn
 		return MeasurementInvalidation{}, ErrInvalidMeasurementInvalidation
 	}
 	return MeasurementInvalidation{
-		source:           spec.Source,
+		source:           source,
 		targetSourceID:   spec.TargetSourceID,
 		reason:           reason,
 		enteredBy:        enteredBy,

@@ -240,3 +240,55 @@ func TestVoidingDropsTheMeasurementFromTheStillValidList(t *testing.T) {
 		t.Fatalf("第二次作废结果 %s", second.Outcome())
 	}
 }
+
+type recordedMeasurementChanges struct{ changes []ports.MeasurementChanged }
+
+func (recorded *recordedMeasurementChanges) NoticeMeasurementChanged(_ context.Context, change ports.MeasurementChanged) error {
+	recorded.changes = append(recorded.changes, change)
+	return nil
+}
+
+// Covers: 带纳秒的发生时间登记成功，原样重放答已有结果；交给下游的变化通知（事件信封的发生时间由它来）、册上的测量用的是
+// 同一个截到微秒的时刻，作废同理。
+func TestANanosecondOccurrenceReachesTheChangeNoticeAtTheRegisterInstant(t *testing.T) {
+	nanos := time.Date(2026, 11, 17, 2, 0, 0, 123456789, time.UTC)
+	micros := time.Date(2026, 11, 17, 2, 0, 0, 123456000, time.UTC)
+	notices := &recordedMeasurementChanges{}
+	handler, err := application.NewRecordActualMeasurementHandler(
+		newMemoryMeasurements(), measurementClock(time.Date(2026, 11, 17, 3, 0, 0, 0, time.UTC)), notices)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := weightCommand()
+	command.OccurredAt = nanos
+	recorded, err := handler.Handle(context.Background(), command)
+	if err != nil || recorded.Outcome() != application.ActualMeasurementRecorded {
+		t.Fatalf("登记 = %v %v", recorded.Outcome(), err)
+	}
+	if measurement, _ := recorded.Measurement(); !measurement.Source().OccurredAt().Equal(micros) {
+		t.Fatalf("册上的发生时间 = %s", measurement.Source().OccurredAt().Format(time.RFC3339Nano))
+	}
+	again, err := handler.Handle(context.Background(), command)
+	if err != nil || again.Outcome() != application.ActualMeasurementExisting {
+		t.Fatalf("原样重放 = %v %v", again.Outcome(), err)
+	}
+
+	voided, err := handler.Invalidate(context.Background(), application.InvalidateActualMeasurementCommand{
+		TenantID: "tenant-1", SourceID: "void-1", TargetSourceID: "measure-1", Reason: "称错件",
+		PerformedBy: "scale-7", Evidence: "WEIGH/8", OccurredAt: nanos.Add(time.Hour),
+	})
+	if err != nil || voided.Outcome() != application.MeasurementInvalidationRecorded {
+		t.Fatalf("作废 = %v %v", voided.Outcome(), err)
+	}
+
+	want := []time.Time{micros, micros, micros.Add(time.Hour)}
+	if len(notices.changes) != len(want) {
+		t.Fatalf("通知 %d 封，want %d", len(notices.changes), len(want))
+	}
+	for index, change := range notices.changes {
+		if !change.OccurredAt.Equal(want[index]) || change.OccurredAt.Nanosecond()%1000 != 0 {
+			t.Fatalf("第 %d 封通知的发生时间 = %s，want %s", index+1,
+				change.OccurredAt.Format(time.RFC3339Nano), want[index].Format(time.RFC3339Nano))
+		}
+	}
+}
