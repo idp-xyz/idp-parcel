@@ -28,14 +28,14 @@
 | `parcel-commercial` | 商业权威依据的发布批；参与方、服务产品、责任法人资料、消费方解析键、版本收尾、审批职责规则 |
 | `parcel-access-register` | 操作者与授予、集成客户端、作业设备、准入范围对照、推送源与签名密钥、首方客户端 |
 | `parcel-network-register` | 版本化网络目录：服务区域、日历、线路、路由策略；可采用随产品发布的参考配置 |
-| `parcel-node-operations-register` | 送站预报有效时窗及其收口 |
+| `parcel-node-operations-register` | 送站预报有效时窗及其收口、当前有效实测形态的采用 |
 | `parcel-transport-register` | 周期安排、具体班次、容量池 |
 | `parcel-customs-register` | 关务案件配置：就绪判断、提交授权、解释规则、关闭义务、门禁前置条件、建案要求规则、口岸与申报路径目录、监管凭证、税费付款协作与核对 |
 | `parcel-ve-register` | 追踪与异常目录：里程碑映射、分诊规则、通知策略、索赔资格与授权、披露策略、异常披露规则、信号规则；索赔材料收讫 |
 | `parcel-pricing-register` | 价卡与计价参考序列的登记快照；序列版本复核 |
 | `parcel-pricing-feed` | 来源连接器绑定；按绑定抓一次序列取值 |
 | `parcel-pricing-template` | 不登记；写出价卡导入的空白模板 |
-| `parcel-settlement-register` | 外部资金事实采用与更正、结算账户、资金映射与核销、分摊分法、财务连接器、计费时点采用、费用项目映射 |
+| `parcel-settlement-register` | 外部资金事实采用与更正、结算账户、资金映射与核销、分摊分法、财务连接器、计费时点采用、费用项目映射、实测差异自动调整的采用 |
 | `parcel-collection-register` | 代收指令、分户账、代收事实、差异事项、协议抵扣、回汇批次、分户账记账 |
 | `parcel-document-numbering-register` | 单据编号时区、租户的单据编号规则 |
 | `parcel-governance-register` | 权威区间、暂停、恢复、阶段评审（候选版本组与 `Go/No-Go`）、接管 |
