@@ -181,6 +181,12 @@ type PublishStatementCommand struct {
 	DeclaredTotalMinor  int64
 	CutOffAt            time.Time
 	PublishedAt         time.Time
+	// CarryUnbilledAdjustments 为真：DeclaredTotalMinor 只是本期费用的合计，本编排把这一户还没出账的调整——挂在本期
+	// 费用上的，和挂在同一账户已发布、未作废对账单上的——随单带走，金额在这里加进总额；本期一笔费用都没有时，出一张
+	// 只有调整行的单，净额可以为负。到点截单总是给真，运营发布口由发布的人选。调整只在这里读一次：让申报的一方先读
+	// 一遍再报数，两次读之间落下一笔调整，报的数就与行勾稽不平，到点截单那一期照记不平、不再重截。
+	// 为假：申报总额含本期费用上还没出账的调整，别的对账单上的调整不带。它不进发布摘要。
+	CarryUnbilledAdjustments bool
 }
 
 // StatementExclusionCause 是命令列出的一件费用没入本期的缘由。
@@ -424,23 +430,35 @@ func (handler *CutOffPublishStatementHandler) Publish(
 	if stop {
 		return stopped, nil
 	}
-	if len(admission.inPeriod) == 0 {
-		// 一件都入不了本期不形成草稿。有判不出归属日的，整笔答未配置——补登之后再截，那几件可能就入了本期；
-		// 没有的，答本期无费用，不答未配置：补登什么都改变不了这个答案（ADR-0269 决定四）。
-		if admission.unconfigured {
-			return StatementResult{outcome: StatementCutUnconfigured, exclusions: admission.exclusions}, nil
-		}
-		return StatementResult{outcome: StatementNoChargeInPeriod, exclusions: admission.exclusions}, nil
+	if len(admission.inPeriod) == 0 && admission.unconfigured {
+		// 一件都入不了本期、又有判不出归属日的，整笔答未配置——补登之后再截，那几件可能就入了本期。
+		return StatementResult{outcome: StatementCutUnconfigured, exclusions: admission.exclusions}, nil
 	}
 
-	draft, err := draftFrom(command, admission.inPeriod, last)
+	attached, err := handler.attachAdjustments(ctx, command, intent.Account, admission.inPeriod)
+	if err != nil {
+		return statementUndecided(AdjustmentViewUnavailable, subject), nil
+	}
+	if len(admission.inPeriod) == 0 && len(attached.adjustments) == 0 {
+		// 本期没有费用，也没有要带的调整，不形成草稿。答本期无费用，不答未配置：补登什么都改变不了这个答案
+		// （ADR-0269 决定四）。本期没有费用而有带过来的调整，照样出一张只有调整行的单。
+		return StatementResult{outcome: StatementNoChargeInPeriod, exclusions: admission.exclusions}, nil
+	}
+	draft, err := draftFrom(command, admission.inPeriod, last, attached)
 	if errors.Is(err, domain.ErrChargeNotConfirmed) {
 		return StatementResult{outcome: StatementChargeNotConfirmed}, nil
 	}
 	if err != nil {
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
-	if err := draft.CheckPublication(command.DeclaredTotalMinor, command.PublishedAt); errors.Is(err, domain.ErrStatementImbalance) {
+	declared := command.DeclaredTotalMinor
+	if command.CarryUnbilledAdjustments {
+		for _, adjustment := range attached.adjustments {
+			_, minor := adjustment.SettlementAmount()
+			declared += signedAdjustment(adjustment.Direction(), minor)
+		}
+	}
+	if err := draft.CheckPublication(declared, command.PublishedAt); errors.Is(err, domain.ErrStatementImbalance) {
 		// 申报总额与入本期的行勾稽不平：阻断，不修正为「约等于」（AT-SA-065）。不入本期的那几件照样指名，
 		// 申报方据此知道差在哪几件。
 		return StatementResult{outcome: StatementImbalanceOutcome, exclusions: admission.exclusions}, nil
@@ -476,7 +494,7 @@ func (handler *CutOffPublishStatementHandler) Publish(
 	if err != nil {
 		return StatementResult{}, fmt.Errorf("settlement accounting: number statement %s: %w", subject, err)
 	}
-	statement, err := domain.PublishStatement(draft, number, command.DeclaredTotalMinor, command.PublishedAt)
+	statement, err := domain.PublishStatement(draft, number, declared, command.PublishedAt)
 	if err != nil {
 		// 勾稽与时刻上面已判过：这里失败是号已取走之后的矛盾，交回错误让事务回滚。
 		return StatementResult{}, fmt.Errorf("settlement accounting: publish numbered statement %s: %w", number, err)
@@ -495,6 +513,10 @@ func (handler *CutOffPublishStatementHandler) Publish(
 	}
 	switch saved {
 	case ports.StatementSaved:
+		if err := handler.includePriorAdjustments(ctx, command, record.Statement, attached); err != nil {
+			// 号已取走、单已落下：纳入没记全就整笔回滚，不留一张带着调整金额却没有纳入关系的单。
+			return StatementResult{}, fmt.Errorf("%w: statement %s: %w", ErrNumberedIssueInterrupted, number, err)
+		}
 		result := StatementResult{outcome: StatementPublished, statement: record, hasRecord: true, exclusions: admission.exclusions}
 		result.handoff = handler.handOff(ctx, ports.StatementIntent{Statement: record}, number.String())
 		return result, nil
@@ -731,6 +753,10 @@ func (handler *CutOffPublishStatementHandler) Void(
 			return StatementResult{outcome: StatementAlreadyVoided, statement: winner, hasRecord: true}, nil
 		}
 		return StatementResult{outcome: StatementNotAccepted}, nil
+	}
+	// 作废落下了，纳入却没撤回：这张单带走的调整会永远算已出账。交回错误让调用方整笔回滚。
+	if err := handler.withdrawCarriedInclusions(ctx, command.TenantID, existing.Statement, voidedAt); err != nil {
+		return StatementResult{}, err
 	}
 	result := StatementResult{outcome: StatementVoidedOutcome, statement: existing, hasRecord: true}
 	result.handoff = handler.handOff(ctx, ports.StatementIntent{Statement: existing}, command.Number)
@@ -1138,11 +1164,135 @@ func (handler *CutOffPublishStatementHandler) ResolveDispute(
 	return StatementResult{outcome: DisputeResolvedOutcome, dispute: existing, hasRecord: true}, nil
 }
 
-func draftFrom(command PublishStatementCommand, charges []domain.CustomerCharge, last domain.AttributionDate) (domain.StatementDraft, error) {
+// attachedAdjustments 是随这张单带走的调整。adjustments 是全部；priorCharge 按费用标识记下其中挂在别的对账单上的那些
+// 各在哪一张单上，priors 是那几张单，各列一次。
+type attachedAdjustments struct {
+	adjustments []domain.ChargeAdjustment
+	priors      []domain.PublishedStatement
+	priorCharge map[string]domain.PublishedStatement
+}
+
+// attachAdjustments 读这一户还没出账的调整：挂在本期费用上的；命令要求随单带走时，还有挂在同一账户已发布、未作废对账单
+// 上的。后一种逐笔找到它那张原账单；找不到是两侧说法矛盾，交回错误，不带一笔没有出处的金额。
+func (handler *CutOffPublishStatementHandler) attachAdjustments(
+	ctx context.Context,
+	command PublishStatementCommand,
+	account domain.SettlementAccountID,
+	charges []domain.CustomerCharge,
+) (attachedAdjustments, error) {
+	currency, err := domain.NewCurrencyCode(command.Currency)
+	if err != nil {
+		return attachedAdjustments{}, err
+	}
+	ids := make([]domain.CustomerChargeID, 0, len(charges))
+	inDraft := map[string]struct{}{}
+	for _, charge := range charges {
+		ids = append(ids, charge.ID())
+		inDraft[charge.ID().String()] = struct{}{}
+	}
+	records, err := handler.deps.Adjustments.ListUnbilledForCutoff(ctx, command.TenantID, account, currency, ids, command.CarryUnbilledAdjustments)
+	if err != nil {
+		return attachedAdjustments{}, err
+	}
+	attached := attachedAdjustments{priorCharge: map[string]domain.PublishedStatement{}}
+	seenPrior := map[string]struct{}{}
+	for _, record := range records {
+		chargeID := record.Adjustment.Charge()
+		if _, covered := inDraft[chargeID.String()]; !covered {
+			prior, found, err := handler.deps.Statements.FindOpenStatementCarryingCharge(ctx, command.TenantID, account, chargeID)
+			if err != nil {
+				return attachedAdjustments{}, err
+			}
+			if !found {
+				return attachedAdjustments{}, fmt.Errorf("adjustment %s hangs on charge %s, which is not on an open statement", record.Adjustment.ID(), chargeID)
+			}
+			attached.priorCharge[chargeID.String()] = prior.Statement
+			if _, seen := seenPrior[prior.Statement.Number().String()]; !seen {
+				seenPrior[prior.Statement.Number().String()] = struct{}{}
+				attached.priors = append(attached.priors, prior.Statement)
+			}
+		}
+		attached.adjustments = append(attached.adjustments, record.Adjustment)
+	}
+	return attached, nil
+}
+
+// includePriorAdjustments 给随单带走、却挂在别的对账单费用上的每一笔调整各记一笔后续纳入：关联它那张原账单，归入这张单
+// 的账期。按调整走，不按费用走：同一笔费用出账之后可以先后挂上几笔调整，各是各的纳入。纳入的意图没交出去就交回错误：
+// 重放答已有对账单，不会再走到这里补发。
+func (handler *CutOffPublishStatementHandler) includePriorAdjustments(
+	ctx context.Context,
+	command PublishStatementCommand,
+	statement domain.PublishedStatement,
+	attached attachedAdjustments,
+) error {
+	for _, adjustment := range attached.adjustments {
+		prior, carried := attached.priorCharge[adjustment.Charge().String()]
+		if !carried {
+			continue
+		}
+		included, err := handler.IncludeAdjustment(ctx, IncludeAdjustmentCommand{
+			TenantID:         command.TenantID,
+			Inclusion:        carriedInclusionID(statement.Number(), adjustment.ID()),
+			Number:           prior.Number().String(),
+			AdjustmentID:     adjustment.ID().String(),
+			SubsequentPeriod: statement.Period().String(),
+			// 截到微秒：库里的时刻只到微秒，带着纳秒算指纹，读回的那一份就对不上。
+			IncludedAt: handler.deps.Clock.Now().UTC().Truncate(time.Microsecond),
+		})
+		if err != nil {
+			return err
+		}
+		switch included.Outcome() {
+		case AdjustmentIncluded, InclusionExistingResult:
+		default:
+			return fmt.Errorf("settlement accounting: include adjustment %s on the next statement: %s", adjustment.ID(), included.Outcome())
+		}
+		if included.StatementHandoffReference() != "" {
+			return fmt.Errorf("settlement accounting: inclusion of adjustment %s was recorded but its intent was not handed off", adjustment.ID())
+		}
+	}
+	return nil
+}
+
+// carriedInclusionID 是一张对账单带走一笔调整时那笔后续纳入的标识：带它的单号加调整标识。单号在里面，同一笔调整
+// 在带它的单作废、纳入撤回之后，由后面的单再带一次时是另一笔纳入；作废时也凭它找得回要撤的那几笔。
+func carriedInclusionID(carrier domain.StatementNumber, adjustment domain.ChargeAdjustmentID) string {
+	return "ADJINC-" + carrier.String() + "-" + adjustment.String()
+}
+
+// withdrawCarriedInclusions 在一张单作废之后撤回它带走的各笔调整的后续纳入：那几笔调整回到没出账，由替代单或后面的
+// 单再带。挂在本单费用上的调整没有纳入，随费用一起回到没出账。
+func (handler *CutOffPublishStatementHandler) withdrawCarriedInclusions(
+	ctx context.Context,
+	tenant domain.TenantID,
+	voided domain.PublishedStatement,
+	at time.Time,
+) error {
+	for _, line := range voided.AdjustmentLines() {
+		if line.OriginalStatement.String() == "" {
+			continue
+		}
+		inclusion, err := domain.NewInclusionReference(carriedInclusionID(voided.Number(), line.Adjustment))
+		if err != nil {
+			return err
+		}
+		if _, err := handler.deps.Inclusions.Withdraw(ctx, ports.InclusionKey{TenantID: tenant, Inclusion: inclusion},
+			"STATEMENT_VOIDED/"+voided.Number().String(), at); err != nil {
+			return fmt.Errorf("settlement accounting: withdraw the inclusion of adjustment %s carried by voided statement %s: %w",
+				line.Adjustment, voided.Number(), err)
+		}
+	}
+	return nil
+}
+
+func draftFrom(command PublishStatementCommand, charges []domain.CustomerCharge, last domain.AttributionDate, attached attachedAdjustments) (domain.StatementDraft, error) {
 	spec := domain.StatementDraftSpec{
 		CutOffAt:            command.CutOffAt,
 		LastAttributionDate: last,
 		Charges:             charges,
+		Adjustments:         attached.adjustments,
+		PriorStatements:     attached.priors,
 	}
 	var err error
 	if spec.Account, err = domain.NewSettlementAccountID(command.Account); err != nil {

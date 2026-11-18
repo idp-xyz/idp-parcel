@@ -7,6 +7,8 @@
 //     登记依据。同租户生效区间与在册行重叠在登记时拒；原样再登答已有结果。
 //   - pre-advice-window-closure 给时窗册上开放终点的那一行追加收口（票 ps-external-mark-relations/14）：指名那一行的起点、收口时刻与
 //     依据。收口之后，起点不早于收口时刻的新行经 pre-advice-window 照常登记；原样再收答已有结果。
+//   - measurement-selection 采用当前有效实测的内置形态。没采用时，同一实物多于一条仍有效实测（复测过）就不定一条。
+//     形态是产品内置的，谁采用是租户取值；本口不替任何租户默认采用。同一形态同一依据再登答已有结果，依据不同不改已经写下的那一行。
 //
 // 输入是一份登记行 JSON（-kind 指族，-file 指路径），字段与在线口的载荷一一对应、另加 tenantId；未知字段一律拒绝——打错的键静默丢弃
 // 会让操作员以为登进去的比实际多。本工具不携带任何默认取值：时窗的两个时长是租户取值，缺了就拒，不当零；收口时刻同样必给。
@@ -50,10 +52,11 @@ const (
 const (
 	kindPreAdviceWindow        = "pre-advice-window"
 	kindPreAdviceWindowClosure = "pre-advice-window-closure"
+	kindMeasurementSelection   = "measurement-selection"
 )
 
 // supportedKinds 只为 `-kind` 的用法文本与未知族的错误文本服务，列成一处免得两段文本各抄一遍族名。
-var supportedKinds = []string{kindPreAdviceWindow, kindPreAdviceWindowClosure}
+var supportedKinds = []string{kindPreAdviceWindow, kindPreAdviceWindowClosure, kindMeasurementSelection}
 
 // systemClock 是 Clock 端口的生产实现：登记时刻由编排取时钟，不由登记行携带。
 type systemClock struct{}
@@ -64,6 +67,7 @@ func (systemClock) Now() time.Time { return time.Now().UTC() }
 type registrar struct {
 	handler    *application.RegisterPreAdviceWindowHandler
 	closer     *application.ClosePreAdviceWindowHandler
+	selection  *application.AdoptMeasurementSelectionHandler
 	transactor bentoapp.Transactor
 }
 
@@ -131,7 +135,15 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return registrar{}, fmt.Errorf("构造时窗收口编排：%w", err)
 	}
-	return registrar{handler: handler, closer: closer, transactor: db.Transactor()}, nil
+	adoptions, err := nopostgres.NewMeasurementSelectionAdoptions(db)
+	if err != nil {
+		return registrar{}, fmt.Errorf("构造实测形态采用册：%w", err)
+	}
+	selection, err := application.NewAdoptMeasurementSelectionHandler(adoptions, systemClock{})
+	if err != nil {
+		return registrar{}, fmt.Errorf("构造实测形态采用编排：%w", err)
+	}
+	return registrar{handler: handler, closer: closer, selection: selection, transactor: db.Transactor()}, nil
 }
 
 // windowInput 是本口 pre-advice-window 族的输入：在线口的载荷类型原样嵌入，另加 tenantId。载荷翻成命令只走在线口那一份（Command），
@@ -155,6 +167,8 @@ func execute(ctx context.Context, kind string, raw []byte, built registrar) (str
 		return executeWindow(ctx, raw, built)
 	case kindPreAdviceWindowClosure:
 		return executeClosure(ctx, raw, built)
+	case kindMeasurementSelection:
+		return executeSelection(ctx, raw, built)
 	default:
 		return fmt.Sprintf("未知登记族 %q（支持 %s）", kind, strings.Join(supportedKinds, " / ")), exitUsage
 	}
@@ -240,6 +254,47 @@ func executeClosure(ctx context.Context, raw []byte, built registrar) (string, i
 			result.Window().EffectiveFrom().Format(time.RFC3339), closure.ClosedAt().Format(time.RFC3339)), exitRegistered
 	default:
 		return fmt.Sprintf("%s: 未知应用结果 %d", kind, result.Outcome()), exitUndecided
+	}
+}
+
+type selectionInput struct {
+	TenantID string `json:"tenantId"`
+	Form     string `json:"form"`
+	Basis    string `json:"basis"`
+}
+
+func executeSelection(ctx context.Context, raw []byte, built registrar) (string, int) {
+	kind := kindMeasurementSelection
+	var input selectionInput
+	if err := decodeStrict(raw, &input); err != nil {
+		return fmt.Sprintf("%s: 译装被拒：%v", kind, err), exitUsage
+	}
+	tenant, err := domain.NewTenantID(input.TenantID)
+	if err != nil {
+		return fmt.Sprintf("%s: 译装被拒：tenantId：%v", kind, err), exitUsage
+	}
+	form, err := domain.MeasurementSelectionFormFromName(input.Form)
+	if err != nil {
+		return fmt.Sprintf("%s: 译装被拒：form：%v", kind, err), exitUsage
+	}
+	var outcome application.AdoptMeasurementSelectionOutcome
+	err = built.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		handled, err := built.selection.Handle(txCtx, application.AdoptMeasurementSelectionCommand{
+			Tenant: tenant, Form: form, Basis: input.Basis,
+		})
+		outcome = handled
+		return err
+	})
+	if err != nil {
+		return fmt.Sprintf("%s: 未决：%v", kind, err), exitUndecided
+	}
+	switch outcome {
+	case application.MeasurementSelectionAdopted, application.MeasurementSelectionExisting:
+		return fmt.Sprintf("%s: %s（%s）", kind, outcome, form), exitRegistered
+	case application.MeasurementSelectionConflict, application.MeasurementSelectionNotAccepted:
+		return fmt.Sprintf("%s: %s", kind, outcome), exitUsage
+	default:
+		return fmt.Sprintf("%s: 未知应用结果 %s", kind, outcome), exitUndecided
 	}
 }
 

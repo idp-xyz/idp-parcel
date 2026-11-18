@@ -577,7 +577,8 @@ type ConfirmationBasisRecorder interface {
 }
 
 // ParcelConfirmationSerializer 让同一件包裹上「记确认依据」的两头排队：终局到达那一头读费用之前、费用形成那一头读终局之前
-// 都先取它，锁到各自事务结束（ADR-0336 决定二）。
+// 都先取它，锁到各自事务结束（ADR-0336 决定二）。费用形成那一头读代次链之前也先取它：同一件包裹各代的形成排成一列，
+// 后到的一代读到的是先到那一代提交之后的链。
 type ParcelConfirmationSerializer interface {
 	SerializeParcelConfirmation(ctx context.Context, tenant domain.TenantID, parcel domain.ParcelReference) error
 }
@@ -816,6 +817,12 @@ type PublishedStatementStore interface {
 		period domain.BillingPeriodReference,
 	) ([]StatementRecord, error)
 	StatementNumberUsed(ctx context.Context, tenant domain.TenantID, number string) (bool, error)
+	FindOpenStatementCarryingCharge(
+		ctx context.Context,
+		tenant domain.TenantID,
+		account domain.SettlementAccountID,
+		charge domain.CustomerChargeID,
+	) (StatementRecord, bool, error)
 	Save(ctx context.Context, record StatementRecord) (StatementSaveOutcome, error)
 	Replace(ctx context.Context, record StatementRecord) (bool, error)
 }
@@ -843,9 +850,13 @@ const (
 )
 
 // SubsequentInclusionStore 按幂等键找回并保存后续账期纳入（写入代数同 ADR-0031）。
+//
+// Withdraw 撤回一笔纳入：带它的那张对账单作废了，这笔调整回到没出账。只在原行上记撤回的时刻与依据，不删行；已经
+// 撤回的再撤一次什么都不改。交回这一次有没有撤下。撤回之后同一笔调整可以由后面的单再纳入一次。
 type SubsequentInclusionStore interface {
 	FindByKey(ctx context.Context, key InclusionKey) (InclusionRecord, bool, error)
 	Save(ctx context.Context, record InclusionRecord) (InclusionSaveOutcome, error)
+	Withdraw(ctx context.Context, key InclusionKey, basis string, at time.Time) (bool, error)
 }
 
 // ChargeAdjustmentKey 是一笔客户费用调整的幂等键。
@@ -900,6 +911,16 @@ type ChargeAdjustmentStore interface {
 // 能写的方法都拿不到。适配器同一个类型两个接口都实现，行模型只有一份。
 type ChargeAdjustmentView interface {
 	FindByKey(ctx context.Context, key ChargeAdjustmentKey) (ChargeAdjustmentRecord, bool, error)
+	// ListUnbilledForCutoff 交这一户、这一结算币下还没进任何未作废对账单、也还没纳入后续账期的调整。
+	// charges 是本期要出账的费用。includePrior 为真时，一并交回挂在同一账户已发布、未作废对账单上的那些。
+	ListUnbilledForCutoff(
+		ctx context.Context,
+		tenant domain.TenantID,
+		account domain.SettlementAccountID,
+		currency domain.CurrencyCode,
+		charges []domain.CustomerChargeID,
+		includePrior bool,
+	) ([]ChargeAdjustmentRecord, error)
 }
 
 // DisputeKey 是客户异议的幂等键。

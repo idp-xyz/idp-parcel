@@ -62,9 +62,13 @@ func chargeConfirmationOnBasis(
 	if err != nil {
 		return nil, err
 	}
+	supersessions, err := sapostgres.NewChargeSupersessions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: charge supersessions for confirmation: %w", err)
+	}
 	confirm, err := saapplication.NewConfirmChargeHandler(saapplication.ConfirmChargeDeps{
 		Charges: charges, Conditions: conditions, Facts: catalogues, Attributions: attributions,
-		Downstream: handoff, Occupation: occupation, Clock: clock,
+		Downstream: handoff, Occupation: occupation, Clock: clock, Supersessions: supersessions,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: confirm charge: %w", err)

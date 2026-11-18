@@ -39,7 +39,7 @@ func NewSealReference(value string) (SealReference, error) {
 	return SealReference{required}, err
 }
 
-// WorkBasisReference 指名封装、开封或处置转移的作业依据。
+// WorkBasisReference 指名一次作业所依据的作业依据。封装、开封、处置转移和实际测量都引用它，不另造一个词。
 type WorkBasisReference struct{ requiredValue }
 
 func NewWorkBasisReference(value string) (WorkBasisReference, error) {

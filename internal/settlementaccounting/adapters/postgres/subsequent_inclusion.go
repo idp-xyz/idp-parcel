@@ -108,6 +108,34 @@ func (repository *SubsequentInclusions) Save(
 	return ports.InclusionSaved, nil
 }
 
+// Withdraw 在原行上记下撤回。只撤还没撤回的那一行：重放不改先记下的时刻与依据。
+func (repository *SubsequentInclusions) Withdraw(
+	ctx context.Context,
+	key ports.InclusionKey,
+	basis string,
+	at time.Time,
+) (bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("withdraw subsequent inclusion: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE settlement_accounting.subsequent_inclusion
+		    SET withdrawn_at = $3, withdrawal_basis = $4
+		  WHERE tenant_id = $1
+		    AND inclusion_id = $2
+		    AND withdrawn_at IS NULL`,
+		key.TenantID.String(),
+		key.Inclusion.String(),
+		at.UTC(),
+		basis,
+	)
+	if err != nil {
+		return false, fmt.Errorf("withdraw subsequent inclusion: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 func rebuildSubsequentInclusion(
 	id domain.InclusionReference,
 	kindName, statement, original, subsequent, charge string,

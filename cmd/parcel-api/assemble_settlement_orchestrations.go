@@ -184,9 +184,13 @@ func buildSettlementOrchestrations(db *bentopg.DB, issuer *docnumber.Assigner) (
 	if err != nil {
 		return none, err
 	}
+	supersessions, err := sapostgres.NewChargeSupersessions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: charge supersessions: %w", err)
+	}
 	confirm, err := saapplication.NewConfirmChargeHandler(saapplication.ConfirmChargeDeps{
 		Charges: charges, Conditions: conditions, Facts: catalogues, Attributions: attributions,
-		Downstream: confirmHandoff, Occupation: occupation, Clock: clock,
+		Downstream: confirmHandoff, Occupation: occupation, Clock: clock, Supersessions: supersessions,
 	})
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: confirm charge: %w", err)

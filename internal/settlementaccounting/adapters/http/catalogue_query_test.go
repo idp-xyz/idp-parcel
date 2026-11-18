@@ -163,7 +163,7 @@ func refusedCatalogueEndpoints(t *testing.T, intake settlementhttp.CatalogueQuer
 		{
 			name:    "charges",
 			target:  "/settlement-charges?registry=customer-charge",
-			handler: settlementhttp.NewQuerySettlementChargesEndpoint(intake, unreachable),
+			handler: settlementhttp.NewQuerySettlementChargesEndpoint(intake, unreachable, nil),
 		},
 		{
 			name:    "statements",
@@ -296,7 +296,7 @@ func TestSettlementCatalogueQueriesRejectUnknownRegistries(t *testing.T) {
 		{
 			name:    "charges",
 			target:  "/settlement-charges",
-			handler: settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), unreachable),
+			handler: settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), unreachable, nil),
 		},
 		{
 			name:    "statements",
@@ -333,7 +333,7 @@ func TestOneSettlementPageDoesNotAnswerAnotherPagesRegistry(t *testing.T) {
 		{
 			name:    "charges asked for an operating registry",
 			target:  "/settlement-charges?registry=operating-result",
-			handler: settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), unreachable),
+			handler: settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), unreachable, nil),
 		},
 		{
 			name:    "operating asked for a charge registry",
@@ -371,7 +371,7 @@ func TestAnUnconfiguredChannelAnswersAlikeWhateverTheDispatchOrLocatorParameters
 	}{
 		{
 			name:    "charges",
-			handler: settlementhttp.NewQuerySettlementChargesEndpoint(unconfigured, unreachable),
+			handler: settlementhttp.NewQuerySettlementChargesEndpoint(unconfigured, unreachable, nil),
 			valid:   "/settlement-charges?registry=customer-charge",
 			others: []string{"/settlement-charges", "/settlement-charges?registry=", "/settlement-charges?registry=unknown",
 				"/settlement-charges?registry=customer_charge"},

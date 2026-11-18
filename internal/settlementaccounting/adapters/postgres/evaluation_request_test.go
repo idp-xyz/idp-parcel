@@ -75,6 +75,52 @@ func evaluationRequestRecord(t *testing.T, tenant, id, feeItem string) ports.Eva
 	}
 }
 
+func TestListCurrentByOccurrenceDropsARequestThatAlreadyHasASuccessor(t *testing.T) {
+	registry, transactor := newEvaluationRequestRegistry(t)
+	first := evaluationRequestRecord(t, "tenant-1", "EVREQ-SYN-1", "fee-linehaul")
+	other := evaluationRequestRecord(t, "tenant-1", "EVREQ-SYN-2", "fee-remote")
+	if saveEvaluationRequest(t, transactor, registry, first) != ports.EvaluationRequestSaved {
+		t.Fatal("首份没记下")
+	}
+	if saveEvaluationRequest(t, transactor, registry, other) != ports.EvaluationRequestSaved {
+		t.Fatal("另一费用项目没记下")
+	}
+	basis := saValue(t, domain.NewMeasurementChangeResumeBasis, "measure-1")
+	nextRequest, err := first.Request.Resume(
+		saValue(t, domain.NewEvaluationRequestID, "EVREQ-SYN-3"),
+		basis,
+		evaluationRequestedAt.Add(time.Hour),
+		first.Request.RequestedBy(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := ports.EvaluationRequestRecord{
+		Key:        ports.EvaluationRequestKey{TenantID: first.Key.TenantID, Request: nextRequest.ID()},
+		Request:    nextRequest,
+		RecordedAt: evaluationRequestedAt.Add(time.Hour),
+	}
+	if saveEvaluationRequest(t, transactor, registry, next) != ports.EvaluationRequestSaved {
+		t.Fatal("下一代没记下")
+	}
+	var listed []ports.EvaluationRequestRecord
+	saWithin(t, transactor, t.Context(), func(txCtx context.Context) error {
+		var err error
+		listed, err = registry.ListCurrentByOccurrence(txCtx, first.Key.TenantID, first.Request.Sources().Occurrence.ID(), first.Request.Sources().Occurrence.Version())
+		return err
+	})
+	if len(listed) != 2 {
+		t.Fatalf("当前请求 %d 份，want 下一代与另一费用项目", len(listed))
+	}
+	got := map[string]bool{}
+	for _, record := range listed {
+		got[record.Key.Request.String()] = true
+	}
+	if got["EVREQ-SYN-1"] || !got["EVREQ-SYN-2"] || !got["EVREQ-SYN-3"] {
+		t.Fatalf("清单 %v", got)
+	}
+}
+
 func saveEvaluationRequest(
 	t *testing.T,
 	transactor bentoapp.Transactor,

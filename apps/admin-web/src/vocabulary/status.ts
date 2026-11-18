@@ -365,6 +365,7 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   BOOKING_ANSWER_ENTRY: muted('录入承运方的订舱答复'),
   EXTERNAL_MANIFEST_ENTRY: muted('录入外部舱单引用'),
   ETA_ENTRY: muted('录入预计到达'),
+  MANUAL_MEASUREMENT_ENTRY: muted('录入称重量方'),
   EXTERNAL_FUNDS_FACT: muted('外部收付款'),
   EXTERNAL_FUNDS_FACT_ADOPTION: muted('收付款登记'),
   CLAIM_SUBMISSION: muted('索赔提交'),
@@ -458,6 +459,14 @@ export const statusVocabulary: Record<string, StatusEntry> = {
 
   // —— 供应商账单逐行匹配 · settlement-accounting（domain.MatchClassification，UC-SA-004；票 document-numbering/11）——
   // 已对上的那一行才能去审核；除它之外的分类都是对不上的样子，各有依据，要先核实，不能直接审核，所以都是琥珀。
+  'actual-measurement': muted('实测'),
+  'declared-measurement': muted('申报'),
+  PRICING_CORRECTION: muted('计价纠错'),
+  COMMERCIAL_CONCESSION: muted('商业让利'),
+  DEBIT: muted('借项'),
+  CREDIT: muted('贷项'),
+  REWEIGH_ADJUSTMENT_NOT_ADOPTED: warn('实测差异自动调整未采用'),
+  REWEIGH_ADJUSTMENT_EXCEEDS_CHARGE: bad('差额贷项越过费用'),
   MATCHED: good('已对上'),
   QUANTITY_VARIANCE: warn('数量不符'),
   PRICE_VARIANCE: warn('价格不符'),

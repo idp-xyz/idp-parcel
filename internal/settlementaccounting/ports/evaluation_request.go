@@ -64,6 +64,16 @@ type EvaluationRequestView interface {
 	FindByID(ctx context.Context, key EvaluationRequestKey) (EvaluationRequestRecord, bool, error)
 }
 
+// EvaluationRequestsByOccurrence 按发生项版本列出还没有下一代的采购评价请求。同一版可以有多份：费用项目不同就是另一问。
+type EvaluationRequestsByOccurrence interface {
+	ListCurrentByOccurrence(
+		ctx context.Context,
+		tenant domain.TenantID,
+		occurrence domain.ChargeOccurrenceID,
+		version domain.OccurrenceVersion,
+	) ([]EvaluationRequestRecord, error)
+}
+
 // EvaluationRequestIdentityFactory 为新请求签发铸造 ID（裁决 2）。
 type EvaluationRequestIdentityFactory interface {
 	MintEvaluationRequestID(ctx context.Context) (domain.EvaluationRequestID, error)

@@ -160,6 +160,9 @@ type OperatorDecision string
 // OperatorDecisionPendingIdentityRecheck 是复核页人工重核一件待识别实物。
 const OperatorDecisionPendingIdentityRecheck OperatorDecision = "PENDING_IDENTITY_RECHECK"
 
+// OperatorDecisionManualMeasurementEntry 是照现场单据登记或作废一条实际测量。词与接入身份的决定种类相同。
+const OperatorDecisionManualMeasurementEntry OperatorDecision = "MANUAL_MEASUREMENT_ENTRY"
+
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与提交操作者的引用（`<发行方>#<sub>`）。身份冲突处置把操作者写进处置
 // 文档（ADR-0210 决定二），重核只用租户。
 type OperatorIdentity struct {

@@ -147,6 +147,15 @@ type FormEstimatedCustomerChargeDeps struct {
 	// FollowUp 在费用落下之后、记结论之前同笔调：登确认事实，已终局的补记确认依据（ADR-0336 决定一、二）。
 	FollowUp EstimatedChargeFollowUp
 	Clock    ports.Clock
+	// 下面这一组一起装才处理代次链上已有的费用，只装一部分构造时即拒。全缺席时每一代只形成自己的预估，不看链上
+	// 别的代：那只给不经过实测变化的单元测试用，生产装配必给。Successors 找这一代之后的各代，Serializer 让同一件
+	// 包裹的各代形成排成一列。
+	PriorCharges     ports.CustomerChargeStore
+	Supersessions    ports.ChargeSupersessionStore
+	ReweighAdoptions ports.ReweighAdjustmentAdoptionView
+	Reweigh          *RecordChargeAdjustmentHandler
+	Successors       ports.SellEvaluationRequestSuccessorView
+	Serializer       ports.ParcelConfirmationSerializer
 }
 
 // FormEstimatedCustomerChargeHandler 是 ADR-0190 决定五的形成编排外层：SELL·客户费用评价已记录之后，按评价回指读回
@@ -160,6 +169,18 @@ func NewFormEstimatedCustomerChargeHandler(deps FormEstimatedCustomerChargeDeps)
 	if deps.Requests == nil || deps.Conclusions == nil || deps.Mappings == nil || deps.Charges == nil || deps.FollowUp == nil ||
 		deps.Clock == nil {
 		return nil, fmt.Errorf("%w: estimated customer charge", ErrNilDependency)
+	}
+	wired := 0
+	for _, present := range []bool{
+		deps.PriorCharges != nil, deps.Supersessions != nil, deps.ReweighAdoptions != nil,
+		deps.Reweigh != nil, deps.Successors != nil, deps.Serializer != nil,
+	} {
+		if present {
+			wired++
+		}
+	}
+	if wired != 0 && wired != 6 {
+		return nil, fmt.Errorf("%w: estimated customer charge: the earlier-charge dependencies are wired in part", ErrNilDependency)
 	}
 	return &FormEstimatedCustomerChargeHandler{deps: deps}, nil
 }
@@ -221,6 +242,10 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: request %s wants %s, evaluation %s carries %s",
 			ErrSellEvaluationCurrencyMismatch, adoption.Request, record.Request.SettlementCurrency(), adoption.Evaluation, adoption.SettlementCurrency)
 	}
+	supersede, settled, result, err := handler.reweighPreviousCharge(ctx, command, record)
+	if err != nil || settled {
+		return result, err
+	}
 	feeItem, mapped, err := handler.singleFeeItem(ctx, command.TenantID, adoption.ChargeCodes)
 	if err != nil {
 		return undecidedEstimatedCharge(FeeItemMappingViewUnavailable, err), nil
@@ -255,6 +280,11 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 				return undecidedEstimatedCharge(ConfirmationFollowUpUndecided, err), nil
 			}
 			return EstimatedCustomerChargeResult{}, err
+		}
+		if supersede.String() != "" {
+			if err := handler.deps.Supersessions.SaveSupersession(ctx, command.TenantID, supersede, charge, handler.deps.Clock.Now()); err != nil {
+				return EstimatedCustomerChargeResult{}, err
+			}
 		}
 		conclusion, err := domain.NewFormedSellEvaluationRequestConclusion(charge)
 		if err != nil {

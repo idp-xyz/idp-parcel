@@ -89,7 +89,27 @@ export interface CustomerChargeRecord {
   attributionDate?: string;
   /** 所在的未作废对账单号；缺席即还没出账。登记争议时按它列出一张单上的费用。 */
   billedOn?: string;
+  /** 后一代预估替代了这一笔时在场。 */
+  supersededBy?: string;
+  adjustments: CustomerChargeAdjustment[];
+  /** 计价重量：评价进位之后、据以查表的那一个。不是实重。 */
+  pricedWeight?: string;
+  pricedWeightUnit?: string;
+  /** 评价用的实重与尺寸出自哪里：actual-measurement 或 declared-measurement。评价没有测量事实时下面几格都缺席。 */
+  weightSource?: string;
+  actualWeight?: string;
+  actualWeightUnit?: string;
+  /** 尺寸三边，由长到短。申报没报尺寸时缺席。 */
+  dimensionSides?: string[];
+  dimensionUnit?: string;
   confirmationBases: ChargeConfirmationBasisRecord[];
+}
+
+export interface CustomerChargeAdjustment {
+  adjustment: string;
+  kind: string;
+  direction: string;
+  settlementAmount: string;
 }
 
 /**

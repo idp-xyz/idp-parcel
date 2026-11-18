@@ -41,6 +41,8 @@ func TestEvaluationStopCausesSitOnTheirStageAndDirection(t *testing.T) {
 		{domain.StopEvaluationSeriesUnresolved, domain.StopAtAdoption, true, true},
 		{domain.StopEvaluationRateNotFound, domain.StopAtAdoption, true, true},
 		{domain.StopEvaluationInputIncomplete, domain.StopAtAdoption, true, true},
+		{domain.StopReweighAdjustmentNotAdopted, domain.StopAtAdoption, false, true},
+		{domain.StopReweighAdjustmentExceedsCharge, domain.StopAtAdoption, false, true},
 		{domain.StopPendingJudgmentCauseUnrecorded, domain.StopAtAdoption, false, true},
 	}
 	if len(cases) != len(domain.AllEvaluationStopCauses()) {
@@ -90,6 +92,7 @@ func TestAParameterRegistrationResumesOnlyTheCausesItCanUnblock(t *testing.T) {
 			domain.StopEvaluationPendingJudgment, domain.StopEvaluationCatalogueUnresolved, domain.StopEvaluationRateNotFound,
 			domain.StopPendingJudgmentCauseUnrecorded,
 		},
+		domain.ParameterReweighAdjustmentAdoption: {domain.StopReweighAdjustmentNotAdopted},
 	}
 	for kind, causes := range want {
 		got := domain.EvaluationStopCausesResumedBy(kind)
@@ -110,7 +113,7 @@ func TestAParameterRegistrationResumesOnlyTheCausesItCanUnblock(t *testing.T) {
 	}
 	for _, cause := range []domain.EvaluationStopCause{
 		domain.StopSettlementPolicyNotAdopted, domain.StopParcelCommercialResolutionAbsent, domain.StopPricingInputUnavailable,
-		domain.StopEvaluationInputIncomplete,
+		domain.StopEvaluationInputIncomplete, domain.StopReweighAdjustmentExceedsCharge,
 	} {
 		for kind := range want {
 			if cause.ResumedBy(kind) {
@@ -137,7 +140,14 @@ func TestAResumeBasisNamesEitherAParameterRegistrationOrAnOperatorReference(t *t
 	if err != nil || operator == parameter {
 		t.Fatalf("运营依据：%v", err)
 	}
-	for _, value := range []string{parameter.String(), operator.String()} {
+	changed, err := domain.NewMeasurementChangeResumeBasis("measure-1")
+	if err != nil || changed == operator {
+		t.Fatalf("实测变化依据：%v", err)
+	}
+	if _, err := domain.NewMeasurementChangeResumeBasis(" measure-1"); err == nil {
+		t.Fatal("带空白的来源身份造出了依据")
+	}
+	for _, value := range []string{parameter.String(), operator.String(), changed.String()} {
 		rebuilt, err := domain.ResumeBasisFromName(value)
 		if err != nil || rebuilt.String() != value {
 			t.Fatalf("重建 %q = %q %v", value, rebuilt, err)

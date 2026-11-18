@@ -59,6 +59,45 @@ export function feeItemLabel(code: string): string {
   return feeItemKindLabels[kind] ?? code;
 }
 
+/** 一笔费用上计价重量与它的来源的几格。读口照评价转写，评价没答的缺席。 */
+export type PricedWeightFields = {
+  pricedWeight?: string;
+  pricedWeightUnit?: string;
+  weightSource?: string;
+  actualWeight?: string;
+  actualWeightUnit?: string;
+  dimensionSides?: string[];
+  dimensionUnit?: string;
+};
+
+/**
+ * 计价重量：评价进位之后、据以查表的那一个。读口没给就答 undefined，不拿实重顶上——取较大者的价卡上，复测只把尺寸量大
+ * 时实重不变而计价重量变了，顶上去的那个数是错的。
+ */
+export function pricedWeightText(row: PricedWeightFields): string | undefined {
+  if (!row.pricedWeight) return undefined;
+  return [row.pricedWeight, row.pricedWeightUnit].filter(Boolean).join(' ');
+}
+
+/**
+ * 计价重量从哪来：评价用的实重与尺寸，以及这两样出自实测还是申报。sourceLabel 把来源码翻成中文。尺寸三边由长到短。
+ * 申报没报尺寸时写「未报尺寸」而不是留空——留空分不清是没报还是读口没给。评价没有测量事实（没有来源码）答 undefined。
+ */
+export function weightBasisText(
+  row: PricedWeightFields,
+  sourceLabel: (code: string) => string,
+): string | undefined {
+  if (!row.weightSource) return undefined;
+  const parts: string[] = [];
+  if (row.actualWeight) parts.push(`实重 ${[row.actualWeight, row.actualWeightUnit].filter(Boolean).join(' ')}`);
+  if (row.dimensionSides && row.dimensionSides.length > 0) {
+    parts.push(`尺寸 ${[row.dimensionSides.join('×'), row.dimensionUnit].filter(Boolean).join(' ')}`);
+  } else {
+    parts.push('未报尺寸');
+  }
+  return `${sourceLabel(row.weightSource)}：${parts.join('，')}`;
+}
+
 /**
  * 从已确认费用里读出「结算账户 → 结算相对方」的对应：对账单只带结算账户号，客户名要经这一跳再查参与方册。这是把册上
  * 已登记的关联读出来，不是从客户属性推断——未被任何已确认费用引用的账户查不到，照实留给调用方显账户号。

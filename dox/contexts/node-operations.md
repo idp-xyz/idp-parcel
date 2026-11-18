@@ -36,6 +36,7 @@
 | 送站交接单 | 节点开立的一张单，记一次送站的交付方、声称的客户账户与成员实物 |
 | 预报有效时窗 | 预报对一次送站算不算数的区间：预计送达时刻前的提前量与后的宽限量。租户取值 |
 | 实物控制 | 节点对实物的占有责任。只因节点收寄或权威运输交接而成立、转移、结束 |
+| 实际测量 | 一次称重量方：毛重与长宽高都必填，各带单位，缺一样不收。落下不改；复测是再登一条完整的，旧的要撤就作废，作废不改原行 |
 | 集运单元实例 | 袋、箱、笼车的一次完整使用周期；可关联可复用载具 |
 | 集运成员关系 | 实物直接位于某个集运单元里的物理包含关系 |
 | 封装成员快照 | 封装时冻结的成员、封签引用与作业依据 |
@@ -170,20 +171,21 @@
 | 做什么 | 路径 |
 |---|---|
 | 收寄（作业端） | `/node-operations/receptions` |
+| 称重量方（作业端登记与作废；手工录入同一决定） | `/node-operations/measurements` `/node-operations/measurement-invalidations` `/node-operations/manual-measurements` `/node-operations/manual-measurement-invalidations` |
 | 重核、身份冲突处置（运营决定） | `/node-operations/identity-rechecks` `/node-operations/identity-dispositions` |
 | 送站交接单（作业端开立、归入、关闭；运营确认） | `/node-operations/delivery-handover-notes` `/node-operations/delivery-handover-assignments` `/node-operations/delivery-handover-closures` `/node-operations/delivery-handover-confirmations` |
 | 客户渠道 | `/v1/node-operations/delivery-pre-advices` `/v1/node-operations/delivery-pre-advice-withdrawals` `/v1/node-operations/delivery-handover-conclusions` |
 | 关务协作承接与执行 | `/node-operations/collaboration-acceptances` `/node-operations/collaboration-executions` |
 | 预报有效时窗登记与收口 | `/node-operations-pre-advice-window-registrations` `/node-operations-pre-advice-window-closures` |
-| 查阅 | `/node-operations-records`（`registry` 取 `reception` `unidentified-item` `identity-review-unit` `consolidation-unit` `consolidation-member` `physical-control`） `/node-operations-delivery-pre-advices` `/node-operations-delivery-handover-notes`（各带按标识取单条） |
+| 查阅 | `/node-operations-records`（`registry` 取 `reception` `unidentified-item` `identity-review-unit` `consolidation-unit` `consolidation-member` `physical-control` `measurement`） `/node-operations-delivery-pre-advices` `/node-operations-delivery-handover-notes`（各带按标识取单条） |
 
-事件消费（`cmd/parcel-dispatch`）：`transport-fulfillment.transport-handover.registered` 推进节点控制；`parcel-shipment.external-identifier-relation.formed`、`parcel-shipment.customer-parcel-number-declaration.retired`、`node-operations.unchecked-pending-identity.recorded`、`node-operations.delivery-scope.established` 触发重核。本上下文发出：`node-operations.node-intake.formed` `node-operations.sealed-snapshot.recorded` `node-operations.collaboration-acceptance.decided` `node-operations.execution-fact.recorded`。
+事件消费（`cmd/parcel-dispatch`）：`transport-fulfillment.transport-handover.registered` 推进节点控制；`parcel-shipment.external-identifier-relation.formed`、`parcel-shipment.customer-parcel-number-declaration.retired`、`node-operations.unchecked-pending-identity.recorded`、`node-operations.delivery-scope.established` 触发重核。本上下文发出：`node-operations.node-intake.formed` `node-operations.actual-measurement.changed` `node-operations.sealed-snapshot.recorded` `node-operations.collaboration-acceptance.decided` `node-operations.execution-fact.recorded`。
 
-离线口（数据库网络内手跑，不监听端口）：`cmd/parcel-node-operations-register`（预报有效时窗的登记与收口）、`cmd/parcel-frontline-import`（按 CSV 模板批量灌收寄与集运六个动作）。
+离线口（数据库网络内手跑，不监听端口）：`cmd/parcel-node-operations-register`（预报有效时窗的登记与收口、当前有效实测形态的采用）、`cmd/parcel-frontline-import`（按 CSV 模板批量灌收寄与集运六个动作）。
 
 ## 旧文档写了、代码里还没有的
 
-- **实际测量与当前有效实测、作业位置与当前位置派生**：搜 `Measure`、`Weigh`、`Location`、`测量`、`作业位置`，没有类型，只有注释提到。
+- **作业位置与当前位置派生仍然没有类型**。当前有效实测已有：仍有效的恰一条就用它，重量与尺寸都出自这一条；复测之后多于一条，按租户采用的形态取，内置形态只有「发生时间最近的一条仍有效」；没采用时不定，发生时间相同也不取。
 - **在场核对、物理状况观察、节点作业限制**：搜 `Presence`、`Condition`、`Restriction` 及中文原词，没有对应类型。
 - **作业任务与作业批次**：搜 `WorkTask`、`Batch`、`作业任务`，没有。协作承接之后直接记执行事实，中间没有任务这一层。
 - **封签记录的状态与观察历史，封签缺失、破损、不一致时的隔离与逐件核对**：代码里只有封签引用 `SealReference`，搜 `SealStatus`、`SealState`、`破损` 没有。

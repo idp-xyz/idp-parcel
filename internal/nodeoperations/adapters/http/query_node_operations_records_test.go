@@ -93,6 +93,13 @@ func (stub unreachableReviewCatalogue) ListConsolidationMembers(
 	return cataloguepage.Result[ports.ConsolidationMemberCatalogueRow]{}, nil
 }
 
+func (stub unreachableReviewCatalogue) ListActualMeasurements(
+	context.Context, domain.TenantID, int, cataloguepage.Query,
+) (cataloguepage.Result[ports.ActualMeasurementCatalogueRow], error) {
+	stub.refuse("actual measurement")
+	return cataloguepage.Result[ports.ActualMeasurementCatalogueRow]{}, nil
+}
+
 // stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键与查询；next 与 total 原样放进每一册的结果。待识别册的答复另问
 // 按实物那一册，那一问收到的查询另记在 gotUnitsQuery，不盖掉 gotQuery。
 type stubReviewCatalogue struct {
@@ -136,6 +143,13 @@ func (stub *stubReviewCatalogue) ListConsolidationMembers(
 ) (cataloguepage.Result[ports.ConsolidationMemberCatalogueRow], error) {
 	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
 	return cataloguepage.Result[ports.ConsolidationMemberCatalogueRow]{Rows: stub.members, Next: stub.next, Total: stub.total}, stub.err
+}
+
+func (stub *stubReviewCatalogue) ListActualMeasurements(
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+) (cataloguepage.Result[ports.ActualMeasurementCatalogueRow], error) {
+	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
+	return cataloguepage.Result[ports.ActualMeasurementCatalogueRow]{Next: stub.next, Total: stub.total}, stub.err
 }
 
 func recordsEndpoint(register *stubReviewCatalogue) http.Handler {
@@ -203,14 +217,13 @@ func TestUnconfiguredIntakeRefusesEveryNodeOperationsRecordsRequest(t *testing.T
 	}
 }
 
-// Covers: 分派参数的封闭集 — 未知册名、空册名都是坏请求（400，理由散文进 detail），读口不被触到。实际
-// 测量与交接证据两区在存储上没有登记册，它们的名字也在封闭集之外：没有表就没有读法，
-// 答一份恒空册子会把「无处可登」演成「登记册为空」。
+// Covers: 分派参数的封闭集 — 未知册名、空册名都是坏请求（400，理由散文进 detail），读口不被触到。
+// 交接证据在存储上没有登记册，它的名字也在封闭集之外：没有表就没有读法，答一份恒空册子会把「无处可登」演成「登记册为空」。
 func TestNodeOperationsRecordsQueryRejectsUnknownRegistries(t *testing.T) {
 	endpoint := nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(
 		grantedIntake(), unreachableReviewCatalogue{t: t},
 	)
-	for _, registry := range []string{"", "?registry=", "?registry=unknown", "?registry=receptions", "?registry=measurement", "?registry=handover-evidence"} {
+	for _, registry := range []string{"", "?registry=", "?registry=unknown", "?registry=receptions", "?registry=handover-evidence"} {
 		t.Run(registry, func(t *testing.T) {
 			assertPageQueryRefused(t, serveGet(endpoint, "/node-operations-records"+registry))
 		})
@@ -277,7 +290,7 @@ func (catalogue *unitsDownCatalogue) ListIdentityReviewUnits(
 // Covers: ADR-0022 — 读库失败没有形成答案：500 + NO_ANSWER_FORMED，不带业务结果格。registry=unidentified-item 的一答由 items
 // 与 units 两册拼成：只 units 那一册读不动、items 完好时也整答 500，不交出缺了 units 的一答。
 func TestNodeOperationsRecordsQueryAnswers500WhenTheRegisterFails(t *testing.T) {
-	for _, registry := range []string{"reception", "unidentified-item", "identity-review-unit", "consolidation-unit", "consolidation-member"} {
+	for _, registry := range []string{"reception", "unidentified-item", "identity-review-unit", "consolidation-unit", "consolidation-member", "measurement"} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{err: errors.New("database is down")}
 			response := serveGet(recordsEndpoint(register), "/node-operations-records?registry="+registry)

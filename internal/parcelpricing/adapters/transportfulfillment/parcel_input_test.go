@@ -23,7 +23,7 @@ func parcelResolverWith(
 	t *testing.T,
 	declared psdomain.DeclaredMeasurementResolution,
 	addresses psdomain.ShipmentAddressElements,
-	measured *adapter.ActualMeasurement,
+	measured *adapter.ActualMeasurementLoad,
 ) *adapter.ParcelResolver {
 	t.Helper()
 	deps := adapter.ParcelResolverDeps{
@@ -31,7 +31,7 @@ func parcelResolverWith(
 		Addresses: addressDouble{elements: addresses},
 	}
 	if measured != nil {
-		deps.Measured = measurementDouble{measured: *measured, found: true}
+		deps.Measured = measurementDouble{load: *measured}
 	}
 	resolver, err := adapter.NewParcelResolver(deps)
 	if err != nil {
@@ -99,7 +99,10 @@ func TestAMeasurementSupersedesTheDeclarationOfAParcel(t *testing.T) {
 	if weight := resolved.Input.ActualWeight(); weight.Value().String() != "2.5" {
 		t.Fatalf("weight = %s, want the measurement", weight.Value())
 	}
-	assertFactVersion(t, resolved.Input, ppdomain.ArtifactDeclaredMeasurement, "measurement")
+	if dimensions, present := resolved.Input.Dimensions(); !present || dimensions.LongestSide().Value().String() != "40" {
+		t.Fatalf("dimensions = %+v %v, want the measured 40×30×25", dimensions, present)
+	}
+	assertFactVersion(t, resolved.Input, ppdomain.ArtifactActualMeasurement, "SYN-MEASURE-1")
 }
 
 func TestAParcelOutsideAnAcceptedRequestIsUnavailable(t *testing.T) {

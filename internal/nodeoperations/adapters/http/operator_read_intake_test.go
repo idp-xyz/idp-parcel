@@ -101,7 +101,7 @@ func TestOperatorReadRefusalsKeepTheirGradesAtTheEndpoint(t *testing.T) {
 func TestOperatorReadIntakeFeedsEveryRegistryTheEnvelopeTenant(t *testing.T) {
 	intake := operatorReadIntake(t, operationsReader{tenant: "SYN-TENANT-01"})
 	for _, registry := range []string{
-		"reception", "unidentified-item", "identity-review-unit", "consolidation-unit", "consolidation-member", "physical-control",
+		"reception", "unidentified-item", "identity-review-unit", "consolidation-unit", "consolidation-member", "physical-control", "measurement",
 	} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{}

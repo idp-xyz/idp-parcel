@@ -262,6 +262,10 @@ const DecisionExternalManifestEntry DecisionKind = "EXTERNAL_MANIFEST_ENTRY"
 // DecisionETAEntry 是操作员把一件包裹到某个里程碑的预计到达录进来：承运商告知的，或运营自己估的。
 const DecisionETAEntry DecisionKind = "ETA_ENTRY"
 
+// DecisionManualMeasurementEntry 是操作员照现场单据把一次称重或量方录进来，或作废一条已登记的测量。
+// 设备上报走作业事实登记，不走这一种决定。
+const DecisionManualMeasurementEntry DecisionKind = "MANUAL_MEASUREMENT_ENTRY"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -302,6 +306,7 @@ var decisionKinds = []DecisionKind{
 	DecisionBookingAnswerEntry,
 	DecisionExternalManifestEntry,
 	DecisionETAEntry,
+	DecisionManualMeasurementEntry,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,

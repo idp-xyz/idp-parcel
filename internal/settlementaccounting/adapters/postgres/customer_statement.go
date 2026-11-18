@@ -88,11 +88,13 @@ type statementLineRow struct {
 	AmountMinor int64  `json:"amount_minor"`
 }
 
+// OriginalStatement 只在调整挂的费用不在本单上时写；单内的那些不带这一格，与这一格出现之前落库的行同形。
 type statementAdjustmentRow struct {
-	Adjustment  string `json:"adjustment"`
-	Charge      string `json:"charge"`
-	Direction   string `json:"direction"`
-	AmountMinor int64  `json:"amount_minor"`
+	Adjustment        string `json:"adjustment"`
+	Charge            string `json:"charge"`
+	Direction         string `json:"direction"`
+	AmountMinor       int64  `json:"amount_minor"`
+	OriginalStatement string `json:"original_statement,omitempty"`
 }
 
 const (
@@ -164,6 +166,24 @@ func (repository *CustomerStatements) FindUnversionedInPeriod(
 		`WHERE tenant_id = $1 AND account_id = $2 AND period_ref = $3 AND draft_version IS NULL
 		 ORDER BY statement_number`,
 		tenant.String(), account.String(), period.String())
+}
+
+// FindOpenStatementCarryingCharge 交同一账户一张未作废、费用行里有这一笔的对账单。
+func (repository *CustomerStatements) FindOpenStatementCarryingCharge(
+	ctx context.Context,
+	tenant domain.TenantID,
+	account domain.SettlementAccountID,
+	charge domain.CustomerChargeID,
+) (ports.StatementRecord, bool, error) {
+	records, err := repository.findStatements(ctx, tenant,
+		`WHERE tenant_id = $1 AND account_id = $2 AND voided_at IS NULL
+		   AND lines @> jsonb_build_array(jsonb_build_object('charge', $3::text))
+		 ORDER BY published_at, statement_number`,
+		tenant.String(), account.String(), charge.String())
+	if err != nil || len(records) == 0 {
+		return ports.StatementRecord{}, false, err
+	}
+	return records[0], true, nil
 }
 
 // StatementNumberUsed 答一个单号是否已在本租户的对账单册上（作废单的号也算已用）。读执行器的理由同 documentNumberUsed。
@@ -377,10 +397,11 @@ func marshalStatementLines(statement domain.PublishedStatement) ([]byte, []byte,
 			direction = directionCreditRow
 		}
 		adjustmentRows = append(adjustmentRows, statementAdjustmentRow{
-			Adjustment:  adjustment.Adjustment.String(),
-			Charge:      adjustment.Charge.String(),
-			Direction:   direction,
-			AmountMinor: adjustment.AmountMinor,
+			Adjustment:        adjustment.Adjustment.String(),
+			Charge:            adjustment.Charge.String(),
+			Direction:         direction,
+			AmountMinor:       adjustment.AmountMinor,
+			OriginalStatement: adjustment.OriginalStatement.String(),
 		})
 	}
 	linesJSON, err := json.Marshal(lineRows)
@@ -453,12 +474,18 @@ func rebuildStatement(
 		if err != nil {
 			return domain.PublishedStatement{}, err
 		}
-		adjustments = append(adjustments, domain.StatementAdjustmentLine{
+		line := domain.StatementAdjustmentLine{
 			Adjustment:  adjustment,
 			Charge:      charge,
 			Direction:   direction,
 			AmountMinor: row.AmountMinor,
-		})
+		}
+		if row.OriginalStatement != "" {
+			if line.OriginalStatement, err = domain.NewStatementNumber(row.OriginalStatement); err != nil {
+				return domain.PublishedStatement{}, err
+			}
+		}
+		adjustments = append(adjustments, line)
 	}
 
 	spec := domain.RehydratePublishedStatementSpec{

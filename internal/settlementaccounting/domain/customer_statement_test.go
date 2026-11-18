@@ -325,6 +325,120 @@ func TestLateChargesAndAdjustmentsGoToSubsequentPeriods(t *testing.T) {
 	statement := publishedStatement(t)
 	subsequent := settlementValue(t, domain.NewBillingPeriodReference, "period-2026-09")
 
+	t.Run("an adjustment on a prior statement enters the next draft", func(t *testing.T) {
+		next, err := domain.CutStatementDraft(domain.StatementDraftSpec{
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
+			Period:              subsequent,
+			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
+			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
+			CutOffAt:            statementCutOffAt.Add(31 * 24 * time.Hour),
+			LastAttributionDate: domain.AttributionDate{Year: 2026, Month: time.September, Day: 30},
+			Charges:             []domain.CustomerCharge{confirmedCharge(t, "charge-9", 4000)},
+			Adjustments:         []domain.ChargeAdjustment{creditAdjustment(t, "adjustment-9", "charge-1", 500)},
+			PriorStatements:     []domain.PublishedStatement{statement},
+		})
+		if err != nil {
+			t.Fatalf("cut: %v", err)
+		}
+		if next.NetTotalMinor() != 3500 {
+			t.Fatalf("net = %d, want 3500", next.NetTotalMinor())
+		}
+
+		// 发布出来的那一行指名原账单；这份快照照它存下的各格读得回来。
+		number := settlementValue(t, domain.NewStatementNumber, "statement-2026-09-001")
+		published, err := domain.PublishStatement(next, number, 3500, statementPublishedAt.Add(31*24*time.Hour))
+		if err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		lines := published.AdjustmentLines()
+		if len(lines) != 1 || lines[0].OriginalStatement != statement.Number() {
+			t.Fatalf("带过来的调整行 = %+v，want 指名原账单 %s", lines, statement.Number())
+		}
+		rehydrate := func(mutate func(*domain.StatementAdjustmentLine)) error {
+			line := lines[0]
+			mutate(&line)
+			_, err := domain.RehydratePublishedStatement(domain.RehydratePublishedStatementSpec{
+				Number: number, Account: published.Account(), Period: published.Period(), Currency: published.Currency(),
+				Lines: published.Lines(), Adjustments: []domain.StatementAdjustmentLine{line},
+				TotalMinor: published.TotalMinor(), PublishedAt: published.PublishedAt(),
+			})
+			return err
+		}
+		if err := rehydrate(func(*domain.StatementAdjustmentLine) {}); err != nil {
+			t.Fatalf("带着原账单的调整行读不回来：%v", err)
+		}
+		if err := rehydrate(func(line *domain.StatementAdjustmentLine) {
+			line.OriginalStatement = domain.StatementNumber{}
+		}); !errors.Is(err, domain.ErrInvalidRehydratedStatement) {
+			t.Fatalf("挂在单外费用上又不指名原账单 err = %v——别人的数读进了这个账户", err)
+		}
+		if err := rehydrate(func(line *domain.StatementAdjustmentLine) {
+			line.OriginalStatement = number
+		}); !errors.Is(err, domain.ErrInvalidRehydratedStatement) {
+			t.Fatalf("原账单指回本单 err = %v", err)
+		}
+		if err := rehydrate(func(line *domain.StatementAdjustmentLine) {
+			line.Charge = settlementValue(t, domain.NewCustomerChargeID, "charge-9")
+		}); !errors.Is(err, domain.ErrInvalidRehydratedStatement) {
+			t.Fatalf("挂在单内费用上却带着原账单 err = %v", err)
+		}
+	})
+
+	t.Run("a period with no charge still publishes the carried adjustment as a credit", func(t *testing.T) {
+		spec := domain.StatementDraftSpec{
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
+			Period:              subsequent,
+			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
+			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
+			CutOffAt:            statementCutOffAt.Add(31 * 24 * time.Hour),
+			LastAttributionDate: domain.AttributionDate{Year: 2026, Month: time.September, Day: 30},
+			Adjustments:         []domain.ChargeAdjustment{creditAdjustment(t, "adjustment-9", "charge-1", 500)},
+			PriorStatements:     []domain.PublishedStatement{statement},
+		}
+		draft, err := domain.CutStatementDraft(spec)
+		if err != nil || draft.NetTotalMinor() != -500 {
+			t.Fatalf("只有调整的草稿：net = %d err = %v，want −500", draft.NetTotalMinor(), err)
+		}
+		number := settlementValue(t, domain.NewStatementNumber, "statement-2026-09-002")
+		published, err := domain.PublishStatement(draft, number, -500, statementPublishedAt.Add(31*24*time.Hour))
+		if err != nil || len(published.Lines()) != 0 || len(published.AdjustmentLines()) != 1 {
+			t.Fatalf("只有调整的对账单：%+v err = %v", published, err)
+		}
+		if _, err := domain.RehydratePublishedStatement(domain.RehydratePublishedStatementSpec{
+			Number: number, Account: published.Account(), Period: published.Period(), Currency: published.Currency(),
+			Adjustments: published.AdjustmentLines(), TotalMinor: -500, PublishedAt: published.PublishedAt(),
+		}); err != nil {
+			t.Fatalf("只有调整行的对账单读不回来：%v", err)
+		}
+		if _, err := domain.RehydratePublishedStatement(domain.RehydratePublishedStatementSpec{
+			Number: number, Account: published.Account(), Period: published.Period(), Currency: published.Currency(),
+			TotalMinor: 0, PublishedAt: published.PublishedAt(),
+		}); !errors.Is(err, domain.ErrInvalidRehydratedStatement) {
+			t.Fatalf("费用行与调整行都没有 err = %v", err)
+		}
+		spec.Adjustments = nil
+		if _, err := domain.CutStatementDraft(spec); !errors.Is(err, domain.ErrInvalidStatementDraft) {
+			t.Fatalf("费用与调整都没有却成了草稿：%v", err)
+		}
+	})
+
+	t.Run("an adjustment on a charge nobody carries is refused", func(t *testing.T) {
+		_, err := domain.CutStatementDraft(domain.StatementDraftSpec{
+			Account:             settlementValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
+			Period:              subsequent,
+			Version:             settlementValue(t, domain.NewStatementDraftVersion, "draft/v1"),
+			Currency:            settlementValue(t, domain.NewCurrencyCode, "USD"),
+			CutOffAt:            statementCutOffAt.Add(31 * 24 * time.Hour),
+			LastAttributionDate: domain.AttributionDate{Year: 2026, Month: time.September, Day: 30},
+			Charges:             []domain.CustomerCharge{confirmedCharge(t, "charge-9", 4000)},
+			Adjustments:         []domain.ChargeAdjustment{creditAdjustment(t, "adjustment-9", "charge-stranger", 500)},
+			PriorStatements:     []domain.PublishedStatement{statement},
+		})
+		if !errors.Is(err, domain.ErrInvalidStatementDraft) {
+			t.Fatalf("err = %v——既不在本期、也不在原账单上的费用，它的调整进了草稿", err)
+		}
+	})
+
 	t.Run("an existing adjustment joins the next period", func(t *testing.T) {
 		inclusion, err := domain.IncludeAdjustmentInSubsequentPeriod(
 			statement,

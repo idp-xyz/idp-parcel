@@ -75,6 +75,8 @@ type StatementDraftSpec struct {
 	LastAttributionDate AttributionDate
 	Charges             []CustomerCharge
 	Adjustments         []ChargeAdjustment
+	// PriorStatements 是同一账户已经发布、未作废的对账单。调整可以挂在本期费用上，也可以挂在这些单的费用行上。
+	PriorStatements []PublishedStatement
 }
 
 // StatementDraft 是当前可重算的候选费用集合（UC-SA-003「草稿」）。草稿不是已发布
@@ -89,11 +91,16 @@ type StatementDraft struct {
 	lastAttributionDate AttributionDate
 	charges             []CustomerCharge
 	adjustments         []ChargeAdjustment
+	// originalStatements 按费用记下：调整挂的费用不在本期、而在更早一张对账单上时，那张原账单的单号。
+	originalStatements map[CustomerChargeID]StatementNumber
 }
 
 // CutStatementDraft 形成截单草稿。只有已确认、已形成归属日且归属日不晚于本期最后一个归属日的费用
-// 可入（AT-SA-059/060、AT-SA-212）；调整必须挂在草稿内的费用上、币种一致——别的费用的调整进来就是
-// 把别人的数记到这个账户头上。
+// 可入（AT-SA-059/060、AT-SA-212）。调整挂在本期费用上，或者挂在同一账户一张已发布、未作废对账单的费用行上；
+// 币种必须与这张单一致。别的费用的调整进来就是把别人的数记到这个账户头上。
+//
+// 本期可以一笔费用都没有、只有带过来的调整：费用出账之后才形成的调整不必等到客户下一次有新费用才出单。费用与调整
+// 都没有的不成草稿。
 func CutStatementDraft(spec StatementDraftSpec) (StatementDraft, error) {
 	if !spec.Account.valid() ||
 		!spec.Period.valid() ||
@@ -101,7 +108,7 @@ func CutStatementDraft(spec StatementDraftSpec) (StatementDraft, error) {
 		!spec.Currency.valid() ||
 		spec.CutOffAt.IsZero() ||
 		!spec.LastAttributionDate.Valid() ||
-		len(spec.Charges) == 0 {
+		(len(spec.Charges) == 0 && len(spec.Adjustments) == 0) {
 		return StatementDraft{}, ErrInvalidStatementDraft
 	}
 	chargeIDs := make(map[CustomerChargeID]struct{}, len(spec.Charges))
@@ -132,12 +139,17 @@ func CutStatementDraft(spec StatementDraftSpec) (StatementDraft, error) {
 		}
 		chargeIDs[charge.ID()] = struct{}{}
 	}
+	originalStatements := map[CustomerChargeID]StatementNumber{}
 	for _, adjustment := range spec.Adjustments {
 		if !adjustment.ID().valid() {
 			return StatementDraft{}, ErrInvalidStatementDraft
 		}
 		if _, covered := chargeIDs[adjustment.Charge()]; !covered {
-			return StatementDraft{}, ErrInvalidStatementDraft
+			original, carried := priorStatementCarrying(spec.Account, spec.PriorStatements, adjustment.Charge())
+			if !carried {
+				return StatementDraft{}, ErrInvalidStatementDraft
+			}
+			originalStatements[adjustment.Charge()] = original
 		}
 		currency, _ := adjustment.SettlementAmount()
 		if currency != spec.Currency {
@@ -153,7 +165,24 @@ func CutStatementDraft(spec StatementDraftSpec) (StatementDraft, error) {
 		lastAttributionDate: spec.LastAttributionDate,
 		charges:             append([]CustomerCharge(nil), spec.Charges...),
 		adjustments:         append([]ChargeAdjustment(nil), spec.Adjustments...),
+		originalStatements:  originalStatements,
 	}, nil
+}
+
+// priorStatementCarrying 交回同一账户上载有这笔费用的那张未作废的已发布对账单。
+func priorStatementCarrying(account SettlementAccountID, statements []PublishedStatement, charge CustomerChargeID) (StatementNumber, bool) {
+	for _, statement := range statements {
+		if statement.Account() != account {
+			continue
+		}
+		if _, _, voided := statement.Voided(); voided {
+			continue
+		}
+		if _, found := statement.LineFor(charge); found {
+			return statement.Number(), true
+		}
+	}
+	return StatementNumber{}, false
 }
 
 // LastAttributionDate 是这份草稿的本期最后一个归属日。
@@ -237,6 +266,9 @@ type StatementAdjustmentLine struct {
 	Charge      CustomerChargeID
 	Direction   AdjustmentDirection
 	AmountMinor int64
+	// OriginalStatement 只在这笔调整挂的费用不在本单上时有：那笔费用所在的原账单。费用出账之后才形成的调整由后面的
+	// 对账单带上金额，这一格让快照自己说得出这一行从哪张单来；读回时凭它分得开「带过来的」与「挂错了费用的」。
+	OriginalStatement StatementNumber
 }
 
 // PublishedStatement 是固定单号、费用范围和金额的不可覆盖快照（UC-SA-003「已发布
@@ -297,10 +329,11 @@ func PublishStatement(
 	for _, adjustment := range draft.adjustments {
 		_, amount := adjustment.SettlementAmount()
 		statement.adjustments = append(statement.adjustments, StatementAdjustmentLine{
-			Adjustment:  adjustment.ID(),
-			Charge:      adjustment.Charge(),
-			Direction:   adjustment.Direction(),
-			AmountMinor: amount,
+			Adjustment:        adjustment.ID(),
+			Charge:            adjustment.Charge(),
+			Direction:         adjustment.Direction(),
+			AmountMinor:       amount,
+			OriginalStatement: draft.originalStatements[adjustment.Charge()],
 		})
 	}
 	return statement, nil

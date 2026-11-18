@@ -109,7 +109,8 @@ func (adapter *FormOnBuyEvaluationRecordedAdapter) HandleRecordedBuyEvaluation(
 		saapplication.RequestedSupplierExpectedCostEvaluationNotAdopted,
 		saapplication.RequestedSupplierExpectedCostNoBuyRequest,
 		saapplication.RequestedSupplierExpectedCostOccurrenceInvalidated,
-		saapplication.RequestedSupplierExpectedCostZeroTotal:
+		saapplication.RequestedSupplierExpectedCostZeroTotal,
+		saapplication.RequestedSupplierExpectedCostUnchanged:
 		return nil
 	case saapplication.RequestedSupplierExpectedCostUndecided:
 		undecided := fmt.Errorf("%w: evaluation %s: %s", ErrSupplierCostFormationUndecided, reference, result.UndecidedReason())

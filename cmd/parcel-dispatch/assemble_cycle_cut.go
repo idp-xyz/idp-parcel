@@ -161,7 +161,7 @@ func cutOffStatementsOnCycle(
 	handler, err := saapplication.NewCutOffStatementsOnCycleHandler(saapplication.CutOffStatementsOnCycleDeps{
 		Ledger: cycles, Candidates: cycles, Arrangements: arrangements, Accounts: accounts, Moments: moments,
 		Charges: charges, Attributions: attributions, AttributionDates: charges,
-		Cutter: cycleStatementCutter{moments: moments, cutoff: cutoff}, Clock: clock,
+		Cutter: cycleStatementCutter{moments: moments, cutoff: cutoff}, Clock: clock, Adjustments: adjustments,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: cut off statements on cycle: %w", err)

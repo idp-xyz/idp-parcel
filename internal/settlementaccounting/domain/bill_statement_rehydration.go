@@ -141,8 +141,8 @@ type RehydratePublishedStatementSpec struct {
 
 // RehydratePublishedStatement 复验发布快照的三类不变量：
 //
-//   - 行完备：至少一行、费用不重复、金额恒正；调整行必须挂在单内费用上（别人的数
-//     不进这个账户）；
+//   - 行完备：费用行与调整行至少有一样、费用不重复、金额恒正；调整行挂在单内费用上，或指名它那张原账单
+//     （费用出账之后才形成的调整由后面的单带上，那张单可以一笔费用都没有）——两样都不是的，是别人的数进了这个账户；
 //   - 勾稽（AT-SA-065 的读回半边）：总额必须等于行合计加借减贷——存进去时勾稽过的
 //     数字读出来不平，说明这行被改写过；
 //   - 作废留痕（AT-SA-069）：依据与时刻同在或同缺，作废不早于发布；行与总额仍在
@@ -153,7 +153,7 @@ func RehydratePublishedStatement(spec RehydratePublishedStatementSpec) (Publishe
 		!spec.Period.valid() ||
 		!spec.Currency.valid() ||
 		spec.PublishedAt.IsZero() ||
-		len(spec.Lines) == 0 {
+		(len(spec.Lines) == 0 && len(spec.Adjustments) == 0) {
 		return PublishedStatement{}, ErrInvalidRehydratedStatement
 	}
 
@@ -175,7 +175,9 @@ func RehydratePublishedStatement(spec RehydratePublishedStatementSpec) (Publishe
 			adjustment.AmountMinor <= 0 {
 			return PublishedStatement{}, ErrInvalidRehydratedStatement
 		}
-		if _, covered := charges[adjustment.Charge]; !covered {
+		// 挂在单内费用上的不带原账单；挂在单外费用上的必须指名它那张原账单，且不是本单自己。
+		if _, covered := charges[adjustment.Charge]; covered == adjustment.OriginalStatement.valid() ||
+			adjustment.OriginalStatement == spec.Number {
 			return PublishedStatement{}, ErrInvalidRehydratedStatement
 		}
 		if adjustment.Direction == AdjustmentDebit {

@@ -75,27 +75,28 @@ const (
 
 // registrar 是本口的全部依赖：采用编排、结算账户登记，加环境事务的来源。
 type registrar struct {
-	funds        *application.MapExternalFundsHandler
-	accounts     *application.RegisterSettlementAccountHandler
-	catalogues   *application.RegisterSettlementCatalogueHandler
-	grammars     *application.RegisterAmountGrammarHandler
-	forms        *application.RegisterAllocationFormHandler
-	ceilings     *application.RegisterAuditEscalationCeilingHandler
-	triggers     *application.RegisterBuyEvaluationTriggerHandler
-	connectors   *application.RegisterAccountingConnectorHandler
-	fees         *application.RegisterPeriodicFeeHandler
-	attributions *application.RegisterChargeAttributionHandler
-	arrangements *application.RegisterStatementArrangementHandler
-	sellTriggers *application.RegisterSellEvaluationTriggerHandler
-	moments      *application.RegisterSettlementMomentHandler
-	conditions   *application.RegisterChargeConfirmationConditionHandler
-	cycles       *application.RegisterStatementCycleHandler
-	adoptions    *application.RegisterPreAcceptanceEstimateAdoptionHandler
-	sellMoments  *application.RegisterSellBillingMomentAdoptionHandler
-	feeMappings  *application.RegisterFeeItemMappingHandler
-	resumes      *application.OperatorResumeEvaluationHandler
-	backfills    *application.BackfillExpectedCostSupplierHandler
-	transactor   bentoapp.Transactor
+	funds            *application.MapExternalFundsHandler
+	accounts         *application.RegisterSettlementAccountHandler
+	catalogues       *application.RegisterSettlementCatalogueHandler
+	grammars         *application.RegisterAmountGrammarHandler
+	forms            *application.RegisterAllocationFormHandler
+	ceilings         *application.RegisterAuditEscalationCeilingHandler
+	triggers         *application.RegisterBuyEvaluationTriggerHandler
+	connectors       *application.RegisterAccountingConnectorHandler
+	fees             *application.RegisterPeriodicFeeHandler
+	attributions     *application.RegisterChargeAttributionHandler
+	arrangements     *application.RegisterStatementArrangementHandler
+	sellTriggers     *application.RegisterSellEvaluationTriggerHandler
+	moments          *application.RegisterSettlementMomentHandler
+	conditions       *application.RegisterChargeConfirmationConditionHandler
+	cycles           *application.RegisterStatementCycleHandler
+	adoptions        *application.RegisterPreAcceptanceEstimateAdoptionHandler
+	sellMoments      *application.RegisterSellBillingMomentAdoptionHandler
+	feeMappings      *application.RegisterFeeItemMappingHandler
+	reweighAdoptions *application.RegisterReweighAdjustmentAdoptionHandler
+	resumes          *application.OperatorResumeEvaluationHandler
+	backfills        *application.BackfillExpectedCostSupplierHandler
+	transactor       bentoapp.Transactor
 }
 
 // systemClock 给版本行的采用时刻与信封的记录时刻：那两个时刻不是登记输入，是「本口此刻形成」——与载荷里的
@@ -384,6 +385,14 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造费用项目映射登记：%w", err)
 	}
+	reweighAdoptionStore, err := sapostgres.NewReweighAdjustmentAdoptions(db)
+	if err != nil {
+		return none, fmt.Errorf("构造实测差异自动调整采用册：%w", err)
+	}
+	reweighAdoptionHandler, err := application.NewRegisterReweighAdjustmentAdoptionHandler(reweighAdoptionStore, parameterHandoff, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造实测差异自动调整采用登记：%w", err)
+	}
 	resumes, err := buildEvaluationResume(db, outboxStore)
 	if err != nil {
 		return none, err
@@ -393,27 +402,28 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		return none, err
 	}
 	return registrar{
-		resumes:      resumes,
-		backfills:    backfills,
-		funds:        funds,
-		accounts:     accountHandler,
-		catalogues:   catalogueHandler,
-		grammars:     grammarHandler,
-		forms:        formHandler,
-		ceilings:     ceilingHandler,
-		triggers:     triggerHandler,
-		connectors:   connectorHandler,
-		fees:         feeHandler,
-		attributions: attributionHandler,
-		arrangements: arrangementHandler,
-		sellTriggers: sellTriggerHandler,
-		moments:      momentHandler,
-		conditions:   conditionHandler,
-		cycles:       cycleHandler,
-		adoptions:    adoptionHandler,
-		sellMoments:  sellMomentHandler,
-		feeMappings:  feeItemMappingHandler,
-		transactor:   db.Transactor(),
+		resumes:          resumes,
+		backfills:        backfills,
+		funds:            funds,
+		accounts:         accountHandler,
+		catalogues:       catalogueHandler,
+		grammars:         grammarHandler,
+		forms:            formHandler,
+		ceilings:         ceilingHandler,
+		triggers:         triggerHandler,
+		connectors:       connectorHandler,
+		fees:             feeHandler,
+		attributions:     attributionHandler,
+		arrangements:     arrangementHandler,
+		sellTriggers:     sellTriggerHandler,
+		moments:          momentHandler,
+		conditions:       conditionHandler,
+		cycles:           cycleHandler,
+		adoptions:        adoptionHandler,
+		sellMoments:      sellMomentHandler,
+		feeMappings:      feeItemMappingHandler,
+		reweighAdoptions: reweighAdoptionHandler,
+		transactor:       db.Transactor(),
 	}, nil
 }
 

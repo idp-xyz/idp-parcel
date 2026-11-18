@@ -226,6 +226,27 @@ func TestTransportChargeOccurrenceRegistrationGrantPassesTheDecisionKindCheck(t 
 	}
 }
 
+func TestManualMeasurementEntryGrantPassesTheDecisionKindCheck(t *testing.T) {
+	register := newOperatorRegister(t)
+	subject := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-MEASURE")
+	expectOutcome(t, "bind", register.bind(t, bindingOf(t, subject, "SYN-TENANT-01", "SYN-BIND-BASIS")), accessidentity.OperatorRegistrationRecorded)
+	interval, err := accessidentity.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := accessidentity.NewOperationDecisionGrant("SYN-TENANT-01", "SYN-DECISION-MEASURE", subject,
+		accessidentity.DecisionManualMeasurementEntry, interval, "SYN-GRANT-BASIS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectOutcome(t, "manual measurement grant", register.grant(t, grant), accessidentity.OperatorRegistrationRecorded)
+	at := time.Date(2026, 11, 17, 0, 0, 0, 0, time.UTC)
+	standing := register.standing(t, subject)
+	if !standing.HoldsDecisionAt(accessidentity.DecisionManualMeasurementEntry, at) {
+		t.Fatalf("手工测量授予没有留下：grants = %+v", standing.Grants())
+	}
+}
+
 // Covers: 票 demo-chain-gaps/20——容量预占与容量释放两种决定过得了库上的决定种类 CHECK（迁移 access_identity/0012
 // 重建的全集），各自往返；只持预占的不因此持释放。
 func TestCapacityReservationAndReleaseGrantsPassTheDecisionKindCheck(t *testing.T) {

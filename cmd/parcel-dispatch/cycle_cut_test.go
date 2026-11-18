@@ -19,6 +19,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/registrationjson"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // 本文件钉到点截单在生产装配上（ADR-0339 决定三）：演示租户登了确认与截单两个时点、对账安排（上海时区）、按确认日归属的形态与
@@ -127,6 +128,221 @@ func TestADispatchCycleCutStopsOnANumberingCollisionAndReleasesTheSequence(t *te
 	}
 	if n := countRows(t, db, `SELECT count(*) FROM settlement_accounting.customer_statement WHERE statement_number = 'OLDSTMT01' AND account_id = 'SYN-SA-SHIPPER-01-RECEIVABLE'`); n != 1 {
 		t.Fatalf("腾出第一个号之后没截出用它的那一张：%d", n)
+	}
+}
+
+// Covers: 费用出账之后才形成的调整由下一张到点截出的对账单带上——真库装配。第一期收一笔费用出一张单；之后在这笔已出账
+// 的费用上先后形成一借一贷两笔调整，另有一笔费用落进下一个截止日。下一拍：第二张单收那笔新费用，总额是它加借减贷，两行
+// 调整各指名第一张单；每笔调整各记一笔后续纳入，关联第一张单、归入第二张单的账期；第一张单一个字不改。再一拍不多出单、
+// 不再纳一遍。第二张单经对账单库读得回来。证据只记 S。
+func TestTheNextDueCycleCarriesAdjustmentsFormedAfterTheirChargeWasBilled(t *testing.T) {
+	beat, db, firstClosing := dueCycleCut(t)
+	if _, err := beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("第一期那一拍：%v", err)
+	}
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var first string
+	if err := querier.QueryRow(t.Context(),
+		`SELECT statement_number FROM settlement_accounting.customer_statement WHERE period_ref = $1`, "CYCLE/"+firstClosing,
+	).Scan(&first); err != nil {
+		t.Fatalf("第一期没出单：%v", err)
+	}
+
+	closed, err := time.Parse("2006-01-02", firstClosing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextClosing := closed.AddDate(0, 0, 1).Format("2006-01-02")
+	adjustments, err := sapostgres.NewChargeAdjustments(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := saValue(t, sadomain.NewTenantID, demoTenant)
+	formedAt := time.Now().UTC().Truncate(time.Microsecond)
+	debit := correctionOnTheBilledCharge(t, "SYN-ADJ-AFTER-BILLING-DEBIT", sadomain.AdjustmentDebit, 1800, formedAt)
+	credit := correctionOnTheBilledCharge(t, "SYN-ADJ-AFTER-BILLING-CREDIT", sadomain.AdjustmentCredit, 300, formedAt.Add(time.Second))
+	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
+		executor, err := db.RequireExecutor(txCtx)
+		if err != nil {
+			return err
+		}
+		// 第二笔费用照第一笔抄一行，只换标识与归属日：它落进下一个截止日，还没出账。
+		if _, err := executor.Exec(txCtx, `INSERT INTO settlement_accounting.customer_charge
+			SELECT (jsonb_populate_record(NULL::settlement_accounting.customer_charge,
+			        to_jsonb(c) || jsonb_build_object('charge_id', 'SYN-CHARGE-NEXT-CYCLE', 'attribution_date', $1::text))).*
+			  FROM settlement_accounting.customer_charge AS c
+			 WHERE c.charge_id = 'SELLCC-SELLREQ-SYN-CONFIRM'`, nextClosing); err != nil {
+			return err
+		}
+		// 第一拍已把下一个截止日记成无费用：撤掉它起的截止记录，好让这笔新费用落进那一期。
+		if _, err := executor.Exec(txCtx,
+			`DELETE FROM settlement_accounting.statement_cycle_cut WHERE closing_date >= $1::date`, nextClosing); err != nil {
+			return err
+		}
+		for _, record := range []saports.ChargeAdjustmentRecord{debit, credit} {
+			if _, err := adjustments.Save(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if _, err := beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("第二期那一拍：%v", err)
+	}
+	var second, total, lines string
+	if err := querier.QueryRow(t.Context(),
+		`SELECT statement_number, total_minor::text,
+		        (SELECT string_agg(line->>'adjustment' || '@' || COALESCE(line->>'original_statement', ''), ',' ORDER BY line->>'adjustment')
+		           FROM jsonb_array_elements(adjustment_lines) AS line)
+		   FROM settlement_accounting.customer_statement WHERE period_ref = $1`, "CYCLE/"+nextClosing,
+	).Scan(&second, &total, &lines); err != nil {
+		t.Fatalf("第二期没出单：%v", err)
+	}
+	wantLines := "SYN-ADJ-AFTER-BILLING-CREDIT@" + first + ",SYN-ADJ-AFTER-BILLING-DEBIT@" + first
+	if total != "12000" || lines != wantLines {
+		t.Fatalf("第二张单 %s 总额 %s、调整行 %s；want 12000（10500 + 1800 − 300）、%s", second, total, lines, wantLines)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM settlement_accounting.subsequent_inclusion
+		 WHERE kind = 'ADJUSTMENT' AND statement_number = $1 AND original_period = $2 AND subsequent_period = $3
+		   AND charge_id = 'SELLCC-SELLREQ-SYN-CONFIRM'
+		   AND adjustment_id IN ('SYN-ADJ-AFTER-BILLING-DEBIT', 'SYN-ADJ-AFTER-BILLING-CREDIT')`,
+		first, "CYCLE/"+firstClosing, "CYCLE/"+nextClosing); n != 2 {
+		t.Fatalf("后续纳入 = %d 笔，want 两笔调整各一笔、都关联第一张单", n)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM settlement_accounting.customer_statement
+		 WHERE statement_number = $1 AND total_minor = 10500 AND jsonb_array_length(adjustment_lines) = 0 AND voided_at IS NULL`, first); n != 1 {
+		t.Fatal("第一张单被改了")
+	}
+
+	// 带着别的对账单上调整的这张单要读得回来：作废、争议、下一期找原账单都先读它。
+	statements, err := sapostgres.NewCustomerStatements(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readBack, found, err := statements.FindByKey(t.Context(), saports.StatementKey{
+		TenantID: tenant, Number: saValue(t, sadomain.NewStatementNumber, second),
+	})
+	if err != nil || !found || readBack.Statement.TotalMinor() != 12000 || len(readBack.Statement.AdjustmentLines()) != 2 {
+		t.Fatalf("第二张单读不回来：found=%v err=%v", found, err)
+	}
+
+	if _, err := beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("再一拍：%v", err)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM settlement_accounting.customer_statement`); n != 2 {
+		t.Fatalf("再一拍之后有 %d 张单，want 仍是 2", n)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM settlement_accounting.subsequent_inclusion`); n != 2 {
+		t.Fatalf("再一拍之后有 %d 笔后续纳入，want 仍是 2", n)
+	}
+}
+
+// Covers: 下一个截止日没有新费用，这一户却有出账之后才形成的调整：照样截出一张只有调整行的对账单，净额为负就是贷记，
+// 调整行指名第一张单，记一笔后续纳入。再一拍不多出单。真库装配，证据只记 S。
+func TestADueCycleWithoutChargesStillPublishesTheAdjustmentsAsACredit(t *testing.T) {
+	beat, db, firstClosing := dueCycleCut(t)
+	if _, err := beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("第一期那一拍：%v", err)
+	}
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var first string
+	if err := querier.QueryRow(t.Context(),
+		`SELECT statement_number FROM settlement_accounting.customer_statement WHERE period_ref = $1`, "CYCLE/"+firstClosing,
+	).Scan(&first); err != nil {
+		t.Fatalf("第一期没出单：%v", err)
+	}
+	closed, err := time.Parse("2006-01-02", firstClosing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextClosing := closed.AddDate(0, 0, 1).Format("2006-01-02")
+	adjustments, err := sapostgres.NewChargeAdjustments(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	credit := correctionOnTheBilledCharge(t, "SYN-ADJ-CREDIT-ONLY", sadomain.AdjustmentCredit, 300, time.Now().UTC().Truncate(time.Microsecond))
+	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
+		executor, err := db.RequireExecutor(txCtx)
+		if err != nil {
+			return err
+		}
+		if _, err := executor.Exec(txCtx,
+			`DELETE FROM settlement_accounting.statement_cycle_cut WHERE closing_date >= $1::date`, nextClosing); err != nil {
+			return err
+		}
+		_, err = adjustments.Save(txCtx, credit)
+		return err
+	})
+
+	if _, err := beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("只有调整的那一拍：%v", err)
+	}
+	var second, total, lines string
+	var chargeLines int
+	if err := querier.QueryRow(t.Context(),
+		`SELECT statement_number, total_minor::text, jsonb_array_length(lines),
+		        (SELECT string_agg(line->>'adjustment' || '@' || COALESCE(line->>'original_statement', ''), ',')
+		           FROM jsonb_array_elements(adjustment_lines) AS line)
+		   FROM settlement_accounting.customer_statement WHERE period_ref = $1`, "CYCLE/"+nextClosing,
+	).Scan(&second, &total, &chargeLines, &lines); err != nil {
+		t.Fatalf("只有调整的那一期没出单：%v", err)
+	}
+	if total != "-300" || chargeLines != 0 || lines != "SYN-ADJ-CREDIT-ONLY@"+first {
+		t.Fatalf("对账单 %s 总额 %s、费用行 %d、调整行 %s；want −300、0、指名第一张单", second, total, chargeLines, lines)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM settlement_accounting.subsequent_inclusion
+		 WHERE inclusion_id = $1 AND statement_number = $2 AND subsequent_period = $3 AND withdrawn_at IS NULL`,
+		"ADJINC-"+second+"-SYN-ADJ-CREDIT-ONLY", first, "CYCLE/"+nextClosing); n != 1 {
+		t.Fatalf("后续纳入 = %d 笔，want 1", n)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM settlement_accounting.statement_cycle_cut
+		 WHERE closing_date = $1::date AND outcome = 'STATEMENT_PUBLISHED' AND statement_number = $2`, nextClosing, second); n != 1 {
+		t.Fatalf("截止记录里没有这张只有调整的单：%d", n)
+	}
+
+	if _, err := beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("再一拍：%v", err)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM settlement_accounting.customer_statement`); n != 2 {
+		t.Fatalf("再一拍之后有 %d 张单，want 仍是 2", n)
+	}
+}
+
+// correctionOnTheBilledCharge 造一笔挂在 dueCycleCut 那笔费用上的计价纠错。
+func correctionOnTheBilledCharge(
+	t *testing.T,
+	id string,
+	direction sadomain.AdjustmentDirection,
+	minor int64,
+	at time.Time,
+) saports.ChargeAdjustmentRecord {
+	t.Helper()
+	adjustment, err := sadomain.FormChargeAdjustment(sadomain.ChargeAdjustmentSpec{
+		ID:                 saValue(t, sadomain.NewChargeAdjustmentID, id),
+		Charge:             saValue(t, sadomain.NewCustomerChargeID, "SELLCC-SELLREQ-SYN-CONFIRM"),
+		Kind:               sadomain.PricingCorrection,
+		Direction:          direction,
+		Evaluation:         saValue(t, sadomain.NewSellEvaluationReference, "SYN-EVAL-"+id),
+		OriginalCurrency:   saValue(t, sadomain.NewCurrencyCode, "CNY"),
+		OriginalMinor:      minor,
+		SettlementCurrency: saValue(t, sadomain.NewCurrencyCode, "CNY"),
+		SettlementMinor:    minor,
+		FormedAt:           at,
+	})
+	if err != nil {
+		t.Fatalf("调整 %s：%v", id, err)
+	}
+	return saports.ChargeAdjustmentRecord{
+		Key:        saports.ChargeAdjustmentKey{TenantID: saValue(t, sadomain.NewTenantID, demoTenant), Adjustment: adjustment.ID()},
+		Adjustment: adjustment,
+		RecordedAt: at,
 	}
 }
 

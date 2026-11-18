@@ -68,6 +68,12 @@ var recordsRegistries = []recordsRegistry{
 		wantSort:    cataloguepage.Sort{Field: "recordedAt"},
 		wantFilters: map[string][]string{"outcome": {domain.ControlNotAdvanced.String()}},
 	},
+	{
+		name: "measurement", key: "measurements",
+		parameters:  "&sort=recordedAt&voided=false&q=SYN",
+		wantSort:    cataloguepage.Sort{Field: "recordedAt"},
+		wantFilters: map[string][]string{"voided": {"false"}},
+	},
 }
 
 // Covers: ADR-0144 决定五、六——各册的答复都带 page（size 取 Intake 给的页大小，next 与 total 原样带出）；registry 之外的查询参数照

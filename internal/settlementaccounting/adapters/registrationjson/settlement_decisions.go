@@ -40,6 +40,9 @@ type statementPublicationDocument struct {
 	LastAttributionDate string   `json:"lastAttributionDate"`
 	DeclaredTotal       string   `json:"declaredTotal"`
 	CutOffAt            string   `json:"cutOffAt"`
+	// CarryUnbilledAdjustments 为真：这一户还没出账的调整——含挂在别的对账单费用上的——随这张单带走，申报合计只报费用，
+	// 费用可以一笔都不列。不写即假：申报合计含所列费用上还没出账的调整，别的对账单上的调整不带。
+	CarryUnbilledAdjustments bool `json:"carryUnbilledAdjustments"`
 }
 
 // StatementPublicationFromJSONForTenant 译装一次截单发布。申报合计按最小币单位的整数串写，与客户费用读口的金额同一写法。
@@ -79,20 +82,21 @@ func StatementPublicationFromJSONForTenant(
 	if err != nil {
 		return application.PublishStatementCommand{}, fmt.Errorf("cutOffAt：%w", err)
 	}
-	if len(document.Charges) == 0 {
-		return application.PublishStatementCommand{}, fmt.Errorf("charges：至少列一笔费用")
+	if len(document.Charges) == 0 && !document.CarryUnbilledAdjustments {
+		return application.PublishStatementCommand{}, fmt.Errorf("charges：至少列一笔费用；只出调整时把 carryUnbilledAdjustments 写成 true")
 	}
 	return application.PublishStatementCommand{
-		TenantID:            tenant,
-		Account:             document.Account,
-		Period:              document.Period,
-		Version:             document.Version,
-		Currency:            document.Currency,
-		ChargeIDs:           document.Charges,
-		LastAttributionDate: document.LastAttributionDate,
-		DeclaredTotalMinor:  declared,
-		CutOffAt:            cutOffAt.UTC(),
-		PublishedAt:         publishedAt.UTC(),
+		TenantID:                 tenant,
+		Account:                  document.Account,
+		Period:                   document.Period,
+		Version:                  document.Version,
+		Currency:                 document.Currency,
+		ChargeIDs:                document.Charges,
+		LastAttributionDate:      document.LastAttributionDate,
+		DeclaredTotalMinor:       declared,
+		CutOffAt:                 cutOffAt.UTC(),
+		PublishedAt:              publishedAt.UTC(),
+		CarryUnbilledAdjustments: document.CarryUnbilledAdjustments,
 	}, nil
 }
 

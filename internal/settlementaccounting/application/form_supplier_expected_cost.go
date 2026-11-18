@@ -49,6 +49,8 @@ const (
 	// ExpectedCostZeroTotal：评价已完成而合计为零，首版与纠错版本都不成行（ADR-0306 决定一、三）。是定局：评价不可变，重投
 	// 还是零。判在发生项失效之后——那一版已失效时答失效，不答零额；派生版本上已有一份成本时答冲突，不答零额。
 	ExpectedCostZeroTotal
+	// ExpectedCostUnchanged：同一版发生项上因实测变化来的新评价，合计与链头相同。不追加纠错版本，链头不动。
+	ExpectedCostUnchanged
 )
 
 func (outcome ExpectedCostOutcome) String() string {
@@ -73,6 +75,8 @@ func (outcome ExpectedCostOutcome) String() string {
 		return "OCCURRENCE_INVALIDATED"
 	case ExpectedCostZeroTotal:
 		return "EVALUATION_ZERO_TOTAL"
+	case ExpectedCostUnchanged:
+		return "EXPECTED_COST_UNCHANGED"
 	default:
 		return ""
 	}
@@ -141,6 +145,8 @@ type FormSupplierExpectedCostCommand struct {
 	FeeItem    domain.FeeItemReference
 	Agreement  domain.SupplierAgreementReference
 	Evaluation domain.BuyEvaluationReference
+	// MeasurementChange 为真：这份评价来自实测变化另起的一代，发生项版本没变。合计与链头相同就不追加。
+	MeasurementChange bool
 }
 
 type ExpectedCostResult struct {
@@ -270,6 +276,17 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 		return ExpectedCostResult{}, fmt.Errorf("settlement accounting: occurrence %s fee item %s: %w", command.Occurrence.ID(), command.FeeItem, err)
 	}
 	correcting := chained && head.Occurrence().Version() != command.Occurrence.Version()
+	// 实测变化不换发生项版本。链已经在这一版上时，按新评价重述全额；合计与链头相同就不追加。
+	restating := command.MeasurementChange && chained && !correcting
+	if restating {
+		if settlementCurrency, _ := head.SettlementAmount(); settlementCurrency != adoption.SettlementCurrency {
+			return ExpectedCostResult{}, fmt.Errorf("%w: occurrence %s from %s to %s",
+				ErrCorrectionChangesSettlementCurrency, command.Occurrence.ID(), settlementCurrency, adoption.SettlementCurrency)
+		}
+		if supplierCostTotalsMatch(head, adoption) {
+			return ExpectedCostResult{outcome: ExpectedCostUnchanged, cost: head, hasCost: true}, nil
+		}
+	}
 	if correcting {
 		if !head.Withdrawn() {
 			return expectedCostUndecided(OccurrenceInvalidationNotRecorded, head.Version().String(),
@@ -299,7 +316,11 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 			ErrOccurrenceAgreementNotRegistered, command.Occurrence.ID(), command.Agreement)
 	}
 	var cost domain.SupplierExpectedCost
-	if correcting {
+	if correcting || restating {
+		reason := domain.OccurrenceSupersededCorrection()
+		if restating {
+			reason = domain.MeasurementChangedCorrection()
+		}
 		cost, err = head.AppendCorrection(domain.CostCorrectionSpec{
 			Version:          command.Version,
 			Occurrence:       command.Occurrence,
@@ -311,7 +332,7 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 			OriginalMinor:    adoption.OriginalMinor,
 			SettlementMinor:  adoption.SettlementMinor,
 			Conversion:       adoption.Conversion,
-			Reason:           domain.OccurrenceSupersededCorrection(),
+			Reason:           reason,
 		})
 	} else {
 		cost, err = domain.FormSupplierExpectedCost(domain.SupplierExpectedCostSpec{
@@ -411,6 +432,13 @@ func (handler *FormSupplierExpectedCostHandler) existingCost(
 	}
 	return ExpectedCostResult{outcome: ExpectedCostAlreadyFormed, cost: first, hasCost: true,
 		continuation: costContinuation("EXPECTED_COST_ALREADY_FORMED", first.Version().String())}, nil
+}
+
+func supplierCostTotalsMatch(head domain.SupplierExpectedCost, adoption ports.BuyEvaluationAdoption) bool {
+	originalCurrency, originalMinor := head.OriginalAmount()
+	_, settlementMinor := head.SettlementAmount()
+	return originalCurrency == adoption.OriginalCurrency && originalMinor == adoption.OriginalMinor &&
+		settlementMinor == adoption.SettlementMinor
 }
 
 func expectedCostUndecided(reason ExpectedCostUndecidedReason, subject string, cause error) ExpectedCostResult {

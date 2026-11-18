@@ -94,7 +94,18 @@ const (
 		           FROM settlement_accounting.charge_confirmation_basis AS b
 		          WHERE b.tenant_id = c.tenant_id
 		            AND b.charge_id = c.charge_id
-		            AND b.fee_item = c.fee_item)`
+		            AND b.fee_item = c.fee_item),
+		        (SELECT superseded_by_charge_id
+		           FROM settlement_accounting.customer_charge_supersession
+		          WHERE tenant_id = c.tenant_id AND charge_id = c.charge_id),
+		        (SELECT COALESCE(json_agg(json_build_object(
+		                    'adjustment', adjustment_id,
+		                    'kind', kind,
+		                    'direction', direction,
+		                    'settlementMinor', settlement_minor
+		                ) ORDER BY formed_at, adjustment_id), '[]'::json)
+		           FROM settlement_accounting.charge_adjustment
+		          WHERE tenant_id = c.tenant_id AND charge_id = c.charge_id)`
 )
 
 func (catalogue *ChargeCatalogue) ListCustomerCharges(
@@ -139,6 +150,8 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 			formedAt          time.Time
 			confirmedAt       *time.Time
 			basesJSON         []byte
+			supersededBy      *string
+			adjustmentsJSON   []byte
 			facts             confirmationFactColumns
 		)
 		if err := rows.Scan(
@@ -152,6 +165,8 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 			&attributionDate, &billedOn,
 			&requiredBasisKind,
 			&basesJSON,
+			&supersededBy,
+			&adjustmentsJSON,
 		); err != nil {
 			return fail(err)
 		}
@@ -171,6 +186,15 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 		// 同一条：未作废的已发布单的行里有这笔费用，取法也同，按发布时刻与单号取第一张。截单不读这两格，照旧当场判。
 		row.AttributionDate = catalogueText(attributionDate)
 		row.BilledOn = catalogueText(billedOn)
+		row.SupersededBy = catalogueText(supersededBy)
+		var adjustmentDocuments []ports.CustomerChargeAdjustmentEntry
+		if err := json.Unmarshal(adjustmentsJSON, &adjustmentDocuments); err != nil {
+			return fail(fmt.Errorf("调整集解码：%w", err))
+		}
+		if adjustmentDocuments == nil {
+			adjustmentDocuments = []ports.CustomerChargeAdjustmentEntry{}
+		}
+		row.Adjustments = adjustmentDocuments
 		row.FormedAt = formedAt.UTC()
 		row.ConfirmedAt = catalogueInstant(confirmedAt)
 

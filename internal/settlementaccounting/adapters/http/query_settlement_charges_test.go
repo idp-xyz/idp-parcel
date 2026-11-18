@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,7 +41,7 @@ func (stub *stubChargeCatalogue) ListSupplierExpectedCosts(
 }
 
 func chargesEndpoint(register *stubChargeCatalogue) http.Handler {
-	return settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), register)
+	return settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), register, nil)
 }
 
 // Covers: 逐格转写 — 费用身份、阶段、币种三件组、确认留痕与依据数组原样透出；金额以
@@ -405,4 +407,104 @@ func TestCustomerChargeQueryShowsTheAttributionDateAndTheStatementItIsOn(t *test
 	if _, has := body.Charges[1]["billedOn"]; has {
 		t.Fatalf("没出账也印了这一键：%v", body.Charges[1])
 	}
+}
+
+// stubPricingWeights 是计价重量来源读口的替身：记下被问的评价标识，交回预置的来源或故障。
+type stubPricingWeights struct {
+	origins map[string]settlementhttp.PricingWeightOrigin
+	err     error
+	asked   []string
+}
+
+func (stub *stubPricingWeights) PricingWeightOrigins(
+	_ context.Context, _ domain.TenantID, evaluationIDs []string,
+) (map[string]settlementhttp.PricingWeightOrigin, error) {
+	stub.asked = append(stub.asked, evaluationIDs...)
+	return stub.origins, stub.err
+}
+
+// Covers: 客户费用行带上计价重量与它的来源，各占自己的键——pricedWeight 是评价进位之后的计价重量，actualWeight 与
+// dimensionSides 是评价用的实重与尺寸，weightSource 说这两样出自实测还是申报。实重不印在计价重量的键上：复测只把尺寸
+// 量大时两个数不同。申报没报尺寸就没有尺寸两键；读口没答的评价这几键整个不出现，不印成空串或空数组。
+func TestCustomerChargeQueryCarriesThePricedWeightAndWhatItCameFrom(t *testing.T) {
+	register := &stubChargeCatalogue{
+		charges: []ports.CustomerChargeCatalogueRow{
+			{Charge: "SYN-CHG-MEASURED", Evaluation: "SYN-EVAL-01", Stage: "ESTIMATED", FormedAt: catalogueBaseAt},
+			{Charge: "SYN-CHG-DECLARED", Evaluation: "SYN-EVAL-02", Stage: "ESTIMATED", FormedAt: catalogueBaseAt},
+			{Charge: "SYN-CHG-UNANSWERED", Evaluation: "SYN-EVAL-03", Stage: "ESTIMATED", FormedAt: catalogueBaseAt},
+		},
+	}
+	weights := &stubPricingWeights{origins: map[string]settlementhttp.PricingWeightOrigin{
+		"SYN-EVAL-01": {
+			Kind: "actual-measurement", PricedWeight: "3", PricedWeightUnit: "KG",
+			ActualWeight: "2.1", ActualWeightUnit: "KG",
+			DimensionSides: []string{"30", "25", "20"}, DimensionUnit: "CM",
+		},
+		"SYN-EVAL-02": {
+			Kind: "declared-measurement", PricedWeight: "1.5", PricedWeightUnit: "KG",
+			ActualWeight: "1.2", ActualWeightUnit: "KG",
+		},
+	}}
+	endpoint := settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), register, weights)
+	response := serveGet(endpoint, "/settlement-charges?registry=customer-charge")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	if asked := "SYN-EVAL-01,SYN-EVAL-02,SYN-EVAL-03"; strings.Join(weights.asked, ",") != asked {
+		t.Fatalf("问来源读口的评价 = %v，want %s", weights.asked, asked)
+	}
+	var body struct {
+		Charges []map[string]any `json:"charges"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	originKeys := []string{
+		"weightSource", "pricedWeight", "pricedWeightUnit", "actualWeight", "actualWeightUnit", "dimensionSides", "dimensionUnit",
+	}
+	originOf := func(row map[string]any) map[string]any {
+		picked := map[string]any{}
+		for _, key := range originKeys {
+			if value, has := row[key]; has {
+				picked[key] = value
+			}
+		}
+		return picked
+	}
+	want := []map[string]any{
+		{
+			"weightSource": "actual-measurement", "pricedWeight": "3", "pricedWeightUnit": "KG",
+			"actualWeight": "2.1", "actualWeightUnit": "KG",
+			"dimensionSides": []any{"30", "25", "20"}, "dimensionUnit": "CM",
+		},
+		{
+			"weightSource": "declared-measurement", "pricedWeight": "1.5", "pricedWeightUnit": "KG",
+			"actualWeight": "1.2", "actualWeightUnit": "KG",
+		},
+		{},
+	}
+	for index, row := range body.Charges {
+		if got := originOf(row); !reflect.DeepEqual(got, want[index]) {
+			t.Fatalf("%v 的计价重量与来源 = %v\nwant %v", row["charge"], got, want[index])
+		}
+	}
+}
+
+// Covers: 来源读口读不回时整份答未形成。照样列出费用而把这几格留空，会把一次该重试的故障读成「这些费用没有计价重量」。
+func TestAnUnreadablePricingWeightOriginIsNoAnswerRatherThanBlankCells(t *testing.T) {
+	register := &stubChargeCatalogue{
+		charges: []ports.CustomerChargeCatalogueRow{
+			{Charge: "SYN-CHG-01", Evaluation: "SYN-EVAL-01", Stage: "ESTIMATED", FormedAt: catalogueBaseAt},
+		},
+	}
+	weights := &stubPricingWeights{err: errors.New("evaluation register unreachable")}
+	endpoint := settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), register, weights)
+	response := serveGet(endpoint, "/settlement-charges?registry=customer-charge")
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d；body = %s", response.Code, http.StatusInternalServerError, response.Body.String())
+	}
+	if got := problemCode(t, response); got != "NO_ANSWER_FORMED" {
+		t.Fatalf("code = %q, want NO_ANSWER_FORMED", got)
+	}
+	assertNoOutcome(t, response)
 }

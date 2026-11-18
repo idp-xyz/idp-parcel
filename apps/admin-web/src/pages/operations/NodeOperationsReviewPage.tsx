@@ -32,7 +32,7 @@ import {
   reviewListConditions,
   rowsOnPage,
 } from './list-conditions';
-import { consolidationPhaseLabels, labelOf } from './presentation';
+import { consolidationPhaseLabels, labelOf, measurementObjectKindLabels, measurementVoidedLabels } from './presentation';
 import { receptionRowOf } from './reception-rows';
 import { recheckPendingIdentity, type IdentityRecheckResponseBody } from './identity-recheck-api';
 import {
@@ -145,6 +145,8 @@ interface ReviewSection {
   columns: ReviewColumn<ReviewRow>[];
   /** 无册区的如实呈现；与「登记册为空」严格分词。 */
   absence?: { title: string; description: string; unlock: string };
+  /** 册空时的说明；缺席用收货那一句。 */
+  emptyDescription?: string;
   /** 行状态胶囊取哪两格；给了即指标即筛。 */
   status?: ReviewStatusSpec;
 }
@@ -209,23 +211,29 @@ const sections: ReviewSection[] = [
   {
     id: 'measurements',
     word: '称重量方',
-    // 每次实际测量必须保留对象、测量项、结果、单位、发生时间、位置、来源和作业
-    // 依据(CONTEXT),不可覆盖。存储上还没有实测登记表,本区无处可读——列向留在
-    // 这里,登记表落地随查询契约扩册时按 CONTEXT 词条重谈。
+    registry: 'measurement',
+    keywordHint: '搜来源标识、货物标签、位置、执行方',
+    status: { labelKey: 'voided' },
+    emptyDescription: '称重量方登记之后，记录会出现在这里。复测是再登一条，已作废的行仍留在册上。',
+    // 一次称重量方是一行：毛重与长宽高都必填，同在这一行上。每行保留对象、结果、单位、发生时间、位置、来源和
+    // 作业依据，不覆盖。复测是再登一行；作废是另一条事实指回来源身份，这一行的数字不动；册上同时列出仍有效与已作废。
     columns: [
       col('operationalItem', '货物标签', { mono: true }),
-      col('measuredItem', '测量项'),
-      col('result', '结果', { align: 'right', className: 'w-[88px]', mono: true }),
-      col('unit', '单位', { className: 'w-[64px]' }),
+      col('weight', '毛重', { align: 'right', className: 'w-[120px]', mono: true }),
+      col('dimensions', '长×宽×高', { align: 'right', className: 'w-[180px]', mono: true }),
       col('occurredAt', '发生时间', { mono: true }),
+      col('voided', '作废'),
+      techCol([
+        ['来源标识', 'sourceId'],
+        ['对象种类', 'objectKind'],
+        ['位置', 'location'],
+        ['作业依据', 'basis'],
+        ['执行方', 'performedBy'],
+        ['录入人', 'enteredBy'],
+        ['原件', 'originalDocument'],
+        ['登记时间', 'recordedAt'],
+      ]),
     ],
-    // 存储上没有实测登记表，查询端点的册名封闭集刻意不含本区（票 admin-skeleton-closure-batch/05 Comments）：没有表就没有读法，
-    // 答一份恒空的册子会把「无处可登」演成「登记册为空」。
-    absence: {
-      title: '称重量方记录还不能在这里查看',
-      description: '网点的称重、量方结果还没有接入管理台，这不是「没有记录」。这一签不显示任何示意数据。',
-      unlock: '称重量方的记录接入后，这一签会自动显示',
-    },
   },
   {
     id: 'handover-evidence',
@@ -298,6 +306,25 @@ function rowsOf(body: NodeOperationsListResponseBody): ReviewRow[] {
       return body.receptions.map(receptionRowOf);
     case 'UNIDENTIFIED_ITEMS_LISTED':
       return body.items.map(unidentifiedRowOf);
+    case 'MEASUREMENTS_LISTED':
+      return body.measurements.map((record) => ({
+        key: record.sourceId,
+        values: {
+          operationalItem: record.objectId,
+          weight: `${record.weightValue} ${record.weightUnit}`,
+          dimensions: `${record.length}×${record.width}×${record.height} ${record.dimensionUnit}`,
+          occurredAt: formatInstant(record.occurredAt),
+          voided: labelOf(measurementVoidedLabels, String(record.voided)),
+          sourceId: record.sourceId,
+          objectKind: labelOf(measurementObjectKindLabels, record.objectKind),
+          location: record.location,
+          basis: record.basis,
+          performedBy: record.performedBy,
+          enteredBy: record.enteredBy ?? '',
+          originalDocument: record.originalDocument ?? '',
+          recordedAt: formatInstant(record.recordedAt),
+        },
+      }));
     case 'CONSOLIDATION_UNITS_LISTED':
       return body.units.map((record) => ({
         key: `unit:${record.unitId}`,
@@ -406,7 +433,7 @@ function RegistrySection({
     module: info,
     endpoint: `GET /node-operations-records?registry=${registry}`,
     emptyTitle: `还没有${section.word}`,
-    emptyDescription: '网点现场扫描、收货后，记录会出现在这里。',
+    emptyDescription: section.emptyDescription ?? '网点现场扫描、收货后，记录会出现在这里。',
     narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
   });
 

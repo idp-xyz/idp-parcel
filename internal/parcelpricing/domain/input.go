@@ -437,6 +437,42 @@ func (input PricingInputSnapshot) FactReferences() []VersionedFactReference {
 	return append([]VersionedFactReference(nil), input.factReferences...)
 }
 
+// PricingWeightOrigin 是计价重量的来源：评价用的实重与尺寸，以及这两样出自实测还是申报。实重不是计价重量——计价
+// 重量是卡的重量策略从实重与体积重里取出、再进位的那一个，在评价的 PricingWeight 上；取较大者的卡上实重没变、
+// 尺寸变了，计价重量照样会变，所以来源要连尺寸一起答。实测整份取用：一条实测同时带重量与尺寸，快照带着实测事实时
+// 两样都出自那一条；只带申报测量事实时都出自申报，申报没报尺寸时 HasDimensions 为假。两类事实都没有时第二个
+// 返回值为假。
+type PricingWeightOrigin struct {
+	Kind          ArtifactKind
+	ActualWeight  Weight
+	Dimensions    Dimensions
+	HasDimensions bool
+}
+
+func PricingWeightOriginOf(input PricingInputSnapshot) (PricingWeightOrigin, bool) {
+	var measured, declared bool
+	for _, fact := range input.FactReferences() {
+		switch fact.Reference().Kind() {
+		case ArtifactActualMeasurement:
+			measured = true
+		case ArtifactDeclaredMeasurement:
+			declared = true
+		}
+	}
+	origin := PricingWeightOrigin{ActualWeight: input.ActualWeight()}
+	origin.Dimensions, origin.HasDimensions = input.Dimensions()
+	switch {
+	case measured:
+		origin.Kind = ArtifactActualMeasurement
+		return origin, true
+	case declared:
+		origin.Kind = ArtifactDeclaredMeasurement
+		return origin, true
+	default:
+		return PricingWeightOrigin{}, false
+	}
+}
+
 func (input PricingInputSnapshot) Dimensions() (Dimensions, bool) {
 	if input.dimensions == nil {
 		return Dimensions{}, false

@@ -51,24 +51,113 @@ func TestDeclaredWeightAndPostalRouteResolveWhenThereIsNoMeasurement(t *testing.
 	}
 }
 
-func TestAMeasurementSupersedesTheDeclaration(t *testing.T) {
-	measured := measuredKG(t, "2.50")
-	resolver := resolverWith(t, membersOf(t, objectRef), declaredKG(t, "1.25"), destinationPostal(t, "100115"), measured)
+// Covers: 实测整份取用。有当前有效实测时，重量与尺寸都出自那一条，申报的重量与尺寸一格都不进快照——哪怕申报
+// 也带着尺寸；快照里只有实测事实，计价重量的来源是实测。
+func TestAMeasurementSupersedesTheWholeDeclaration(t *testing.T) {
+	declared := declaredKGWithDimensions(t, "1.25", "20", "15", "10")
+	resolver := resolverWith(t, membersOf(t, objectRef), declared, destinationPostal(t, "100115"), measuredKG(t, "2.50"))
 
-	resolved := resolve(t, resolver, ppdomain.PricingPurposeSupplierCost)
-	weight := resolved.Input.ActualWeight()
-	if weight.Value().String() != "2.5" || weight.Unit() != ppdomain.WeightUnitKilogram {
-		t.Fatalf("weight = %s %s", weight.Value(), weight.Unit())
-	}
-	if _, present := resolved.Input.Dimensions(); present {
-		t.Fatal("declaration dimensions replaced a measurement that had none")
-	}
-	assertFactVersion(t, resolved.Input, ppdomain.ArtifactDeclaredMeasurement, "measurement")
-	for _, fact := range resolved.Input.FactReferences() {
-		if strings.Contains(fact.Reference().Version(), "declaration") {
-			t.Fatalf("declaration replaced the measurement: %s", fact.Reference().Version())
+	for _, purpose := range []ppdomain.PricingPurpose{ppdomain.PricingPurposeSupplierCost, ppdomain.PricingPurposeCustomerCharge} {
+		resolved := resolve(t, resolver, purpose)
+		weight := resolved.Input.ActualWeight()
+		if weight.Value().String() != "2.5" || weight.Unit() != ppdomain.WeightUnitKilogram {
+			t.Fatalf("%s：重量 = %s %s，want 实测的 2.5 KG", purpose, weight.Value(), weight.Unit())
+		}
+		dimensions, present := resolved.Input.Dimensions()
+		if !present || dimensions.LongestSide().Value().String() != "40" || dimensions.ShortestSide().Value().String() != "25" {
+			t.Fatalf("%s：尺寸 = %+v %v，want 实测的 40×30×25", purpose, dimensions, present)
+		}
+		assertFactVersion(t, resolved.Input, ppdomain.ArtifactActualMeasurement, "SYN-MEASURE-1")
+		for _, fact := range resolved.Input.FactReferences() {
+			if fact.Reference().Kind() == ppdomain.ArtifactDeclaredMeasurement {
+				t.Fatalf("%s：申报顶进了有实测的快照：%s", purpose, fact.Reference().Version())
+			}
+		}
+		if origin, ok := ppdomain.PricingWeightOriginOf(resolved.Input); !ok || origin.Kind != ppdomain.ArtifactActualMeasurement {
+			t.Fatalf("%s：计价重量来源 = %+v %v，want 实测", purpose, origin, ok)
 		}
 	}
+}
+
+// Covers: 当前有效实测定不下（复测之后没有采用形态，或两条发生时间相同）时整份输入不可得，不退回申报。
+func TestAnUndeterminedMeasurementDoesNotFallBackToTheDeclaration(t *testing.T) {
+	deps := adapter.ResolverDeps{
+		Members:   &memberDouble{members: membersOf(t, objectRef), found: true},
+		Declared:  declaredDouble{resolution: declaredKGWithDimensions(t, "1.25", "20", "15", "10")},
+		Addresses: addressDouble{elements: destinationPostal(t, "100115")},
+		Measured:  measurementDouble{load: adapter.ActualMeasurementLoad{Undetermined: "输入不可得：实测多于一条"}},
+	}
+	resolver, err := adapter.NewResolver(deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := resolver.ResolvePricingInput(context.Background(), inputQuery(t, ppdomain.PricingPurposeCustomerCharge))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Outcome != ppports.PricingInputUnavailable || !names(resolved.Missing, "实测多于一条") {
+		t.Fatalf("outcome=%s missing=%v，want 输入不可得", resolved.Outcome, resolved.Missing)
+	}
+}
+
+// Covers: 没有实测时两样都取申报；客户申报里的尺寸不是必填，申报了就带上。
+func TestWithoutAMeasurementTheDeclaredDimensionsAreUsed(t *testing.T) {
+	declared := declaredKGWithDimensions(t, "1.25", "20", "15", "10")
+	resolved := resolve(t, resolverWith(t, membersOf(t, objectRef), declared, destinationPostal(t, "100115"), nil),
+		ppdomain.PricingPurposeCustomerCharge)
+	if weight := resolved.Input.ActualWeight(); weight.Value().String() != "1.25" {
+		t.Fatalf("重量 = %s，want 申报的 1.25", weight.Value())
+	}
+	if dimensions, present := resolved.Input.Dimensions(); !present || dimensions.LongestSide().Value().String() != "20" {
+		t.Fatalf("尺寸 = %+v %v，want 申报的 20×15×10", dimensions, present)
+	}
+	if origin, ok := ppdomain.PricingWeightOriginOf(resolved.Input); !ok || origin.Kind != ppdomain.ArtifactDeclaredMeasurement {
+		t.Fatalf("计价重量来源 = %+v %v，want 申报", origin, ok)
+	}
+}
+
+func mustDecimal(t *testing.T, raw string) ppdomain.Decimal {
+	t.Helper()
+	value, err := ppdomain.ParseDecimal(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
+
+func declaredKGWithDimensions(t *testing.T, weight, length, width, height string) psdomain.DeclaredMeasurementResolution {
+	t.Helper()
+	value := func(raw string) psdomain.MeasurementValue {
+		parsed, err := psdomain.NewMeasurementValue(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return parsed
+	}
+	unit := func(raw string) psdomain.MeasurementUnitReference {
+		reference, err := psdomain.NewMeasurementUnitReference(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return reference
+	}
+	declaredWeight, err := psdomain.NewDeclaredWeight(value(weight), unit("KG"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dimensions, err := psdomain.NewDeclaredDimensions(value(length), value(width), value(height), unit("CM"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	measurement, err := psdomain.NewDeclaredMeasurement(declaredWeight, dimensions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolution, err := psdomain.DeclaredMeasurementOnBaseline(measurement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolution
 }
 
 func TestAMissingDeclarationDoesNotInventAWeight(t *testing.T) {
@@ -221,12 +310,11 @@ func (double addressDouble) LoadAddressElements(context.Context, psdomain.Tenant
 }
 
 type measurementDouble struct {
-	measured adapter.ActualMeasurement
-	found    bool
+	load adapter.ActualMeasurementLoad
 }
 
-func (double measurementDouble) LoadActualMeasurement(context.Context, ppdomain.TenantID, string) (adapter.ActualMeasurement, bool, error) {
-	return double.measured, double.found, nil
+func (double measurementDouble) LoadActualMeasurement(context.Context, ppdomain.TenantID, string) (adapter.ActualMeasurementLoad, error) {
+	return double.load, nil
 }
 
 func resolverWith(
@@ -234,7 +322,7 @@ func resolverWith(
 	members tfports.ChargeOccurrenceMembers,
 	declared psdomain.DeclaredMeasurementResolution,
 	addresses psdomain.ShipmentAddressElements,
-	measured *adapter.ActualMeasurement,
+	measured *adapter.ActualMeasurementLoad,
 ) *adapter.Resolver {
 	t.Helper()
 	deps := adapter.ResolverDeps{
@@ -243,7 +331,7 @@ func resolverWith(
 		Addresses: addressDouble{elements: addresses},
 	}
 	if measured != nil {
-		deps.Measured = measurementDouble{measured: *measured, found: true}
+		deps.Measured = measurementDouble{load: *measured}
 	}
 	resolver, err := adapter.NewResolver(deps)
 	if err != nil {
@@ -344,13 +432,18 @@ func destinationPostal(t *testing.T, postal string) psdomain.ShipmentAddressElem
 	return psdomain.NewShipmentAddressElements(psdomain.AddressElementsNotProvidedResolution(), destination)
 }
 
-func measuredKG(t *testing.T, raw string) *adapter.ActualMeasurement {
+// measuredKG 是一条当前有效实测：毛重由用例给，尺寸 40×30×25 CM，事实版本是那次测量的来源身份。
+func measuredKG(t *testing.T, raw string) *adapter.ActualMeasurementLoad {
 	t.Helper()
 	weight, err := ppdomain.NewWeightFromString(raw, ppdomain.WeightUnitKilogram)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reference, err := ppdomain.NewVersionReferenceIdentity(ppdomain.ArtifactDeclaredMeasurement, objectRef, "measurement")
+	sides, err := ppdomain.NewDimensions(mustDecimal(t, "40"), mustDecimal(t, "30"), mustDecimal(t, "25"), ppdomain.LengthUnitCentimeter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reference, err := ppdomain.NewVersionReferenceIdentity(ppdomain.ArtifactActualMeasurement, objectRef, "SYN-MEASURE-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +451,7 @@ func measuredKG(t *testing.T, raw string) *adapter.ActualMeasurement {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &adapter.ActualMeasurement{Weight: weight, Fact: fact}
+	return &adapter.ActualMeasurementLoad{Found: true, Weight: weight, Dimensions: sides, Fact: fact}
 }
 
 func assertFactVersion(t *testing.T, input ppdomain.PricingInputSnapshot, kind ppdomain.ArtifactKind, version string) {

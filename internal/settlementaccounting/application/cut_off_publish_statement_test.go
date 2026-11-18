@@ -35,6 +35,26 @@ func statementKey(key ports.StatementKey) string {
 	return key.TenantID.String() + "|" + key.Number.String()
 }
 
+func (double *statementStoreDouble) FindOpenStatementCarryingCharge(
+	_ context.Context,
+	_ domain.TenantID,
+	account domain.SettlementAccountID,
+	charge domain.CustomerChargeID,
+) (ports.StatementRecord, bool, error) {
+	for _, record := range double.records {
+		if record.Statement.Account() != account {
+			continue
+		}
+		if _, _, voided := record.Statement.Voided(); voided {
+			continue
+		}
+		if _, found := record.Statement.LineFor(charge); found {
+			return record, true, nil
+		}
+	}
+	return ports.StatementRecord{}, false, nil
+}
+
 func (double *statementStoreDouble) FindByKey(
 	_ context.Context,
 	key ports.StatementKey,
@@ -164,11 +184,38 @@ func (double *statementStoreDouble) Replace(
 
 type inclusionStoreDouble struct {
 	records map[string]ports.InclusionRecord
-	findErr error
+	// withdrawn 按纳入键记下撤回的依据。照真册：撤回的那一行还在，只是不再占着「一笔调整只纳入一次」。
+	withdrawn map[string]string
+	findErr   error
 }
 
 func newInclusionStore() *inclusionStoreDouble {
-	return &inclusionStoreDouble{records: map[string]ports.InclusionRecord{}}
+	return &inclusionStoreDouble{records: map[string]ports.InclusionRecord{}, withdrawn: map[string]string{}}
+}
+
+func (double *inclusionStoreDouble) Withdraw(_ context.Context, key ports.InclusionKey, basis string, _ time.Time) (bool, error) {
+	index := inclusionKey(key)
+	if _, exists := double.records[index]; !exists {
+		return false, nil
+	}
+	if _, already := double.withdrawn[index]; already {
+		return false, nil
+	}
+	double.withdrawn[index] = basis
+	return true, nil
+}
+
+// carries 答这笔调整有没有一笔没撤回的后续纳入。
+func (double *inclusionStoreDouble) carries(adjustment domain.ChargeAdjustmentID) bool {
+	for index, record := range double.records {
+		if _, withdrawn := double.withdrawn[index]; withdrawn {
+			continue
+		}
+		if included, has := record.Inclusion.Adjustment(); has && included == adjustment {
+			return true
+		}
+	}
+	return false
 }
 
 func inclusionKey(key ports.InclusionKey) string {

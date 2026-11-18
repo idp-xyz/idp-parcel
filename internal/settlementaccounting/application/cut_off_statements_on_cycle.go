@@ -1,6 +1,7 @@
 // cut_off_statements_on_cycle.go 是到点截单（ADR-0339 决定三）：登了对账周期的一户，每个已经关上的截止日截一期——收拢已确认、
-// 归属日不晚于截止日、尚未出账的费用，合计照它们的结算金额加总，交给截单发布那一只编排。截单仍先过截单时点门；本期没有费用的
-// 截止日只记一笔、不发单。周期、对账安排、截单时点任一没登都不截：那是租户取值缺席，不代登。
+// 归属日不晚于截止日、尚未出账的费用，合计照它们的结算金额加总，交给截单发布那一只编排；这一户还没出账的调整由那一只编排
+// 随单带走。截单仍先过截单时点门；本期没有费用、也没有还没出账的调整的截止日只记一笔、不发单，没有费用而有调整的照样截出
+// 一张只有调整行的单。周期、对账安排、截单时点任一没登都不截：那是租户取值缺席，不代登。
 package application
 
 import (
@@ -88,6 +89,8 @@ type CutOffStatementsOnCycleDeps struct {
 	AttributionDates ports.ChargeAttributionDateRecorder
 	Cutter           StatementCutter
 	Clock            ports.Clock
+	// Adjustments 只在本期没有费用时问一句：这一户有没有还没出账的调整。有就照样截单。
+	Adjustments ports.ChargeAdjustmentView
 }
 
 type CutOffStatementsOnCycleHandler struct {
@@ -97,7 +100,7 @@ type CutOffStatementsOnCycleHandler struct {
 func NewCutOffStatementsOnCycleHandler(deps CutOffStatementsOnCycleDeps) (*CutOffStatementsOnCycleHandler, error) {
 	if deps.Ledger == nil || deps.Candidates == nil || deps.Arrangements == nil || deps.Accounts == nil ||
 		deps.Moments == nil || deps.Charges == nil || deps.Attributions == nil || deps.AttributionDates == nil ||
-		deps.Cutter == nil || deps.Clock == nil {
+		deps.Cutter == nil || deps.Clock == nil || deps.Adjustments == nil {
 		return nil, fmt.Errorf("%w: cut off statements on cycle", ErrNilDependency)
 	}
 	return &CutOffStatementsOnCycleHandler{deps: deps}, nil
@@ -192,7 +195,15 @@ func (handler *CutOffStatementsOnCycleHandler) cutClosing(
 		return ports.StatementCycleCut{}, false, fmt.Errorf("%w: cycle cut candidates: %w", ErrCycleCutUndecided, err)
 	}
 	if len(candidates) == 0 {
-		return ports.StatementCycleCut{Closing: closing, Outcome: cycleCutNoCharge, CutAt: now}, true, nil
+		// 本期没有费用。这一户有还没出账的调整，照样截一张只有调整行的单；没有才只记截止日。这里只问有没有，带哪几笔、
+		// 合计多少由截单编排自己读。
+		pending, err := handler.deps.Adjustments.ListUnbilledForCutoff(ctx, tenant, account.ID(), currency, nil, true)
+		if err != nil {
+			return ports.StatementCycleCut{}, false, fmt.Errorf("%w: unbilled adjustments: %w", ErrCycleCutUndecided, err)
+		}
+		if len(pending) == 0 {
+			return ports.StatementCycleCut{Closing: closing, Outcome: cycleCutNoCharge, CutAt: now}, true, nil
+		}
 	}
 	cutOffAt, err := arrangement.ClosingInstant(closing)
 	if err != nil {
@@ -209,6 +220,8 @@ func (handler *CutOffStatementsOnCycleHandler) cutClosing(
 		LastAttributionDate: closing.String(),
 		CutOffAt:            cutOffAt,
 		PublishedAt:         now,
+		// 合计只报费用。还没出账的调整由截单编排读一次、随单带走并加进总额，这里不先读一遍。
+		CarryUnbilledAdjustments: true,
 	}
 	for _, candidate := range candidates {
 		command.ChargeIDs = append(command.ChargeIDs, candidate.Charge.String())

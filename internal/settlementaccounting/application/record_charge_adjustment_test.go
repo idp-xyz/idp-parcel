@@ -116,6 +116,75 @@ func correctionCommand(t *testing.T, id string) application.RecordChargeAdjustme
 	}
 }
 
+func TestSettleReweighRecordsTheDeltaAndRefusesACreditPastZero(t *testing.T) {
+	fixture := newAdjustmentFixture(t)
+	tenant := billValue(t, domain.NewTenantID, "tenant-1")
+	none, err := fixture.handler.SettleReweigh(context.Background(), application.ReweighDifferenceCommand{
+		TenantID: tenant, ChargeID: "charge-1", Evaluation: "sell-eval-same",
+		OriginalCurrency: "USD", OriginalMinor: 12000, SettlementCurrency: "USD", SettlementMinor: 12000,
+	})
+	if err != nil || none != application.ReweighDifferenceNone || fixture.adjustments.saves != 0 {
+		t.Fatalf("差额为零 %s saves=%d err=%v", none, fixture.adjustments.saves, err)
+	}
+	recorded, err := fixture.handler.SettleReweigh(context.Background(), application.ReweighDifferenceCommand{
+		TenantID: tenant, ChargeID: "charge-1", Evaluation: "sell-eval-up",
+		OriginalCurrency: "USD", OriginalMinor: 15000, SettlementCurrency: "USD", SettlementMinor: 15000,
+	})
+	if err != nil || recorded != application.ReweighDifferenceRecorded || fixture.adjustments.saves != 1 {
+		t.Fatalf("借项 %s saves=%d err=%v", recorded, fixture.adjustments.saves, err)
+	}
+	exceeds, err := fixture.handler.SettleReweigh(context.Background(), application.ReweighDifferenceCommand{
+		TenantID: tenant, ChargeID: "charge-1", Evaluation: "sell-eval-down",
+		OriginalCurrency: "USD", OriginalMinor: -100, SettlementCurrency: "USD", SettlementMinor: -100,
+	})
+	if err != nil || exceeds != application.ReweighDifferenceExceedsCharge {
+		t.Fatalf("越过零 %s err=%v", exceeds, err)
+	}
+}
+
+// Covers: 重估的差额只对着计价该收的净额算，商业让利不在内。价格没变的重估不记调整；价格变了，差额是新旧价格之差，
+// 让掉的那一笔原样留着；贷项会不会把费用让成负数仍连让利一起看。
+func TestSettleReweighLeavesACommercialConcessionAlone(t *testing.T) {
+	fixture := newAdjustmentFixture(t)
+	tenant := billValue(t, domain.NewTenantID, "tenant-1")
+	concession, err := fixture.handler.Handle(context.Background(), application.RecordChargeAdjustmentCommand{
+		TenantID: tenant, AdjustmentID: "concession-1", ChargeID: "charge-1",
+		Kind: domain.CommercialConcession, Direction: domain.AdjustmentCredit, Authorization: "CONCESSION-APPROVAL/9",
+		OriginalCurrency: "USD", OriginalMinor: 2000, SettlementCurrency: "USD", SettlementMinor: 2000,
+	})
+	if err != nil || concession.Outcome() != application.ChargeAdjustmentRecordedOutcome {
+		t.Fatalf("让利 %s err=%v", concession.Outcome(), err)
+	}
+	settle := func(evaluation string, minor int64) application.ReweighDifferenceOutcome {
+		t.Helper()
+		outcome, err := fixture.handler.SettleReweigh(context.Background(), application.ReweighDifferenceCommand{
+			TenantID: tenant, ChargeID: "charge-1", Evaluation: evaluation,
+			OriginalCurrency: "USD", OriginalMinor: minor, SettlementCurrency: "USD", SettlementMinor: minor,
+		})
+		if err != nil {
+			t.Fatalf("重估 %s：%v", evaluation, err)
+		}
+		return outcome
+	}
+	if outcome := settle("sell-eval-same", 12000); outcome != application.ReweighDifferenceNone || len(fixture.adjustments.records) != 1 {
+		t.Fatalf("价格没变的重估答 %s，册上 %d 笔；want 无差额、只有那笔让利", outcome, len(fixture.adjustments.records))
+	}
+	if outcome := settle("sell-eval-up", 15000); outcome != application.ReweighDifferenceRecorded {
+		t.Fatalf("涨价的重估答 %s", outcome)
+	}
+	debit, found := fixture.adjustments.records["REWEIGH-sell-eval-up"]
+	if _, minor := debit.Adjustment.SettlementAmount(); !found || debit.Adjustment.Direction() != domain.AdjustmentDebit || minor != 3000 {
+		t.Fatalf("借项 = %v %s %d，want 借 3000（15000 减 12000，不把让利补回来）", found, debit.Adjustment.Direction(), minor)
+	}
+	// 12000 + 3000 - 2000 = 13000。重估回 12000 贷 3000；再往下到 1500，按计价要贷 10500，连让利一起就成了负数。
+	if outcome := settle("sell-eval-back", 12000); outcome != application.ReweighDifferenceRecorded {
+		t.Fatalf("回落的重估答 %s", outcome)
+	}
+	if outcome := settle("sell-eval-low", 1500); outcome != application.ReweighDifferenceExceedsCharge {
+		t.Fatalf("越过零的重估答 %s，want 贷项越过费用", outcome)
+	}
+}
+
 // Covers: ADR-0087 决定二与 SA CONTEXT「已确认费用……由对应唯一创建用例追加调整明细；
 // 原确认费用仍保留，对账纳入和资金核销不能代替金额调整」——调整独立成册地形成，不碰
 // 原费用、不需要任何对账单参与；重复触发返回原结果。

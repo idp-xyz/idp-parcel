@@ -16,8 +16,7 @@ import (
 // 上列的是**检索列面**的照实转写：收寄判断照登记行转写（intake/control 两 jsonb 的
 // 字段逐个透出，不重建领域对象、不形成判断），集运单元照行转写。例外是集运成员关系册上的方向依据记录：它经领域
 // 重建门读回成 domain.DirectionalBasisRecord——NULL 必须读作`未记录`、坏行必须响亮，照实转写那几格做不到「绝不显示
-// 成依据齐全」。页面五区里实际测量
-// 与节点侧交接证据两区在存储上还没有登记册，本端口刻意没有那两个方法——没有表就
+// 成依据齐全」。节点侧交接证据在存储上还没有登记册，本端口刻意没有那个方法——没有表就
 // 没有读法，造一个恒空方法会把「无处可登」演成「登记册为空」，两者是不同的答案
 // （票 05 Comments 记明）。
 //
@@ -225,4 +224,32 @@ type ReviewCatalogueRead interface {
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[PhysicalControlTransitionCatalogueRow], error)
+	ListActualMeasurements(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ActualMeasurementCatalogueRow], error)
+}
+
+// ActualMeasurementCatalogueRow 是实际测量册上列的一行。重量与三边都是登记时的原数，不另算、不换算。
+// Voided 只看有没有作废指过来，不把作废理解成这一行被改过。
+type ActualMeasurementCatalogueRow struct {
+	SourceID         string
+	ObjectKind       string
+	ObjectID         string
+	WeightValue      string
+	WeightUnit       string
+	Length           string
+	Width            string
+	Height           string
+	DimensionUnit    string
+	OccurredAt       time.Time
+	RecordedAt       time.Time
+	Location         string
+	Basis            string
+	PerformedBy      string
+	Voided           bool
+	EnteredBy        string
+	OriginalDocument string
 }

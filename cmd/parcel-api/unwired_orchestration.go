@@ -78,6 +78,22 @@ func (unwiredWithdrawal) Handle(
 	return shipmentapp.WithdrawShipmentRequestResult{}, errOrchestrationNotWired
 }
 
+type unwiredActualMeasurement struct{}
+
+func (unwiredActualMeasurement) Handle(
+	context.Context,
+	nodeopsapp.RecordActualMeasurementCommand,
+) (nodeopsapp.RecordActualMeasurementResult, error) {
+	return nodeopsapp.RecordActualMeasurementResult{}, errOrchestrationNotWired
+}
+
+func (unwiredActualMeasurement) Invalidate(
+	context.Context,
+	nodeopsapp.InvalidateActualMeasurementCommand,
+) (nodeopsapp.InvalidateActualMeasurementResult, error) {
+	return nodeopsapp.InvalidateActualMeasurementResult{}, errOrchestrationNotWired
+}
+
 type unwiredReception struct{}
 
 func (unwiredReception) Handle(

@@ -26,6 +26,8 @@ const (
 	ConfirmChargeOutcomeInvalid ConfirmChargeOutcome = iota
 	ChargeConfirmedOutcome
 	ChargeAlreadyConfirmedOutcome
+	// ChargeSuperseded：这笔预估已经被后一代预估替代，不再确认。
+	ChargeSuperseded
 	ConfirmationConditionNotMet
 	ConfirmNotAccepted
 	ConfirmUndecided
@@ -37,6 +39,8 @@ func (outcome ConfirmChargeOutcome) String() string {
 		return "CHARGE_CONFIRMED"
 	case ChargeAlreadyConfirmedOutcome:
 		return "ALREADY_CONFIRMED"
+	case ChargeSuperseded:
+		return "CHARGE_SUPERSEDED"
 	case ConfirmationConditionNotMet:
 		return "CONDITION_NOT_MET"
 	case ConfirmNotAccepted:
@@ -148,6 +152,8 @@ type ConfirmChargeDeps struct {
 	Downstream   ports.ChargeConfirmationHandoff
 	Occupation   OccupationConversion
 	Clock        ports.Clock
+	// Supersessions 缺席时不拦确认。生产装配要装上，被替代的预估才不会再确认。
+	Supersessions ports.ChargeSupersessionStore
 }
 
 type ConfirmChargeHandler struct {
@@ -185,6 +191,15 @@ func (handler *ConfirmChargeHandler) Handle(
 	if !found {
 		// 指名了不存在的费用：提交矛盾，改单重来。
 		return ConfirmChargeResult{outcome: ConfirmNotAccepted}, nil
+	}
+	if charge.Stage() != domain.ChargeConfirmed && handler.deps.Supersessions != nil {
+		superseded, err := handler.deps.Supersessions.Superseded(ctx, command.TenantID, chargeID)
+		if err != nil {
+			return chargeStoreUndecided(command.ChargeID), nil
+		}
+		if superseded {
+			return ConfirmChargeResult{outcome: ChargeSuperseded}, nil
+		}
 	}
 	if charge.Stage() == domain.ChargeConfirmed {
 		// 已确认费用重复提交：返回原确认，不二确、不换依据（幂等）。占用收口也重走一遍：它以包裹为单位幂等，已转出的

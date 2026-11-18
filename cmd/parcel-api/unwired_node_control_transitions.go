@@ -8,6 +8,16 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
+// ListActualMeasurements 让未接线的节点作业查阅读口也答实际测量册那一问，与它别的几问同一个答法。
+func (unwiredNodeOperationsRecords) ListActualMeasurements(
+	context.Context,
+	nodeopsdomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[nodeopsports.ActualMeasurementCatalogueRow], error) {
+	return cataloguepage.Result[nodeopsports.ActualMeasurementCatalogueRow]{}, errOrchestrationNotWired
+}
+
 // ListPhysicalControlTransitions 让未接线的节点作业查阅读口也答节点控制转移册那一问（ADR-0214 决定三），与它别的几问同一个答法。
 func (unwiredNodeOperationsRecords) ListPhysicalControlTransitions(
 	context.Context,

@@ -59,9 +59,35 @@ const (
 // 排序、阶段筛选与 q 由端点按各册的声明（ports.CustomerChargePages、ports.SupplierExpectedCostPages）
 // 解码（ADR-0144 决定六）；按 registry 分派与解码都排在 Intake 之后（catalogue-read-pagination-rollout spec「端点先
 // Intake、后解码查询参数」）。
+// PricingWeightSourceReader 按评价标识回答一笔费用的计价重量与它的来源。缺席时费用册仍列出，这几格空着；在场而读不回
+// 时整份答未形成。
+type PricingWeightSourceReader interface {
+	PricingWeightOrigins(
+		ctx context.Context,
+		tenant domain.TenantID,
+		evaluationIDs []string,
+	) (map[string]PricingWeightOrigin, error)
+}
+
+// PricingWeightOrigin 是费用册上计价重量与来源的几格，两样分开印。PricedWeight 是评价进位之后的计价重量；ActualWeight 与
+// DimensionSides（三边由长到短）是评价用的实重与尺寸，Kind 用评价事实的种类词说它们出自实测还是申报。实重不印在计价
+// 重量的键上：取较大者的卡上复测只把尺寸量大时，实重不变而计价重量变了。
+//
+// 字段与提供方那一份逐一相同，装配处靠类型转换交过来：哪一边加了格另一边没加，编译就过不去，不会悄悄丢一格。
+type PricingWeightOrigin struct {
+	Kind             string
+	PricedWeight     string
+	PricedWeightUnit string
+	ActualWeight     string
+	ActualWeightUnit string
+	DimensionSides   []string
+	DimensionUnit    string
+}
+
 func NewQuerySettlementChargesEndpoint(
 	intake CatalogueQueryIntake,
 	reader ChargeCatalogueReader,
+	weights PricingWeightSourceReader,
 ) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if !guardGet(response, request) {
@@ -80,7 +106,7 @@ func NewQuerySettlementChargesEndpoint(
 
 		switch values.Get("registry") {
 		case registryCustomerCharge:
-			serveCustomerCharges(response, request, values, reader, tenant, query.Limit)
+			serveCustomerCharges(response, request, values, reader, weights, tenant, query.Limit)
 		case registrySupplierExpectedCost:
 			serveSupplierExpectedCosts(response, request, values, reader, tenant, query.Limit)
 		default:
@@ -94,6 +120,7 @@ func serveCustomerCharges(
 	request *http.Request,
 	values url.Values,
 	reader ChargeCatalogueReader,
+	weights PricingWeightSourceReader,
 	tenant domain.TenantID,
 	limit int,
 ) {
@@ -109,6 +136,19 @@ func serveCustomerCharges(
 		return
 	}
 	// 空列表交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
+	origins := map[string]PricingWeightOrigin{}
+	if weights != nil {
+		ids := make([]string, 0, len(page.Rows))
+		for _, row := range page.Rows {
+			ids = append(ids, row.Evaluation)
+		}
+		loaded, err := weights.PricingWeightOrigins(request.Context(), tenant, ids)
+		if err != nil {
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		origins = loaded
+	}
 	bodies := make([]customerChargeBody, 0, len(page.Rows))
 	for _, row := range page.Rows {
 		bases := make([]chargeConfirmationBasisBody, 0, len(row.ConfirmationBases))
@@ -119,6 +159,14 @@ func serveCustomerCharges(
 				RecordedAt: rfc3339(basis.RecordedAt),
 			})
 		}
+		adjustments := make([]chargeAdjustmentBody, 0, len(row.Adjustments))
+		for _, adjustment := range row.Adjustments {
+			adjustments = append(adjustments, chargeAdjustmentBody{
+				Adjustment: adjustment.Adjustment, Kind: adjustment.Kind, Direction: adjustment.Direction,
+				SettlementAmount: minorAmount(adjustment.SettlementMinor),
+			})
+		}
+		origin := origins[row.Evaluation]
 		bodies = append(bodies, customerChargeBody{
 			Charge:               row.Charge,
 			FeeItem:              row.FeeItem,
@@ -143,6 +191,15 @@ func serveCustomerCharges(
 			ConfirmationBases:    bases,
 			AttributionDate:      row.AttributionDate,
 			BilledOn:             row.BilledOn,
+			SupersededBy:         row.SupersededBy,
+			Adjustments:          adjustments,
+			WeightSource:         origin.Kind,
+			PricedWeight:         origin.PricedWeight,
+			PricedWeightUnit:     origin.PricedWeightUnit,
+			ActualWeight:         origin.ActualWeight,
+			ActualWeightUnit:     origin.ActualWeightUnit,
+			DimensionSides:       origin.DimensionSides,
+			DimensionUnit:        origin.DimensionUnit,
 		})
 	}
 	writeJSON(response, http.StatusOK, customerChargeListResponse{
@@ -244,6 +301,23 @@ type customerChargeBody struct {
 	ConfirmationBases    []chargeConfirmationBasisBody `json:"confirmationBases"`
 	AttributionDate      string                        `json:"attributionDate,omitempty"`
 	BilledOn             string                        `json:"billedOn,omitempty"`
+	SupersededBy         string                        `json:"supersededBy,omitempty"`
+	Adjustments          []chargeAdjustmentBody        `json:"adjustments"`
+	// 计价重量与它的来源（见 PricingWeightOrigin）。读口没答的评价这几键整个不出现。
+	PricedWeight     string   `json:"pricedWeight,omitempty"`
+	PricedWeightUnit string   `json:"pricedWeightUnit,omitempty"`
+	WeightSource     string   `json:"weightSource,omitempty"`
+	ActualWeight     string   `json:"actualWeight,omitempty"`
+	ActualWeightUnit string   `json:"actualWeightUnit,omitempty"`
+	DimensionSides   []string `json:"dimensionSides,omitempty"`
+	DimensionUnit    string   `json:"dimensionUnit,omitempty"`
+}
+
+type chargeAdjustmentBody struct {
+	Adjustment       string `json:"adjustment"`
+	Kind             string `json:"kind"`
+	Direction        string `json:"direction"`
+	SettlementAmount string `json:"settlementAmount"`
 }
 
 // chargeConfirmationBasisBody 逐字段透出一种已到达的确认依据。「到了哪几种」与

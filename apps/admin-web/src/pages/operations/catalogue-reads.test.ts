@@ -81,7 +81,7 @@ test('运输履约各册以 registry 选册，下推的胶囊、筛选框、检�
   ]);
 });
 
-// Covers: 网点作业三册——registry 选册；收货记录 kind、集包 phase 下推；待识别货物的「为什么认不出」是页面派生，不进查询串。
+// Covers: 网点作业各册——registry 选册；收货记录 kind、集包 phase、称重量方 voided 下推；待识别货物的「为什么认不出」是页面派生，不进查询串。
 test('网点作业各册以 registry 选册，下推的胶囊、检索词与游标跟在后面', async () => {
   const urls = captureRequests();
   await listNodeOperationsRecords(nodeOperationsConditions('reception'));
@@ -95,11 +95,15 @@ test('网点作业各册以 registry 选册，下推的胶囊、检索词与游�
   await listNodeOperationsRecords(
     nodeOperationsConditions('unidentified-item', reviewListConditions('SYN-DPCL', nodePushedStatus['unidentified-item'], 'ALL')),
   );
+  await listNodeOperationsRecords(
+    nodeOperationsConditions('measurement', reviewListConditions('SYN-HU', nodePushedStatus.measurement, 'true')),
+  );
   deepEqual(urls, [
     '/node-operations-records?registry=reception',
     '/node-operations-records?registry=reception&kind=PENDING_IDENTIFICATION',
     '/node-operations-records?registry=consolidation-unit&phase=SEALED&q=SYN-SEAL&after=c1',
     '/node-operations-records?registry=unidentified-item&q=SYN-DPCL',
+    '/node-operations-records?registry=measurement&voided=true&q=SYN-HU',
   ]);
 });
 

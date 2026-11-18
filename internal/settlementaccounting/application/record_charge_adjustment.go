@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -192,16 +193,12 @@ func (handler *RecordChargeAdjustmentHandler) Handle(
 
 	// 应收方向的费用：先锁它的客户作用域，再读既有调整、落这一笔、重算——同一账户上的调整与确认排成一列，两笔各自
 	// 不越界的贷项不会合起来把费用让成负数。
-	facts, _ := charge.ConfirmedFacts()
-	recompute := facts.Direction == domain.ChargeReceivable && handler.deps.Balances != nil && handler.deps.Books != nil
-	var scope domain.SettlementScope
-	if recompute {
-		if scope, err = domain.NewSettlementScope(facts.ResponsibleEntity, facts.SettlementAccount, chargeCurrency); err != nil {
-			return RecordChargeAdjustmentResult{}, fmt.Errorf("record charge adjustment: settlement scope: %w", err)
-		}
-		if err := handler.deps.Balances.LockOperationalBalanceScope(ctx, command.TenantID, scope); err != nil {
-			return handler.registerUndecided(command.AdjustmentID), nil
-		}
+	scope, recompute, err := handler.lockCustomerScope(ctx, command.TenantID, charge)
+	if errors.Is(err, errCustomerScopeLockUnavailable) {
+		return handler.registerUndecided(command.AdjustmentID), nil
+	}
+	if err != nil {
+		return RecordChargeAdjustmentResult{}, err
 	}
 
 	if existing, present, err := handler.deps.Adjustments.FindByKey(ctx, key); err != nil {
@@ -250,6 +247,31 @@ func (handler *RecordChargeAdjustmentHandler) Handle(
 		adjustment:    adjustment,
 		hasAdjustment: true,
 	}, nil
+}
+
+// errCustomerScopeLockUnavailable 说明客户作用域的锁没取到。它是依赖读写不动，不是提交有错。
+var errCustomerScopeLockUnavailable = errors.New("settlement accounting: customer scope lock unavailable")
+
+// lockCustomerScope 给应收方向的费用锁住它的客户作用域。第二个返回值为假：这笔费用不进客户余额，或装配没给余额口，
+// 不锁也不重算。同一事务里再锁一次是同一把锁。
+func (handler *RecordChargeAdjustmentHandler) lockCustomerScope(
+	ctx context.Context,
+	tenant domain.TenantID,
+	charge domain.CustomerCharge,
+) (domain.SettlementScope, bool, error) {
+	facts, _ := charge.ConfirmedFacts()
+	if facts.Direction != domain.ChargeReceivable || handler.deps.Balances == nil || handler.deps.Books == nil {
+		return domain.SettlementScope{}, false, nil
+	}
+	currency, _ := charge.SettlementAmount()
+	scope, err := domain.NewSettlementScope(facts.ResponsibleEntity, facts.SettlementAccount, currency)
+	if err != nil {
+		return domain.SettlementScope{}, false, fmt.Errorf("record charge adjustment: settlement scope: %w", err)
+	}
+	if err := handler.deps.Balances.LockOperationalBalanceScope(ctx, tenant, scope); err != nil {
+		return domain.SettlementScope{}, false, fmt.Errorf("%w: %w", errCustomerScopeLockUnavailable, err)
+	}
+	return scope, true, nil
 }
 
 // signedAdjustment 把一笔调整折成对费用金额的增减：借项加、贷项减。
@@ -335,4 +357,138 @@ func (handler *RecordChargeAdjustmentHandler) registerUndecided(id string) Recor
 func adjustmentContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
+}
+
+// ReweighDifferenceOutcome 是已确认费用按新评价结算差额的结果。为零不形成调整。
+type ReweighDifferenceOutcome uint8
+
+const (
+	ReweighDifferenceOutcomeInvalid ReweighDifferenceOutcome = iota
+	ReweighDifferenceNone
+	ReweighDifferenceRecorded
+	ReweighDifferenceReplayed
+	ReweighDifferenceExceedsCharge
+	ReweighDifferenceNotAccepted
+	ReweighDifferenceUndecided
+)
+
+func (outcome ReweighDifferenceOutcome) String() string {
+	switch outcome {
+	case ReweighDifferenceNone:
+		return "NO_DIFFERENCE"
+	case ReweighDifferenceRecorded:
+		return "ADJUSTMENT_RECORDED"
+	case ReweighDifferenceReplayed:
+		return "ALREADY_RECORDED"
+	case ReweighDifferenceExceedsCharge:
+		return "ADJUSTMENT_EXCEEDS_CHARGE"
+	case ReweighDifferenceNotAccepted:
+		return "SOURCE_NOT_ACCEPTED"
+	case ReweighDifferenceUndecided:
+		return "ADJUSTMENT_UNDECIDED"
+	case ReweighDifferenceOutcomeInvalid:
+		return ""
+	default:
+		return ""
+	}
+}
+
+// ReweighDifferenceCommand 用新评价的两格金额对一笔已确认费用结算差额。调整标识由评价标识派生，同一份评价重投是同一笔。
+type ReweighDifferenceCommand struct {
+	TenantID           domain.TenantID
+	ChargeID           string
+	Evaluation         string
+	OriginalCurrency   string
+	OriginalMinor      int64
+	SettlementCurrency string
+	SettlementMinor    int64
+	Conversion         string
+}
+
+// SettleReweigh 只经本用例写调整册。差额是新评价的金额减去这笔费用按计价该收的净额：费用加上已有的计价纠错。
+// 商业让利不在这份净额里——它是另凭授权让掉的，不是哪一份评价算出来的；算进去，下一次重估就会把让掉的钱记成
+// 借项收回来。贷项会不会把费用让成负数仍看全部调整，那一道在 Handle 里。
+func (handler *RecordChargeAdjustmentHandler) SettleReweigh(
+	ctx context.Context,
+	command ReweighDifferenceCommand,
+) (ReweighDifferenceOutcome, error) {
+	chargeID, err := domain.NewCustomerChargeID(command.ChargeID)
+	if err != nil {
+		return ReweighDifferenceNotAccepted, nil
+	}
+	charge, found, err := handler.deps.Charges.FindByID(ctx, command.TenantID, chargeID)
+	if err != nil {
+		return ReweighDifferenceUndecided, nil
+	}
+	if !found || charge.Stage() != domain.ChargeConfirmed {
+		return ReweighDifferenceNotAccepted, nil
+	}
+	chargeCurrency, chargeMinor := charge.SettlementAmount()
+	if command.SettlementCurrency != chargeCurrency.String() {
+		return ReweighDifferenceNotAccepted, nil
+	}
+	originalCurrency, originalMinor := charge.OriginalAmount()
+	// 读既有调整之前先锁：差额是照读到的净额算的，不排队的话另一笔计价纠错落在读与写之间，差额就算错了。
+	if _, _, err := handler.lockCustomerScope(ctx, command.TenantID, charge); errors.Is(err, errCustomerScopeLockUnavailable) {
+		return ReweighDifferenceUndecided, nil
+	} else if err != nil {
+		return ReweighDifferenceOutcomeInvalid, err
+	}
+	recorded, err := handler.deps.Adjustments.ListByCharge(ctx, command.TenantID, chargeID)
+	if err != nil {
+		return ReweighDifferenceUndecided, nil
+	}
+	netSettlement, netOriginal := chargeMinor, originalMinor
+	for _, record := range recorded {
+		if record.Adjustment.Kind() != domain.PricingCorrection {
+			continue
+		}
+		_, minor := record.Adjustment.SettlementAmount()
+		netSettlement += signedAdjustment(record.Adjustment.Direction(), minor)
+		_, original := record.Adjustment.OriginalAmount()
+		netOriginal += signedAdjustment(record.Adjustment.Direction(), original)
+	}
+	settlementDelta := command.SettlementMinor - netSettlement
+	originalDelta := command.OriginalMinor - netOriginal
+	if settlementDelta == 0 && originalDelta == 0 {
+		return ReweighDifferenceNone, nil
+	}
+	if settlementDelta == 0 || originalDelta == 0 || (settlementDelta > 0) != (originalDelta > 0) {
+		return ReweighDifferenceNotAccepted, nil
+	}
+	direction := domain.AdjustmentDebit
+	settlementAmount, originalAmount := settlementDelta, originalDelta
+	if settlementDelta < 0 {
+		direction = domain.AdjustmentCredit
+		settlementAmount = -settlementDelta
+		originalAmount = -originalDelta
+	}
+	result, err := handler.Handle(ctx, RecordChargeAdjustmentCommand{
+		TenantID:           command.TenantID,
+		AdjustmentID:       "REWEIGH-" + command.Evaluation,
+		ChargeID:           command.ChargeID,
+		Kind:               domain.PricingCorrection,
+		Direction:          direction,
+		Evaluation:         command.Evaluation,
+		OriginalCurrency:   originalCurrency.String(),
+		OriginalMinor:      originalAmount,
+		SettlementCurrency: command.SettlementCurrency,
+		SettlementMinor:    settlementAmount,
+		Conversion:         command.Conversion,
+	})
+	if err != nil {
+		return ReweighDifferenceOutcomeInvalid, err
+	}
+	switch result.Outcome() {
+	case ChargeAdjustmentRecordedOutcome:
+		return ReweighDifferenceRecorded, nil
+	case ChargeAdjustmentReplayedOutcome:
+		return ReweighDifferenceReplayed, nil
+	case AdjustmentExceedsCharge:
+		return ReweighDifferenceExceedsCharge, nil
+	case AdjustmentUndecided:
+		return ReweighDifferenceUndecided, nil
+	default:
+		return ReweighDifferenceNotAccepted, nil
+	}
 }

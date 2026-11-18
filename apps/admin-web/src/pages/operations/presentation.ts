@@ -14,6 +14,18 @@ export const controlKindLabels: Record<string, string> = {
   HANDOVER_IN: '交接转入',
 };
 
+/** 测量对象种类封闭两格（nodeoperations domain MeasurementObjectKind）。 */
+export const measurementObjectKindLabels: Record<string, string> = {
+  HANDLING_UNIT: '作业实物',
+  CONSOLIDATION_UNIT: '集运单元',
+};
+
+/** 作废筛选词与行上那一格同词：false 是仍有效，true 是已有作废指过来。 */
+export const measurementVoidedLabels: Record<string, string> = {
+  false: '仍有效',
+  true: '已作废',
+};
+
 /** 集运单元实例阶段封闭三相，中文取 CONTEXT 生命周期原词。 */
 export const consolidationPhaseLabels: Record<string, string> = {
   OPEN: '开放装入',

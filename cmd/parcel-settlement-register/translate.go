@@ -47,6 +47,7 @@ const (
 	commandFeeItemMapping              = "fee-item-mapping"
 	commandEvaluationResume            = "evaluation-resume"
 	commandExpectedCostSupplier        = "expected-cost-supplier-backfill"
+	commandReweighAdjustmentAdoption   = "reweigh-adjustment-adoption"
 )
 
 var allCommands = []string{
@@ -77,6 +78,7 @@ var allCommands = []string{
 	commandFeeItemMapping,
 	commandEvaluationResume,
 	commandExpectedCostSupplier,
+	commandReweighAdjustmentAdoption,
 }
 
 // dispatchFunc 是一条命令在事务内的一次调用，交回已经归好退出码的答复。资金事实与结算账户是两族答案，
@@ -451,9 +453,26 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 			}
 			return message, code, nil
 		}, nil
+	case commandReweighAdjustmentAdoption:
+		return reweighAdjustmentAdoptionCommand(raw)
 	default:
 		return nil, fmt.Errorf("未知登记命令 %q（支持 %s）", command, strings.Join(allCommands, " / "))
 	}
+}
+
+func reweighAdjustmentAdoptionCommand(raw []byte) (dispatchFunc, error) {
+	tenant, account, basis, err := registrationjson.ReweighAdjustmentAdoptionFromJSON(raw)
+	if err != nil {
+		return nil, err
+	}
+	return func(ctx context.Context, registrar registrar) (string, int, error) {
+		effect, err := registrar.reweighAdoptions.RegisterReweighAdjustmentAdoption(ctx, tenant, account, basis)
+		if err != nil {
+			return "", 0, err
+		}
+		message, code := catalogueAnswer(commandReweighAdjustmentAdoption, effect, account.String())
+		return message, code, nil
+	}, nil
 }
 
 // errEvaluationResumeUndecided 让运营续办在某一件未决时整笔回滚；execute 把它译成未决的退出码。

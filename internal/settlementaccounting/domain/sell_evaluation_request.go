@@ -293,7 +293,8 @@ func sellRequestStateOf(cause EvaluationStopCause) SellEvaluationRequestState {
 	switch cause {
 	case StopEvaluationPendingJudgment, StopAmountRoundingUndeclared, StopFeeItemMappingIncomplete,
 		StopEvaluationCatalogueUnresolved, StopEvaluationSeriesUnresolved, StopEvaluationRateNotFound,
-		StopEvaluationInputIncomplete, StopPendingJudgmentCauseUnrecorded:
+		StopEvaluationInputIncomplete, StopPendingJudgmentCauseUnrecorded,
+		StopReweighAdjustmentNotAdopted, StopReweighAdjustmentExceedsCharge:
 		return SellRequestPendingJudgment
 	case StopEvaluationUnratable:
 		return SellRequestUnratable

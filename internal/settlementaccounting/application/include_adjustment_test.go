@@ -16,7 +16,46 @@ import (
 // 纳入关系的所有权，替身也不该长出一条本用例不该有的路。
 type adjustmentViewDouble struct {
 	records map[string]ports.ChargeAdjustmentRecord
-	err     error
+	// unbilled 是已形成、待出账的调整，按形成先后。截单读它：挂在点名费用上的总交回，其余的只在 includePrior 为真时交回。
+	unbilled []ports.ChargeAdjustmentRecord
+	// statements 与 inclusions 给了，就照真册再筛一遍：已写在一张未作废对账单调整行里的、有一笔没撤回的后续纳入的，
+	// 不再交；带它的那张单作废、纳入撤回之后又交回来。
+	statements *statementStoreDouble
+	inclusions *inclusionStoreDouble
+	err        error
+}
+
+// onOpenStatement 答这笔费用是不是在一张未作废的对账单上。没给对账单册时一律答是。
+func (double *adjustmentViewDouble) onOpenStatement(charge domain.CustomerChargeID) bool {
+	if double.statements == nil {
+		return true
+	}
+	for _, record := range double.statements.records {
+		if _, _, voided := record.Statement.Voided(); voided {
+			continue
+		}
+		if _, found := record.Statement.LineFor(charge); found {
+			return true
+		}
+	}
+	return false
+}
+
+// billed 答这笔调整此刻算不算已出账。
+func (double *adjustmentViewDouble) billed(adjustment domain.ChargeAdjustmentID) bool {
+	if double.statements != nil {
+		for _, record := range double.statements.records {
+			if _, _, voided := record.Statement.Voided(); voided {
+				continue
+			}
+			for _, line := range record.Statement.AdjustmentLines() {
+				if line.Adjustment == adjustment {
+					return true
+				}
+			}
+		}
+	}
+	return double.inclusions != nil && double.inclusions.carries(adjustment)
 }
 
 func newAdjustmentView() *adjustmentViewDouble {
@@ -32,6 +71,33 @@ func (double *adjustmentViewDouble) FindByKey(
 	}
 	record, found := double.records[key.TenantID.String()+"|"+key.Adjustment.String()]
 	return record, found, nil
+}
+
+func (double *adjustmentViewDouble) ListUnbilledForCutoff(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.SettlementAccountID,
+	_ domain.CurrencyCode,
+	charges []domain.CustomerChargeID,
+	includePrior bool,
+) ([]ports.ChargeAdjustmentRecord, error) {
+	if double.err != nil {
+		return nil, double.err
+	}
+	named := map[domain.CustomerChargeID]bool{}
+	for _, charge := range charges {
+		named[charge] = true
+	}
+	var listed []ports.ChargeAdjustmentRecord
+	for _, record := range double.unbilled {
+		if double.billed(record.Adjustment.ID()) {
+			continue
+		}
+		if named[record.Adjustment.Charge()] || (includePrior && double.onOpenStatement(record.Adjustment.Charge())) {
+			listed = append(listed, record)
+		}
+	}
+	return listed, nil
 }
 
 // pricingCorrectionOn 造一笔已由 UC-SA-002 形成的计价纠错借项——本用例只读它，从不造它。
@@ -210,9 +276,11 @@ func TestAdjustmentInclusionOnlyReadsAdjustments(t *testing.T) {
 		if !found {
 			t.Fatal("编排没有调整读口")
 		}
+		// 名单上的每一个都只读调整册：按标识取一笔，列出还没出账的。往名单里加名字之前先核它不写。
+		reads := map[string]bool{"FindByKey": true, "ListUnbilledForCutoff": true}
 		for index := 0; index < field.Type.NumMethod(); index++ {
 			name := field.Type.Method(index).Name
-			if name != "FindByKey" {
+			if !reads[name] {
 				t.Fatalf("调整口长出了 %q——UC-SA-003 只拥有纳入关系，连一条能写调整的路都不该有", name)
 			}
 		}

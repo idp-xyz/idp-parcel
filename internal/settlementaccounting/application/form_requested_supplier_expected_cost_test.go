@@ -198,6 +198,59 @@ func TestARequestedBuyEvaluationFormsTheFirstVersionUnderTheDerivedIdentity(t *t
 	}
 }
 
+// Covers: 实测变化另起的那一代停下之后，由运营续办出来的下一代仍按新实测重述成本：沿前一代往回看，跳过停下的各代，
+// 找得到凭实测变化另起的那一代。续办的那一代自己凭的不是实测变化；只看它自己的依据，就会答`已有首版`、成本留在旧值。
+// 没有实测变化在前的续办照旧答`已有首版`。
+func TestAGenerationResumedAfterAStalledMeasurementChangeStillRestatesTheCost(t *testing.T) {
+	fixture := newRequestedCostFixture(t)
+	if _, err := fixture.handle(t, "buy-eval-1", "EVREQ-SYN-1"); err != nil {
+		t.Fatalf("首版：%v", err)
+	}
+	tenant := billValue(t, domain.NewTenantID, "tenant-1")
+	resume := func(from, id string, basis domain.ResumeBasis, stopped domain.EvaluationStopCause) {
+		t.Helper()
+		previous := fixture.requests.records[tenant.String()+"/"+from]
+		next, err := previous.Request.Resume(billValue(t, domain.NewEvaluationRequestID, id), basis,
+			costOccurredAt.Add(time.Hour), billValue(t, domain.NewRequesterReference, "syn-settlement-job"))
+		if err != nil {
+			t.Fatalf("续办 %s：%v", id, err)
+		}
+		fixture.requests.records[tenant.String()+"/"+id] = ports.EvaluationRequestRecord{
+			Key:     ports.EvaluationRequestKey{TenantID: tenant, Request: next.ID()},
+			Request: next, RecordedAt: costRecordedAt, StopCause: stopped,
+		}
+	}
+	measured := billValue(t, domain.NewMeasurementChangeResumeBasis, "measure-1")
+	operator := func(reference string) domain.ResumeBasis {
+		return billValue(t, domain.NewOperatorResumeBasis, reference)
+	}
+	changed := completedAdoption(t, "buy-eval-9")
+	changed.OriginalMinor = 4300
+	changed.SettlementMinor = 31000
+	fixture.evaluations.adoptions["buy-eval-9"] = changed
+
+	// 没有实测变化在前：首代之后直接由运营续办出来的一代，照旧答已有首版。
+	resume("EVREQ-SYN-1", "EVREQ-SYN-PLAIN", operator("ops-0"), domain.EvaluationStopCauseInvalid)
+	plain, err := fixture.handle(t, "buy-eval-9", "EVREQ-SYN-PLAIN")
+	if err != nil || plain.Outcome() != application.RequestedSupplierExpectedCostFirstVersionExists {
+		t.Fatalf("没有实测变化的续办 = %s err=%v，want 已有首版", plain.Outcome(), err)
+	}
+
+	resume("EVREQ-SYN-1", "EVREQ-SYN-2", measured, domain.StopEvaluationInputIncomplete)
+	resume("EVREQ-SYN-2", "EVREQ-SYN-3", operator("ops-1"), domain.EvaluationStopCauseInvalid)
+	result, err := fixture.handle(t, "buy-eval-9", "EVREQ-SYN-3")
+	if err != nil || result.Outcome() != application.RequestedSupplierExpectedCostAdopted {
+		t.Fatalf("outcome = %s / %s err=%v，want 按新实测重述", result.Outcome(), result.Formation().Outcome(), err)
+	}
+	restated, _ := result.Formation().Cost()
+	prior, corrects := restated.PriorVersion()
+	reason, _ := restated.CorrectionReason()
+	if _, minor := restated.SettlementAmount(); !corrects || prior.String() != "BUYSC-EVREQ-SYN-1" ||
+		reason != domain.MeasurementChangedCorrection() || minor != 31000 {
+		t.Fatalf("重述版本 = %s 回指 %s（%v）原因 %s 金额 %d", restated.Version(), prior, corrects, reason, minor)
+	}
+}
+
 // Covers: AT-SA-207——发生项 v1 失效（v2）之后长出替代版本 v3，另一份请求点名 v3、同一费用项目，评价命中同一价卡版本：不再答`已有首版`
 // 即止（ADR-0200 越权风险点 4、票 demo-chain-gaps/15），而是按新评价重述全额、接在失效纠错版本后面追加一个纠错版本：回指它、原因是
 // 发生项替代、发生项版本随评价换成 v3，版本标识由这份请求派生；首版一字不动。金额与首版相同也追加——纠错由发生项新版本触发，不由评价

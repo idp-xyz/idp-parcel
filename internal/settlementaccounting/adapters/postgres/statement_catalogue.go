@@ -115,7 +115,8 @@ const customerStatementColumns = `s.statement_number, s.account_id, s.period_ref
 		                )
 		           FROM settlement_accounting.subsequent_inclusion AS i
 		          WHERE i.tenant_id = s.tenant_id
-		            AND i.statement_number = s.statement_number)`
+		            AND i.statement_number = s.statement_number
+		            AND i.withdrawn_at IS NULL)`
 
 // statementDisputeNumbers 是单上各项争议的争议号连成的一格，只供 q 检索：客户报来的常是争议号，争议挂在单上、不另成一册。
 // 以换行相隔，检索词里没有换行就不会跨两个号命中；单上没有争议、或争议都没有号时为 NULL，这一格不命中。

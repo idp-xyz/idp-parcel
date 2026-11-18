@@ -106,6 +106,7 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/nodeoperations/adapters/postgres/execution_fact_handoff.go":           partitionPerEnvelopePrefix + "键即信封 ID（键取到动作，各动作独立成条）",
 	"internal/nodeoperations/adapters/postgres/identity_recheck_doorbell.go":        partitionSubjectPrefix + "租户/作业实物（定长指纹；自投重核门铃，同一件实物的门铃排一条队）",
 	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go":              partitionPerEnvelopePrefix + "键即信封 ID（收寄键）",
+	"internal/nodeoperations/adapters/postgres/measurement_changed_handoff.go":      partitionSubjectPrefix + "租户/测量对象（种类加标识的定长指纹；同一对象的称重与作废排一条队）",
 	"internal/nodeoperations/adapters/postgres/sealed_snapshot_handoff.go":          partitionSubjectPrefix + "租户/集运单元",
 
 	// 键比上面各行都长，单起一段：并进去 gofmt 会重排整段的对齐。

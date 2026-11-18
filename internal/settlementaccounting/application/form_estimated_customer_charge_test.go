@@ -52,6 +52,22 @@ func (double *sellRequestRegisterDouble) FindCurrentByParcel(
 	return ports.SellEvaluationRequestRecord{}, false, errors.New("not used by the formation")
 }
 
+// FindSuccessor 照册上「一份请求至多一个下一代」找回指这一份的那一代。
+func (double *sellRequestRegisterDouble) FindSuccessor(
+	_ context.Context,
+	key ports.SellEvaluationRequestKey,
+) (ports.SellEvaluationRequestRecord, bool, error) {
+	if double.viewErr != nil {
+		return ports.SellEvaluationRequestRecord{}, false, double.viewErr
+	}
+	for _, record := range double.records {
+		if previous, has := record.Request.Previous(); has && previous == key.Request {
+			return record, true, nil
+		}
+	}
+	return ports.SellEvaluationRequestRecord{}, false, nil
+}
+
 func (double *sellRequestRegisterDouble) RecordConclusion(
 	_ context.Context,
 	key ports.SellEvaluationRequestKey,

@@ -53,6 +53,8 @@ const (
 	// RequestedSupplierExpectedCostZeroTotal：评价已完成而合计为零。不写成本行，在 BUY 请求册上记`负向结束（零额）`；不是停因，
 	// 不进续办队列（ADR-0306 决定三）。
 	RequestedSupplierExpectedCostZeroTotal
+	// RequestedSupplierExpectedCostUnchanged：实测变化带来的新评价合计与链头相同，没有追加成本版本。
+	RequestedSupplierExpectedCostUnchanged
 )
 
 func (outcome RequestedSupplierExpectedCostOutcome) String() string {
@@ -71,6 +73,8 @@ func (outcome RequestedSupplierExpectedCostOutcome) String() string {
 		return "OCCURRENCE_INVALIDATED"
 	case RequestedSupplierExpectedCostZeroTotal:
 		return "BUY_EVALUATION_ZERO_TOTAL"
+	case RequestedSupplierExpectedCostUnchanged:
+		return "SUPPLIER_EXPECTED_COST_UNCHANGED"
 	default:
 		return ""
 	}
@@ -167,13 +171,20 @@ func (handler *FormRequestedSupplierExpectedCostHandler) Handle(
 	request := record.Request
 	sources := request.Sources()
 	version := request.SupplierExpectedCostVersionID()
+	measurementChange, err := handler.followsAMeasurementChange(ctx, command.TenantID, record)
+	if err != nil {
+		return RequestedSupplierExpectedCostResult{
+			outcome: RequestedSupplierExpectedCostUndecided, reason: BuyEvaluationRequestViewUnavailable, cause: err,
+		}, nil
+	}
 	formed, err := handler.deps.Costs.Handle(ctx, FormSupplierExpectedCostCommand{
-		TenantID:   command.TenantID,
-		Version:    version,
-		Occurrence: sources.Occurrence,
-		FeeItem:    sources.FeeItem,
-		Agreement:  sources.Agreement,
-		Evaluation: adoption.Evaluation,
+		TenantID:          command.TenantID,
+		Version:           version,
+		Occurrence:        sources.Occurrence,
+		FeeItem:           sources.FeeItem,
+		Agreement:         sources.Agreement,
+		Evaluation:        adoption.Evaluation,
+		MeasurementChange: measurementChange,
 	})
 	if err != nil {
 		return RequestedSupplierExpectedCostResult{}, err
@@ -181,6 +192,8 @@ func (handler *FormRequestedSupplierExpectedCostHandler) Handle(
 	switch formed.Outcome() {
 	case ExpectedCostFormed, ExpectedCostExistingResult:
 		return RequestedSupplierExpectedCostResult{outcome: RequestedSupplierExpectedCostAdopted, formation: formed}, nil
+	case ExpectedCostUnchanged:
+		return RequestedSupplierExpectedCostResult{outcome: RequestedSupplierExpectedCostUnchanged, formation: formed}, nil
 	case ExpectedCostAlreadyFormed:
 		return RequestedSupplierExpectedCostResult{outcome: RequestedSupplierExpectedCostFirstVersionExists, formation: formed}, nil
 	case ExpectedCostUnratable:
@@ -203,6 +216,37 @@ func (handler *FormRequestedSupplierExpectedCostHandler) Handle(
 	default:
 		return RequestedSupplierExpectedCostResult{}, fmt.Errorf("%w: %s for version %s",
 			ErrUnexpectedRequestedExpectedCostFormation, formed.Outcome(), version)
+	}
+}
+
+// followsAMeasurementChange 答这一代的评价是不是在重述一次实测变化。这一代自己凭实测变化另起，算；这一代是续办出来的，
+// 就沿前一代往回看：中间停下的各代（带停因、没形成成本）跳过，其中有一代凭实测变化另起，也算。只看这一代自己的依据，
+// 实测变化那一代停下之后由补登或运营续办出来的下一代，就不会按新实测重述成本。走到一代没停下的就止步：那一代的评价
+// 已经采用过，这条链上更早的实测变化轮不到这一代来重述。
+func (handler *FormRequestedSupplierExpectedCostHandler) followsAMeasurementChange(
+	ctx context.Context,
+	tenant domain.TenantID,
+	record ports.EvaluationRequestRecord,
+) (bool, error) {
+	for {
+		if record.Request.ResumeBasis().FromMeasurementChange() {
+			return true, nil
+		}
+		previous, has := record.Request.Previous()
+		if !has {
+			return false, nil
+		}
+		earlier, found, err := handler.deps.Requests.FindByID(ctx, ports.EvaluationRequestKey{TenantID: tenant, Request: previous})
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			return false, fmt.Errorf("%w: previous request %s", ErrBuyEvaluationRequestNotRecorded, previous)
+		}
+		if earlier.StopCause == domain.EvaluationStopCauseInvalid {
+			return false, nil
+		}
+		record = earlier
 	}
 }
 

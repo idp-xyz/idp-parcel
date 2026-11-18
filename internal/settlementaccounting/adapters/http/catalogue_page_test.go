@@ -167,7 +167,7 @@ type pagedCatalogue struct {
 // pagedCatalogues 交回本上下文按 ADR-0144 翻页的全部册子。
 func pagedCatalogues() []pagedCatalogue {
 	charges := func(intake settlementhttp.CatalogueQueryIntake, reader settlementCatalogueReaders) http.Handler {
-		return settlementhttp.NewQuerySettlementChargesEndpoint(intake, reader)
+		return settlementhttp.NewQuerySettlementChargesEndpoint(intake, reader, nil)
 	}
 	statements := func(intake settlementhttp.CatalogueQueryIntake, reader settlementCatalogueReaders) http.Handler {
 		return settlementhttp.NewQuerySettlementStatementsEndpoint(intake, reader)

@@ -1,0 +1,5 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "form": "LATEST_STILL_VALID_BY_OCCURRED_AT",
+  "basis": "SYN-MEAS-FORM-01"
+}

@@ -126,6 +126,88 @@ func (repository *ChargeAdjustments) ListByCharge(
 	return records, nil
 }
 
+// ListUnbilledForCutoff 见端口头注。已写进未作废对账单调整行、或有一笔没撤回的后续纳入的，不再交。带它的那张单
+// 作废之后纳入随之撤回，这笔调整又算没出账。
+func (repository *ChargeAdjustments) ListUnbilledForCutoff(
+	ctx context.Context,
+	tenant domain.TenantID,
+	account domain.SettlementAccountID,
+	currency domain.CurrencyCode,
+	charges []domain.CustomerChargeID,
+	includePrior bool,
+) ([]ports.ChargeAdjustmentRecord, error) {
+	if len(charges) == 0 && !includePrior {
+		return nil, nil
+	}
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list unbilled adjustments: %w", err)
+	}
+	ids := make([]string, 0, len(charges))
+	for _, charge := range charges {
+		ids = append(ids, charge.String())
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT a.adjustment_id, a.charge_id, a.kind, a.direction, a.evaluation_ref, a.authorization_ref,
+		        a.original_currency, a.original_minor, a.settlement_currency, a.settlement_minor,
+		        a.conversion_ref, a.formed_at, a.recorded_at
+		   FROM settlement_accounting.charge_adjustment AS a
+		   JOIN settlement_accounting.customer_charge AS c
+		     ON c.tenant_id = a.tenant_id AND c.charge_id = a.charge_id
+		  WHERE a.tenant_id = $1
+		    AND c.settlement_account_id = $2
+		    AND a.settlement_currency = $3
+		    AND NOT EXISTS (
+		        SELECT 1 FROM settlement_accounting.customer_statement AS s
+		         WHERE s.tenant_id = a.tenant_id
+		           AND s.voided_at IS NULL
+		           AND s.adjustment_lines @> jsonb_build_array(jsonb_build_object('adjustment', a.adjustment_id)))
+		    AND NOT EXISTS (
+		        SELECT 1 FROM settlement_accounting.subsequent_inclusion AS i
+		         WHERE i.tenant_id = a.tenant_id AND i.adjustment_id = a.adjustment_id AND i.withdrawn_at IS NULL)
+		    AND (
+		        a.charge_id = ANY($4::text[])
+		        OR ($5::bool AND EXISTS (
+		            SELECT 1 FROM settlement_accounting.customer_statement AS billed
+		             WHERE billed.tenant_id = a.tenant_id
+		               AND billed.account_id = $2
+		               AND billed.voided_at IS NULL
+		               AND billed.lines @> jsonb_build_array(jsonb_build_object('charge', a.charge_id))))
+		    )
+		  ORDER BY a.formed_at, a.adjustment_id`,
+		tenant.String(), account.String(), currency.String(), ids, includePrior,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list unbilled adjustments: %w", err)
+	}
+	defer rows.Close()
+	records := []ports.ChargeAdjustmentRecord{}
+	for rows.Next() {
+		var id string
+		var row adjustmentRow
+		if err := rows.Scan(append([]any{&id}, row.scanTargets()...)...); err != nil {
+			return nil, fmt.Errorf("list unbilled adjustments: %w", err)
+		}
+		adjustmentID, err := domain.NewChargeAdjustmentID(id)
+		if err != nil {
+			return nil, fmt.Errorf("list unbilled adjustments: %w", err)
+		}
+		adjustment, err := rebuildChargeAdjustment(adjustmentID, row)
+		if err != nil {
+			return nil, fmt.Errorf("list unbilled adjustments: %w", err)
+		}
+		records = append(records, ports.ChargeAdjustmentRecord{
+			Key:        ports.ChargeAdjustmentKey{TenantID: tenant, Adjustment: adjustmentID},
+			Adjustment: adjustment,
+			RecordedAt: row.recordedAt.UTC(),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list unbilled adjustments: %w", err)
+	}
+	return records, nil
+}
+
 // Save 写下一笔调整。同标识已有记录时答`已登记`，不覆盖先到者——调整只追加。
 func (repository *ChargeAdjustments) Save(
 	ctx context.Context,

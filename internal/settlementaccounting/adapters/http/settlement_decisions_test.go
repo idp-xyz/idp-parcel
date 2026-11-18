@@ -141,4 +141,20 @@ func TestTheStatementPublicationFaceTakesThePublishedAtFromItsClock(t *testing.T
 			t.Fatalf("%s = %d，want 400", name, response.Code)
 		}
 	}
+
+	// 写明随单带走还没出账的调整：命令带上这一格，费用可以一笔都不列（只出调整）；不写这一格时命令里是假。
+	if publisher.calls[0].CarryUnbilledAdjustments {
+		t.Fatal("没写 carryUnbilledAdjustments，命令却要求随单带走调整")
+	}
+	carrying := strings.Replace(strings.Replace(publicationBody, `["SYN-CHARGE-1"]`, `[]`, 1),
+		`"declaredTotal":"9600"`, `"declaredTotal":"0","carryUnbilledAdjustments":true`, 1)
+	taken := len(publisher.calls)
+	response = httptest.NewRecorder()
+	endpoint.ServeHTTP(response, decisionRequest(carrying))
+	if response.Code != http.StatusOK || len(publisher.calls) != taken+1 {
+		t.Fatalf("只出调整 = %d %s", response.Code, response.Body)
+	}
+	if last := publisher.calls[taken]; !last.CarryUnbilledAdjustments || len(last.ChargeIDs) != 0 || last.DeclaredTotalMinor != 0 {
+		t.Fatalf("只出调整的命令 = %+v", last)
+	}
 }

@@ -28,6 +28,7 @@ var evaluationParameterKinds = map[domain.EvaluationParameterKind]bool{
 	domain.ParameterSellBillingMomentAdoption: true,
 	domain.ParameterFeeItemMapping:            true,
 	domain.ParameterBuyEvaluationTrigger:      true,
+	domain.ParameterReweighAdjustmentAdoption: true,
 }
 
 // OutboxEvaluationParameterRegisteredHandoff 实现 ports.EvaluationParameterRegisteredHandoff。

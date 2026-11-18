@@ -24,7 +24,7 @@ import { MultiRegistrationPanel } from '../../components/registration';
 import { chargeDecisionTargets } from './decisions';
 import { problemNote } from './presentation';
 import { AmountCell, TwoLine, technicalRows } from './ops-ui';
-import { feeItemLabel, parcelFromRef, sourceFactLabel } from './ops-refs';
+import { feeItemLabel, parcelFromRef, pricedWeightText, sourceFactLabel, weightBasisText } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
 
 // 费用与计费页（主责上下文 settlement-accounting：费用项目、费用明细与费用调整的版本与依据）。
@@ -94,6 +94,17 @@ function customerChargeTechnicalRows(row: CustomerChargeRecord) {
     { label: '计费范围', value: row.primaryChargingScope },
     { label: '换算依据', value: row.conversionStep },
     { label: '形成时间', value: formatInstant(row.formedAt) },
+    // 两格分开：计价重量是评价进位之后的那一个，来源是它用的实重与尺寸。合成一格只印实重，复测只改了尺寸的那一笔
+    // 前后看着一样，金额却变了。
+    { label: '计价重量', value: pricedWeightText(row) },
+    { label: '重量与尺寸来源', value: weightBasisText(row, labelFor) },
+    { label: '被替代为', value: row.supersededBy },
+    {
+      label: '调整',
+      value: row.adjustments
+        .map((adjustment) => `${labelFor(adjustment.kind)} ${labelFor(adjustment.direction)} ${adjustment.settlementAmount}`)
+        .join('；'),
+    },
   ]);
 }
 

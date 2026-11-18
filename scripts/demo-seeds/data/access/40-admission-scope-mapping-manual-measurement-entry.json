@@ -1,0 +1,13 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-OD-MANUAL-MEASUREMENT-ENTRY-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "MANUAL_MEASUREMENT_ENTRY",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    }
+  ]
+}

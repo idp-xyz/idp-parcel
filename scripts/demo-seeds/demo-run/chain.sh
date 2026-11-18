@@ -78,6 +78,7 @@ ch_intake() {
   local out
   out="$(IDP_PARCEL_PRE_ADVICE_ID="$pre" "$SEEDS_DIR/receive-one-delivery.sh" "$PREF")" || { printf '[失败] receive-one-delivery.sh：%s\n' "$out" >&2; exit 1; }
   [[ "$out" == 201\ INTAKE_FORMED* ]] || { printf '[失败] 收寄答复不是 201 INTAKE_FORMED：%s\n' "$out" >&2; exit 1; }
+  UNIT="$(python3 -c 'import re,sys; m=re.search(r"实物 ([^，]+)", sys.argv[1]); print(m.group(1) if m else "")' "$out")"
   printf '%-34s → %s\n' "收寄（上海枢纽作业设备）" "$out"
   # 客户费用行不带包裹号：收寄前先记下已有的费用号，收寄后新出现的那一笔就是这一件的预估客户费用。
   _estimated() {

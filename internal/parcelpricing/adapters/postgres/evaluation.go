@@ -101,6 +101,51 @@ func (repository *Evaluations) FindByID(
 	return evaluation, true, nil
 }
 
+// FindByIDs 按标识成批取回本租户的评价。名单里没有的标识不出现在结果里。
+func (repository *Evaluations) FindByIDs(
+	ctx context.Context,
+	tenant domain.TenantID,
+	ids []domain.EvaluationID,
+) ([]domain.PricingEvaluation, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("find evaluations: %w", err)
+	}
+	raw := make([]string, 0, len(ids))
+	for _, id := range ids {
+		raw = append(raw, id.String())
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT `+evaluationRowColumns+`
+		   FROM parcel_pricing.evaluation
+		  WHERE tenant_id = $1 AND evaluation_id = ANY($2::text[])`,
+		tenant.String(), raw,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find evaluations: %w", err)
+	}
+	defer rows.Close()
+	var found []domain.PricingEvaluation
+	for rows.Next() {
+		row, err := scanEvaluationRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("find evaluations: %w", err)
+		}
+		evaluation, err := row.evaluation()
+		if err != nil {
+			return nil, fmt.Errorf("find evaluations: %w", err)
+		}
+		found = append(found, evaluation)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("find evaluations: %w", err)
+	}
+	return found, nil
+}
+
 // FindByRequestReference 按（租户、回指）取为那份 SA 评价请求形成的评价（ports.EvaluationByRequestView）。租户进
 // 谓词（ADR-0003）：别的租户的评价对本租户不存在。至多一行由迁移 0010 的部分唯一索引守；读回同经整图重验与
 // 比对列交叉核。

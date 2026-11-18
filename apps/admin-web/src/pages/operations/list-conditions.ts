@@ -10,6 +10,7 @@ import {
   consolidationPhaseLabels,
   handoverVerdictLabels,
   masterDocumentStandingLabels,
+  measurementVoidedLabels,
   receptionKindLabels,
 } from './presentation';
 import type { NodeOperationsRegistry, TransportFulfillmentRegistry } from './records-api';
@@ -28,10 +29,11 @@ export const transportPushedStatus: Partial<Record<TransportFulfillmentRegistry,
   'carrier-master-document': { dimension: 'standing', labels: masterDocumentStandingLabels },
 };
 
-/** 节点作业各册：收货记录按 kind、集包按 phase（ports.ReceptionPages、ConsolidationUnitPages）。 */
+/** 节点作业各册：收货记录按 kind、集包按 phase、称重量方按 voided（ports.ReceptionPages、ConsolidationUnitPages、ActualMeasurementPages）。 */
 export const nodePushedStatus: Partial<Record<NodeOperationsRegistry, PushedStatus>> = {
   reception: { dimension: 'kind', labels: receptionKindLabels },
   'consolidation-unit': { dimension: 'phase', labels: consolidationPhaseLabels },
+  measurement: { dimension: 'voided', labels: measurementVoidedLabels },
 };
 
 /** 外部轨迹的确认方式按 effectiveBasis（ports.ExternalTrackingFactPages）。 */

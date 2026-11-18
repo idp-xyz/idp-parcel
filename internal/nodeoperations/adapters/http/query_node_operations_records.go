@@ -52,6 +52,12 @@ type ReviewCatalogueReader interface {
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[ports.PhysicalControlTransitionCatalogueRow], error)
+	ListActualMeasurements(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.ActualMeasurementCatalogueRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -69,6 +75,7 @@ const (
 	registryUnidentifiedItem    = "unidentified-item"
 	registryConsolidationUnit   = "consolidation-unit"
 	registryConsolidationMember = "consolidation-member"
+	registryMeasurement         = "measurement"
 )
 
 // registryCatalogues 是册名的封闭集，也是每个册名各对一册的目录声明（ADR-0144 决定四：选择器保持原义，一个取值一册）。
@@ -80,6 +87,7 @@ var registryCatalogues = map[string]*cataloguepage.Catalogue{
 	registryConsolidationUnit:   ports.ConsolidationUnitPages,
 	registryConsolidationMember: ports.ConsolidationMemberPages,
 	registryPhysicalControl:     ports.PhysicalControlTransitionPages,
+	registryMeasurement:         ports.ActualMeasurementPages,
 }
 
 // unknownRegistryReason 只说本端点认哪几个册名，不谈库里有什么；它只在 Intake 放行之后出现。
@@ -89,9 +97,9 @@ var unknownRegistryReason = "registry 只认 " + strings.Join(slices.Sorted(maps
 // （GET /node-operations-records，票 admin-skeleton-closure-batch/05）。
 //
 // 本页是治理查阅面，不是一线作业端（ADR-0021）：实时现场作业走设备渠道的命令端点，
-// 本端点零登记零编辑动作，只上列已登记的作业事实。页面五区里实际测量与节点侧交接
-// 证据两区在存储上还没有登记册，本端点的册名封闭集刻意没有那两格——没有表就没有
-// 读法，答一份恒空的册子会把「无处可登」演成「登记册为空」（票 05 Comments 记明）。
+// 本端点零登记零编辑动作，只上列已登记的作业事实。节点侧交接证据在存储上还没有登记册，
+// 册名封闭集刻意没有那一格——没有表就没有读法，答一份恒空的册子会把「无处可登」演成
+// 「登记册为空」（票 05 Comments 记明）。实际测量册列出全部测量，含已作废的；作废不改原行。
 //
 // **不下推身份裁决或处置参数**：待识别实物的身份确认由 parcel-shipment 以版本化
 // 关联形成，查阅面收下「确认身份」参数就等于让目录读口长出第二种「处置」语义。
@@ -141,6 +149,8 @@ func NewQueryNodeOperationsRecordsEndpoint(
 			serveConsolidationMembers(response, request, reader, tenant, query.Limit, pageQuery)
 		case registryPhysicalControl:
 			servePhysicalControlTransitions(response, request, reader, tenant, query.Limit, pageQuery)
+		case registryMeasurement:
+			serveActualMeasurements(response, request, reader, tenant, query.Limit, pageQuery)
 		}
 	})
 }

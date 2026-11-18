@@ -1,15 +1,20 @@
 package main
 
 import (
+	"context"
 	"net/http"
 
+	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
+	sapricing "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/parcelpricing"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
+	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
 type settlementCatalogueWiring struct {
 	settlementCharges           settlementhttp.ChargeCatalogueReader
+	pricingWeights              settlementhttp.PricingWeightSourceReader
 	settlementStatements        settlementhttp.StatementCatalogueReader
 	settlementDisputed          settlementhttp.DisputedStatementReader
 	settlementStatementLines    settlementhttp.StatementLineReader
@@ -58,8 +63,17 @@ func init() {
 			if err != nil {
 				return none, err
 			}
+			evaluations, err := pppostgres.NewEvaluations(sources.db)
+			if err != nil {
+				return none, err
+			}
+			pricingWeights, err := sapricing.NewPricingWeightOrigins(evaluations)
+			if err != nil {
+				return none, err
+			}
 			return settlementCatalogueWiring{
 				settlementCharges:    settlementCharges,
+				pricingWeights:       pricingWeightBridge{origins: pricingWeights},
 				settlementStatements: settlementStatements,
 				// 存在争议的单读的是对账单册同一张表、同一套列，同一个适配器两口共用。
 				settlementDisputed:          settlementStatements,
@@ -79,7 +93,7 @@ func init() {
 				// 自己的 Intake 变量：作用域形状同为租户一维，责任法人、结算账户与币种是账上的
 				// 归属维不是查阅方身份，分设只会让装配点看起来能只配一半。哪几本册进哪个入口、
 				// 资金冻结与运营结算余额为何不在其中，裁决在各构造函数的注释，此处不复述。
-				{Pattern: "/settlement-charges", Handler: settlementhttp.NewQuerySettlementChargesEndpoint(settlementCatalogueIntake, wiring.settlementCharges)},
+				{Pattern: "/settlement-charges", Handler: settlementhttp.NewQuerySettlementChargesEndpoint(settlementCatalogueIntake, wiring.settlementCharges, wiring.pricingWeights)},
 				{Pattern: "/settlement-statements", Handler: settlementhttp.NewQuerySettlementStatementsEndpoint(settlementCatalogueIntake, wiring.settlementStatements)},
 				{Pattern: "/settlement-disputed-statements", Handler: settlementhttp.NewQueryDisputedCustomerStatementsEndpoint(settlementCatalogueIntake, wiring.settlementDisputed)},
 				// 一张单自己的费用行：管理台登记争议时从这里选费用（ADR-0354）。
@@ -94,4 +108,25 @@ func init() {
 			}
 		},
 	})
+}
+
+type pricingWeightBridge struct {
+	origins *sapricing.PricingWeightOrigins
+}
+
+func (bridge pricingWeightBridge) PricingWeightOrigins(
+	ctx context.Context,
+	tenant sadomain.TenantID,
+	evaluationIDs []string,
+) (map[string]settlementhttp.PricingWeightOrigin, error) {
+	loaded, err := bridge.origins.PricingWeightOrigins(ctx, tenant, evaluationIDs)
+	if err != nil {
+		return nil, err
+	}
+	answered := make(map[string]settlementhttp.PricingWeightOrigin, len(loaded))
+	for id, origin := range loaded {
+		// 类型转换而不是逐格抄：两边的结构体字段逐一相同才转得过去，哪一边多一格这里就不编译。
+		answered[id] = settlementhttp.PricingWeightOrigin(origin)
+	}
+	return answered, nil
 }

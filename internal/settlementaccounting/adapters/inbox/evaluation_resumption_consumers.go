@@ -140,6 +140,7 @@ var (
 		EventType:    "settlement-accounting.evaluation-parameter.registered",
 		Kinds: []domain.EvaluationParameterKind{
 			domain.ParameterSellBillingMomentAdoption, domain.ParameterFeeItemMapping, domain.ParameterBuyEvaluationTrigger,
+			domain.ParameterReweighAdjustmentAdoption,
 		},
 	}
 	// PricingParameterRegisteredResumption 收计价的登记（价卡、序列与目录的在用版本）。

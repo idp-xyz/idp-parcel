@@ -9,7 +9,7 @@ import (
 // 答复体的 JSON 字段名点名，查询对象由端点按它解出，各维落到哪一列在 postgres 读面里。缺省序保迁移前的次序（该票 spec「缺省序保
 // 今天的次序」），决胜键一律与排序维同向（决定三）。
 //
-// /node-operations-records 按 registry 分派六册，registry 在六册上都登为选择器（决定四）：端点按它挑册、在解码之前拒认不出的册名，
+// /node-operations-records 按 registry 分派，registry 在各册上都登为选择器（决定四）：端点按它挑册、在解码之前拒认不出的册名，
 // 取值进游标摘要——一册的游标拿到另一册去用答 400。
 //
 // 按实物或按交接事件计量的几册（头注里点名）是 ADR-0144 越权风险点「精确 `total`」最先撞上的一类：总数仍给精确值，超出租户级规模
@@ -98,6 +98,21 @@ var ConsolidationMemberPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "action", Vocabulary: []string{domain.AddMemberAction.String(), domain.RemoveMemberAction.String()}},
+	},
+	Selectors: []string{registrySelector},
+})
+
+// ActualMeasurementPages 是实际测量册（registry=measurement）的声明。
+//
+// 缺省序是登记时刻倒序；行标识是来源标识。voided 放出作筛选维：作废不改测量行，voided 看的是有没有作废指过来。
+// 一条测量同时带重量与尺寸，册上没有「测量项」这一维可筛。q 覆盖来源标识、对象标识、位置与执行方。
+var ActualMeasurementPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name:        "node-operations-actual-measurements",
+	Sorts:       []cataloguepage.SortDimension{{Name: "recordedAt", Kind: cataloguepage.Instant}},
+	DefaultSort: cataloguepage.Sort{Field: "recordedAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "voided", Vocabulary: cataloguepage.BooleanVocabulary()},
 	},
 	Selectors: []string{registrySelector},
 })

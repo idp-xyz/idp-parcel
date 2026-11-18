@@ -99,6 +99,9 @@ func postedBalanceBase(
 // 最近一张按 published_at 取——含已作废的：最近一张已作废且尚无替代时，上一周期没有有效快照，答尚无事实；
 // 若只在未作废里取最近，会静默退回更早一个周期的数当分母。替代单发布在作废之后，published_at 更晚，自然
 // 成为最近一张。
+//
+// 只有调整行、没有费用行的单不算一个周期的费用快照，跳过：它只是把出账之后才形成的调整补出来，拿它当最近一张，
+// 分母就成了零。
 func priorPeriodConfirmedChargesBase(
 	ctx context.Context,
 	querier bentopg.Querier,
@@ -113,6 +116,7 @@ func priorPeriodConfirmedChargesBase(
 		  WHERE tenant_id = $1
 		    AND account_id = $2
 		    AND currency = $3
+		    AND jsonb_array_length(lines) > 0
 		  ORDER BY published_at DESC, statement_number DESC
 		  LIMIT 1`,
 		tenant.String(),

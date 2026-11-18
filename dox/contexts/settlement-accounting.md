@@ -84,7 +84,7 @@
 | `NOT_FORMED` 未形成 | 评价失败，或计价没形成评价 | 带停因 |
 | `ZERO_TOTAL` 负向结束（零额） | 评价已完成而合计为零 | 不建费用行，不带停因，不续办 |
 
-停因（BUY 与 SELL 共用）：`SETTLEMENT_POLICY_NOT_ADOPTED` `SETTLEMENT_ACCOUNT_NOT_REGISTERED` `SELL_BILLING_MOMENT_NOT_ADOPTED` `SELL_BILLING_MOMENT_SCOPE_ABSENT` `PARCEL_HAS_NO_COMMERCIAL_RESOLUTION` `OCCURRENCE_REASON_NOT_REGISTERED` `FEE_ITEM_NOT_REGISTERED` `PRICE_CARD_NOT_CONFIGURED` `PRICE_CARD_APPLICABILITY_CONFLICT` `PRICING_INPUT_UNAVAILABLE` `EVALUATION_PENDING_JUDGMENT` `EVALUATION_UNRATABLE` `EVALUATION_CONFLICT` `EVALUATION_FAILED` `AMOUNT_ROUNDING_UNDECLARED` `CONVERSION_STEP_MISSING` `FEE_ITEM_MAPPING_INCOMPLETE` `EVALUATION_CATALOGUE_UNRESOLVED` `EVALUATION_SERIES_UNRESOLVED` `EVALUATION_RATE_NOT_FOUND` `EVALUATION_INPUT_INCOMPLETE` `PENDING_JUDGMENT_CAUSE_UNRECORDED`。
+停因（BUY 与 SELL 共用）：`SETTLEMENT_POLICY_NOT_ADOPTED` `SETTLEMENT_ACCOUNT_NOT_REGISTERED` `SELL_BILLING_MOMENT_NOT_ADOPTED` `SELL_BILLING_MOMENT_SCOPE_ABSENT` `PARCEL_HAS_NO_COMMERCIAL_RESOLUTION` `OCCURRENCE_REASON_NOT_REGISTERED` `FEE_ITEM_NOT_REGISTERED` `PRICE_CARD_NOT_CONFIGURED` `PRICE_CARD_APPLICABILITY_CONFLICT` `PRICING_INPUT_UNAVAILABLE` `EVALUATION_PENDING_JUDGMENT` `EVALUATION_UNRATABLE` `EVALUATION_CONFLICT` `EVALUATION_FAILED` `AMOUNT_ROUNDING_UNDECLARED` `CONVERSION_STEP_MISSING` `FEE_ITEM_MAPPING_INCOMPLETE` `EVALUATION_CATALOGUE_UNRESOLVED` `EVALUATION_SERIES_UNRESOLVED` `EVALUATION_RATE_NOT_FOUND` `EVALUATION_INPUT_INCOMPLETE` `PENDING_JUDGMENT_CAUSE_UNRECORDED`。SELL 另有两格：`REWEIGH_ADJUSTMENT_NOT_ADOPTED` 是这一户还没采用「实测差异自动调整」，补登后续办；`REWEIGH_ADJUSTMENT_EXCEEDS_CHARGE` 是贷项会让这笔费用连同既有调整变成负数，不续办。
 
 ## 规则
 
@@ -98,6 +98,7 @@
 **费用形成与确认**
 
 - 已完成且合计不为零的 SELL 评价形成预估客户费用，金额整组出自该评价。BUY 评价不形成客户费用。
+- 实测变化为包裹的销售评价另起一代。新评价对着这条代次链上最近的一笔费用办，中间停下的各代没有费用、跳过：那笔费用还没确认，新预估替代它，被替代的不再确认；已确认，不另建费用，这一户采用了「实测差异自动调整」才记一笔计价纠错，没采用就停下。差额是新评价的金额减去费用加已有计价纠错的净额，商业让利不算在内；为零不记。已被更晚一代办过钱的旧一代不再动钱，照记那一代的结论。
 - 原币金额、合同结算币金额、换算依据是从同一个评价采用来的一组；同币种时两额必须相等且没有换算步骤。换算已在评价内完成，本上下文不重算。
 - 确认前，责任法人、结算相对方、收付方向、结算账户、依据、主要计费范围、来源事实登在确认事实册上；册上没有这一行，确认停在未决。
 - 确认条件按费用项目点名要哪一种确认依据；用哪种依据确认哪个费用项目是租户取值。依据记下后，这一户采用了确认时点就当场确认，没采用只记依据。
@@ -106,7 +107,7 @@
 
 - 供应商预期成本首版按 BUY 评价回指的那份请求形成，一份请求至多一份首版；评价不是已完成、或合计为零，不形成成本行。每一版记下所依协议的供应商，取自 `party-commercial`，不设默认。
 - 计价纠错是重述全额的新成本版本，不是带方向的差额。
-- 发生项某一版失效时，依它的各条成本链头各追加一版失效纠错版本；当前有效供应商预期成本不采用它。替代版本的评价形成时接在后面重述全额。一版至多被纠正一次。
+- 发生项某一版失效时，依它的各条成本链头各追加一版失效纠错版本；当前有效供应商预期成本不采用它。替代版本的评价形成时接在后面重述全额。实测变化另起一代、发生项版本没变时，同样按新评价重述全额；合计与链头相同不追加。那一代停下之后续办出来的下一代照样重述。一版至多被纠正一次。
 
 **供应商账单与审核**
 
@@ -121,7 +122,7 @@
 - 结算账户登记册上，责任法人、结算相对方、收付方向、结算币种、结算政策对象五格在租户内唯一；改任一格是另一个账户。
 - 费用要已确认、有归属日、尚未出账，且归属日不晚于截单命令点名的本期最后一个归属日，才入对账单。登了对账周期的账户到点自动截单，没登的只由授权人员发起。
 - 归属日按费用项目登记的形态，在结算账户对账安排的业务时区里落成公历日，过了截单时刻归下一日。形态或对账安排没登记，不形成归属日。
-- 对账单总额必须等于所含费用结算金额之和。发布后单号、范围、金额不可覆盖；之后的调整与迟到费用只经后续对账纳入进入后续账期。
+- 对账单总额必须等于所含费用结算金额之和，再加借项、减贷项。发布后单号、范围、金额不可覆盖。本期费用上还没出账的调整随这张单带走。费用已经出账之后形成的调整，由下一张到点截出的对账单带上金额：调整行指名它那张原账单，每笔调整各记一笔后续纳入，不改已发布的单。那一期没有新费用也照出，对账单可以只有调整行，净额为负即贷记；费用行与调整行都没有才不出单。运营手工发布写明随单带走时同此，不写就不带别的对账单上的调整。带走调整时申报的是费用合计，调整在截单时读一次、加进总额。带调整的单作废，它记下的后续纳入随之撤回，那几笔调整回到没出账，由替代单或下一期再带。
 - 发布幂等按发布意图：同一账户、周期、截止版本，内容相同答原单原号，内容不同答发布意图冲突。
 - 争议只对已发布的对账单提出，指向明确费用及金额范围；作废之后才提出的不登记。对账单、争议、审核应付各在开立的同一事务内取得单据号。
 
@@ -149,7 +150,7 @@
 
 **调整、分摊与经营结果（分摊与经营结果无入口，见末节）**
 
-- 普通客户费用的调整只有计价纠错与商业让利两类；纠错必须引用新评价，商业让利必须引用有效授权。调整只挂在已确认费用上，结算币种与费用相同，贷项不得把费用连同既有调整让成负数；落下即重算客户作用域的已确认未结。同一调整标识同内容重投交回原来那一笔，内容不同答冲突。调整登记、对账单作废、后到费用纳入、调整纳入是四种分开授予的运营决定，时刻一律由服务端给；作废必带依据、只成立一次；一笔后到费用、一笔调整各只纳入后续账期一次；已在任一有效对账单上出过账的费用不是后到费用；纳回原账期、原账单已作废都不受理。
+- 普通客户费用的调整只有计价纠错与商业让利两类；纠错必须引用新评价，商业让利必须引用有效授权。调整只挂在已确认费用上，结算币种与费用相同，贷项不得把费用连同既有调整让成负数；落下即重算客户作用域的已确认未结。同一调整标识同内容重投交回原来那一笔，内容不同答冲突。调整登记、对账单作废、后到费用纳入、调整纳入是四种分开授予的运营决定，时刻一律由服务端给；作废必带依据、只成立一次；一笔后到费用、一笔调整各只纳入后续账期一次（已撤回的不算）；已在任一有效对账单上出过账的费用不是后到费用；纳回原账期、原账单已作废都不受理。
 - 分法按租户与分摊规则版本登记，没登记答未配置，不默认按重、不均摊。已分摊金额与未分摊余额之和等于来源金额；尾差按最大余数分配，余数相同按目标标识升序；没有正权重时整笔未分摊。
 - 经营结果按口径成对采用组成：预估口径用客户预估费用与供应商预期成本，已确认口径用客户运营应收、审核应付与贷项，已结算口径只用核销分配。审核应付与贷项各按方向计入一次。
 
@@ -173,7 +174,7 @@
 | 资金事实采用（人工） | `/settlement-external-funds-fact-manual-registrations` `/settlement-external-funds-fact-correction-manual-registrations` |
 | 只读 | `/settlement-charges` `/settlement-statements` `/settlement-disputed-statements` `/settlement-statement-lines` `/settlement-pre-acceptance-estimates` `/settlement-funds-applications` `/settlement-operating-results` `/settlement-supplier-bill-lines` `/settlement-audited-payables` |
 
-事件消费（`cmd/parcel-dispatch`）：发生项已形成发起 BUY 评价并处理失效；评价已记录形成预估客户费用与供应商预期成本；评价未形成记停因；参数已登记触发续办；有效交付已终局记确认依据；到点截单；税费付款核对的采用；接受前控制的施加与释放。
+事件消费（`cmd/parcel-dispatch`）：发生项已形成发起 BUY 评价并处理失效；评价已记录形成预估客户费用与供应商预期成本；实测变化为已有销售评价与载有该包裹的收费发生项上的采购评价另起下一代；评价未形成记停因；参数已登记触发续办；有效交付已终局记确认依据；到点截单；税费付款核对的采用；接受前控制的施加与释放。
 
 离线口 `cmd/parcel-settlement-register`（数据库网络内手跑，不监听端口），子命令：
 

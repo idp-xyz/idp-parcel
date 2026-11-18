@@ -103,6 +103,10 @@ const (
 	StopEvaluationSeriesUnresolved
 	StopEvaluationRateNotFound
 	StopEvaluationInputIncomplete
+	// StopReweighAdjustmentNotAdopted：新评价与已确认费用有差额，这一户还没采用「实测差异自动调整」。
+	StopReweighAdjustmentNotAdopted
+	// StopReweighAdjustmentExceedsCharge：差额里的贷项会让这笔费用连同既有调整变成负数。不形成，也不靠重投变好。
+	StopReweighAdjustmentExceedsCharge
 	// StopPendingJudgmentCauseUnrecorded 只出自迁移：停因一列落地之前就已记成`待判断`的 SELL 请求，当时没记是哪一种
 	// 待判断。迁移不猜它是评价待判断、取整未声明还是映射不全，所以价卡、参考序列、参考目录、费用项映射这几类登记都解得开它
 	// （成员以 ResumedBy 的该分支为准）。
@@ -131,6 +135,8 @@ var allEvaluationStopCauses = []EvaluationStopCause{
 	StopEvaluationSeriesUnresolved,
 	StopEvaluationRateNotFound,
 	StopEvaluationInputIncomplete,
+	StopReweighAdjustmentNotAdopted,
+	StopReweighAdjustmentExceedsCharge,
 	StopPendingJudgmentCauseUnrecorded,
 }
 
@@ -178,6 +184,10 @@ func (cause EvaluationStopCause) String() string {
 		return "EVALUATION_RATE_NOT_FOUND"
 	case StopEvaluationInputIncomplete:
 		return "EVALUATION_INPUT_INCOMPLETE"
+	case StopReweighAdjustmentNotAdopted:
+		return "REWEIGH_ADJUSTMENT_NOT_ADOPTED"
+	case StopReweighAdjustmentExceedsCharge:
+		return "REWEIGH_ADJUSTMENT_EXCEEDS_CHARGE"
 	case StopPendingJudgmentCauseUnrecorded:
 		return "PENDING_JUDGMENT_CAUSE_UNRECORDED"
 	default:
@@ -208,7 +218,8 @@ func (cause EvaluationStopCause) Stage() EvaluationStopStage {
 	case StopEvaluationPendingJudgment, StopEvaluationUnratable, StopEvaluationConflict, StopEvaluationFailed,
 		StopAmountRoundingUndeclared, StopConversionStepMissing, StopFeeItemMappingIncomplete,
 		StopEvaluationCatalogueUnresolved, StopEvaluationSeriesUnresolved, StopEvaluationRateNotFound,
-		StopEvaluationInputIncomplete, StopPendingJudgmentCauseUnrecorded:
+		StopEvaluationInputIncomplete, StopPendingJudgmentCauseUnrecorded,
+		StopReweighAdjustmentNotAdopted, StopReweighAdjustmentExceedsCharge:
 		return StopAtAdoption
 	default:
 		return EvaluationStopStageInvalid
@@ -234,7 +245,7 @@ func (cause EvaluationStopCause) OccursIn(direction EvaluationDirection) bool {
 	switch cause {
 	case StopSettlementPolicyNotAdopted, StopSettlementAccountNotRegistered, StopSellBillingMomentNotAdopted,
 		StopSellBillingMomentScopeAbsent, StopParcelCommercialResolutionAbsent, StopFeeItemMappingIncomplete,
-		StopPendingJudgmentCauseUnrecorded:
+		StopPendingJudgmentCauseUnrecorded, StopReweighAdjustmentNotAdopted, StopReweighAdjustmentExceedsCharge:
 		return direction == SellEvaluationDirection
 	case StopOccurrenceReasonNotRegistered, StopTriggerFeeItemNotRegistered, StopConversionStepMissing:
 		return direction == BuyEvaluationDirection
@@ -283,6 +294,8 @@ func (cause EvaluationStopCause) ResumedBy(kind EvaluationParameterKind) bool {
 		return kind == ParameterPriceCard || kind == ParameterReferenceSeries
 	case StopFeeItemMappingIncomplete:
 		return kind == ParameterFeeItemMapping
+	case StopReweighAdjustmentNotAdopted:
+		return kind == ParameterReweighAdjustmentAdoption
 	case StopPendingJudgmentCauseUnrecorded:
 		return kind == ParameterPriceCard || kind == ParameterReferenceSeries ||
 			kind == ParameterReferenceCatalogue || kind == ParameterFeeItemMapping
@@ -318,6 +331,7 @@ const (
 	ParameterSellBillingMomentAdoption
 	ParameterFeeItemMapping
 	ParameterBuyEvaluationTrigger
+	ParameterReweighAdjustmentAdoption
 	ParameterPriceCard
 	ParameterReferenceSeries
 	ParameterReferenceCatalogue
@@ -333,6 +347,8 @@ func (kind EvaluationParameterKind) String() string {
 		return "FEE_ITEM_MAPPING"
 	case ParameterBuyEvaluationTrigger:
 		return "BUY_EVALUATION_TRIGGER"
+	case ParameterReweighAdjustmentAdoption:
+		return "REWEIGH_ADJUSTMENT_ADOPTION"
 	case ParameterPriceCard:
 		return "PRICE_CARD"
 	case ParameterReferenceSeries:
@@ -348,7 +364,7 @@ func (kind EvaluationParameterKind) String() string {
 func EvaluationParameterKindFromName(name string) (EvaluationParameterKind, error) {
 	for _, candidate := range []EvaluationParameterKind{
 		ParameterSettlementAccount, ParameterSellBillingMomentAdoption, ParameterFeeItemMapping,
-		ParameterBuyEvaluationTrigger, ParameterPriceCard, ParameterReferenceSeries, ParameterReferenceCatalogue,
+		ParameterBuyEvaluationTrigger, ParameterReweighAdjustmentAdoption, ParameterPriceCard, ParameterReferenceSeries, ParameterReferenceCatalogue,
 	} {
 		if candidate.String() == name {
 			return candidate, nil
@@ -383,17 +399,18 @@ func (kind EvaluationParameterKind) Narrowing() EvaluationParameterNarrowing {
 		return EvaluationParameterNarrowing{PricingScope: true, Direction: true}
 	case ParameterBuyEvaluationTrigger:
 		return EvaluationParameterNarrowing{OccurrenceReason: true}
-	case ParameterSellBillingMomentAdoption:
+	case ParameterSellBillingMomentAdoption, ParameterReweighAdjustmentAdoption:
 		return EvaluationParameterNarrowing{Account: true}
 	default:
 		return EvaluationParameterNarrowing{}
 	}
 }
 
-// 续办依据的两种来源段。不是标识铸造前缀，照样以 Prefix 结尾进前缀门禁：依据串与各上下文铸造的标识在日志里混看。
+// 续办依据的来源段。不是标识铸造前缀，照样以 Prefix 结尾进前缀门禁：依据串与各上下文铸造的标识在日志里混看。
 const (
-	parameterResumeBasisPrefix = "PARAMREG"
-	operatorResumeBasisPrefix  = "OPSRESUME"
+	parameterResumeBasisPrefix         = "PARAMREG"
+	operatorResumeBasisPrefix          = "OPSRESUME"
+	measurementChangeResumeBasisPrefix = "MEASCHG"
 )
 
 // ResumeBasis 是一次续办凭的什么：一次参数登记（种类加那封信的标识），或一次运营续办（运营人员给的续办引用）。它记在
@@ -418,9 +435,20 @@ func NewOperatorResumeBasis(reference string) (ResumeBasis, error) {
 	return ResumeBasis{requiredValue{value: operatorResumeBasisPrefix + "/" + reference}}, nil
 }
 
-// ResumeBasisFromName 重建册上的依据串。只认两种来源段，别的拒。
+// NewMeasurementChangeResumeBasis 由一次实际测量的变化造依据。reference 是那次登记或作废的来源身份：
+// 同一次变化重投是同一条依据，下一代至多开一次。
+func NewMeasurementChangeResumeBasis(reference string) (ResumeBasis, error) {
+	if strings.TrimSpace(reference) == "" || strings.TrimSpace(reference) != reference {
+		return ResumeBasis{}, fmt.Errorf("%w: measurement change resume basis", ErrInvalidEvaluationResumption)
+	}
+	return ResumeBasis{requiredValue{value: measurementChangeResumeBasisPrefix + "/" + reference}}, nil
+}
+
+// ResumeBasisFromName 重建册上的依据串。只认参数登记、运营续办与实测变化三种来源段，别的拒。
 func ResumeBasisFromName(value string) (ResumeBasis, error) {
-	if strings.HasPrefix(value, parameterResumeBasisPrefix+"/") || strings.HasPrefix(value, operatorResumeBasisPrefix+"/") {
+	if strings.HasPrefix(value, parameterResumeBasisPrefix+"/") ||
+		strings.HasPrefix(value, operatorResumeBasisPrefix+"/") ||
+		strings.HasPrefix(value, measurementChangeResumeBasisPrefix+"/") {
 		return ResumeBasis{requiredValue{value: value}}, nil
 	}
 	return ResumeBasis{}, fmt.Errorf("%w: resume basis %q", ErrInvalidEvaluationResumption, value)
@@ -428,6 +456,11 @@ func ResumeBasisFromName(value string) (ResumeBasis, error) {
 
 // Present 答依据在不在场：首代请求由原始那一拍发起时没有依据。
 func (basis ResumeBasis) Present() bool { return basis.valid() }
+
+// FromMeasurementChange 答这份依据是不是一次实际测量的变化。
+func (basis ResumeBasis) FromMeasurementChange() bool {
+	return strings.HasPrefix(basis.String(), measurementChangeResumeBasisPrefix+"/")
+}
 
 // firstGeneration 是代次的起点。代次从一起数：零值规格当首代读，旧调用点不必为它改。
 const firstGeneration = 1

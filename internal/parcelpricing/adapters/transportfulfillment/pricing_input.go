@@ -3,7 +3,7 @@
 // 那一只问话的键是运输收费发生项（目录名由此来），经运输履约找到成员包裹之后整段交给前者。按包裹的那一只不放
 // adapters/parcelshipment：按发生项那一只组合它，同包才不必为组合导出「从包裹到快照」那一步，实测优先、缺席取
 // 申报的取源规则（ADR-0171 决定二）也就只有一个入口。目录名的复核随 ADR-0171 越权风险点 1 归 PP owner。节点
-// 实测登记册不在这里实现。
+// 实测登记册与当前有效实测的派生在 adapters/nodeoperations，这一包只消费它答好的重量与尺寸。
 package transportfulfillment
 
 import (
@@ -32,21 +32,24 @@ const (
 	missingParcel         = "settlement-accounting: the evaluation request names no parcel"
 )
 
-// ActualMeasurement 是节点仍有效实测交来的原始量。本卡不造那本登记册；读口缺席时解析器改走申报。
-type ActualMeasurement struct {
-	Weight     ppdomain.Weight
-	Dimensions *ppdomain.Dimensions
-	Fact       ppdomain.VersionedFactReference
+// ActualMeasurementLoad 是按包裹问来的当前有效实测。节点的一条测量同时带重量与尺寸，所以 Found 为真时两样都在，
+// 解析器整份用它，申报一格都不补；Found 为假时整份走申报。Undetermined 非空时整份输入不可得，文字就是缺的那一件。
+type ActualMeasurementLoad struct {
+	Found        bool
+	Undetermined string
+	Weight       ppdomain.Weight
+	Dimensions   ppdomain.Dimensions
+	Fact         ppdomain.VersionedFactReference
 }
 
-// ActualMeasurementView 是将来 node-operations 实测只读口在消费侧的形状。今天没有实现。
-// found=false 表示这个对象没有实测，解析器改走申报。多于一条实测的选择不在这里。
+// ActualMeasurementView 是 node-operations 当前有效实测在消费侧的形状。
+// 多于一条、发生时间并列、一件包裹对上多件实物，都由读口收成 Undetermined，这里不再挑选。
 type ActualMeasurementView interface {
 	LoadActualMeasurement(
 		ctx context.Context,
 		tenant ppdomain.TenantID,
 		object string,
-	) (ActualMeasurement, bool, error)
+	) (ActualMeasurementLoad, error)
 }
 
 // ParcelResolverDeps 是按包裹那一只的提供方口。Measured 可以为 nil：没有实测读口。
@@ -206,14 +209,19 @@ func (resolver *ParcelResolver) weightAndDimensions(
 	parcel psdomain.DeclaredParcelID,
 	object string,
 ) (ppdomain.Weight, *ppdomain.Dimensions, []ppdomain.VersionedFactReference, []string, error) {
+	// 实测整份取用：节点的一条测量同时带重量与尺寸，有当前有效实测时两样都用它，申报不得顶替、也不补哪一格；
+	// 没有实测，两样都取申报。快照里因此只会有实测事实或申报事实其中一类，计价重量出自哪一边看事实种类就分得出。
 	if resolver.deps.Measured != nil {
-		measured, found, err := resolver.deps.Measured.LoadActualMeasurement(ctx, tenant, object)
+		measured, err := resolver.deps.Measured.LoadActualMeasurement(ctx, tenant, object)
 		if err != nil {
 			return ppdomain.Weight{}, nil, nil, nil, err
 		}
-		if found {
-			// 实测在场时申报不得顶替，尺寸缺了也不回退到申报。
-			return measured.Weight, measured.Dimensions, []ppdomain.VersionedFactReference{measured.Fact}, nil, nil
+		if measured.Undetermined != "" {
+			return ppdomain.Weight{}, nil, nil, []string{measured.Undetermined}, nil
+		}
+		if measured.Found {
+			dimensions := measured.Dimensions
+			return measured.Weight, &dimensions, []ppdomain.VersionedFactReference{measured.Fact}, nil, nil
 		}
 	}
 	resolution, err := resolver.deps.Declared.LoadDeclaredMeasurement(ctx, psTenant, parcel)
@@ -234,6 +242,7 @@ func (resolver *ParcelResolver) weightAndDimensions(
 	if !ok {
 		return ppdomain.Weight{}, nil, nil, []string{missingWeightUnit + ": " + measurement.Weight().Unit().String()}, nil
 	}
+	// 客户申报里的尺寸不是必填：没申报就没有尺寸，不在这里造。
 	var dimensions *ppdomain.Dimensions
 	if declared, hasDimensions := measurement.Dimensions(); hasDimensions {
 		translated, ok := translateDimensions(declared)

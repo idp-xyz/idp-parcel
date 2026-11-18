@@ -26,6 +26,7 @@ func SupplierCostWithdrawalVersionID(prior SupplierCostVersionID) (SupplierCostV
 const (
 	occurrenceInvalidatedCorrection = "OCCURRENCE_INVALIDATED"
 	occurrenceSupersededCorrection  = "OCCURRENCE_SUPERSEDED"
+	measurementChangedCorrection    = "MEASUREMENT_CHANGED"
 )
 
 // OccurrenceInvalidatedCorrection 是发生项失效驱动的那一种纠错原因。
@@ -36,6 +37,11 @@ func OccurrenceInvalidatedCorrection() CostCorrectionReason {
 // OccurrenceSupersededCorrection 是发生项替代版本的新评价驱动的那一种纠错原因。
 func OccurrenceSupersededCorrection() CostCorrectionReason {
 	return CostCorrectionReason{requiredValue{value: occurrenceSupersededCorrection}}
+}
+
+// MeasurementChangedCorrection 是同一版发生项上、因实测变化而来的新评价驱动的那一种纠错原因。
+func MeasurementChangedCorrection() CostCorrectionReason {
+	return CostCorrectionReason{requiredValue{value: measurementChangedCorrection}}
 }
 
 // Withdrawn 说这一版是不是失效纠错版本：链头是它，这一项发生项在这个费用项目上此刻没有当前有效的预期成本。

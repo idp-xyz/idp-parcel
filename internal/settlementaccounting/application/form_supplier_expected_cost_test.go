@@ -455,3 +455,45 @@ func TestTheBuyEvaluationSeamOnlyReads(t *testing.T) {
 		t.Fatalf("BUY 评价口的方法集不是只有 LoadBuyEvaluation：%d 个方法", field.Type.NumMethod())
 	}
 }
+
+func TestAMeasurementChangeRestatesTheSupplierCostWhenTheTotalChanges(t *testing.T) {
+	fixture := newExpectedCostFixture(t)
+	if _, err := fixture.handler.Handle(context.Background(), expectedCostCommand(t, "cost-7/v1", "buy-eval-1")); err != nil {
+		t.Fatal(err)
+	}
+	changed := completedAdoption(t, "buy-eval-2")
+	changed.OriginalMinor = 4300
+	changed.SettlementMinor = 31000
+	fixture.evaluations.adoptions["buy-eval-2"] = changed
+	command := expectedCostCommand(t, "cost-7/v2", "buy-eval-2")
+	command.MeasurementChange = true
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil || result.Outcome() != application.ExpectedCostFormed {
+		t.Fatalf("重述 %s err=%v", result.Outcome(), err)
+	}
+	cost, present := result.Cost()
+	if !present {
+		t.Fatal("没有成本")
+	}
+	prior, corrects := cost.PriorVersion()
+	reason, hasReason := cost.CorrectionReason()
+	if !corrects || prior.String() != "cost-7/v1" || !hasReason || reason != domain.MeasurementChangedCorrection() {
+		t.Fatalf("回指 %s %v 原因 %s %v", prior, corrects, reason, hasReason)
+	}
+	if _, minor := cost.SettlementAmount(); minor != 31000 {
+		t.Fatalf("结算金额 %d", minor)
+	}
+}
+
+func TestAnUnchangedMeasurementLeavesTheSupplierCostHead(t *testing.T) {
+	fixture := newExpectedCostFixture(t)
+	if _, err := fixture.handler.Handle(context.Background(), expectedCostCommand(t, "cost-7/v1", "buy-eval-1")); err != nil {
+		t.Fatal(err)
+	}
+	command := expectedCostCommand(t, "cost-7/v2", "buy-eval-1")
+	command.MeasurementChange = true
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil || result.Outcome() != application.ExpectedCostUnchanged || fixture.registry.saves != 1 {
+		t.Fatalf("未变 %s saves=%d err=%v", result.Outcome(), fixture.registry.saves, err)
+	}
+}

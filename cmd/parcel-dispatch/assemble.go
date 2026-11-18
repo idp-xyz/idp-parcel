@@ -32,6 +32,7 @@ import (
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	ppidentity "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/identity"
 	ppinbox "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/inbox"
+	ppnodeops "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/nodeoperations"
 	ppshipment "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/parcelshipment"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	ppsettlement "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/settlementaccounting"
@@ -2603,13 +2604,42 @@ func formEstimatedCustomerChargeOnSellEvaluationConsumer(
 	if err != nil {
 		return nil, err
 	}
+	supersessions, err := sapostgres.NewChargeSupersessions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: charge supersessions: %w", err)
+	}
+	reweighAdoptions, err := sapostgres.NewReweighAdjustmentAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reweigh adjustment adoptions: %w", err)
+	}
+	adjustments, err := sapostgres.NewChargeAdjustments(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: charge adjustments: %w", err)
+	}
+	postings, err := sapostgres.NewCustomerReceiptPostings(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customer receipt postings for reweigh: %w", err)
+	}
+	reweigh := saapplication.NewRecordChargeAdjustmentHandler(saapplication.RecordChargeAdjustmentDeps{
+		Charges: charges, Adjustments: adjustments, Clock: clock, Balances: postings, Books: postings,
+	})
+	parcelLocks, err := sapostgres.NewParcelConfirmationLocks(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel confirmation locks for formation: %w", err)
+	}
 	formation, err := saapplication.NewFormEstimatedCustomerChargeHandler(saapplication.FormEstimatedCustomerChargeDeps{
-		Requests:    requests,
-		Conclusions: requests,
-		Mappings:    mappings,
-		Charges:     formSell,
-		FollowUp:    followUp,
-		Clock:       clock,
+		Requests:         requests,
+		Conclusions:      requests,
+		Mappings:         mappings,
+		Charges:          formSell,
+		FollowUp:         followUp,
+		Clock:            clock,
+		PriorCharges:     charges,
+		Supersessions:    supersessions,
+		ReweighAdoptions: reweighAdoptions,
+		Reweigh:          reweigh,
+		Successors:       requests,
+		Serializer:       parcelLocks,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form estimated customer charge: %w", err)
@@ -2639,9 +2669,8 @@ const evaluationRequestFormationEvidence = ppdomain.EvidenceSynthetic
 // PP 的 `adapters/settlementaccounting`；PP application 不 import SA。这是 PP 第一条生产形成路：EvaluatePricingHandler
 // 此前在组合根里零调用。
 //
-// Inputs 装的是消费侧解析器（ADR-0171）：发生项成员走 TF，申报测量与地址要素走 PS。节点实测登记册还没有
-// （pp-pricing-input-seams/04），Measured 保持 nil——没有实测时用申报，并在事实引用里标明来源是申报。
-// 不接一只永远答「不在」的替身。
+// Inputs 装的是消费侧解析器（ADR-0171）：发生项成员走 TF，申报测量与地址要素走 PS，当前有效实测走节点作业。
+// 没有实测时用申报，并在事实引用里标明来源是申报。不接一只永远答「不在」的替身。
 func formEvaluationOnEvaluationRequestConsumer(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -2656,10 +2685,15 @@ func formEvaluationOnEvaluationRequestConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: declared measurement and address elements: %w", err)
 	}
+	measured, err := actualMeasurements(db)
+	if err != nil {
+		return nil, err
+	}
 	inputs, err := pptransport.NewResolver(pptransport.ResolverDeps{
 		Members:   occurrences,
 		Declared:  shipments,
 		Addresses: shipments,
+		Measured:  measured,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pricing input resolver: %w", err)
@@ -2692,9 +2726,9 @@ func formEvaluationOnEvaluationRequestConsumer(
 // 消费侧适配器读 SA SELL 请求册的只读半边 → 译成 SELL·客户费用命令交同一只「按评价请求形成评价」入口。评价已记录
 // 之后形成预估客户费用是 SA 那一侧的另一只编排。
 //
-// Inputs 装按包裹的解析器：SELL 请求点名包裹，快照不经发生项，所以不接 TF 的成员读口。申报测量与地址要素走 PS；
-// Measured 同 BUY 那一路保持 nil——没有实测时用申报并标明来源，这是 ADR-0190 决定四对 ADR-0171 决定五在 SELL·客户费用
-// 预估那一格的作答。证据层级与 BUY 那一路同一个常量，理由见它的头注。
+// Inputs 装按包裹的解析器：SELL 请求点名包裹，快照不经发生项，所以不接 TF 的成员读口。申报测量与地址要素走 PS，
+// 当前有效实测与 BUY 那一路同一只读口。没有实测时用申报并标明来源，这是 ADR-0190 决定四对 ADR-0171 决定五在
+// SELL·客户费用预估那一格的作答。证据层级与 BUY 那一路同一个常量，理由见它的头注。
 func formEvaluationOnSellEvaluationRequestConsumer(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -2705,9 +2739,14 @@ func formEvaluationOnSellEvaluationRequestConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: declared measurement and address elements: %w", err)
 	}
+	measured, err := actualMeasurements(db)
+	if err != nil {
+		return nil, err
+	}
 	inputs, err := pptransport.NewParcelResolver(pptransport.ParcelResolverDeps{
 		Declared:  shipments,
 		Addresses: shipments,
+		Measured:  measured,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: parcel pricing input resolver: %w", err)
@@ -2733,6 +2772,28 @@ func formEvaluationOnSellEvaluationRequestConsumer(
 		return nil, fmt.Errorf("parcel-dispatch: sell evaluation request submitted consumer: %w", err)
 	}
 	return consumer, nil
+}
+
+// actualMeasurements 装按包裹读当前有效实测的那一只。BUY 与 SELL 共用：没有关联实物、或实物上没有仍有效实测时，
+// 解析器改走申报。
+func actualMeasurements(db *bentopg.DB) (pptransport.ActualMeasurementView, error) {
+	associations, err := nopostgres.NewParcelAssociations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel associations: %w", err)
+	}
+	measurements, err := nopostgres.NewActualMeasurements(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: actual measurements: %w", err)
+	}
+	adoptions, err := nopostgres.NewMeasurementSelectionAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: measurement selection adoptions: %w", err)
+	}
+	view, err := ppnodeops.NewParcelMeasurementView(associations, measurements, adoptions)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: actual measurement view: %w", err)
+	}
+	return view, nil
 }
 
 // formEvaluationFromRequest 装「按评价请求形成评价」入口。BUY 与 SELL 两路各装一只，只差 Inputs：评价库与交接、价卡

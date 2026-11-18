@@ -6,7 +6,7 @@
 // 相同，registry 是传输形状由调用方给定；响应外壳的 outcome 词与列表键已把册子
 // 分开，无需回显 registry。传输与五格判读收敛在共享 catalogue-api。
 //
-// 页面五区里没有对应册子的区（节点侧的实际测量与交接证据、运输侧的承运总单与
+// 页面上没有对应册子的区（节点侧的交接证据、运输侧的承运总单与
 // 运输舱单）在这里也没有函数——服务端的册名封闭集刻意不含那几格（没有表就没有
 // 读法，票 05 Comments），本文件不造会被 400 拒掉的查询。
 //
@@ -19,13 +19,14 @@ import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } fr
 
 export type { ApiResult } from '../catalogue-api';
 
-// ---- 节点作业三册（node-operations-review 页） ----
+// ---- 节点作业查阅册（node-operations-review 页） ----
 
-/** 册名封闭集，与传输层 ?registry= 分派同词。 */
+/** 册名封闭集，与传输层 ?registry= 分派同词。这一并集只收本文件 listNodeOperationsRecords 覆盖的几册。 */
 export type NodeOperationsRegistry =
   | 'reception'
   | 'unidentified-item'
-  | 'consolidation-unit';
+  | 'consolidation-unit'
+  | 'measurement';
 
 /**
  * 一行收寄登记。kind 是收寄判断的封闭词（INTAKE_FORMED / PENDING_IDENTIFICATION），
@@ -171,11 +172,36 @@ export interface ConsolidationUnitRecord {
   closedAt?: string;
 }
 
+/**
+ * 一行实际测量：一次称重量方，毛重与长宽高恒在场，各带自己的单位，都是登记时的原数。
+ * voided 恒在场：false 是仍有效。录入人与原件只在手工录入时出现。
+ */
+export interface ActualMeasurementRecord {
+  sourceId: string;
+  objectKind: string;
+  objectId: string;
+  weightValue: string;
+  weightUnit: string;
+  length: string;
+  width: string;
+  height: string;
+  dimensionUnit: string;
+  occurredAt: string;
+  recordedAt: string;
+  location: string;
+  basis: string;
+  performedBy: string;
+  voided: boolean;
+  enteredBy?: string;
+  originalDocument?: string;
+}
+
 /** page 说的是行所在那一册；待识别册的 units 恒是按实物那一册的第一页，往后翻走 listIdentityReviewUnits。 */
 export type NodeOperationsListResponseBody =
   | { outcome: 'RECEPTIONS_LISTED'; receptions: ReceptionRecord[]; page: CataloguePage }
   | { outcome: 'UNIDENTIFIED_ITEMS_LISTED'; items: UnidentifiedItemRecord[]; units?: IdentityReviewUnit[]; page: CataloguePage }
-  | { outcome: 'CONSOLIDATION_UNITS_LISTED'; units: ConsolidationUnitRecord[]; page: CataloguePage };
+  | { outcome: 'CONSOLIDATION_UNITS_LISTED'; units: ConsolidationUnitRecord[]; page: CataloguePage }
+  | { outcome: 'MEASUREMENTS_LISTED'; measurements: ActualMeasurementRecord[]; page: CataloguePage };
 
 interface NodeBodyByRegistry {
   reception: Extract<NodeOperationsListResponseBody, { outcome: 'RECEPTIONS_LISTED' }>;
@@ -187,6 +213,7 @@ interface NodeBodyByRegistry {
     NodeOperationsListResponseBody,
     { outcome: 'CONSOLIDATION_UNITS_LISTED' }
   >;
+  measurement: Extract<NodeOperationsListResponseBody, { outcome: 'MEASUREMENTS_LISTED' }>;
 }
 
 /** 节点作业查阅一问的条件：registry 选哪本册，保持原义、不兼作筛选维（ADR-0144 决定四），但同样进游标摘要。 */
@@ -201,7 +228,7 @@ export function nodeOperationsConditions<Registry extends NodeOperationsRegistry
   return { ...conditions, selectors: { registry } };
 }
 
-/** 返回类型按条件里的 registry 收窄：三册行形状互不相同，页面按区择形状。收哪些键见 ports.ReceptionPages、UnidentifiedItemPages 与 ConsolidationUnitPages。 */
+/** 返回类型按条件里的 registry 收窄：各册行形状互不相同，页面按区择形状。收哪些键见 ports 上同名册的声明。 */
 export function listNodeOperationsRecords<Registry extends NodeOperationsRegistry>(
   conditions: NodeOperationsConditions<Registry>,
   after: string | null = null,

@@ -67,6 +67,7 @@ type cycleFixture struct {
 	ledger       *cycleLedgerDouble
 	arrangements *arrangementsDouble
 	cutter       *cycleCutterDouble
+	adjustments  *adjustmentViewDouble
 	candidates   cycleCandidatesDouble
 	handler      *application.CutOffStatementsOnCycleHandler
 	record       ports.StatementCycleRecord
@@ -89,6 +90,7 @@ func newCycleFixture(t *testing.T, candidates map[string][]ports.CycleCutCandida
 		ledger:       &cycleLedgerDouble{},
 		arrangements: newArrangementsDouble(),
 		cutter:       &cycleCutterDouble{moment: moment},
+		adjustments:  newAdjustmentView(),
 		candidates:   cycleCandidatesDouble{byClosing: candidates},
 		record:       ports.StatementCycleRecord{Tenant: confirmCommand(t).TenantID, Cycle: cycle},
 	}
@@ -99,6 +101,7 @@ func newCycleFixture(t *testing.T, candidates map[string][]ports.CycleCutCandida
 		Moments:  newMomentHandler(t, momentViewOf(moment)), Charges: newChargeStore(),
 		Attributions: newAttributionJudge(t, newAttributionFormsDouble(), fixture.arrangements), AttributionDates: newChargeStore(),
 		Cutter: fixture.cutter, Clock: confirmClock{at: time.Date(2026, 10, 31, 11, 0, 0, 0, time.UTC)},
+		Adjustments: fixture.adjustments,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -151,6 +154,10 @@ func TestACycleCutRecordsEmptyClosingsAndComposesTheCommandFromTheCandidates(t *
 		len(command.ChargeIDs) != 2 || !command.CutOffAt.Equal(time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)) ||
 		!command.PublishedAt.Equal(time.Date(2026, 10, 31, 11, 0, 0, 0, time.UTC)) {
 		t.Fatalf("截单命令 = %+v", command)
+	}
+	// 合计只报费用；还没出账的调整交给截单编排随单带走，这里不先读一遍再报数。
+	if !command.CarryUnbilledAdjustments {
+		t.Fatal("到点截单没有要求随单带走还没出账的调整")
 	}
 }
 

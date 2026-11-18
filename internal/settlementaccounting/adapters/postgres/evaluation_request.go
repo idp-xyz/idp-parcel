@@ -40,6 +40,7 @@ var (
 	_ ports.EvaluationRequestStopRecorder      = (*EvaluationRequests)(nil)
 	_ ports.EvaluationRequestZeroTotalRecorder = (*EvaluationRequests)(nil)
 	_ ports.EvaluationRequestSuccessorView     = (*EvaluationRequests)(nil)
+	_ ports.EvaluationRequestsByOccurrence     = (*EvaluationRequests)(nil)
 )
 
 // Save 登记一份评价请求。撞主键或撞自然键唯一约束都交回`已存在`而不是错误：那是业务答案，编排据以按
@@ -249,6 +250,70 @@ func (registry *EvaluationRequests) findOne(
 		return ports.EvaluationRequestRecord{}, false, fmt.Errorf("find evaluation request: %w", err)
 	}
 
+	record, err := scanEvaluationRequest(tenant, querier.QueryRow(ctx,
+		`SELECT `+evaluationRequestColumnList+`
+		   FROM settlement_accounting.evaluation_request `+where,
+		args...,
+	))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.EvaluationRequestRecord{}, false, nil
+	}
+	if err != nil {
+		return ports.EvaluationRequestRecord{}, false, fmt.Errorf("find evaluation request: %w", err)
+	}
+	return record, true, nil
+}
+
+// ListCurrentByOccurrence 交这一版发生项上还没有下一代的请求。后一代在册上的不进这份清单。
+func (registry *EvaluationRequests) ListCurrentByOccurrence(
+	ctx context.Context,
+	tenant domain.TenantID,
+	occurrence domain.ChargeOccurrenceID,
+	version domain.OccurrenceVersion,
+) ([]ports.EvaluationRequestRecord, error) {
+	querier, err := registry.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list evaluation requests by occurrence: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT `+evaluationRequestColumnList+`
+		   FROM settlement_accounting.evaluation_request AS current
+		  WHERE current.tenant_id = $1
+		    AND current.occurrence_id = $2
+		    AND current.occurrence_version = $3
+		    AND NOT EXISTS (
+		        SELECT 1 FROM settlement_accounting.evaluation_request AS successor
+		         WHERE successor.tenant_id = current.tenant_id
+		           AND successor.previous_request_id = current.request_id
+		    )
+		  ORDER BY current.request_id`,
+		tenant.String(), occurrence.String(), version.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list evaluation requests by occurrence: %w", err)
+	}
+	defer rows.Close()
+	var listed []ports.EvaluationRequestRecord
+	for rows.Next() {
+		record, err := scanEvaluationRequest(tenant, rows)
+		if err != nil {
+			return nil, fmt.Errorf("list evaluation requests by occurrence: %w", err)
+		}
+		listed = append(listed, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list evaluation requests by occurrence: %w", err)
+	}
+	return listed, nil
+}
+
+const evaluationRequestColumnList = `request_id, scope_ref, purpose,
+		        occurrence_id, occurrence_reason, occurrence_version, occurred_at,
+		        fee_item, agreement_ref, source_digest,
+		        requested_at, requested_by, recorded_at,
+		        generation, previous_request_id, resume_basis, stop_cause, negative_end`
+
+func scanEvaluationRequest(tenant domain.TenantID, row pgx.Row) (ports.EvaluationRequestRecord, error) {
 	var (
 		requestID, scope, purpose                         string
 		occurrenceID, occurrenceReason, occurrenceVersion string
@@ -257,26 +322,13 @@ func (registry *EvaluationRequests) findOne(
 		generation                                        int
 		previous, basis, cause, negativeEnd               *string
 	)
-	err = querier.QueryRow(ctx,
-		`SELECT request_id, scope_ref, purpose,
-		        occurrence_id, occurrence_reason, occurrence_version, occurred_at,
-		        fee_item, agreement_ref, source_digest,
-		        requested_at, requested_by, recorded_at,
-		        generation, previous_request_id, resume_basis, stop_cause, negative_end
-		   FROM settlement_accounting.evaluation_request `+where,
-		args...,
-	).Scan(&requestID, &scope, &purpose,
+	if err := row.Scan(&requestID, &scope, &purpose,
 		&occurrenceID, &occurrenceReason, &occurrenceVersion, &occurredAt,
 		&feeItem, &agreement, &digest,
 		&requestedAt, &requestedBy, &recordedAt,
-		&generation, &previous, &basis, &cause, &negativeEnd)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ports.EvaluationRequestRecord{}, false, nil
+		&generation, &previous, &basis, &cause, &negativeEnd); err != nil {
+		return ports.EvaluationRequestRecord{}, err
 	}
-	if err != nil {
-		return ports.EvaluationRequestRecord{}, false, fmt.Errorf("find evaluation request: %w", err)
-	}
-
 	request, err := rebuildEvaluationRequest(evaluationRequestColumns{
 		requestID:         requestID,
 		scope:             scope,
@@ -295,18 +347,18 @@ func (registry *EvaluationRequests) findOne(
 		basis:             derefText(basis),
 	})
 	if err != nil {
-		return ports.EvaluationRequestRecord{}, false, fmt.Errorf("find evaluation request: %w", err)
+		return ports.EvaluationRequestRecord{}, fmt.Errorf("find evaluation request: %w", err)
 	}
 	var stopCause domain.EvaluationStopCause
 	if cause != nil {
 		if stopCause, err = domain.EvaluationStopCauseFromName(*cause); err != nil {
-			return ports.EvaluationRequestRecord{}, false, fmt.Errorf("find evaluation request: %w", err)
+			return ports.EvaluationRequestRecord{}, fmt.Errorf("find evaluation request: %w", err)
 		}
 	}
 	// 库上的 CHECK 只收零额一个词、且与停因互斥；这里再核一次，只为迁移改坏约束时不静默。
 	zeroTotal := negativeEnd != nil
 	if zeroTotal && (*negativeEnd != zeroTotalEnd || cause != nil) {
-		return ports.EvaluationRequestRecord{}, false, fmt.Errorf("find evaluation request: %s carries negative end %q with stop cause %v",
+		return ports.EvaluationRequestRecord{}, fmt.Errorf("find evaluation request: %s carries negative end %q with stop cause %v",
 			requestID, *negativeEnd, cause != nil)
 	}
 	return ports.EvaluationRequestRecord{
@@ -315,7 +367,7 @@ func (registry *EvaluationRequests) findOne(
 		RecordedAt: recordedAt.UTC(),
 		StopCause:  stopCause,
 		ZeroTotal:  zeroTotal,
-	}, true, nil
+	}, nil
 }
 
 // evaluationRequestColumns 是一行评价请求的原样取值。列全部非空，没有指针列。
