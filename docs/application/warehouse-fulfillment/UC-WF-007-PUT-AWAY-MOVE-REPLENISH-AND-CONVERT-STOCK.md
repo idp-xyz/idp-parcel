@@ -193,8 +193,8 @@
 | 库内移动、形态转换、状态转换与短少的登记口，次品转良品口与读口 | 未做。四个登记口挂「作业事实登记」能力面，各定一版带形状版本的规范化形状，同一事实身份的重放与内容冲突按它比（ADR-0149 决定四）；次品转良品挂「运营决定」能力面；读口挂主数据与运营查阅读 | PN-09 开发交接划包 |
 | 移入、移出待出库库区 | 拣货、回库与拆包回库在 UC-WF-013、UC-WF-016；出库复核发现破损的转次品在 UC-WF-013。本用例的口仍不收待出库库区的行 | 已写成 |
 | 分配还指着已经搬走的货 | 补入账把分配改到新格，未完成的拣货在新格拣；同一数量先批准的一份入账。拣货差额的形成在 UC-WF-013 | 已写成 |
-| 从退货暂存库区移出与回库处置 | 本用例的口照记从退货暂存库区上架、移库与状态转换的事实；回库处置怎样约束这些货的去向、没处置就移走的怎么办没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
-| 库内作业与收费发生项 | 上架不另形成发生项，入库作业发生项在收货确认时形成；移库、补货、形态转换与次品转良品要不要作为增值服务项目计费没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
+| 从退货暂存库区移出与回库处置 | 没有处置就把货移出的，本用例照记。处置只指名去向，见 UC-WF-017 | 已写成 |
+| 库内作业与收费发生项 | 上架不另形成发生项。移库、补货、形态转换与次品转良品，租户登记了同名增值服务项目才形成。见 UC-WF-019 | 已写成 |
 | 接入词：作业事实类型「库内移动登记」「形态转换登记」「状态转换登记」「短少登记」，作业范围种类「仓」，运营决定种类「次品转良品」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | 各口从载荷收货主客户账户 | 库存账的一格以货主为一维，作业事实的行与次品转良品只能由载荷指名货主；`ADR-OPS` 决定二写的是身份格不从请求体收，次品转良品这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | 一线作业端读在库的格、占用与可选的移入目标 | 下发的内容、有效区间与离线边界没有写；离线记下的事实到达时只入账了一部分，设备怎样把逐行结果与形成的差异呈现给作业人员也没有写 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |

@@ -186,7 +186,7 @@
 | 首方客户 API 契约 | 入库预报的提交、告知更新、撤回与查阅还没有写进契约 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | 代录提交从载荷收货主客户账户 | 新建预报时没有在册的对象可以取货主，只能由载荷指名；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | `AT-WF-082`、`AT-WF-083`，现行那一版告知到一线作业端 | 仓按到货线索找预报，用的该是现行的那一版；它怎样下发到一线作业端、离线时手里是哪一版，没有定 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
-| 到仓方式受理之后不改 | 实际到仓的方式与预报声明的不同时，入库作业发生项上到仓方式那一格取哪一个，本用例不定 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
+| 到仓方式受理之后不改 | 入库作业发生项的到仓方式取预报上的那一个。见 UC-WF-019 | 已写成 |
 | 准入范围 | 两个面的写照各族判；仓配的写落在治理登记册的哪个对象范围没有定，随 `ADR-OPT` 越权风险点 7 一起定：那一点问的是某个租户怎样经 PN-08 的阶段准入启用仓配，任何生产部署打开开关之前要有答案 | 产品 owner 与试点治理 owner |
 | `AT-WF-032`，撤回与收货确认的先后 | 两者要在同一份预报上串行判；收货一侧的答法见 UC-WF-004 | 随实现 |
 | `AT-WF-036`，部署开关关着时端点怎么答 | `ADR-OPT` 决定四留给第一张落仓配端点的实施票；两种做法都不得折成 404 | 第一张落仓配端点的实施票 |

@@ -193,8 +193,8 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 收货确认口、完结口、差异结论口（货主与代录）与读口 | 未做。收货挂「作业事实登记」能力面，要定一版带形状版本的规范化形状，同一事实身份的重放与内容冲突按它比（ADR-0149 决定四）；完结与代录挂「运营决定」能力面；货主作结论挂首方客户渠道 | PN-09 开发交接划包 |
-| 入库作业收费发生项 | CONTEXT「收费发生项」写入库作业在收货确认时按每次收货形成；本用例只把收货确认写成作业事实，发生项的形成、计量与作业属性没有写。收货行上的实点箱数是给它留的计量来源，托数与柜型本用例没有带 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md)，写成之后回填指针 |
-| 离线迟到的收货的入库时间 | 入库批次的入库时间照 CONTEXT「库存账与守恒」取入账那一刻，不取设备的发生时间；迟到的收货，库龄因此从入账那天起算 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) 写仓租时核一遍 |
+| 入库作业收费发生项 | 收货确认形成入库作业发生项，计量与属性见 UC-WF-019。实点箱数是计量来源；托数与柜型本用例没有带 | 已写成 |
+| 离线迟到的收货的入库时间 | 入库时间取入账那一刻，库龄从那天起算。入账之前的日子不补仓租。见 UC-WF-019 | 已写成 |
 | 上架、待检的状态转换 | 收货暂存里的库存可见但不可分配；上架与状态转换写在 [UC-WF-007](./UC-WF-007-PUT-AWAY-MOVE-REPLENISH-AND-CONVERT-STOCK.md)，还没有实现 | PN-09 开发交接划包 |
 | 收错了怎么改；货主有异议之后 | 已入账的收货不改不删。数量、批号、库存状态收错了，或货主提了异议、仓复点之后要改账，都以库存调整表达，写在 [UC-WF-011](./UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md)：调整可以引用收货差异与所更正的收货事实，不以结论为前提；本用例只记结论 | PN-09 开发交接划包 |
 | 接入词：作业事实类型「收货确认」，作业范围种类「仓」，运营决定种类「入库预报完结」「收货差异结论代录」，客户面能力「收货差异确认」「仓配查阅」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
