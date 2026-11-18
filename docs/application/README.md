@@ -122,3 +122,6 @@ PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-
 | `UC-WF-014` | [代办仓配出库的委托](./warehouse-fulfillment/UC-WF-014-ACT-FOR-THE-OWNER-ON-A-WAREHOUSE-OUTBOUND-SHIPMENT.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；以货主名义提交与消费小包托运的信封已形成，代办授予待租户提供 |
 | `UC-WF-015` | [确认出库并更正](./warehouse-fulfillment/UC-WF-015-CONFIRM-WAREHOUSE-OUTBOUND.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；三支出库确认、离线照记与不成立的回补已形成，面单本体待租户提供 |
 | `UC-WF-016` | [出库截单](./warehouse-fulfillment/UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；按阶段释放预占、回库与晚到的拣货已形成，代录授予待租户提供 |
+| `UC-WF-017` | [退货预报、退货入库与回库处置](./warehouse-fulfillment/UC-WF-017-ACCEPT-RETURNS-AND-DISPOSE-OF-THEM.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；预报、入库、认不出转待认领与逐件处置已形成，代录授予待租户提供 |
+| `UC-WF-018` | [接收代理仓库存声明并转出代理仓出库](./warehouse-fulfillment/UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；声明不进账、结果原样保全已形成，连接器凭据待租户提供 |
+| `UC-WF-019` | [形成仓储作业收费发生项](./warehouse-fulfillment/UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md) | `warehouse-fulfillment` | 用例已写成，待实现（PN-09）；七种作业种类、仓租与更正版本已形成，库龄口径与计量单位待租户提供 |

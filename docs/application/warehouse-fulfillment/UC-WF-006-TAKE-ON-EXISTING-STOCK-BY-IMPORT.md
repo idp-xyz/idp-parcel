@@ -169,7 +169,7 @@
 |---|---|---|
 | 建账导入的提交口与读口 | 未做。提交挂「运营决定」能力面，读口挂主数据与运营查阅读 | PN-09 开发交接划包 |
 | `AT-WF-075`、`AT-WF-077`、`AT-WF-078`，批准与驳回 | 批准与驳回的口、批准职责规则、它没登记时答未配置、提交人与批准人怎样比，写在 [UC-WF-011](./UC-WF-011-RESOLVE-STOCK-DISCREPANCIES-AND-APPROVE-STOCK-ADJUSTMENTS.md)（`AT-WF-170`、`AT-WF-172`、`AT-WF-173`），还没有实现；本用例只定批准成立之后怎样入账 | PN-09 开发交接划包 |
-| 建账导入与收费发生项 | CONTEXT「收费发生项」只让入库作业在收货确认时形成，建账导入不形成入库作业发生项；声明的入库时间早于入账那一天时，入账之前的那些天补不补仓租没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
+| 建账导入与收费发生项 | 不形成入库作业发生项。入账之前的那些天不补仓租。见 UC-WF-019 | 已写成 |
 | `AT-WF-079`，货主读库存与流水 | 读口写在 [UC-WF-009](./UC-WF-009-FREEZE-AND-UNFREEZE-STOCK-AND-READ-STOCK-HOLDS-AND-MOVEMENTS.md)（`AT-WF-137`）；首方客户 API 契约里还没有它 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | 接入词：运营决定种类「建账导入提交」 | 本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | 演示种子灌在库库存 | 演示租户的在库库存经本用例的提交与 UC-WF-011 的批准灌入，批准之前要先灌批准职责规则；种子里走哪个口（在线口，还是另开受控批量口）没有定 | PN-09 开发交接划包 |

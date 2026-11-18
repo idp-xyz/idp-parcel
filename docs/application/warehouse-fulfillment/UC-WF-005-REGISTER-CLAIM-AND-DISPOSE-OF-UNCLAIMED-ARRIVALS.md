@@ -190,8 +190,8 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 到货登记口、认领口、撤销口、处置口、处置规则登记口与读口 | 未做。到货登记挂「作业事实登记」能力面，要定一版带形状版本的规范化形状，同一事实身份的重放与内容冲突按它比（ADR-0149 决定四）；认领、撤销与处置挂「运营决定」能力面；处置规则挂登记册配置写面，在线口与受控批量口消费同一登记用例（ADR-0085 决定一） | PN-09 开发交接划包 |
-| `AT-WF-061`，退件的认领之后按退货入库入账；退货入库认不出货主时转来 | 退货入库的用例还没有写：退件的入账怎样引用到货、退货入库登记时认不出货主的怎样转成待认领到货，都归它 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
-| 处置的实物执行与收费 | 处置只记决定。实物怎么办（销毁、退回、变卖之类）在系统外执行；作业种类里的销毁指在账库存的销毁，待认领到货不在账上，处置要不要形成收费发生项没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
+| `AT-WF-061`，退件的认领之后按退货入库入账；退货入库认不出货主时转来 | 见 UC-WF-017：认不出的建待认领到货；认领之后的入库引用那一件 | 已写成 |
+| 处置的实物执行与收费 | 处置只记决定。待认领到货不在账上，不形成销毁发生项；租户把该处置登记成增值服务项目才形成。见 UC-WF-019 | 已写成 |
 | 接入词：作业事实类型「待认领到货登记」，作业范围种类「仓」，运营决定种类「待认领到货认领」「待认领到货处置」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | 处置规则在参数登记册里的行 | 处置规则是租户取值，参数登记册里还没有它的行 | 票 [warehouse-fulfillment/12](../../../.scratch/warehouse-fulfillment/issues/12-write-the-pn-09-development-handoff-and-synthetic-task-pack.md) |
 | 认领从载荷收货主客户账户 | 待认领到货不属于任何货主，认领只能由载荷指名货主；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |

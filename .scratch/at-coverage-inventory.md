@@ -2129,6 +2129,34 @@
 | `AT-WF-226` | 代录截单要有依据引用与授予；指名在册的请求不从载荷再带货主 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
 | `AT-WF-227` | 一个仓都没登记时截单答未配置 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
 | `AT-WF-228` | 部署开关关着时截单口不提供业务答复 | UC-WF-016-CANCEL-AN-OUTBOUND-REQUEST-OR-PARCEL.md |
+| `AT-WF-229` | 退货预报受理，同一键重投不形成库存 | UC-WF-017-ACCEPT-RETURNS-AND-DISPOSE-OF-THEM.md |
+| `AT-WF-230` | 按装箱记录认出货主的退件入库，不冲回原出库 | UC-WF-017-ACCEPT-RETURNS-AND-DISPOSE-OF-THEM.md |
+| `AT-WF-231` | 认不出货主的退件转待认领，认领后再入库并引用它 | UC-WF-017-ACCEPT-RETURNS-AND-DISPOSE-OF-THEM.md |
+| `AT-WF-232` | 货还在退货暂存则处置成立；货已移走则执行不成立 | UC-WF-017-ACCEPT-RETURNS-AND-DISPOSE-OF-THEM.md |
+| `AT-WF-233` | 销毁与退还货主不在退货用例里入账 | UC-WF-017-ACCEPT-RETURNS-AND-DISPOSE-OF-THEM.md |
+| `AT-WF-234` | 没有处置就把退货暂存货上架的，库内作业照记 | UC-WF-017-ACCEPT-RETURNS-AND-DISPOSE-OF-THEM.md |
+| `AT-WF-235` | 停用仓与代理仓不受理新退货预报；没登记的仓答查无所指 | UC-WF-017-ACCEPT-RETURNS-AND-DISPOSE-OF-THEM.md |
+| `AT-WF-236` | 部署开关关着时退货各口不提供业务答复 | UC-WF-017-ACCEPT-RETURNS-AND-DISPOSE-OF-THEM.md |
+| `AT-WF-237` | 代理仓声明有效、过期答未知、新声明取代旧的，都不进库存账 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
+| `AT-WF-238` | 指名代理仓的出库经连接器转出，不铸拣货事实 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
+| `AT-WF-239` | 代理仓缺货或拒绝则出库请求终结 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
+| `AT-WF-240` | 装箱结果后再提交委托，交接结果即出库确认且不消耗自营账 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
+| `AT-WF-241` | 自备面单经连接器转给代理仓，不形成委托 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
+| `AT-WF-242` | 连接器或仓没登记时转出与声明答未配置 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
+| `AT-WF-243` | 向代理仓提交库或退货预报答仓不受理 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
+| `AT-WF-244` | 部署开关关着时代理仓各口不提供业务答复 | UC-WF-018-TAKE-AGENT-WAREHOUSE-STATEMENTS-AND-HAND-OFF-OUTBOUND.md |
+| `AT-WF-245` | 收货确认形成入库作业发生项，不带金额 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-246` | 同一收货重放不形成第二份；建账导入不形成入库作业 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-247` | 出库确认、自提与代理仓交接各形成出库作业发生项 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-248` | 退货入库与回库处置各形成退货处理发生项 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-249` | 加工与销毁入账形成对应种类的发生项 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-250` | 仓租按计费日形成并可重放；时区没登记则不形成 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-251` | 口径登记前的日子不补仓租；晚跑只补当时已齐的日子 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-252` | 单位不同不折算；补测才重述；再测一版不改旧发生项 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-253` | 没有库位类型带「无」；冻结只记有无，不减在库数量 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-254` | 调整更正收货则重述入库作业发生项；收货不成立则作废 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-255` | 换标按登记的项目形成；没登记的开箱不形成；拍照完成不改账 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
+| `AT-WF-256` | 一个仓都没登记或开关关着时不形成收费发生项 | UC-WF-019-FORM-WAREHOUSE-CHARGE-OCCURRENCES.md |
 
 ## 重盘变化摘要（0cddbba）
 
@@ -2437,3 +2465,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-11-12 追记（票 warehouse-fulfillment/08）：新立 UC-WF-007 至 UC-WF-011（库内作业、加工与商品换标、冻结与库存查阅、盘点、库存差异与库存调整），`AT-WF-085`–`180`。`internal/` 下还没有仓配履约的包，都未实现、没有测试点名，入④，等 PN-09 的实施票。总览计数未重算，由推送方重算。
 
 2026-11-18 追记（票 warehouse-fulfillment/09）：新立 UC-WF-012 至 UC-WF-016（受理与预占、波次拣货打包、代办委托、出库确认、出库截单），`AT-WF-181`–`228`。`internal/` 下还没有仓配履约的包，都未实现、没有测试点名，入④。总览计数未重算，由推送方重算。
+
+2026-11-18 追记（票 warehouse-fulfillment/10）：新立 UC-WF-017 至 UC-WF-019（退货、代理仓、收费发生项），`AT-WF-229`–`256`。都未实现，入④。总览计数未重算。
