@@ -182,7 +182,7 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 预报提交口、告知更新口、撤回口、代录口与读口 | 未做。货主口挂首方客户渠道，各写口各定一版带形状版本的规范化形状（ADR-0139 决定八），来源请求键的命令前缀进首方族的保留前缀表（ADR-0310 决定一）；代录口挂「运营决定」能力面 | PN-09 开发交接划包 |
-| `AT-WF-030`，单据号 | 入库预报的类型代码与默认模板由本上下文声明、在装配时汇总（`ADR-NUM` 决定五、六），还没有定；日期所用的时区来源是仓的业务时区 | PN-09 开发交接划包，定下之后写回本用例 |
+| `AT-WF-030`，单据号 | 类型代码 `INBOUND_PRE_ADVICE`，默认模板 `IB-{yyyy}{mm}{dd}-{seq:5}`，按日重置。出库请求与退货预报的代码在同一张表 | 已写成，见 [PN-09 交接](../../design/pn-09-warehouse-fulfillment-development-handoff.md) |
 | 接入词：客户面能力「入库预报提交」「入库预报告知更新」「入库预报撤回」「仓配查阅」，运营决定种类「入库预报代录」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | 首方客户 API 契约 | 入库预报的提交、告知更新、撤回与查阅还没有写进契约 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |
 | 代录提交从载荷收货主客户账户 | 新建预报时没有在册的对象可以取货主，只能由载荷指名；`ADR-OPS` 决定二写的是身份格不从请求体收，这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 已写成（[ADR-0384](../../adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)、[首方契约](../../api/first-party-api-contract.md)仓配一节、[一线简报](../../design/frontline-scan-offline-and-conflict-decision-brief.md)「仓内作业」） |

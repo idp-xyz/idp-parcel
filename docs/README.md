@@ -62,6 +62,7 @@
 - [`PN-04` 运输履约与包裹终局开发交接](./design/pn-04-transport-fulfillment-and-parcel-finalization-development-handoff.md)：把常规运输机会、班次、容量、运输委托、订舱、收费发生项、权威交接、实际履约、派送、POD、逐包裹取消/收寄后处置、替代/退运旅程与终局组织成 W01 至 W08；当前生产结论保持 `No-Go / 待参数化`，不以监管运输专项替代常规主链。
 - [`PN-06` 追踪、异常与客户披露开发交接](./design/pn-06-visibility-and-exception-development-handoff.md)：把已接受事实、内部投影、普通客户全程追踪视图、ETA、可见性缺口、异常分诊、案件、客户披露、索赔三类期限、追偿外部动作/响应、关务专项和联合验证组织成 W01 至 W08；通用业务编排已形成，真实参数和联合证据仍待提供，当前生产结论保持 `No-Go / 待参数化`。
 - [`PN-07` 运营结算与经营核算开发交接](./design/pn-07-operational-settlement-and-accounting-development-handoff.md)：把计量、客户/供应商计价、运输发生项到预期成本、调整唯一所有权、接受前财务控制、对账单、供应商账单、真实收付映射/核销、成本分摊、经营结果、赔付/追偿金额和关务代垫组织成 W01 至 W09；通用业务编排已形成，真实参数和联合账期证据仍待提供，当前生产结论保持 `No-Go / 待参数化`。
+- [`PN-09` 仓配履约开发交接](./design/pn-09-warehouse-fulfillment-development-handoff.md)：把可选的仓配履约划成 W01 至 W24，含开关、作业、收费发生项，以及计价与结算两侧用合成发生项就能验的包。不在首发。代码未开始。证据只记 `S`。
 - [`PP-S03` 证据与合成契约开发交接](./design/pp-s03-par-set-02-03-evidence-and-synthetic-contract.md)：在无真实 SELL/BUY 参数时固定隔离 `S` 的计价验收、费用代码交接和缺映射 `PENDING` 边界；不创建结算对象或解除生产门禁。
 - [`PP-S03-W01` Golden Case 源证据闭合工作单](./design/pp-s03-w01-golden-case-source-evidence-request.md)：把源文件身份、哈希、取数范围、参考设计自述的四条源价卡差异和使用授权整理成可执行取证，并固定完全闭合、部分闭合与不可闭合三种结论；不修改参考树，不改写证据层级，也不单独构成参数状态转换。
 - [计价规则模型最终设计](./design/pp-pricing-rule-model-final-design.md)：一次性固定 `parcel-pricing` 规则模型的概念集合与形态——特征判定、附加费规则与分区分档价表、百分比与取较大值、方案级条件最低计价重量、费用依赖与排除集、计价参考序列（燃油费率与汇率）、币种换算——并给出范围判据、待取证项与实施顺序。概念定义与不变量已抬升至[小包计价上下文](./domain/parcel-pricing/CONTEXT.md)，本文保留每条从卡上哪一处得出的推导过程；所有数值保持`待参数化`，不确定任何金额或阈值。

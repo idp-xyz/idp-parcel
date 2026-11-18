@@ -95,7 +95,7 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 - 领域规则以[仓配履约 CONTEXT](../domain/warehouse-fulfillment/CONTEXT.md)为准。为什么可选、部署与租户两级各怎么关、其他上下文为什么不以它为前提，只在 ADR-0375。
 - 某个租户用不用仓配是租户取值（见[产品需求假设](#产品需求假设)的 `PA-WF-01`）；首发试点范围不含仓配（[首发试点范围](./PILOT-SCOPE.md)）。
-- 现状（取证于 `4d8809add`）：`UC-WF-*` 还没写，`internal/` 下没有仓配履约的生产代码，机制半边记**未开始**。用例、仓储作业费的计价与结算、开发交接照 [`.scratch/warehouse-fulfillment/spec.md`](../../.scratch/warehouse-fulfillment/spec.md) 的子票顺序做；这一条只记写下时的状态，读到与代码不符时以代码为准。
+- 现状（2026-11-18，票 12）：`UC-WF-001` 至 `UC-WF-019`、ADR-0384 与 [PN-09 开发交接](../design/pn-09-warehouse-fulfillment-development-handoff.md) 已写。`internal/` 下没有仓配履约的生产包。机制半边的文档已齐，代码未开始。这一条只记写下时的状态，读到与代码不符时以代码为准。
 
 ## 当前应用用例覆盖缺口
 
