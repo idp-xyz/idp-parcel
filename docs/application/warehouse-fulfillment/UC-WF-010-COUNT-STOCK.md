@@ -189,8 +189,8 @@
 | 规则或验收行 | 现状缺口 | 承接 |
 |---|---|---|
 | 盘点的创建、开始、完成与作废口，清点结果口与读口 | 未做。四个决定口挂「运营决定」能力面；清点结果挂「作业事实登记」能力面，要定一版带形状版本的规范化形状，同一事实身份的重放与内容冲突按它比（ADR-0149 决定四）；读口挂主数据与运营查阅读 | PN-09 开发交接划包 |
-| `AT-WF-145`，未完成的拣货任务 | 拣货任务的生命周期归出库的用例，还没有写；「未完成」的判据随它定 | 票 [warehouse-fulfillment/09](../../../.scratch/warehouse-fulfillment/issues/09-write-the-outbound-use-cases.md) |
-| 待出库库区不在盘点范围 | 那里的货随拣货与出库确认进出；它的账实不符怎样发现、怎样处理没有写 | 票 [warehouse-fulfillment/09](../../../.scratch/warehouse-fulfillment/issues/09-write-the-outbound-use-cases.md) |
+| `AT-WF-145`，未完成的拣货任务 | 「未完成」指还没记完成、也没因出库截单撤销的那一份，见 UC-WF-013 启动条件 | 已写成 |
+| 待出库库区不在盘点范围 | 那里的账实不符在出库复核发现，差异记在该件所在的格，见 UC-WF-013；批准在 UC-WF-011 | 已写成 |
 | 盘点与收费发生项 | 盘点要不要作为增值服务项目计费没有写 | 票 [warehouse-fulfillment/10](../../../.scratch/warehouse-fulfillment/issues/10-write-the-return-agent-warehouse-and-charge-occurrence-use-cases.md) |
 | 接入词：运营决定种类「盘点」，作业事实类型「盘点清点」，作业范围种类「仓」 | 都是本用例的暂名；进 `internal/accessidentity` 的词与粒度归接入词表的 ADR | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
 | 盘点的范围与清点行从载荷收货主客户账户 | 库存账的一格以货主为一维，只能由载荷指名；`ADR-OPS` 决定二写的是身份格不从请求体收，创建这一口照哪一种读，要在接入词表的 ADR 里写明。与 UC-WF-002「代录口从载荷收货主客户账户」一行是同一个问题 | 票 [warehouse-fulfillment/11](../../../.scratch/warehouse-fulfillment/issues/11-write-the-customer-faces-and-the-frontline-warehouse-work-contract.md) |
