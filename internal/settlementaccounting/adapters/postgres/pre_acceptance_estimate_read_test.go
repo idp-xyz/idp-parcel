@@ -118,7 +118,7 @@ func detailedEstimateOf(t *testing.T, currencyCode, product, firstWeight string,
 	if err != nil {
 		t.Fatalf("lines: %v", err)
 	}
-	estimate, gap, err := domain.FormPerParcelSellTrialSum(estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1"), estimateCard, currency,
+	estimate, gap, err := domain.FormPerParcelSellTrialSum(estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1"), estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1").PricingScope(), estimateCard, currency,
 		[]domain.PreAcceptanceTrial{first, second})
 	if err != nil || gap != domain.PreAcceptanceEstimateFormed {
 		t.Fatalf("estimate: gap = %s err = %v", gap, err)
@@ -259,7 +259,7 @@ func TestALegacyTraceReadsAsNotRecordedAndARedriveAcrossTheMigrationReplays(t *t
 	if err != nil {
 		t.Fatalf("trial: %v", err)
 	}
-	changed, _, err = domain.FormPerParcelSellTrialSum(estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1"), estimateCard, changed.Currency(),
+	changed, _, err = domain.FormPerParcelSellTrialSum(estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1"), estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1").PricingScope(), estimateCard, changed.Currency(),
 		[]domain.PreAcceptanceTrial{other, trials[1]})
 	if err != nil {
 		t.Fatalf("estimate: %v", err)

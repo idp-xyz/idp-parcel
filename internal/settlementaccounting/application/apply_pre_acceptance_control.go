@@ -594,9 +594,11 @@ func (handler *ApplyPreAcceptanceControlHandler) formEstimate(
 		return none, halted, nil
 	}
 
-	estimate, gap, err := domain.FormPerParcelSellTrialSum(adoption, answer.PriceCard, command.Scope.Currency(), answer.Trials)
+	// scope 是这次估价实际问的那一个范围（estimateSellPriceSources）：合同的第一个来源，或旧合同的采用行上的范围。
+	// 不能让领域回头去读采用行——新形状合同的采用行不带范围，合同只声明一个来源时各件也不另记来源，头上那一格就空了。
+	estimate, gap, err := domain.FormPerParcelSellTrialSum(adoption, scope, answer.PriceCard, command.Scope.Currency(), answer.Trials)
 	if err != nil {
-		// 采用行过了构造门、价卡引用在已形成那一格必有值，走到这里是编程错误。
+		// 采用行过了构造门、价卡引用在已形成那一格必有值、问的范围非空，走到这里是编程错误。
 		return none, nil, fmt.Errorf("form pre-acceptance estimate: %w", err)
 	}
 	reason, stopped, err = estimateGapReason(gap)

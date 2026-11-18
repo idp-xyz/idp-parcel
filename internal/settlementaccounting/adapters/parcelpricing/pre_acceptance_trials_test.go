@@ -228,7 +228,7 @@ func TestPreAcceptanceTrialsCarryMinorUnitTotalsAndTheirVersionManifest(t *testi
 	if err != nil {
 		t.Fatalf("adoption: %v", err)
 	}
-	estimate, gap, err := sadomain.FormPerParcelSellTrialSum(adoption, answer.PriceCard, mustSA(t, sadomain.NewCurrencyCode, "CNY"), answer.Trials)
+	estimate, gap, err := sadomain.FormPerParcelSellTrialSum(adoption, adoption.PricingScope(), answer.PriceCard, mustSA(t, sadomain.NewCurrencyCode, "CNY"), answer.Trials)
 	if err != nil || gap != sadomain.PreAcceptanceEstimateFormed || estimate.TotalMinor() != 2500 {
 		t.Fatalf("estimate = %d gap = %s err = %v, 想要 2500", estimate.TotalMinor(), gap, err)
 	}

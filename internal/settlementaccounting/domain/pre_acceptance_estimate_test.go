@@ -37,7 +37,7 @@ func TestAPerParcelSellTrialSumAddsEveryParcelAndKeepsItsProvenance(t *testing.T
 	cny := mustRef(t, domain.NewCurrencyCode, "CNY")
 	trials := []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 1250, "CNY"), totaledTrial(t, "P-2", 800, "CNY")}
 
-	estimate, gap, err := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), "PRICE_CARD:SYN-PLAN@v1", cny, trials)
+	estimate, gap, err := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), perParcelAdoption(t).PricingScope(), "PRICE_CARD:SYN-PLAN@v1", cny, trials)
 	if err != nil || gap != domain.PreAcceptanceEstimateFormed {
 		t.Fatalf("gap = %s err = %v, 想要已形成", gap, err)
 	}
@@ -53,9 +53,47 @@ func TestAPerParcelSellTrialSumAddsEveryParcelAndKeepsItsProvenance(t *testing.T
 		t.Fatalf("留痕 = %+v, 想要逐件评价标识与版本清单原样", kept)
 	}
 
-	again, _, _ := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), "PRICE_CARD:SYN-PLAN@v1", cny, kept)
+	again, _, _ := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), perParcelAdoption(t).PricingScope(), "PRICE_CARD:SYN-PLAN@v1", cny, kept)
 	if again.TotalMinor() != estimate.TotalMinor() {
 		t.Fatalf("按留痕复算得 %d, 想要 %d", again.TotalMinor(), estimate.TotalMinor())
+	}
+}
+
+// Covers: ADR-0380 决定七——估价头上的计价范围是这次实际问的那一个，不从采用行读。新形状合同的采用行不带范围，合同只声明
+// 一个来源时各件也不另记来源：头上那一格取调用方交来的范围。采用行带着另一个范围也不作数。各件自己记了来源时取第一件的。
+// 两处都没有范围是调用方漏交，报错，不留一行没有范围的估价。
+func TestTheEstimateScopeIsTheOneAskedNotTheAdoptionRow(t *testing.T) {
+	cny := mustRef(t, domain.NewCurrencyCode, "CNY")
+	contractScope := mustRef(t, domain.NewEstimatePricingScope, "SCOPE-CONTRACT-1")
+	bare, err := domain.NewPreAcceptanceEstimateAdoption(
+		mustRef(t, domain.NewSettlementAccountID, "ACCT-1"), domain.PerParcelSellTrialSum, domain.EstimatePricingScope{})
+	if err != nil {
+		t.Fatalf("不带范围的采用行：%v", err)
+	}
+	plain := []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 1250, "CNY")}
+
+	estimate, gap, err := domain.FormPerParcelSellTrialSum(bare, contractScope, "PRICE_CARD:SYN-PLAN@v1", cny, plain)
+	if err != nil || gap != domain.PreAcceptanceEstimateFormed || estimate.PricingScope() != contractScope {
+		t.Fatalf("采用行不带范围：scope = %q gap = %s err = %v，想要合同的那一个来源", estimate.PricingScope(), gap, err)
+	}
+
+	estimate, _, err = domain.FormPerParcelSellTrialSum(perParcelAdoption(t), contractScope, "PRICE_CARD:SYN-PLAN@v1", cny, plain)
+	if err != nil || estimate.PricingScope() != contractScope {
+		t.Fatalf("采用行带着另一个范围：scope = %q err = %v，想要这次问的那一个", estimate.PricingScope(), err)
+	}
+
+	landed := mustRef(t, domain.NewEstimatePricingScope, "SCOPE-CONTRACT-2")
+	sourced, err := plain[0].WithSellPriceSource(landed, "PRICE_CARD:SYN-PLAN-2@v1")
+	if err != nil {
+		t.Fatalf("记来源：%v", err)
+	}
+	estimate, _, err = domain.FormPerParcelSellTrialSum(bare, contractScope, "PRICE_CARD:SYN-PLAN@v1", cny, []domain.PreAcceptanceTrial{sourced})
+	if err != nil || estimate.PricingScope() != landed {
+		t.Fatalf("各件自己记了来源：scope = %q err = %v，想要第一件落到的那一个", estimate.PricingScope(), err)
+	}
+
+	if _, _, err := domain.FormPerParcelSellTrialSum(bare, domain.EstimatePricingScope{}, "PRICE_CARD:SYN-PLAN@v1", cny, plain); !errors.Is(err, domain.ErrBlankValue) {
+		t.Fatalf("err = %v，问的范围与各件的来源都没有时应报错", err)
 	}
 }
 
@@ -79,7 +117,7 @@ func TestAPerParcelSellTrialSumStopsInsteadOfFillingAGap(t *testing.T) {
 		"加不进 int64":  {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 1<<62, "CNY"), totaledTrial(t, "P-2", 1<<62, "CNY")}, want: domain.PreAcceptanceEstimateSumOverflow},
 	} {
 		t.Run(name, func(t *testing.T) {
-			estimate, gap, err := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), "PRICE_CARD:SYN-PLAN@v1",
+			estimate, gap, err := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), perParcelAdoption(t).PricingScope(), "PRICE_CARD:SYN-PLAN@v1",
 				mustRef(t, domain.NewCurrencyCode, "CNY"), tc.trials)
 			if err != nil || gap != tc.want || estimate.TotalMinor() != 0 {
 				t.Fatalf("gap = %s total = %d err = %v, 想要停在 %s、不出金额", gap, estimate.TotalMinor(), err, tc.want)
@@ -98,7 +136,7 @@ func TestAPerParcelSellTrialSumStopsInsteadOfFillingAGap(t *testing.T) {
 		named[gap.String()] = gap
 	}
 
-	if _, _, err := domain.FormPerParcelSellTrialSum(domain.PreAcceptanceEstimateAdoption{}, "PRICE_CARD:SYN-PLAN@v1",
+	if _, _, err := domain.FormPerParcelSellTrialSum(domain.PreAcceptanceEstimateAdoption{}, perParcelAdoption(t).PricingScope(), "PRICE_CARD:SYN-PLAN@v1",
 		mustRef(t, domain.NewCurrencyCode, "CNY"), nil); !errors.Is(err, domain.ErrBlankValue) {
 		t.Fatalf("没有采用行 err = %v, 想要拒——形态只能来自采用行", err)
 	}

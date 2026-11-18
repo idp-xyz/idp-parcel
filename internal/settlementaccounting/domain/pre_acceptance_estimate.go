@@ -286,8 +286,12 @@ func SplitVersionReferenceLiteral(literal string) (VersionReferenceParts, bool) 
 // 任一份为负也停，哪怕合计仍是正数——决定二没有这一格，它是本形态的取舍：一件的 SELL 试算为负是价卡对那一件给了一笔返还，加进
 // 合计会让冻结少于其余各件试算之和，等于拿这一件的负数去抵另几件该占的资金。合计加不进 int64 同样停，不绕回。两格各自指名，不并
 // 进「合计不是正数」：并了，处理尝试上就分不出是价卡给了负数、合计太大，还是本就合出零。
+//
+// asked 是这次估价实际问的计价范围，由调用方交来：合同声明了销售价格来源就是合同的第一个来源，旧合同是采用行上的范围
+// （ADR-0380 决定七）。估价头上那一格不从采用行读——新形状合同的采用行不带范围，带了也不是这次问的那一个。
 func FormPerParcelSellTrialSum(
 	adoption PreAcceptanceEstimateAdoption,
+	asked EstimatePricingScope,
 	priceCard string,
 	currency CurrencyCode,
 	trials []PreAcceptanceTrial,
@@ -321,13 +325,11 @@ func FormPerParcelSellTrialSum(
 	if total <= 0 {
 		return PreAcceptanceEstimate{}, PreAcceptanceEstimateNotPositive, nil
 	}
-	// 新形状的合同采用行不带计价范围。各件自己记下用的来源时，估价头上的那一格取第一件的来源，
-	// 留痕列仍要一个非空范围；各件真正用的来源在试算上，不在这一格。
-	scope := adoption.PricingScope()
-	if scope.String() == "" {
-		if trialScope, _, present := trials[0].SellPriceSource(); present {
-			scope = trialScope
-		}
+	// 估价头上的那一格：各件自己记下用的来源时（合同声明了多于一个来源）取第一件的来源，各件真正用的来源在试算上；
+	// 各件没有另记时（合同只声明一个来源，或旧合同）就是这次问的那一个。留痕列要一个非空范围，两处都没有是调用方漏交。
+	scope := asked
+	if trialScope, _, present := trials[0].SellPriceSource(); present {
+		scope = trialScope
 	}
 	if scope.String() == "" {
 		return PreAcceptanceEstimate{}, PreAcceptanceEstimateGapInvalid, fmt.Errorf("%w: pre-acceptance estimate pricing scope", ErrBlankValue)

@@ -576,6 +576,33 @@ func TestTheEstimateAsksTheContractSellPriceSources(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0380 决定二、七——合同只声明一个来源、采用行不带计价范围（新形状合同的账户就是这样登的）时，估价照样形成，
+// 头上的计价范围是合同的那一个来源。试算只带这一个范围去问，不带列表。演示动线上第一位这样的客户曾在这里整条受理链失败：
+// 领域回头去读采用行上的范围，读到空。
+func TestAContractWithOneSellPriceSourceFormsTheEstimateWithoutAnAdoptionScope(t *testing.T) {
+	only := value(t, domain.NewEstimatePricingScope, "SYN-SCOPE-ONLY")
+	arranged, err := domain.NewOrderedSellPriceSources([]domain.EstimatePricingScope{only})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trials := estimating(t, 1_250)
+	handler := estimateWithSellPrices(t, fixedSellPrices{arrangement: arranged}, bareEstimateAdoption(t), trials)
+	result, err := handler.Handle(context.Background(), command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ControlApplied {
+		t.Fatalf("outcome = %q/%q，想要 CONTROL_APPLIED", result.Outcome(), result.NotFormedReason())
+	}
+	estimate, formed := result.Estimate()
+	if !formed || estimate.PricingScope() != only || estimate.TotalMinor() != 1_250 {
+		t.Fatalf("estimate scope = %q total = %d formed = %t，想要合同的那一个来源、1250", estimate.PricingScope(), estimate.TotalMinor(), formed)
+	}
+	if query := trials.askedWith; query.PricingScope != only || len(query.Scopes) != 0 {
+		t.Fatalf("试算问法 = %+v，想要只带合同的那一个范围", query)
+	}
+}
+
 // Covers: ADR-0380 决定七——合同声明不计销售价时，估价答未配置，不拿零顶，也不去问试算。
 func TestAnExplicitNoSellPriceAnswersUnconfigured(t *testing.T) {
 	basis := value(t, domain.NewNoSellPriceBasis, "合同写明不计销售价")

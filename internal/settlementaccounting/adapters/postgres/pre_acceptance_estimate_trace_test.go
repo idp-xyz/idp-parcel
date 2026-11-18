@@ -30,7 +30,7 @@ func estimateOf(t *testing.T, minors ...int64) domain.PreAcceptanceEstimate {
 		}
 		trials = append(trials, trial)
 	}
-	estimate, gap, err := domain.FormPerParcelSellTrialSum(estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1"),
+	estimate, gap, err := domain.FormPerParcelSellTrialSum(estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1"), estimateAdoption(t, "ACCT-1", "SCOPE-SELL-1").PricingScope(),
 		"PRICE_CARD:SYN-PLAN-SELL@v1", cny, trials)
 	if err != nil || gap != domain.PreAcceptanceEstimateFormed {
 		t.Fatalf("estimate: gap = %s err = %v", gap, err)

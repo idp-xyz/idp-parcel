@@ -34,7 +34,7 @@ func TestATrialCarriesItsPricingWeightAndChargeLinesIntoTheEstimate(t *testing.T
 	}
 	bare := totaledTrial(t, "P-2", 800, "CNY")
 
-	estimate, gap, err := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), "PRICE_CARD:SYN-PLAN@v1",
+	estimate, gap, err := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), perParcelAdoption(t).PricingScope(), "PRICE_CARD:SYN-PLAN@v1",
 		mustRef(t, domain.NewCurrencyCode, "CNY"), []domain.PreAcceptanceTrial{detailed, bare})
 	if err != nil || gap != domain.PreAcceptanceEstimateFormed {
 		t.Fatalf("gap = %s err = %v", gap, err)
@@ -106,7 +106,7 @@ func TestTheTrialDetailRefusesBlankOrNegativeCells(t *testing.T) {
 
 // Covers: ADR-0379 决定一——选卡用的服务产品随估价留痕；没申报即不记，空白不收。
 func TestAnEstimateRecordsTheServiceProductItsCardWasSelectedFor(t *testing.T) {
-	estimate, _, err := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), "PRICE_CARD:SYN-PLAN@v1",
+	estimate, _, err := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), perParcelAdoption(t).PricingScope(), "PRICE_CARD:SYN-PLAN@v1",
 		mustRef(t, domain.NewCurrencyCode, "CNY"), []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 100, "CNY")})
 	if err != nil {
 		t.Fatalf("estimate: %v", err)
