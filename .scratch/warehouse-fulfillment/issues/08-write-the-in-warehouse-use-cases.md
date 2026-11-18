@@ -1,7 +1,7 @@
 # 08 写 `UC-WF`：库内作业、冻结、盘点与差异
 
 Category: docs
-Status: in-progress（2026-11-12 认领，分支 `cursor/wf-in-warehouse`，工作树 `idp-parcel-wf-in-warehouse`）
+Status: in-progress（2026-11-12 认领，分支 `cursor/wf-in-warehouse`；2026-11-18 修订与评审收在分支上，没有进 main，见「没有进 main」）
 Blocked by: 05
 
 依据：[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md) 的「库存账」「占用与可用量」「盘点、差异与调整」词条，「库存账与守恒」「占用、预占与分配」「盘点、差异与调整」规则，与「加工」「盘点」「库存差异」「冻结」生命周期。
@@ -166,7 +166,8 @@ CONTEXT 没写、要在本票定下的：
   - `go run ./tools/adr-index -check` 退 0，本票没有动 ADR。
   - `go run ./tools/at-coverage-counts -check` 只报生成物与文件不一致。重算的差别只在总览（④桶与合计各多出本票的 96 条，按前缀的表 WF 一行随之增加），重算之后 `-check` 退 0。
   - 只改 `.md`，没跑 `go build` 与测试。
-- 提交在分支 `cursor/wf-in-warehouse`：认领 `1dde32fa8`，首稿 `5e03986a0`，并入 main 的合并提交 `7c0dd1521`，其后的修订在同一分支；进 main 的 SHA 见「进 main 记录」。
+- 提交在分支 `cursor/wf-in-warehouse`：认领 `1dde32fa8`，首稿 `5e03986a0`，并入 main 的合并提交 `7c0dd1521`，其后的修订在同一分支；没有进 main，缘由见「没有进 main」。
+
 ## 评审记录（2026-11-18）
 
 钉的 tip：`0460c7f21`（修订后）。首稿 tip 是 `fbe964468`；中间 `c84ba822a` 是搁置时保全的 CONTEXT 半成品，修订在它之上。
@@ -175,7 +176,7 @@ CONTEXT 没写、要在本票定下的：
 
 - 机械探针（R1 / R1b）：链接、编号、生成物门禁、引文归属等已跑的部分无阻断；用例结构 / 权威依据名 /「改文档」跨文件规矩等项因 `resource_exhausted` 未做完。
 - Spec：S1（UC-WF-011）完成，0 阻断、11 非阻断；S2（UC-WF-008）、S3（UC-WF-007）中断。S3 留下三条候选阻断，作者判为成立，主因是库内作业差额记在移入格、批准时在那一格单边调增，源头仍占着时账上会多出一份。
-- 当时未写进票面；现场与推断见会话交接文档。
+- 当时没有写进票面。评审人的产物随临时目录丢了，上面各条是从会话记录里作者当时的处理重建的；S3 的三条里只有主因那一条留下了转述。
 
 ### 2026-11-18（修订后，一轮）
 
@@ -183,3 +184,23 @@ CONTEXT 没写、要在本票定下的：
 - 非作者 Spec（修订 diff `c84ba822a..0460c7f21`，隔离检出 `idp-review-wf08`）：**阻断 0**、非阻断 2。结论：补入账主口径与 CONTEXT / 票面 / UC-WF-007·011 自洽；旧「只在差异格调增」已排除库内作业。
 - 非阻断两条按交付模式「只修挡上线的」留下不修：（1）UC-WF-011「已入账」括注 `WF-LIFE`「库存差异」，「流水与原来的作业同种」实际在 `WF-RULE`；（2）`AT-WF-176` 读流水列举未点明补入账的同种库内流水。
 - Standards 快检（作者侧，tip 上）：改动皆 `.md`；`git diff --check` 仅词条行尾两空格（体例）；`merge-tree` 对 `origin/main` 无冲突；`generated-artifacts-pr.sh` 与 `adr-index -check` 退 0；`at-coverage-counts -check` 仅总览过期（推送方按现行 workflow 可不重生成）；BD-WF-001..038 连续。
+
+### 没评到的
+
+- UC-WF-009 与 UC-WF-010 的规格轴，没有人评过。
+- UC-WF-008 只评到一半：S2 中断时，它对 ADR-0310、ADR-0139、ADR-0151、ADR-0375 与 UC-WF-004 的几处引用还没核完；其中开箱形成的收货差异没有入库预报、UC-WF-004 的读口能不能查到它这一处，没有结论。
+- 首稿的用例结构、权威依据所指的名字与「改文档」各条规矩，非作者一侧没有做完；前两项作者自查核过，见「完成记录」。
+- 2026-11-18 那一轮只看修订的 diff，没有重看首稿的其余部分；它自己写明 diff 里的相对链接只抽查过（作者自查全核了），也没有对照 `c84ba822a` 的 CONTEXT 全文。
+- 票 09 至 12 的转交是否如实，「完成记录」与「与在途分支的交叠」里的断言，非作者一侧没有核过。
+- 代 owner 看的几点只出现在 S1 里，原文已丢；没有任何一位 owner 本人看过。
+
+## 没有进 main（2026-11-18）
+
+本票的产物收在分支 `cursor/wf-in-warehouse`（origin）上，不重放进 main，也不开「进 main 记录」。
+
+- main 自 2026-11-12 起冻结了 `docs/` 与 `.scratch/`（取证于 main `a63254f9b`；这两处规矩是本分支并入 main 之后才有的，本分支的树里没有）：main 的 docs/README 开头写着「不再往这里加文件或改内容」，main 的 AGENTS.md「改文档」写着「`docs/` 与 `.scratch/` 不再改。例外只有在途那一批票的票面，做完为止，名单见 dox/work.md。」本票新增的用例、改的 CONTEXT、索引与 AT 盘点都在这两个目录里，票面之外的不在例外之内。
+- 有先例：票 commercial-four-module-requirements/16 照旧规矩改到 `docs/` 的那几处，在 main 的 `bdba71e9d` 被撤回，改在 `dox/` 里说。
+- main 的 `dox/contexts/warehouse-fulfillment.md`「现状」一节记着库内作业的用例在这条分支上、没有并入 main；`dox/work.md`「搁置」一节点着这条分支。用户 2026-11-18 点名的是接着这条分支做，没有给 `docs/` 开例外。
+- 2026-11-18 会话曾在隔离树里把本票各笔重放到 main `a63254f9b` 上（本地分支 `cursor/wf08-landing`），没有推；核到上面各条之后弃了，那棵树与那条本地分支已删。
+- 要进 main，须用户明说给 `docs/` 开这个例外；重放的做法在「与在途分支的交叠」末条。要实现库内作业，把本分支上的 CONTEXT 与 UC-WF-007 至 UC-WF-011 当设计稿读，规则照 main 现行的规矩与代码同一笔写进 `dox/contexts/warehouse-fulfillment.md`。
+- 本票因此停在 `in-progress`，不认作 `resolved`：那要等进 main，或用户另有裁定。票 09 至 12 没有开。
