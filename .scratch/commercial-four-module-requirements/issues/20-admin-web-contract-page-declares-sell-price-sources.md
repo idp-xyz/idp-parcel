@@ -1,7 +1,7 @@
 # 20 管理台：合同页录入与显示销售价格来源，逐个来源标出此刻有没有在用的卡
 
 Category: enhancement
-Status: resolved——2026-11-17 进 `main`，见「进 main 记录」。此前 in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-20-contract-sell-price-page`（worktree `idp-parcel-cfmr20`），基线 `6156f4b43`。此前 ready-for-agent
+Status: resolved——2026-11-17 进 `main`；目录表不发请求那一截随票 21 复核修订于 2026-11-18 再进 `main`，见票 21「进 main 记录（2026-11-18 复核修订）」。此前 in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-20-contract-sell-price-page`（worktree `idp-parcel-cfmr20`），基线 `6156f4b43`。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arrangement.md)
 地盘：`apps/admin-web/**`。diff 全在这里时照 `docs/agents/workflow.md`「前端切片」一节，一人在 `main` 上直接做
@@ -61,3 +61,4 @@ Blocked by: 票 [16](./16-the-customer-contract-body-carries-the-sell-price-arra
      - 组件层探针（`scripts/dom-probe.mjs`，探针源不入库）在 happy-dom 里渲染这两列，八项全过：目录表六行一次也不问计价；详情写出「1. SYN-SCOPE-EXCL-01 · 没有在用的卡」「2. SYN-SCOPE-01 · 有 2 张在用的卡」；详情栏与对象页两处渲染同一个来源只问一次；旧合同写「本版合同没有销售价格约定，计价范围取自结算账户的采用登记」。
      - 在跑着的演示环境上问页面读的两个口：`/commercial-customer-contracts` 交回 `SYN-CONTRACT-22` 的来源 `SYN-SCOPE-EXCL-01`、`SYN-SCOPE-01`（顺序如此）与 `SYN-CONTRACT-21` 的 `SYN-SCOPE-01`，旧合同没有这一格；`/pricing-sell-price-scope` 对三个范围名答 1 张、2 张、0 张。
      完成判据第一条「演示租户上录入、批准、发布一份带两个来源的合同版本」仍没有人在页面上点过。
+- 2026-11-18（进 main）：目录表与详情拆成两列的那一截随 `cursor/cfmr-21-review-fixes` 进 `main`，验过的代码与步骤写在票 21「进 main 记录（2026-11-18 复核修订）」。

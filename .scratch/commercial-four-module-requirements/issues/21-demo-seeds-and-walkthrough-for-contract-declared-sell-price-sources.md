@@ -1,7 +1,7 @@
 # 21 演示租户的种子合同声明销售价格来源，演示动线走通「专属价没谈到的线路落到标准价」
 
 Category: enhancement
-Status: resolved——2026-11-17 进 `main`，见「进 main 记录」。此前 in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-21-demo-sell-price-sources`（worktree `idp-parcel-cfmr21`），基线 `45e22ecdb`。此前 ready-for-agent
+Status: resolved——2026-11-17 进 `main`；2026-11-18 复核修订再进 `main`，见「进 main 记录」。此前 in-progress——2026-11-17 Cursor 会话认领，分支 `cursor/cfmr-21-demo-sell-price-sources`（worktree `idp-parcel-cfmr21`），基线 `45e22ecdb`。此前 ready-for-agent
 父票：[spec](../spec.md)
 Blocked by: 票 [19](./19-settlement-requests-sell-evaluations-with-the-contract-declared-scope-list.md)、票 [20](./20-admin-web-contract-page-declares-sell-price-sources.md)
 地盘：`scripts/demo-seeds`
@@ -61,4 +61,16 @@ Blocked by: 票 [19](./19-settlement-requests-sell-evaluations-with-the-contract
      - Spec 轴非阻断两条，都没改：合同页没有浏览器证据；估价头上的范围换了来历之后，合同声明了来源、采用行又带范围的在途控制请求跨部署重驱会答请求冲突（今天没有这样的在途请求）。
      - 评审者自报：Standards 轴没跑测试；Spec 轴跑了新增测试、专属卡测试、`go vet` 与 seedgen 重生成比对，没跑全量、真库走查与动线。
      - 没挡上线的几条记在 `dox/work.md`「评审留下、不挡上线的」。没有开第二轮。
-  9. **评审之后的那一笔**只改一处测试注释、README、`dox/work.md`、本票与段六脚本的可执行位。重跑了受影响的五个包；全量、灌种子与动线没有在这一笔上重跑。还没进 `main`。
+  9. **评审之后的那一笔**只改一处测试注释、README、`dox/work.md`、本票与段六脚本的可执行位。重跑了受影响的五个包；全量、灌种子与动线没有在这一笔上重跑。进 `main` 见下面 2026-11-18 一条。
+
+## 进 main 记录（2026-11-18 复核修订）
+
+2026-11-18。用户选定「进 main」。推送方就是作者会话（Cursor）。本次会话不调用 MCP。
+
+- **验过的代码**：`7e99fc6a7`，底是 `560b00fde`。落地时 `main` 仍是它的底，重放是空操作。收口这一笔只改本票与票 20，全量与种子没有再跑。
+- **出处**：分支 `cursor/cfmr-21-review-fixes`（worktree `idp-parcel-cfmr21fix` / 推送用 `idp-parcel-land`）。
+- **评审**：见 Comments 同日第 8 条；两轴没有阻断，评审之后的三处小修不另开一轮。
+- **生成物**：没有重生成，门已从 CI 摘掉。
+- **全量真库测试**：在 `7e99fc6a7` 上跑 `scripts/test-full.sh`，退 0。
+- **灌一次性库**：`scripts/demo-seeds/seed.sh` 灌进 `55432` 上的专用库 `cfmr21fix_seed`，退 0，随后 `check-sell-price-sources.sh` 退 0（96 / 87 / 83 CNY），库用后已删。`demo-run/60` 没有在这一笔上重跑（钉 `50d057f33` 时已退 0）。
+- **完成判据**：干净库重灌、专属与没谈到的线路、两条编排同额，都有可重复的核对。管理台页面仍没有在浏览器里点开；目录表不发请求、详情带标见票 20。
