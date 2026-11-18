@@ -7,6 +7,7 @@
 - **客户要求清单**（合同、价卡、计费、报价），用户 2026-11-12 点名全做。票面在这一批做完之前仍留在 [.scratch 的规格](../.scratch/commercial-four-module-requirements/spec.md)下，不搬。
   - 票 05（按包裹派生经营结果）顺带给结算里「成本分摊与经营结果」那组编排接上入口。
   - 其余各票：见规格的子票表。
+- **仓配履约（PN-09，可选能力）**，用户 2026-11-18 点名继续。按[开发交接](../docs/design/pn-09-warehouse-fulfillment-development-handoff.md)逐包做，票在 `.scratch/pn-09-build/`。部署开关与依赖方向门禁已在 main，开关默认关；仓配业务还没有代码。
 
 ## 不做，租户用到再补
 
@@ -96,4 +97,4 @@
 
 ## 搁置
 
-等用户点名：`cursor/reporting-source-adr`、`shelved/company-subject-profile`（都在 origin）。仓配文档票 08 至 12 已进 main，仍无代码。冻结的票见[冻结清单](../.scratch/launch-line-freeze-2026-10-27.md)。
+等用户点名：`cursor/reporting-source-adr`、`shelved/company-subject-profile`（都在 origin）。冻结的票见[冻结清单](../.scratch/launch-line-freeze-2026-10-27.md)。

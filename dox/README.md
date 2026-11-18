@@ -51,7 +51,7 @@
 | PN-06 | 追踪、异常与客户披露 | `visibility-exception` | 达标（留待项已认可） |
 | PN-07 | 计价、账单与运营结算 | `parcel-pricing`、`settlement-accounting` | 达标（留待项已认可） |
 | PN-08 | 端到端试点与阶段准入 | `pilotgovernance` | 达标；真实候选与证据包等租户 |
-| PN-09 | 仓配履约（可选，首发不含） | `warehouse-fulfillment` | 用例、客户面与开发交接已在 main；无生产代码；实现仍搁置 |
+| PN-09 | 仓配履约（可选，首发不含） | `warehouse-fulfillment` | 用例、客户面与开发交接已在 main；部署开关与依赖方向门禁已在 main，默认关；仓配业务无代码，在做 |
 
 ## 一条规则现在是什么，看哪
 

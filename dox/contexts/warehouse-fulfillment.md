@@ -1,15 +1,18 @@
 # 仓配履约（`warehouse-fulfillment`）
 
-对照 main `99fc0037d`（2026-11-12）写成。
+对照 main `99fc0037d`（2026-11-12）写成；「现状」一节 2026-11-18 对照 `9eef5267e` 改过。
 
-**这份文件不是现行规则。** 本上下文没有实现，下面写的是设计意图与词，供日后要做时定位；任何一句都不能当作产品现在的行为。
+**这份文件不是现行规则。** 本上下文的业务没有实现，「现状」之外写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
 
 ## 现状
 
-- 可选能力，首发不含，已搁置。
-- main 上没有生产代码：`internal/` 下没有 `warehousefulfillment` 目录，`cmd/` 下没有它的进程或登记口，也没有部署开关。
-- 在 `internal/` 与 `cmd/` 里搜 `warehouse`（不分大小写）：命中全在测试里，是夹具取值（`customer-warehouse-1`、`SYN-WAREHOUSE-1`、`RETURN_TO_BONDED_WAREHOUSE`）和一条被拒的 `"target_kind":"WAREHOUSE"` 用例，都与本上下文无关。搜「仓储」命中的是持久化仓储（repository）的意思。搜「仓配」只有下面「留的缝」一节那两处注释。
-- 文档写到开发交接：用例、客户面、接入词与 PN-09 交接都在 main 的 `docs/` 里。没有生产代码。库内用例只评过一部分，没评到的记在票 08；出库用例评过一轮，修订记在票 09。票 10 至 12 的非作者评审没交卷。
+- 可选能力，首发不含。用户 2026-11-18 点名继续，按 PN-09 开发交接逐包做。
+- main 上只有部署开关与依赖方向门禁，没有仓配业务：`internal/` 下没有 `warehousefulfillment` 目录，`cmd/` 下没有它的进程、端点或登记口，派发里没有它的路。
+- 部署开关是环境变量 `IDP_PARCEL_WAREHOUSE_FULFILLMENT_ENABLED`，去首尾空白后恰为 `true` 才开，默认关。读法在 `cmd/internal/warehouseswitch`。`parcel-api` 与 `parcel-dispatch` 启动时各读一次并写启动日志。今天开与关的行为相同：还没有任何端点或路读它。
+- 派发里仓配的路只经 `registerWarehouseFulfillmentRoutes` 登记，开关关着时一路都不登记。它今天没有调用方。
+- 依赖方向门禁在 `internal/architecture/warehouse_fulfillment_dependency_gate_test.go`：别的上下文不得导入仓配，只留结算、计价、全程追踪各自的 `adapters/warehousefulfillment`。它不看测试文件，也不看库表与信封类型串。
+- 在 `internal/` 与 `cmd/` 里搜 `warehouse`，除上面几处外，命中的是测试夹具取值与一条被拒的 `"target_kind":"WAREHOUSE"` 用例，与本上下文无关。搜「仓储」命中的是持久化仓储（repository）的意思。
+- 文档写到开发交接：用例、客户面、接入词与 PN-09 交接都在 main 的 `docs/` 里。库内用例只评过一部分，没评到的记在票 08；出库用例评过一轮，修订记在票 09。票 10 至 12 的非作者评审没交卷。
 
 入库、库内、出库、平台备货与代理仓各段的设计概览见 [scenarios.md](../scenarios.md)「仓配履约」。
 
@@ -60,7 +63,7 @@
 - 委托来源里没有「仓配出库」这一种。
 - `internal/parcelpricing` 与 `internal/settlementaccounting` 里没有仓储作业收费发生项、仓储计费方案或对应的评价对象。
 - `internal/visibilityexception` 里没有 `warehouse-outbound-confirmed` 这个类型词。
-- 没有按部署启用或关闭本上下文的开关。
+- 小包托运不发「委托待受控补充」信封，派发里也没有它的收工路。
 
 ## 要做它时先看
 

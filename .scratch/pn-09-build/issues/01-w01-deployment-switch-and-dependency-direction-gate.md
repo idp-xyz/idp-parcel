@@ -1,7 +1,7 @@
 # 01 `PN09-W01` 前半：部署开关与依赖方向门禁
 
 Category: enhancement
-Status: in-progress（2026-11-18 认领，分支 `cursor/wf-w01-switch`）
+Status: resolved（2026-11-18 进 main，见「进 main 记录」）
 Blocked by: 无
 
 依据：[ADR-0375](../../../docs/adr/0375-warehouse-fulfillment-is-an-optional-capability-on-its-own-pn-09-slice-off-per-deployment-unless-switched-on-and-unconfigured-per-tenant-until-registered.md) 决定三、四；[PN-09 开发交接](../../../docs/design/pn-09-warehouse-fulfillment-development-handoff.md) 的 `PN09-W01`。
@@ -28,3 +28,24 @@ Blocked by: 无
 - 门禁在今天的树上是绿的，自测证明它对违规导入与违规目录各能变红。
 - `gofmt -l .` 为空，`go vet ./...`、`go build ./...` 退 0，`bash scripts/ci/test-shards.sh check` 退 0。受影响包的测试通过。
 - 其他上下文的代码一行不改。
+
+## 评审记录
+
+作者是 Sonnet 5.5 子代理，评审是主会话，钉 `9eef5267e`。一轮，没有阻断。
+
+- 对照票面逐条读了全部改动。生产代码只动 `cmd/parcel-api` 与 `cmd/parcel-dispatch` 的装配和新包 `cmd/internal/warehouseswitch`。`internal/` 下只加了一份门禁测试。
+- 评审自己重跑：`gofmt -l .` 为空，`go vet ./...`、`go build ./...`、分片核对退 0，`cmd/internal` 与 `internal/architecture` 的测试通过。
+- 作者报告做过变异检查：把门反着写、把值接成常量、放宽读法、删掉启动日志，对应用例都变红。评审没有重做这一步。
+
+不挡的三处，照收：
+
+- `cmd/parcel-api/warehouse_fulfillment_switch_test.go` 断言的是源文件结构，不是行为。它对 `run`、`openDatabase`、`startup` 这几个名字敏感，改名要同改。第一张落仓配端点的票有了开与关两种装配的用例之后，可以删掉它。
+- 目录门禁比票面严：任何层级的 `adapters/warehousefulfillment` 不在点名位置即红，含仓配自己下面的同名目录。
+- `dispatchSettings` 头注「全部必填」对这一格不成立，字段注释里写了例外。头注是原有的，没有改。
+
+## 进 main 记录
+
+- main 上的内容是 `9eef5267e`，与分支 `cursor/wf-w01-switch` 的 tip 同一个对象，快进，没有重放。收口是随后这一笔。
+- 全量真库测试：`scripts/test-full.sh --detach` 对 `9eef5267e` 跑，`FULL-EXIT=0`。
+- 演示种子没有灌：改动不碰迁移、登记 CLI 与种子，开关默认关。
+- 生成物不重算。
