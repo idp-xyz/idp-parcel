@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	// measurementChangedConsumerName 是这个消费者在收件箱里的身份，收件箱按它记哪些事件已经消费过。名字里的 sell 是历史
-	// 叫法，如今销售与采购两路重评都由它转交的处理方办；它是收件箱身份，改了字面已经消费过的事件会被当成没消费过再办一遍，
-	// 所以不改。
-	measurementChangedConsumerName = "settlement-accounting/reevaluate-sell-on-measurement-change"
+	// measurementChangedConsumerName 是这个消费者在收件箱里的身份，收件箱按（消费者、来源、信封 ID）记哪些信封已经消费
+	// 过，同一封再到会被它拦下。销售与采购的重评都由这个消费者转交的处理方办，名字因此不指哪一路。收件箱的去重不是唯一
+	// 的防线：处理方自己对同一次变化也幂等，沿代次链认出这次变化的来源身份已经另起过一代（见 resumeChain.basisAlreadyUsed），
+	// 换了信封身份再到也不会多开一代。
+	measurementChangedConsumerName = "settlement-accounting/reevaluate-on-measurement-change"
 	// MeasurementChangedEventType 与节点作业交出的那一串同字面。
 	MeasurementChangedEventType = "node-operations.actual-measurement.changed"
 )
