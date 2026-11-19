@@ -4,7 +4,8 @@ import "fmt"
 
 // RegistrationOutcome 是各册登记用例共用的结果代数（ADR-0031）：`REGISTERED` 是本次落册；`ALREADY_REGISTERED` 是同一修订号、
 // 内容相同的重放，回显在册的那一份；`CONTENT_CONFLICT` 是同一修订号、内容不同，不覆盖在册的；`NOT_ACCEPTED` 是新修订没通过
-// 核对，一个字节没写，并且一定带一个封闭的拒绝理由。
+// 核对，一个字节没写，并且一定带一个封闭的拒绝理由；`NOT_CONFIGURED` 只属于不指名仓的册（库位类型、包材）：本租户一个仓
+// 都没登记，租户取值还没到，不是拒绝（UC-WF-001「结果语义契约」），所以不带拒绝理由、指出的格与最新修订号，也不落册。
 //
 // 各册的字面量逐字相同（UC-WF-001「结果语义契约」）：登记方读一册学会的结果词，在别的册上照样成立。形状（落点 + 拒绝理由 +
 // 指出的格）因此也只立一套，往后某册要加的结果落在下面的结果与拒绝理由枚举里再添一格，不另抄一份。
@@ -16,6 +17,7 @@ const (
 	RegistrationAlreadyRegistered
 	RegistrationContentConflict
 	RegistrationNotAccepted
+	RegistrationNotConfigured
 )
 
 func (outcome RegistrationOutcome) String() string {
@@ -28,6 +30,8 @@ func (outcome RegistrationOutcome) String() string {
 		return "CONTENT_CONFLICT"
 	case RegistrationNotAccepted:
 		return "NOT_ACCEPTED"
+	case RegistrationNotConfigured:
+		return "NOT_CONFIGURED"
 	default:
 		return ""
 	}
