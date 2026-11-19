@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -125,12 +126,13 @@ func (fake *fakeZoneRegistry) revisionsOf(zone string) []domain.ZoneRevision {
 	return fake.rows["SYN-TENANT-01/SYN-WH-01/"+zone]
 }
 
-// fakeWarehouseLookup 是「仓已登记」的内存替身：按（租户，仓编码）记在册的仓，在册的那一笔修订可以是停用的。
+// fakeWarehouseLookup 是「仓已登记」的内存替身：按（租户，仓编码）记在册的仓，在册的那一笔修订可以是停用的。并发用例里两个
+// goroutine 同时读它，所以 asked 用原子计数。
 type fakeWarehouseLookup struct {
 	registered  map[string]bool
 	deactivated map[string]bool
 	err         error
-	asked       int
+	asked       atomic.Int32
 }
 
 func newFakeWarehouseLookup(tenant string, warehouses ...string) *fakeWarehouseLookup {
@@ -167,7 +169,7 @@ func (fake *fakeWarehouseLookup) LoadLatestWarehouse(
 	tenant domain.TenantID,
 	code domain.WarehouseCode,
 ) (domain.WarehouseRevision, bool, error) {
-	fake.asked++
+	fake.asked.Add(1)
 	if fake.err != nil {
 		return domain.WarehouseRevision{}, false, fake.err
 	}
@@ -532,7 +534,7 @@ func TestRegisterZoneUnderADeactivatedWarehouseIsAccepted(t *testing.T) {
 	expectZoneOutcome(t, "停用的仓下改库区名称", mustRegisterZone(t, handler, registerZoneCommand(t, 2, func(spec *domain.ZoneContentSpec) {
 		spec.Name = valueOf(t, domain.NewZoneName, "合成存储区（仓停用中）")
 	})), application.RegistrationRegistered)
-	if warehouses.asked == 0 {
+	if warehouses.asked.Load() == 0 {
 		t.Fatalf("没有向仓册问过仓在不在册")
 	}
 }
@@ -649,8 +651,8 @@ func TestRegisterZoneJudgesReplayAndConflictBeforeSequenceUsageAndReference(t *t
 	expectZoneOutcome(t, "对它换用途", mustRegisterZone(t, handler, registerZoneCommand(t, 1, func(spec *domain.ZoneContentSpec) {
 		spec.Usage = domain.ZoneUsagePicking
 	})), application.RegistrationContentConflict)
-	if zones.saves != 0 || warehouses.asked != 0 {
-		t.Fatalf("重放与冲突保存了 %d 次、问了仓册 %d 次，want 都是 0", zones.saves, warehouses.asked)
+	if zones.saves != 0 || warehouses.asked.Load() != 0 {
+		t.Fatalf("重放与冲突保存了 %d 次、问了仓册 %d 次，want 都是 0", zones.saves, warehouses.asked.Load())
 	}
 }
 

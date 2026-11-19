@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -123,11 +124,12 @@ func (fake *fakeLocationTypeRegistry) revisionsOf(code string) []domain.Location
 	return fake.rows["SYN-TENANT-01/"+code]
 }
 
-// fakeTenantWarehouses 是「本租户有没有登记过仓」的内存替身，按租户记。asked 数问过几次。
+// fakeTenantWarehouses 是「本租户有没有登记过仓」的内存替身，按租户记。asked 数问过几次；并发用例里两个 goroutine 同时问它，
+// 所以用原子计数。
 type fakeTenantWarehouses struct {
 	registered map[string]bool
 	err        error
-	asked      int
+	asked      atomic.Int32
 }
 
 func newFakeTenantWarehouses(tenants ...string) *fakeTenantWarehouses {
@@ -139,7 +141,7 @@ func newFakeTenantWarehouses(tenants ...string) *fakeTenantWarehouses {
 }
 
 func (fake *fakeTenantWarehouses) HasAnyWarehouse(_ context.Context, tenant domain.TenantID) (bool, error) {
-	fake.asked++
+	fake.asked.Add(1)
 	if fake.err != nil {
 		return false, fake.err
 	}
@@ -462,8 +464,8 @@ func TestRegisterLocationTypeJudgesReplayAndConflictBeforeNotConfiguredAndSequen
 	expectLocationTypeOutcome(t, "对它换内容", mustRegisterLocationType(t, handler, registerLocationTypeCommand(t, 1, func(spec *domain.LocationTypeContentSpec) {
 		spec.Name = valueOf(t, domain.NewLocationTypeName, "另一个名字")
 	})), application.RegistrationContentConflict)
-	if registry.saves != 0 || warehouses.asked != 0 {
-		t.Fatalf("重放与冲突保存了 %d 次、问了仓册 %d 次，want 都是 0", registry.saves, warehouses.asked)
+	if registry.saves != 0 || warehouses.asked.Load() != 0 {
+		t.Fatalf("重放与冲突保存了 %d 次、问了仓册 %d 次，want 都是 0", registry.saves, warehouses.asked.Load())
 	}
 }
 

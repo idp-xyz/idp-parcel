@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -126,10 +127,11 @@ func (fake *fakeLocationRegistry) revisionsOf(location string) []domain.Location
 	return fake.rows["SYN-TENANT-01/SYN-WH-01/"+location]
 }
 
-// trackedZones 在库区册之前包一层：数问过几次，并可以让读不动。库位只拿库区的窄读口，所以这里只实现读方法。
+// trackedZones 在库区册之前包一层：数问过几次，并可以让读不动。库位只拿库区的窄读口，所以这里只实现读方法。并发用例里两个
+// goroutine 同时读它，所以 asked 用原子计数。
 type trackedZones struct {
 	inner ports.ZoneLookup
-	asked int
+	asked atomic.Int32
 	err   error
 }
 
@@ -139,7 +141,7 @@ func (tracked *trackedZones) LoadLatestZone(
 	warehouse domain.WarehouseCode,
 	code domain.ZoneCode,
 ) (domain.ZoneRevision, bool, error) {
-	tracked.asked++
+	tracked.asked.Add(1)
 	if tracked.err != nil {
 		return domain.ZoneRevision{}, false, tracked.err
 	}
@@ -147,10 +149,10 @@ func (tracked *trackedZones) LoadLatestZone(
 }
 
 // trackedLocationTypes 在库位类型册之前包一层：数问过几次，可以让读不动，并可以在读完之后插进一段（afterLoad），演「读到没停用、
-// 落册之前被别人停用」。
+// 落册之前被别人停用」。并发用例里两个 goroutine 同时读它，所以 asked 用原子计数。
 type trackedLocationTypes struct {
 	inner     ports.LocationTypeLookup
-	asked     int
+	asked     atomic.Int32
 	err       error
 	afterLoad func()
 }
@@ -160,7 +162,7 @@ func (tracked *trackedLocationTypes) LoadLatestLocationType(
 	tenant domain.TenantID,
 	code domain.LocationTypeCode,
 ) (domain.LocationTypeRevision, bool, error) {
-	tracked.asked++
+	tracked.asked.Add(1)
 	if tracked.err != nil {
 		return domain.LocationTypeRevision{}, false, tracked.err
 	}
@@ -229,7 +231,7 @@ func (fixture *locationFixture) handler() *application.RegisterLocationHandler {
 
 // lookupsAsked 是别的册被问过的总次数，重放与冲突、错位与不可改的用例据此证明「没有走到后面的核」。
 func (fixture *locationFixture) lookupsAsked() int {
-	return fixture.warehouses.asked + fixture.zones.asked + fixture.types.asked
+	return int(fixture.warehouses.asked.Load() + fixture.zones.asked.Load() + fixture.types.asked.Load())
 }
 
 // 下面几个是内容的写法：用例只改它关心的格，缺省是只带所属库区 SYN-ZONE-01、不带库位类型与优先级、不停用。
@@ -682,15 +684,15 @@ func TestRegisterLocationChecksSequenceThenZoneThenWarehouseThenZoneThenTypeThen
 	named := registerLocationCommand(t, 2, typedAs(t, "SYN-LT-01"))
 	expectLocationRefusal(t, "仓、库区、库位类型都问不到", mustRegisterLocation(t, handler, named),
 		application.RegistrationRefusalReferenceNotFound, domain.LocationFieldWarehouseCode)
-	if fixture.zones.asked != 0 || fixture.types.asked != 0 {
-		t.Fatalf("仓问不到之后问了库区 %d 次、库位类型 %d 次，want 0", fixture.zones.asked, fixture.types.asked)
+	if fixture.zones.asked.Load() != 0 || fixture.types.asked.Load() != 0 {
+		t.Fatalf("仓问不到之后问了库区 %d 次、库位类型 %d 次，want 0", fixture.zones.asked.Load(), fixture.types.asked.Load())
 	}
 
 	fixture.warehouses.registered["SYN-TENANT-01/SYN-WH-01"] = true
 	expectLocationRefusal(t, "仓在册、库区与库位类型问不到", mustRegisterLocation(t, handler, named),
 		application.RegistrationRefusalReferenceNotFound, domain.LocationFieldZoneCode)
-	if fixture.types.asked != 0 {
-		t.Fatalf("库区问不到之后问了库位类型 %d 次，want 0", fixture.types.asked)
+	if fixture.types.asked.Load() != 0 {
+		t.Fatalf("库区问不到之后问了库位类型 %d 次，want 0", fixture.types.asked.Load())
 	}
 
 	fixture.putZone(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-01", false)
@@ -850,8 +852,8 @@ func TestRegisterLocationUnderADeactivatedWarehouseAndZoneIsAccepted(t *testing.
 	expectLocationOutcome(t, "停用的仓与库区下登记库位", mustRegisterLocation(t, handler, registerLocationCommand(t, 1, inZone(t, "SYN-ZONE-D"))), application.RegistrationRegistered)
 	expectLocationOutcome(t, "停用的仓与库区下改优先级", mustRegisterLocation(t, handler, registerLocationCommand(t, 2, combined(inZone(t, "SYN-ZONE-D"), prioritisedAs(4)))),
 		application.RegistrationRegistered)
-	if fixture.warehouses.asked == 0 || fixture.zones.asked == 0 {
-		t.Fatalf("没有向仓册 %d 次、库区册 %d 次问过它们在不在册", fixture.warehouses.asked, fixture.zones.asked)
+	if fixture.warehouses.asked.Load() == 0 || fixture.zones.asked.Load() == 0 {
+		t.Fatalf("没有向仓册 %d 次、库区册 %d 次问过它们在不在册", fixture.warehouses.asked.Load(), fixture.zones.asked.Load())
 	}
 }
 

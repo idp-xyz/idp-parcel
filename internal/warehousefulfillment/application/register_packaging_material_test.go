@@ -591,8 +591,8 @@ func TestRegisterPackagingMaterialJudgesReplayAndConflictBeforeNotConfiguredSequ
 	expectPackagingMaterialOutcome(t, "对它换成坏单位的内容", mustRegisterPackagingMaterial(t, handler, registerPackagingMaterialCommand(t, 1, func(spec *domain.PackagingMaterialContentSpec) {
 		spec.WeightUnit = valueOf(t, domain.NewUnitCode, "CM")
 	})), application.RegistrationContentConflict)
-	if registry.saves != 0 || warehouses.asked != 0 {
-		t.Fatalf("重放与冲突保存了 %d 次、问了仓册 %d 次，want 都是 0", registry.saves, warehouses.asked)
+	if registry.saves != 0 || warehouses.asked.Load() != 0 {
+		t.Fatalf("重放与冲突保存了 %d 次、问了仓册 %d 次，want 都是 0", registry.saves, warehouses.asked.Load())
 	}
 }
 
