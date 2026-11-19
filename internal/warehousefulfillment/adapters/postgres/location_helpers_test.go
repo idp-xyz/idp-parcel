@@ -163,7 +163,7 @@ func mustSaveLocations(t *testing.T, stores locationStores, revisions ...domain.
 	}
 }
 
-// 下面三个造登记用例要核的别的册：仓、库区与库位类型，各在自己的事务里落册。
+// 下面这些方法造登记用例要核的别的册——仓、库区与库位类型，各在自己的事务里落册。
 
 func (stores locationStores) mustSaveWarehouse(t *testing.T, tenant, code string, revision int, deactivated bool) {
 	t.Helper()

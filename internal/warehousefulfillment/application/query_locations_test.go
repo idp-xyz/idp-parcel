@@ -61,7 +61,7 @@ func locationFirstPage(t *testing.T, values url.Values) cataloguepage.Query {
 }
 
 // Covers: UC-WF-001 查阅（库位的部分）——列表与修订史把读口给的行原样交出，租户、页大小、查询与仓编码、库位编码照原样转交；
-// 列表的查询认仓编码、库区编码与是否停用三个筛选维。
+// 列表的查询认仓编码、库区编码与是否停用这几个筛选维。
 func TestQueryLocationsAnswersTheRowsThePortGivesForTheTenantAndQuery(t *testing.T) {
 	reads := &fakeLocationReads{
 		listed: []ports.LocationRow{
