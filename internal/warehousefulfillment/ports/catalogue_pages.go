@@ -19,6 +19,20 @@ var WarehousePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	},
 })
 
+// LocationTypePages 是库位类型列表的查询声明（ADR-0144 决定三、四、七），照仓列表的做法：库位类型按租户登记、各仓共用，行标识就是
+// 库位类型编码一段，缺省序按编码排；只开这一个可排维，筛选维只有是否停用——登记表单与下游挑库位类型时按它收窄，不能只在第一页里挑。
+var LocationTypePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-location-types",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "locationTypeCode", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "locationTypeCode"},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+	},
+})
+
 // ZonePages 是库区列表的查询声明（ADR-0144 决定三、四、七），照仓列表的做法：只开一个可排维，行标识是（仓编码，库区编码）两段，
 // 缺省序就是先按仓、再按库区。排序维取 warehouseCode 而不取 zoneCode：库区编码在仓内才唯一，单按它排没有稳定的行序，也不是
 // 登记方挑库区的顺序。
