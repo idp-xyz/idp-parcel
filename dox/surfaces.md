@@ -1,6 +1,6 @@
 # 入口总表
 
-由代码读出：管理台页面取自 `apps/admin-web/src/navigation.ts`，接口取自 `cmd/parcel-api/endpoints_*.go` 的登记处。页面状态核于 main `d118b4f83`（2026-11-12），其后只改各笔改动碰到的行；接口数量数于 main `543133d7a`（2026-11-18）的登记处，2026-11-19 另加仓配的三个（没有重数）。这一页是清单，不受行数上限约束；页面或接口增减时照代码重列。
+由代码读出：管理台页面取自 `apps/admin-web/src/navigation.ts`，接口取自 `cmd/parcel-api/endpoints_*.go` 的登记处。页面状态核于 main `d118b4f83`（2026-11-12），其后只改各笔改动碰到的行；接口数量数于 main `543133d7a`（2026-11-18）的登记处，2026-11-19 另加仓配的十五个（在原数上加的，没有重数）。这一页是清单，不受行数上限约束；页面或接口增减时照代码重列。
 
 它回答「产品有哪些能操作的地方，今天各能做到哪」。
 
@@ -154,7 +154,7 @@
 
 完整词典在 `apps/admin-web/src/vocabulary/`。
 
-## 接口：289 个，按接入面分
+## 接口：301 个，按接入面分
 
 谁能调哪一类接口，由接入面定。每一面的授予在[接入与身份](./contexts/access-identity.md)里登记。
 
@@ -164,8 +164,8 @@
 | 集成客户端 | 外部系统回传事实：报关服务商、承运商、银行或财务系统 | 8 |
 | 作业事实登记 | 一线作业端用登记过的设备登事实：收寄、称重量方、交接、揽收、派送、交付 | 20 |
 | 运营决定 | 操作员作出要留名的决定：复核、处置、裁决、确认、审核、凭原件的手工录入 | 79 |
-| 登记册配置写 | 操作员登记主数据与规则：合同、价卡、网络、目录 | 76 |
-| 主数据与运营查阅读 | 操作员查阅 | 88 |
+| 登记册配置写 | 操作员登记主数据与规则：合同、价卡、网络、目录 | 80 |
+| 主数据与运营查阅读 | 操作员查阅 | 96 |
 | 操作者与授予管理 | 管理员管谁能登录、持有哪几格授予 | 4 |
 | 隔离读 | 受理复核与授权处置的队列读口 | 3 |
 
@@ -200,8 +200,8 @@
 
 ### 操作员与作业端接口
 
-其余各面的接口太多，不在这里逐条列；登记处就是完整清单。客户接口之外的 278 个按路径首词的数量（含上表集成客户端那 8 个）。`warehouse` 那 3 个是仓配的，部署没打开仓配开关时不提供业务答复：
-`transport` 52、`commercial` 43、`customs` 40、`pricing` 23、`settlement` 23、`node` 20、`visibility` 9、`network` 8、`shipment` 6、`reference` 5、`route` 5、`operator` 5、`document` 4、`post` 4、`cancellation` 2、`exception` 5、`evidence` 3、`eta` 2、`customer` 4、`control` 2、`claims` 1、`channel` 1、`collection` 1、`governance` 1、`label` 1、`work` 1、`operators` 1、`acceptance` 1、`authorized` 1、`tracking` 1、`warehouse` 3。
+其余各面的接口太多，不在这里逐条列；登记处就是完整清单。客户接口之外的 290 个按路径首词的数量（含上表集成客户端那 8 个）。`warehouse` 那 15 个是仓配的，部署没打开仓配开关时不提供业务答复：
+`transport` 52、`commercial` 43、`customs` 40、`pricing` 23、`settlement` 23、`node` 20、`visibility` 9、`network` 8、`shipment` 6、`reference` 5、`route` 5、`operator` 5、`document` 4、`post` 4、`cancellation` 2、`exception` 5、`evidence` 3、`eta` 2、`customer` 4、`control` 2、`claims` 1、`channel` 1、`collection` 1、`governance` 1、`label` 1、`work` 1、`operators` 1、`acceptance` 1、`authorized` 1、`tracking` 1、`warehouse` 15。
 
 ## 离线登记命令
 

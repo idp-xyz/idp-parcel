@@ -1,7 +1,7 @@
 # 03 `PN09-W02` 第二部分：库区、库位类型、库位与包材
 
 Category: enhancement
-Status: in-progress（2026-11-19 认领，分支 `cursor/wf-w02-registers`）
+Status: resolved（2026-11-19 进 main，见「进 main 记录」）
 Blocked by: 02
 
 依据：[UC-WF-001](../../../docs/application/warehouse-fulfillment/UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md)；[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md)「主数据登记」；现行做法见 [dox 仓配履约](../../../dox/contexts/warehouse-fulfillment.md)「已实现：仓登记册」与票 [02](./02-w02-register-and-read-warehouses.md)。
@@ -78,3 +78,35 @@ UC-WF-001 的 `AT-WF-001` 至 `AT-WF-004`、`AT-WF-009`、`AT-WF-010`、`AT-WF-0
 - 货主的客户系统查阅仓。
 - 停用的库区与库位「不再作移入目标」（`AT-WF-007`、`AT-WF-008`）：那是入库与库内用例的事，还没有实现。
 - 向一线作业端下发库区与库位。
+
+## 评审记录
+
+作者是 Sonnet 5.5 子代理，分三段交。评审是主会话，每段交回时评一次，钉分支 `cursor/wf-w02-registers` 的 `5db75836f`（库区）、`1d75e285d`（库位类型与包材）、`9218dc39f`（库位）。没有阻断。
+
+- 读过的：库区、包材、库位三个登记用例，共用的结果类型，十进制数值类型，登记答复的共用写法，库区、包材、库位三份迁移，`cmd/parcel-api` 的特性文件。没有逐行读的：库位类型一路，各册的 PostgreSQL 适配器、读端点、报文译装与各测试文件。
+- 评审每段都重跑：`gofmt -l .` 为空，`go vet ./...`、`go build ./...`、分片核对退 0；仓配各包、`internal/architecture`、迁移、`cmd/parcel-api` 整包通过。
+- 既有各册的测试没有被删断言：改到的既有测试文件只加行，另有一处头注改写。仓配的包只导入 `accessidentity` 与 `platform`。`go.mod` 没动。
+
+实现时定下的几处，照收，可以推翻：
+
+- 结果代数改成各册共用的一套泛型类型。仓那一册原来的名字留作别名，对外的字面量与答复体不变。
+- 各册同属一个特性、一个依赖结构、一个特性文件：登记处不许两个特性共用一种依赖结构。
+- 各册的登记流程照仓复制，没有抽成共用的泛型流程。
+- 包材数值的位数上限按写出来的位数数，前导零与尾零也算：`0000000012` 是坏载荷。票面只写了位数，没写按哪种数。要改成按有效位数，只动 `domain.NewMeasure`。
+- 包材的数值为零在应用层判，排在重放、未配置与修订连续之后。内容不合时指出报文次序里第一个不合的格。
+- 包材的单位码不在库上镜像：内置目录会增补。库上只守单位码非空白与数值为正。
+- 修订号小于 1 时，库位类型与包材先看有没有仓再答错位；库区与库位直接答错位。对外的答复种类相同。
+- 库位的优先级 `1.0`、`1e2` 是坏载荷。
+- 库位类型在读到没停用与落册之间被别人停用，这一笔照常落册。
+
+留着的：
+
+- 分支上有一笔中间提交 `422fb88d4`，两条架构棘轮在它上面是红的，下一笔起变绿。重放到 main 之后它对应的那一笔同样如此，tip 是绿的。
+- 业务时区、登记时刻与列表排序规则的三处，同票 02 的评审记录。
+
+## 进 main 记录
+
+- 出处：分支 `cursor/wf-w02-registers` 的 `9218dc39f`。main 在这期间多了别的会话的提交，所以重放：cherry-pick 到 `cd413bdf0` 之上，无冲突，内容在 `2e2aabd7b`。仓配各路径与分支 tip 逐字相同。收口是随后这一笔。
+- 全量真库测试：`scripts/test-full.sh --detach` 对 `2e2aabd7b` 跑，`FULL-EXIT=0`。
+- 演示种子没有灌：本票不带种子，开关默认关。`warehouse_fulfillment` schema 多了这几册的空表。
+- 生成物不重算。

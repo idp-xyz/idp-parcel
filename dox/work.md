@@ -7,7 +7,7 @@
 - **客户要求清单**（合同、价卡、计费、报价），用户 2026-11-12 点名全做。票面在这一批做完之前仍留在 [.scratch 的规格](../.scratch/commercial-four-module-requirements/spec.md)下，不搬。
   - 票 05（按包裹派生经营结果）顺带给结算里「成本分摊与经营结果」那组编排接上入口。
   - 其余各票：见规格的子票表。
-- **仓配履约（PN-09，可选能力）**，用户 2026-11-18 点名继续。按[开发交接](../docs/design/pn-09-warehouse-fulfillment-development-handoff.md)逐包做，票在 `.scratch/pn-09-build/`。已在 main：部署开关、依赖方向门禁、仓这一册的登记与查阅，开关默认关。下一件是库区、库位类型、库位与包材。
+- **仓配履约（PN-09，可选能力）**，用户 2026-11-18 点名继续。按[开发交接](../docs/design/pn-09-warehouse-fulfillment-development-handoff.md)逐包做，票在 `.scratch/pn-09-build/`。已在 main：部署开关、依赖方向门禁，仓、库区、库位类型、库位、包材的登记与查阅，开关默认关。下一件是商品与仓测（`PN09-W03`）。
 
 ## 不做，租户用到再补
 
