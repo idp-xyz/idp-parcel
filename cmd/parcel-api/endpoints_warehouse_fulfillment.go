@@ -7,13 +7,20 @@ import (
 	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
 )
 
-// warehouseFulfillmentWiring 是仓配履约仓这一册的依赖。enabled 是部署开关（ADR-0375 决定四）的值，从 endpointSources 来、在
-// build 里定：为假时其余字段全是零值——关着的部署不构造任何仓配的适配器与编排，mount 也就没有东西可接。
+// warehouseFulfillmentWiring 是仓配履约各册的依赖：仓与库区。enabled 是部署开关（ADR-0375 决定四）的值，从 endpointSources 来、
+// 在 build 里定：为假时其余字段全是零值——关着的部署不构造任何仓配的适配器与编排，mount 也就没有东西可接。
+//
+// 仓配的各册同属一个特性、一个开关、一个依赖结构，不按册拆成几个特性：登记处不许两个特性共用一种依赖结构，而各册的行都带同一个
+// 开关，装配测试里「仓配的行」是一个整体（见 warehouseFulfillmentLines）。加一册就是在这里多三个字段、在下面多三行（ADR-0222）。
 type warehouseFulfillmentWiring struct {
 	enabled      bool
 	registration warehousehttp.WarehouseRegistrar
 	catalogue    warehousehttp.WarehouseCatalogueReader
 	revisions    warehousehttp.WarehouseRevisionsReader
+
+	zoneRegistration warehousehttp.ZoneRegistrar
+	zoneCatalogue    warehousehttp.ZoneCatalogueReader
+	zoneRevisions    warehousehttp.ZoneRevisionsReader
 }
 
 func init() {
@@ -27,6 +34,13 @@ func init() {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-warehouse-revisions?warehouseCode=SYN-WH-01",
 			},
+			// 库区：三行的面与仓同族。库区的身份是（仓编码，库区编码），修订史口的探测目标两个编码都要带。
+			"/warehouse-fulfillment-zone-registrations": {method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true},
+			"/warehouse-fulfillment-zones":              {method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true},
+			"/warehouse-fulfillment-zone-revisions": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-zone-revisions?warehouseCode=SYN-WH-01&zoneCode=SYN-ZONE-01",
+			},
 		},
 		build: func(sources endpointSources) (warehouseFulfillmentWiring, error) {
 			if !sources.warehouseFulfillment {
@@ -37,10 +51,13 @@ func init() {
 				return warehouseFulfillmentWiring{}, err
 			}
 			return warehouseFulfillmentWiring{
-				enabled:      true,
-				registration: orchestration.registration,
-				catalogue:    orchestration.queries,
-				revisions:    orchestration.queries,
+				enabled:          true,
+				registration:     orchestration.registration,
+				catalogue:        orchestration.queries,
+				revisions:        orchestration.queries,
+				zoneRegistration: orchestration.zoneRegistration,
+				zoneCatalogue:    orchestration.zoneQueries,
+				zoneRevisions:    orchestration.zoneQueries,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring warehouseFulfillmentWiring) []httpapi.BusinessEndpoint {
@@ -50,17 +67,27 @@ func init() {
 			registration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			warehouses := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			revisions := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
-			// 开着：与别的登记写行、查阅行行为一致——渠道没配答「接入渠道未配置」，配了走真编排。各读口共用一个 Intake。
+			zoneRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			zones := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			zoneRevisions := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			// 开着：与别的登记写行、查阅行行为一致——渠道没配答「接入渠道未配置」，配了走真编排。各读口共用一个 Intake，各册的
+			// 登记口共用同一个认证器。
 			if wiring.enabled {
 				catalogueIntake := channels.warehouseCatalogue()
 				registration = warehousehttp.NewRegisterWarehouseEndpoint(channels.warehouseRegistration(), wiring.registration)
 				warehouses = warehousehttp.NewQueryWarehousesEndpoint(catalogueIntake, wiring.catalogue)
 				revisions = warehousehttp.NewQueryWarehouseRevisionsEndpoint(catalogueIntake, wiring.revisions)
+				zoneRegistration = warehousehttp.NewRegisterZoneEndpoint(channels.zoneRegistration(), wiring.zoneRegistration)
+				zones = warehousehttp.NewQueryZonesEndpoint(catalogueIntake, wiring.zoneCatalogue)
+				zoneRevisions = warehousehttp.NewQueryZoneRevisionsEndpoint(catalogueIntake, wiring.zoneRevisions)
 			}
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/warehouse-fulfillment-warehouse-registrations", Handler: registration},
 				{Pattern: "/warehouse-fulfillment-warehouses", Handler: warehouses},
 				{Pattern: "/warehouse-fulfillment-warehouse-revisions", Handler: revisions},
+				{Pattern: "/warehouse-fulfillment-zone-registrations", Handler: zoneRegistration},
+				{Pattern: "/warehouse-fulfillment-zones", Handler: zones},
+				{Pattern: "/warehouse-fulfillment-zone-revisions", Handler: zoneRevisions},
 			}
 		},
 	})
