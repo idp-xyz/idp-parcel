@@ -68,6 +68,21 @@ func (registration transactionalZoneRegistration) Register(
 	})
 }
 
+// transactionalLocationTypeRegistration 是库位类型登记的事务壳。核「本租户有没有登记过仓」的读与库位类型的读写在同一个事务里。
+type transactionalLocationTypeRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.RegisterLocationTypeHandler
+}
+
+func (registration transactionalLocationTypeRegistration) Register(
+	ctx context.Context,
+	command warehouseapp.RegisterLocationTypeCommand,
+) (warehouseapp.RegisterLocationTypeResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.RegisterLocationTypeResult, error) {
+		return registration.inner.Register(txCtx, command)
+	})
+}
+
 // warehouseFulfillmentOrchestration 是仓配各册开着时的真编排：各册的登记（带事务壳）与查阅。查阅读已落册的修订，不开事务。
 type warehouseFulfillmentOrchestration struct {
 	registration transactionalWarehouseRegistration
@@ -75,6 +90,9 @@ type warehouseFulfillmentOrchestration struct {
 
 	zoneRegistration transactionalZoneRegistration
 	zoneQueries      *warehouseapp.QueryZonesHandler
+
+	locationTypeRegistration transactionalLocationTypeRegistration
+	locationTypeQueries      *warehouseapp.QueryLocationTypesHandler
 }
 
 func buildWarehouseFulfillmentOrchestration(db *bentopg.DB) (warehouseFulfillmentOrchestration, error) {
@@ -95,6 +113,14 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB) (warehouseFulfillmen
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: zone catalogue: %w", err)
 	}
+	locationTypes, err := whpostgres.NewLocationTypes(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: location type registry: %w", err)
+	}
+	locationTypeCatalogue, err := whpostgres.NewLocationTypeCatalogue(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: location type catalogue: %w", err)
+	}
 	return warehouseFulfillmentOrchestration{
 		registration: transactionalWarehouseRegistration{
 			transactor: db.Transactor(),
@@ -108,5 +134,11 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB) (warehouseFulfillmen
 			inner: warehouseapp.NewRegisterZoneHandler(zones, warehouses, systemClock{}),
 		},
 		zoneQueries: warehouseapp.NewQueryZonesHandler(zoneCatalogue, zoneCatalogue),
+		locationTypeRegistration: transactionalLocationTypeRegistration{
+			transactor: db.Transactor(),
+			// 库位类型登记核「本租户有没有登记过仓」读的也是仓登记册本身：同一个事务里的同一只适配器。
+			inner: warehouseapp.NewRegisterLocationTypeHandler(locationTypes, warehouses, systemClock{}),
+		},
+		locationTypeQueries: warehouseapp.NewQueryLocationTypesHandler(locationTypeCatalogue, locationTypeCatalogue),
 	}, nil
 }
