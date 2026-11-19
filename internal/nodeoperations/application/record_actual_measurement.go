@@ -210,11 +210,18 @@ func measurementFromCommand(command RecordActualMeasurementCommand) (domain.Actu
 	if err != nil {
 		return domain.ActualMeasurement{}, err
 	}
+	weight, err := domain.NewGrossWeight(command.WeightValue, weightUnit)
+	if err != nil {
+		return domain.ActualMeasurement{}, err
+	}
+	dimensions, err := domain.NewOuterDimensions(command.Length, command.Width, command.Height, dimensionUnit)
+	if err != nil {
+		return domain.ActualMeasurement{}, err
+	}
 	spec := domain.ActualMeasurementSpec{
 		Source: source, ObjectKind: objectKind, ObjectID: command.ObjectID,
 		Node: node, Location: location, Basis: basis,
-		WeightValue: command.WeightValue, WeightUnit: weightUnit,
-		Length: command.Length, Width: command.Width, Height: command.Height, DimensionUnit: dimensionUnit,
+		Weight: weight, Dimensions: dimensions,
 		EnteredBy: strings.TrimSpace(command.EnteredBy),
 	}
 	if strings.TrimSpace(command.OriginalDocument) != "" {

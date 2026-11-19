@@ -59,14 +59,24 @@ func (catalogue *ReviewCatalogue) ListActualMeasurements(
 
 	fetched := make([]ports.ActualMeasurementCatalogueRow, 0, limit+1)
 	for rows.Next() {
-		var row ports.ActualMeasurementCatalogueRow
+		var (
+			row                                                           ports.ActualMeasurementCatalogueRow
+			weightValue, weightUnit, length, width, height, dimensionUnit string
+		)
 		if err := rows.Scan(
 			&row.SourceID, &row.ObjectKind, &row.ObjectID,
-			&row.WeightValue, &row.WeightUnit, &row.Length, &row.Width, &row.Height, &row.DimensionUnit,
+			&weightValue, &weightUnit, &length, &width, &height, &dimensionUnit,
 			&row.OccurredAt, &row.RecordedAt, &row.Location, &row.Basis, &row.PerformedBy,
 			&row.EnteredBy, &row.OriginalDocument, &row.Voided,
 		); err != nil {
 			return fail(err)
+		}
+		// 行是经构造器写下的，读回也走构造器：绕开应用写进来的坏行整页报错，与按来源身份读、仍有效清单是同一条规矩，不照抄给查阅人。
+		if row.Weight, err = domain.NewGrossWeight(weightValue, weightUnit); err != nil {
+			return fail(fmt.Errorf("measurement %s: %w", row.SourceID, err))
+		}
+		if row.Dimensions, err = domain.NewOuterDimensions(length, width, height, dimensionUnit); err != nil {
+			return fail(fmt.Errorf("measurement %s: %w", row.SourceID, err))
 		}
 		row.OccurredAt = row.OccurredAt.UTC()
 		row.RecordedAt = row.RecordedAt.UTC()

@@ -144,12 +144,12 @@ func measurementFact(parcel, sourceID string) (ppdomain.VersionedFactReference, 
 
 // translateWeight 把实测的重量译成计价的重量；译不出来时第二个返回值是照实的原因文字，译得出来时为空。
 func translateWeight(measurement nodomain.ActualMeasurement) (ppdomain.Weight, string) {
-	value, unitName := measurement.Weight()
-	unit, err := ppdomain.NewWeightUnit(unitName)
+	gross := measurement.Weight()
+	unit, err := ppdomain.NewWeightUnit(gross.Unit())
 	if err != nil {
-		return ppdomain.Weight{}, weightUnitOutsideTable + "：" + unitName
+		return ppdomain.Weight{}, weightUnitOutsideTable + "：" + gross.Unit()
 	}
-	weight, err := ppdomain.NewWeightFromString(value, unit)
+	weight, err := ppdomain.NewWeightFromString(gross.Value(), unit)
 	if err != nil {
 		return ppdomain.Weight{}, weightValueUnreadable
 	}
@@ -160,12 +160,12 @@ var _ pptransport.ActualMeasurementView = (*ParcelMeasurementView)(nil)
 
 // translateDimensions 与 translateWeight 同形：尺寸三边共用一个单位，单位与数值各答各的原因。
 func translateDimensions(measurement nodomain.ActualMeasurement) (ppdomain.Dimensions, string) {
-	length, width, height, unitName := measurement.Dimensions()
-	unit, err := ppdomain.NewLengthUnit(unitName)
+	outer := measurement.Dimensions()
+	unit, err := ppdomain.NewLengthUnit(outer.Unit())
 	if err != nil {
-		return ppdomain.Dimensions{}, dimensionUnitOutsideTable + "：" + unitName
+		return ppdomain.Dimensions{}, dimensionUnitOutsideTable + "：" + outer.Unit()
 	}
-	dimensions, err := ppdomain.NewDimensionsFromStrings(length, width, height, unit)
+	dimensions, err := ppdomain.NewDimensionsFromStrings(outer.Length(), outer.Width(), outer.Height(), unit)
 	if err != nil {
 		return ppdomain.Dimensions{}, dimensionValueUnreadable
 	}

@@ -75,8 +75,7 @@ func (repository *ActualMeasurements) SaveMeasurement(
 		return ports.ActualMeasurementSaveOutcomeInvalid, fmt.Errorf("save actual measurement: %w", err)
 	}
 	measurement := record.Measurement
-	weightValue, weightUnit := measurement.Weight()
-	length, width, height, dimensionUnit := measurement.Dimensions()
+	weight, dimensions := measurement.Weight(), measurement.Dimensions()
 	enteredBy, document, manual := measurement.ManualEntry()
 	var original *string
 	if manual {
@@ -100,12 +99,12 @@ func (repository *ActualMeasurements) SaveMeasurement(
 		measurement.Node().String(),
 		measurement.Location().String(),
 		measurement.Basis().String(),
-		weightValue,
-		weightUnit,
-		length,
-		width,
-		height,
-		dimensionUnit,
+		weight.Value(),
+		weight.Unit(),
+		dimensions.Length(),
+		dimensions.Width(),
+		dimensions.Height(),
+		dimensions.Unit(),
 		measurement.Source().PerformedBy().String(),
 		measurement.Source().Evidence().String(),
 		measurement.Source().OccurredAt().UTC(),
@@ -408,11 +407,18 @@ func rebuildMeasurement(
 	if err != nil {
 		return domain.ActualMeasurement{}, err
 	}
+	weight, err := domain.NewGrossWeight(weightValue, weightUnit)
+	if err != nil {
+		return domain.ActualMeasurement{}, err
+	}
+	dimensions, err := domain.NewOuterDimensions(length, width, height, dimensionUnit)
+	if err != nil {
+		return domain.ActualMeasurement{}, err
+	}
 	spec := domain.ActualMeasurementSpec{
 		Source: source, ObjectKind: objectKind, ObjectID: objectID,
 		Node: node, Location: location, Basis: basis,
-		WeightValue: weightValue, WeightUnit: weightUnit,
-		Length: length, Width: width, Height: height, DimensionUnit: dimensionUnit,
+		Weight: weight, Dimensions: dimensions,
 		EnteredBy: textOf(enteredBy),
 	}
 	if originalDocument != nil {

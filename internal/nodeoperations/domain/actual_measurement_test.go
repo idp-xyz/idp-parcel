@@ -22,22 +22,36 @@ func measurementSource(t *testing.T, sourceID string) domain.WorkFactSource {
 	return source
 }
 
+func grossWeight(t *testing.T, value, unit string) domain.GrossWeight {
+	t.Helper()
+	weight, err := domain.NewGrossWeight(value, unit)
+	if err != nil {
+		t.Fatalf("毛重：%v", err)
+	}
+	return weight
+}
+
+func outerDimensions(t *testing.T, length, width, height, unit string) domain.OuterDimensions {
+	t.Helper()
+	dimensions, err := domain.NewOuterDimensions(length, width, height, unit)
+	if err != nil {
+		t.Fatalf("外廓尺寸：%v", err)
+	}
+	return dimensions
+}
+
 // measurementSpec 是一条完整的测量：毛重 2.10 KG，尺寸 20×15.5×10 CM。
 func measurementSpec(t *testing.T) domain.ActualMeasurementSpec {
 	t.Helper()
 	return domain.ActualMeasurementSpec{
-		Source:        measurementSource(t, "measure-1"),
-		ObjectKind:    domain.HandlingUnitObject,
-		ObjectID:      "unit-1",
-		Node:          mustValue(t, domain.NewNodeReference, "node-origin"),
-		Location:      mustValue(t, domain.NewWorkLocationReference, "bench-2"),
-		Basis:         mustValue(t, domain.NewWorkBasisReference, "intake-1"),
-		WeightValue:   "2.10",
-		WeightUnit:    "KG",
-		Length:        "20",
-		Width:         "15.5",
-		Height:        "10",
-		DimensionUnit: "CM",
+		Source:     measurementSource(t, "measure-1"),
+		ObjectKind: domain.HandlingUnitObject,
+		ObjectID:   "unit-1",
+		Node:       mustValue(t, domain.NewNodeReference, "node-origin"),
+		Location:   mustValue(t, domain.NewWorkLocationReference, "bench-2"),
+		Basis:      mustValue(t, domain.NewWorkBasisReference, "intake-1"),
+		Weight:     grossWeight(t, "2.10", "KG"),
+		Dimensions: outerDimensions(t, "20", "15.5", "10", "CM"),
 	}
 }
 
@@ -46,19 +60,21 @@ func TestAnActualMeasurementKeepsTheReportedWeightAndDimensions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("形成测量：%v", err)
 	}
-	if value, unit := measurement.Weight(); value != "2.10" || unit != "KG" {
-		t.Fatalf("毛重 = %s %s", value, unit)
+	if weight := measurement.Weight(); weight.Value() != "2.10" || weight.Unit() != "KG" {
+		t.Fatalf("毛重 = %s %s", weight.Value(), weight.Unit())
 	}
-	if length, width, height, unit := measurement.Dimensions(); length != "20" || width != "15.5" || height != "10" || unit != "CM" {
-		t.Fatalf("尺寸 = %s %s %s %s", length, width, height, unit)
+	if size := measurement.Dimensions(); size.Length() != "20" || size.Width() != "15.5" || size.Height() != "10" || size.Unit() != "CM" {
+		t.Fatalf("尺寸 = %s %s %s %s", size.Length(), size.Width(), size.Height(), size.Unit())
 	}
 	if measurement.ContentDigest() == "" || measurement.ContentDigest() != measurement.ContentDigest() {
 		t.Fatal("同一条测量的内容摘要不稳定")
 	}
 
 	for name, change := range map[string]func(*domain.ActualMeasurementSpec){
-		"重量变了": func(spec *domain.ActualMeasurementSpec) { spec.WeightValue = "2.40" },
-		"尺寸变了": func(spec *domain.ActualMeasurementSpec) { spec.Height = "12" },
+		"重量变了": func(spec *domain.ActualMeasurementSpec) { spec.Weight = grossWeight(t, "2.40", "KG") },
+		"尺寸变了": func(spec *domain.ActualMeasurementSpec) {
+			spec.Dimensions = outerDimensions(t, "20", "15.5", "12", "CM")
+		},
 	} {
 		changed := measurementSpec(t)
 		change(&changed)
@@ -72,35 +88,17 @@ func TestAnActualMeasurementKeepsTheReportedWeightAndDimensions(t *testing.T) {
 	}
 }
 
-// Covers: 重量与尺寸都是必填。只称了重、没量方的那一条不收，只量了方、没称重的也不收；数字要是正数，单位要在场。
+// Covers: 重量与尺寸都是必填。只称了重、没量方的那一条不收，只量了方、没称重的也不收。数字要是正数、单位要在场，这一层
+// 由两个值对象的构造器管着，见 TestAGrossWeightRefusesAMalformedQuantityOrAMissingUnit 与
+// TestOuterDimensionsRefuseAnySideThatIsMalformedOrAMissingUnit。
 func TestAMeasurementNeedsBothItsWeightAndItsDimensions(t *testing.T) {
 	cases := map[string]func(domain.ActualMeasurementSpec) domain.ActualMeasurementSpec{
-		"零重量": func(spec domain.ActualMeasurementSpec) domain.ActualMeasurementSpec {
-			spec.WeightValue = "0.00"
-			return spec
-		},
-		"重量没有单位": func(spec domain.ActualMeasurementSpec) domain.ActualMeasurementSpec {
-			spec.WeightUnit = ""
-			return spec
-		},
 		"只称了重、没量方": func(spec domain.ActualMeasurementSpec) domain.ActualMeasurementSpec {
-			spec.Length, spec.Width, spec.Height, spec.DimensionUnit = "", "", "", ""
+			spec.Dimensions = domain.OuterDimensions{}
 			return spec
 		},
 		"只量了方、没称重": func(spec domain.ActualMeasurementSpec) domain.ActualMeasurementSpec {
-			spec.WeightValue, spec.WeightUnit = "", ""
-			return spec
-		},
-		"尺寸缺一边": func(spec domain.ActualMeasurementSpec) domain.ActualMeasurementSpec {
-			spec.Height = ""
-			return spec
-		},
-		"尺寸没有单位": func(spec domain.ActualMeasurementSpec) domain.ActualMeasurementSpec {
-			spec.DimensionUnit = ""
-			return spec
-		},
-		"一边是零": func(spec domain.ActualMeasurementSpec) domain.ActualMeasurementSpec {
-			spec.Width = "0"
+			spec.Weight = domain.GrossWeight{}
 			return spec
 		},
 		"只有录入人没有原件": func(spec domain.ActualMeasurementSpec) domain.ActualMeasurementSpec {

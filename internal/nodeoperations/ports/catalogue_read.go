@@ -232,18 +232,14 @@ type ReviewCatalogueRead interface {
 	) (cataloguepage.Result[ActualMeasurementCatalogueRow], error)
 }
 
-// ActualMeasurementCatalogueRow 是实际测量册上列的一行。重量与三边都是登记时的原数，不另算、不换算。
+// ActualMeasurementCatalogueRow 是实际测量册上列的一行。毛重与外廓尺寸都是登记时的原数，不另算、不换算。
 // Voided 只看有没有作废指过来，不把作废理解成这一行被改过。
 type ActualMeasurementCatalogueRow struct {
 	SourceID         string
 	ObjectKind       string
 	ObjectID         string
-	WeightValue      string
-	WeightUnit       string
-	Length           string
-	Width            string
-	Height           string
-	DimensionUnit    string
+	Weight           domain.GrossWeight
+	Dimensions       domain.OuterDimensions
 	OccurredAt       time.Time
 	RecordedAt       time.Time
 	Location         string

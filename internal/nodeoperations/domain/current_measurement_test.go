@@ -21,7 +21,7 @@ func measuredAt(t *testing.T, sourceID, weight string, occurred time.Time) domai
 	}
 	spec := measurementSpec(t)
 	spec.Source = source
-	spec.WeightValue = weight
+	spec.Weight = grossWeight(t, weight, "KG")
 	measurement, err := domain.NewActualMeasurement(spec)
 	if err != nil {
 		t.Fatalf("测量：%v", err)
@@ -35,7 +35,7 @@ func TestOneStillValidMeasurementIsCurrentWithoutAdoption(t *testing.T) {
 	if answer != domain.CurrentMeasurementOne || cause != domain.CurrentMeasurementCauseInvalid {
 		t.Fatalf("answer=%s cause=%s", answer, cause)
 	}
-	if value, _ := got.Weight(); value != "2.10" {
+	if value := got.Weight().Value(); value != "2.10" {
 		t.Fatalf("取出 %s", value)
 	}
 	if _, answer, _ := domain.SelectCurrentMeasurement(nil, true); answer != domain.CurrentMeasurementNone {

@@ -50,12 +50,19 @@ func savedMeasurement(t *testing.T, sourceID, weight string, sides [3]string, oc
 	if err != nil {
 		t.Fatalf("来源：%v", err)
 	}
+	gross, err := domain.NewGrossWeight(weight, "KG")
+	if err != nil {
+		t.Fatalf("毛重：%v", err)
+	}
+	outer, err := domain.NewOuterDimensions(sides[0], sides[1], sides[2], "CM")
+	if err != nil {
+		t.Fatalf("外廓尺寸：%v", err)
+	}
 	measurement, err := domain.NewActualMeasurement(domain.ActualMeasurementSpec{
 		Source: source, ObjectKind: domain.HandlingUnitObject, ObjectID: "unit-1",
 		Node: ref(t, domain.NewNodeReference, "node-origin"), Location: ref(t, domain.NewWorkLocationReference, "bench-2"),
-		Basis:       ref(t, domain.NewWorkBasisReference, "intake-1"),
-		WeightValue: weight, WeightUnit: "KG",
-		Length: sides[0], Width: sides[1], Height: sides[2], DimensionUnit: "CM",
+		Basis:  ref(t, domain.NewWorkBasisReference, "intake-1"),
+		Weight: gross, Dimensions: outer,
 	})
 	if err != nil {
 		t.Fatalf("测量：%v", err)
@@ -149,11 +156,11 @@ func TestAVoidedMeasurementLeavesTheStillValidList(t *testing.T) {
 	if len(still) != 1 || still[0].Key.SourceID != "measure-2" {
 		t.Fatalf("仍有效 = %v", still)
 	}
-	if weight, unit := still[0].Measurement.Weight(); weight != "2.40" || unit != "KG" {
-		t.Fatalf("留下的重量 = %s %s", weight, unit)
+	if weight := still[0].Measurement.Weight(); weight.Value() != "2.40" || weight.Unit() != "KG" {
+		t.Fatalf("留下的重量 = %s %s", weight.Value(), weight.Unit())
 	}
-	if length, width, height, unit := still[0].Measurement.Dimensions(); length != "20" || width != "15" || height != "10" || unit != "CM" {
-		t.Fatalf("留下的尺寸 = %s×%s×%s %s，重量与尺寸要随同一行读回", length, width, height, unit)
+	if size := still[0].Measurement.Dimensions(); size.Length() != "20" || size.Width() != "15" || size.Height() != "10" || size.Unit() != "CM" {
+		t.Fatalf("留下的尺寸 = %s×%s×%s %s，重量与尺寸要随同一行读回", size.Length(), size.Width(), size.Height(), size.Unit())
 	}
 	if !still[0].Measurement.Source().OccurredAt().Equal(second.Measurement.Source().OccurredAt()) {
 		t.Fatal("发生时间被记录时刻顶替了")
@@ -238,12 +245,12 @@ func TestTheMeasurementCatalogueKeepsVoidedRows(t *testing.T) {
 	}
 	remeasured, first := page.Rows[0], page.Rows[1]
 	if remeasured.SourceID != "cat-remeasure" || remeasured.Voided ||
-		remeasured.WeightValue != "2.10" || remeasured.WeightUnit != "KG" ||
-		remeasured.Length != "30" || remeasured.Width != "25" || remeasured.Height != "20" || remeasured.DimensionUnit != "CM" {
+		remeasured.Weight.Value() != "2.10" || remeasured.Weight.Unit() != "KG" ||
+		remeasured.Dimensions.Length() != "30" || remeasured.Dimensions.Width() != "25" || remeasured.Dimensions.Height() != "20" || remeasured.Dimensions.Unit() != "CM" {
 		t.Fatalf("复测行 = %+v，want 一行上同时有重量与尺寸", remeasured)
 	}
 	if first.SourceID != "cat-first" || !first.Voided ||
-		first.WeightValue != "2.10" || first.Length != "20" || first.Width != "15" || first.Height != "10" {
+		first.Weight.Value() != "2.10" || first.Dimensions.Length() != "20" || first.Dimensions.Width() != "15" || first.Dimensions.Height() != "10" {
 		t.Fatalf("被作废的那一行 = %+v，want 数字原样留着", first)
 	}
 

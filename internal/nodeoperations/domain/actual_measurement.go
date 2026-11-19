@@ -87,8 +87,8 @@ func measurementSourceAtRegisterInstant(source WorkFactSource) WorkFactSource {
 	return source
 }
 
-// ActualMeasurementSpec 是形成一条实际测量所需的全部输入。单位只要求被指名；对产品
-// 内置单位目录的核对在入口做，这里不换算、不改写数字。
+// ActualMeasurementSpec 是形成一条实际测量所需的全部输入。毛重与外廓尺寸各是一个值对象，数量与单位在它们的构造器里核；
+// 对产品内置单位目录的核对在入口做，这里不换算、不改写数字。
 type ActualMeasurementSpec struct {
 	Source           WorkFactSource
 	ObjectKind       MeasurementObjectKind
@@ -96,12 +96,8 @@ type ActualMeasurementSpec struct {
 	Node             NodeReference
 	Location         WorkLocationReference
 	Basis            WorkBasisReference
-	WeightValue      string
-	WeightUnit       string
-	Length           string
-	Width            string
-	Height           string
-	DimensionUnit    string
+	Weight           GrossWeight
+	Dimensions       OuterDimensions
 	EnteredBy        string
 	OriginalDocument MeasurementOriginalDocument
 }
@@ -115,61 +111,39 @@ type ActualMeasurement struct {
 	node             NodeReference
 	location         WorkLocationReference
 	basis            WorkBasisReference
-	weightValue      string
-	weightUnit       string
-	length           string
-	width            string
-	height           string
-	dimensionUnit    string
+	weight           GrossWeight
+	dimensions       OuterDimensions
 	enteredBy        string
 	originalDocument MeasurementOriginalDocument
 }
 
-// NewActualMeasurement 收下一条测量。毛重与长宽高都必填，各带自己的单位：只称了重、没量方的那一条不收，
-// 反过来也不收——计价重量取实重与体积重的较大者，缺一样这条测量就算不出计价重量。录入人与原件要么都在、要么
-// 都不在——设备上报没有录入人，手工录入缺一格就说不清这份数字是谁照哪张原件写的。
+// NewActualMeasurement 收下一条测量。毛重与外廓尺寸都必填：只称了重、没量方的那一条不收，反过来也不收——计价重量取实重
+// 与体积重的较大者，缺一样这条测量就算不出计价重量；两个值对象的零值就是「缺了」。录入人与原件要么都在、要么都不在——
+// 设备上报没有录入人，手工录入缺一格就说不清这份数字是谁照哪张原件写的。
 func NewActualMeasurement(spec ActualMeasurementSpec) (ActualMeasurement, error) {
 	source := measurementSourceAtRegisterInstant(spec.Source)
 	if !source.valid() || !spec.ObjectKind.valid() || strings.TrimSpace(spec.ObjectID) == "" ||
-		!spec.Node.valid() || !spec.Location.valid() || !spec.Basis.valid() {
+		!spec.Node.valid() || !spec.Location.valid() || !spec.Basis.valid() ||
+		!spec.Weight.valid() || !spec.Dimensions.valid() {
 		return ActualMeasurement{}, ErrInvalidActualMeasurement
-	}
-	measurement := ActualMeasurement{
-		source:        source,
-		objectKind:    spec.ObjectKind,
-		objectID:      spec.ObjectID,
-		node:          spec.Node,
-		location:      spec.Location,
-		basis:         spec.Basis,
-		weightUnit:    strings.TrimSpace(spec.WeightUnit),
-		dimensionUnit: strings.TrimSpace(spec.DimensionUnit),
-	}
-	if measurement.weightUnit == "" || measurement.dimensionUnit == "" {
-		return ActualMeasurement{}, ErrInvalidActualMeasurement
-	}
-	for _, quantity := range []struct {
-		raw  string
-		into *string
-	}{
-		{spec.WeightValue, &measurement.weightValue},
-		{spec.Length, &measurement.length},
-		{spec.Width, &measurement.width},
-		{spec.Height, &measurement.height},
-	} {
-		value, err := newMeasurementQuantity(quantity.raw)
-		if err != nil {
-			return ActualMeasurement{}, ErrInvalidActualMeasurement
-		}
-		*quantity.into = value
 	}
 	enteredBy := strings.TrimSpace(spec.EnteredBy)
 	hasDocument := spec.OriginalDocument.valid()
 	if (enteredBy == "") != !hasDocument {
 		return ActualMeasurement{}, ErrInvalidActualMeasurement
 	}
-	measurement.enteredBy = enteredBy
-	measurement.originalDocument = spec.OriginalDocument
-	return measurement, nil
+	return ActualMeasurement{
+		source:           source,
+		objectKind:       spec.ObjectKind,
+		objectID:         spec.ObjectID,
+		node:             spec.Node,
+		location:         spec.Location,
+		basis:            spec.Basis,
+		weight:           spec.Weight,
+		dimensions:       spec.Dimensions,
+		enteredBy:        enteredBy,
+		originalDocument: spec.OriginalDocument,
+	}, nil
 }
 
 func (measurement ActualMeasurement) Source() WorkFactSource { return measurement.source }
@@ -186,15 +160,11 @@ func (measurement ActualMeasurement) Location() WorkLocationReference { return m
 
 func (measurement ActualMeasurement) Basis() WorkBasisReference { return measurement.basis }
 
-// Weight 交回毛重与它的单位。单位是现场报的原词，没有换算。
-func (measurement ActualMeasurement) Weight() (string, string) {
-	return measurement.weightValue, measurement.weightUnit
-}
+// Weight 交回毛重。单位是现场报的原词，没有换算。
+func (measurement ActualMeasurement) Weight() GrossWeight { return measurement.weight }
 
-// Dimensions 交回长、宽、高与单位。三边共用现场报的那一个单位。
-func (measurement ActualMeasurement) Dimensions() (string, string, string, string) {
-	return measurement.length, measurement.width, measurement.height, measurement.dimensionUnit
-}
+// Dimensions 交回外廓尺寸。三边共用现场报的那一个单位。
+func (measurement ActualMeasurement) Dimensions() OuterDimensions { return measurement.dimensions }
 
 // ManualEntry 给出手工录入的人与原件。设备上报的测量没有这两格。
 func (measurement ActualMeasurement) ManualEntry() (string, MeasurementOriginalDocument, bool) {
@@ -214,12 +184,12 @@ func (measurement ActualMeasurement) ContentDigest() string {
 		Node:             measurement.node.String(),
 		Location:         measurement.location.String(),
 		Basis:            measurement.basis.String(),
-		WeightValue:      measurement.weightValue,
-		WeightUnit:       measurement.weightUnit,
-		Length:           measurement.length,
-		Width:            measurement.width,
-		Height:           measurement.height,
-		DimensionUnit:    measurement.dimensionUnit,
+		WeightValue:      measurement.weight.Value(),
+		WeightUnit:       measurement.weight.Unit(),
+		Length:           measurement.dimensions.Length(),
+		Width:            measurement.dimensions.Width(),
+		Height:           measurement.dimensions.Height(),
+		DimensionUnit:    measurement.dimensions.Unit(),
 		PerformedBy:      measurement.source.PerformedBy().String(),
 		Evidence:         measurement.source.Evidence().String(),
 		OccurredAt:       measurement.source.OccurredAt().UTC().Format(time.RFC3339Nano),

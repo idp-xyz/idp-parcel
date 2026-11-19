@@ -126,10 +126,18 @@ func newScopeTargetStore(t *testing.T, node string) *scopeTargetStore {
 	if err != nil {
 		t.Fatal(err)
 	}
+	gross, err := domain.NewGrossWeight("2.10", "KG")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer, err := domain.NewOuterDimensions("30", "25", "20", "CM")
+	if err != nil {
+		t.Fatal(err)
+	}
 	measurement, err := domain.NewActualMeasurement(domain.ActualMeasurementSpec{
 		Source: source, ObjectKind: domain.HandlingUnitObject, ObjectID: "SYN-HU-1",
 		Node: registeredAt, Location: location, Basis: basis,
-		WeightValue: "2.10", WeightUnit: "KG", Length: "30", Width: "25", Height: "20", DimensionUnit: "CM",
+		Weight: gross, Dimensions: outer,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -229,12 +229,19 @@ func measuredAs(t *testing.T, sourceID string, occurred time.Time, weightUnit, w
 	if err != nil {
 		t.Fatal(err)
 	}
+	gross, err := nodomain.NewGrossWeight(weightValue, weightUnit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer, err := nodomain.NewOuterDimensions(length, width, height, dimensionUnit)
+	if err != nil {
+		t.Fatal(err)
+	}
 	measurement, err := nodomain.NewActualMeasurement(nodomain.ActualMeasurementSpec{
 		Source: source, ObjectKind: nodomain.HandlingUnitObject, ObjectID: "unit-1",
 		Node: must(t, nodomain.NewNodeReference, "node-origin"), Location: must(t, nodomain.NewWorkLocationReference, "bench-2"),
-		Basis:       must(t, nodomain.NewWorkBasisReference, "intake-1"),
-		WeightValue: weightValue, WeightUnit: weightUnit,
-		Length: length, Width: width, Height: height, DimensionUnit: dimensionUnit,
+		Basis:  must(t, nodomain.NewWorkBasisReference, "intake-1"),
+		Weight: gross, Dimensions: outer,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -152,12 +152,11 @@ func TestAReportedWeightIsKeptAndARepeatReturnsIt(t *testing.T) {
 	if !present {
 		t.Fatal("记下了却没有测量")
 	}
-	value, unit := measurement.Weight()
-	if value != "2.10" || unit != "KG" {
-		t.Fatalf("重量 = %s %s", value, unit)
+	if weight := measurement.Weight(); weight.Value() != "2.10" || weight.Unit() != "KG" {
+		t.Fatalf("重量 = %s %s", weight.Value(), weight.Unit())
 	}
-	if length, width, height, lengthUnit := measurement.Dimensions(); length != "20" || width != "15" || height != "10" || lengthUnit != "CM" {
-		t.Fatalf("尺寸 = %s×%s×%s %s", length, width, height, lengthUnit)
+	if size := measurement.Dimensions(); size.Length() != "20" || size.Width() != "15" || size.Height() != "10" || size.Unit() != "CM" {
+		t.Fatalf("尺寸 = %s×%s×%s %s", size.Length(), size.Width(), size.Height(), size.Unit())
 	}
 
 	again, err := handler.Handle(context.Background(), weightCommand())
@@ -178,7 +177,7 @@ func TestAReportedWeightIsKeptAndARepeatReturnsIt(t *testing.T) {
 		t.Fatalf("冲突结果 %s", conflict.Outcome())
 	}
 	kept, _ := again.Measurement()
-	keptValue, _ := kept.Weight()
+	keptValue := kept.Weight().Value()
 	if keptValue != "2.10" {
 		t.Fatalf("冲突之后重量变成了 %s", keptValue)
 	}
