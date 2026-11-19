@@ -166,6 +166,8 @@ const (
 	WeightUnitPound    WeightUnit = "LB"
 )
 
+// NewWeightUnit 是计价认哪些重量单位的唯一一张表：按原词匹配，不折大小写、不去空白。适配器翻译外来的单位符号一律
+// 经它，不在自己那一侧另列一份——表一旦两处不同，两个来源认的单位就不一样了。
 func NewWeightUnit(value string) (WeightUnit, error) {
 	unit := WeightUnit(value)
 	if !unit.valid() {

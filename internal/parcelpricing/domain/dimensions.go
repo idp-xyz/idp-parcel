@@ -7,6 +7,8 @@ const (
 	LengthUnitCentimeter LengthUnit = "CM"
 )
 
+// NewLengthUnit 是计价认哪些长度单位的唯一一张表：按原词匹配，不折大小写、不去空白。适配器翻译外来的单位符号一律
+// 经它，不在自己那一侧另列一份——表一旦两处不同，两个来源认的单位就不一样了。
 func NewLengthUnit(value string) (LengthUnit, error) {
 	unit := LengthUnit(value)
 	if !unit.valid() {
@@ -99,6 +101,21 @@ func NewDimensions(length, width, height Decimal, unit LengthUnit) (Dimensions, 
 		}
 	}
 	return Dimensions{longest: sides[0], second: sides[1], shortest: sides[2], unit: unit}, nil
+}
+
+// NewDimensionsFromStrings 把三边的十进制文本收成外廓，与 NewWeightFromString 同形：文本只经 ParseDecimal 这一道门，
+// 单位由调用方先过 NewLengthUnit。文本解析不了答 ParseDecimal 的错，三边里有非正数答 ErrInvalidDimensions，调用方
+// 凭此分得清是文本不成数还是数不成外廓。
+func NewDimensionsFromStrings(length, width, height string, unit LengthUnit) (Dimensions, error) {
+	var sides [3]Decimal
+	for index, raw := range [3]string{length, width, height} {
+		side, err := ParseDecimal(raw)
+		if err != nil {
+			return Dimensions{}, err
+		}
+		sides[index] = side
+	}
+	return NewDimensions(sides[0], sides[1], sides[2], unit)
 }
 
 func (dimensions Dimensions) LongestSide() Length {

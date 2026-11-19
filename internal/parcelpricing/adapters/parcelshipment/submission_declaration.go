@@ -73,8 +73,8 @@ func (adapter *SubmissionDeclarations) LoadSubmissionDeclaration(
 }
 
 // measurementOf 把一份申报测量译成计价的重量与外廓。单位符号按原词进计价的封闭单位表，不折大小写：正式 SELL 评价的输入解析
-// （transportfulfillment 适配器的 weightUnit / lengthUnit）按原词认，受理前若折叠，同一份申报会在受理前估出冻结额、受理后却评不出
-// 客户费用，那笔冻结就没有费用可转。表外的单位不猜，整件当没有测量交回——猜错单位估错的是要占用客户的那笔钱。
+// （transportfulfillment 适配器）同经 NewWeightUnit、NewLengthUnit 那张表、按原词认，受理前若折叠，同一份申报会在受理前估出冻结额、
+// 受理后却评不出客户费用，那笔冻结就没有费用可转。表外的单位不猜，整件当没有测量交回——猜错单位估错的是要占用客户的那笔钱。
 func measurementOf(measurement psdomain.DeclaredMeasurement) (*ppdomain.Weight, *ppdomain.Dimensions) {
 	declared := measurement.Weight()
 	unit, err := ppdomain.NewWeightUnit(declared.Unit().String())

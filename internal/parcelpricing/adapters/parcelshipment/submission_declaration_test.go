@@ -232,7 +232,7 @@ func TestASubmissionDeclarationTranslatesEachParcelAndTheRoute(t *testing.T) {
 }
 
 // 单位不在计价单位表内不猜：整件当没有测量交回。重量单位与外廓单位任一在表外都是这一格。表按原词认，小写的 kg、cm 也在表外：
-// 正式 SELL 评价的输入解析（transportfulfillment 适配器的 weightUnit / lengthUnit）同样按原词认、对小写答表外，受理前若折叠，
+// 正式 SELL 评价的输入解析（transportfulfillment 适配器）同经 NewWeightUnit、NewLengthUnit 那张表、按原词认、对小写答表外，受理前若折叠，
 // 同一份申报在受理前估得出冻结额、受理后却评不出客户费用。
 func TestAnUntranslatableUnitLeavesTheParcelUnmeasured(t *testing.T) {
 	for name, profile := range map[string]psdomain.DeclaredParcelProfile{

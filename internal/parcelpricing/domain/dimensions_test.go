@@ -108,3 +108,36 @@ func TestDimensionsRejectUnusableMeasurements(t *testing.T) {
 		})
 	}
 }
+
+// 三边的文本进外廓只经 ParseDecimal 这一道门，得到的外廓与按 Decimal 构造的同一份；文本不成数与数不成外廓各答各的错，
+// 调用方据此给出照实的原因。
+func TestDimensionsFromStringsParseTheSidesAndSeparateTheTwoFailures(t *testing.T) {
+	built, err := domain.NewDimensionsFromStrings("8", " 70 ", "9.5", domain.LengthUnitCentimeter)
+	if err != nil {
+		t.Fatalf("from strings: %v", err)
+	}
+	if built != dimensions(t, "8", "70", "9.5", domain.LengthUnitCentimeter) {
+		t.Fatalf("from strings = %+v，与按 Decimal 构造的不同", built)
+	}
+
+	for _, testCase := range []struct {
+		name                  string
+		length, width, height string
+		unit                  domain.LengthUnit
+		want                  error
+	}{
+		{"text is not a number", "70", "wide", "9", domain.LengthUnitCentimeter, domain.ErrInvalidDecimal},
+		{"exponent spelling is not accepted", "7e1", "8", "9", domain.LengthUnitCentimeter, domain.ErrInvalidDecimal},
+		{"blank side", "70", "8", " ", domain.LengthUnitCentimeter, domain.ErrInvalidDecimal},
+		{"side is a number but not positive", "70", "0", "9", domain.LengthUnitCentimeter, domain.ErrInvalidDimensions},
+		{"negative side", "70", "8", "-9", domain.LengthUnitCentimeter, domain.ErrInvalidDimensions},
+		{"unit outside the table", "70", "8", "9", domain.LengthUnit("FT"), domain.ErrInvalidDimensions},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := domain.NewDimensionsFromStrings(testCase.length, testCase.width, testCase.height, testCase.unit)
+			if !errors.Is(err, testCase.want) {
+				t.Fatalf("err = %v, want %v", err, testCase.want)
+			}
+		})
+	}
+}

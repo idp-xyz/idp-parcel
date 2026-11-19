@@ -363,15 +363,11 @@ func declaredFact(parcel string, resolution psdomain.DeclaredMeasurementResoluti
 }
 
 func translateWeight(weight psdomain.DeclaredWeight) (ppdomain.Weight, bool) {
-	unit, ok := weightUnit(weight.Unit().String())
-	if !ok {
-		return ppdomain.Weight{}, false
-	}
-	value, err := ppdomain.ParseDecimal(weight.Value().String())
+	unit, err := ppdomain.NewWeightUnit(weight.Unit().String())
 	if err != nil {
 		return ppdomain.Weight{}, false
 	}
-	translated, err := ppdomain.NewWeight(value, unit)
+	translated, err := ppdomain.NewWeightFromString(weight.Value().String(), unit)
 	if err != nil {
 		return ppdomain.Weight{}, false
 	}
@@ -379,45 +375,16 @@ func translateWeight(weight psdomain.DeclaredWeight) (ppdomain.Weight, bool) {
 }
 
 func translateDimensions(dimensions psdomain.DeclaredDimensions) (ppdomain.Dimensions, bool) {
-	unit, ok := lengthUnit(dimensions.Unit().String())
-	if !ok {
-		return ppdomain.Dimensions{}, false
-	}
-	length, err := ppdomain.ParseDecimal(dimensions.Length().String())
+	unit, err := ppdomain.NewLengthUnit(dimensions.Unit().String())
 	if err != nil {
 		return ppdomain.Dimensions{}, false
 	}
-	width, err := ppdomain.ParseDecimal(dimensions.Width().String())
-	if err != nil {
-		return ppdomain.Dimensions{}, false
-	}
-	height, err := ppdomain.ParseDecimal(dimensions.Height().String())
-	if err != nil {
-		return ppdomain.Dimensions{}, false
-	}
-	translated, err := ppdomain.NewDimensions(length, width, height, unit)
+	translated, err := ppdomain.NewDimensionsFromStrings(
+		dimensions.Length().String(), dimensions.Width().String(), dimensions.Height().String(), unit)
 	if err != nil {
 		return ppdomain.Dimensions{}, false
 	}
 	return translated, true
-}
-
-func weightUnit(raw string) (ppdomain.WeightUnit, bool) {
-	switch raw {
-	case "KG", "G", "LB", "OZ":
-		return ppdomain.WeightUnit(raw), true
-	default:
-		return "", false
-	}
-}
-
-func lengthUnit(raw string) (ppdomain.LengthUnit, bool) {
-	switch raw {
-	case "CM", "IN":
-		return ppdomain.LengthUnit(raw), true
-	default:
-		return "", false
-	}
 }
 
 func unavailable(missing ...string) ppports.PricingInputResolution {

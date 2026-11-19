@@ -138,8 +138,8 @@ func measurementFact(parcel, sourceID string) (ppdomain.VersionedFactReference, 
 
 func translateWeight(measurement nodomain.ActualMeasurement) (ppdomain.Weight, bool) {
 	value, unitName := measurement.Weight()
-	unit, ok := weightUnit(unitName)
-	if !ok {
+	unit, err := ppdomain.NewWeightUnit(unitName)
+	if err != nil {
 		return ppdomain.Weight{}, false
 	}
 	weight, err := ppdomain.NewWeightFromString(value, unit)
@@ -153,43 +153,13 @@ var _ pptransport.ActualMeasurementView = (*ParcelMeasurementView)(nil)
 
 func translateDimensions(measurement nodomain.ActualMeasurement) (ppdomain.Dimensions, bool) {
 	length, width, height, unitName := measurement.Dimensions()
-	unit, ok := lengthUnit(unitName)
-	if !ok {
-		return ppdomain.Dimensions{}, false
-	}
-	lengthValue, err := ppdomain.ParseDecimal(length)
+	unit, err := ppdomain.NewLengthUnit(unitName)
 	if err != nil {
 		return ppdomain.Dimensions{}, false
 	}
-	widthValue, err := ppdomain.ParseDecimal(width)
-	if err != nil {
-		return ppdomain.Dimensions{}, false
-	}
-	heightValue, err := ppdomain.ParseDecimal(height)
-	if err != nil {
-		return ppdomain.Dimensions{}, false
-	}
-	dimensions, err := ppdomain.NewDimensions(lengthValue, widthValue, heightValue, unit)
+	dimensions, err := ppdomain.NewDimensionsFromStrings(length, width, height, unit)
 	if err != nil {
 		return ppdomain.Dimensions{}, false
 	}
 	return dimensions, true
-}
-
-func weightUnit(raw string) (ppdomain.WeightUnit, bool) {
-	switch raw {
-	case "KG", "G", "LB", "OZ":
-		return ppdomain.WeightUnit(raw), true
-	default:
-		return "", false
-	}
-}
-
-func lengthUnit(raw string) (ppdomain.LengthUnit, bool) {
-	switch raw {
-	case "CM", "IN":
-		return ppdomain.LengthUnit(raw), true
-	default:
-		return "", false
-	}
 }
