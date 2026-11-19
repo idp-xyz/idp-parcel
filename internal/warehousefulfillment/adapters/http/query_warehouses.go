@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
-	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
@@ -45,20 +44,20 @@ func NewQueryWarehousesEndpoint(intake CatalogueIntake, reader WarehouseCatalogu
 
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
-			writeIntakeProblem(response, request, err)
+			writeIntakeProblem(response, err)
 			return
 		}
 
 		pageQuery, err := ports.WarehousePages.DecodeRaw(request.URL.RawQuery)
 		if err != nil {
-			writePageQueryProblem(response, request, err)
+			writePageQueryProblem(response, err)
 			return
 		}
 
 		page, err := reader.ListWarehouses(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "warehouse list did not form an answer")
-			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 		writeJSON(response, http.StatusOK, warehouseListResponse{

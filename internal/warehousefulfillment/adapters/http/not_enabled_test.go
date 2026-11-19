@@ -51,7 +51,7 @@ func TestSwitchedOffLinesAnswer403ProblemDetailsWithTheNotEnabledCode(t *testing
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, request)
 
-		object := assertProblem(t, line.pattern, response, http.StatusForbidden, "WAREHOUSE_FULFILLMENT_NOT_ENABLED")
+		object := assertProblemDetails(t, line.pattern, response, http.StatusForbidden, "WAREHOUSE_FULFILLMENT_NOT_ENABLED")
 		if response.Code == http.StatusNotFound {
 			t.Fatalf("%s：开关关着不得答 404", line.pattern)
 		}
@@ -103,7 +103,7 @@ func TestSwitchedOffLinesAnswerEveryCallerAndEveryRequestAlike(t *testing.T) {
 		for name, build := range variants {
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, build())
-			assertProblem(t, line.pattern+" "+name, response, http.StatusForbidden, "WAREHOUSE_FULFILLMENT_NOT_ENABLED")
+			assertProblemDetails(t, line.pattern+" "+name, response, http.StatusForbidden, "WAREHOUSE_FULFILLMENT_NOT_ENABLED")
 			if baseline == nil {
 				baseline = response
 				continue
@@ -127,7 +127,7 @@ func TestSwitchedOffLinesNeverReadTheBody(t *testing.T) {
 
 	handler.ServeHTTP(response, request)
 
-	assertProblem(t, "关着", response, http.StatusForbidden, "WAREHOUSE_FULFILLMENT_NOT_ENABLED")
+	assertProblemDetails(t, "关着", response, http.StatusForbidden, "WAREHOUSE_FULFILLMENT_NOT_ENABLED")
 	if body.reads != 0 {
 		t.Fatalf("开关关着仍读了请求体 %d 次", body.reads)
 	}
@@ -145,7 +145,7 @@ func TestSwitchedOffLinesKeepTheMethodGateOfTheirLine(t *testing.T) {
 				t.Fatalf("%s %s：不得答 404", method, line.pattern)
 			}
 			if method == line.method {
-				assertProblem(t, method+" "+line.pattern, response, http.StatusForbidden, "WAREHOUSE_FULFILLMENT_NOT_ENABLED")
+				assertProblemDetails(t, method+" "+line.pattern, response, http.StatusForbidden, "WAREHOUSE_FULFILLMENT_NOT_ENABLED")
 				continue
 			}
 			assertProblem(t, method+" "+line.pattern, response, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED")

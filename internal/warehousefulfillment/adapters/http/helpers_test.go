@@ -273,8 +273,30 @@ func assertKeys(t *testing.T, name string, object map[string]json.RawMessage, wa
 	}
 }
 
-// assertProblem 断言一份问题详情：状态码、码、媒体类型，且不带 `outcome`——问题详情只说明为什么没有 `outcome`（ADR-0022）。
+// assertProblem 断言一份操作者各族的旧形状问题体 {"error":{"code","detail"?}}：状态码、码，且顶层不带 `outcome`——问题体只说明为什么
+// 没有 `outcome`（ADR-0022）。交回 error 对象的各成员，供用例核 detail。
 func assertProblem(t *testing.T, name string, response *httptest.ResponseRecorder, status int, code string) map[string]json.RawMessage {
+	t.Helper()
+	if response.Code != status {
+		t.Fatalf("%s：状态 %d %s，want %d %s", name, response.Code, response.Body.String(), status, code)
+	}
+	if contentType := response.Header().Get("Content-Type"); contentType != "application/json" {
+		t.Fatalf("%s：Content-Type = %q，want application/json", name, contentType)
+	}
+	outer := decodeObject(t, response)
+	assertKeys(t, name, outer, "error")
+	var inner map[string]json.RawMessage
+	if err := json.Unmarshal(outer["error"], &inner); err != nil {
+		t.Fatalf("%s：error 不是对象：%s", name, response.Body.String())
+	}
+	if got := stringMember(t, inner, "code"); got != code {
+		t.Fatalf("%s：code = %q，want %q（%s）", name, got, code, response.Body.String())
+	}
+	return inner
+}
+
+// assertProblemDetails 断言一份 RFC 9457 问题详情：状态码、码、媒体类型，且不带 `outcome`。只有开关关着那一格写这个形状。
+func assertProblemDetails(t *testing.T, name string, response *httptest.ResponseRecorder, status int, code string) map[string]json.RawMessage {
 	t.Helper()
 	if response.Code != status {
 		t.Fatalf("%s：状态 %d %s，want %d %s", name, response.Code, response.Body.String(), status, code)

@@ -1,16 +1,18 @@
 // Package warehousehttp 承载仓配履约主数据登记册的 HTTP 适配器（ADR-0375 决定四、五）：仓的登记口、各仓当前修订的查阅口、
 // 一个仓的修订史口，以及部署开关关着时仓配各口那一份固定的答复。
 //
-// 本包的 4xx 与 5xx 一律是 RFC 9457 问题详情（ADR-0140 决定三），码归本包、媒体类型与成员归 httpapi。业务判别只在 `outcome`
-// （ADR-0022）：问题详情只说明为什么没有 `outcome`。
+// 业务判别只在 `outcome`（ADR-0022）：问题体只说明为什么没有 `outcome`。本包是操作者渠道的两个面（登记册配置写、主数据与运营
+// 查阅读），问题体沿用这两个面在别的上下文里的旧形状 {"error":{"code"}}：装配处对这两个面的读口挂的请求目标检查答的就是这个形状，
+// 同一个上下文里的同一格不该有两种写法；这两个面迁到 RFC 9457 问题详情（ADR-0140 决定三）时整族一起迁。唯一的例外是开关关着时
+// 的那一格——它是新立的一格，没有旧形状要对齐，按 ADR-0140 决定三写问题详情（见 not_enabled.go）。
 package warehousehttp
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
-	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
 // 信封一层的各格答复，各对一种恢复动作（ADR-0029）。登记册配置写与主数据与运营查阅读这两个面都不判准入范围，所以没有
@@ -56,39 +58,59 @@ func (err *malformedRequest) Is(target error) bool {
 	return target == ErrMalformedRequest
 }
 
+type problemResponse struct {
+	Error problemDetail `json:"error"`
+}
+
+type problemDetail struct {
+	Code string `json:"code"`
+	// Detail 是散文不是代数：前端原样示出、不查表、不据此分支。只随「改请求才会好」的 400 在场，只谈调用方自己这份载荷或
+	// 查询错在哪，不回显任何取值；403 与 5xx 不带（探针同答、依赖故障的内部原文不外泄）。
+	Detail string `json:"detail,omitempty"`
+}
+
+func writeProblem(response http.ResponseWriter, status int, code string) {
+	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code}})
+}
+
+// writeMalformed 答 400 并带理由。单立一个函数而不是给 writeProblem 加变参：交不交 detail 在调用点要一眼读得出来。
+func writeMalformed(response http.ResponseWriter, reason string) {
+	writeJSON(response, http.StatusBadRequest, problemResponse{Error: problemDetail{Code: codeMalformedRequest, Detail: reason}})
+}
+
 // writeIntakeProblem 把 Intake 交回的错答成它的那一格。先分信封各格，再分请求畸形，其余是 Intake 自己出了故障（5xx，成因
 // 不外泄）。
-func writeIntakeProblem(response http.ResponseWriter, request *http.Request, err error) {
+func writeIntakeProblem(response http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrAccessChannelNotConfigured):
-		httpapi.WriteProblem(response, request, http.StatusForbidden, codeAccessChannelNotConfigured)
+		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
 	case errors.Is(err, ErrOperatorCredentialRejected):
-		httpapi.WriteProblem(response, request, http.StatusUnauthorized, codeOperatorCredentialRejected)
+		writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
 	case errors.Is(err, ErrOperatorNotGranted):
-		httpapi.WriteProblem(response, request, http.StatusForbidden, codeOperatorNotGranted)
+		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
 	case errors.Is(err, ErrIdentityDependencyUnavailable):
-		httpapi.WriteProblem(response, request, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
+		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
 	case errors.Is(err, ErrMalformedRequest):
 		var malformed *malformedRequest
 		if errors.As(err, &malformed) {
-			httpapi.WriteProblemWithDetail(response, request, http.StatusBadRequest, codeMalformedRequest, malformed.reason)
+			writeMalformed(response, malformed.reason)
 			return
 		}
-		httpapi.WriteProblem(response, request, http.StatusBadRequest, codeMalformedRequest)
+		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 	default:
-		httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeIntakeFailed)
+		writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
 	}
 }
 
 // writePageQueryProblem 答列表查询参数不成立的那一格（ADR-0144 决定一、四）：筛选维、排序与游标按册声明解不开即答 400，理由
 // 散文原样进 detail。在 Intake 之后解码：渠道未配置时对一切请求同答 403，没有凭据的调用方也就探不出本册开放了哪些查询维度。
-func writePageQueryProblem(response http.ResponseWriter, request *http.Request, err error) {
+func writePageQueryProblem(response http.ResponseWriter, err error) {
 	var malformed *cataloguepage.MalformedQuery
 	if errors.As(err, &malformed) {
-		httpapi.WriteProblemWithDetail(response, request, http.StatusBadRequest, codeMalformedRequest, malformed.Reason)
+		writeMalformed(response, malformed.Reason)
 		return
 	}
-	httpapi.WriteProblem(response, request, http.StatusBadRequest, codeMalformedRequest)
+	writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 }
 
 // refuseMethod 是各口自守的方法门：方法不对答 405 并带 Allow。路由层刻意不按方法设卡（httpapi.BusinessEndpoint），
@@ -98,6 +120,12 @@ func refuseMethod(response http.ResponseWriter, request *http.Request, allowed s
 		return false
 	}
 	response.Header().Set("Allow", allowed)
-	httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+	writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 	return true
+}
+
+func writeJSON(response http.ResponseWriter, status int, value any) {
+	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(status)
+	_ = json.NewEncoder(response).Encode(value)
 }
