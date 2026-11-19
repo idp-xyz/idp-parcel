@@ -7,7 +7,7 @@ import (
 	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
 )
 
-// warehouseFulfillmentWiring 是仓配履约各册的依赖：仓、库区、库位类型与包材。enabled 是部署开关（ADR-0375 决定四）的值，从 endpointSources 来、
+// warehouseFulfillmentWiring 是仓配履约各册的依赖：仓、库区、库位类型、库位与包材。enabled 是部署开关（ADR-0375 决定四）的值，从 endpointSources 来、
 // 在 build 里定：为假时其余字段全是零值——关着的部署不构造任何仓配的适配器与编排，mount 也就没有东西可接。
 //
 // 仓配的各册同属一个特性、一个开关、一个依赖结构，不按册拆成几个特性：登记处不许两个特性共用一种依赖结构，而各册的行都带同一个
@@ -25,6 +25,10 @@ type warehouseFulfillmentWiring struct {
 	locationTypeRegistration warehousehttp.LocationTypeRegistrar
 	locationTypeCatalogue    warehousehttp.LocationTypeCatalogueReader
 	locationTypeRevisions    warehousehttp.LocationTypeRevisionsReader
+
+	locationRegistration warehousehttp.LocationRegistrar
+	locationCatalogue    warehousehttp.LocationCatalogueReader
+	locationRevisions    warehousehttp.LocationRevisionsReader
 
 	packagingMaterialRegistration warehousehttp.PackagingMaterialRegistrar
 	packagingMaterialCatalogue    warehousehttp.PackagingMaterialCatalogueReader
@@ -56,6 +60,13 @@ func init() {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-location-type-revisions?locationTypeCode=SYN-LT-01",
 			},
+			// 库位：各行的面与仓同族。库位的身份是（仓编码，库位编码），修订史口的探测目标要带上这两段。
+			"/warehouse-fulfillment-location-registrations": {method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true},
+			"/warehouse-fulfillment-locations":              {method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true},
+			"/warehouse-fulfillment-location-revisions": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-location-revisions?warehouseCode=SYN-WH-01&locationCode=SYN-LOC-01",
+			},
 			// 包材：各行的面与仓同族。包材按租户登记、各仓共用，修订史口的探测目标只带包材编码一段。
 			"/warehouse-fulfillment-packaging-material-registrations": {method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true},
 			"/warehouse-fulfillment-packaging-materials":              {method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true},
@@ -85,6 +96,10 @@ func init() {
 				locationTypeCatalogue:    orchestration.locationTypeQueries,
 				locationTypeRevisions:    orchestration.locationTypeQueries,
 
+				locationRegistration: orchestration.locationRegistration,
+				locationCatalogue:    orchestration.locationQueries,
+				locationRevisions:    orchestration.locationQueries,
+
 				packagingMaterialRegistration: orchestration.packagingMaterialRegistration,
 				packagingMaterialCatalogue:    orchestration.packagingMaterialQueries,
 				packagingMaterialRevisions:    orchestration.packagingMaterialQueries,
@@ -103,6 +118,9 @@ func init() {
 			locationTypeRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			locationTypes := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			locationTypeRevisions := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			locationRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			locations := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			locationRevisions := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			packagingMaterialRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			packagingMaterials := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			packagingMaterialRevisions := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
@@ -119,6 +137,9 @@ func init() {
 				locationTypeRegistration = warehousehttp.NewRegisterLocationTypeEndpoint(channels.locationTypeRegistration(), wiring.locationTypeRegistration)
 				locationTypes = warehousehttp.NewQueryLocationTypesEndpoint(catalogueIntake, wiring.locationTypeCatalogue)
 				locationTypeRevisions = warehousehttp.NewQueryLocationTypeRevisionsEndpoint(catalogueIntake, wiring.locationTypeRevisions)
+				locationRegistration = warehousehttp.NewRegisterLocationEndpoint(channels.locationRegistration(), wiring.locationRegistration)
+				locations = warehousehttp.NewQueryLocationsEndpoint(catalogueIntake, wiring.locationCatalogue)
+				locationRevisions = warehousehttp.NewQueryLocationRevisionsEndpoint(catalogueIntake, wiring.locationRevisions)
 				packagingMaterialRegistration = warehousehttp.NewRegisterPackagingMaterialEndpoint(
 					channels.packagingMaterialRegistration(), wiring.packagingMaterialRegistration)
 				packagingMaterials = warehousehttp.NewQueryPackagingMaterialsEndpoint(catalogueIntake, wiring.packagingMaterialCatalogue)
@@ -134,6 +155,9 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-location-type-registrations", Handler: locationTypeRegistration},
 				{Pattern: "/warehouse-fulfillment-location-types", Handler: locationTypes},
 				{Pattern: "/warehouse-fulfillment-location-type-revisions", Handler: locationTypeRevisions},
+				{Pattern: "/warehouse-fulfillment-location-registrations", Handler: locationRegistration},
+				{Pattern: "/warehouse-fulfillment-locations", Handler: locations},
+				{Pattern: "/warehouse-fulfillment-location-revisions", Handler: locationRevisions},
 				{Pattern: "/warehouse-fulfillment-packaging-material-registrations", Handler: packagingMaterialRegistration},
 				{Pattern: "/warehouse-fulfillment-packaging-materials", Handler: packagingMaterials},
 				{Pattern: "/warehouse-fulfillment-packaging-material-revisions", Handler: packagingMaterialRevisions},

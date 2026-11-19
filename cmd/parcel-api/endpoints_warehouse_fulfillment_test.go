@@ -106,6 +106,35 @@ func (unwiredLocationTypeCatalogue) LocationTypeRevisions(
 	return nil, errOrchestrationNotWired
 }
 
+type unwiredLocationRegistration struct{}
+
+func (unwiredLocationRegistration) Register(
+	context.Context,
+	warehouseapp.RegisterLocationCommand,
+) (warehouseapp.RegisterLocationResult, error) {
+	return warehouseapp.RegisterLocationResult{}, errOrchestrationNotWired
+}
+
+type unwiredLocationCatalogue struct{}
+
+func (unwiredLocationCatalogue) ListLocations(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.LocationRow], error) {
+	return cataloguepage.Result[warehouseports.LocationRow]{}, errOrchestrationNotWired
+}
+
+func (unwiredLocationCatalogue) LocationRevisions(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.WarehouseCode,
+	warehousedomain.LocationCode,
+) ([]warehouseports.LocationRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredPackagingMaterialRegistration struct{}
 
 func (unwiredPackagingMaterialRegistration) Register(
@@ -148,6 +177,10 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		locationTypeCatalogue:    unwiredLocationTypeCatalogue{},
 		locationTypeRevisions:    unwiredLocationTypeCatalogue{},
 
+		locationRegistration: unwiredLocationRegistration{},
+		locationCatalogue:    unwiredLocationCatalogue{},
+		locationRevisions:    unwiredLocationCatalogue{},
+
 		packagingMaterialRegistration: unwiredPackagingMaterialRegistration{},
 		packagingMaterialCatalogue:    unwiredPackagingMaterialCatalogue{},
 		packagingMaterialRevisions:    unwiredPackagingMaterialCatalogue{},
@@ -169,6 +202,10 @@ const (
 	locationTypeRegistrationsLine = "/warehouse-fulfillment-location-type-registrations"
 	locationTypeListLine          = "/warehouse-fulfillment-location-types"
 	locationTypeRevisionsLine     = "/warehouse-fulfillment-location-type-revisions"
+
+	locationRegistrationsLine = "/warehouse-fulfillment-location-registrations"
+	locationListLine          = "/warehouse-fulfillment-locations"
+	locationRevisionsLine     = "/warehouse-fulfillment-location-revisions"
 
 	packagingMaterialRegistrationsLine = "/warehouse-fulfillment-packaging-material-registrations"
 	packagingMaterialListLine          = "/warehouse-fulfillment-packaging-materials"
@@ -232,6 +269,10 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		locationTypeRegistrationsLine: {http.MethodPost, faceRegistryWrite},
 		locationTypeListLine:          {http.MethodGet, faceOperationsRead},
 		locationTypeRevisionsLine:     {http.MethodGet, faceOperationsRead},
+
+		locationRegistrationsLine: {http.MethodPost, faceRegistryWrite},
+		locationListLine:          {http.MethodGet, faceOperationsRead},
+		locationRevisionsLine:     {http.MethodGet, faceOperationsRead},
 
 		packagingMaterialRegistrationsLine: {http.MethodPost, faceRegistryWrite},
 		packagingMaterialListLine:          {http.MethodGet, faceOperationsRead},
@@ -307,6 +348,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			warehouseRegistrationsLine: {status, code}, warehouseListLine: {status, code}, warehouseRevisionsLine: {status, code},
 			zoneRegistrationsLine: {status, code}, zoneListLine: {status, code}, zoneRevisionsLine: {status, code},
 			locationTypeRegistrationsLine: {status, code}, locationTypeListLine: {status, code}, locationTypeRevisionsLine: {status, code},
+			locationRegistrationsLine: {status, code}, locationListLine: {status, code}, locationRevisionsLine: {status, code},
 			packagingMaterialRegistrationsLine: {status, code}, packagingMaterialListLine: {status, code}, packagingMaterialRevisionsLine: {status, code},
 		}
 	}
@@ -328,6 +370,10 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			locationTypeListLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			locationTypeRevisionsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 
+			locationRegistrationsLine: {http.StatusBadRequest, "MALFORMED_REQUEST"},
+			locationListLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			locationRevisionsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+
 			packagingMaterialRegistrationsLine: {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			packagingMaterialListLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packagingMaterialRevisionsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -343,6 +389,10 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			locationTypeRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			locationTypeListLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			locationTypeRevisionsLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+
+			locationRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			locationListLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			locationRevisionsLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 
 			packagingMaterialRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packagingMaterialListLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
