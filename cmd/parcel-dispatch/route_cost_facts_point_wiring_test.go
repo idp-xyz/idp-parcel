@@ -28,12 +28,17 @@ func (double *physicalFactsDouble) PhysicalParcelFactsFor(
 	return double.answer, nil
 }
 
-// measuredWeight 造一份只称了重的物理事实，事实引用标明出自实际测量。
-func measuredWeight(t *testing.T, kilograms string) nrpricing.PhysicalParcelFacts {
+// measuredParcel 造一份取得了的物理事实：一条实测同时带毛重与长宽高（外廓小到体积重远不及实重，价只由实重定），事实引用
+// 标明出自实际测量。
+func measuredParcel(t *testing.T, kilograms string) nrpricing.PhysicalParcelFacts {
 	t.Helper()
 	weight, err := ppdomain.NewWeightFromString(kilograms, ppdomain.WeightUnitKilogram)
 	if err != nil {
 		t.Fatalf("实测重量：%v", err)
+	}
+	dimensions, err := ppdomain.NewDimensionsFromStrings("30", "20", "10", ppdomain.LengthUnitCentimeter)
+	if err != nil {
+		t.Fatalf("实测外廓：%v", err)
 	}
 	reference, err := ppdomain.NewVersionReferenceIdentity(ppdomain.ArtifactActualMeasurement, "SYN-PARCEL-01", "SYN-MEASUREMENT-01")
 	if err != nil {
@@ -43,7 +48,7 @@ func measuredWeight(t *testing.T, kilograms string) nrpricing.PhysicalParcelFact
 	if err != nil {
 		t.Fatalf("事实引用：%v", err)
 	}
-	facts, err := nrpricing.ObtainedPhysicalFacts(&weight, nil, []ppdomain.VersionedFactReference{fact})
+	facts, err := nrpricing.ObtainedPhysicalFacts(weight, dimensions, []ppdomain.VersionedFactReference{fact})
 	if err != nil {
 		t.Fatalf("物理事实：%v", err)
 	}
@@ -97,10 +102,11 @@ func assertBasis(t *testing.T, costs nrports.RouteCandidateCosts, want nrdomain.
 }
 
 // Covers: 判据 4 真库那一格——声明 2.5 KG 与实测 7 KG 不符：预路由按声明出价 25500，首次收寄复核、到站复核、授权改路决定都按
-// 实测出价 78000，出处标物理事实；首次收寄复核的物理事实截到收寄的业务时间，到站复核取判断此刻。
+// 实测出价 78000，出处标 PHYSICAL（重量与外廓整份出自实测，声明那一格不补）；首次收寄复核的物理事实截到收寄的业务时间，到站复核
+// 取判断此刻。
 func TestTheJudgmentPointDecidesWhetherTheDeclarationOrTheMeasurementPricesTheCandidate(t *testing.T) {
 	f := newFactsPointFixture(t)
-	physical := &physicalFactsDouble{answer: measuredWeight(t, "7")}
+	physical := &physicalFactsDouble{answer: measuredParcel(t, "7")}
 	intakeAt := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
 	intake, err := nrdomain.NewFirstIntakeFactsPoint(intakeAt)
 	if err != nil {

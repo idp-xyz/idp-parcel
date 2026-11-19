@@ -1472,8 +1472,9 @@ func (broken brokenCustomsSource) AssessCustomsApplicability(
 // 序列取值（ADR-0189 决定一）。卡要的那一格没有（没登区、没有路线、没有在用版本），那一段待判断，候选缺成本依据——不给任何租户
 // 编一个区让候选假出价。计价时点取路由判断的时钟，与证据视图同一个。
 //
-// 包裹事实按判断点选来源（PointedParcelFacts）。node-operations 还没有实际测量登记册，物理事实的来源只能装「一项都没取得」
-// （NoPhysicalParcelFacts）：复核因此恒退回客户声明出价，依据如实标退回，而不是读过一遍又读空。登记册接上之后，换装的是这一处。
+// 包裹事实按判断点选来源（PointedParcelFacts）。路由的物理事实读口还没接到 node-operations 的实际测量上，所以物理事实的
+// 来源装的是「一项都没取得」（NoPhysicalParcelFacts）：复核因此恒退回客户声明出价，依据如实标退回，而不是读过一遍又读空。
+// 读口接上之后，换装的是这一处。
 func routeCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSource {
 	return routeCostsOver(db, clock, nrpricing.NoPhysicalParcelFacts{})
 }

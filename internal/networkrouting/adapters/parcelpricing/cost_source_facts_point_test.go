@@ -91,7 +91,7 @@ func loadAt(t *testing.T, source *testSource, point nrdomain.ParcelFactsPoint) n
 // light 落进 10kg 以上的贵档，flat 最便宜。成本出处与成本族都标明依据是物理事实。
 func TestTheJudgmentPointChangesWhichCandidateIsCheapest(t *testing.T) {
 	source := twoCandidatesCheapUntilHeavy(t)
-	source.pointed = pointedFacts(t, declaredFacts(t, "1", false), &physicalDouble{answer: obtained(t, "12", nil)})
+	source.pointed = pointedFacts(t, declaredFacts(t, "1", false), &physicalDouble{answer: obtained(t, "12", dimensionsOf(t, "30", "20", "10"))})
 
 	preRoute := loadAt(t, source, nrdomain.NewPreRouteFactsPoint())
 	if got := cheapest(t, preRoute); got != "line-light" || preRoute.FactsBasis != nrdomain.ParcelFactsDeclaration {

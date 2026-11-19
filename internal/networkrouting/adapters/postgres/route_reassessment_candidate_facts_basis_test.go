@@ -10,7 +10,7 @@ import (
 // 取得的物理事实，到站复核使用当前有效物理实测」）：复核记录上一格、逐段成本出处里一格；没出过价的记录读回为空，出处缺这一格
 // 读回为客户声明（依据出现之前落库的出处，包裹事实一律取客户声明）。
 
-// Covers: 复核记录往返带依据——退回声明的、并用的、定不下的各一格；改善依据里被替代那一侧的出处也带依据往返。
+// Covers: 复核记录往返带依据——实测的、退回声明的、定不下的、没有事实的各一格；改善依据里被替代那一侧的出处也带依据往返。
 func TestTheCandidateFactsBasisRoundTripsOnTheReassessmentRecord(t *testing.T) {
 	_, reassessments, transactor, _ := newRouteStores(t)
 	ctx := t.Context()
@@ -18,7 +18,6 @@ func TestTheCandidateFactsBasisRoundTripsOnTheReassessmentRecord(t *testing.T) {
 
 	for _, basis := range []domain.ParcelFactsBasis{
 		domain.ParcelFactsPhysical,
-		domain.ParcelFactsPhysicalWithDeclaration,
 		domain.ParcelFactsDeclarationFallback,
 		domain.ParcelFactsPhysicalUnresolved,
 		domain.ParcelFactsNone,
@@ -96,8 +95,37 @@ func TestACitationStoredBeforeTheBasisExistedReadsBackAsTheDeclaration(t *testin
 	}
 }
 
+// Covers: 出处里写着封闭集之外的依据读回响亮报错，不兜底成客户声明——物理事实不与声明并用，「并用」的字面与任何认不出的文本
+// 同样对待；出处缺依据那一格才读回为客户声明（见上一条）。
+func TestACitationNamingABasisOutsideTheClosedSetFailsLoudlyOnReadBack(t *testing.T) {
+	_, reassessments, transactor, pool := newRouteStores(t)
+	ctx := t.Context()
+	key := routeKey(t, "tenant-1", "parcel-1")
+
+	for _, outside := range []struct{ id, name, literal string }{
+		{"with-declaration", "物理事实并用声明", "PHYSICAL_WITH_DECLARATION"},
+		{"unknown", "认不出", "LAST_WEIGHED"},
+	} {
+		name, literal := outside.name, outside.literal
+		correlation := scalar(t, domain.NewRequestCorrelationID, "trigger-outside-closed-set-"+outside.id)
+		saveReassessment(t, transactor, ctx, reassessments, correlation, improvementReroutedRecord(t, key, correlation))
+		if _, err := pool.Exec(ctx,
+			`UPDATE network_routing.route_reassessment
+			    SET improvement_basis = jsonb_set(improvement_basis, '{superseded_cost_citations}',
+			        (SELECT jsonb_agg(jsonb_set(citation, '{facts_basis}', to_jsonb($2::text)))
+			           FROM jsonb_array_elements(improvement_basis -> 'superseded_cost_citations') AS citation))
+			  WHERE correlation_id = $1`, correlation.String(), literal); err != nil {
+			t.Fatalf("%s：写出处的依据：%v", name, err)
+		}
+		if found, _, err := reassessments.FindByCorrelation(ctx, key.TenantID, correlation); err == nil {
+			t.Fatalf("%s：出处依据 %q 被读成 %+v，want 读回报错", name, literal, found.ImprovementBasis.SupersededCostCitations())
+		}
+	}
+}
+
 // Covers: 库面钉住复核记录的依据是封闭集，且不含 DECLARATION——那是预路由取客户声明的依据，复核在任何判断点上都不按它出价；
-// 认不出的文本也拒。正例同形状只换依据那一格，证明拒的是这一格。
+// 也不含 PHYSICAL_WITH_DECLARATION——物理事实整份取用，没有哪条路造得出并用；认不出的文本也拒。正例同形状只换依据那一格，
+// 证明拒的是这一格。
 func TestTheCandidateFactsBasisColumnIsAClosedSetWithoutThePreRouteBasis(t *testing.T) {
 	_, _, _, pool := newRouteStores(t)
 	ctx := t.Context()
@@ -118,14 +146,16 @@ func TestTheCandidateFactsBasisColumnIsAClosedSetWithoutThePreRouteBasis(t *test
 	text := func(value string) *string { return &value }
 
 	for name, basis := range map[string]*string{
-		"退回声明": text("DECLARATION_FALLBACK"), "实测": text("PHYSICAL"), "并用": text("PHYSICAL_WITH_DECLARATION"),
+		"退回声明": text("DECLARATION_FALLBACK"), "实测": text("PHYSICAL"),
 		"定不下": text("PHYSICAL_UNRESOLVED"), "没有事实": text("NONE"), "没出过价": nil,
 	} {
 		if err := insert("ok-"+name, basis); err != nil {
 			t.Fatalf("%s 应落得了库：%v", name, err)
 		}
 	}
-	for name, basis := range map[string]string{"预路由的依据": "DECLARATION", "认不出": "LAST_WEIGHED", "空串": ""} {
+	for name, basis := range map[string]string{
+		"预路由的依据": "DECLARATION", "物理事实并用声明": "PHYSICAL_WITH_DECLARATION", "认不出": "LAST_WEIGHED", "空串": "",
+	} {
 		if err := insert("bad-"+name, text(basis)); err == nil {
 			t.Fatalf("%s 进了复核库", name)
 		}

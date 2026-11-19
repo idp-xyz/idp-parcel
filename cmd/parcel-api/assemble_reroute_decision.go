@@ -155,8 +155,9 @@ func (broken brokenRerouteCustomsSource) AssessCustomsApplicability(
 }
 
 // rerouteCosts 装配候选成本取数侧：目录依据、内部政策解析与方案装载全接库，包裹事实按判断点选来源（客户声明取自 PS，物理事实
-// 的来源与复核那一份同一种装法：node-operations 还没有实际测量登记册，装「一项都没取得」，授权改路决定因此退回客户声明出价并
-// 标明），逐段区域取租户登的段计价区域，评价走 PP「对给定价卡形成试算」的入口。
+// 的来源与复核那一份同一种装法：路由的物理事实读口还没接到 node-operations 的实际测量上，装「一项都没取得」，授权改路决定
+// 因此退回客户声明出价并标明；读口接上之后，换装的是这一处），逐段区域取租户登的段计价区域，评价走 PP「对给定价卡形成试算」
+// 的入口。
 func rerouteCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSource {
 	catalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {

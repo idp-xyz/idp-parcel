@@ -15,7 +15,7 @@ import (
 
 // 本文件钉按判断点选包裹事实来源的三条规则（CONTEXT「预路由使用客户声明快照；首次收寄复核使用当时已经取得的物理事实，到站
 // 复核使用当前有效物理实测」）：物理事实一项没取得——退回客户声明并标明；物理事实在而定不下用哪条——不退回声明，各段待
-// 判断；只取得一部分——声明只补缺的项，不顶替任何一项已有的实测。
+// 判断；物理事实取得了——重量与外廓整份取用，声明一格都不读、不补，取得了的物理事实必须重量与外廓都在。
 
 var (
 	intakeAt = time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
@@ -87,15 +87,10 @@ func dimensionsOf(t *testing.T, length, width, height string) ppdomain.Dimension
 	return dimensions
 }
 
-// obtained 造一份取得了的物理事实，事实引用标明出自实际测量。
-func obtained(t *testing.T, weight string, dimensions *ppdomain.Dimensions) adapter.PhysicalParcelFacts {
+// obtained 造一份取得了的物理事实：一条实测同时带毛重与外廓，事实引用标明出自实际测量。
+func obtained(t *testing.T, weight string, dimensions ppdomain.Dimensions) adapter.PhysicalParcelFacts {
 	t.Helper()
-	var measured *ppdomain.Weight
-	if weight != "" {
-		w := weightOf(t, weight)
-		measured = &w
-	}
-	facts, err := adapter.ObtainedPhysicalFacts(measured, dimensions,
+	facts, err := adapter.ObtainedPhysicalFacts(weightOf(t, weight), dimensions,
 		[]ppdomain.VersionedFactReference{factReference(t, ppdomain.ArtifactActualMeasurement, "parcel-1", "measurement-1")})
 	if err != nil {
 		t.Fatalf("物理事实：%v", err)
@@ -131,7 +126,7 @@ func factKinds(facts adapter.ParcelFacts) []ppdomain.ArtifactKind {
 
 // Covers: 预路由只取客户声明，一次物理事实也不问；依据标客户声明。
 func TestThePreRoutePointReadsOnlyTheDeclaration(t *testing.T) {
-	declared, physical := declaredFacts(t, "2.5", true), &physicalDouble{answer: obtained(t, "9", nil)}
+	declared, physical := declaredFacts(t, "2.5", true), &physicalDouble{answer: obtained(t, "9", dimensionsOf(t, "50", "40", "30"))}
 
 	got, found, err := pointedFacts(t, declared, physical).ParcelFactsFor(context.Background(), judgmentKey(t), nrdomain.NewPreRouteFactsPoint())
 	if err != nil || !found {
@@ -156,7 +151,7 @@ func TestPhysicalFactsAreReadAsOfTheMomentTheJudgmentPointNames(t *testing.T) {
 		"授权决定": {nrdomain.NewDecisionFactsPoint(), judgedAt},
 	} {
 		t.Run(name, func(t *testing.T) {
-			physical := &physicalDouble{answer: obtained(t, "9", nil)}
+			physical := &physicalDouble{answer: obtained(t, "9", dimensionsOf(t, "50", "40", "30"))}
 			if _, _, err := pointedFacts(t, declaredFacts(t, "2.5", false), physical).ParcelFactsFor(context.Background(), judgmentKey(t), test.point); err != nil {
 				t.Fatal(err)
 			}
@@ -170,7 +165,7 @@ func TestPhysicalFactsAreReadAsOfTheMomentTheJudgmentPointNames(t *testing.T) {
 // Covers: 实测与声明不符时按实测——重量与外廓都取得了：取物理事实，声明不读、不进事实引用；依据标物理事实。
 func TestObtainedPhysicalFactsPriceInsteadOfTheDeclaration(t *testing.T) {
 	measured := dimensionsOf(t, "50", "40", "30")
-	declared, physical := declaredFacts(t, "2.5", true), &physicalDouble{answer: obtained(t, "12", &measured)}
+	declared, physical := declaredFacts(t, "2.5", true), &physicalDouble{answer: obtained(t, "12", measured)}
 
 	got, found, err := pointedFacts(t, declared, physical).ParcelFactsFor(context.Background(), judgmentKey(t), nrdomain.NewArrivalFactsPoint())
 	if err != nil || !found {
@@ -187,55 +182,52 @@ func TestObtainedPhysicalFactsPriceInsteadOfTheDeclaration(t *testing.T) {
 	}
 }
 
-// Covers: 物理事实只取得一部分时声明只补缺的项——只称了重：重量取实测、外廓补声明，依据标二者并用，事实引用两路都在；声明没有
-// 外廓时不补，依据仍是物理事实。
-func TestADeclarationOnlyFillsTheItemsThePhysicalFactsLack(t *testing.T) {
-	t.Run("只称了重，声明有外廓", func(t *testing.T) {
-		got, found, err := pointedFacts(t, declaredFacts(t, "2.5", true), &physicalDouble{answer: obtained(t, "12", nil)}).
-			ParcelFactsFor(context.Background(), judgmentKey(t), nrdomain.NewArrivalFactsPoint())
-		if err != nil || !found {
-			t.Fatalf("found=%v err=%v", found, err)
-		}
-		if got.Weight.Value().String() != "12" || got.Dimensions == nil || got.Dimensions.LongestSide().Value().String() != "30" {
-			t.Fatalf("实重 = %s、外廓 = %+v，want 实测 12 与声明外廓 30×20×10", got.Weight.Value(), got.Dimensions)
-		}
-		kinds := factKinds(got)
-		if got.Basis != nrdomain.ParcelFactsPhysicalWithDeclaration || len(kinds) != 2 ||
-			kinds[0] != ppdomain.ArtifactActualMeasurement || kinds[1] != ppdomain.ArtifactDeclaredMeasurement {
-			t.Fatalf("依据 = %s、事实引用 = %v，want 并用、先实测后声明", got.Basis, kinds)
-		}
-	})
-	t.Run("只称了重，声明也没有外廓", func(t *testing.T) {
-		got, found, err := pointedFacts(t, declaredFacts(t, "2.5", false), &physicalDouble{answer: obtained(t, "12", nil)}).
-			ParcelFactsFor(context.Background(), judgmentKey(t), nrdomain.NewArrivalFactsPoint())
-		if err != nil || !found {
-			t.Fatalf("found=%v err=%v", found, err)
-		}
-		if got.Dimensions != nil || got.Basis != nrdomain.ParcelFactsPhysical || len(got.Facts) != 1 {
-			t.Fatalf("外廓 = %+v、依据 = %s、事实引用 %d 条，want 无外廓、物理事实、只有实测那一条", got.Dimensions, got.Basis, len(got.Facts))
-		}
-	})
-	t.Run("只量了外廓，重量取声明", func(t *testing.T) {
-		measured := dimensionsOf(t, "50", "40", "30")
-		got, found, err := pointedFacts(t, declaredFacts(t, "2.5", true), &physicalDouble{answer: obtained(t, "", &measured)}).
-			ParcelFactsFor(context.Background(), judgmentKey(t), nrdomain.NewArrivalFactsPoint())
-		if err != nil || !found {
-			t.Fatalf("found=%v err=%v", found, err)
-		}
-		if got.Weight.Value().String() != "2.5" || got.Dimensions.LongestSide().Value().String() != "50" ||
-			got.Basis != nrdomain.ParcelFactsPhysicalWithDeclaration {
-			t.Fatalf("实重 = %s、外廓 = %s、依据 = %s，want 声明 2.5、实测外廓 50、并用", got.Weight.Value(), got.Dimensions.LongestSide().Value(), got.Basis)
-		}
-	})
-	t.Run("只量了外廓而实重哪里都没有", func(t *testing.T) {
-		measured := dimensionsOf(t, "50", "40", "30")
-		none := &declaredDouble{}
-		got, found, err := pointedFacts(t, none, &physicalDouble{answer: obtained(t, "", &measured)}).
-			ParcelFactsFor(context.Background(), judgmentKey(t), nrdomain.NewArrivalFactsPoint())
-		if err != nil || found || got.Basis != nrdomain.ParcelFactsNone {
-			t.Fatalf("found=%v err=%v 依据 = %s，want 不能凭一个外廓出价、没有事实", found, err, got.Basis)
-		}
-	})
+// Covers: 物理事实取得了就整份取用——声明里重量与外廓都与实测不同时，声明源一次都没被读（替身记次数），交出的重量与外廓都是
+// 物理事实的，依据标物理事实，事实引用里没有声明的引用；声明源读不回也不牵连这一格，因为根本不读。三个取物理事实的判断点同此。
+func TestObtainedPhysicalFactsAreTakenWholeAndTheDeclarationIsNeverRead(t *testing.T) {
+	for name, point := range map[string]nrdomain.ParcelFactsPoint{
+		"首次收寄": firstIntake(t), "到站": nrdomain.NewArrivalFactsPoint(), "授权决定": nrdomain.NewDecisionFactsPoint(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			measured := dimensionsOf(t, "50", "40", "30")
+			declared := declaredFacts(t, "2.5", true)
+			declared.err = errors.New("声明读不回")
+
+			got, found, err := pointedFacts(t, declared, &physicalDouble{answer: obtained(t, "12", measured)}).
+				ParcelFactsFor(context.Background(), judgmentKey(t), point)
+			if err != nil || !found {
+				t.Fatalf("found=%v err=%v", found, err)
+			}
+			if declared.asked != 0 {
+				t.Fatalf("取得了物理事实却读了 %d 次声明，want 0", declared.asked)
+			}
+			if got.Weight.Value().String() != "12" || got.Dimensions == nil ||
+				got.Dimensions.LongestSide().Value().String() != "50" || got.Dimensions.ShortestSide().Value().String() != "30" {
+				t.Fatalf("实重 = %s、外廓 = %+v，want 实测的 12 与 50×40×30，没有一格是声明的", got.Weight.Value(), got.Dimensions)
+			}
+			if kinds := factKinds(got); got.Basis != nrdomain.ParcelFactsPhysical || len(kinds) != 1 || kinds[0] != ppdomain.ArtifactActualMeasurement {
+				t.Fatalf("依据 = %s、事实引用 = %v，want 物理事实、只有实际测量", got.Basis, kinds)
+			}
+		})
+	}
+}
+
+// Covers: 取得了的物理事实重量与外廓都在——只带重量或只带外廓的物理事实构造时报错，不收下。重量与外廓取值，没有「只带一样」
+// 的签名，只剩没经构造门的零值一条路，同样拒。不然「只有一部分」会重新有了来源，复核就得拿声明去补，造出重量是实测、外廓
+// 是声明的混合快照。
+func TestPhysicalFactsWithOnlyOneOfWeightAndDimensionsCannotBeObtained(t *testing.T) {
+	reference := []ppdomain.VersionedFactReference{factReference(t, ppdomain.ArtifactActualMeasurement, "parcel-1", "measurement-1")}
+	weight, dimensions := weightOf(t, "12"), dimensionsOf(t, "50", "40", "30")
+
+	if _, err := adapter.ObtainedPhysicalFacts(weight, ppdomain.Dimensions{}, reference); err == nil {
+		t.Fatal("只有重量的物理事实被收下")
+	}
+	if _, err := adapter.ObtainedPhysicalFacts(ppdomain.Weight{}, dimensions, reference); err == nil {
+		t.Fatal("只有外廓的物理事实被收下")
+	}
+	if _, err := adapter.ObtainedPhysicalFacts(weight, dimensions, reference); err != nil {
+		t.Fatalf("重量与外廓都在的物理事实被拒：%v", err)
+	}
 }
 
 // Covers: 物理事实一项都没取得时退回客户声明，依据标退回，排序照常；声明也没有则一项事实都没有。
@@ -274,8 +266,8 @@ func TestUnresolvedPhysicalFactsAreNotReplacedByTheDeclaration(t *testing.T) {
 	}
 }
 
-// Covers: 读口读不回是依赖故障，原样上抛，不折成「没取得」而退回声明——那会在依赖故障时悄悄按声明出价；物理事实只取得一部分、
-// 补缺项的声明读不回，同样上抛（ADR-0029：读不动是未决）。
+// Covers: 读口读不回是依赖故障，原样上抛，不折成「没取得」而退回声明——那会在依赖故障时悄悄按声明出价；声明读不回、而要退回
+// 声明出价时同样上抛（ADR-0029：读不动是未决）。取得了物理事实时不读声明，声明读不回与它无关（见整份取用那一条）。
 func TestAReadFailureIsNeverTurnedIntoAFallback(t *testing.T) {
 	broken := errors.New("读库失败")
 	if _, _, err := pointedFacts(t, declaredFacts(t, "2.5", false), &physicalDouble{err: broken}).
@@ -285,11 +277,6 @@ func TestAReadFailureIsNeverTurnedIntoAFallback(t *testing.T) {
 	if _, _, err := pointedFacts(t, &declaredDouble{err: broken}, &physicalDouble{answer: adapter.NoPhysicalFactsObtained()}).
 		ParcelFactsFor(context.Background(), judgmentKey(t), nrdomain.NewArrivalFactsPoint()); !errors.Is(err, broken) {
 		t.Fatalf("声明读不回：err = %v，want 上抛", err)
-	}
-	// 物理事实只有重量、外廓要靠声明补：补外廓的那一读读不回，是未决，不折成「声明没有」而按只有实测重量、无外廓出价。
-	if _, _, err := pointedFacts(t, &declaredDouble{err: broken}, &physicalDouble{answer: obtained(t, "12", nil)}).
-		ParcelFactsFor(context.Background(), judgmentKey(t), nrdomain.NewArrivalFactsPoint()); !errors.Is(err, broken) {
-		t.Fatalf("只有实测重量、补外廓的声明读不回：err = %v，want 上抛", err)
 	}
 }
 
@@ -311,11 +298,11 @@ func TestPhysicalFactsCannotBeObtainedWithoutContentOrProvenance(t *testing.T) {
 		t.Fatalf("answer = %v err = %v，want 没取得", answer.Answer(), err)
 	}
 	reference := []ppdomain.VersionedFactReference{factReference(t, ppdomain.ArtifactActualMeasurement, "parcel-1", "measurement-1")}
-	weight := weightOf(t, "1")
-	if _, err := adapter.ObtainedPhysicalFacts(nil, nil, reference); err == nil {
+	weight, dimensions := weightOf(t, "1"), dimensionsOf(t, "30", "20", "10")
+	if _, err := adapter.ObtainedPhysicalFacts(ppdomain.Weight{}, ppdomain.Dimensions{}, reference); err == nil {
 		t.Fatal("重量与外廓都没有的物理事实被收下")
 	}
-	if _, err := adapter.ObtainedPhysicalFacts(&weight, nil, nil); err == nil {
+	if _, err := adapter.ObtainedPhysicalFacts(weight, dimensions, nil); err == nil {
 		t.Fatal("没有事实引用的物理事实被收下")
 	}
 	if _, err := adapter.NewPointedParcelFacts(nil, &physicalDouble{}, fixedClock{}); err == nil {

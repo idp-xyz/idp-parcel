@@ -85,11 +85,8 @@ const (
 	ParcelFactsBasisInvalid ParcelFactsBasis = iota
 	// ParcelFactsDeclaration 是预路由取客户声明，本该如此。
 	ParcelFactsDeclaration
-	// ParcelFactsPhysical 是用到的每一项（实重、外廓）都出自物理事实。
+	// ParcelFactsPhysical 是取得了物理事实，重量与外廓整份出自它：客户声明一格都不读、不补，与计价「实测整份取用」同一口径。
 	ParcelFactsPhysical
-	// ParcelFactsPhysicalWithDeclaration 是物理事实只取得了一部分：有的项（常见是只称了重、没量外廓）取物理事实，其余取
-	// 客户声明。客户声明只补物理事实没有的项，不顶替任何一项已有的实测。
-	ParcelFactsPhysicalWithDeclaration
 	// ParcelFactsDeclarationFallback 是该取物理事实而一项都没取得，退回客户声明出价。排序照常，出处如实标明。
 	ParcelFactsDeclarationFallback
 	// ParcelFactsPhysicalUnresolved 是物理事实在、却定不下用哪一条（多于一条而没有已登记的取用规则）。客户声明不得顶替
@@ -105,8 +102,6 @@ func (basis ParcelFactsBasis) String() string {
 		return "DECLARATION"
 	case ParcelFactsPhysical:
 		return "PHYSICAL"
-	case ParcelFactsPhysicalWithDeclaration:
-		return "PHYSICAL_WITH_DECLARATION"
 	case ParcelFactsDeclarationFallback:
 		return "DECLARATION_FALLBACK"
 	case ParcelFactsPhysicalUnresolved:
@@ -123,7 +118,7 @@ func (basis ParcelFactsBasis) Valid() bool { return basis.String() != "" }
 // PricesACandidate 答这一格依据下是否可能有出价：成本出处只记出了价的段，所以只有这几格能进出处。
 func (basis ParcelFactsBasis) PricesACandidate() bool {
 	switch basis {
-	case ParcelFactsDeclaration, ParcelFactsPhysical, ParcelFactsPhysicalWithDeclaration, ParcelFactsDeclarationFallback:
+	case ParcelFactsDeclaration, ParcelFactsPhysical, ParcelFactsDeclarationFallback:
 		return true
 	default:
 		return false

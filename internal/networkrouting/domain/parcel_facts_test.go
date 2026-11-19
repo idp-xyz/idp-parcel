@@ -70,15 +70,14 @@ func TestParcelFactsPointsRefuseWhatNamesNoJudgmentPoint(t *testing.T) {
 }
 
 // Covers: 依据只有出了价的几格能进成本出处；定不下用哪条实测与一项事实也没有都没有出价，进不了出处。库里读回认不出的文本
-// 响亮报错，不兜底成某一格。
+// 响亮报错，不兜底成某一格——物理事实不与声明并用，「并用」那个字面不在封闭集里，读回与任何未知字面同样报错。
 func TestOnlyPricedFactsBasesCanBeCitedAndTheClosedSetRoundTrips(t *testing.T) {
 	priced := map[domain.ParcelFactsBasis]bool{
-		domain.ParcelFactsDeclaration:             true,
-		domain.ParcelFactsPhysical:                true,
-		domain.ParcelFactsPhysicalWithDeclaration: true,
-		domain.ParcelFactsDeclarationFallback:     true,
-		domain.ParcelFactsPhysicalUnresolved:      false,
-		domain.ParcelFactsNone:                    false,
+		domain.ParcelFactsDeclaration:         true,
+		domain.ParcelFactsPhysical:            true,
+		domain.ParcelFactsDeclarationFallback: true,
+		domain.ParcelFactsPhysicalUnresolved:  false,
+		domain.ParcelFactsNone:                false,
 	}
 	for basis, citable := range priced {
 		parsed, err := domain.ParseParcelFactsBasis(basis.String())
@@ -96,8 +95,15 @@ func TestOnlyPricedFactsBasesCanBeCitedAndTheClosedSetRoundTrips(t *testing.T) {
 			t.Fatalf("%s 进了出处：err = %v，want ErrInvalidRoutePlan", basis, err)
 		}
 	}
-	if _, err := domain.ParseParcelFactsBasis("LAST_WEIGHED"); err == nil {
-		t.Fatal("认不出的依据被兜底成某一格")
+	for _, unknown := range []string{"LAST_WEIGHED", "PHYSICAL_WITH_DECLARATION", ""} {
+		if basis, err := domain.ParseParcelFactsBasis(unknown); err == nil {
+			t.Fatalf("认不出的依据 %q 被读成 %s", unknown, basis)
+		}
+	}
+	for basis := domain.ParcelFactsDeclaration; basis.Valid(); basis++ {
+		if _, listed := priced[basis]; !listed {
+			t.Fatalf("封闭集里的 %s 没有列在本用例的出价表上", basis)
+		}
 	}
 	if _, err := domain.NewPlannedLegCostCitation(domain.PlannedLegCostCitationSpec{
 		Ordinal: 1, EvaluationID: "EST-1", PlanReference: "plan/v1",

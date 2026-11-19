@@ -62,7 +62,7 @@
 | 计划适用性 | `CURRENTLY_EFFECTIVE` `SUPERSEDED` `LAPSED` `CONCLUDED` |
 | 计划履约段种类 | `BETWEEN_NODES` `DELIVERY` |
 | 控制依据 | `NODE_INTAKE_CONTROL` `OFFSITE_PICKUP_CONTROL` `TRANSPORT_HANDOVER_CONTROL` `SOURCE_HINT` |
-| 包裹事实出处 | `DECLARATION` `PHYSICAL` `PHYSICAL_WITH_DECLARATION` `DECLARATION_FALLBACK` `PHYSICAL_UNRESOLVED` `NONE` |
+| 包裹事实出处 | `DECLARATION` `PHYSICAL` `DECLARATION_FALLBACK` `PHYSICAL_UNRESOLVED` `NONE` |
 | 可用性调整种类 | `SUSPENSION` `CLOSURE` `RESUMPTION` `SCOPE_ADJUSTMENT` |
 | 调整对象 | `NODE` `CONNECTION` `LINE` |
 | 线路段成本依据 | `SUPPLIER_BUY_PLAN` `INTERNAL_POLICY` |
@@ -125,7 +125,7 @@
 **包裹事实**
 
 - 预路由用客户声明；首次收寄复核用截到收寄业务时间的物理事实；到站复核与授权改路决定用此刻仍有效的实测。
-- 物理事实一项也没有才退回客户声明，并标明是退回；只有一部分时逐项取，声明只补缺的项。
+- 物理事实整份取用：取得了就重量与外廓都用它，客户声明一格都不读、不补；一项也没有才退回客户声明，并标明是退回。
 - 物理事实有多条而定不下用哪一条时不退回声明，各段待判断。
 
 **复核**
