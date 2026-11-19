@@ -1,54 +1,18 @@
-// Package registrationjson 是仓配履约登记报文的 JSON 译装：把调用方交来的一笔修订译成应用层的登记命令（ADR-0375 决定四）。
-//
-// 租户与登记责任方只从接入信封来（UC-WF-001「输入」），所以译装收调用方传入的两个值，报文里不许有这两格。本包只管形状：
-// 国家码在不在内置目录、业务时区认不认得出、修订号接不接得上，都是应用层在判过重放与冲突之后另判的事，译装不提前把它们
-// 当坏载荷拒掉，否则同一份内容在「原样重投」时会先于「已登记（重放）」被拒。
 package registrationjson
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
-	"reflect"
-	"strconv"
-	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 )
 
-// ErrMalformedDocument 是报文形状不成立：改载荷才会好，原样重投不会。
-var ErrMalformedDocument = errors.New("warehouse fulfillment registrationjson: malformed document")
-
-// MalformedDocumentError 带一句只谈调用方自己这份载荷错在哪的理由。理由只点名格，不回显任何取值——地址正文与仓编码出现在
-// 错误正文里，日志与界面都得再防一次（UC-WF-001「权限、隔离与审计」）。
-type MalformedDocumentError struct {
-	Reason string
-}
-
-func (err *MalformedDocumentError) Error() string {
-	return fmt.Sprintf("%s: %s", ErrMalformedDocument, err.Reason)
-}
-
-func (err *MalformedDocumentError) Is(target error) bool {
-	return target == ErrMalformedDocument
-}
-
-func malformed(format string, arguments ...any) error {
-	return &MalformedDocumentError{Reason: fmt.Sprintf(format, arguments...)}
-}
-
 // warehouseDocument 是一笔仓修订的线格式。键名与登记口答复里 `field` 点名的格同一套（`address.country`、`businessTimeZone`），
 // 登记方照答复里的格改报文，不必再做一次对照。
 //
-// TenantID 与 Registrant 两格**只为拒而存在**：用 json.RawMessage 是因为 `"tenantId": null` 也是自报，键在场就要拒，
-// 指针认不出 null。只靠 DisallowUnknownFields 也会拒，但那样的理由是「未知键」，登记方读不出这是一条规则而不是拼写错误。
-//
 // 必填格用指针，缺失与零值才分得开：修订号 0 是应用层答修订错位的内容，不是缺失；空串是空白，不是缺失。
 type warehouseDocument struct {
-	TenantID         json.RawMessage  `json:"tenantId"`
-	Registrant       json.RawMessage  `json:"registrant"`
+	carriedIdentity
 	WarehouseCode    *string          `json:"warehouseCode"`
 	Revision         *int             `json:"revision"`
 	Name             *string          `json:"name"`
@@ -75,15 +39,12 @@ func WarehouseCommand(
 	registrant domain.Registrant,
 ) (application.RegisterWarehouseCommand, error) {
 	var none application.RegisterWarehouseCommand
-	document, err := decodeWarehouseDocument(reader)
+	document, err := decodeDocument[warehouseDocument](reader, "warehouse revision")
 	if err != nil {
 		return none, err
 	}
-	if len(document.TenantID) > 0 {
-		return none, malformed("tenantId must not be carried in the payload; the tenant comes from the access channel, not from the request")
-	}
-	if len(document.Registrant) > 0 {
-		return none, malformed("registrant must not be carried in the payload; the registrant comes from the operator envelope, not from the request")
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
 	}
 
 	if document.WarehouseCode == nil {
@@ -159,71 +120,4 @@ func WarehouseCommand(
 		Content:    content,
 		Registrant: registrant,
 	}, nil
-}
-
-// textCell 过一格文本的领域构造门。构造器的错误正文带着格名而不带取值，但这里仍自己写理由：理由只点名 JSON 里的键路径，
-// 与报文的写法对得上。
-func textCell[Value any](path, raw string, construct func(string) (Value, error)) (Value, error) {
-	value, err := construct(raw)
-	switch {
-	case err == nil:
-		return value, nil
-	case errors.Is(err, domain.ErrUnstorableValue):
-		return value, malformed("%s carries a character that cannot be stored (NUL or invalid UTF-8)", path)
-	default:
-		return value, malformed("%s must not be blank", path)
-	}
-}
-
-func decodeWarehouseDocument(reader io.Reader) (warehouseDocument, error) {
-	var document warehouseDocument
-	decoder := json.NewDecoder(reader)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&document); err != nil {
-		return warehouseDocument{}, decodeFailure(err)
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return warehouseDocument{}, malformed("the body must carry exactly one JSON object and nothing after it")
-	}
-	return document, nil
-}
-
-// decodeFailure 把解码器的错译成一句不带取值的理由。解码器的错误正文里有的带着报文里的片段（类型错的取值、读错的原文），
-// 所以只取它的类别与键路径，不转抄它的正文。
-func decodeFailure(err error) error {
-	var syntax *json.SyntaxError
-	var typed *json.UnmarshalTypeError
-	switch {
-	case errors.Is(err, io.EOF):
-		return malformed("the body is empty")
-	case errors.Is(err, io.ErrUnexpectedEOF), errors.As(err, &syntax):
-		return malformed("the body is not valid JSON")
-	case errors.As(err, &typed):
-		if typed.Field == "" {
-			return malformed("the body must be a JSON object")
-		}
-		return malformed("%s must be %s", typed.Field, expectedKind(typed.Type))
-	}
-	if quoted, isUnknownKey := strings.CutPrefix(err.Error(), "json: unknown field "); isUnknownKey {
-		if key, unquoteErr := strconv.Unquote(quoted); unquoteErr == nil && len(key) <= 64 {
-			return malformed("the key %q is not part of a warehouse revision", key)
-		}
-		return malformed("the payload carries a key that is not part of a warehouse revision")
-	}
-	return malformed("the body could not be read as JSON")
-}
-
-func expectedKind(kind reflect.Type) string {
-	switch kind.Kind() {
-	case reflect.String:
-		return "a string"
-	case reflect.Int, reflect.Int64:
-		return "an integer"
-	case reflect.Bool:
-		return "a boolean"
-	case reflect.Struct:
-		return "an object"
-	default:
-		return "of the declared type"
-	}
 }

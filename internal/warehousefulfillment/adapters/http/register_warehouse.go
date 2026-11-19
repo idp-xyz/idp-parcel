@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 )
 
 // WarehouseRegistrar 是登记口转交的登记编排。事务边界在编排侧给出（登记册的保存在没有环境事务时拒绝，
@@ -17,16 +18,11 @@ type WarehouseRegistrar interface {
 // 编译期锁缝：本端点不新造登记语义，只消费 application 里那一个登记用例。
 var _ WarehouseRegistrar = (*application.RegisterWarehouseHandler)(nil)
 
-// registerAnswer 是登记口的答复体。`outcome` 取应用结果枚举原名，业务判别只看它：重放与内容冲突是治理答案不是失败，传输层
-// 不合并、不改名。`refusal` 只随 NOT_ACCEPTED，`field` 只随 IMMUTABLE_FIELD 与 CONTENT_INVALID，`latestRevision` 只随
-// REVISION_OUT_OF_SEQUENCE——册上没有这个仓时是 0，所以用指针：0 要出现，别的结果上整键缺席。`warehouse` 只随 REGISTERED 与
+// registerAnswer 是登记口的答复体：各册共用的答复头（registrationAnswerHead）加 `warehouse`，后者只随 REGISTERED 与
 // ALREADY_REGISTERED，回显在册的那一笔（含登记责任方与登记时刻）。
 type registerAnswer struct {
-	Outcome        string         `json:"outcome"`
-	Refusal        string         `json:"refusal,omitempty"`
-	Field          string         `json:"field,omitempty"`
-	LatestRevision *int           `json:"latestRevision,omitempty"`
-	Warehouse      *warehouseBody `json:"warehouse,omitempty"`
+	registrationAnswerHead
+	Warehouse *warehouseBody `json:"warehouse,omitempty"`
 }
 
 // NewRegisterWarehouseEndpoint 交回仓修订登记的 HTTP 入口（POST /warehouse-fulfillment-warehouse-registrations）：修订 1 是
@@ -61,42 +57,12 @@ func NewRegisterWarehouseEndpoint(intake WarehouseRegistrationIntake, registrar 
 }
 
 func writeRegisterAnswer(response http.ResponseWriter, result application.RegisterWarehouseResult) {
-	outcome := result.Outcome()
-	name := outcome.String()
-	if name == "" {
-		writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
-		return
-	}
-	answer := registerAnswer{Outcome: name}
-	status := http.StatusOK
-
-	switch outcome {
-	case application.WarehouseRegistered, application.WarehouseAlreadyRegistered:
-		revision, present := result.Revision()
-		if !present {
-			// 落册或在册的结果一定带着那一笔；没带是编排与传输层对结果的理解漂开了，不能答一个空的成功。
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
-			return
+	writeRegistrationAnswer(response, result, func(head registrationAnswerHead, echoed *domain.WarehouseRevision) any {
+		answer := registerAnswer{registrationAnswerHead: head}
+		if echoed != nil {
+			body := warehouseBodyOfRevision(*echoed)
+			answer.Warehouse = &body
 		}
-		body := warehouseBodyOfRevision(revision)
-		answer.Warehouse = &body
-		if outcome == application.WarehouseRegistered {
-			status = http.StatusCreated
-		}
-	case application.WarehouseNotAccepted:
-		refusal := result.Refusal()
-		if refusal.String() == "" {
-			writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
-			return
-		}
-		answer.Refusal = refusal.String()
-		switch refusal {
-		case application.WarehouseRefusalImmutableField, application.WarehouseRefusalContentInvalid:
-			answer.Field = result.Field().String()
-		case application.WarehouseRefusalRevisionOutOfSequence:
-			latest := result.LatestRevision()
-			answer.LatestRevision = &latest
-		}
-	}
-	writeJSON(response, status, answer)
+		return answer
+	})
 }
