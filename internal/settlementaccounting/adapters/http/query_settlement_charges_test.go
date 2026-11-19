@@ -447,16 +447,16 @@ func TestCustomerChargeQueryShowsTheAttributionDateAndTheStatementItIsOn(t *test
 	}
 }
 
-// stubPricingWeights 是计价重量来源读口的替身：记下被问的评价标识，交回预置的来源或故障。
-type stubPricingWeights struct {
-	origins map[string]settlementhttp.PricingWeightOrigin
+// stubPricedWeights 是计价重量与来源读口的替身：记下被问的评价标识，交回预置的计价重量与来源或故障。
+type stubPricedWeights struct {
+	origins map[string]settlementhttp.PricedWeightAndOrigin
 	err     error
 	asked   []string
 }
 
-func (stub *stubPricingWeights) PricingWeightOrigins(
+func (stub *stubPricedWeights) PricedWeightsAndOrigins(
 	_ context.Context, _ domain.TenantID, evaluationIDs []string,
-) (map[string]settlementhttp.PricingWeightOrigin, error) {
+) (map[string]settlementhttp.PricedWeightAndOrigin, error) {
 	stub.asked = append(stub.asked, evaluationIDs...)
 	return stub.origins, stub.err
 }
@@ -472,7 +472,7 @@ func TestCustomerChargeQueryCarriesThePricedWeightAndWhatItCameFrom(t *testing.T
 			{Charge: "SYN-CHG-UNANSWERED", Evaluation: "SYN-EVAL-03", Stage: "ESTIMATED", FormedAt: catalogueBaseAt},
 		},
 	}
-	weights := &stubPricingWeights{origins: map[string]settlementhttp.PricingWeightOrigin{
+	weights := &stubPricedWeights{origins: map[string]settlementhttp.PricedWeightAndOrigin{
 		"SYN-EVAL-01": {
 			Kind: "actual-measurement", PricedWeight: "3", PricedWeightUnit: "KG",
 			ActualWeight: "2.1", ActualWeightUnit: "KG",
@@ -529,13 +529,13 @@ func TestCustomerChargeQueryCarriesThePricedWeightAndWhatItCameFrom(t *testing.T
 }
 
 // Covers: 来源读口读不回时整份答未形成。照样列出费用而把这几格留空，会把一次该重试的故障读成「这些费用没有计价重量」。
-func TestAnUnreadablePricingWeightOriginIsNoAnswerRatherThanBlankCells(t *testing.T) {
+func TestAnUnreadablePricedWeightAndOriginIsNoAnswerRatherThanBlankCells(t *testing.T) {
 	register := &stubChargeCatalogue{
 		charges: []ports.CustomerChargeCatalogueRow{
 			{Charge: "SYN-CHG-01", Evaluation: "SYN-EVAL-01", Stage: "ESTIMATED", FormedAt: catalogueBaseAt},
 		},
 	}
-	weights := &stubPricingWeights{err: errors.New("evaluation register unreachable")}
+	weights := &stubPricedWeights{err: errors.New("evaluation register unreachable")}
 	endpoint := settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), register, weights)
 	response := serveGet(endpoint, "/settlement-charges?registry=customer-charge")
 	if response.Code != http.StatusInternalServerError {

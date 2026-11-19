@@ -81,16 +81,16 @@ func measuredInput(
 		subject, "Z1", kilograms(t, kilogramsRaw), sides, basisAt, fact))
 }
 
-func loadOrigins(t *testing.T, double *evaluationsByIDDouble, ids ...string) map[string]adapter.PricingWeightOrigin {
+func loadOrigins(t *testing.T, double *evaluationsByIDDouble, ids ...string) map[string]adapter.PricedWeightAndOrigin {
 	t.Helper()
-	origins := must[*adapter.PricingWeightOrigins](t)(adapter.NewPricingWeightOrigins(double))
-	return must[map[string]adapter.PricingWeightOrigin](t)(origins.PricingWeightOrigins(
+	origins := must[*adapter.PricedWeightsAndOrigins](t)(adapter.NewPricedWeightsAndOrigins(double))
+	return must[map[string]adapter.PricedWeightAndOrigin](t)(origins.PricedWeightsAndOrigins(
 		context.Background(), must[sadomain.TenantID](t)(sadomain.NewTenantID("tenant-1")), ids))
 }
 
 // Covers: 费用册上的计价重量是评价进位之后、据以查表的那一个，不是实重；来源一格另答评价用的实重与尺寸，以及这两样
 // 出自实测还是申报。尺寸三边由长到短。申报没报尺寸时尺寸缺席；评价没有测量事实时来源整格缺席，计价重量照答。
-func TestThePricingWeightOriginAnswersThePricedWeightAndWhatItCameFrom(t *testing.T) {
+func TestThePricedWeightAndOriginAnswersThePricedWeightAndWhatItCameFrom(t *testing.T) {
 	card := halfKilogramCard(t)
 	remeasured := must[ppdomain.Dimensions](t)(ppdomain.NewDimensions(
 		decimal(t, "25"), decimal(t, "30"), decimal(t, "20"), ppdomain.LengthUnitCentimeter))
@@ -107,7 +107,7 @@ func TestThePricingWeightOriginAnswersThePricedWeightAndWhatItCameFrom(t *testin
 
 	origins := loadOrigins(t, double, "eval-measured", "", "eval-declared", "eval-measured", "eval-bare", "eval-unknown")
 
-	want := map[string]adapter.PricingWeightOrigin{
+	want := map[string]adapter.PricedWeightAndOrigin{
 		"eval-measured": {
 			Kind: "actual-measurement", PricedWeight: "2.5", PricedWeightUnit: "KG",
 			ActualWeight: "2.1", ActualWeightUnit: "KG",
@@ -130,8 +130,8 @@ func TestThePricingWeightOriginAnswersThePricedWeightAndWhatItCameFrom(t *testin
 // Covers: 登记册读不回时上抛，不答成「这些费用都没有计价重量」。
 func TestAnUnreadableEvaluationRegisterIsAnErrorNotAnEmptyAnswer(t *testing.T) {
 	down := errors.New("evaluation register unreachable")
-	origins := must[*adapter.PricingWeightOrigins](t)(adapter.NewPricingWeightOrigins(&evaluationsByIDDouble{err: down}))
-	answered, err := origins.PricingWeightOrigins(
+	origins := must[*adapter.PricedWeightsAndOrigins](t)(adapter.NewPricedWeightsAndOrigins(&evaluationsByIDDouble{err: down}))
+	answered, err := origins.PricedWeightsAndOrigins(
 		context.Background(), must[sadomain.TenantID](t)(sadomain.NewTenantID("tenant-1")), []string{"eval-measured"})
 	if !errors.Is(err, down) || answered != nil {
 		t.Fatalf("answered = %v err = %v，want 上抛", answered, err)
@@ -143,9 +143,9 @@ func TestAnUnreadableEvaluationRegisterIsAnErrorNotAnEmptyAnswer(t *testing.T) {
 // 前面读得到的几笔也不交回。
 func TestAChargeEvaluationReferenceThePricingSideCannotBuildIsAnErrorNamingIt(t *testing.T) {
 	double := &evaluationsByIDDouble{}
-	origins := must[*adapter.PricingWeightOrigins](t)(adapter.NewPricingWeightOrigins(double))
+	origins := must[*adapter.PricedWeightsAndOrigins](t)(adapter.NewPricedWeightsAndOrigins(double))
 
-	answered, err := origins.PricingWeightOrigins(
+	answered, err := origins.PricedWeightsAndOrigins(
 		context.Background(), must[sadomain.TenantID](t)(sadomain.NewTenantID("tenant-1")),
 		[]string{"eval-measured", " eval-padded ", "eval-declared"})
 
@@ -160,8 +160,8 @@ func TestAChargeEvaluationReferenceThePricingSideCannotBuildIsAnErrorNamingIt(t 
 	}
 }
 
-func TestThePricingWeightOriginsRefuseAMissingRegister(t *testing.T) {
-	if _, err := adapter.NewPricingWeightOrigins(nil); err == nil {
+func TestThePricedWeightsAndOriginsRefuseAMissingRegister(t *testing.T) {
+	if _, err := adapter.NewPricedWeightsAndOrigins(nil); err == nil {
 		t.Fatal("没有评价登记册也构造成了")
 	}
 }

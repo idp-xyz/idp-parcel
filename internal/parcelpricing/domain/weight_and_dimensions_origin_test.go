@@ -7,19 +7,19 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-func TestPricingWeightOriginFollowsTheMeasurementFact(t *testing.T) {
+func TestWeightAndDimensionsOriginFollowsTheMeasurementFact(t *testing.T) {
 	bare := syntheticInputForSubject(t, packageSubject(t, "package-1"), "1.50", "Z1")
-	if _, ok := domain.PricingWeightOriginOf(bare); ok {
+	if _, ok := domain.WeightAndDimensionsOriginOf(bare); ok {
 		t.Fatal("没有测量事实也答了来源")
 	}
 	actual := inputWithFact(t, "2.10", domain.ArtifactActualMeasurement, "measure-1")
-	origin, ok := domain.PricingWeightOriginOf(actual)
+	origin, ok := domain.WeightAndDimensionsOriginOf(actual)
 	if !ok || origin.Kind != domain.ArtifactActualMeasurement ||
 		origin.ActualWeight.Value().String() != "2.1" || origin.ActualWeight.Unit() != domain.WeightUnitKilogram {
 		t.Fatalf("实测 %+v %v", origin, ok)
 	}
 	declared := inputWithFact(t, "1.50", domain.ArtifactDeclaredMeasurement, "declaration")
-	origin, ok = domain.PricingWeightOriginOf(declared)
+	origin, ok = domain.WeightAndDimensionsOriginOf(declared)
 	if !ok || origin.Kind != domain.ArtifactDeclaredMeasurement {
 		t.Fatalf("申报 %+v %v", origin, ok)
 	}
@@ -28,7 +28,7 @@ func TestPricingWeightOriginFollowsTheMeasurementFact(t *testing.T) {
 		fact(t, domain.ArtifactDeclaredMeasurement, "declaration"),
 		fact(t, domain.ArtifactActualMeasurement, "measure-1"),
 	)
-	origin, ok = domain.PricingWeightOriginOf(both)
+	origin, ok = domain.WeightAndDimensionsOriginOf(both)
 	if !ok || origin.Kind != domain.ArtifactActualMeasurement || origin.ActualWeight.Value().String() != "2.1" {
 		t.Fatalf("两类事实同在 %+v %v，want 实测", origin, ok)
 	}
@@ -36,10 +36,10 @@ func TestPricingWeightOriginFollowsTheMeasurementFact(t *testing.T) {
 
 // Covers: 来源连尺寸一起答——取较大者的卡上，实重没变、尺寸变了，计价重量照样会变，只答实重说不清它从哪来。实测一定
 // 带尺寸；申报没报尺寸时答没有，不拿别的顶上。
-func TestPricingWeightOriginCarriesTheDimensionsTheEvaluationUsed(t *testing.T) {
+func TestWeightAndDimensionsOriginCarriesTheDimensionsTheEvaluationUsed(t *testing.T) {
 	remeasured := dimensions(t, "25", "30", "20", domain.LengthUnitCentimeter)
 	measured := inputWithFacts(t, "2.10", &remeasured, fact(t, domain.ArtifactActualMeasurement, "measure-2"))
-	origin, ok := domain.PricingWeightOriginOf(measured)
+	origin, ok := domain.WeightAndDimensionsOriginOf(measured)
 	if !ok || !origin.HasDimensions {
 		t.Fatalf("实测 %+v %v，want 带尺寸", origin, ok)
 	}
@@ -50,7 +50,7 @@ func TestPricingWeightOriginCarriesTheDimensionsTheEvaluationUsed(t *testing.T) 
 	}
 
 	undeclared := inputWithFact(t, "1.50", domain.ArtifactDeclaredMeasurement, "declaration")
-	origin, ok = domain.PricingWeightOriginOf(undeclared)
+	origin, ok = domain.WeightAndDimensionsOriginOf(undeclared)
 	if !ok || origin.HasDimensions {
 		t.Fatalf("申报没报尺寸 %+v %v，want 来源在、尺寸不在", origin, ok)
 	}

@@ -44,22 +44,22 @@ const (
 	registrySupplierExpectedCost = "supplier-expected-cost"
 )
 
-// PricingWeightSourceReader 按评价标识回答一笔费用的计价重量与它的来源。缺席时费用册仍列出，这几格空着；在场而读不回
-// 时整份答未形成。
-type PricingWeightSourceReader interface {
-	PricingWeightOrigins(
+// PricedWeightAndOriginReader 按评价标识回答一笔费用的计价重量，连同评价用的实重、尺寸与它们的来源。缺席时费用册仍列出，
+// 这几格空着；在场而读不回时整份答未形成。
+type PricedWeightAndOriginReader interface {
+	PricedWeightsAndOrigins(
 		ctx context.Context,
 		tenant domain.TenantID,
 		evaluationIDs []string,
-	) (map[string]PricingWeightOrigin, error)
+	) (map[string]PricedWeightAndOrigin, error)
 }
 
-// PricingWeightOrigin 是费用册上计价重量与来源的几格，两样分开印。PricedWeight 是评价进位之后的计价重量；ActualWeight 与
+// PricedWeightAndOrigin 是费用册上计价重量与来源的几格，两样分开印。PricedWeight 是评价进位之后的计价重量；ActualWeight 与
 // DimensionSides（三边由长到短）是评价用的实重与尺寸，Kind 用评价事实的种类词说它们出自实测还是申报。实重不印在计价
 // 重量的键上：取较大者的卡上复测只把尺寸量大时，实重不变而计价重量变了。
 //
 // 字段与提供方那一份逐一相同，装配处靠类型转换交过来：哪一边加了格另一边没加，编译就过不去，不会悄悄丢一格。
-type PricingWeightOrigin struct {
+type PricedWeightAndOrigin struct {
 	Kind             string
 	PricedWeight     string
 	PricedWeightUnit string
@@ -87,7 +87,7 @@ type PricingWeightOrigin struct {
 func NewQuerySettlementChargesEndpoint(
 	intake CatalogueQueryIntake,
 	reader ChargeCatalogueReader,
-	weights PricingWeightSourceReader,
+	weights PricedWeightAndOriginReader,
 ) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if !guardGet(response, request) {
@@ -120,7 +120,7 @@ func serveCustomerCharges(
 	request *http.Request,
 	values url.Values,
 	reader ChargeCatalogueReader,
-	weights PricingWeightSourceReader,
+	weights PricedWeightAndOriginReader,
 	tenant domain.TenantID,
 	limit int,
 ) {
@@ -135,13 +135,13 @@ func serveCustomerCharges(
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	origins := map[string]PricingWeightOrigin{}
+	origins := map[string]PricedWeightAndOrigin{}
 	if weights != nil {
 		ids := make([]string, 0, len(page.Rows))
 		for _, row := range page.Rows {
 			ids = append(ids, row.Evaluation)
 		}
-		loaded, err := weights.PricingWeightOrigins(request.Context(), tenant, ids)
+		loaded, err := weights.PricedWeightsAndOrigins(request.Context(), tenant, ids)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
@@ -307,7 +307,7 @@ type customerChargeBody struct {
 	Superseded   bool                   `json:"superseded,omitempty"`
 	SupersededBy string                 `json:"supersededBy,omitempty"`
 	Adjustments  []chargeAdjustmentBody `json:"adjustments"`
-	// 计价重量与它的来源（见 PricingWeightOrigin）。读口没答的评价这几键整个不出现。
+	// 计价重量与它的来源（见 PricedWeightAndOrigin）。读口没答的评价这几键整个不出现。
 	PricedWeight     string   `json:"pricedWeight,omitempty"`
 	PricedWeightUnit string   `json:"pricedWeightUnit,omitempty"`
 	WeightSource     string   `json:"weightSource,omitempty"`

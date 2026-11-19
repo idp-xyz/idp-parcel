@@ -74,8 +74,8 @@ func TestAMeasurementSupersedesTheWholeDeclaration(t *testing.T) {
 				t.Fatalf("%s：申报顶进了有实测的快照：%s", purpose, fact.Reference().Version())
 			}
 		}
-		if origin, ok := ppdomain.PricingWeightOriginOf(resolved.Input); !ok || origin.Kind != ppdomain.ArtifactActualMeasurement {
-			t.Fatalf("%s：计价重量来源 = %+v %v，want 实测", purpose, origin, ok)
+		if origin, ok := ppdomain.WeightAndDimensionsOriginOf(resolved.Input); !ok || origin.Kind != ppdomain.ArtifactActualMeasurement {
+			t.Fatalf("%s：重量与尺寸来源 = %+v %v，want 实测", purpose, origin, ok)
 		}
 	}
 }
@@ -112,8 +112,8 @@ func TestWithoutAMeasurementTheDeclaredDimensionsAreUsed(t *testing.T) {
 	if dimensions, present := resolved.Input.Dimensions(); !present || dimensions.LongestSide().Value().String() != "20" {
 		t.Fatalf("尺寸 = %+v %v，want 申报的 20×15×10", dimensions, present)
 	}
-	if origin, ok := ppdomain.PricingWeightOriginOf(resolved.Input); !ok || origin.Kind != ppdomain.ArtifactDeclaredMeasurement {
-		t.Fatalf("计价重量来源 = %+v %v，want 申报", origin, ok)
+	if origin, ok := ppdomain.WeightAndDimensionsOriginOf(resolved.Input); !ok || origin.Kind != ppdomain.ArtifactDeclaredMeasurement {
+		t.Fatalf("重量与尺寸来源 = %+v %v，want 申报", origin, ok)
 	}
 }
 
