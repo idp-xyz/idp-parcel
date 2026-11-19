@@ -7,7 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
-// Covers: 票面「四册共同的规则」——结果的各个字面量是对外的词，各册共用同一套：REFERENCE_NOT_FOUND 是库区起新增的拒绝理由；仓那一册
+// Covers: 票面「四册共同的规则」——结果的各个字面量是对外的词，各册共用同一套：REFERENCE_NOT_FOUND 是库区起新增的拒绝理由，
+// REFERENCE_DEACTIVATED 是库位起新增的拒绝理由（新指名的对象已停用）；仓那一册
 // 沿用的名字是同一套类型与取值的别名，所以对外的字面量一个字节都没变。下面的赋值是编译期的证明：别名与共用类型是同一个类型，
 // 不是另一份枚举。
 func TestRegistrationAlgebraIsSharedAcrossRegistersAndKeepsItsLiterals(t *testing.T) {
@@ -35,6 +36,7 @@ func TestRegistrationAlgebraIsSharedAcrossRegistersAndKeepsItsLiterals(t *testin
 		application.RegistrationRefusalImmutableField:        "IMMUTABLE_FIELD",
 		application.RegistrationRefusalContentInvalid:        "CONTENT_INVALID",
 		application.RegistrationRefusalReferenceNotFound:     "REFERENCE_NOT_FOUND",
+		application.RegistrationRefusalReferenceDeactivated:  "REFERENCE_DEACTIVATED",
 	} {
 		if refusal.String() != literal {
 			t.Errorf("拒绝理由字面量 = %q，want %q", refusal.String(), literal)

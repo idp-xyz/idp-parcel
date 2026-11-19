@@ -38,7 +38,7 @@ func (outcome RegistrationOutcome) String() string {
 }
 
 // RegistrationRefusal 是 `NOT_ACCEPTED` 的原因。逐格分开是因为登记方的续办各不相同：修订错位要重读册面，不可改的格要换成
-// 原来的值，内容不合要改那一格的取值，指名的对象查不到要先去登记它。
+// 原来的值，内容不合要改那一格的取值，指名的对象查不到要先去登记它，新指名的对象已停用要改指名一个在用的。
 type RegistrationRefusal uint8
 
 const (
@@ -47,6 +47,7 @@ const (
 	RegistrationRefusalImmutableField
 	RegistrationRefusalContentInvalid
 	RegistrationRefusalReferenceNotFound
+	RegistrationRefusalReferenceDeactivated
 )
 
 func (refusal RegistrationRefusal) String() string {
@@ -59,6 +60,8 @@ func (refusal RegistrationRefusal) String() string {
 		return "CONTENT_INVALID"
 	case RegistrationRefusalReferenceNotFound:
 		return "REFERENCE_NOT_FOUND"
+	case RegistrationRefusalReferenceDeactivated:
+		return "REFERENCE_DEACTIVATED"
 	default:
 		return ""
 	}
@@ -84,7 +87,7 @@ func (result RegistrationResult[Revision, Field]) Refusal() RegistrationRefusal 
 	return result.refusal
 }
 
-// Field 指出 IMMUTABLE_FIELD、CONTENT_INVALID 与 REFERENCE_NOT_FOUND 差在哪一格；别的结果上是零值。
+// Field 指出 IMMUTABLE_FIELD、CONTENT_INVALID、REFERENCE_NOT_FOUND 与 REFERENCE_DEACTIVATED 差在哪一格；别的结果上是零值。
 func (result RegistrationResult[Revision, Field]) Field() Field {
 	return result.field
 }
