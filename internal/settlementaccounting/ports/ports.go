@@ -851,8 +851,9 @@ const (
 
 // SubsequentInclusionStore 按幂等键找回并保存后续账期纳入（写入代数同 ADR-0031）。
 //
-// Withdraw 撤回一笔纳入：带它的那张对账单作废了，这笔调整回到没出账。只在原行上记撤回的时刻与依据，不删行；已经
+// Withdraw 撤回一笔调整纳入：带它的那张对账单作废了，这笔调整回到没出账。只在原行上记撤回的时刻与依据，不删行；已经
 // 撤回的再撤一次什么都不改。交回这一次有没有撤下。撤回之后同一笔调整可以由后面的单再纳入一次。
+// 撤回只对调整纳入成立：后到费用的纳入是运营的决定，带它的单作废之后仍然成立，对它调 Withdraw 一行不动、答没撤。
 type SubsequentInclusionStore interface {
 	FindByKey(ctx context.Context, key InclusionKey) (InclusionRecord, bool, error)
 	Save(ctx context.Context, record InclusionRecord) (InclusionSaveOutcome, error)

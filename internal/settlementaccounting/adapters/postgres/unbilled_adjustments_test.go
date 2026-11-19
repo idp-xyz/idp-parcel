@@ -319,6 +319,90 @@ func TestAWithdrawnInclusionFreesItsAdjustmentToBeCarriedAgain(t *testing.T) {
 	}
 }
 
+// withdrawalOf 读一笔纳入行上的撤回两列原样：没撤回两列都是空。
+func (fixture unbilledFixture) withdrawalOf(t *testing.T, key ports.InclusionKey) (at *time.Time, basis *string) {
+	t.Helper()
+	querier, err := fixture.db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := querier.QueryRow(t.Context(), `
+		SELECT withdrawn_at, withdrawal_basis
+		  FROM settlement_accounting.subsequent_inclusion
+		 WHERE tenant_id = $1 AND inclusion_id = $2`,
+		key.TenantID.String(), key.Inclusion.String(),
+	).Scan(&at, &basis); err != nil {
+		t.Fatal(err)
+	}
+	return at, basis
+}
+
+// Covers: 撤回是调整纳入独有的：对一笔后到费用的纳入调 Withdraw 答没撤，行上撤回两列仍为空，同一笔费用换个标识再纳仍被挡；
+// 同一事务里对调整纳入的撤回照旧撤得下。后到费用的纳入是运营决定，带它的单作废之后这条决定仍然成立。
+func TestWithdrawActsOnlyOnAdjustmentInclusionsAndNeverOnALateChargeInclusion(t *testing.T) {
+	fixture := newUnbilledFixture(t)
+	open, _, err := fixture.statements.FindByKey(t.Context(), ports.StatementKey{
+		TenantID: fixture.tenant, Number: saValue(t, domain.NewStatementNumber, "STMT-OPEN"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	late := confirmedChargeOn(t, "charge-late", "ACCOUNT/syn-1")
+	lateInclusion := func(id string) ports.InclusionRecord {
+		t.Helper()
+		inclusion, err := domain.IncludeLateChargeInSubsequentPeriod(open.Statement, late,
+			saValue(t, domain.NewInclusionReference, id), saValue(t, domain.NewBillingPeriodReference, "2026-10"), inclusionAt)
+		if err != nil {
+			t.Fatalf("形成后到费用纳入：%v", err)
+		}
+		return ports.InclusionRecord{
+			Key:           ports.InclusionKey{TenantID: fixture.tenant, Inclusion: inclusion.Inclusion()},
+			ContentDigest: "digest-" + id, Inclusion: inclusion, RecordedAt: inclusionAt,
+		}
+	}
+	first := lateInclusion("inclusion-late-1")
+	fixture.within(func(txCtx context.Context) error {
+		if _, err := fixture.charges.SaveConfirmed(txCtx, fixture.tenant, late); err != nil {
+			return err
+		}
+		saved, err := fixture.inclusions.Save(txCtx, first)
+		if err == nil && saved != ports.InclusionSaved {
+			err = errors.New("后到费用的纳入没记下")
+		}
+		return err
+	})
+
+	adjustment := ports.InclusionKey{TenantID: fixture.tenant, Inclusion: saValue(t, domain.NewInclusionReference, "inclusion-unbilled-1")}
+	var lateWithdrawn, adjustmentWithdrawn bool
+	fixture.within(func(txCtx context.Context) error {
+		var err error
+		if lateWithdrawn, err = fixture.inclusions.Withdraw(txCtx, first.Key, "STATEMENT_VOIDED/STMT-NEXT", statementVoidAt); err != nil {
+			return err
+		}
+		adjustmentWithdrawn, err = fixture.inclusions.Withdraw(txCtx, adjustment, "STATEMENT_VOIDED/STMT-NEXT", statementVoidAt)
+		return err
+	})
+	if lateWithdrawn || !adjustmentWithdrawn {
+		t.Fatalf("撤回后到费用的纳入 = %v，撤回调整纳入 = %v；want 没撤、撤下", lateWithdrawn, adjustmentWithdrawn)
+	}
+	if at, basis := fixture.withdrawalOf(t, first.Key); at != nil || basis != nil {
+		t.Fatalf("后到费用的纳入行上撤回两列 = %v / %v，want 仍为空", at, basis)
+	}
+	if at, basis := fixture.withdrawalOf(t, adjustment); at == nil || basis == nil {
+		t.Fatalf("调整纳入行上撤回两列 = %v / %v，want 已记下", at, basis)
+	}
+
+	var blocked ports.InclusionSaveOutcome
+	fixture.within(func(txCtx context.Context) error {
+		var err error
+		blocked, err = fixture.inclusions.Save(txCtx, lateInclusion("inclusion-late-2"))
+		return err
+	})
+	if blocked != ports.InclusionAlreadyRecorded {
+		t.Fatalf("后到费用换标识再纳 = %d，want 被挡（它的纳入仍然成立）", blocked)
+	}
+}
+
 // Covers: 只有调整行、没有费用行的对账单存得下、读得回，净额可以为负；费用行与调整行都没有的被库约束拒。上一结算周期
 // 已确认费用合计跳过这种单，仍取最近一张带费用行的。
 func TestAnAdjustmentOnlyStatementRoundTripsAndIsNotAChargePeriod(t *testing.T) {

@@ -108,7 +108,9 @@ func (repository *SubsequentInclusions) Save(
 	return ports.InclusionSaved, nil
 }
 
-// Withdraw 在原行上记下撤回。只撤还没撤回的那一行：重放不改先记下的时刻与依据。
+// Withdraw 在原行上记下撤回。只撤还没撤回的那一行：重放不改先记下的时刻与依据。只作用于调整纳入：后到费用的纳入是运营
+// 的决定，不随对账单作废而撤，那一行不动、答没撤；唯一索引 subsequent_inclusion_one_per_late_charge 因此不带撤回条件。
+// 判调整纳入用 adjustment_id 非空，与迁移里把两种纳入分开的写法一致。
 func (repository *SubsequentInclusions) Withdraw(
 	ctx context.Context,
 	key ports.InclusionKey,
@@ -124,6 +126,7 @@ func (repository *SubsequentInclusions) Withdraw(
 		    SET withdrawn_at = $3, withdrawal_basis = $4
 		  WHERE tenant_id = $1
 		    AND inclusion_id = $2
+		    AND adjustment_id IS NOT NULL
 		    AND withdrawn_at IS NULL`,
 		key.TenantID.String(),
 		key.Inclusion.String(),
