@@ -18,7 +18,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
-// 包材这一册的真库用例沿用仓、库区与库位类型几册的约定：pgtest.Pool 给每个用例一个施加过全套迁移计划的全新库，租户与包材编码一律是合成值。
+// 包材这一册的真库用例沿用别的登记册的约定：pgtest.Pool 给每个用例一个施加过全套迁移计划的全新库，租户与包材编码一律是合成值。
 
 // packagingMaterialStores 是一个用例要用的全部：包材写口、包材读口、仓写口（核「本租户已登记过仓」与造仓用）、事务器与连接池。
 type packagingMaterialStores struct {

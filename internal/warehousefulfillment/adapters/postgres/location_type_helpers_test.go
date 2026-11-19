@@ -18,7 +18,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
-// 库位类型这一册的真库用例沿用仓、库区两册的约定：pgtest.Pool 给每个用例一个施加过全套迁移计划的全新库，租户与库位类型编码一律是合成值。
+// 库位类型这一册的真库用例沿用别的登记册的约定：pgtest.Pool 给每个用例一个施加过全套迁移计划的全新库，租户与库位类型编码一律是合成值。
 
 // locationTypeStores 是一个用例要用的全部：库位类型写口、库位类型读口、仓写口（核「本租户已登记过仓」与造仓用）、事务器与连接池。
 type locationTypeStores struct {

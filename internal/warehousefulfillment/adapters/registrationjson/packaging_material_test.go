@@ -92,7 +92,7 @@ func TestThePackagingMaterialCodeNameAndUnitsAreHandedOverVerbatim(t *testing.T)
 	}
 }
 
-// 修订号不是正整数的报文译得出，由应用层答成修订错位：译装不提前把它当坏载荷拒掉（同仓、库区、库位类型那几册）。
+// 修订号不是正整数的报文译得出，由应用层答成修订错位：译装不提前把它当坏载荷拒掉（同别的册）。
 func TestAPackagingMaterialRevisionNumberTheApplicationJudgesIsNotRefusedAsMalformed(t *testing.T) {
 	for _, number := range []string{"0", "-3"} {
 		body := strings.Replace(packagingDocument(`"1"`, `"1"`, `"1"`, `"CM"`, `"1"`, `"KG"`), `"revision":1`, `"revision":`+number, 1)

@@ -445,7 +445,7 @@ func TestRegisterLocationTypeIgnoresWarehousesOfOtherTenants(t *testing.T) {
 	expectLocationTypeOutcome(t, "登记了仓的那个租户自己", mustRegisterLocationType(t, handler, other), application.RegistrationRegistered)
 }
 
-// Covers: 重放先于 NOT_CONFIGURED 与修订连续——判定次序的第一格：先按（身份，修订号）找在册的那一笔，重放与冲突不再过后面的核。册上早就有的
+// Covers: 重放先于 NOT_CONFIGURED 与修订连续——先按（身份，修订号）找在册的那一笔，重放与冲突不再过后面的核。册上早就有的
 // 修订，哪怕此刻本租户一个仓都问不到，原样重投仍是重放，换内容仍是冲突，不能变成未配置；仓册一次都没被问到。
 func TestRegisterLocationTypeJudgesReplayAndConflictBeforeNotConfiguredAndSequence(t *testing.T) {
 	registry := newFakeLocationTypeRegistry()

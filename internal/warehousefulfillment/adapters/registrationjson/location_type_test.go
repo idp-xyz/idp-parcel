@@ -115,7 +115,7 @@ func TestACarriedTenantOrRegistrantIsRefusedOnALocationTypeWhateverItsValue(t *t
 	}
 }
 
-// Covers: AT-WF-004——坏载荷各答 400 一格：JSON 不合法、认不得的键（含仓、库区、包材那几册的格）、必填格缺失或类型不对、必填文本格是空白。
+// Covers: AT-WF-004——坏载荷各答 400 一格：JSON 不合法、认不得的键（含别的册的格）、必填格缺失或类型不对、必填文本格是空白。
 func TestMalformedLocationTypeDocumentsAreRefused(t *testing.T) {
 	cases := map[string]string{
 		"empty body":            ``,
