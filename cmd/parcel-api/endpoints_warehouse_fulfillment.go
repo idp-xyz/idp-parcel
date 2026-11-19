@@ -7,7 +7,7 @@ import (
 	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
 )
 
-// warehouseFulfillmentWiring 是仓配履约各册的依赖：仓、库区与库位类型。enabled 是部署开关（ADR-0375 决定四）的值，从 endpointSources 来、
+// warehouseFulfillmentWiring 是仓配履约各册的依赖：仓、库区、库位类型与包材。enabled 是部署开关（ADR-0375 决定四）的值，从 endpointSources 来、
 // 在 build 里定：为假时其余字段全是零值——关着的部署不构造任何仓配的适配器与编排，mount 也就没有东西可接。
 //
 // 仓配的各册同属一个特性、一个开关、一个依赖结构，不按册拆成几个特性：登记处不许两个特性共用一种依赖结构，而各册的行都带同一个
@@ -25,6 +25,10 @@ type warehouseFulfillmentWiring struct {
 	locationTypeRegistration warehousehttp.LocationTypeRegistrar
 	locationTypeCatalogue    warehousehttp.LocationTypeCatalogueReader
 	locationTypeRevisions    warehousehttp.LocationTypeRevisionsReader
+
+	packagingMaterialRegistration warehousehttp.PackagingMaterialRegistrar
+	packagingMaterialCatalogue    warehousehttp.PackagingMaterialCatalogueReader
+	packagingMaterialRevisions    warehousehttp.PackagingMaterialRevisionsReader
 }
 
 func init() {
@@ -52,6 +56,13 @@ func init() {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-location-type-revisions?locationTypeCode=SYN-LT-01",
 			},
+			// 包材：各行的面与仓同族。包材按租户登记、各仓共用，修订史口的探测目标只带包材编码一段。
+			"/warehouse-fulfillment-packaging-material-registrations": {method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true},
+			"/warehouse-fulfillment-packaging-materials":              {method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true},
+			"/warehouse-fulfillment-packaging-material-revisions": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-packaging-material-revisions?packagingMaterialCode=SYN-BOX-01",
+			},
 		},
 		build: func(sources endpointSources) (warehouseFulfillmentWiring, error) {
 			if !sources.warehouseFulfillment {
@@ -73,6 +84,10 @@ func init() {
 				locationTypeRegistration: orchestration.locationTypeRegistration,
 				locationTypeCatalogue:    orchestration.locationTypeQueries,
 				locationTypeRevisions:    orchestration.locationTypeQueries,
+
+				packagingMaterialRegistration: orchestration.packagingMaterialRegistration,
+				packagingMaterialCatalogue:    orchestration.packagingMaterialQueries,
+				packagingMaterialRevisions:    orchestration.packagingMaterialQueries,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring warehouseFulfillmentWiring) []httpapi.BusinessEndpoint {
@@ -88,6 +103,9 @@ func init() {
 			locationTypeRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			locationTypes := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			locationTypeRevisions := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			packagingMaterialRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			packagingMaterials := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			packagingMaterialRevisions := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			// 开着：与别的登记写行、查阅行行为一致——渠道没配答「接入渠道未配置」，配了走真编排。各读口共用一个 Intake，各册的
 			// 登记口共用同一个认证器。
 			if wiring.enabled {
@@ -101,6 +119,10 @@ func init() {
 				locationTypeRegistration = warehousehttp.NewRegisterLocationTypeEndpoint(channels.locationTypeRegistration(), wiring.locationTypeRegistration)
 				locationTypes = warehousehttp.NewQueryLocationTypesEndpoint(catalogueIntake, wiring.locationTypeCatalogue)
 				locationTypeRevisions = warehousehttp.NewQueryLocationTypeRevisionsEndpoint(catalogueIntake, wiring.locationTypeRevisions)
+				packagingMaterialRegistration = warehousehttp.NewRegisterPackagingMaterialEndpoint(
+					channels.packagingMaterialRegistration(), wiring.packagingMaterialRegistration)
+				packagingMaterials = warehousehttp.NewQueryPackagingMaterialsEndpoint(catalogueIntake, wiring.packagingMaterialCatalogue)
+				packagingMaterialRevisions = warehousehttp.NewQueryPackagingMaterialRevisionsEndpoint(catalogueIntake, wiring.packagingMaterialRevisions)
 			}
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/warehouse-fulfillment-warehouse-registrations", Handler: registration},
@@ -112,6 +134,9 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-location-type-registrations", Handler: locationTypeRegistration},
 				{Pattern: "/warehouse-fulfillment-location-types", Handler: locationTypes},
 				{Pattern: "/warehouse-fulfillment-location-type-revisions", Handler: locationTypeRevisions},
+				{Pattern: "/warehouse-fulfillment-packaging-material-registrations", Handler: packagingMaterialRegistration},
+				{Pattern: "/warehouse-fulfillment-packaging-materials", Handler: packagingMaterials},
+				{Pattern: "/warehouse-fulfillment-packaging-material-revisions", Handler: packagingMaterialRevisions},
 			}
 		},
 	})
