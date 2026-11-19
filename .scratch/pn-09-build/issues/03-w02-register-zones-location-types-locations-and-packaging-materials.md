@@ -110,3 +110,12 @@ UC-WF-001 的 `AT-WF-001` 至 `AT-WF-004`、`AT-WF-009`、`AT-WF-010`、`AT-WF-0
 - 全量真库测试：`scripts/test-full.sh --detach` 对 `2e2aabd7b` 跑，`FULL-EXIT=0`。
 - 演示种子没有灌：本票不带种子，开关默认关。`warehouse_fulfillment` schema 多了这几册的空表。
 - 生成物不重算。
+
+## 落地之后：CI 红了一次
+
+收口那一笔 `1150c303b` 推上去之后，main 的 CI 在 `Test (rest)` 红了（run 44499035771）。
+
+- 原因：CI 带 `-race` 跑。应用层的并发用例里，测试替身的 `asked` 计数没有同步，两个 goroutine 同时自增。竞态只在测试替身上，生产代码没有。
+- 为什么没拦住：`scripts/test-full.sh` 不带 `-race`，评审各段重跑的检查也没带。这是评审漏的一项。本机带 `-race` 连跑三遍不复现，连跑二百遍稳定复现。
+- 修复：`6a6dae1f5`，只改四个测试文件，计数改成原子计数。作者是 Sonnet 5.5 子代理。评审重跑：应用层 `-race -count=200` 退 0、没有竞态报告；仓配各包、`internal/architecture`、`cmd/parcel-api` 整包照 CI 的 `-race -count=1 -p 1` 跑，都退 0。全量真库测试没有重跑：改动只在一个包的测试文件里。
+- 往后：仓配各票的评审每段加一遍带 `-race` 的。
