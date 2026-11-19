@@ -288,10 +288,10 @@ func (invalidation MeasurementInvalidation) ManualEntry() (string, MeasurementOr
 // ContentDigest 是这条作废的内容摘要。被作废的来源身份在里面：同一条作废身份改指
 // 另一条测量，是冲突，不是重放。
 func (invalidation MeasurementInvalidation) ContentDigest() string {
-	return measurementDigest(measurementDocument{
+	return invalidationDigest(invalidationDocument{
 		Face:             "MEASUREMENT_INVALIDATION",
-		ObjectID:         invalidation.targetSourceID,
-		Basis:            invalidation.reason,
+		TargetSourceID:   invalidation.targetSourceID,
+		Reason:           invalidation.reason,
 		PerformedBy:      invalidation.source.PerformedBy().String(),
 		Evidence:         invalidation.source.Evidence().String(),
 		OccurredAt:       invalidation.source.OccurredAt().UTC().Format(time.RFC3339Nano),
@@ -321,8 +321,32 @@ type measurementDocument struct {
 	OriginalDocument string `json:"originalDocument,omitempty"`
 }
 
+// invalidationDocument 是作废内容摘要的规范化形状。被作废的来源身份与原因各用自己的 Go 字段名，JSON 键名与字段顺序
+// 却必须与已落册的摘要字节一致：被作废的来源身份仍写在 objectId，原因仍写在 basis，改了键名或顺序，册上存下的作废
+// 就被判成别的内容。
+type invalidationDocument struct {
+	Canonicalization string `json:"canonicalization"`
+	Face             string `json:"face"`
+	TargetSourceID   string `json:"objectId,omitempty"`
+	Reason           string `json:"basis,omitempty"`
+	PerformedBy      string `json:"performedBy"`
+	Evidence         string `json:"evidence"`
+	OccurredAt       string `json:"occurredAt"`
+	EnteredBy        string `json:"enteredBy,omitempty"`
+	OriginalDocument string `json:"originalDocument,omitempty"`
+}
+
 func measurementDigest(document measurementDocument) string {
 	document.Canonicalization = payloadCanonicalizationVersion
+	return canonicalDigest(document)
+}
+
+func invalidationDigest(document invalidationDocument) string {
+	document.Canonicalization = payloadCanonicalizationVersion
+	return canonicalDigest(document)
+}
+
+func canonicalDigest(document any) string {
 	encoded, err := json.Marshal(document)
 	if err != nil {
 		return ""

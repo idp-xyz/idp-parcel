@@ -93,14 +93,9 @@ func NewWorkFactHandoverNoteIntake(authenticator HandoverNoteWorkFactAuthenticat
 
 // authenticate 先认证、后解载荷：授予不过的调用方看不到载荷校验的结果。
 func (intake *WorkFactHandoverNoteIntake) authenticate(ctx context.Context, request *http.Request, fact DeliveryHandoverFact) (domain.TenantID, domain.NodeReference, error) {
-	device := strings.TrimSpace(request.Header.Get(headerWorkDevice))
-	kind := strings.TrimSpace(request.Header.Get(headerWorkScopeKind))
-	reference := strings.TrimSpace(request.Header.Get(headerWorkScopeRef))
-	if device == "" || kind == "" || reference == "" {
-		return domain.TenantID{}, domain.NodeReference{}, fmt.Errorf("%w: %s, %s and %s are required", ErrMalformedRequest, headerWorkDevice, headerWorkScopeKind, headerWorkScopeRef)
-	}
-	if kind != "NODE" {
-		return domain.TenantID{}, domain.NodeReference{}, fmt.Errorf("%w: a delivery handover note lives at a node; Parcel-Work-Scope-Kind must be NODE", ErrMalformedRequest)
+	device, kind, reference, err := nodeWorkScope(request, "a delivery handover note lives at a node; Parcel-Work-Scope-Kind must be NODE")
+	if err != nil {
+		return domain.TenantID{}, domain.NodeReference{}, err
 	}
 	return intake.authenticator.AuthenticateDeliveryHandoverFact(ctx, httpapi.BearerToken(request), device, kind, reference, fact)
 }

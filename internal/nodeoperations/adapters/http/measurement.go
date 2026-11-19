@@ -34,6 +34,8 @@ type ManualMeasurementIntake interface {
 	IntakeManualMeasurementInvalidation(context.Context, *http.Request) (application.InvalidateActualMeasurementCommand, error)
 }
 
+const measurementNotNode = "node work requires Parcel-Work-Scope-Kind NODE"
+
 var _ MeasurementIntake = (*WorkFactReceptionIntake)(nil)
 var _ MeasurementIntake = UnconfiguredIntake{}
 var _ ManualMeasurementIntake = (*OperatorDecisionIntake)(nil)
@@ -41,7 +43,7 @@ var _ ManualMeasurementIntake = UnconfiguredIntake{}
 
 func (intake *WorkFactReceptionIntake) IntakeMeasurement(ctx context.Context, request *http.Request) (application.RecordActualMeasurementCommand, error) {
 	none := application.RecordActualMeasurementCommand{}
-	tenant, node, err := intake.authenticateNode(ctx, request)
+	tenant, node, err := intake.authenticateNode(ctx, request, measurementNotNode)
 	if err != nil {
 		return none, err
 	}
@@ -54,7 +56,7 @@ func (intake *WorkFactReceptionIntake) IntakeMeasurement(ctx context.Context, re
 
 func (intake *WorkFactReceptionIntake) IntakeMeasurementInvalidation(ctx context.Context, request *http.Request) (application.InvalidateActualMeasurementCommand, error) {
 	none := application.InvalidateActualMeasurementCommand{}
-	tenant, node, err := intake.authenticateNode(ctx, request)
+	tenant, node, err := intake.authenticateNode(ctx, request, measurementNotNode)
 	if err != nil {
 		return none, err
 	}
@@ -64,19 +66,6 @@ func (intake *WorkFactReceptionIntake) IntakeMeasurementInvalidation(ctx context
 	}
 	// 作业端设备只能作废在认证出的这个节点上登记的测量；这条规则由编排判，这里只把节点交进命令。
 	return invalidationCommand(tenant, application.InvalidationAtNode(node), document, "", "")
-}
-
-func (intake *WorkFactReceptionIntake) authenticateNode(ctx context.Context, request *http.Request) (domain.TenantID, domain.NodeReference, error) {
-	device := strings.TrimSpace(request.Header.Get(headerWorkDevice))
-	kind := strings.TrimSpace(request.Header.Get(headerWorkScopeKind))
-	reference := strings.TrimSpace(request.Header.Get(headerWorkScopeRef))
-	if device == "" || kind == "" || reference == "" {
-		return domain.TenantID{}, domain.NodeReference{}, fmt.Errorf("%w: %s, %s and %s are required", ErrMalformedRequest, headerWorkDevice, headerWorkScopeKind, headerWorkScopeRef)
-	}
-	if kind != "NODE" {
-		return domain.TenantID{}, domain.NodeReference{}, fmt.Errorf("%w: node work requires Parcel-Work-Scope-Kind NODE", ErrMalformedRequest)
-	}
-	return intake.authenticator.AuthenticateNodeReception(ctx, httpapi.BearerToken(request), device, kind, reference)
 }
 
 func (UnconfiguredIntake) IntakeMeasurement(context.Context, *http.Request) (application.RecordActualMeasurementCommand, error) {
@@ -250,98 +239,93 @@ func boundedSourceID(sourceID string) error {
 	return nil
 }
 
-// NewRecordMeasurementEndpoint 交回作业端的测量登记口。
-func NewRecordMeasurementEndpoint(intake MeasurementIntake, handler ActualMeasurementHandler) http.Handler {
+// measurementEndpoint 是四个测量口共用的骨架：只收 POST，译命令，交编排，答结果。作业端的两口在译命令失败时先问设备是否在用
+// （deviceFace），手工的两口没有设备这一步。译命令与调编排都包成闭包、到请求时才取方法，装配时交进来的 intake 为空也只在
+// 请求时才暴露。
+func measurementEndpoint[Command, Result any](
+	deviceFace bool,
+	intake func(context.Context, *http.Request) (Command, error),
+	handle func(context.Context, Command) (Result, error),
+	answer func(Result) (outcome string, created bool),
+) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost {
 			response.Header().Set("Allow", http.MethodPost)
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
-		command, err := intake.IntakeMeasurement(request.Context(), request)
+		command, err := intake(request.Context(), request)
 		if err != nil {
-			if deviceNotInUse(response, err) {
+			if deviceFace && deviceNotInUse(response, err) {
 				return
 			}
 			writeIntakeProblem(response, err)
 			return
 		}
-		result, err := handler.Handle(request.Context(), command)
+		result, err := handle(request.Context(), command)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		writeMeasurementOutcome(response, result.Outcome().String(), result.Outcome() == application.ActualMeasurementRecorded)
+		outcome, created := answer(result)
+		writeMeasurementOutcome(response, outcome, created)
 	})
+}
+
+func answerMeasurementRecording(result application.RecordActualMeasurementResult) (string, bool) {
+	return result.Outcome().String(), result.Outcome() == application.ActualMeasurementRecorded
+}
+
+func answerMeasurementInvalidation(result application.InvalidateActualMeasurementResult) (string, bool) {
+	return result.Outcome().String(), result.Outcome() == application.MeasurementInvalidationRecorded
+}
+
+// NewRecordMeasurementEndpoint 交回作业端的测量登记口。
+func NewRecordMeasurementEndpoint(intake MeasurementIntake, handler ActualMeasurementHandler) http.Handler {
+	return measurementEndpoint(true,
+		func(ctx context.Context, request *http.Request) (application.RecordActualMeasurementCommand, error) {
+			return intake.IntakeMeasurement(ctx, request)
+		},
+		func(ctx context.Context, command application.RecordActualMeasurementCommand) (application.RecordActualMeasurementResult, error) {
+			return handler.Handle(ctx, command)
+		},
+		answerMeasurementRecording)
 }
 
 // NewInvalidateMeasurementEndpoint 交回作业端的测量作废口。
 func NewInvalidateMeasurementEndpoint(intake MeasurementIntake, handler ActualMeasurementHandler) http.Handler {
-	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.Method != http.MethodPost {
-			response.Header().Set("Allow", http.MethodPost)
-			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
-			return
-		}
-		command, err := intake.IntakeMeasurementInvalidation(request.Context(), request)
-		if err != nil {
-			if deviceNotInUse(response, err) {
-				return
-			}
-			writeIntakeProblem(response, err)
-			return
-		}
-		result, err := handler.Invalidate(request.Context(), command)
-		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
-			return
-		}
-		writeMeasurementOutcome(response, result.Outcome().String(), result.Outcome() == application.MeasurementInvalidationRecorded)
-	})
+	return measurementEndpoint(true,
+		func(ctx context.Context, request *http.Request) (application.InvalidateActualMeasurementCommand, error) {
+			return intake.IntakeMeasurementInvalidation(ctx, request)
+		},
+		func(ctx context.Context, command application.InvalidateActualMeasurementCommand) (application.InvalidateActualMeasurementResult, error) {
+			return handler.Invalidate(ctx, command)
+		},
+		answerMeasurementInvalidation)
 }
 
 // NewRecordManualMeasurementEndpoint 交回手工登记口。
 func NewRecordManualMeasurementEndpoint(intake ManualMeasurementIntake, handler ActualMeasurementHandler) http.Handler {
-	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.Method != http.MethodPost {
-			response.Header().Set("Allow", http.MethodPost)
-			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
-			return
-		}
-		command, err := intake.IntakeManualMeasurement(request.Context(), request)
-		if err != nil {
-			writeIntakeProblem(response, err)
-			return
-		}
-		result, err := handler.Handle(request.Context(), command)
-		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
-			return
-		}
-		writeMeasurementOutcome(response, result.Outcome().String(), result.Outcome() == application.ActualMeasurementRecorded)
-	})
+	return measurementEndpoint(false,
+		func(ctx context.Context, request *http.Request) (application.RecordActualMeasurementCommand, error) {
+			return intake.IntakeManualMeasurement(ctx, request)
+		},
+		func(ctx context.Context, command application.RecordActualMeasurementCommand) (application.RecordActualMeasurementResult, error) {
+			return handler.Handle(ctx, command)
+		},
+		answerMeasurementRecording)
 }
 
 // NewInvalidateManualMeasurementEndpoint 交回手工作废口。
 func NewInvalidateManualMeasurementEndpoint(intake ManualMeasurementIntake, handler ActualMeasurementHandler) http.Handler {
-	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.Method != http.MethodPost {
-			response.Header().Set("Allow", http.MethodPost)
-			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
-			return
-		}
-		command, err := intake.IntakeManualMeasurementInvalidation(request.Context(), request)
-		if err != nil {
-			writeIntakeProblem(response, err)
-			return
-		}
-		result, err := handler.Invalidate(request.Context(), command)
-		if err != nil {
-			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
-			return
-		}
-		writeMeasurementOutcome(response, result.Outcome().String(), result.Outcome() == application.MeasurementInvalidationRecorded)
-	})
+	return measurementEndpoint(false,
+		func(ctx context.Context, request *http.Request) (application.InvalidateActualMeasurementCommand, error) {
+			return intake.IntakeManualMeasurementInvalidation(ctx, request)
+		},
+		func(ctx context.Context, command application.InvalidateActualMeasurementCommand) (application.InvalidateActualMeasurementResult, error) {
+			return handler.Invalidate(ctx, command)
+		},
+		answerMeasurementInvalidation)
 }
 
 func deviceNotInUse(response http.ResponseWriter, err error) bool {

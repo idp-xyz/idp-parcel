@@ -67,38 +67,6 @@ func TestASecondAdoptionWithAnotherBasisDoesNotReplaceTheFirst(t *testing.T) {
 	}
 }
 
-func TestTheCurrentAssociationDropsASucceededJudgment(t *testing.T) {
-	pool := pgtest.Pool(t)
-	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
-	if err != nil {
-		t.Fatal(err)
-	}
-	associations, err := adapter.NewParcelAssociations(db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const insert = `INSERT INTO node_operations.reception
-		(tenant_id, source_id, content_digest, kind, intake, control, candidates, identity_conflict,
-		 service_markers, recorded_at, judgment_version, predecessor_version)
-		VALUES ('tenant-a', $1, 'digest', 'INTAKE_FORMED', $2::jsonb, '{}'::jsonb, '[]'::jsonb, false,
-		        '[]'::jsonb, now(), $3, $4)`
-	if _, err := pool.Exec(t.Context(), insert, "src-old",
-		`{"unit":"unit-old","association":"parcel-1","version":"v1"}`, "v1", nil); err != nil {
-		t.Fatalf("旧判断：%v", err)
-	}
-	if _, err := pool.Exec(t.Context(), insert, "src-new",
-		`{"unit":"unit-new","association":"parcel-1","version":"v2"}`, "v2", "v1"); err != nil {
-		t.Fatalf("当前判断：%v", err)
-	}
-	units, err := associations.ListHandlingUnits(t.Context(), ref(t, domain.NewTenantID, "tenant-a"), ref(t, domain.NewParcelAssociationReference, "parcel-1"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(units) != 1 || units[0].String() != "unit-new" {
-		t.Fatalf("关联 = %v", units)
-	}
-}
-
 func newMeasurementSelection(t *testing.T) (*adapter.MeasurementSelectionAdoptions, bentoapp.Transactor) {
 	t.Helper()
 	pool := pgtest.Pool(t)

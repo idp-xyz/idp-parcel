@@ -1,5 +1,11 @@
 package domain
 
+import "errors"
+
+// ErrInvalidMeasurementSelectionForm 是形态词不在产品内置的词表里。库里出现不认识的词只可能是写入方绕过了构造器，
+// 译装口上出现是操作员写错了词；恢复动作是改用内置的那一种。
+var ErrInvalidMeasurementSelectionForm = errors.New("node operations: invalid measurement selection form")
+
 // MeasurementSelectionForm 是从多条仍有效实测里取出一条的内置形态。
 // 租户没有采用任何形态时，多于一条就不取。
 type MeasurementSelectionForm uint8
@@ -20,17 +26,13 @@ func (form MeasurementSelectionForm) String() string {
 	}
 }
 
-func (form MeasurementSelectionForm) valid() bool {
-	return form == LatestStillValidByOccurredAt
-}
-
 // MeasurementSelectionFormFromName 把册上的词译回形态。词表外的拒。
 func MeasurementSelectionFormFromName(name string) (MeasurementSelectionForm, error) {
 	switch name {
 	case LatestStillValidByOccurredAt.String():
 		return LatestStillValidByOccurredAt, nil
 	default:
-		return MeasurementSelectionFormInvalid, ErrInvalidActualMeasurement
+		return MeasurementSelectionFormInvalid, ErrInvalidMeasurementSelectionForm
 	}
 }
 

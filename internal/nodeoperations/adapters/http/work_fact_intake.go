@@ -53,18 +53,34 @@ var _ ReceptionIntake = (*WorkFactReceptionIntake)(nil)
 
 func (intake *WorkFactReceptionIntake) IntakeReception(ctx context.Context, request *http.Request) (application.ReceiveDeliveredUnitCommand, error) {
 	none := application.ReceiveDeliveredUnitCommand{}
-	device := strings.TrimSpace(request.Header.Get(headerWorkDevice))
-	kind := strings.TrimSpace(request.Header.Get(headerWorkScopeKind))
-	reference := strings.TrimSpace(request.Header.Get(headerWorkScopeRef))
-	if device == "" || kind == "" || reference == "" {
-		return none, fmt.Errorf("%w: %s, %s and %s are required", ErrMalformedRequest, headerWorkDevice, headerWorkScopeKind, headerWorkScopeRef)
-	}
-	if kind != "NODE" {
-		return none, fmt.Errorf("%w: node reception requires Parcel-Work-Scope-Kind NODE", ErrMalformedRequest)
-	}
-	tenant, node, err := intake.authenticator.AuthenticateNodeReception(ctx, httpapi.BearerToken(request), device, kind, reference)
+	tenant, node, err := intake.authenticateNode(ctx, request, "node reception requires Parcel-Work-Scope-Kind NODE")
 	if err != nil {
 		return none, err
 	}
 	return receptionCommand(tenant, node, request)
+}
+
+// authenticateNode 读作业事实面的三个头并认证出租户与节点。各口说的是各自的事，种类不对时的错误文本由调用方给。
+func (intake *WorkFactReceptionIntake) authenticateNode(ctx context.Context, request *http.Request, notNode string) (domain.TenantID, domain.NodeReference, error) {
+	device, kind, reference, err := nodeWorkScope(request, notNode)
+	if err != nil {
+		return domain.TenantID{}, domain.NodeReference{}, err
+	}
+	return intake.authenticator.AuthenticateNodeReception(ctx, httpapi.BearerToken(request), device, kind, reference)
+}
+
+// nodeWorkScope 读出作业事实面的三个头：设备、作业范围种类与作业范围引用。三个头缺一个，或种类不是 NODE，都拒成载荷不成形；
+// 各口（收寄、测量、交接单、执行事实）的认证器不同，这一步是它们共有的前置，种类不对时的错误文本由调用方给（notNode），
+// 免得合并之后各口的服务端日志说成同一句。
+func nodeWorkScope(request *http.Request, notNode string) (device, kind, reference string, err error) {
+	device = strings.TrimSpace(request.Header.Get(headerWorkDevice))
+	kind = strings.TrimSpace(request.Header.Get(headerWorkScopeKind))
+	reference = strings.TrimSpace(request.Header.Get(headerWorkScopeRef))
+	if device == "" || kind == "" || reference == "" {
+		return "", "", "", fmt.Errorf("%w: %s, %s and %s are required", ErrMalformedRequest, headerWorkDevice, headerWorkScopeKind, headerWorkScopeRef)
+	}
+	if kind != "NODE" {
+		return "", "", "", fmt.Errorf("%w: %s", ErrMalformedRequest, notNode)
+	}
+	return device, kind, reference, nil
 }
