@@ -18,3 +18,21 @@ var WarehousePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
 	},
 })
+
+// ZonePages 是库区列表的查询声明（ADR-0144 决定三、四、七），照仓列表的做法：只开一个可排维，行标识是（仓编码，库区编码）两段，
+// 缺省序就是先按仓、再按库区。排序维取 warehouseCode 而不取 zoneCode：库区编码在仓内才唯一，单按它排没有稳定的行序，也不是
+// 登记方挑库区的顺序。
+//
+// 筛选维两个：仓编码（不设词表——仓是租户取值，词表只能是空的）与是否停用。仓编码按答复体的字段名点名、逐字比较。
+var ZonePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-zones",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "warehouseCode", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "warehouseCode"},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "warehouseCode"},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+	},
+})
