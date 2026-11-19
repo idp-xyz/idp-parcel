@@ -96,16 +96,32 @@ func TestACitationStoredBeforeTheBasisExistedReadsBackAsTheDeclaration(t *testin
 }
 
 // Covers: 出处里写着封闭集之外的依据读回响亮报错，不兜底成客户声明——物理事实不与声明并用，「并用」的字面与任何认不出的文本
-// 同样对待；出处缺依据那一格才读回为客户声明（见上一条）。
+// 同样对待；领域认得、但没有出价的依据（构造门不让进成本出处）也一样；出处缺依据那一格才读回为客户声明
+// （TestACitationStoredBeforeTheBasisExistedReadsBackAsTheDeclaration）。
+// 库上的 CHECK 把这些字面拒在写入处，所以这里先在本用例自己的库里摘掉改善依据列的那条约束再写：读回解析是约束之外自立的
+// 一道防线，不靠约束在场才成立——绕过适配器手写进约束缺席的库里的行，只有它挡。没有出价的依据正是库约束拒的那几格，读回同样
+// 拒，证约束没有比读回更严。走完整的 FindByCorrelation，证的是读回路径本身，不是 costCitationsOfRows 单独。
 func TestACitationNamingABasisOutsideTheClosedSetFailsLoudlyOnReadBack(t *testing.T) {
 	_, reassessments, transactor, pool := newRouteStores(t)
 	ctx := t.Context()
 	key := routeKey(t, "tenant-1", "parcel-1")
 
-	for _, outside := range []struct{ id, name, literal string }{
+	if _, err := pool.Exec(ctx,
+		`ALTER TABLE network_routing.route_reassessment
+		   DROP CONSTRAINT route_reassessment_improvement_basis_facts_basis_closed`); err != nil {
+		t.Fatalf("摘掉改善依据列的封闭集约束：%v", err)
+	}
+	type outsideBasis struct{ id, name, literal string }
+	outsides := []outsideBasis{
 		{"with-declaration", "物理事实并用声明", "PHYSICAL_WITH_DECLARATION"},
 		{"unknown", "认不出", "LAST_WEIGHED"},
-	} {
+	}
+	for basis := domain.ParcelFactsDeclaration; basis.Valid(); basis++ {
+		if !basis.PricesACandidate() {
+			outsides = append(outsides, outsideBasis{"unpriced-" + basis.String(), "没有出价的依据 " + basis.String(), basis.String()})
+		}
+	}
+	for _, outside := range outsides {
 		name, literal := outside.name, outside.literal
 		correlation := scalar(t, domain.NewRequestCorrelationID, "trigger-outside-closed-set-"+outside.id)
 		saveReassessment(t, transactor, ctx, reassessments, correlation, improvementReroutedRecord(t, key, correlation))
@@ -120,6 +136,37 @@ func TestACitationNamingABasisOutsideTheClosedSetFailsLoudlyOnReadBack(t *testin
 		if found, _, err := reassessments.FindByCorrelation(ctx, key.TenantID, correlation); err == nil {
 			t.Fatalf("%s：出处依据 %q 被读成 %+v，want 读回报错", name, literal, found.ImprovementBasis.SupersededCostCitations())
 		}
+	}
+}
+
+// Covers: 出处里写着封闭集之外的依据，库在写入那一刻就拒，不拖到读回——退役的「并用」字面与认不出的文本都撞改善依据列的 CHECK，
+// 行原样不动、读回仍是写入时的依据。每一处落出处的列各自的拒收，见 TestACostCitationColumnAcceptsWhatReadsBackAndRefusesEveryOtherFactsBasis。
+func TestACitationNamingABasisOutsideTheClosedSetIsRefusedWhenItIsWritten(t *testing.T) {
+	_, reassessments, transactor, pool := newRouteStores(t)
+	ctx := t.Context()
+	key := routeKey(t, "tenant-1", "parcel-1")
+	correlation := scalar(t, domain.NewRequestCorrelationID, "trigger-refused-on-write")
+	saveReassessment(t, transactor, ctx, reassessments, correlation, improvementReroutedRecord(t, key, correlation))
+
+	for _, outside := range []struct{ name, literal string }{
+		{"物理事实并用声明", "PHYSICAL_WITH_DECLARATION"},
+		{"认不出", "LAST_WEIGHED"},
+	} {
+		_, err := pool.Exec(ctx,
+			`UPDATE network_routing.route_reassessment
+			    SET improvement_basis = jsonb_set(improvement_basis, '{superseded_cost_citations}',
+			        (SELECT jsonb_agg(jsonb_set(citation, '{facts_basis}', to_jsonb($2::text)))
+			           FROM jsonb_array_elements(improvement_basis -> 'superseded_cost_citations') AS citation))
+			  WHERE correlation_id = $1`, correlation.String(), outside.literal)
+		requireCheckViolation(t, err, "route_reassessment_improvement_basis_facts_basis_closed", outside.name)
+	}
+
+	found, present, err := reassessments.FindByCorrelation(ctx, key.TenantID, correlation)
+	if err != nil || !present {
+		t.Fatalf("按关联读回：present=%v err=%v", present, err)
+	}
+	if cited := found.ImprovementBasis.SupersededCostCitations(); len(cited) != 1 || cited[0].FactsBasis() != domain.ParcelFactsDeclarationFallback {
+		t.Fatalf("被拒之后出处依据 = %+v，want 仍是写入时的 DECLARATION_FALLBACK", cited)
 	}
 }
 
