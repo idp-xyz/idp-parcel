@@ -30,6 +30,12 @@ type LocationTypeRegistrationIntake interface {
 	IntakeLocationTypeRegistration(ctx context.Context, request *http.Request) (application.RegisterLocationTypeCommand, error)
 }
 
+// PackagingMaterialRegistrationIntake 把一次已认证的接入请求翻译成包材修订的登记命令。理由同 WarehouseRegistrationIntake：租户与登记责任方
+// 只能来自认证结果，认证先于请求体；认证与译装的做法各册共用同一份（OperatorRegistryIntake），渠道未配置时同样挂 UnconfiguredIntake。
+type PackagingMaterialRegistrationIntake interface {
+	IntakePackagingMaterialRegistration(ctx context.Context, request *http.Request) (application.RegisterPackagingMaterialCommand, error)
+}
+
 // CatalogueQuery 是一次已授权的仓册查阅：租户来自认证结果、不取自查询串，页大小由接入面按渠道契约裁决、不采信调用方自报。
 type CatalogueQuery struct {
 	Tenant domain.TenantID

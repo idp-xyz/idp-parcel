@@ -15,10 +15,11 @@ import (
 type UnconfiguredIntake struct{}
 
 var (
-	_ WarehouseRegistrationIntake    = UnconfiguredIntake{}
-	_ ZoneRegistrationIntake         = UnconfiguredIntake{}
-	_ LocationTypeRegistrationIntake = UnconfiguredIntake{}
-	_ CatalogueIntake                = UnconfiguredIntake{}
+	_ WarehouseRegistrationIntake         = UnconfiguredIntake{}
+	_ ZoneRegistrationIntake              = UnconfiguredIntake{}
+	_ LocationTypeRegistrationIntake      = UnconfiguredIntake{}
+	_ PackagingMaterialRegistrationIntake = UnconfiguredIntake{}
+	_ CatalogueIntake                     = UnconfiguredIntake{}
 )
 
 // IntakeWarehouseRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
@@ -36,6 +37,12 @@ func (UnconfiguredIntake) IntakeLocationTypeRegistration(
 	context.Context, *http.Request,
 ) (application.RegisterLocationTypeCommand, error) {
 	return application.RegisterLocationTypeCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakePackagingMaterialRegistration(
+	context.Context, *http.Request,
+) (application.RegisterPackagingMaterialCommand, error) {
+	return application.RegisterPackagingMaterialCommand{}, ErrAccessChannelNotConfigured
 }
 
 func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {
