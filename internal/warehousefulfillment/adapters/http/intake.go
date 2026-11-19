@@ -30,6 +30,12 @@ type LocationTypeRegistrationIntake interface {
 	IntakeLocationTypeRegistration(ctx context.Context, request *http.Request) (application.RegisterLocationTypeCommand, error)
 }
 
+// LocationRegistrationIntake 把一次已认证的接入请求翻译成库位修订的登记命令。理由同 WarehouseRegistrationIntake：租户与登记责任方
+// 只能来自认证结果，认证先于请求体；认证与译装的做法各册共用同一份（OperatorRegistryIntake），渠道未配置时同样挂 UnconfiguredIntake。
+type LocationRegistrationIntake interface {
+	IntakeLocationRegistration(ctx context.Context, request *http.Request) (application.RegisterLocationCommand, error)
+}
+
 // PackagingMaterialRegistrationIntake 把一次已认证的接入请求翻译成包材修订的登记命令。理由同 WarehouseRegistrationIntake：租户与登记责任方
 // 只能来自认证结果，认证先于请求体；认证与译装的做法各册共用同一份（OperatorRegistryIntake），渠道未配置时同样挂 UnconfiguredIntake。
 type PackagingMaterialRegistrationIntake interface {

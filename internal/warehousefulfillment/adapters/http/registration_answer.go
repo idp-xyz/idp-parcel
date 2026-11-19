@@ -8,9 +8,9 @@ import (
 )
 
 // registrationAnswerHead 是各册登记口答复体的头四格：`outcome` 取应用结果枚举原名，业务判别只看它：重放与内容冲突是治理答案
-// 不是失败，传输层不合并、不改名。`refusal` 只随 NOT_ACCEPTED，`field` 只随 IMMUTABLE_FIELD、CONTENT_INVALID 与
-// REFERENCE_NOT_FOUND，`latestRevision` 只随 REVISION_OUT_OF_SEQUENCE——册上没有这个对象时是 0，所以用指针：0 要出现，别的结果上
-// 整键缺席。回显在册那一笔的那一格各册键名不同（仓是 `warehouse`，库区是 `zone`），由各册的答复体接在头后面。`NOT_CONFIGURED`
+// 不是失败，传输层不合并、不改名。`refusal` 只随 NOT_ACCEPTED，`field` 只随 IMMUTABLE_FIELD、CONTENT_INVALID、REFERENCE_NOT_FOUND 与
+// REFERENCE_DEACTIVATED，`latestRevision` 只随 REVISION_OUT_OF_SEQUENCE——册上没有这个对象时是 0，所以用指针：0 要出现，别的结果上
+// 整键缺席。回显在册那一笔的那一格各册键名不同（仓是 `warehouse`，库区是 `zone`，库位是 `location`），由各册的答复体接在头后面。`NOT_CONFIGURED`
 // 与 `CONTENT_CONFLICT` 一样只有头里的 `outcome` 一格：它是租户取值没到，不是拒绝，所以没有 `refusal`，也没有别的细节。
 type registrationAnswerHead struct {
 	Outcome        string `json:"outcome"`
@@ -60,7 +60,8 @@ func writeRegistrationAnswer[Revision any, Field fmt.Stringer](
 		switch refusal {
 		case application.RegistrationRefusalImmutableField,
 			application.RegistrationRefusalContentInvalid,
-			application.RegistrationRefusalReferenceNotFound:
+			application.RegistrationRefusalReferenceNotFound,
+			application.RegistrationRefusalReferenceDeactivated:
 			head.Field = result.Field().String()
 		case application.RegistrationRefusalRevisionOutOfSequence:
 			latest := result.LatestRevision()
