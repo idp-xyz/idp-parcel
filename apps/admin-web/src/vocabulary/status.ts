@@ -459,19 +459,26 @@ export const statusVocabulary: Record<string, StatusEntry> = {
 
   // —— 供应商账单逐行匹配 · settlement-accounting（domain.MatchClassification，UC-SA-004；票 document-numbering/11）——
   // 已对上的那一行才能去审核；除它之外的分类都是对不上的样子，各有依据，要先核实，不能直接审核，所以都是琥珀。
-  'actual-measurement': muted('实测'),
-  'declared-measurement': muted('申报'),
-  PRICING_CORRECTION: muted('计价纠错'),
-  COMMERCIAL_CONCESSION: muted('商业让利'),
-  DEBIT: muted('借项'),
-  CREDIT: muted('贷项'),
-  REWEIGH_ADJUSTMENT_NOT_ADOPTED: warn('实测差异自动调整未采用'),
-  REWEIGH_ADJUSTMENT_EXCEEDS_CHARGE: bad('差额贷项越过费用'),
   MATCHED: good('已对上'),
   QUANTITY_VARIANCE: warn('数量不符'),
   PRICE_VARIANCE: warn('价格不符'),
   NO_MATCHING_OCCURRENCE: warn('找不到对应运输'),
   DUPLICATE_BILLING: warn('重复收费'),
+
+  // —— 称重量方与复磅差额 · node-operations / settlement-accounting ——
+  // 复磅是再登一条完整的实测。包裹的计价重量因此变了、而费用已经确认时，只记差额：评价用的重量出自哪里、差额记成哪一种调整与哪个方向、
+  // 自动调整为什么停下，界面都读这一段。
+  // 评价用的实重与尺寸出自实测还是申报。
+  'actual-measurement': muted('实测'),
+  'declared-measurement': muted('申报'),
+  // 已确认费用上的调整种类（纠错必引新评价，让利必引有效授权）与方向（借项加收、贷项减收）。
+  PRICING_CORRECTION: muted('计价纠错'),
+  COMMERCIAL_CONCESSION: muted('商业让利'),
+  DEBIT: muted('借项'),
+  CREDIT: muted('贷项'),
+  // 要记差额调整却停下的两个原因（domain.EvaluationStopCause）：这一户没采用「实测差异自动调整」；差额贷项会把费用连同既有调整让成负数。
+  REWEIGH_ADJUSTMENT_NOT_ADOPTED: warn('实测差异自动调整未采用'),
+  REWEIGH_ADJUSTMENT_EXCEEDS_CHARGE: bad('差额贷项越过费用'),
 };
 
 /**
