@@ -330,6 +330,90 @@ func TestWorkFactReceptionIntakeTakesDeviceAndScopeFromHeadersAndAuthenticatesFi
 	}
 }
 
+// workFactReceptionHeaderBody 是一份合规的收寄载荷，只为让头部那几格单独成为请求被拒或被放行的原因。
+const workFactReceptionHeaderBody = `{"sourceId":"SYN-DEVICE-07/000136","deliveredBy":"SYN-COURIER-01","handlingUnit":"SYN-HU-0016",` +
+	`"mark":"SYN-MARK-0016","claim":"SCAN_ONLY","occurredAt":"2026-09-24T10:10:00+08:00"}`
+
+// Covers: 三头缺一、种类不是 NODE 这四格的确切应答——Intake 交回的错误文本逐字（头名拼在其中；服务端日志靠这句话认出
+// 是哪一格），经收寄端点是 400 与结果码 MALFORMED_REQUEST，响应体不带问题详情文本、也不带任何别的格。两处都钉，
+// 头名换了出处之后文本与应答都不许变；认证方一次也不被问。
+func TestWorkFactReceptionIntakeAnswersEachHeaderRefusalWithTheExactTextStatusAndCode(t *testing.T) {
+	const (
+		headersRequired = "node operations http: malformed request: Parcel-Device-Id, Parcel-Work-Scope-Kind and Parcel-Work-Scope-Reference are required"
+		notNode         = "node operations http: malformed request: node reception requires Parcel-Work-Scope-Kind NODE"
+	)
+	for name, testCase := range map[string]struct {
+		mutate   func(*http.Request)
+		wantText string
+	}{
+		"缺设备头":      {func(request *http.Request) { request.Header.Del("Parcel-Device-Id") }, headersRequired},
+		"缺种类头":      {func(request *http.Request) { request.Header.Del("Parcel-Work-Scope-Kind") }, headersRequired},
+		"缺引用头":      {func(request *http.Request) { request.Header.Del("Parcel-Work-Scope-Reference") }, headersRequired},
+		"设备头只有空白":   {func(request *http.Request) { request.Header.Set("Parcel-Device-Id", " \t ") }, headersRequired},
+		"种类不是 NODE": {func(request *http.Request) { request.Header.Set("Parcel-Work-Scope-Kind", "OFFSITE") }, notNode},
+		"种类大小写不同":   {func(request *http.Request) { request.Header.Set("Parcel-Work-Scope-Kind", "node") }, notNode},
+		// 先判齐全、再判种类：缺头又种类不对时，答的是缺头那一句。
+		"缺设备头且种类不是 NODE": {func(request *http.Request) {
+			request.Header.Del("Parcel-Device-Id")
+			request.Header.Set("Parcel-Work-Scope-Kind", "OFFSITE")
+		}, headersRequired},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var asked []string
+			intake := receptionIntakeWith(t, receptionAuthenticatorFake{asked: &asked})
+
+			request := receptionRequest(workFactReceptionHeaderBody)
+			testCase.mutate(request)
+			_, err := intake.IntakeReception(context.Background(), request)
+			if !errors.Is(err, nodeopshttp.ErrMalformedRequest) {
+				t.Fatalf("err = %v, want ErrMalformedRequest", err)
+			}
+			if err.Error() != testCase.wantText {
+				t.Fatalf("错误文本 = %q, want %q", err.Error(), testCase.wantText)
+			}
+			if len(asked) != 0 {
+				t.Fatalf("认证方被问 %v, want 一次也不问", asked)
+			}
+
+			endpoint := nodeopshttp.NewReceiveDeliveredUnitEndpoint(intake, failingHandler{})
+			recorder := httptest.NewRecorder()
+			request = receptionRequest(workFactReceptionHeaderBody)
+			testCase.mutate(request)
+			endpoint.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", recorder.Code)
+			}
+			if got, want := recorder.Body.String(), `{"error":{"code":"MALFORMED_REQUEST"}}`+"\n"; got != want {
+				t.Fatalf("body = %q, want %q", got, want)
+			}
+			if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+				t.Fatalf("Content-Type = %q, want application/json", got)
+			}
+		})
+	}
+}
+
+// Covers: 头值两端带空白照常认证——三个头各去一次两端空白再交给认证方，认证方看到的是去过空白的值，节点取自认证结果。
+func TestWorkFactReceptionIntakeTrimsPaddedHeaderValuesBeforeAuthenticating(t *testing.T) {
+	var asked []string
+	intake := receptionIntakeWith(t, receptionAuthenticatorFake{asked: &asked})
+	request := receptionRequest(workFactReceptionHeaderBody)
+	request.Header.Set("Parcel-Device-Id", "  SYN-DEVICE-NODE\t")
+	request.Header.Set("Parcel-Work-Scope-Kind", " NODE ")
+	request.Header.Set("Parcel-Work-Scope-Reference", "\t"+presentedScopeReference+"  ")
+
+	command, err := intake.IntakeReception(context.Background(), request)
+	if err != nil {
+		t.Fatalf("两端带空白的头值被拒：%v", err)
+	}
+	if len(asked) != 1 || asked[0] != "SYN-DEVICE-NODE|NODE|"+presentedScopeReference {
+		t.Fatalf("认证方被问 %v, want 去过两端空白的三个头", asked)
+	}
+	if got := command.Node.String(); got != workFactNode {
+		t.Fatalf("Node = %q, want %q（认证结果）", got, workFactNode)
+	}
+}
+
 // Covers: ADR-0149 决定二——作业事实收寄 Intake 只实现收寄口；查阅行归查阅读，在类型上就装不进本类型。
 func TestWorkFactReceptionIntakeServesOnlyTheReceptionLine(t *testing.T) {
 	var intake any = receptionIntakeForTest(t)

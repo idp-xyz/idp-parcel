@@ -5,17 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
-)
-
-const (
-	headerWorkDevice    = "Parcel-Device-Id"
-	headerWorkScopeKind = "Parcel-Work-Scope-Kind"
-	headerWorkScopeRef  = "Parcel-Work-Scope-Reference"
 )
 
 var (
@@ -53,7 +46,7 @@ var _ ReceptionIntake = (*WorkFactReceptionIntake)(nil)
 
 func (intake *WorkFactReceptionIntake) IntakeReception(ctx context.Context, request *http.Request) (application.ReceiveDeliveredUnitCommand, error) {
 	none := application.ReceiveDeliveredUnitCommand{}
-	tenant, node, err := intake.authenticateNode(ctx, request, "node reception requires Parcel-Work-Scope-Kind NODE")
+	tenant, node, err := intake.authenticateNode(ctx, request, "node reception requires "+httpapi.HeaderWorkScopeKind+" NODE")
 	if err != nil {
 		return none, err
 	}
@@ -71,13 +64,12 @@ func (intake *WorkFactReceptionIntake) authenticateNode(ctx context.Context, req
 
 // nodeWorkScope 读出作业事实面的三个头：设备、作业范围种类与作业范围引用。三个头缺一个，或种类不是 NODE，都拒成载荷不成形；
 // 各口（收寄、测量、交接单、执行事实）的认证器不同，这一步是它们共有的前置，种类不对时的错误文本由调用方给（notNode），
-// 免得合并之后各口的服务端日志说成同一句。
+// 免得合并之后各口的服务端日志说成同一句。头名与读法（去空白、缺一即不齐）在 httpapi.ReadWorkFactHeaders，这里只认本上下文的 NODE 种类。
 func nodeWorkScope(request *http.Request, notNode string) (device, kind, reference string, err error) {
-	device = strings.TrimSpace(request.Header.Get(headerWorkDevice))
-	kind = strings.TrimSpace(request.Header.Get(headerWorkScopeKind))
-	reference = strings.TrimSpace(request.Header.Get(headerWorkScopeRef))
-	if device == "" || kind == "" || reference == "" {
-		return "", "", "", fmt.Errorf("%w: %s, %s and %s are required", ErrMalformedRequest, headerWorkDevice, headerWorkScopeKind, headerWorkScopeRef)
+	device, kind, reference, complete := httpapi.ReadWorkFactHeaders(request)
+	if !complete {
+		return "", "", "", fmt.Errorf("%w: %s, %s and %s are required", ErrMalformedRequest,
+			httpapi.HeaderWorkDevice, httpapi.HeaderWorkScopeKind, httpapi.HeaderWorkScopeReference)
 	}
 	if kind != "NODE" {
 		return "", "", "", fmt.Errorf("%w: %s", ErrMalformedRequest, notNode)

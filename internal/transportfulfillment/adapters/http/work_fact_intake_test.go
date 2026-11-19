@@ -308,6 +308,102 @@ func TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine(t *testing.
 	}
 }
 
+// workFactHeaderRefusals 是三头缺一、种类不是 OFFSITE 这几格，与各格 Intake 交回的确切错误文本（头名拼在其中；服务端日志
+// 靠这句话认出是哪一格）。含种类为 NODE 一格——节点作业范围的授予不得打运输履约的口。先判齐全、再判种类：缺头又种类不对时，
+// 答的是缺头那一句。
+func workFactHeaderRefusals() map[string]struct {
+	mutate   func(*http.Request)
+	wantText string
+} {
+	const (
+		headersRequired = "transport fulfillment http: malformed request: Parcel-Device-Id, Parcel-Work-Scope-Kind and Parcel-Work-Scope-Reference are required"
+		notOffsite      = "transport fulfillment http: malformed request: transport fulfillment work facts require Parcel-Work-Scope-Kind OFFSITE"
+	)
+	type refusal = struct {
+		mutate   func(*http.Request)
+		wantText string
+	}
+	return map[string]refusal{
+		"缺设备头":     {func(request *http.Request) { request.Header.Del("Parcel-Device-Id") }, headersRequired},
+		"缺种类头":     {func(request *http.Request) { request.Header.Del("Parcel-Work-Scope-Kind") }, headersRequired},
+		"缺引用头":     {func(request *http.Request) { request.Header.Del("Parcel-Work-Scope-Reference") }, headersRequired},
+		"引用头只有空白":  {func(request *http.Request) { request.Header.Set("Parcel-Work-Scope-Reference", "  ") }, headersRequired},
+		"种类是 NODE": {func(request *http.Request) { request.Header.Set("Parcel-Work-Scope-Kind", "NODE") }, notOffsite},
+		"种类大小写不同":  {func(request *http.Request) { request.Header.Set("Parcel-Work-Scope-Kind", "offsite") }, notOffsite},
+		"缺设备头且种类是 NODE": {func(request *http.Request) {
+			request.Header.Del("Parcel-Device-Id")
+			request.Header.Set("Parcel-Work-Scope-Kind", "NODE")
+		}, headersRequired},
+	}
+}
+
+// Covers: 作业事实各口共用的头部拒绝，逐口交回确切的错误文本，认证方一次也不被问。
+func TestWorkFactCommandIntakeRefusesEachHeaderFaultWithTheExactTextOnEveryLine(t *testing.T) {
+	for pattern, line := range workFactLines {
+		for name, testCase := range workFactHeaderRefusals() {
+			t.Run(pattern+"/"+name, func(t *testing.T) {
+				var asked []string
+				intake := workFactIntakeWith(t, workFactAuthenticatorFake{asked: &asked})
+				request := commandRequest(line.valid)
+				testCase.mutate(request)
+				err := line.intake(intake, request)
+				if !errors.Is(err, tfhttp.ErrMalformedRequest) {
+					t.Fatalf("err = %v, want ErrMalformedRequest", err)
+				}
+				if err.Error() != testCase.wantText {
+					t.Fatalf("错误文本 = %q, want %q", err.Error(), testCase.wantText)
+				}
+				if len(asked) != 0 {
+					t.Fatalf("认证方被问 %v, want 一次也不问", asked)
+				}
+			})
+		}
+	}
+}
+
+// Covers: 同一批头部拒绝经揽收登记端点的确切应答：400 与结果码 MALFORMED_REQUEST，响应体不带问题详情文本、也不带任何别的格；
+// 编排一侧装的是只会报错的替身，漏过 Intake 就成 500，不会碰巧也是 400。
+func TestWorkFactCommandIntakeAnswersEachHeaderFaultWith400MalformedRequest(t *testing.T) {
+	endpoint := tfhttp.NewRegisterOffsitePickupEndpoint(workFactIntakeForTest(t), failingPickupRegistrationHandler{})
+	for name, testCase := range workFactHeaderRefusals() {
+		t.Run(name, func(t *testing.T) {
+			request := commandRequest(offsitePickupRegistrationBody)
+			testCase.mutate(request)
+			recorder := httptest.NewRecorder()
+			endpoint.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", recorder.Code)
+			}
+			if got, want := recorder.Body.String(), `{"error":{"code":"MALFORMED_REQUEST"}}`+"\n"; got != want {
+				t.Fatalf("body = %q, want %q", got, want)
+			}
+			if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+				t.Fatalf("Content-Type = %q, want application/json", got)
+			}
+		})
+	}
+}
+
+// Covers: 头值两端带空白照常认证，逐口成立——三个头各去一次两端空白再交给认证方。
+func TestWorkFactCommandIntakeTrimsPaddedHeaderValuesBeforeAuthenticatingOnEveryLine(t *testing.T) {
+	for pattern, line := range workFactLines {
+		t.Run(pattern, func(t *testing.T) {
+			var asked []string
+			intake := workFactIntakeWith(t, workFactAuthenticatorFake{asked: &asked})
+			request := commandRequest(line.valid)
+			request.Header.Set("Parcel-Device-Id", "  SYN-DEVICE-OFFSITE\t")
+			request.Header.Set("Parcel-Work-Scope-Kind", " OFFSITE ")
+			request.Header.Set("Parcel-Work-Scope-Reference", "\tSYN-OFFSITE-01  ")
+			if err := line.intake(intake, request); err != nil {
+				t.Fatalf("两端带空白的头值被拒：%v", err)
+			}
+			if len(asked) != 1 || asked[0] != "SYN-DEVICE-OFFSITE|OFFSITE|SYN-OFFSITE-01" {
+				t.Fatalf("认证方被问 %v, want 去过两端空白的三个头", asked)
+			}
+		})
+	}
+}
+
 const handoverRegistrationBody = `{"object":"SYN-PARCEL-08-05","scope":"SYN-SCOPE/hub-dock-05","releasedBy":"SYN-PARTY/hub-08",` +
 	`"receivedBy":"SYN-PARTY/linehaul-08","verdict":"HANDED_OVER","releasingEvidence":"SYN-EVIDENCE/release-05",` +
 	`"receivingEvidence":"SYN-EVIDENCE/receive-05","rule":"SYN-RULE/handover@v1","basis":"SYN-BASIS/handover-05","version":"v1",` +

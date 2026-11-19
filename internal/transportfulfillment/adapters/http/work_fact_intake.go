@@ -5,18 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
-)
-
-// 作业事实口的身份不进事实载荷（ADR-0023：载荷是设备签发的事实内容）。设备与作业范围从这三个头来。
-const (
-	headerWorkDevice    = "Parcel-Device-Id"
-	headerWorkScopeKind = "Parcel-Work-Scope-Kind"
-	headerWorkScopeRef  = "Parcel-Work-Scope-Reference"
 )
 
 // ErrDeviceNotInUse 表示令牌与授予都过了，设备未登记、已停用或登在别的作业范围上（403）。
@@ -61,16 +53,16 @@ var (
 	_ DeliveryGatePreviewIntake     = (*WorkFactCommandIntake)(nil)
 )
 
+// tenantFrom 读作业事实面的设备与作业范围三头（头名与读法在 httpapi.ReadWorkFactHeaders）并认证出租户。
 func (intake *WorkFactCommandIntake) tenantFrom(ctx context.Context, request *http.Request) (domain.TenantID, error) {
-	device := strings.TrimSpace(request.Header.Get(headerWorkDevice))
-	kind := strings.TrimSpace(request.Header.Get(headerWorkScopeKind))
-	reference := strings.TrimSpace(request.Header.Get(headerWorkScopeRef))
-	if device == "" || kind == "" || reference == "" {
-		return domain.TenantID{}, fmt.Errorf("%w: %s, %s and %s are required", ErrMalformedRequest, headerWorkDevice, headerWorkScopeKind, headerWorkScopeRef)
+	device, kind, reference, complete := httpapi.ReadWorkFactHeaders(request)
+	if !complete {
+		return domain.TenantID{}, fmt.Errorf("%w: %s, %s and %s are required", ErrMalformedRequest,
+			httpapi.HeaderWorkDevice, httpapi.HeaderWorkScopeKind, httpapi.HeaderWorkScopeReference)
 	}
 	// 收寄口只认 NODE。这一面若也认 NODE，登在节点上的设备就能拿节点授予打揽收、交接和交付。
 	if kind != "OFFSITE" {
-		return domain.TenantID{}, fmt.Errorf("%w: transport fulfillment work facts require Parcel-Work-Scope-Kind OFFSITE", ErrMalformedRequest)
+		return domain.TenantID{}, fmt.Errorf("%w: transport fulfillment work facts require %s OFFSITE", ErrMalformedRequest, httpapi.HeaderWorkScopeKind)
 	}
 	return intake.authenticator.AuthenticateWorkFact(ctx, httpapi.BearerToken(request), device, kind, reference)
 }
