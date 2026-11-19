@@ -135,7 +135,6 @@ func serveCustomerCharges(
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
-	// 空列表交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
 	origins := map[string]PricingWeightOrigin{}
 	if weights != nil {
 		ids := make([]string, 0, len(page.Rows))
@@ -149,6 +148,7 @@ func serveCustomerCharges(
 		}
 		origins = loaded
 	}
+	// 空列表交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
 	bodies := make([]customerChargeBody, 0, len(page.Rows))
 	for _, row := range page.Rows {
 		bases := make([]chargeConfirmationBasisBody, 0, len(row.ConfirmationBases))
