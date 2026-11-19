@@ -152,7 +152,7 @@ type ConfirmChargeDeps struct {
 	Downstream   ports.ChargeConfirmationHandoff
 	Occupation   OccupationConversion
 	Clock        ports.Clock
-	// Supersessions 缺席时不拦确认。生产装配要装上，被替代的预估才不会再确认。
+	// Supersessions 必装：被替代的预估不再确认，这条规则靠它守，所以构造时核齐，缺了就拒。
 	Supersessions ports.ChargeSupersessionStore
 	// ChargeLock 让这笔费用上的确认与复磅形成那一头的记替代排成一列，必装，见 ports.ChargeStageLock。
 	ChargeLock ports.ChargeStageLock
@@ -165,7 +165,8 @@ type ConfirmChargeHandler struct {
 // NewConfirmChargeHandler 在装配时核齐依赖：缺件在这里报，不等到确认那一刻才撞空指针。
 func NewConfirmChargeHandler(deps ConfirmChargeDeps) (*ConfirmChargeHandler, error) {
 	if deps.Charges == nil || deps.Conditions == nil || deps.Facts == nil || deps.Attributions == nil ||
-		deps.Downstream == nil || deps.Occupation == nil || deps.Clock == nil || deps.ChargeLock == nil {
+		deps.Downstream == nil || deps.Occupation == nil || deps.Clock == nil || deps.Supersessions == nil ||
+		deps.ChargeLock == nil {
 		return nil, fmt.Errorf("%w: confirm charge", ErrNilDependency)
 	}
 	return &ConfirmChargeHandler{deps: deps}, nil
@@ -201,7 +202,7 @@ func (handler *ConfirmChargeHandler) Handle(
 		// 指名了不存在的费用：提交矛盾，改单重来。
 		return ConfirmChargeResult{outcome: ConfirmNotAccepted}, nil
 	}
-	if charge.Stage() != domain.ChargeConfirmed && handler.deps.Supersessions != nil {
+	if charge.Stage() != domain.ChargeConfirmed {
 		superseded, err := handler.deps.Supersessions.Superseded(ctx, command.TenantID, chargeID)
 		if err != nil {
 			return chargeStoreUndecided(command.ChargeID), nil

@@ -187,6 +187,28 @@ func (double *chargeLockDouble) LockChargeStage(_ context.Context, _ domain.Tena
 	return double.err
 }
 
+// neverSupersededDouble 是确认编排必装的替代册里「从不被替代」的最小替身：确认只读 Superseded；写的两个方法确认碰不到，
+// 碰到了说明用例走偏，报错而不是悄悄吞掉。要被替代的用例自己换上别的替身。
+type neverSupersededDouble struct{}
+
+var errNeverSupersededDoubleWritten = errors.New("never superseded double: unexpected write")
+
+func (neverSupersededDouble) SaveSupersession(
+	context.Context, domain.TenantID, domain.CustomerChargeID, domain.CustomerChargeID, time.Time,
+) error {
+	return errNeverSupersededDoubleWritten
+}
+
+func (neverSupersededDouble) SaveSupersessionWithoutSuccessor(
+	context.Context, domain.TenantID, domain.CustomerChargeID, time.Time,
+) error {
+	return errNeverSupersededDoubleWritten
+}
+
+func (neverSupersededDouble) Superseded(context.Context, domain.TenantID, domain.CustomerChargeID) (bool, error) {
+	return false, nil
+}
+
 type confirmFixture struct {
 	store        *chargeStoreDouble
 	lock         *chargeLockDouble
@@ -203,14 +225,15 @@ type confirmFixture struct {
 func (fixture *confirmFixture) deps(t *testing.T) application.ConfirmChargeDeps {
 	t.Helper()
 	return application.ConfirmChargeDeps{
-		Charges:      fixture.store,
-		Conditions:   fixture.conditions,
-		Facts:        fixture.facts,
-		Attributions: newAttributionJudge(t, fixture.forms, fixture.arrangements),
-		Downstream:   fixture.handoff,
-		Occupation:   fixture.occupation,
-		Clock:        confirmClock{at: chargeConfirmedAt},
-		ChargeLock:   fixture.lock,
+		Charges:       fixture.store,
+		Conditions:    fixture.conditions,
+		Facts:         fixture.facts,
+		Attributions:  newAttributionJudge(t, fixture.forms, fixture.arrangements),
+		Downstream:    fixture.handoff,
+		Occupation:    fixture.occupation,
+		Clock:         confirmClock{at: chargeConfirmedAt},
+		Supersessions: neverSupersededDouble{},
+		ChargeLock:    fixture.lock,
 	}
 }
 

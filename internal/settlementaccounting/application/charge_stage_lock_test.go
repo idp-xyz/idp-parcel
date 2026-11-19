@@ -183,6 +183,16 @@ func TestTheConfirmationRefusesToBeBuiltWithoutTheChargeLock(t *testing.T) {
 	}
 }
 
+// Covers: 替代册是确认编排的必需依赖：「被替代的不再确认」靠它守，漏装就无声地不守，所以装配时核齐，缺了在这里报。
+func TestTheConfirmationRefusesToBeBuiltWithoutTheSupersessionRegister(t *testing.T) {
+	fixture := newConfirmFixture(t)
+	deps := fixture.deps(t)
+	deps.Supersessions = nil
+	if _, err := application.NewConfirmChargeHandler(deps); !errors.Is(err, application.ErrNilDependency) {
+		t.Fatalf("err = %v，want 缺依赖", err)
+	}
+}
+
 // Covers: 确认的各条入口都被覆盖——管理台手工确认直接调确认编排；到点自动确认（按包裹与按费用两种进法）与形成后的跟进确认
 // 都经同一只确认编排，所以都在读阶段之前取到这笔费用的行锁。有包裹可锁的入口先取包裹锁、再取费用行锁。
 func TestEveryConfirmationEntryTakesTheChargeRowLock(t *testing.T) {
