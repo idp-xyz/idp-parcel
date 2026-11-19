@@ -42,6 +42,8 @@ type PricingWeightOrigin struct {
 	DimensionUnit    string
 }
 
+// PricingWeightOrigins 空标识与重复标识不问；登记册里没有的评价在答复里缺席。计价一侧造不出评价标识的引用报
+// ErrUntranslatableReference 并点名它，整批不交回。
 func (origins *PricingWeightOrigins) PricingWeightOrigins(
 	ctx context.Context,
 	tenant sadomain.TenantID,
@@ -63,7 +65,9 @@ func (origins *PricingWeightOrigins) PricingWeightOrigins(
 		seen[raw] = struct{}{}
 		id, err := ppdomain.NewEvaluationID(raw)
 		if err != nil {
-			continue
+			// 费用行上的评价引用只来自读得回评价的那条形成路径，计价一侧造不出标识的引用是数据坏了；跳过它会把一笔
+			// 说不清缘由的费用答成「没有计价重量」，与评价确实没有测量事实混在一起。
+			return nil, fmt.Errorf("%w: evaluation reference %q: %v", ErrUntranslatableReference, raw, err)
 		}
 		ids = append(ids, id)
 	}

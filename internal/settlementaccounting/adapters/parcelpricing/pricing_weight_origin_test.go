@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -134,6 +135,28 @@ func TestAnUnreadableEvaluationRegisterIsAnErrorNotAnEmptyAnswer(t *testing.T) {
 		context.Background(), must[sadomain.TenantID](t)(sadomain.NewTenantID("tenant-1")), []string{"eval-measured"})
 	if !errors.Is(err, down) || answered != nil {
 		t.Fatalf("answered = %v err = %v，want 上抛", answered, err)
+	}
+}
+
+// Covers: 费用行上的评价引用只来自计价评价登记册里找得到的评价（形成费用的唯一路径先按评价标识读回评价才记下它），所以引用在计价
+// 一侧造不出评价标识，是数据坏了，不是「这笔费用没有计价重量」。读口报错并点名那个引用，不再跳过它答一份少一笔的结果；不去问登记册，
+// 前面读得到的几笔也不交回。
+func TestAChargeEvaluationReferenceThePricingSideCannotBuildIsAnErrorNamingIt(t *testing.T) {
+	double := &evaluationsByIDDouble{}
+	origins := must[*adapter.PricingWeightOrigins](t)(adapter.NewPricingWeightOrigins(double))
+
+	answered, err := origins.PricingWeightOrigins(
+		context.Background(), must[sadomain.TenantID](t)(sadomain.NewTenantID("tenant-1")),
+		[]string{"eval-measured", " eval-padded ", "eval-declared"})
+
+	if !errors.Is(err, adapter.ErrUntranslatableReference) {
+		t.Fatalf("err = %v，want 以 ErrUntranslatableReference 报错", err)
+	}
+	if !strings.Contains(err.Error(), `" eval-padded "`) {
+		t.Fatalf("err = %q，want 点名坏的那个引用", err)
+	}
+	if answered != nil || len(double.asked) != 0 {
+		t.Fatalf("answered = %v asked = %v，want 不交回任何一笔也不去问登记册", answered, double.asked)
 	}
 }
 
