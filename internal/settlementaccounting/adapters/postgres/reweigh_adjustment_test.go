@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -45,7 +46,8 @@ func TestReweighWritesRefuseToRunOutsideATransaction(t *testing.T) {
 }
 
 // Covers: 没有后继的替代（新评价合计为零）存得进，Superseded 答是，客户费用册读回的行 superseded 为真、supersededBy 为空；
-// 之后一代形成新预估，给出后继就补上；已有后继的不被再改写——后到的另一个后继、再来的没有后继的替代都不动它。
+// 之后一代形成新预估，给出后继就补上；已有后继的不被再改写——再来的没有后继的替代不动它（另一个后继的那一格见
+// TestASupersessionNamingAnotherSuccessorIsRefusedAndLeavesTheRowAsItWas）。
 func TestASupersessionWithoutASuccessorIsStoredAndTheSuccessorLaterFillsItIn(t *testing.T) {
 	db := catalogueDB(t)
 	charges, err := adapter.NewCustomerCharges(db)
@@ -61,9 +63,9 @@ func TestASupersessionWithoutASuccessorIsStoredAndTheSuccessorLaterFillsItIn(t *
 		t.Fatal(err)
 	}
 	tenant := saTenant(t, "tenant-a")
-	zeroed, successor, other := estimatedCharge(t, "charge-zero-1"), estimatedCharge(t, "charge-zero-2"), estimatedCharge(t, "charge-zero-3")
+	zeroed, successor := estimatedCharge(t, "charge-zero-1"), estimatedCharge(t, "charge-zero-2")
 	saWithin(t, db.Transactor(), t.Context(), func(ctx context.Context) error {
-		for _, charge := range []domain.CustomerCharge{zeroed, successor, other} {
+		for _, charge := range []domain.CustomerCharge{zeroed, successor} {
 			if _, err := charges.SaveEstimated(ctx, tenant, charge); err != nil {
 				return err
 			}
@@ -107,13 +109,102 @@ func TestASupersessionWithoutASuccessorIsStoredAndTheSuccessorLaterFillsItIn(t *
 	}
 
 	saWithin(t, db.Transactor(), t.Context(), func(ctx context.Context) error {
-		if err := supersessions.SaveSupersession(ctx, tenant, zeroed.ID(), other.ID(), stageLockAt.Add(2*time.Hour)); err != nil {
-			return err
-		}
 		return supersessions.SaveSupersessionWithoutSuccessor(ctx, tenant, zeroed.ID(), stageLockAt.Add(3*time.Hour))
 	})
 	if by, superseded, _ := read(); by != successor.ID().String() || !superseded {
 		t.Fatalf("已有后继的替代被改写：supersededBy=%q Superseded=%v，want 仍是 %s", by, superseded, successor.ID())
+	}
+}
+
+// supersessionOf 读替代册上被替代那一笔的原样：后继（空串即没有后继）与最初记下的时刻；行不在则 found 为假。
+func supersessionOf(
+	t *testing.T,
+	db *bentopg.DB,
+	tenant domain.TenantID,
+	charge domain.CustomerChargeID,
+) (successor string, recordedAt time.Time, found bool) {
+	t.Helper()
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored *string
+	err = querier.QueryRow(t.Context(), `
+		SELECT superseded_by_charge_id, recorded_at
+		  FROM settlement_accounting.customer_charge_supersession
+		 WHERE tenant_id = $1 AND charge_id = $2`,
+		tenant.String(), charge.String(),
+	).Scan(&stored, &recordedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", time.Time{}, false
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored != nil {
+		successor = *stored
+	}
+	return successor, recordedAt, true
+}
+
+// Covers: 记替代撞上「已有另一个后继」不能静默不写——同一后继记两次都成功（重放，行不变、recorded_at 仍是最初那一刻）；
+// 已有行带着另一个后继，答 ports.ErrChargeSupersededByAnother，行一字不改；已有行的后继为空时给出后继就补上。
+func TestASupersessionNamingAnotherSuccessorIsRefusedAndLeavesTheRowAsItWas(t *testing.T) {
+	db := catalogueDB(t)
+	charges, err := adapter.NewCustomerCharges(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	supersessions, err := adapter.NewChargeSupersessions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := saTenant(t, "tenant-a")
+	replaced, successor, other := estimatedCharge(t, "charge-dup-1"), estimatedCharge(t, "charge-dup-2"), estimatedCharge(t, "charge-dup-3")
+	hollow := estimatedCharge(t, "charge-dup-4")
+	saWithin(t, db.Transactor(), t.Context(), func(ctx context.Context) error {
+		for _, charge := range []domain.CustomerCharge{replaced, successor, other, hollow} {
+			if _, err := charges.SaveEstimated(ctx, tenant, charge); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	save := func(charge, by domain.CustomerChargeID, at time.Time) error {
+		return db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
+			return supersessions.SaveSupersession(ctx, tenant, charge, by, at)
+		})
+	}
+
+	if err := save(replaced.ID(), successor.ID(), stageLockAt); err != nil {
+		t.Fatalf("首次记替代：%v", err)
+	}
+	if err := save(replaced.ID(), successor.ID(), stageLockAt.Add(time.Hour)); err != nil {
+		t.Fatalf("同一后继重放应算成功，实得：%v", err)
+	}
+	if by, at, found := supersessionOf(t, db, tenant, replaced.ID()); !found || by != successor.ID().String() || !at.Equal(stageLockAt) {
+		t.Fatalf("重放之后替代行 found=%v 后继=%q 时刻=%s，want 后继 %s、时刻 %s", found, by, at, successor.ID(), stageLockAt)
+	}
+
+	err = save(replaced.ID(), other.ID(), stageLockAt.Add(2*time.Hour))
+	if !errors.Is(err, ports.ErrChargeSupersededByAnother) {
+		t.Fatalf("另一个后继应答 ErrChargeSupersededByAnother，实得：%v", err)
+	}
+	if by, at, found := supersessionOf(t, db, tenant, replaced.ID()); !found || by != successor.ID().String() || !at.Equal(stageLockAt) {
+		t.Fatalf("被拒之后替代行 found=%v 后继=%q 时刻=%s，want 一字未改：后继 %s、时刻 %s", found, by, at, successor.ID(), stageLockAt)
+	}
+
+	saWithin(t, db.Transactor(), t.Context(), func(ctx context.Context) error {
+		return supersessions.SaveSupersessionWithoutSuccessor(ctx, tenant, hollow.ID(), stageLockAt)
+	})
+	if by, _, found := supersessionOf(t, db, tenant, hollow.ID()); !found || by != "" {
+		t.Fatalf("没有后继的替代 found=%v 后继=%q，want 行在、后继为空", found, by)
+	}
+	if err := save(hollow.ID(), successor.ID(), stageLockAt.Add(time.Hour)); err != nil {
+		t.Fatalf("空后继补上后继：%v", err)
+	}
+	if by, at, found := supersessionOf(t, db, tenant, hollow.ID()); !found || by != successor.ID().String() || !at.Equal(stageLockAt) {
+		t.Fatalf("补上之后替代行 found=%v 后继=%q 时刻=%s，want 后继 %s、时刻仍是 %s", found, by, at, successor.ID(), stageLockAt)
 	}
 }
 

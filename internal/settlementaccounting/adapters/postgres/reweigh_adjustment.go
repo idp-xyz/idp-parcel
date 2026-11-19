@@ -39,7 +39,7 @@ func (repository *ChargeSupersessions) SaveSupersession(
 		return fmt.Errorf("save charge supersession: %w", err)
 	}
 	// 已有行的后继为空（新评价合计为零时先记的没有后继的替代）才补上后继；已有后继的不覆盖，recorded_at 也留着最初被替代的那一刻。
-	_, err = executor.Exec(ctx, `
+	tag, err := executor.Exec(ctx, `
 		INSERT INTO settlement_accounting.customer_charge_supersession AS supersession (
 			tenant_id, charge_id, superseded_by_charge_id, recorded_at
 		) VALUES ($1, $2, $3, $4)
@@ -50,6 +50,25 @@ func (repository *ChargeSupersessions) SaveSupersession(
 	)
 	if err != nil {
 		return fmt.Errorf("save charge supersession: %w", err)
+	}
+	if tag.RowsAffected() == 1 {
+		return nil
+	}
+	// 一行都没动，只可能是冲突的那一行已带着后继。后继一旦写下就不再变，所以这里读到的就是它：同一个是重放，另一个是一笔
+	// 费用有了两个替代者，不能让调用方以为记下了。
+	var stored string
+	err = executor.QueryRow(ctx, `
+		SELECT superseded_by_charge_id
+		  FROM settlement_accounting.customer_charge_supersession
+		 WHERE tenant_id = $1 AND charge_id = $2`,
+		tenant.String(), charge.String(),
+	).Scan(&stored)
+	if err != nil {
+		return fmt.Errorf("save charge supersession: %w", err)
+	}
+	if stored != supersededBy.String() {
+		return fmt.Errorf("save charge supersession: charge %s is superseded by %s, not %s: %w",
+			charge, stored, supersededBy, ports.ErrChargeSupersededByAnother)
 	}
 	return nil
 }

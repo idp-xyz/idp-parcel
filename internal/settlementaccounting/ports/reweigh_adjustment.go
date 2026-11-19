@@ -2,10 +2,14 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
+
+// ErrChargeSupersededByAnother 说明替代册上这笔费用已被另一笔费用替代：同一笔费用不能有两个后继。
+var ErrChargeSupersededByAnother = errors.New("settlement accounting: charge is already superseded by another charge")
 
 // ChargeSupersessionStore 记下后一代评价替代了前一代仍未确认的费用。确认口据此不再确认被替代的那一笔。
 //
@@ -13,7 +17,12 @@ import (
 // 被替代、不再确认（SaveSupersessionWithoutSuccessor）。分成两个方法而不是让后继可缺席：缺后继是一种业务情形，不是一个
 // 没填的参数，调用处读得出自己在记哪一种。之后一代形成新预估时，同一笔费用上的 SaveSupersession 把它补成后继。
 type ChargeSupersessionStore interface {
-	// SaveSupersession 记下 charge 被 supersededBy 替代。这笔费用已有没有后继的替代时补上后继；已有后继的不覆盖。
+	// SaveSupersession 记下 charge 被 supersededBy 替代。这笔费用在册上的样子不同，答法也不同：
+	//   - 还没有替代：写下。
+	//   - 已有替代而没有后继：补上后继，recorded_at 留着最初被替代的那一刻。
+	//   - 已有替代、后继就是 supersededBy：重放，算成功，不改。
+	//   - 已有替代、后继是另一笔：答 ErrChargeSupersededByAnother，不改。
+	// 最后一种是一笔费用有了两个替代者，费用行锁与包裹锁挡着，正常撞不上；撞上了不能静默当作记下了，调用方照错误整笔回滚。
 	SaveSupersession(
 		ctx context.Context,
 		tenant domain.TenantID,
