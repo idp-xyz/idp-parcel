@@ -13,29 +13,16 @@ type Clock interface {
 	Now() time.Time
 }
 
-// WarehouseSaveOutcome 是一笔仓修订在持久化面的落点（ADR-0031）：`已落库`是新写入的一笔，`已在册`是同键同内容的
-// 重放，`内容冲突`是同键异内容。业务格不用 error 表达，事务因此保持可用。比的只是完整内容，不比登记责任方与登记时刻。
-type WarehouseSaveOutcome uint8
+// 仓这一册沿用的落点名字：落点代数是各册共用的 RegistrySaveOutcome，这里的名字是同一套类型与取值的别名，仓一侧的
+// 调用与用例不必跟着换名。
+type WarehouseSaveOutcome = RegistrySaveOutcome
 
 const (
-	WarehouseSaveOutcomeInvalid WarehouseSaveOutcome = iota
-	WarehouseRevisionSaved
-	WarehouseRevisionAlreadyRegistered
-	WarehouseRevisionContentConflict
+	WarehouseSaveOutcomeInvalid        = RegistrySaveOutcomeInvalid
+	WarehouseRevisionSaved             = RegistryRevisionSaved
+	WarehouseRevisionAlreadyRegistered = RegistryRevisionAlreadyRegistered
+	WarehouseRevisionContentConflict   = RegistryRevisionContentConflict
 )
-
-func (outcome WarehouseSaveOutcome) String() string {
-	switch outcome {
-	case WarehouseRevisionSaved:
-		return "SAVED"
-	case WarehouseRevisionAlreadyRegistered:
-		return "ALREADY_REGISTERED"
-	case WarehouseRevisionContentConflict:
-		return "CONTENT_CONFLICT"
-	default:
-		return ""
-	}
-}
 
 // WarehouseRegistry 是仓登记册的写入面：键 = 租户 + 仓编码 + 修订号，修订只追加、不覆盖。
 //

@@ -12,96 +12,27 @@ import (
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
-// RegisterWarehouseOutcome 是仓登记用例的结果代数（ADR-0031）：`REGISTERED` 是本次落册；`ALREADY_REGISTERED` 是同一修订号、
-// 内容相同的重放，回显在册的那一份；`CONTENT_CONFLICT` 是同一修订号、内容不同，不覆盖在册的；`NOT_ACCEPTED` 是新修订没通过
-// 核对，一个字节没写，并且一定带一个封闭的拒绝理由。
-//
-// 结果的形状（落点 + 拒绝理由 + 指出的格）是为了往后再加：别的册会有指名对象查不到、对象已停用这类拒绝理由，也会有
-// 租户取值没到时的另一种落点。它们落在这两个枚举里再添一格，Field 已经能指名所指的那一格，结果的形状不用动。
-type RegisterWarehouseOutcome uint8
-
-const (
-	RegisterWarehouseOutcomeInvalid RegisterWarehouseOutcome = iota
-	WarehouseRegistered
-	WarehouseAlreadyRegistered
-	WarehouseContentConflict
-	WarehouseNotAccepted
+// 仓这一册沿用的结果名字：结果代数是各册共用的一套（registration_result.go），这里的名字是同一套类型与取值的别名，仓一侧的
+// 编排、译装与用例不必跟着换名。对外的字面量、答复体与状态码都由那一套给出，别名不另立。
+type (
+	RegisterWarehouseOutcome = RegistrationOutcome
+	RegisterWarehouseRefusal = RegistrationRefusal
+	// RegisterWarehouseResult 的 Field 是仓修订上的格（见 domain.WarehouseField），回显的是在册的仓修订。
+	RegisterWarehouseResult = RegistrationResult[domain.WarehouseRevision, domain.WarehouseField]
 )
 
-func (outcome RegisterWarehouseOutcome) String() string {
-	switch outcome {
-	case WarehouseRegistered:
-		return "REGISTERED"
-	case WarehouseAlreadyRegistered:
-		return "ALREADY_REGISTERED"
-	case WarehouseContentConflict:
-		return "CONTENT_CONFLICT"
-	case WarehouseNotAccepted:
-		return "NOT_ACCEPTED"
-	default:
-		return ""
-	}
-}
-
-// RegisterWarehouseRefusal 是 `NOT_ACCEPTED` 的原因。逐格分开是因为登记方的续办各不相同：修订错位要重读册面，不可改的格
-// 要换成原来的值，内容不合要改那一格的取值。
-type RegisterWarehouseRefusal uint8
-
 const (
-	WarehouseRefusalNone RegisterWarehouseRefusal = iota
-	WarehouseRefusalRevisionOutOfSequence
-	WarehouseRefusalImmutableField
-	WarehouseRefusalContentInvalid
+	RegisterWarehouseOutcomeInvalid = RegistrationOutcomeInvalid
+	WarehouseRegistered             = RegistrationRegistered
+	WarehouseAlreadyRegistered      = RegistrationAlreadyRegistered
+	WarehouseContentConflict        = RegistrationContentConflict
+	WarehouseNotAccepted            = RegistrationNotAccepted
+
+	WarehouseRefusalNone                  = RegistrationRefusalNone
+	WarehouseRefusalRevisionOutOfSequence = RegistrationRefusalRevisionOutOfSequence
+	WarehouseRefusalImmutableField        = RegistrationRefusalImmutableField
+	WarehouseRefusalContentInvalid        = RegistrationRefusalContentInvalid
 )
-
-func (refusal RegisterWarehouseRefusal) String() string {
-	switch refusal {
-	case WarehouseRefusalRevisionOutOfSequence:
-		return "REVISION_OUT_OF_SEQUENCE"
-	case WarehouseRefusalImmutableField:
-		return "IMMUTABLE_FIELD"
-	case WarehouseRefusalContentInvalid:
-		return "CONTENT_INVALID"
-	default:
-		return ""
-	}
-}
-
-// RegisterWarehouseResult 携带落点、`NOT_ACCEPTED` 的原因与细节。输入被拒是已形成的答案，不是技术失败；只有册读写不动才
-// 另走 error。
-type RegisterWarehouseResult struct {
-	outcome        RegisterWarehouseOutcome
-	refusal        RegisterWarehouseRefusal
-	field          domain.WarehouseField
-	latestRevision int
-	registered     domain.WarehouseRevision
-	hasRegistered  bool
-}
-
-func (result RegisterWarehouseResult) Outcome() RegisterWarehouseOutcome {
-	return result.outcome
-}
-
-// Refusal 只在 NOT_ACCEPTED 时有值。
-func (result RegisterWarehouseResult) Refusal() RegisterWarehouseRefusal {
-	return result.refusal
-}
-
-// Field 指出 IMMUTABLE_FIELD 与 CONTENT_INVALID 差在哪一格；别的结果上是零值。
-func (result RegisterWarehouseResult) Field() domain.WarehouseField {
-	return result.field
-}
-
-// LatestRevision 只在 REVISION_OUT_OF_SEQUENCE 时有值：在册的最新修订号，册上没有这个仓时是 0。
-func (result RegisterWarehouseResult) LatestRevision() int {
-	return result.latestRevision
-}
-
-// Revision 只在 REGISTERED 与 ALREADY_REGISTERED 时有：落册或在册的那一笔。重放回显的是在册那一份，登记责任方与登记时刻
-// 因此是当初落册时的，不是这次重投的。
-func (result RegisterWarehouseResult) Revision() (domain.WarehouseRevision, bool) {
-	return result.registered, result.hasRegistered
-}
 
 // RegisterWarehouseCommand 登记仓的一笔修订：修订 1 是首次登记，其后是改资料、停用与再启用，各占下一个修订号。
 // Tenant 与 Registrant 取自认证信封，不取自载荷。
