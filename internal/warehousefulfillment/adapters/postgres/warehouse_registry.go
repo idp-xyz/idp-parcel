@@ -28,7 +28,30 @@ func NewWarehouses(db *bentopg.DB) (*Warehouses, error) {
 	return &Warehouses{db: db}, nil
 }
 
-var _ ports.WarehouseRegistry = (*Warehouses)(nil)
+var (
+	_ ports.WarehouseRegistry = (*Warehouses)(nil)
+	// 不指名仓的册核「本租户有没有登记过仓」读的也是仓登记册本身，不另有一条读路。
+	_ ports.TenantWarehouseLookup = (*Warehouses)(nil)
+)
+
+// HasAnyWarehouse 回答本租户在仓册上有没有任何一笔修订。别的租户登记的仓不算；停用的仓也算（只追加的册里登记过就留着）。
+func (repository *Warehouses) HasAnyWarehouse(ctx context.Context, tenant domain.TenantID) (bool, error) {
+	const operation = "has any warehouse"
+	if tenant.String() == "" {
+		return false, fmt.Errorf("%s: tenant is required", operation)
+	}
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", operation, err)
+	}
+	var registered bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM warehouse_fulfillment.warehouse_revision WHERE tenant_id = $1)`,
+		tenant.String()).Scan(&registered); err != nil {
+		return false, fmt.Errorf("%s: %w", operation, err)
+	}
+	return registered, nil
+}
 
 func (repository *Warehouses) SaveWarehouseRevision(
 	ctx context.Context,
