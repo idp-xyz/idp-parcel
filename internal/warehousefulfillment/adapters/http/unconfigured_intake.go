@@ -18,6 +18,7 @@ var (
 	_ WarehouseRegistrationIntake         = UnconfiguredIntake{}
 	_ ZoneRegistrationIntake              = UnconfiguredIntake{}
 	_ LocationTypeRegistrationIntake      = UnconfiguredIntake{}
+	_ LocationRegistrationIntake          = UnconfiguredIntake{}
 	_ PackagingMaterialRegistrationIntake = UnconfiguredIntake{}
 	_ CatalogueIntake                     = UnconfiguredIntake{}
 )
@@ -37,6 +38,12 @@ func (UnconfiguredIntake) IntakeLocationTypeRegistration(
 	context.Context, *http.Request,
 ) (application.RegisterLocationTypeCommand, error) {
 	return application.RegisterLocationTypeCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeLocationRegistration(
+	context.Context, *http.Request,
+) (application.RegisterLocationCommand, error) {
+	return application.RegisterLocationCommand{}, ErrAccessChannelNotConfigured
 }
 
 func (UnconfiguredIntake) IntakePackagingMaterialRegistration(

@@ -36,6 +36,7 @@ var (
 	_ WarehouseRegistrationIntake         = (*OperatorRegistryIntake)(nil)
 	_ ZoneRegistrationIntake              = (*OperatorRegistryIntake)(nil)
 	_ LocationTypeRegistrationIntake      = (*OperatorRegistryIntake)(nil)
+	_ LocationRegistrationIntake          = (*OperatorRegistryIntake)(nil)
 	_ PackagingMaterialRegistrationIntake = (*OperatorRegistryIntake)(nil)
 )
 
@@ -65,6 +66,13 @@ func (intake *OperatorRegistryIntake) IntakeLocationTypeRegistration(
 	request *http.Request,
 ) (application.RegisterLocationTypeCommand, error) {
 	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.LocationTypeCommand)
+}
+
+func (intake *OperatorRegistryIntake) IntakeLocationRegistration(
+	ctx context.Context,
+	request *http.Request,
+) (application.RegisterLocationCommand, error) {
+	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.LocationCommand)
 }
 
 func (intake *OperatorRegistryIntake) IntakePackagingMaterialRegistration(
