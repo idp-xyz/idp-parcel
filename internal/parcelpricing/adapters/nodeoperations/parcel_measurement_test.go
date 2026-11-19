@@ -42,6 +42,22 @@ func TestOneMeasurementAnswersBothTheWeightAndTheDimensions(t *testing.T) {
 	}
 }
 
+// 空白的包裹标识指不到任何一件包裹：答没有实测、不报错，也不拿它去问关联与测量的读口。夹具的读口对任何包裹都交回一件实物
+// 与一条测量，所以真问了的话这里会读到实测。
+func TestABlankParcelIdentityHasNoMeasurementAndAsksNoOne(t *testing.T) {
+	only := measured(t, "measure-1", "2.10", time.Date(2026, 11, 17, 2, 0, 0, 0, time.UTC))
+	view := measurementView(t, []string{"unit-1"}, []nodomain.ActualMeasurement{only}, false)
+	for name, parcel := range map[string]string{"空串": "", "纯空白": "  \t"} {
+		load, err := view.LoadActualMeasurement(context.Background(), pricingTenant(t), parcel)
+		if err != nil {
+			t.Fatalf("%s：%v", name, err)
+		}
+		if load.Found || load.Undetermined != "" {
+			t.Fatalf("%s：空白标识答了实测：%+v", name, load)
+		}
+	}
+}
+
 func TestSeveralAssociatedUnitsAreUndetermined(t *testing.T) {
 	view := measurementView(t, []string{"unit-1", "unit-2"}, nil, false)
 	load, err := view.LoadActualMeasurement(context.Background(), pricingTenant(t), "parcel-1")

@@ -2,6 +2,7 @@ package nodeoperations
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
@@ -68,9 +69,13 @@ func (view *ParcelMeasurementView) LoadActualMeasurement(
 	if err != nil {
 		return none, err
 	}
+	// 空白标识指不到任何一件包裹，答「没有实测」与读口查无关联时一致；别的错不在此列，照原样冒上去。
 	parcel, err := nodomain.NewParcelAssociationReference(object)
-	if err != nil {
+	if errors.Is(err, nodomain.ErrBlankValue) {
 		return none, nil
+	}
+	if err != nil {
+		return none, err
 	}
 	units, err := view.associations.ListHandlingUnits(ctx, nodeTenant, parcel)
 	if err != nil {
