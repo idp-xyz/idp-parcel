@@ -83,6 +83,21 @@ func (registration transactionalLocationTypeRegistration) Register(
 	})
 }
 
+// transactionalLocationRegistration 是库位登记的事务壳。核仓、库区与库位类型的读与库位的读写在同一个事务里。
+type transactionalLocationRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.RegisterLocationHandler
+}
+
+func (registration transactionalLocationRegistration) Register(
+	ctx context.Context,
+	command warehouseapp.RegisterLocationCommand,
+) (warehouseapp.RegisterLocationResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.RegisterLocationResult, error) {
+		return registration.inner.Register(txCtx, command)
+	})
+}
+
 // transactionalPackagingMaterialRegistration 是包材登记的事务壳。核「本租户有没有登记过仓」的读与包材的读写在同一个事务里。
 type transactionalPackagingMaterialRegistration struct {
 	transactor bentoapp.Transactor
@@ -108,6 +123,9 @@ type warehouseFulfillmentOrchestration struct {
 
 	locationTypeRegistration transactionalLocationTypeRegistration
 	locationTypeQueries      *warehouseapp.QueryLocationTypesHandler
+
+	locationRegistration transactionalLocationRegistration
+	locationQueries      *warehouseapp.QueryLocationsHandler
 
 	packagingMaterialRegistration transactionalPackagingMaterialRegistration
 	packagingMaterialQueries      *warehouseapp.QueryPackagingMaterialsHandler
@@ -139,6 +157,14 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB) (warehouseFulfillmen
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: location type catalogue: %w", err)
 	}
+	locations, err := whpostgres.NewLocations(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: location registry: %w", err)
+	}
+	locationCatalogue, err := whpostgres.NewLocationCatalogue(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: location catalogue: %w", err)
+	}
 	packagingMaterials, err := whpostgres.NewPackagingMaterials(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: packaging material registry: %w", err)
@@ -166,6 +192,12 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB) (warehouseFulfillmen
 			inner: warehouseapp.NewRegisterLocationTypeHandler(locationTypes, warehouses, systemClock{}),
 		},
 		locationTypeQueries: warehouseapp.NewQueryLocationTypesHandler(locationTypeCatalogue, locationTypeCatalogue),
+		locationRegistration: transactionalLocationRegistration{
+			transactor: db.Transactor(),
+			// 库位登记核仓、库区与库位类型已登记，读的都是各册的登记册本身：同一个事务里的同一批适配器。
+			inner: warehouseapp.NewRegisterLocationHandler(locations, warehouses, zones, locationTypes, systemClock{}),
+		},
+		locationQueries: warehouseapp.NewQueryLocationsHandler(locationCatalogue, locationCatalogue),
 		packagingMaterialRegistration: transactionalPackagingMaterialRegistration{
 			transactor: db.Transactor(),
 			// 包材登记核「本租户有没有登记过仓」读的也是仓登记册本身：同一个事务里的同一只适配器。
