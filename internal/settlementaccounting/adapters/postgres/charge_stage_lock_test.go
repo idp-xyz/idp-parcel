@@ -27,6 +27,25 @@ type stageLockClock struct{}
 
 func (stageLockClock) Now() time.Time { return stageLockAt }
 
+// stageLockMovableClock 是形成与确认编排共用的钟：记替代取它的时刻，零额用例要看「后继补上之后 recorded_at 仍是最初那
+// 一刻」，钟不动就分不出被改写与没被改写；确认取同一只钟，确认时刻才不会早于晚一拍形成的费用。
+type stageLockMovableClock struct {
+	mutex sync.Mutex
+	at    time.Time
+}
+
+func (clock *stageLockMovableClock) Now() time.Time {
+	clock.mutex.Lock()
+	defer clock.mutex.Unlock()
+	return clock.at
+}
+
+func (clock *stageLockMovableClock) advance(by time.Duration) {
+	clock.mutex.Lock()
+	defer clock.mutex.Unlock()
+	clock.at = clock.at.Add(by)
+}
+
 type stageLockConditions struct {
 	basis domain.ConfirmationBasisReference
 }
@@ -70,9 +89,10 @@ func (double stageLockMappings) FindFeeItemMapping(
 	return mapping, err == nil, err
 }
 
+// stageLockEvaluations 交回夹具此刻装着的那份评价。用指针装进形成编排：零额用例要在两代之间换掉它。
 type stageLockEvaluations struct{ adoption ports.SellEvaluationAdoption }
 
-func (double stageLockEvaluations) LoadSellEvaluation(
+func (double *stageLockEvaluations) LoadSellEvaluation(
 	context.Context, domain.TenantID, domain.SellEvaluationReference,
 ) (ports.SellEvaluationAdoption, bool, error) {
 	return double.adoption, true, nil
@@ -106,12 +126,14 @@ type stageLockFixture struct {
 	earlier       domain.CustomerChargeID
 	next          ports.SellEvaluationRequestRecord
 	adoption      ports.SellEvaluationAdoption
+	evaluations   *stageLockEvaluations
+	clock         *stageLockMovableClock
 }
 
 func newStageLockFixture(t *testing.T) *stageLockFixture {
 	t.Helper()
 	db := catalogueDB(t)
-	fixture := &stageLockFixture{db: db, tenant: saTenant(t, "tenant-a")}
+	fixture := &stageLockFixture{db: db, tenant: saTenant(t, "tenant-a"), clock: &stageLockMovableClock{at: stageLockAt}}
 	var err error
 	if fixture.charges, err = adapter.NewCustomerCharges(db); err != nil {
 		t.Fatal(err)
@@ -199,7 +221,7 @@ func newStageLockFixture(t *testing.T) *stageLockFixture {
 		Attributions:  attributions,
 		Downstream:    stageLockHandoff{},
 		Occupation:    stageLockOccupation{},
-		Clock:         stageLockClock{},
+		Clock:         fixture.clock,
 		Supersessions: fixture.supersessions,
 		ChargeLock:    fixture.charges,
 	})
@@ -217,7 +239,8 @@ func newStageLockFixture(t *testing.T) *stageLockFixture {
 		SettlementCurrency: saValue(t, domain.NewCurrencyCode, "XTS"),
 		SettlementMinor:    15000,
 	}
-	formSell, err := application.NewFormSellCustomerChargeHandler(stageLockEvaluations{adoption: fixture.adoption}, fixture.charges)
+	fixture.evaluations = &stageLockEvaluations{adoption: fixture.adoption}
+	formSell, err := application.NewFormSellCustomerChargeHandler(fixture.evaluations, fixture.charges)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +250,7 @@ func newStageLockFixture(t *testing.T) *stageLockFixture {
 		Mappings:         stageLockMappings{item: saValue(t, domain.NewFeeItemReference, "SYN-FEE-FREIGHT")},
 		Charges:          formSell,
 		FollowUp:         stageLockFollowUp{},
-		Clock:            stageLockClock{},
+		Clock:            fixture.clock,
 		PriorCharges:     fixture.charges,
 		Supersessions:    fixture.supersessions,
 		ReweighAdoptions: stageLockAdoption{},
