@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 )
 
@@ -44,7 +43,7 @@ func NewRegisterWarehouseEndpoint(intake WarehouseRegistrationIntake, registrar 
 
 		command, err := intake.IntakeWarehouseRegistration(request.Context(), request)
 		if err != nil {
-			writeIntakeProblem(response, request, err)
+			writeIntakeProblem(response, err)
 			return
 		}
 
@@ -54,18 +53,18 @@ func NewRegisterWarehouseEndpoint(intake WarehouseRegistrationIntake, registrar 
 			// 地址正文不进日志（UC-WF-001「权限、隔离与审计」）。
 			slog.ErrorContext(request.Context(), "warehouse registration did not form an answer",
 				"warehouseCode", command.Code.String(), "revision", command.Revision)
-			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		writeRegisterAnswer(response, request, result)
+		writeRegisterAnswer(response, result)
 	})
 }
 
-func writeRegisterAnswer(response http.ResponseWriter, request *http.Request, result application.RegisterWarehouseResult) {
+func writeRegisterAnswer(response http.ResponseWriter, result application.RegisterWarehouseResult) {
 	outcome := result.Outcome()
 	name := outcome.String()
 	if name == "" {
-		httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeUnnamedOutcome)
+		writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
 		return
 	}
 	answer := registerAnswer{Outcome: name}
@@ -76,7 +75,7 @@ func writeRegisterAnswer(response http.ResponseWriter, request *http.Request, re
 		revision, present := result.Revision()
 		if !present {
 			// 落册或在册的结果一定带着那一笔；没带是编排与传输层对结果的理解漂开了，不能答一个空的成功。
-			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 		body := warehouseBodyOfRevision(revision)
@@ -87,7 +86,7 @@ func writeRegisterAnswer(response http.ResponseWriter, request *http.Request, re
 	case application.WarehouseNotAccepted:
 		refusal := result.Refusal()
 		if refusal.String() == "" {
-			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeUnnamedOutcome)
+			writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
 			return
 		}
 		answer.Refusal = refusal.String()

@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
-	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
@@ -49,13 +48,13 @@ func NewQueryWarehouseRevisionsEndpoint(intake CatalogueIntake, reader Warehouse
 
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
-			writeIntakeProblem(response, request, err)
+			writeIntakeProblem(response, err)
 			return
 		}
 
 		code, reason := warehouseCodeOf(request)
 		if reason != "" {
-			httpapi.WriteProblemWithDetail(response, request, http.StatusBadRequest, codeMalformedRequest, reason)
+			writeMalformed(response, reason)
 			return
 		}
 
@@ -63,7 +62,7 @@ func NewQueryWarehouseRevisionsEndpoint(intake CatalogueIntake, reader Warehouse
 		if err != nil {
 			// 读不回是答案未形成，不是「没有历史」：伪装成后者会让一次该重试的故障变成一段看起来如实的空历史。
 			slog.ErrorContext(request.Context(), "warehouse revisions did not form an answer", "warehouseCode", code.String())
-			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 		writeJSON(response, http.StatusOK, warehouseRevisionsResponse{

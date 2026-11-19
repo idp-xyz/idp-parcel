@@ -17,7 +17,10 @@ const CodeWarehouseFulfillmentNotEnabled = "WAREHOUSE_FULFILLMENT_NOT_ENABLED"
 // 任何请求内容都是同一份——要不然一个有凭据的调用方就能从答复的差别里探出这个部署开着还是关着之外的东西。
 //
 // 方法门照仓库各端点的做法自守：方法不对仍答 405 并带 Allow，403 不越过它抢答（ADR-0055 对未配置同此）。允许的方法由装配点按
-// 那一行声明的方法传入，所以同一路径上方法对错的答复与开关开着时同一份，不随开关变。
+// 那一行声明的方法传入，所以同一路径上方法对错的答复与开关开着时同一份（405 写本包的旧形状问题体，不随开关变）。
+//
+// 只有这一格的 403 写 RFC 9457 问题详情（ADR-0140 决定三）：它是新立的一格，没有旧形状要对齐；本包别的问题体沿用操作者各族的
+// 旧形状（见 problem.go）。
 func NewNotEnabledEndpoint(allowedMethod string) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if refuseMethod(response, request, allowedMethod) {

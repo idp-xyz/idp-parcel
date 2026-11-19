@@ -1,8 +1,6 @@
 package warehousehttp
 
 import (
-	"encoding/json"
-	"net/http"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
@@ -80,12 +78,6 @@ func warehouseBodiesOfRows(rows []ports.WarehouseRow) []warehouseBody {
 		bodies = append(bodies, warehouseBodyOfRow(row))
 	}
 	return bodies
-}
-
-func writeJSON(response http.ResponseWriter, status int, value any) {
-	response.Header().Set("Content-Type", "application/json")
-	response.WriteHeader(status)
-	_ = json.NewEncoder(response).Encode(value)
 }
 
 func rfc3339(at time.Time) string {
