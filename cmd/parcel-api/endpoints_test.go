@@ -137,12 +137,21 @@ func TestEveryRegisteredFeatureMountsExactlyItsDeclaredLines(t *testing.T) {
 func TestEveryAssembledEndpointAnswersUnconfigured(t *testing.T) {
 	// 传 unwired* 占位而非真编排与真读口：本测试钉的是未配置面（403 在编排之前），
 	// 真编排的装配与行为由各 assemble_*_test.go 对真库另证。
+	//
+	// 仓配的行取开关打开的那份占位（endpoints_warehouse_fulfillment_test.go）：开着时它们与别的行同样从未配置起步。
 	endpoints := assembleUnconfiguredBusinessEndpoints()
-	assertEveryDeclaredLineAnswersUnconfigured(t, endpoints, nil)
+	assertEveryDeclaredLineAnswersUnconfigured(t, endpoints, nil, true)
 }
 
-// assertEveryDeclaredLineAnswersUnconfigured 逐行探一遍，prepare 非 nil 时先给请求补头。
-func assertEveryDeclaredLineAnswersUnconfigured(t *testing.T, endpoints []httpapi.BusinessEndpoint, prepare func(*http.Request, endpointLine)) {
+// assertEveryDeclaredLineAnswersUnconfigured 逐行探一遍，prepare 非 nil 时先给请求补头。warehouseFulfillmentOn 说这一批端点是
+// 按仓配开关开着还是关着装出来的：关着时只有声明了仓配开关的行答 WAREHOUSE_FULFILLMENT_NOT_ENABLED（ADR-0384 决定七），别的
+// 行仍答「接入渠道未配置」，不在这里放宽。
+func assertEveryDeclaredLineAnswersUnconfigured(
+	t *testing.T,
+	endpoints []httpapi.BusinessEndpoint,
+	prepare func(*http.Request, endpointLine),
+	warehouseFulfillmentOn bool,
+) {
 	t.Helper()
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, endpoints)
 	probes := businessEndpointProbes()
@@ -166,11 +175,15 @@ func assertEveryDeclaredLineAnswersUnconfigured(t *testing.T, endpoints []httpap
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, request)
 
+		wantCode := "ACCESS_CHANNEL_NOT_CONFIGURED"
+		if lines[endpoint.Pattern].warehouseFulfillment && !warehouseFulfillmentOn {
+			wantCode = "WAREHOUSE_FULFILLMENT_NOT_ENABLED"
+		}
 		if response.Code != http.StatusForbidden {
 			t.Fatalf("%s %s: status = %d, want %d", probe.method, probe.target, response.Code, http.StatusForbidden)
 		}
-		if got := problemCode(t, response); got != "ACCESS_CHANNEL_NOT_CONFIGURED" {
-			t.Fatalf("%s: code = %q, want ACCESS_CHANNEL_NOT_CONFIGURED", endpoint.Pattern, got)
+		if got := problemCode(t, response); got != wantCode {
+			t.Fatalf("%s: code = %q, want %s", endpoint.Pattern, got, wantCode)
 		}
 		assertNoOutcome(t, response, endpoint.Pattern)
 	}
@@ -302,7 +315,8 @@ func TestProductionAssemblyMountsEveryDeclaredLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("生产装配：%v", err)
 	}
-	assertEveryDeclaredLineAnswersUnconfigured(t, endpoints, stampWorkScope)
+	// 生产装配的基线是仓配开关关着（startupChannels 的零值）：仓配的行答 WAREHOUSE_FULFILLMENT_NOT_ENABLED，别的行不变。
+	assertEveryDeclaredLineAnswersUnconfigured(t, endpoints, stampWorkScope, false)
 }
 
 // Covers: ADR-0222 决定六 — 同一路径登两次，装配交回错误而不是让后一个静默盖掉前一个。

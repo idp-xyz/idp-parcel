@@ -30,6 +30,8 @@ import (
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	veaccess "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/accessidentity"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
+	whaccess "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/accessidentity"
+	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
 )
 
 // operatorDecisionIntakes 是操作者渠道「运营决定」能力面在各上下文的 Intake（ADR-0151；票 operator-channel/15）。nodeOperations
@@ -202,6 +204,10 @@ type operatorRegistryIntakes struct {
 	transport  *tfhttp.OperatorRegistryIntake
 	// nodeOperations 是节点作业的登记写面（ADR-0212 决定二末项：预报有效时窗册），与上面各格同一只铸造器。
 	nodeOperations *nodeopshttp.OperatorRegistryIntake
+	// warehouse 是仓配履约的登记册配置写（ADR-0375 决定四；ADR-0384 决定五：登记仓不另开能力面），warehouseOperationsRead 是它的
+	// 主数据与运营查阅读。两只与上下各格同一只铸造器；仓配开关关着时它们照样建出来、只是没有任何端点问到它们。
+	warehouse               *warehousehttp.OperatorRegistryIntake
+	warehouseOperationsRead *warehousehttp.OperatorOperationsReadIntake
 	// pricingOperationsRead 不是登记写面：试算与价卡目录查阅挂主数据与运营查阅读（ADR-0152 决定六、ADR-0077；
 	// 票 operator-channel/06、05）。网络、关务、商业的目录查阅同这一面。与登记写面各口共用同一只铸造器。
 	pricingOperationsRead    *pricinghttp.OperatorOperationsReadIntake
@@ -311,6 +317,22 @@ func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operat
 	if err != nil {
 		return operatorRegistryIntakes{}, err
 	}
+	warehouseAuthenticator, err := whaccess.NewOperatorRegistryAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	warehouse, err := warehousehttp.NewOperatorRegistryIntake(warehouseAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	warehouseReadAuthenticator, err := whaccess.NewOperatorOperationsReadAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	warehouseOperationsRead, err := warehousehttp.NewOperatorOperationsReadIntake(warehouseReadAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
 	reads, err := buildOperatorOperationsReads(minter)
 	if err != nil {
 		return operatorRegistryIntakes{}, err
@@ -318,6 +340,7 @@ func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operat
 	reads.visibility, reads.customs, reads.network, reads.pricing, reads.commercial, reads.transport =
 		visibility, customs, network, pricing, commercial, transport
 	reads.nodeOperations = nodeOperations
+	reads.warehouse, reads.warehouseOperationsRead = warehouse, warehouseOperationsRead
 	reads.pricingOperationsRead = pricingOperationsRead
 	reads.networkOperationsRead = networkOperationsRead
 	reads.customsOperationsRead = customsOperationsRead
