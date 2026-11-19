@@ -280,6 +280,11 @@ func TestTheRegisterRefusesAMeasurementWithoutItsDimensions(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			// 事实行要先在来源身份登记表占位才写得进；这条用例证的是尺寸必填，占位只是让齐全的那一行不被登记表拦下。
+			if _, err = executor.Exec(txCtx, `INSERT INTO node_operations.measurement_source_identity (tenant_id, source_id, kind)
+				VALUES ('tenant-a', $1, 'MEASUREMENT')`, sourceID); err != nil {
+				return err
+			}
 			_, err = executor.Exec(txCtx, `INSERT INTO node_operations.actual_measurement
 				(tenant_id, source_id, content_digest, object_kind, object_id, node_ref, location_ref, basis_ref,
 				 weight_value, weight_unit, length_value, width_value, height_value, dimension_unit,

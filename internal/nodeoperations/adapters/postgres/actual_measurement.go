@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
@@ -25,9 +26,11 @@ func NewActualMeasurements(db *bentopg.DB) (*ActualMeasurements, error) {
 	return &ActualMeasurements{db: db}, nil
 }
 
-// SerializeSourceIdentity 取（租户，来源身份）的事务级咨询锁。测量与作废是两张表、各有各的主键，库里没有任何一处挡「同一来源身份
-// 既是测量又是作废」；挡它的是编排：先取这把锁，再读另一张表。锁名与类别无关，所以一条测量与一条作废带同一个来源身份并发到时
-// 也排同一个队，后一条读得到前一条已提交的行。事务的隔离级别是读已提交，取锁之后的读才看得见对方的提交。
+// SerializeSourceIdentity 取（租户，来源身份）的事务级咨询锁。测量与作废是两张表、各有各的主键，「同一来源身份既是测量又是
+// 作废」由来源身份登记表（measurement_source_identity）在库上挡住；这把锁的用处是让编排先答出来源冲突这个明确的结果：先取锁，
+// 再读另一张表。锁名与类别无关，所以一条测量与一条作废带同一个来源身份并发到时也排同一个队，后一条读得到前一条已提交的行。
+// 事务的隔离级别是读已提交，取锁之后的读才看得见对方的提交。锁没盖住（绕开编排的写入，或锁之外的并发）时，登记表的主键与
+// 事实表指向它的外键是后背，那一步以错误交回，不会记成功。
 func (repository *ActualMeasurements) SerializeSourceIdentity(ctx context.Context, key ports.ActualMeasurementKey) error {
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
@@ -79,6 +82,9 @@ func (repository *ActualMeasurements) SaveMeasurement(
 	if manual {
 		original = optionalReference(document.String())
 	}
+	if err := claimSourceIdentity(ctx, executor, record.Key.TenantID, measurement.Source().SourceID(), sourceKindMeasurement); err != nil {
+		return ports.ActualMeasurementSaveOutcomeInvalid, fmt.Errorf("save actual measurement: %w", err)
+	}
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.actual_measurement
 			(tenant_id, source_id, content_digest, object_kind, object_id, node_ref, location_ref, basis_ref,
@@ -108,12 +114,46 @@ func (repository *ActualMeasurements) SaveMeasurement(
 		original,
 	)
 	if err != nil {
-		return ports.ActualMeasurementSaveOutcomeInvalid, fmt.Errorf("save actual measurement: %w", err)
+		return ports.ActualMeasurementSaveOutcomeInvalid, fmt.Errorf("save actual measurement: %w", describeSourceIdentityViolation(err))
 	}
 	if tag.RowsAffected() == 0 {
 		return ports.ActualMeasurementAlreadyRecorded, nil
 	}
 	return ports.ActualMeasurementSaved, nil
+}
+
+const (
+	sourceKindMeasurement  = "MEASUREMENT"
+	sourceKindInvalidation = "INVALIDATION"
+)
+
+// claimSourceIdentity 在来源身份登记表上为 kind 这一类占住（租户，来源身份），紧挨在写事实行之前，不放在「目标不在册」「已被
+// 作废」这类提前返回的判断之前：那些结果不写事实行，早占就留下一个没有事实行的占位，把这个来源身份永远锁给了这一类。同类重放时
+// 占位已在，不动它。已被另一类占着时这里不报错、也不改它的种类，随后写事实行时指向登记表的外键拒掉，以错误交回。
+func claimSourceIdentity(ctx context.Context, executor bentopg.Executor, tenant domain.TenantID, sourceID, kind string) error {
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO node_operations.measurement_source_identity (tenant_id, source_id, kind)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT ON CONSTRAINT measurement_source_identity_pkey DO NOTHING`,
+		tenant.String(), sourceID, kind,
+	); err != nil {
+		return fmt.Errorf("占来源身份：%w", err)
+	}
+	return nil
+}
+
+// describeSourceIdentityViolation 把事实行撞上指向登记表的外键（来源身份已被另一类占着）说成人话；别的错误原样交回。
+func describeSourceIdentityViolation(err error) error {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
+		return err
+	}
+	switch pgErr.ConstraintName {
+	case "actual_measurement_source_identity_fk", "measurement_invalidation_source_identity_fk":
+		return fmt.Errorf("来源身份已被另一类事实占用，库约束拦下：%w", err)
+	default:
+		return err
+	}
 }
 
 func (repository *ActualMeasurements) ListStillValid(
@@ -221,6 +261,9 @@ func (repository *ActualMeasurements) SaveInvalidation(
 	if manual {
 		original = optionalReference(document.String())
 	}
+	if err := claimSourceIdentity(ctx, executor, record.Key.TenantID, invalidation.Source().SourceID(), sourceKindInvalidation); err != nil {
+		return ports.MeasurementInvalidationSaveOutcomeInvalid, fmt.Errorf("save measurement invalidation: %w", err)
+	}
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.measurement_invalidation
 			(tenant_id, source_id, content_digest, target_source_id, reason, performed_by, evidence,
@@ -240,7 +283,7 @@ func (repository *ActualMeasurements) SaveInvalidation(
 		original,
 	)
 	if err != nil {
-		return ports.MeasurementInvalidationSaveOutcomeInvalid, fmt.Errorf("save measurement invalidation: %w", err)
+		return ports.MeasurementInvalidationSaveOutcomeInvalid, fmt.Errorf("save measurement invalidation: %w", describeSourceIdentityViolation(err))
 	}
 	if tag.RowsAffected() == 0 {
 		return ports.MeasurementInvalidationAlreadyRecorded, nil
