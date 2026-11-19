@@ -426,3 +426,11 @@ func (channels endpointChannels) zoneRegistration() warehousehttp.ZoneRegistrati
 	}
 	return warehousehttp.UnconfiguredIntake{}
 }
+
+// locationTypeRegistration 同样取 operatorRegistries.warehouse 这一只 Intake，理由同 zoneRegistration。
+func (channels endpointChannels) locationTypeRegistration() warehousehttp.LocationTypeRegistrationIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}

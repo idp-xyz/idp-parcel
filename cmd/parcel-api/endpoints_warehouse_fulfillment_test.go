@@ -78,6 +78,34 @@ func (unwiredZoneCatalogue) ZoneRevisions(
 	return nil, errOrchestrationNotWired
 }
 
+type unwiredLocationTypeRegistration struct{}
+
+func (unwiredLocationTypeRegistration) Register(
+	context.Context,
+	warehouseapp.RegisterLocationTypeCommand,
+) (warehouseapp.RegisterLocationTypeResult, error) {
+	return warehouseapp.RegisterLocationTypeResult{}, errOrchestrationNotWired
+}
+
+type unwiredLocationTypeCatalogue struct{}
+
+func (unwiredLocationTypeCatalogue) ListLocationTypes(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.LocationTypeRow], error) {
+	return cataloguepage.Result[warehouseports.LocationTypeRow]{}, errOrchestrationNotWired
+}
+
+func (unwiredLocationTypeCatalogue) LocationTypeRevisions(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.LocationTypeCode,
+) ([]warehouseports.LocationTypeRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 	return warehouseFulfillmentWiring{
 		enabled:          enabled,
@@ -87,6 +115,10 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		zoneRegistration: unwiredZoneRegistration{},
 		zoneCatalogue:    unwiredZoneCatalogue{},
 		zoneRevisions:    unwiredZoneCatalogue{},
+
+		locationTypeRegistration: unwiredLocationTypeRegistration{},
+		locationTypeCatalogue:    unwiredLocationTypeCatalogue{},
+		locationTypeRevisions:    unwiredLocationTypeCatalogue{},
 	}
 }
 
@@ -101,6 +133,10 @@ const (
 	zoneRegistrationsLine      = "/warehouse-fulfillment-zone-registrations"
 	zoneListLine               = "/warehouse-fulfillment-zones"
 	zoneRevisionsLine          = "/warehouse-fulfillment-zone-revisions"
+
+	locationTypeRegistrationsLine = "/warehouse-fulfillment-location-type-registrations"
+	locationTypeListLine          = "/warehouse-fulfillment-location-types"
+	locationTypeRevisionsLine     = "/warehouse-fulfillment-location-type-revisions"
 )
 
 // warehouseFulfillmentLines 是登记处里声明了仓配开关的各行，按路径排序。
@@ -156,6 +192,10 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		zoneRegistrationsLine:      {http.MethodPost, faceRegistryWrite},
 		zoneListLine:               {http.MethodGet, faceOperationsRead},
 		zoneRevisionsLine:          {http.MethodGet, faceOperationsRead},
+
+		locationTypeRegistrationsLine: {http.MethodPost, faceRegistryWrite},
+		locationTypeListLine:          {http.MethodGet, faceOperationsRead},
+		locationTypeRevisionsLine:     {http.MethodGet, faceOperationsRead},
 	}
 	lines := declaredEndpointLines()
 	if got := warehouseFulfillmentLines(); len(got) != len(want) {
@@ -226,6 +266,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 		return map[string]answer{
 			warehouseRegistrationsLine: {status, code}, warehouseListLine: {status, code}, warehouseRevisionsLine: {status, code},
 			zoneRegistrationsLine: {status, code}, zoneListLine: {status, code}, zoneRevisionsLine: {status, code},
+			locationTypeRegistrationsLine: {status, code}, locationTypeListLine: {status, code}, locationTypeRevisionsLine: {status, code},
 		}
 	}
 	cases := []struct {
@@ -241,6 +282,10 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			zoneRegistrationsLine:      {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			zoneListLine:               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			zoneRevisionsLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+
+			locationTypeRegistrationsLine: {http.StatusBadRequest, "MALFORMED_REQUEST"},
+			locationTypeListLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			locationTypeRevisionsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		}},
 		{"read grant only", operationsReaderRegister{}, presentedOperatorToken, map[string]answer{
 			warehouseRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -249,6 +294,10 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			zoneRegistrationsLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			zoneListLine:               {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			zoneRevisionsLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+
+			locationTypeRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			locationTypeListLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			locationTypeRevisionsLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 		}},
 		{"no bearer token", everyOperatorGrant{}, "", same(http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED")},
 		{"register is down", failingRegister{}, presentedOperatorToken, same(http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE")},
