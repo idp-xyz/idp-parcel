@@ -101,7 +101,7 @@ func (intake *OperatorDecisionIntake) IntakeManualMeasurement(ctx context.Contex
 	if err != nil {
 		return none, err
 	}
-	var document measurementDocument
+	var document manualMeasurementDocument
 	if err := decodeClosedDocument(request, &document); err != nil {
 		return none, err
 	}
@@ -112,7 +112,7 @@ func (intake *OperatorDecisionIntake) IntakeManualMeasurement(ctx context.Contex
 	if err != nil {
 		return none, fmt.Errorf("%w: node: %v", ErrMalformedRequest, err)
 	}
-	return measurementCommand(operator.Tenant, node, document, operator.Operator, document.OriginalDocument)
+	return measurementCommand(operator.Tenant, node, document.measurementDocument, operator.Operator, document.OriginalDocument)
 }
 
 func (intake *OperatorDecisionIntake) IntakeManualMeasurementInvalidation(ctx context.Context, request *http.Request) (application.InvalidateActualMeasurementCommand, error) {
@@ -121,7 +121,7 @@ func (intake *OperatorDecisionIntake) IntakeManualMeasurementInvalidation(ctx co
 	if err != nil {
 		return none, err
 	}
-	var document measurementInvalidationDocument
+	var document manualMeasurementInvalidationDocument
 	if err := decodeClosedDocument(request, &document); err != nil {
 		return none, err
 	}
@@ -129,38 +129,50 @@ func (intake *OperatorDecisionIntake) IntakeManualMeasurementInvalidation(ctx co
 		return none, fmt.Errorf("%w: originalDocument is required", ErrMalformedRequest)
 	}
 	// 手工作废是运营决定：持授予的操作者可以作废本租户任何节点的测量，所以交「不限节点」，不是漏传。
-	return invalidationCommand(operator.Tenant, application.InvalidationAcrossTenantNodes(), document, operator.Operator, document.OriginalDocument)
+	return invalidationCommand(operator.Tenant, application.InvalidationAcrossTenantNodes(), document.measurementInvalidationDocument, operator.Operator, document.OriginalDocument)
 }
 
-// measurementDocument 是一次称重量方的载荷。重量与长宽高都必填，没有「只报其中一项」的写法：缺了哪一格，
-// 口上都拒成载荷不成形。复测是带新来源标识再报一条完整的。
+// measurementDocument 是作业端一次称重量方的载荷。重量与长宽高都必填，没有「只报其中一项」的写法：缺了哪一格，
+// 口上都拒成载荷不成形。复测是带新来源标识再报一条完整的。节点取认证结果、原件号只属于手工录入，所以这里没有这两格：
+// 封闭解码把作业端载荷里的 node 与 originalDocument 当未知键拒掉，不是悄悄忽略。
 type measurementDocument struct {
-	SourceID         string `json:"sourceId"`
-	ObjectKind       string `json:"objectKind"`
-	ObjectID         string `json:"objectId"`
-	Node             string `json:"node,omitempty"`
-	Location         string `json:"location"`
-	Basis            string `json:"basis"`
-	PerformedBy      string `json:"performedBy"`
-	EvidenceRef      string `json:"evidenceRef"`
-	OccurredAt       string `json:"occurredAt"`
-	WeightValue      string `json:"weightValue"`
-	WeightUnit       string `json:"weightUnit"`
-	Length           string `json:"length"`
-	Width            string `json:"width"`
-	Height           string `json:"height"`
-	DimensionUnit    string `json:"dimensionUnit"`
-	OriginalDocument string `json:"originalDocument,omitempty"`
+	SourceID      string `json:"sourceId"`
+	ObjectKind    string `json:"objectKind"`
+	ObjectID      string `json:"objectId"`
+	Location      string `json:"location"`
+	Basis         string `json:"basis"`
+	PerformedBy   string `json:"performedBy"`
+	EvidenceRef   string `json:"evidenceRef"`
+	OccurredAt    string `json:"occurredAt"`
+	WeightValue   string `json:"weightValue"`
+	WeightUnit    string `json:"weightUnit"`
+	Length        string `json:"length"`
+	Width         string `json:"width"`
+	Height        string `json:"height"`
+	DimensionUnit string `json:"dimensionUnit"`
 }
 
+// manualMeasurementDocument 是手工录入的载荷：作业端载荷之上多两格，节点与原件号都由录入人写，不来自认证。
+type manualMeasurementDocument struct {
+	measurementDocument
+	Node             string `json:"node"`
+	OriginalDocument string `json:"originalDocument"`
+}
+
+// measurementInvalidationDocument 是作业端一次作废的载荷；没有 originalDocument，理由同 measurementDocument。
 type measurementInvalidationDocument struct {
-	SourceID         string `json:"sourceId"`
-	TargetSourceID   string `json:"targetSourceId"`
-	Reason           string `json:"reason"`
-	PerformedBy      string `json:"performedBy"`
-	EvidenceRef      string `json:"evidenceRef"`
-	OccurredAt       string `json:"occurredAt"`
-	OriginalDocument string `json:"originalDocument,omitempty"`
+	SourceID       string `json:"sourceId"`
+	TargetSourceID string `json:"targetSourceId"`
+	Reason         string `json:"reason"`
+	PerformedBy    string `json:"performedBy"`
+	EvidenceRef    string `json:"evidenceRef"`
+	OccurredAt     string `json:"occurredAt"`
+}
+
+// manualMeasurementInvalidationDocument 是手工作废的载荷：多一格原件号。
+type manualMeasurementInvalidationDocument struct {
+	measurementInvalidationDocument
+	OriginalDocument string `json:"originalDocument"`
 }
 
 func measurementCommand(
