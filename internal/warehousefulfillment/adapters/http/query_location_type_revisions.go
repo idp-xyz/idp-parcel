@@ -1,0 +1,84 @@
+package warehousehttp
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
+)
+
+// LocationTypeRevisionsReader 是一个库位类型修订史端点消费的读口。
+type LocationTypeRevisionsReader interface {
+	LocationTypeRevisions(ctx context.Context, tenant domain.TenantID, code domain.LocationTypeCode) ([]ports.LocationTypeRow, error)
+}
+
+// 编译期锁缝：读口形状与查阅用例保持一致。
+var _ LocationTypeRevisionsReader = (*application.QueryLocationTypesHandler)(nil)
+
+const (
+	outcomeLocationTypeRevisionsListed = "LOCATION_TYPE_REVISIONS_LISTED"
+	// locationTypeCodeQueryKey 是本端点唯一的查询键：库位类型编码是业务内容，不放路径里，理由同仓的修订史口。
+	locationTypeCodeQueryKey = "locationTypeCode"
+)
+
+// locationTypeRevisionsResponse 顶层回显库位类型编码：页面切换行时上一问的答案可能后到，据此核对答的是不是它此刻问的那个库位类型，
+// 不拿数组首笔去推（空数组没有首笔）。
+type locationTypeRevisionsResponse struct {
+	Outcome          string             `json:"outcome"`
+	LocationTypeCode string             `json:"locationTypeCode"`
+	Revisions        []locationTypeBody `json:"revisions"`
+}
+
+// NewQueryLocationTypeRevisionsEndpoint 交回一个库位类型全部修订的查阅入口（GET /warehouse-fulfillment-location-type-revisions?locationTypeCode=…），
+// 按修订号升序。这个库位类型在本租户查不到时答 200 与空数组，与别的租户的同编码库位类型同答：读口不泄露别的租户有没有这个库位类型
+// （UC-WF-001「权限、隔离与审计」），也就不答 404。编码在 Intake 之后读：未配置要拒在一切请求内容之前（ADR-0055 决定三），查询串也是
+// 请求内容。
+func NewQueryLocationTypeRevisionsEndpoint(intake CatalogueIntake, reader LocationTypeRevisionsReader) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if refuseMethod(response, request, http.MethodGet) {
+			return
+		}
+
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeIntakeProblem(response, err)
+			return
+		}
+
+		code, reason := locationTypeCodeOf(request)
+		if reason != "" {
+			writeMalformed(response, reason)
+			return
+		}
+
+		rows, err := reader.LocationTypeRevisions(request.Context(), query.Tenant, code)
+		if err != nil {
+			// 读不回是答案未形成，不是「没有历史」：伪装成后者会让一次该重试的故障变成一段看起来如实的空历史。
+			slog.ErrorContext(request.Context(), "location type revisions did not form an answer", "locationTypeCode", code.String())
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeJSON(response, http.StatusOK, locationTypeRevisionsResponse{
+			Outcome:          outcomeLocationTypeRevisionsListed,
+			LocationTypeCode: code.String(),
+			Revisions:        locationTypeBodiesOfRows(rows),
+		})
+	})
+}
+
+// locationTypeCodeOf 从查询串取库位类型编码：恰一个 `locationTypeCode`，没有别的键。规矩同 warehouseCodeOf。不成立时交回一句理由
+// （只谈查询串的形状，不回显取值），成立时理由为空。
+func locationTypeCodeOf(request *http.Request) (domain.LocationTypeCode, string) {
+	cells, reason := queryCells(request, locationTypeCodeQueryKey)
+	if reason != "" {
+		return domain.LocationTypeCode{}, reason
+	}
+	code, err := domain.NewLocationTypeCode(cells[0])
+	if err != nil {
+		return domain.LocationTypeCode{}, blankCellReason(locationTypeCodeQueryKey)
+	}
+	return code, ""
+}

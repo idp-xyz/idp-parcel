@@ -33,8 +33,9 @@ type OperatorRegistryIntake struct {
 }
 
 var (
-	_ WarehouseRegistrationIntake = (*OperatorRegistryIntake)(nil)
-	_ ZoneRegistrationIntake      = (*OperatorRegistryIntake)(nil)
+	_ WarehouseRegistrationIntake    = (*OperatorRegistryIntake)(nil)
+	_ ZoneRegistrationIntake         = (*OperatorRegistryIntake)(nil)
+	_ LocationTypeRegistrationIntake = (*OperatorRegistryIntake)(nil)
 )
 
 func NewOperatorRegistryIntake(authenticator OperatorRegistryAuthenticator) (*OperatorRegistryIntake, error) {
@@ -56,6 +57,13 @@ func (intake *OperatorRegistryIntake) IntakeZoneRegistration(
 	request *http.Request,
 ) (application.RegisterZoneCommand, error) {
 	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.ZoneCommand)
+}
+
+func (intake *OperatorRegistryIntake) IntakeLocationTypeRegistration(
+	ctx context.Context,
+	request *http.Request,
+) (application.RegisterLocationTypeCommand, error) {
+	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.LocationTypeCommand)
 }
 
 // intakeRegistration 是各册登记 Intake 共用的一步：令牌不过的请求，请求体一个字节都不读；过了才把请求体按这一册的译法译成命令，
