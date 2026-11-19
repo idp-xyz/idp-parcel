@@ -117,11 +117,12 @@ func (handler *ReevaluateBuyOnMeasurementChangeHandler) open(
 	record ports.EvaluationRequestRecord,
 	basis domain.ResumeBasis,
 ) (bool, error) {
-	head, err := handler.head(ctx, record)
+	chain := handler.chain(tenant)
+	head, err := chain.head(ctx, record)
 	if err != nil {
 		return false, err
 	}
-	used, err := handler.basisAlreadyUsed(ctx, tenant, head, basis)
+	used, err := chain.basisAlreadyUsed(ctx, head, basis)
 	if err != nil {
 		return false, err
 	}
@@ -163,43 +164,23 @@ func (handler *ReevaluateBuyOnMeasurementChangeHandler) open(
 	return true, nil
 }
 
-func (handler *ReevaluateBuyOnMeasurementChangeHandler) head(
-	ctx context.Context,
-	record ports.EvaluationRequestRecord,
-) (ports.EvaluationRequestRecord, error) {
-	for {
-		successor, found, err := handler.successors.FindSuccessor(ctx, record.Key)
-		if err != nil {
-			return ports.EvaluationRequestRecord{}, err
-		}
-		if !found {
-			return record, nil
-		}
-		record = successor
-	}
-}
-
-func (handler *ReevaluateBuyOnMeasurementChangeHandler) basisAlreadyUsed(
-	ctx context.Context,
+// chain 把采购请求的读口接成代次链上的走法；沿前一代往回读的是同一租户的请求。
+func (handler *ReevaluateBuyOnMeasurementChangeHandler) chain(
 	tenant domain.TenantID,
-	record ports.EvaluationRequestRecord,
-	basis domain.ResumeBasis,
-) (bool, error) {
-	for {
-		if record.Request.ResumeBasis() == basis {
-			return true, nil
-		}
-		previous, has := record.Request.Previous()
-		if !has {
-			return false, nil
-		}
-		earlier, found, err := handler.requests.FindByID(ctx, ports.EvaluationRequestKey{TenantID: tenant, Request: previous})
-		if err != nil {
-			return false, err
-		}
-		if !found {
-			return false, fmt.Errorf("buy reevaluation: previous request %s is missing", previous)
-		}
-		record = earlier
+) resumeChain[ports.EvaluationRequestRecord, domain.EvaluationRequestID] {
+	return resumeChain[ports.EvaluationRequestRecord, domain.EvaluationRequestID]{
+		label: "buy reevaluation",
+		successorOf: func(ctx context.Context, record ports.EvaluationRequestRecord) (ports.EvaluationRequestRecord, bool, error) {
+			return handler.successors.FindSuccessor(ctx, record.Key)
+		},
+		basisOf: func(record ports.EvaluationRequestRecord) domain.ResumeBasis {
+			return record.Request.ResumeBasis()
+		},
+		previousOf: func(record ports.EvaluationRequestRecord) (domain.EvaluationRequestID, bool) {
+			return record.Request.Previous()
+		},
+		findByID: func(ctx context.Context, id domain.EvaluationRequestID) (ports.EvaluationRequestRecord, bool, error) {
+			return handler.requests.FindByID(ctx, ports.EvaluationRequestKey{TenantID: tenant, Request: id})
+		},
 	}
 }

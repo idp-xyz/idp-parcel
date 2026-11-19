@@ -87,11 +87,12 @@ func (handler *ReevaluateSellOnMeasurementChangeHandler) Handle(
 	if !found {
 		return SellReevaluationNoRequest, nil
 	}
-	head, err := handler.head(ctx, current)
+	chain := handler.chain(command.Tenant)
+	head, err := chain.head(ctx, current)
 	if err != nil {
 		return ReevaluateSellOnMeasurementChangeOutcomeInvalid, err
 	}
-	used, err := handler.basisAlreadyUsed(ctx, command.Tenant, head, basis)
+	used, err := chain.basisAlreadyUsed(ctx, head, basis)
 	if err != nil {
 		return ReevaluateSellOnMeasurementChangeOutcomeInvalid, err
 	}
@@ -129,43 +130,23 @@ func (handler *ReevaluateSellOnMeasurementChangeHandler) Handle(
 	return SellReevaluationOpened, nil
 }
 
-func (handler *ReevaluateSellOnMeasurementChangeHandler) head(
-	ctx context.Context,
-	record ports.SellEvaluationRequestRecord,
-) (ports.SellEvaluationRequestRecord, error) {
-	for {
-		successor, found, err := handler.successors.FindSuccessor(ctx, record.Key)
-		if err != nil {
-			return ports.SellEvaluationRequestRecord{}, err
-		}
-		if !found {
-			return record, nil
-		}
-		record = successor
-	}
-}
-
-func (handler *ReevaluateSellOnMeasurementChangeHandler) basisAlreadyUsed(
-	ctx context.Context,
+// chain 把销售请求的读口接成代次链上的走法；沿前一代往回读的是同一租户的请求。
+func (handler *ReevaluateSellOnMeasurementChangeHandler) chain(
 	tenant domain.TenantID,
-	record ports.SellEvaluationRequestRecord,
-	basis domain.ResumeBasis,
-) (bool, error) {
-	for {
-		if record.Request.ResumeBasis() == basis {
-			return true, nil
-		}
-		previous, has := record.Request.Previous()
-		if !has {
-			return false, nil
-		}
-		earlier, found, err := handler.requests.FindByID(ctx, ports.SellEvaluationRequestKey{TenantID: tenant, Request: previous})
-		if err != nil {
-			return false, err
-		}
-		if !found {
-			return false, fmt.Errorf("sell reevaluation: previous request %s is missing", previous)
-		}
-		record = earlier
+) resumeChain[ports.SellEvaluationRequestRecord, domain.SellEvaluationRequestID] {
+	return resumeChain[ports.SellEvaluationRequestRecord, domain.SellEvaluationRequestID]{
+		label: "sell reevaluation",
+		successorOf: func(ctx context.Context, record ports.SellEvaluationRequestRecord) (ports.SellEvaluationRequestRecord, bool, error) {
+			return handler.successors.FindSuccessor(ctx, record.Key)
+		},
+		basisOf: func(record ports.SellEvaluationRequestRecord) domain.ResumeBasis {
+			return record.Request.ResumeBasis()
+		},
+		previousOf: func(record ports.SellEvaluationRequestRecord) (domain.SellEvaluationRequestID, bool) {
+			return record.Request.Previous()
+		},
+		findByID: func(ctx context.Context, id domain.SellEvaluationRequestID) (ports.SellEvaluationRequestRecord, bool, error) {
+			return handler.requests.FindByID(ctx, ports.SellEvaluationRequestKey{TenantID: tenant, Request: id})
+		},
 	}
 }
