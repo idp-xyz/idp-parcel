@@ -64,3 +64,22 @@ var ZonePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
 	},
 })
+
+// LocationPages 是库位列表的查询声明（ADR-0144 决定三、四、七），照库区列表的做法：只开一个可排维，行标识是（仓编码，库位编码）两段，
+// 缺省序就是先按仓、再按库位。排序维取 warehouseCode 而不取 locationCode：库位编码在仓内才唯一，单按它排没有稳定的行序。
+//
+// 筛选维是仓编码、库区编码（都不设词表——仓与库区是租户取值，词表只能是空的，逐字比较）与是否停用。库区编码在仓内才唯一，所以按它
+// 筛时通常与仓编码一起给。
+var LocationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-locations",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "warehouseCode", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "warehouseCode"},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "warehouseCode"},
+		{Name: "zoneCode"},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+	},
+})
