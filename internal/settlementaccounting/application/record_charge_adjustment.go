@@ -274,12 +274,9 @@ func (handler *RecordChargeAdjustmentHandler) lockCustomerScope(
 	return scope, true, nil
 }
 
-// signedAdjustment 把一笔调整折成对费用金额的增减：借项加、贷项减。
+// signedAdjustment 把一笔调整折成对费用金额的增减：借项加、贷项减。折法只在领域有一份。
 func signedAdjustment(direction domain.AdjustmentDirection, minor int64) int64 {
-	if direction == domain.AdjustmentCredit {
-		return -minor
-	}
-	return minor
+	return direction.Signed(minor)
 }
 
 // replayOrConflict 判同一标识下库里那一份与这次要登的是不是同一笔：费用、种类、方向、依据与两格金额都相同即重放，
@@ -405,12 +402,8 @@ type ReweighDifferenceCommand struct {
 	Conversion         string
 }
 
-// SettleReweigh 只经本用例写调整册。差额按结算币判：新评价的结算币金额减去这笔费用按计价该收的净额，即费用加上已有的
-// 计价纠错；为零不记，不管原币那一格差多少——头部承运商的复核调整都按账单币种开。结算币差额不为零时，原币可比（新评价
-// 与每一笔既有计价纠错的原币种都是费用的原币种）、原币差额不为零且与结算币差额同号，才连原币差额一起记，换算依据取新评价的；
-// 其余一律按结算币记，原币种取结算币种、两额相等、不带换算依据。不能一直拒收：拒收被调用方当错误上抛，这一代就永远没有结论。
-// 商业让利不在这份净额里——它是另凭授权让掉的，不是哪一份评价算出来的；算进去，下一次重估就会把让掉的钱记成
-// 借项收回来。贷项会不会把费用让成负数仍看全部调整，那一道在 Handle 里。
+// SettleReweigh 只经本用例写调整册。差额怎么算归领域的 SettleReweighDifference，这里只编排：读费用、锁客户作用域、
+// 读既有调整、交领域算、照结果经 Handle 落一笔。贷项会不会把费用让成负数仍看全部调整，那一道在 Handle 里。
 func (handler *RecordChargeAdjustmentHandler) SettleReweigh(
 	ctx context.Context,
 	command ReweighDifferenceCommand,
@@ -426,11 +419,10 @@ func (handler *RecordChargeAdjustmentHandler) SettleReweigh(
 	if !found || charge.Stage() != domain.ChargeConfirmed {
 		return ReweighDifferenceNotAccepted, nil
 	}
-	chargeCurrency, chargeMinor := charge.SettlementAmount()
+	chargeCurrency, _ := charge.SettlementAmount()
 	if command.SettlementCurrency != chargeCurrency.String() {
 		return ReweighDifferenceNotAccepted, nil
 	}
-	originalCurrency, originalMinor := charge.OriginalAmount()
 	// 读既有调整之前先锁：差额是照读到的净额算的，不排队的话另一笔计价纠错落在读与写之间，差额就算错了。
 	if _, _, err := handler.lockCustomerScope(ctx, command.TenantID, charge); errors.Is(err, errCustomerScopeLockUnavailable) {
 		return ReweighDifferenceUndecided, nil
@@ -441,60 +433,32 @@ func (handler *RecordChargeAdjustmentHandler) SettleReweigh(
 	if err != nil {
 		return ReweighDifferenceUndecided, nil
 	}
-	netSettlement, netOriginal := chargeMinor, originalMinor
-	// 原币金额只在同一种币上才能相加相减：新评价与既有的每一笔计价纠错，原币种都得是费用的原币种。
-	originalComparable := command.OriginalCurrency == originalCurrency.String()
+	adjustments := make([]domain.ChargeAdjustment, 0, len(recorded))
 	for _, record := range recorded {
-		if record.Adjustment.Kind() != domain.PricingCorrection {
-			continue
-		}
-		_, minor := record.Adjustment.SettlementAmount()
-		netSettlement += signedAdjustment(record.Adjustment.Direction(), minor)
-		adjustmentOriginalCurrency, original := record.Adjustment.OriginalAmount()
-		if adjustmentOriginalCurrency != originalCurrency {
-			originalComparable = false
-		}
-		netOriginal += signedAdjustment(record.Adjustment.Direction(), original)
+		adjustments = append(adjustments, record.Adjustment)
 	}
-	settlementDelta := command.SettlementMinor - netSettlement
-	if settlementDelta == 0 {
+	difference := domain.SettleReweighDifference(charge, adjustments, domain.ReweighEvaluation{
+		OriginalCurrency:   command.OriginalCurrency,
+		OriginalMinor:      command.OriginalMinor,
+		SettlementCurrency: command.SettlementCurrency,
+		SettlementMinor:    command.SettlementMinor,
+		Conversion:         command.Conversion,
+	})
+	if !difference.Needed {
 		return ReweighDifferenceNone, nil
-	}
-	direction := domain.AdjustmentDebit
-	settlementAmount := settlementDelta
-	if settlementDelta < 0 {
-		direction = domain.AdjustmentCredit
-		settlementAmount = -settlementDelta
-	}
-	// 默认按结算币记：原币种取结算币种、原币金额等于结算币差额、不带换算依据，正是形成门里「同币种两额相等」那一格。
-	recordCurrency, recordOriginal, recordConversion := command.SettlementCurrency, settlementAmount, ""
-	if originalComparable {
-		originalDelta := command.OriginalMinor - netOriginal
-		sameSign := originalDelta != 0 && (originalDelta > 0) == (settlementDelta > 0)
-		originalAmount := originalDelta
-		if originalAmount < 0 {
-			originalAmount = -originalAmount
-		}
-		// 形成门的两道限制先在这里对一遍，对不上就按结算币记：同币种费用上两额必须相等；跨币种必带换算依据。
-		// 放过去只会被形成门拒收，调用方把拒收当错误上抛，这一代从此一直重投。
-		sameCurrency := originalCurrency.String() == command.SettlementCurrency
-		fitsGate := (sameCurrency && originalAmount == settlementAmount) || (!sameCurrency && command.Conversion != "")
-		if sameSign && fitsGate {
-			recordCurrency, recordOriginal, recordConversion = originalCurrency.String(), originalAmount, command.Conversion
-		}
 	}
 	result, err := handler.Handle(ctx, RecordChargeAdjustmentCommand{
 		TenantID:           command.TenantID,
 		AdjustmentID:       "REWEIGH-" + command.Evaluation,
 		ChargeID:           command.ChargeID,
 		Kind:               domain.PricingCorrection,
-		Direction:          direction,
+		Direction:          difference.Direction,
 		Evaluation:         command.Evaluation,
-		OriginalCurrency:   recordCurrency,
-		OriginalMinor:      recordOriginal,
+		OriginalCurrency:   difference.OriginalCurrency,
+		OriginalMinor:      difference.OriginalMinor,
 		SettlementCurrency: command.SettlementCurrency,
-		SettlementMinor:    settlementAmount,
-		Conversion:         recordConversion,
+		SettlementMinor:    difference.SettlementMinor,
+		Conversion:         difference.Conversion,
 	})
 	if err != nil {
 		return ReweighDifferenceOutcomeInvalid, err

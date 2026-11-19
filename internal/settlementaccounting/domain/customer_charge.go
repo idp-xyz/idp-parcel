@@ -419,6 +419,14 @@ func (direction AdjustmentDirection) String() string {
 	}
 }
 
+// Signed 把一笔调整的金额折成对费用金额的增减：借项加、贷项减。
+func (direction AdjustmentDirection) Signed(minor int64) int64 {
+	if direction == AdjustmentCredit {
+		return -minor
+	}
+	return minor
+}
+
 // CommercialAuthorizationReference 指名让利所依据的有效商业授权。纠错与让利的依据
 // 分两格而不共用一格：两者语义不同（一个指评价、一个指授权），Kind 之外得有第二个
 // 维分辨那个字符串指的是什么——与 CustomerCharge 把 evaluation 与 confirmation 分开
