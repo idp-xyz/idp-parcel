@@ -62,13 +62,14 @@ type raceOutcome struct {
 	err     error
 }
 
-// raceSaves 让 first 先在事务里插入并按住不提交，再让 second 保存、等它卡在主键上，然后放 first 提交。
-func raceSaves(
+// raceSaves 让 first 先在事务里插入并按住不提交，再让 second 保存、等它卡在主键上，然后放 first 提交。各册的登记册共用它：
+// 修订的类型是参数，落点代数各册本就是同一套。
+func raceSaves[Revision any](
 	t *testing.T,
 	transactor bentoapp.Transactor,
-	save func(ctx context.Context, revision domain.WarehouseRevision) (ports.WarehouseSaveOutcome, error),
+	save func(ctx context.Context, revision Revision) (ports.RegistrySaveOutcome, error),
 	observer *blockedSessionObserver,
-	first, second domain.WarehouseRevision,
+	first, second Revision,
 ) (raceOutcome, raceOutcome) {
 	t.Helper()
 	ctx := t.Context()
