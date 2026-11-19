@@ -41,7 +41,7 @@ type zoneRevisionsResponse struct {
 
 // NewQueryZoneRevisionsEndpoint 交回一个库区全部修订的查阅入口（GET /warehouse-fulfillment-zone-revisions?warehouseCode=…&zoneCode=…），
 // 按修订号升序。这个库区在本租户查不到时答 200 与空数组，与别的租户的同编码库区同答：读口不泄露别的租户有没有这个库区
-// （UC-WF-001「权限、隔离与审计」），也就不答 404。两个编码在 Intake 之后读：未配置要拒在一切请求内容之前（ADR-0055 决定三），
+// （UC-WF-001「权限、隔离与审计」），也就不答 404。仓编码与库区编码在 Intake 之后读：未配置要拒在一切请求内容之前（ADR-0055 决定三），
 // 查询串也是请求内容。
 func NewQueryZoneRevisionsEndpoint(intake CatalogueIntake, reader ZoneRevisionsReader) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {

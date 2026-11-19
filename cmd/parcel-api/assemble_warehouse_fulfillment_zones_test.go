@@ -270,7 +270,7 @@ func TestZonesAreRegisteredAndReadBackThroughTheProductionAssembly(t *testing.T)
 	}
 }
 
-// Covers: AT-WF-012（端点那一半）——开关关着时，同样的真库与真渠道（授予齐备、令牌有效）打库区的三个口，答 403
+// Covers: AT-WF-012（端点那一半）——开关关着时，同样的真库与真渠道（授予齐备、令牌有效）打库区的各口，答 403
 // WAREHOUSE_FULFILLMENT_NOT_ENABLED，库区册里一行也没落：登记口没有走到任何编排，库表（空表）原样。
 func TestSwitchedOffZonesNeverReachTheRegisterOnARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
