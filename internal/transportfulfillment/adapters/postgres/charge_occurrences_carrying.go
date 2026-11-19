@@ -10,9 +10,8 @@ import (
 
 var _ ports.ChargeOccurrencesCarryingObject = (*ChargeOccurrences)(nil)
 
-// ListCurrentCarrying 列出仍有效、成员里有这一件对象的发生项版本。「仍有效」读每一项的当前版：没有别的版本以
-// corrects_version 回指它，且它不是失效版——与 ListCurrentOnScope、FindCovering 是同一句话，只是各查询里的别名与
-// 参数序号不同，没有抽成共用片段；改这句话时它们要一并对过。
+// ListCurrentCarrying 列出仍有效、成员里有这一件对象的发生项版本。「仍有效」的定义在 currentChargeOccurrenceHead，
+// 发生项在本查询里因此取它要求的别名 head。
 func (repository *ChargeOccurrences) ListCurrentCarrying(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -23,23 +22,16 @@ func (repository *ChargeOccurrences) ListCurrentCarrying(
 		return nil, fmt.Errorf("list charge occurrences carrying: %w", err)
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT occurrence.occurrence_ref, occurrence.validity_version
-		   FROM transport_fulfillment.transport_charge_occurrence AS occurrence
+		`SELECT head.occurrence_ref, head.validity_version
+		   FROM transport_fulfillment.transport_charge_occurrence AS head
 		   JOIN transport_fulfillment.transport_charge_occurrence_member AS member
-		     ON member.tenant_id = occurrence.tenant_id
-		    AND member.occurrence_ref = occurrence.occurrence_ref
-		    AND member.validity_version = occurrence.validity_version
-		  WHERE occurrence.tenant_id = $1
+		     ON member.tenant_id = head.tenant_id
+		    AND member.occurrence_ref = head.occurrence_ref
+		    AND member.validity_version = head.validity_version
+		  WHERE head.tenant_id = $1
 		    AND member.object_ref = $2
-		    AND occurrence.revision_kind IS DISTINCT FROM $3
-		    AND NOT EXISTS (
-		        SELECT 1
-		          FROM transport_fulfillment.transport_charge_occurrence AS later
-		         WHERE later.tenant_id = occurrence.tenant_id
-		           AND later.occurrence_ref = occurrence.occurrence_ref
-		           AND later.corrects_version = occurrence.validity_version
-		    )
-		  ORDER BY occurrence.occurrence_ref, occurrence.validity_version`,
+		    AND `+currentChargeOccurrenceHead(3)+`
+		  ORDER BY head.occurrence_ref, head.validity_version`,
 		tenant.String(), object.String(), domain.OccurrenceInvalidated.String(),
 	)
 	if err != nil {

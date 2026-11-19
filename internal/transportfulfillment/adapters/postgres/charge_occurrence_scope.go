@@ -50,7 +50,7 @@ func holdChargeOccurrenceScope(
 	return nil
 }
 
-// ListCurrentOnScope 列出这个范围上各项仍有效的链头（「仍有效」的读法与 FindCovering 同一句），按登记先后排，再逐项按键整条读回、
+// ListCurrentOnScope 列出这个范围上各项仍有效的链头（「仍有效」的定义在 currentChargeOccurrenceHead），按登记先后排，再逐项按键整条读回、
 // 过重建门。范围上的项数是一段上的成员数一级，逐项回读不成问题。
 func (repository *ChargeOccurrences) ListCurrentOnScope(
 	ctx context.Context,
@@ -68,13 +68,7 @@ func (repository *ChargeOccurrences) ListCurrentOnScope(
 		  WHERE head.tenant_id = $1
 		    AND head.reason = $2
 		    AND head.scope_ref = $3
-		    AND head.revision_kind IS DISTINCT FROM $4
-		    AND NOT EXISTS (
-		        SELECT 1
-		          FROM transport_fulfillment.transport_charge_occurrence AS successor
-		         WHERE successor.tenant_id = head.tenant_id
-		           AND successor.occurrence_ref = head.occurrence_ref
-		           AND successor.corrects_version = head.validity_version)
+		    AND `+currentChargeOccurrenceHead(4)+`
 		  ORDER BY head.recorded_at, head.occurrence_ref`,
 		tenant.String(), reason.String(), scope.String(), domain.OccurrenceInvalidated.String(),
 	)

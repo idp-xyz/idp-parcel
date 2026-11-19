@@ -243,10 +243,9 @@ func (repository *ChargeOccurrences) LoadMembers(
 // 同一范围要同一出处：存下的依据串取第一道斜杠之前那一词，与查询依据的 Source 比（读法见
 // domain.OccurrenceBasisReference.Source）。成员交集那一支本就要求依据相同，出处一条对它不多挡什么。
 //
-// 「仍有效」读每一项的当前版：没有别的版本以 corrects_version 回指它的那一版，且它不是失效版——被替代的旧版已由
-// 新版接替，失效的那一项说的是「那个范围不成立」，其成员可以另登。多于一项盖住时回显最早登记的那一项：登记方
-// 要去改的是先到的那一份。锁键各维以 chr(31) 分隔后取 hashtext，口径同 node_operations 收寄那把锁；哈希撞上只
-// 多等一会儿，不错判。锁随事务释放，不在事务里调用由 RequireExecutor 拒——无锁的查答不了「此刻没有」。
+// 「仍有效」的定义在 currentChargeOccurrenceHead。多于一项盖住时回显最早登记的那一项：登记方要去改的是先到的那一份。
+// 锁键各维以 chr(31) 分隔后取 hashtext，口径同 node_operations 收寄那把锁；哈希撞上只多等一会儿，不错判。锁随事务
+// 释放，不在事务里调用由 RequireExecutor 拒——无锁的查答不了「此刻没有」。
 func (repository *ChargeOccurrences) FindCovering(
 	ctx context.Context,
 	query ports.ChargeOccurrenceCoverageQuery,
@@ -279,13 +278,7 @@ func (repository *ChargeOccurrences) FindCovering(
 		    AND head.scope_ref = $3
 		    AND split_part(head.fact_basis, '/', 1) = $10
 		    AND head.occurrence_ref <> $4
-		    AND head.revision_kind IS DISTINCT FROM $5
-		    AND NOT EXISTS (
-		        SELECT 1
-		          FROM transport_fulfillment.transport_charge_occurrence AS successor
-		         WHERE successor.tenant_id = head.tenant_id
-		           AND successor.occurrence_ref = head.occurrence_ref
-		           AND successor.corrects_version = head.validity_version)
+		    AND `+currentChargeOccurrenceHead(5)+`
 		    AND ($6
 		         OR head.unit_ref = ANY($7)
 		         OR (head.fact_basis = $8
