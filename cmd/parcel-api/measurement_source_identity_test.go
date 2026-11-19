@@ -247,6 +247,7 @@ func TestAMeasurementAndAnInvalidationRacingForOneSourceIdentityLeaveExactlyOne(
 				TenantID: sharedIdentityTenant, SourceID: shared, TargetSourceID: target, Reason: "称错件",
 				PerformedBy: "SYN-SCALE-01", Evidence: "WEIGH/2",
 				OccurredAt: time.Date(2026, 11, 17, 3, 0, 0, 0, time.UTC),
+				Scope:      nodeopsapp.InvalidationAcrossTenantNodes(),
 			})
 		}()
 		close(start)

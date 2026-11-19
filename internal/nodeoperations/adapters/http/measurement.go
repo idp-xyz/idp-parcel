@@ -54,7 +54,7 @@ func (intake *WorkFactReceptionIntake) IntakeMeasurement(ctx context.Context, re
 
 func (intake *WorkFactReceptionIntake) IntakeMeasurementInvalidation(ctx context.Context, request *http.Request) (application.InvalidateActualMeasurementCommand, error) {
 	none := application.InvalidateActualMeasurementCommand{}
-	tenant, _, err := intake.authenticateNode(ctx, request)
+	tenant, node, err := intake.authenticateNode(ctx, request)
 	if err != nil {
 		return none, err
 	}
@@ -62,7 +62,8 @@ func (intake *WorkFactReceptionIntake) IntakeMeasurementInvalidation(ctx context
 	if err := decodeClosedDocument(request, &document); err != nil {
 		return none, err
 	}
-	return invalidationCommand(tenant, document, "", "")
+	// 作业端设备只能作废在认证出的这个节点上登记的测量；这条规则由编排判，这里只把节点交进命令。
+	return invalidationCommand(tenant, application.InvalidationAtNode(node), document, "", "")
 }
 
 func (intake *WorkFactReceptionIntake) authenticateNode(ctx context.Context, request *http.Request) (domain.TenantID, domain.NodeReference, error) {
@@ -127,7 +128,8 @@ func (intake *OperatorDecisionIntake) IntakeManualMeasurementInvalidation(ctx co
 	if strings.TrimSpace(document.OriginalDocument) == "" {
 		return none, fmt.Errorf("%w: originalDocument is required", ErrMalformedRequest)
 	}
-	return invalidationCommand(operator.Tenant, document, operator.Operator, document.OriginalDocument)
+	// 手工作废是运营决定：持授予的操作者可以作废本租户任何节点的测量，所以交「不限节点」，不是漏传。
+	return invalidationCommand(operator.Tenant, application.InvalidationAcrossTenantNodes(), document, operator.Operator, document.OriginalDocument)
 }
 
 // measurementDocument 是一次称重量方的载荷。重量与长宽高都必填，没有「只报其中一项」的写法：缺了哪一格，
@@ -203,6 +205,7 @@ func measurementCommand(
 
 func invalidationCommand(
 	tenant domain.TenantID,
+	scope application.MeasurementInvalidationScope,
 	document measurementInvalidationDocument,
 	enteredBy string,
 	original string,
@@ -221,7 +224,7 @@ func invalidationCommand(
 	return application.InvalidateActualMeasurementCommand{
 		TenantID: tenant.String(), SourceID: document.SourceID, TargetSourceID: document.TargetSourceID,
 		Reason: document.Reason, PerformedBy: document.PerformedBy, Evidence: document.EvidenceRef,
-		OccurredAt: occurredAt, EnteredBy: enteredBy, OriginalDocument: original,
+		OccurredAt: occurredAt, EnteredBy: enteredBy, OriginalDocument: original, Scope: scope,
 	}, nil
 }
 

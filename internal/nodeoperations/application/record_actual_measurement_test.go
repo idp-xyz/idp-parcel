@@ -220,6 +220,7 @@ func TestVoidingDropsTheMeasurementFromTheStillValidList(t *testing.T) {
 		TenantID: "tenant-1", SourceID: "void-1", TargetSourceID: "measure-1", Reason: "称错件",
 		PerformedBy: "scale-7", Evidence: "WEIGH/8",
 		OccurredAt: time.Date(2026, 11, 17, 4, 0, 0, 0, time.UTC),
+		Scope:      application.InvalidationAcrossTenantNodes(),
 	})
 	if err != nil {
 		t.Fatalf("作废：%v", err)
@@ -243,6 +244,7 @@ func TestVoidingDropsTheMeasurementFromTheStillValidList(t *testing.T) {
 		TenantID: "tenant-1", SourceID: "void-2", TargetSourceID: "measure-1", Reason: "再作废一次",
 		PerformedBy: "scale-7", Evidence: "WEIGH/9",
 		OccurredAt: time.Date(2026, 11, 17, 5, 0, 0, 0, time.UTC),
+		Scope:      application.InvalidationAcrossTenantNodes(),
 	})
 	if err != nil {
 		t.Fatalf("第二次作废：%v", err)
@@ -287,6 +289,7 @@ func TestANanosecondOccurrenceReachesTheChangeNoticeAtTheRegisterInstant(t *test
 	voided, err := handler.Invalidate(context.Background(), application.InvalidateActualMeasurementCommand{
 		TenantID: "tenant-1", SourceID: "void-1", TargetSourceID: "measure-1", Reason: "称错件",
 		PerformedBy: "scale-7", Evidence: "WEIGH/8", OccurredAt: nanos.Add(time.Hour),
+		Scope: application.InvalidationAcrossTenantNodes(),
 	})
 	if err != nil || voided.Outcome() != application.MeasurementInvalidationRecorded {
 		t.Fatalf("作废 = %v %v", voided.Outcome(), err)

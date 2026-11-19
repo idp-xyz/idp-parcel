@@ -34,6 +34,7 @@ func voidCommand(sourceID, target, reason string) application.InvalidateActualMe
 		TenantID: "tenant-1", SourceID: sourceID, TargetSourceID: target, Reason: reason,
 		PerformedBy: "scale-7", Evidence: "WEIGH/8",
 		OccurredAt: time.Date(2026, 11, 17, 4, 0, 0, 0, time.UTC),
+		Scope:      application.InvalidationAcrossTenantNodes(),
 	}
 }
 

@@ -14,6 +14,10 @@ import (
 var (
 	errUnnamedMeasurementSave   = errors.New("node operations: unnamed measurement save")
 	errMeasurementReplayMissing = errors.New("node operations: recorded measurement was not readable")
+
+	// ErrMeasurementInvalidationScopeMissing 表示作废命令没带范围。这是装配或译装的错，不是业务结果：漏传的范围若按「不限节点」
+	// 办，作业端设备就能作废别的节点的测量，所以编排拒收，不替它挑一种。
+	ErrMeasurementInvalidationScopeMissing = errors.New("node operations: measurement invalidation carries no scope")
 )
 
 // RecordActualMeasurementOutcome 是一次测量登记的结果。已有结果与来源冲突都已经有了
@@ -294,6 +298,7 @@ const (
 	MeasurementInvalidationNotAccepted
 	MeasurementInvalidationTargetMissing
 	MeasurementInvalidationAlreadyVoid
+	MeasurementInvalidationTargetAtAnotherNode
 )
 
 func (outcome InvalidateActualMeasurementOutcome) String() string {
@@ -310,6 +315,8 @@ func (outcome InvalidateActualMeasurementOutcome) String() string {
 		return "TARGET_MISSING"
 	case MeasurementInvalidationAlreadyVoid:
 		return "ALREADY_VOID"
+	case MeasurementInvalidationTargetAtAnotherNode:
+		return "TARGET_AT_ANOTHER_NODE"
 	case InvalidateActualMeasurementOutcomeInvalid:
 		return ""
 	default:
@@ -317,8 +324,44 @@ func (outcome InvalidateActualMeasurementOutcome) String() string {
 	}
 }
 
+// MeasurementInvalidationScope 说一次作废可以指向哪些节点上登记的测量。两种来路在类型上分开：作业端设备只能作废在认证出的
+// 那个节点上登记的测量（InvalidationAtNode），手工作废是运营决定、持授予的操作者可以作废本租户任何节点的测量
+// （InvalidationAcrossTenantNodes）。零值不是任何一种：用空节点表示「不限」会让漏传悄悄放开范围，所以零值被编排拒收。
+type MeasurementInvalidationScope struct {
+	node   domain.NodeReference
+	across bool
+}
+
+// InvalidationAtNode 把作废限定在 node 上登记的测量。node 是零值时得到的是没带范围，不是不限节点。
+func InvalidationAtNode(node domain.NodeReference) MeasurementInvalidationScope {
+	return MeasurementInvalidationScope{node: node}
+}
+
+// InvalidationAcrossTenantNodes 不限节点：本租户任何节点上登记的测量都可以作废。只有手工作废这条来路该用它。
+func InvalidationAcrossTenantNodes() MeasurementInvalidationScope {
+	return MeasurementInvalidationScope{across: true}
+}
+
+// AtNode 交回被限定的节点；不是「限定在某个节点」的范围时 ok 为假。
+func (scope MeasurementInvalidationScope) AtNode() (node domain.NodeReference, ok bool) {
+	if scope.across || scope.node.String() == "" {
+		return domain.NodeReference{}, false
+	}
+	return scope.node, true
+}
+
+// AcrossTenantNodes 说这是不限节点的范围。
+func (scope MeasurementInvalidationScope) AcrossTenantNodes() bool {
+	return scope.across && scope.node.String() == ""
+}
+
+func (scope MeasurementInvalidationScope) set() bool {
+	_, atNode := scope.AtNode()
+	return atNode || scope.AcrossTenantNodes()
+}
+
 // InvalidateActualMeasurementCommand 指回被作废那条的来源身份。它不带重量或尺寸：
-// 作废不复制被作废的数字。
+// 作废不复制被作废的数字。Scope 必带：作业端与手工两种来路各交各的范围，漏传不收。
 type InvalidateActualMeasurementCommand struct {
 	TenantID         string
 	SourceID         string
@@ -329,6 +372,7 @@ type InvalidateActualMeasurementCommand struct {
 	OccurredAt       time.Time
 	EnteredBy        string
 	OriginalDocument string
+	Scope            MeasurementInvalidationScope
 }
 
 // InvalidateActualMeasurementResult 交回作废结果。作废事实只在记下或重放时给出。
@@ -346,11 +390,15 @@ func (result InvalidateActualMeasurementResult) Invalidation() (domain.Measureme
 	return result.invalidation, result.present
 }
 
-// Invalidate 写下一条作废。同一条测量上再来一条不同来源的作废答已经作废，不覆盖先到的那条。
+// Invalidate 写下一条作废。同一条测量上再来一条不同来源的作废答已经作废，不覆盖先到的那条。判断顺序是：来源身份撞另一类的
+// 答来源冲突，目标不在册，目标在别的节点（只限作业端的范围），然后才是已作废与重放；所以别的节点的设备连重放答原结果也拿不到。
 func (handler *RecordActualMeasurementHandler) Invalidate(
 	ctx context.Context,
 	command InvalidateActualMeasurementCommand,
 ) (InvalidateActualMeasurementResult, error) {
+	if !command.Scope.set() {
+		return InvalidateActualMeasurementResult{}, ErrMeasurementInvalidationScopeMissing
+	}
 	invalidation, err := invalidationFromCommand(command)
 	if err != nil {
 		return InvalidateActualMeasurementResult{outcome: MeasurementInvalidationNotAccepted}, nil
@@ -370,6 +418,15 @@ func (handler *RecordActualMeasurementHandler) Invalidate(
 	}
 	if taken {
 		return InvalidateActualMeasurementResult{outcome: MeasurementInvalidationSourceConflict}, nil
+	}
+	if node, limited := command.Scope.AtNode(); limited {
+		refusal, refused, err := handler.targetOutsideNode(ctx, record.Key.TenantID, invalidation.TargetSourceID(), node)
+		if err != nil {
+			return InvalidateActualMeasurementResult{}, err
+		}
+		if refused {
+			return InvalidateActualMeasurementResult{outcome: refusal}, nil
+		}
 	}
 	saved, err := handler.measurements.SaveInvalidation(ctx, record)
 	if err != nil {
@@ -392,6 +449,28 @@ func (handler *RecordActualMeasurementHandler) Invalidate(
 	default:
 		return InvalidateActualMeasurementResult{}, errUnnamedMeasurementSave
 	}
+}
+
+// targetOutsideNode 读被作废的那条测量、比它登记的节点：不在册答目标不在册，在别的节点答目标在别的节点，refused 为真；
+// 在 node 上登记的不拒。测量落下不改，节点也不会变，读在写之前不会错过并发。目标不在册这一格与写口的同名答案是同一个结果，
+// 这里先答只为让它排在节点判断之前。
+func (handler *RecordActualMeasurementHandler) targetOutsideNode(
+	ctx context.Context,
+	tenant domain.TenantID,
+	targetSourceID string,
+	node domain.NodeReference,
+) (outcome InvalidateActualMeasurementOutcome, refused bool, err error) {
+	target, found, err := handler.measurements.FindMeasurement(ctx, ports.ActualMeasurementKey{TenantID: tenant, SourceID: targetSourceID})
+	if err != nil {
+		return InvalidateActualMeasurementOutcomeInvalid, false, err
+	}
+	if !found {
+		return MeasurementInvalidationTargetMissing, true, nil
+	}
+	if target.Measurement.Node().String() != node.String() {
+		return MeasurementInvalidationTargetAtAnotherNode, true, nil
+	}
+	return InvalidateActualMeasurementOutcomeInvalid, false, nil
 }
 
 func (handler *RecordActualMeasurementHandler) replayInvalidation(

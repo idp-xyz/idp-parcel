@@ -131,6 +131,7 @@ func TestAnInvalidationTakingAMeasurementsSourceIdentityPastTheOrchestrationIsAn
 		TenantID: sharedIdentityTenant, SourceID: taken, TargetSourceID: target, Reason: "称错件",
 		PerformedBy: "SYN-SCALE-01", Evidence: "WEIGH/2",
 		OccurredAt: time.Date(2026, 11, 17, 3, 0, 0, 0, time.UTC),
+		Scope:      nodeopsapp.InvalidationAcrossTenantNodes(),
 	})
 	wantForeignKeyViolation(t, "作废借用测量的来源身份", err, "measurement_invalidation_source_identity_fk")
 	if result.Outcome() == nodeopsapp.MeasurementInvalidationRecorded || result.Outcome() == nodeopsapp.MeasurementInvalidationExisting {
