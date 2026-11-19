@@ -97,7 +97,8 @@ step "只称重不量方（不收）" "$OP" POST /node-operations/manual-measure
   "400:*"
 
 # 第一条称重量方。有了实测，重量与尺寸都用它，申报一格都不补。申报预估的替代者就是当前这一笔。
-measure "SYN-WEIGH-${STAMP}-M1" 2.10 22 16 11 "$(now_utc)"
+M1_AT="$(now_utc)"
+measure "SYN-WEIGH-${STAMP}-M1" 2.10 22 16 11 "$M1_AT"
 _measured_estimate() {
   charge_row "$FIRST"
   NEXT="$(jsel "$LAST" charges charge "$FIRST" supersededBy)"
@@ -134,8 +135,9 @@ printf '%-34s → %s CONFIRMED %s 分\n' "费用确认" "$CHARGE" "$CONFIRMED_AM
 # 时间相同，哪一条都不取，那一代停下。作废多录的那一条，之后的一代按 30×25×20 算，越过停下的那一代认出已确认的
 # 那一笔：借项只有一笔，客户费用册上不多出费用。
 CHARGES_AT_CONFIRMATION="$(charge_ids)"
-sleep 2
 REWEIGH_AT="$(now_utc)"
+# 复测的发生时间要严格晚于第一条，否则当前有效实测取不出复测；两个时刻都是定长的 UTC 秒级串，字典序就是时间序。
+[[ "$REWEIGH_AT" > "$M1_AT" ]] || fail "复测的发生时间 $REWEIGH_AT 不晚于第一条称重量方的 $M1_AT"
 measure "SYN-WEIGH-${STAMP}-M2" 2.10 30 25 20 "$REWEIGH_AT"
 measure "SYN-WEIGH-${STAMP}-M3" 2.10 30 25 25 "$REWEIGH_AT"
 # 先等这两代办完再作废：作废得太快，它们会赶在作废之后才评价，就走不到「定不下」那一格。
