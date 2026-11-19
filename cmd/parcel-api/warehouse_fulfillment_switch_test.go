@@ -4,17 +4,26 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
+
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+
+	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
+	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
 // 本文件证仓配部署开关在 parcel-api 里的接法（ADR-0375 决定四）：run 在开池之前读一次、写启动日志，值经 startupChannels
 // 交到 endpointSources，特性只从 endpointSources 取。
 //
-// 这几条是对源文件的结构断言，不是行为断言：run 要开池才往下走，没有真库就跑不到那一步，而开关今天没有任何端点消费，
-// 也就没有可观察的答复。开关读法与启动日志的行为用例在 cmd/internal/warehouseswitch。
+// 「run 里读一次、在开池之前」是对源文件的结构断言：run 要开池才往下走，没有真库就跑不到那一步，只能对着语法树核。值从
+// startupChannels 传到仓配各行是行为用例：经生产装配对真库装配，看开关为真与为假时仓配的行各答什么。开关读法与启动日志的
+// 行为用例在 cmd/internal/warehouseswitch。
 
 const warehouseSwitchPackage = "warehouseswitch"
 
@@ -168,28 +177,73 @@ func isSelectorOf(expression ast.Expr, qualifier, name string) bool {
 	return isSelector && selector.Sel.Name == name && isIdentifierNamed(selector.X, qualifier)
 }
 
-// Covers: ADR-0375 决定四——值从 startupChannels 原样进 endpointSources，两处都是布尔、缺省为关；生产装配里 endpointSources
-// 那一格取的就是 startup 的那一格，没有接到别的值上。
-func TestTheWarehouseFulfillmentSwitchTravelsFromStartupChannelsIntoEndpointSources(t *testing.T) {
-	for name, structure := range map[string]reflect.Type{
-		"startupChannels": reflect.TypeOf(startupChannels{}),
-		"endpointSources": reflect.TypeOf(endpointSources{}),
-	} {
-		field, found := structure.FieldByName("warehouseFulfillment")
-		if !found {
-			t.Fatalf("%s 没有 warehouseFulfillment 这一格", name)
-		}
-		if field.Type.Kind() != reflect.Bool {
-			t.Fatalf("%s.warehouseFulfillment 是 %s，want bool", name, field.Type)
-		}
+// Covers: ADR-0375 决定四、AT-WF-012（端点那一半）——开关值从 startupChannels 经 endpointSources 进到仓配的各行：经
+// assembleProductionEndpoints 对真库装配，startupChannels.warehouseFulfillment 为真，打仓配的各行答「接入渠道未配置」（渠道配了时
+// 答真渠道的答复：核验方放行、操作者册里没有这个操作者，答 OPERATOR_NOT_GRANTED）；为假，不论渠道配没配，各行都答
+// WAREHOUSE_FULFILLMENT_NOT_ENABLED。零值就是关：缺省不提供仓配的业务答复。
+func TestTheWarehouseFulfillmentSwitchTravelsFromStartupChannelsIntoTheWarehouseLines(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
 	}
-	if (startupChannels{}).warehouseFulfillment || (endpointSources{}).warehouseFulfillment {
-		t.Fatal("零值读成了开：缺省必须是关")
+	unset := fakeGetenv(nil)
+	unsetOperator, _, err := buildOperatorCredentialVerifier(unset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	integrationClientVerifier, _, err := buildIntegrationClientCredentialVerifier(unset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	customerClientVerifier, _, err := buildCustomerClientCredentialVerifier(unset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assemble := func(startup startupChannels) http.Handler {
+		t.Helper()
+		startup.integrationClientVerifier, startup.customerClientVerifier = integrationClientVerifier, customerClientVerifier
+		endpoints, err := assembleProductionEndpoints(db, startup)
+		if err != nil {
+			t.Fatalf("生产装配：%v", err)
+		}
+		return httpapi.NewWithEndpoints(buildinfo.Info{}, endpoints)
 	}
 
-	assemble := functionBody(t, parseProcessFile(t, "main.go"), "assembleProductionEndpoints")
-	value := literalFieldValue(t, assemble, "endpointSources", "warehouseFulfillment")
-	if !isSelectorOf(value, "startup", "warehouseFulfillment") {
-		t.Fatal("endpointSources.warehouseFulfillment 该取 startup.warehouseFulfillment")
+	cases := []struct {
+		name    string
+		startup startupChannels
+		code    string
+	}{
+		{"switch on, channel unconfigured", startupChannels{warehouseFulfillment: true, operatorVerifier: unsetOperator}, "ACCESS_CHANNEL_NOT_CONFIGURED"},
+		{"switch on, channel configured", startupChannels{warehouseFulfillment: true, operatorVerifier: acceptingVerifier{}}, "OPERATOR_NOT_GRANTED"},
+		{"switch off, channel unconfigured", startupChannels{warehouseFulfillment: false, operatorVerifier: unsetOperator}, "WAREHOUSE_FULFILLMENT_NOT_ENABLED"},
+		{"switch off, channel configured", startupChannels{warehouseFulfillment: false, operatorVerifier: acceptingVerifier{}}, "WAREHOUSE_FULFILLMENT_NOT_ENABLED"},
+		{"switch never set", startupChannels{operatorVerifier: acceptingVerifier{}}, "WAREHOUSE_FULFILLMENT_NOT_ENABLED"},
+	}
+	for _, testCase := range cases {
+		router := assemble(testCase.startup)
+		for _, pattern := range warehouseFulfillmentLines() {
+			probe := businessEndpointProbes()[pattern]
+			request := httptest.NewRequest(probe.method, probe.target, strings.NewReader(`{}`))
+			request.Header.Set("Authorization", "Bearer "+presentedOperatorToken)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+
+			if response.Code != http.StatusForbidden || problemCode(t, response) != testCase.code {
+				t.Fatalf("%s：%s 答 %d %s，want 403 %s", testCase.name, pattern, response.Code, response.Body.String(), testCase.code)
+			}
+			assertNoOutcome(t, response, pattern)
+		}
+	}
+	// 同一份生产装配里别的行与开关无关：一行不属于仓配的登记写行，两种开关下都从「接入渠道未配置」起步。
+	for _, on := range []bool{false, true} {
+		router := assemble(startupChannels{warehouseFulfillment: on, operatorVerifier: unsetOperator})
+		request := httptest.NewRequest(http.MethodPost, "/commercial-registration-number-type-registrations", strings.NewReader(`{}`))
+		request.Header.Set("Authorization", "Bearer "+presentedOperatorToken)
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if !leftUnconfigured(t, response) {
+			t.Fatalf("开关 %t：别的行答 %d %s，want 「接入渠道未配置」", on, response.Code, response.Body.String())
+		}
 	}
 }

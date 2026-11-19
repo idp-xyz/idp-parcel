@@ -21,6 +21,7 @@ import (
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
+	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
 )
 
 // 本文件是业务端点的登记处（ADR-0222）：各 endpoints_<特性>.go 在 init 里把自己那几行登进 endpointRegistry，
@@ -41,6 +42,10 @@ type endpointLine struct {
 	probe string
 	// multipartUpload 为真：这一行除 JSON 外另收 multipart/form-data 上传，请求体检查放过上传（见 requestBodyGuard）。
 	multipartUpload bool
+	// warehouseFulfillment 为真：这一行属于可选能力仓配履约（ADR-0375 决定四），受部署开关管。开关关着（缺省）时它的处理器是
+	// 固定的 WAREHOUSE_FULFILLMENT_NOT_ENABLED，与渠道配没配无关；装配测试据此只对仓配的行认这一格，别的行照旧从「接入渠道
+	// 未配置」起步（ADR-0384 决定七）。
+	warehouseFulfillment bool
 }
 
 // faceFamily 是能打开一行的那一族接入渠道。
@@ -151,7 +156,7 @@ type endpointSources struct {
 	// registerNewerCanonicalization 是登记较新规范化版本价卡的部署开关（ADR-0352），价卡登记口与草稿发布口共读这一格。
 	registerNewerCanonicalization bool
 	// warehouseFulfillment 是仓配履约的部署开关（ADR-0375 决定四）：关着时仓配的端点不向任何调用方提供业务答复。仓配的特性从
-	// 这一格取，不另读环境；今天还没有任何仓配端点消费它。
+	// 这一格取，不另读环境：关着时特性的 build 不构造任何仓配的适配器与编排。
 	warehouseFulfillment bool
 	// documentNumbers 是编号组件（ADR-0355 决定四、六）：规则册各口与各类单据的开立取同一套，规则册、序列与开立事务
 	// 都在上面那个 db 上。
@@ -395,4 +400,20 @@ func (channels endpointChannels) governanceRegistry() governancehttp.RegistryQue
 		return channels.operatorRegistries.governanceOperationsRead
 	}
 	return governancehttp.UnconfiguredIntake{}
+}
+
+// warehouseCatalogue 与 warehouseRegistration 是仓配开着时各口的 Intake：渠道没配答未配置。开关关着时它们不被问到——那时各口
+// 答的是 WAREHOUSE_FULFILLMENT_NOT_ENABLED，不经任何 Intake（见 endpoints_warehouse_fulfillment.go）。
+func (channels endpointChannels) warehouseCatalogue() warehousehttp.CatalogueIntake {
+	if channels.operatorRegistries.warehouseOperationsRead != nil {
+		return channels.operatorRegistries.warehouseOperationsRead
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
+func (channels endpointChannels) warehouseRegistration() warehousehttp.WarehouseRegistrationIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
 }
