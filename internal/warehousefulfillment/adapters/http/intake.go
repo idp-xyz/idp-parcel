@@ -17,6 +17,13 @@ type WarehouseRegistrationIntake interface {
 	IntakeWarehouseRegistration(ctx context.Context, request *http.Request) (application.RegisterWarehouseCommand, error)
 }
 
+// ZoneRegistrationIntake 把一次已认证的接入请求翻译成库区修订的登记命令。理由同 WarehouseRegistrationIntake：租户与登记责任方
+// 只能来自认证结果，认证先于请求体。各册各有一个这样的接口，因为命令的类型各不相同；认证与译装的做法各册共用同一份
+// （OperatorRegistryIntake），渠道未配置时同样挂 UnconfiguredIntake。
+type ZoneRegistrationIntake interface {
+	IntakeZoneRegistration(ctx context.Context, request *http.Request) (application.RegisterZoneCommand, error)
+}
+
 // CatalogueQuery 是一次已授权的仓册查阅：租户来自认证结果、不取自查询串，页大小由接入面按渠道契约裁决、不采信调用方自报。
 type CatalogueQuery struct {
 	Tenant domain.TenantID

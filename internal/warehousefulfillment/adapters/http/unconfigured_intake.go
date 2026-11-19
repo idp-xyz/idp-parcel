@@ -16,6 +16,7 @@ type UnconfiguredIntake struct{}
 
 var (
 	_ WarehouseRegistrationIntake = UnconfiguredIntake{}
+	_ ZoneRegistrationIntake      = UnconfiguredIntake{}
 	_ CatalogueIntake             = UnconfiguredIntake{}
 )
 
@@ -24,6 +25,10 @@ func (UnconfiguredIntake) IntakeWarehouseRegistration(
 	context.Context, *http.Request,
 ) (application.RegisterWarehouseCommand, error) {
 	return application.RegisterWarehouseCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeZoneRegistration(context.Context, *http.Request) (application.RegisterZoneCommand, error) {
+	return application.RegisterZoneCommand{}, ErrAccessChannelNotConfigured
 }
 
 func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {

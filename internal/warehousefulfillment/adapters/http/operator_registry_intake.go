@@ -3,6 +3,7 @@ package warehousehttp
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
@@ -24,13 +25,17 @@ type OperatorRegistryAuthenticator interface {
 	AuthenticateRegistryWrite(ctx context.Context, bearerToken string) (OperatorIdentity, error)
 }
 
-// OperatorRegistryIntake 是操作者渠道在本包登记册配置写面的 Intake（ADR-0100 决定四）。登记一个修订不形成生产事实，所以
-// 不判准入范围。先认证、后读请求体；租户与登记责任方填认证结果，报文里这两格在场即拒。
+// OperatorRegistryIntake 是操作者渠道在本包登记册配置写面的 Intake（ADR-0100 决定四），各册的登记口共用这一只：一个认证器，
+// 每册一个方法。登记一个修订不形成生产事实，所以不判准入范围。先认证、后读请求体；租户与登记责任方填认证结果，报文里这两格
+// 在场即拒。
 type OperatorRegistryIntake struct {
 	authenticator OperatorRegistryAuthenticator
 }
 
-var _ WarehouseRegistrationIntake = (*OperatorRegistryIntake)(nil)
+var (
+	_ WarehouseRegistrationIntake = (*OperatorRegistryIntake)(nil)
+	_ ZoneRegistrationIntake      = (*OperatorRegistryIntake)(nil)
+)
 
 func NewOperatorRegistryIntake(authenticator OperatorRegistryAuthenticator) (*OperatorRegistryIntake, error) {
 	if authenticator == nil {
@@ -43,9 +48,26 @@ func (intake *OperatorRegistryIntake) IntakeWarehouseRegistration(
 	ctx context.Context,
 	request *http.Request,
 ) (application.RegisterWarehouseCommand, error) {
-	var none application.RegisterWarehouseCommand
-	// 令牌不过的请求，请求体一个字节都不读。
-	identity, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
+	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.WarehouseCommand)
+}
+
+func (intake *OperatorRegistryIntake) IntakeZoneRegistration(
+	ctx context.Context,
+	request *http.Request,
+) (application.RegisterZoneCommand, error) {
+	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.ZoneCommand)
+}
+
+// intakeRegistration 是各册登记 Intake 共用的一步：令牌不过的请求，请求体一个字节都不读；过了才把请求体按这一册的译法译成命令，
+// 租户与登记责任方填认证结果。译装交回的坏载荷译成本包的请求畸形，别的错原样上抛。
+func intakeRegistration[Command any](
+	ctx context.Context,
+	request *http.Request,
+	authenticator OperatorRegistryAuthenticator,
+	translate func(io.Reader, domain.TenantID, domain.Registrant) (Command, error),
+) (Command, error) {
+	var none Command
+	identity, err := authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
 	if err != nil {
 		return none, err
 	}
@@ -53,7 +75,7 @@ func (intake *OperatorRegistryIntake) IntakeWarehouseRegistration(
 	if body == nil {
 		body = http.NoBody
 	}
-	command, err := registrationjson.WarehouseCommand(body, identity.Tenant, identity.Registrant)
+	command, err := translate(body, identity.Tenant, identity.Registrant)
 	if err != nil {
 		var malformed *registrationjson.MalformedDocumentError
 		if errors.As(err, &malformed) {

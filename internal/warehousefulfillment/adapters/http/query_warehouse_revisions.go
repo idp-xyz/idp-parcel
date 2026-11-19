@@ -2,11 +2,9 @@ package warehousehttp
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 
-	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
@@ -77,26 +75,13 @@ func NewQueryWarehouseRevisionsEndpoint(intake CatalogueIntake, reader Warehouse
 // 后照常作答——一个写坏的编码被丢下就成了没给。编码逐字交给领域，不去空白。不成立时交回一句理由（只谈查询串的形状，不回显取值），
 // 成立时理由为空。
 func warehouseCodeOf(request *http.Request) (domain.WarehouseCode, string) {
-	values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+	cells, reason := queryCells(request, warehouseCodeQueryKey)
+	if reason != "" {
+		return domain.WarehouseCode{}, reason
+	}
+	code, err := domain.NewWarehouseCode(cells[0])
 	if err != nil {
-		var malformed *cataloguepage.MalformedQuery
-		if errors.As(err, &malformed) {
-			return domain.WarehouseCode{}, malformed.Reason
-		}
-		return domain.WarehouseCode{}, "the query string could not be read"
-	}
-	for key := range values {
-		if key != warehouseCodeQueryKey {
-			return domain.WarehouseCode{}, "only " + warehouseCodeQueryKey + " is accepted as a query key"
-		}
-	}
-	given := values[warehouseCodeQueryKey]
-	if len(given) != 1 {
-		return domain.WarehouseCode{}, warehouseCodeQueryKey + " must be given exactly once"
-	}
-	code, err := domain.NewWarehouseCode(given[0])
-	if err != nil {
-		return domain.WarehouseCode{}, warehouseCodeQueryKey + " must be a non-blank value that can be stored verbatim"
+		return domain.WarehouseCode{}, blankCellReason(warehouseCodeQueryKey)
 	}
 	return code, ""
 }
