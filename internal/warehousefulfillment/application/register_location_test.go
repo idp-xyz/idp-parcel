@@ -738,8 +738,8 @@ func TestRegisterLocationRefusesANewlyNamedDeactivatedTypeAndKeepsAnExistingOneA
 	}
 }
 
-// Covers: AT-WF-003（库位的部分）「新指名」的三种情形各一条——首笔修订就指名；上一笔没带库位类型、这一笔带上；换成另一个类型编码。
-// 三种都在类型此刻已停用时答 REFERENCE_DEACTIVATED。又证：上一笔带类型、这一笔去掉类型、再下一笔又指名同一个已停用的类型，算新指名。
+// Covers: AT-WF-003（库位的部分）「新指名」的各种情形各一条——首笔修订就指名；上一笔没带库位类型、这一笔带上；换成另一个类型编码。
+// 这些都在类型此刻已停用时答 REFERENCE_DEACTIVATED。又证：上一笔带类型、这一笔去掉类型、再下一笔又指名同一个已停用的类型，算新指名。
 func TestRegisterLocationJudgesWhatCountsAsNamingATypeNewly(t *testing.T) {
 	t.Run("首笔修订", func(t *testing.T) {
 		fixture := newLocationFixture(t)

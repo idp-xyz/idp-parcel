@@ -28,8 +28,8 @@ type RegisterLocationCommand struct {
 // RegisterLocationHandler 是库位登记册的写侧编排。事务边界在调用方：每条命令各起一个环境事务，登记册的保存在没有环境事务时拒绝。
 // 并发提交同一修订号的两笔不靠这里加锁——登记册的主键让至多一笔落册，另一笔的保存按内容答重放或冲突，再由这里译成结果。
 //
-// 对仓、库区与库位类型三册只读不写，所以三者都只拿窄读口：各册只追加，登记过的对象不会再变成「不在册」，这几读不需要锁，也不与
-// 库位的并发登记相干。
+// 对仓册、库区册与库位类型册只读不写，所以它们都只拿窄读口：各册只追加，登记过的对象不会再变成「不在册」，对它们的读不需要锁，
+// 也不与库位的并发登记相干。
 type RegisterLocationHandler struct {
 	locations     ports.LocationRegistry
 	warehouses    ports.WarehouseLookup

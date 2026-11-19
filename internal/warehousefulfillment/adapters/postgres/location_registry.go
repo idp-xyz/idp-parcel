@@ -31,7 +31,7 @@ func NewLocations(db *bentopg.DB) (*Locations, error) {
 var (
 	_ ports.LocationRegistry = (*Locations)(nil)
 	// 库位登记用例核「所属库区已登记且属于这个仓」与「库位类型已登记、是否停用」读的是库区登记册与库位类型登记册本身，不另有读路：
-	// 两册各自的这一个读方法就是库位要的窄读口。
+	// 库区册与库位类型册各自的这一个读方法就是库位要的窄读口。
 	_ ports.ZoneLookup         = (*Zones)(nil)
 	_ ports.LocationTypeLookup = (*LocationTypes)(nil)
 )
