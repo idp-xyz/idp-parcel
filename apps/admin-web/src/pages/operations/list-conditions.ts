@@ -5,12 +5,12 @@
 import type { WorkbenchChip } from '../../templates';
 import type { CatalogueConditions } from '../catalogue-query';
 import { matchesSearch } from '../party/list-order';
+import { scopeLabels } from '../../vocabulary/status';
 import { effectiveBasisLabels } from './effective-time-judgment';
 import {
   consolidationPhaseLabels,
   handoverVerdictLabels,
   masterDocumentStandingLabels,
-  measurementVoidedLabels,
   receptionKindLabels,
 } from './presentation';
 import type { NodeOperationsRegistry, TransportFulfillmentRegistry } from './records-api';
@@ -33,7 +33,7 @@ export const transportPushedStatus: Partial<Record<TransportFulfillmentRegistry,
 export const nodePushedStatus: Partial<Record<NodeOperationsRegistry, PushedStatus>> = {
   reception: { dimension: 'kind', labels: receptionKindLabels },
   'consolidation-unit': { dimension: 'phase', labels: consolidationPhaseLabels },
-  measurement: { dimension: 'voided', labels: measurementVoidedLabels },
+  measurement: { dimension: 'voided', labels: scopeLabels('measurement-voided') },
 };
 
 /** 外部轨迹的确认方式按 effectiveBasis（ports.ExternalTrackingFactPages）。 */

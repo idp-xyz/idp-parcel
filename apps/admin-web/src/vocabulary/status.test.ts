@@ -1,10 +1,11 @@
 import { test } from 'node:test';
-import { deepEqual, equal, ok } from 'node:assert/strict';
+import { deepEqual, equal, ok, throws } from 'node:assert/strict';
 import {
   chargeCodeLabel,
   configureVocabularyWarnings,
   knownStatusCodes,
   labelFor,
+  scopeLabels,
   scopedStatusVocabulary,
   statusEntryFor,
   statusVocabulary,
@@ -96,6 +97,28 @@ test('分册覆盖按册生效', () => {
   equal(labelFor('PENDING', 'pricing-evaluation'), '待判断');
   equal(labelFor('REFUSED', 'handover'), '已拒收');
   equal(toneFor('OPEN', 'consolidation'), 'info');
+});
+
+// Covers: 称重量方册上屏的两组词出自词典——对象种类两个码取全局词、作废与否取 measurement-voided 一册（false / true 离了册没有意思）。
+test('称重量方的对象种类与作废两组词取自词典', () => {
+  equal(labelFor('HANDLING_UNIT'), '作业实物');
+  equal(labelFor('CONSOLIDATION_UNIT'), '集运单元');
+  equal(labelFor('false', 'measurement-voided'), '仍有效');
+  equal(labelFor('true', 'measurement-voided'), '已作废');
+});
+
+// Covers: 一册的「码 → 词」表按词典登记序出，值与 labelFor 取到的同词；册名不存在是编码错误，抛出而不是给空表。
+test('分册词表派生给筛选胶囊用，册名写错即抛', () => {
+  const voided = scopeLabels('measurement-voided');
+  deepEqual(Object.entries(voided), [
+    ['false', '仍有效'],
+    ['true', '已作废'],
+  ]);
+  for (const [code, label] of Object.entries(voided)) equal(labelFor(code, 'measurement-voided'), label);
+  throws(
+    () => scopeLabels('measurement-voidd'),
+    (error: unknown) => error instanceof Error && error.message.includes('measurement-voidd'),
+  );
 });
 
 // Covers: 计价费用代码的参考译法；查不到的码原样显示并按词典同一机制只告警一次。

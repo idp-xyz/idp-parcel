@@ -32,7 +32,8 @@ import {
   reviewListConditions,
   rowsOnPage,
 } from './list-conditions';
-import { consolidationPhaseLabels, labelOf, measurementObjectKindLabels, measurementVoidedLabels } from './presentation';
+import { consolidationPhaseLabels, labelOf } from './presentation';
+import { measurementRowOf } from './measurement-rows';
 import { receptionRowOf } from './reception-rows';
 import { recheckPendingIdentity, type IdentityRecheckResponseBody } from './identity-recheck-api';
 import {
@@ -307,24 +308,7 @@ function rowsOf(body: NodeOperationsListResponseBody): ReviewRow[] {
     case 'UNIDENTIFIED_ITEMS_LISTED':
       return body.items.map(unidentifiedRowOf);
     case 'MEASUREMENTS_LISTED':
-      return body.measurements.map((record) => ({
-        key: record.sourceId,
-        values: {
-          operationalItem: record.objectId,
-          weight: `${record.weightValue} ${record.weightUnit}`,
-          dimensions: `${record.length}×${record.width}×${record.height} ${record.dimensionUnit}`,
-          occurredAt: formatInstant(record.occurredAt),
-          voided: labelOf(measurementVoidedLabels, String(record.voided)),
-          sourceId: record.sourceId,
-          objectKind: labelOf(measurementObjectKindLabels, record.objectKind),
-          location: record.location,
-          basis: record.basis,
-          performedBy: record.performedBy,
-          enteredBy: record.enteredBy ?? '',
-          originalDocument: record.originalDocument ?? '',
-          recordedAt: formatInstant(record.recordedAt),
-        },
-      }));
+      return body.measurements.map(measurementRowOf);
     case 'CONSOLIDATION_UNITS_LISTED':
       return body.units.map((record) => ({
         key: `unit:${record.unitId}`,

@@ -3,6 +3,7 @@ import { deepEqual, equal } from 'node:assert/strict';
 import {
   allStatuses,
   handoverNotePushedStatus,
+  nodePushedStatus,
   pageStatusChips,
   preAdvicePushedStatus,
   pushedStatusChips,
@@ -34,6 +35,23 @@ test('下推的胶囊词取自读口词表', () => {
     'REFUSED',
   ]);
   deepEqual(Object.keys(transportPushedStatus['carrier-master-document']?.labels ?? {}).sort(), ['IN_FORCE', 'REVOKED', 'SUPERSEDED']);
+});
+
+// Covers: 称重量方册的胶囊按 voided 这一布尔维出两格，先「仍有效」后「已作废」，点选落成 voided=false / true。
+test('称重量方册的胶囊下推成 voided 布尔维', () => {
+  const measurement = nodePushedStatus.measurement;
+  if (measurement === undefined) throw new Error('称重量方册应有可下推的维');
+  equal(measurement.dimension, 'voided');
+  deepEqual(
+    pushedStatusChips(measurement, allStatuses, () => undefined).map((chip) => [chip.id, chip.label]),
+    [
+      [allStatuses, '全部'],
+      ['false', '仍有效'],
+      ['true', '已作废'],
+    ],
+  );
+  deepEqual(pushedStatusFilters(measurement, 'false'), { voided: ['false'] });
+  deepEqual(pushedStatusFilters(measurement, 'true'), { voided: ['true'] });
 });
 
 // Covers: 送站两册的胶囊只出读口布尔维的两个词，先「否」后「是」；「全部」不带这一维，选了一格即这一维只带它。
