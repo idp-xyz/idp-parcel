@@ -49,12 +49,44 @@ func (unwiredWarehouseCatalogue) WarehouseRevisions(
 	return nil, errOrchestrationNotWired
 }
 
+type unwiredZoneRegistration struct{}
+
+func (unwiredZoneRegistration) Register(
+	context.Context,
+	warehouseapp.RegisterZoneCommand,
+) (warehouseapp.RegisterZoneResult, error) {
+	return warehouseapp.RegisterZoneResult{}, errOrchestrationNotWired
+}
+
+type unwiredZoneCatalogue struct{}
+
+func (unwiredZoneCatalogue) ListZones(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.ZoneRow], error) {
+	return cataloguepage.Result[warehouseports.ZoneRow]{}, errOrchestrationNotWired
+}
+
+func (unwiredZoneCatalogue) ZoneRevisions(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.WarehouseCode,
+	warehousedomain.ZoneCode,
+) ([]warehouseports.ZoneRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 	return warehouseFulfillmentWiring{
-		enabled:      enabled,
-		registration: unwiredWarehouseRegistration{},
-		catalogue:    unwiredWarehouseCatalogue{},
-		revisions:    unwiredWarehouseCatalogue{},
+		enabled:          enabled,
+		registration:     unwiredWarehouseRegistration{},
+		catalogue:        unwiredWarehouseCatalogue{},
+		revisions:        unwiredWarehouseCatalogue{},
+		zoneRegistration: unwiredZoneRegistration{},
+		zoneCatalogue:    unwiredZoneCatalogue{},
+		zoneRevisions:    unwiredZoneCatalogue{},
 	}
 }
 
@@ -66,6 +98,9 @@ const (
 	warehouseRegistrationsLine = "/warehouse-fulfillment-warehouse-registrations"
 	warehouseListLine          = "/warehouse-fulfillment-warehouses"
 	warehouseRevisionsLine     = "/warehouse-fulfillment-warehouse-revisions"
+	zoneRegistrationsLine      = "/warehouse-fulfillment-zone-registrations"
+	zoneListLine               = "/warehouse-fulfillment-zones"
+	zoneRevisionsLine          = "/warehouse-fulfillment-zone-revisions"
 )
 
 // warehouseFulfillmentLines 是登记处里声明了仓配开关的各行，按路径排序。
@@ -118,6 +153,9 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		warehouseRegistrationsLine: {http.MethodPost, faceRegistryWrite},
 		warehouseListLine:          {http.MethodGet, faceOperationsRead},
 		warehouseRevisionsLine:     {http.MethodGet, faceOperationsRead},
+		zoneRegistrationsLine:      {http.MethodPost, faceRegistryWrite},
+		zoneListLine:               {http.MethodGet, faceOperationsRead},
+		zoneRevisionsLine:          {http.MethodGet, faceOperationsRead},
 	}
 	lines := declaredEndpointLines()
 	if got := warehouseFulfillmentLines(); len(got) != len(want) {
@@ -187,6 +225,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 	same := func(status int, code string) map[string]answer {
 		return map[string]answer{
 			warehouseRegistrationsLine: {status, code}, warehouseListLine: {status, code}, warehouseRevisionsLine: {status, code},
+			zoneRegistrationsLine: {status, code}, zoneListLine: {status, code}, zoneRevisionsLine: {status, code},
 		}
 	}
 	cases := []struct {
@@ -199,11 +238,17 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			warehouseRegistrationsLine: {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			warehouseListLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseRevisionsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			zoneRegistrationsLine:      {http.StatusBadRequest, "MALFORMED_REQUEST"},
+			zoneListLine:               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			zoneRevisionsLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		}},
 		{"read grant only", operationsReaderRegister{}, presentedOperatorToken, map[string]answer{
 			warehouseRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseListLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseRevisionsLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			zoneRegistrationsLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			zoneListLine:               {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			zoneRevisionsLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 		}},
 		{"no bearer token", everyOperatorGrant{}, "", same(http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED")},
 		{"register is down", failingRegister{}, presentedOperatorToken, same(http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE")},

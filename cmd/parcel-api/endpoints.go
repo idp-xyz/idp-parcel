@@ -417,3 +417,12 @@ func (channels endpointChannels) warehouseRegistration() warehousehttp.Warehouse
 	}
 	return warehousehttp.UnconfiguredIntake{}
 }
+
+// zoneRegistration 与 warehouseRegistration 是同一只 Intake（operatorRegistries.warehouse）：仓配各册的登记口共用一个认证器，
+// 每册一个方法，所以加一册不另建接入身份适配器，也不在 operatorRegistryIntakes 里多一格。
+func (channels endpointChannels) zoneRegistration() warehousehttp.ZoneRegistrationIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
