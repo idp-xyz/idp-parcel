@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	sainbox "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/inbox"
+	sanodeops "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/nodeoperations"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -14,7 +14,7 @@ import (
 )
 
 // ReevaluateBuyForMeasuredParcel 把一次作业实物上的测量变化译成对载有关联包裹的收费发生项的采购重评。
-// 集运单元上的测量、对不上恰好一件包裹的实物，这次不另起请求。
+// 对不上包裹的变化（见 nodeoperations 适配器的 MeasuredParcel）这次不另起请求。
 type ReevaluateBuyForMeasuredParcel struct {
 	associations noports.CurrentParcelAssociation
 	occurrences  tfports.ChargeOccurrencesCarryingParcel
@@ -36,25 +36,11 @@ func (adapter *ReevaluateBuyForMeasuredParcel) HandleChangedMeasurement(
 	ctx context.Context,
 	changed sainbox.ChangedMeasurement,
 ) error {
-	if changed.ObjectKind != nodomain.HandlingUnitObject.String() {
-		return nil
-	}
-	tenant, err := nodomain.NewTenantID(changed.TenantID)
-	if err != nil {
+	measured, found, err := sanodeops.MeasuredParcel(ctx, adapter.associations, changed)
+	if err != nil || !found {
 		return err
 	}
-	unit, err := nodomain.NewHandlingUnitID(changed.ObjectID)
-	if err != nil {
-		return err
-	}
-	parcels, err := adapter.associations.ListParcels(ctx, tenant, unit)
-	if err != nil {
-		return err
-	}
-	if len(parcels) != 1 {
-		return nil
-	}
-	carried, err := tfdomain.NewCarriedObjectReference(parcels[0].String())
+	carried, err := tfdomain.NewCarriedObjectReference(measured.String())
 	if err != nil {
 		return err
 	}

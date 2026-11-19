@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	sainbox "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/inbox"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
@@ -12,7 +11,7 @@ import (
 )
 
 // ReevaluateOnMeasurementChange 把一次作业实物上的测量变化译成对关联包裹的销售重评。
-// 集运单元上的测量、对不上恰好一件包裹的实物，这次不另起请求。
+// 对不上包裹的变化（见 MeasuredParcel）这次不另起请求。
 type ReevaluateOnMeasurementChange struct {
 	associations noports.CurrentParcelAssociation
 	sell         *saapplication.ReevaluateSellOnMeasurementChangeHandler
@@ -32,25 +31,11 @@ func (adapter *ReevaluateOnMeasurementChange) HandleChangedMeasurement(
 	ctx context.Context,
 	changed sainbox.ChangedMeasurement,
 ) error {
-	if changed.ObjectKind != nodomain.HandlingUnitObject.String() {
-		return nil
-	}
-	tenant, err := nodomain.NewTenantID(changed.TenantID)
-	if err != nil {
+	measured, found, err := MeasuredParcel(ctx, adapter.associations, changed)
+	if err != nil || !found {
 		return err
 	}
-	unit, err := nodomain.NewHandlingUnitID(changed.ObjectID)
-	if err != nil {
-		return err
-	}
-	parcels, err := adapter.associations.ListParcels(ctx, tenant, unit)
-	if err != nil {
-		return err
-	}
-	if len(parcels) != 1 {
-		return nil
-	}
-	parcel, err := sadomain.NewParcelReference(parcels[0].String())
+	parcel, err := sadomain.NewParcelReference(measured.String())
 	if err != nil {
 		return err
 	}
