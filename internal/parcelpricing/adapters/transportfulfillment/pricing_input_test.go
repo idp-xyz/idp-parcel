@@ -3,6 +3,7 @@ package transportfulfillment_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -127,6 +128,11 @@ func mustDecimal(t *testing.T, raw string) ppdomain.Decimal {
 
 func declaredKGWithDimensions(t *testing.T, weight, length, width, height string) psdomain.DeclaredMeasurementResolution {
 	t.Helper()
+	return declaredKGWithDimensionsIn(t, weight, "CM", length, width, height)
+}
+
+func declaredKGWithDimensionsIn(t *testing.T, weight, dimensionUnit, length, width, height string) psdomain.DeclaredMeasurementResolution {
+	t.Helper()
 	value := func(raw string) psdomain.MeasurementValue {
 		parsed, err := psdomain.NewMeasurementValue(raw)
 		if err != nil {
@@ -145,7 +151,7 @@ func declaredKGWithDimensions(t *testing.T, weight, length, width, height string
 	if err != nil {
 		t.Fatal(err)
 	}
-	dimensions, err := psdomain.NewDeclaredDimensions(value(length), value(width), value(height), unit("CM"))
+	dimensions, err := psdomain.NewDeclaredDimensions(value(length), value(width), value(height), unit(dimensionUnit))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,6 +216,44 @@ func TestALowercaseDeclaredUnitIsOutsideTheTableForTheCustomerCharge(t *testing.
 	}
 	if resolved.Outcome != ppports.PricingInputUnavailable || !names(resolved.Missing, "kg") {
 		t.Fatalf("outcome=%s missing=%v, 想要小写 kg 当表外单位停", resolved.Outcome, resolved.Missing)
+	}
+}
+
+// 申报译不成计价的重量或外廓时，原因要照实说是哪一种：单位不在计价单位表里，与数值计价读不成重量／外廓，各是各的排查路。
+// 申报数字的形状与正负由小包托运的构造门拦下，表内单位下计价读不了的只剩小数位数超过计价十进制数的上限。
+func TestADeclarationPricingCannotTranslateIsUnavailableWithTheTrueReason(t *testing.T) {
+	tooPrecise := "1." + strings.Repeat("0", ppdomain.DecimalMaxScale) + "1"
+	for name, testCase := range map[string]struct {
+		declared psdomain.DeclaredMeasurementResolution
+		want     string
+	}{
+		"重量单位在表外": {
+			declaredUnit(t, "1.25", "TON"),
+			"parcel-shipment: declared weight unit is outside the pricing unit table: TON",
+		},
+		"重量数值超出计价能表示的位数": {
+			declaredKG(t, tooPrecise),
+			"parcel-shipment: declared weight value cannot be read as a pricing weight",
+		},
+		"尺寸单位在表外": {
+			declaredKGWithDimensionsIn(t, "1.25", "FATHOM", "20", "15", "10"),
+			"parcel-shipment: declared dimension unit is outside the pricing unit table: FATHOM",
+		},
+		"尺寸数值超出计价能表示的位数": {
+			declaredKGWithDimensions(t, "1.25", "20", tooPrecise, "10"),
+			"parcel-shipment: declared dimension values cannot be read as pricing dimensions",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			resolver := resolverWith(t, membersOf(t, objectRef), testCase.declared, destinationPostal(t, "100115"), nil)
+			resolved, err := resolver.ResolvePricingInput(context.Background(), inputQuery(t, ppdomain.PricingPurposeCustomerCharge))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resolved.Outcome != ppports.PricingInputUnavailable || !slices.Equal(resolved.Missing, []string{testCase.want}) {
+				t.Fatalf("outcome=%s missing=%q, want 不可得且原因 %q", resolved.Outcome, resolved.Missing, testCase.want)
+			}
+		})
 	}
 }
 

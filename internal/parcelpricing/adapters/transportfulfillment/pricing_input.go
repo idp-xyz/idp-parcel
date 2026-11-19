@@ -27,6 +27,8 @@ const (
 	missingDeclaredWeight = "parcel-shipment: declared weight is absent"
 	missingWeightUnit     = "parcel-shipment: declared weight unit is outside the pricing unit table"
 	missingLengthUnit     = "parcel-shipment: declared dimension unit is outside the pricing unit table"
+	missingWeightValue    = "parcel-shipment: declared weight value cannot be read as a pricing weight"
+	missingLengthValue    = "parcel-shipment: declared dimension values cannot be read as pricing dimensions"
 	missingDestination    = "parcel-shipment: destination postal code is absent"
 	missingBusinessTime   = "transport-fulfillment: charge occurrence has no business time"
 	missingParcel         = "settlement-accounting: the evaluation request names no parcel"
@@ -238,16 +240,16 @@ func (resolver *ParcelResolver) weightAndDimensions(
 	if !present {
 		return ppdomain.Weight{}, nil, nil, []string{missingDeclaredWeight}, nil
 	}
-	weight, ok := translateWeight(measurement.Weight())
-	if !ok {
-		return ppdomain.Weight{}, nil, nil, []string{missingWeightUnit + ": " + measurement.Weight().Unit().String()}, nil
+	weight, untranslatable := translateWeight(measurement.Weight())
+	if untranslatable != "" {
+		return ppdomain.Weight{}, nil, nil, []string{untranslatable}, nil
 	}
 	// 客户申报里的尺寸不是必填：没申报就没有尺寸，不在这里造。
 	var dimensions *ppdomain.Dimensions
 	if declared, hasDimensions := measurement.Dimensions(); hasDimensions {
-		translated, ok := translateDimensions(declared)
-		if !ok {
-			return ppdomain.Weight{}, nil, nil, []string{missingLengthUnit + ": " + declared.Unit().String()}, nil
+		translated, untranslatable := translateDimensions(declared)
+		if untranslatable != "" {
+			return ppdomain.Weight{}, nil, nil, []string{untranslatable}, nil
 		}
 		dimensions = &translated
 	}
@@ -362,29 +364,34 @@ func declaredFact(parcel string, resolution psdomain.DeclaredMeasurementResoluti
 	return ppdomain.NewVersionedFactReference(reference)
 }
 
-func translateWeight(weight psdomain.DeclaredWeight) (ppdomain.Weight, bool) {
-	unit, err := ppdomain.NewWeightUnit(weight.Unit().String())
+// translateWeight 把申报的重量译成计价的重量；译不出来时第二个返回值是照实的缺项文字，译得出来时为空。单位不在计价
+// 单位表里与数值计价读不成重量是两条不同的排查路，各给各的话。
+func translateWeight(weight psdomain.DeclaredWeight) (ppdomain.Weight, string) {
+	unitName := weight.Unit().String()
+	unit, err := ppdomain.NewWeightUnit(unitName)
 	if err != nil {
-		return ppdomain.Weight{}, false
+		return ppdomain.Weight{}, missingWeightUnit + ": " + unitName
 	}
 	translated, err := ppdomain.NewWeightFromString(weight.Value().String(), unit)
 	if err != nil {
-		return ppdomain.Weight{}, false
+		return ppdomain.Weight{}, missingWeightValue
 	}
-	return translated, true
+	return translated, ""
 }
 
-func translateDimensions(dimensions psdomain.DeclaredDimensions) (ppdomain.Dimensions, bool) {
-	unit, err := ppdomain.NewLengthUnit(dimensions.Unit().String())
+// translateDimensions 与 translateWeight 同形：三边共用一个单位，单位与数值各答各的话。
+func translateDimensions(dimensions psdomain.DeclaredDimensions) (ppdomain.Dimensions, string) {
+	unitName := dimensions.Unit().String()
+	unit, err := ppdomain.NewLengthUnit(unitName)
 	if err != nil {
-		return ppdomain.Dimensions{}, false
+		return ppdomain.Dimensions{}, missingLengthUnit + ": " + unitName
 	}
 	translated, err := ppdomain.NewDimensionsFromStrings(
 		dimensions.Length().String(), dimensions.Width().String(), dimensions.Height().String(), unit)
 	if err != nil {
-		return ppdomain.Dimensions{}, false
+		return ppdomain.Dimensions{}, missingLengthValue
 	}
-	return translated, true
+	return translated, ""
 }
 
 func unavailable(missing ...string) ppports.PricingInputResolution {

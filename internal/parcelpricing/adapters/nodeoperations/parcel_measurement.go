@@ -14,6 +14,13 @@ const (
 	severalMeasurements = "输入不可得：实测多于一条"
 	sameOccurredAt      = "输入不可得：两条实测的发生时间相同，定不下"
 	severalUnits        = "输入不可得：这件包裹关联着多件作业实物，定不下"
+
+	// 译不出重量或尺寸有两条不同的排查路：单位不在计价单位表里（去查登记的单位符号），与单位在表内而数值计价读不成
+	// 重量或外廓（去查登记的数字）。节点登记册不核单位表，也不核计价能表示的位数，两种都登得进去。
+	weightUnitOutsideTable    = "输入不可得：实测重量的单位不在计价单位表里"
+	weightValueUnreadable     = "输入不可得：实测重量的数值不成立，计价读不成一个重量"
+	dimensionUnitOutsideTable = "输入不可得：实测尺寸的单位不在计价单位表里"
+	dimensionValueUnreadable  = "输入不可得：实测尺寸的数值不成立，计价读不成一个外廓"
 )
 
 // ParcelMeasurementView 按包裹读当前有效实测，译成计价输入用的重量与尺寸。
@@ -97,19 +104,13 @@ func (view *ParcelMeasurementView) LoadActualMeasurement(
 	default:
 		return none, nil
 	}
-	weight, ok := translateWeight(current)
-	if !ok {
-		value, unit := current.Weight()
-		return pptransport.ActualMeasurementLoad{
-			Undetermined: "parcel-pricing: measured weight unit is outside the pricing unit table: " + unit + " " + value,
-		}, nil
+	weight, undetermined := translateWeight(current)
+	if undetermined != "" {
+		return pptransport.ActualMeasurementLoad{Undetermined: undetermined}, nil
 	}
-	dimensions, ok := translateDimensions(current)
-	if !ok {
-		_, _, _, unit := current.Dimensions()
-		return pptransport.ActualMeasurementLoad{
-			Undetermined: "parcel-pricing: measured dimension unit is outside the pricing unit table: " + unit,
-		}, nil
+	dimensions, undetermined := translateDimensions(current)
+	if undetermined != "" {
+		return pptransport.ActualMeasurementLoad{Undetermined: undetermined}, nil
 	}
 	fact, err := measurementFact(object, current.Source().SourceID())
 	if err != nil {
@@ -136,30 +137,32 @@ func measurementFact(parcel, sourceID string) (ppdomain.VersionedFactReference, 
 	return ppdomain.NewVersionedFactReference(reference)
 }
 
-func translateWeight(measurement nodomain.ActualMeasurement) (ppdomain.Weight, bool) {
+// translateWeight 把实测的重量译成计价的重量；译不出来时第二个返回值是照实的原因文字，译得出来时为空。
+func translateWeight(measurement nodomain.ActualMeasurement) (ppdomain.Weight, string) {
 	value, unitName := measurement.Weight()
 	unit, err := ppdomain.NewWeightUnit(unitName)
 	if err != nil {
-		return ppdomain.Weight{}, false
+		return ppdomain.Weight{}, weightUnitOutsideTable + "：" + unitName
 	}
 	weight, err := ppdomain.NewWeightFromString(value, unit)
 	if err != nil {
-		return ppdomain.Weight{}, false
+		return ppdomain.Weight{}, weightValueUnreadable
 	}
-	return weight, true
+	return weight, ""
 }
 
 var _ pptransport.ActualMeasurementView = (*ParcelMeasurementView)(nil)
 
-func translateDimensions(measurement nodomain.ActualMeasurement) (ppdomain.Dimensions, bool) {
+// translateDimensions 与 translateWeight 同形：尺寸三边共用一个单位，单位与数值各答各的原因。
+func translateDimensions(measurement nodomain.ActualMeasurement) (ppdomain.Dimensions, string) {
 	length, width, height, unitName := measurement.Dimensions()
 	unit, err := ppdomain.NewLengthUnit(unitName)
 	if err != nil {
-		return ppdomain.Dimensions{}, false
+		return ppdomain.Dimensions{}, dimensionUnitOutsideTable + "：" + unitName
 	}
 	dimensions, err := ppdomain.NewDimensionsFromStrings(length, width, height, unit)
 	if err != nil {
-		return ppdomain.Dimensions{}, false
+		return ppdomain.Dimensions{}, dimensionValueUnreadable
 	}
-	return dimensions, true
+	return dimensions, ""
 }

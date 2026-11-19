@@ -2,6 +2,7 @@ package nodeoperations_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,6 +94,56 @@ func TestTheSameOccurredTimeDoesNotPickAMeasurement(t *testing.T) {
 	}
 }
 
+// 译不出重量或尺寸时整份输入不可得，原因要照实说是哪一种：单位不在计价单位表里，与数值计价读不成重量／外廓，是两条
+// 不同的排查路。节点登记册只拦数字的形状与正负，不核单位表，也不核计价能表示的位数，所以两种都进得来。
+func TestAMeasurementPricingCannotTranslateIsUndeterminedWithTheTrueReason(t *testing.T) {
+	// 小数位数比计价的十进制数能收的上限多一位：形状是合法的正数，登记册收得下，计价读不了。
+	tooPrecise := "1." + strings.Repeat("0", ppdomain.DecimalMaxScale) + "1"
+	at := time.Date(2026, 11, 17, 2, 0, 0, 0, time.UTC)
+	for _, testCase := range []struct {
+		name        string
+		measurement nodomain.ActualMeasurement
+		want        string
+	}{
+		{
+			"重量单位在表外",
+			measuredAs(t, "measure-1", at, "STONE", "2.10", "CM", "30", "25", "20"),
+			"输入不可得：实测重量的单位不在计价单位表里：STONE",
+		},
+		{
+			"重量单位小写也在表外",
+			measuredAs(t, "measure-1", at, "kg", "2.10", "CM", "30", "25", "20"),
+			"输入不可得：实测重量的单位不在计价单位表里：kg",
+		},
+		{
+			"重量数值超出计价能表示的位数",
+			measuredAs(t, "measure-1", at, "KG", tooPrecise, "CM", "30", "25", "20"),
+			"输入不可得：实测重量的数值不成立，计价读不成一个重量",
+		},
+		{
+			"尺寸单位在表外",
+			measuredAs(t, "measure-1", at, "KG", "2.10", "FATHOM", "30", "25", "20"),
+			"输入不可得：实测尺寸的单位不在计价单位表里：FATHOM",
+		},
+		{
+			"尺寸数值超出计价能表示的位数",
+			measuredAs(t, "measure-1", at, "KG", "2.10", "CM", "30", tooPrecise, "20"),
+			"输入不可得：实测尺寸的数值不成立，计价读不成一个外廓",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			view := measurementView(t, []string{"unit-1"}, []nodomain.ActualMeasurement{testCase.measurement}, false)
+			load, err := view.LoadActualMeasurement(context.Background(), pricingTenant(t), "parcel-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if load.Found || load.Undetermined != testCase.want {
+				t.Fatalf("译不出 = %+v，want 不可得且原因 %q", load, testCase.want)
+			}
+		})
+	}
+}
+
 type measurementFixture struct {
 	units        []string
 	measurements []nodomain.ActualMeasurement
@@ -147,6 +198,12 @@ func pricingTenant(t *testing.T) ppdomain.TenantID {
 // measured 造一条完整的测量：毛重由用例给，尺寸 30×25×20 CM。
 func measured(t *testing.T, sourceID, value string, occurred time.Time) nodomain.ActualMeasurement {
 	t.Helper()
+	return measuredAs(t, sourceID, occurred, "KG", value, "CM", "30", "25", "20")
+}
+
+// measuredAs 连单位与每一格数字都由用例给：登记册只拦数字形状与正负，表外的单位、计价读不了的位数都能登进去。
+func measuredAs(t *testing.T, sourceID string, occurred time.Time, weightUnit, weightValue, dimensionUnit, length, width, height string) nodomain.ActualMeasurement {
+	t.Helper()
 	source, err := nodomain.NewWorkFactSource(
 		sourceID,
 		must(t, nodomain.NewPerformingPartyReference, "scale-7"),
@@ -160,8 +217,8 @@ func measured(t *testing.T, sourceID, value string, occurred time.Time) nodomain
 		Source: source, ObjectKind: nodomain.HandlingUnitObject, ObjectID: "unit-1",
 		Node: must(t, nodomain.NewNodeReference, "node-origin"), Location: must(t, nodomain.NewWorkLocationReference, "bench-2"),
 		Basis:       must(t, nodomain.NewWorkBasisReference, "intake-1"),
-		WeightValue: value, WeightUnit: "KG",
-		Length: "30", Width: "25", Height: "20", DimensionUnit: "CM",
+		WeightValue: weightValue, WeightUnit: weightUnit,
+		Length: length, Width: width, Height: height, DimensionUnit: dimensionUnit,
 	})
 	if err != nil {
 		t.Fatal(err)
