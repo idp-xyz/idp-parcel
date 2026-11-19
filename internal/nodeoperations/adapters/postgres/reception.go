@@ -147,6 +147,17 @@ func (repository *Receptions) FindOtherUnitIntakes(
 // 而不是让查询不收敛。一条链上的版本是重核、冲突与续办逐次追加的，远到不了这个数。
 const maxJudgmentChain = 1024
 
+// currentJudgmentPredicate 只留判断链上的当前版本：没有后继判断把它当前驱的才算，走索引 reception_predecessor_unique。没有判断版本
+// 的行没有后继可指，这句对它也成立；要排除它的读口自己另加 judgment_version IS NOT NULL。
+//
+// 外层必须以别名 r 引用收寄册：谓词里的 r.tenant_id 与 r.judgment_version 落在那一行上，内层的后继行另起别名 successor。外层
+// 用了别的别名，要改的是外层的别名，不是这一句。各读口都引用这一句，免得有的读口改了「当前」的算法、另一些还按旧的列。
+const currentJudgmentPredicate = `NOT EXISTS (
+		        SELECT 1
+		          FROM node_operations.reception AS successor
+		         WHERE successor.tenant_id = r.tenant_id
+		           AND successor.predecessor_version = r.judgment_version)`
+
 // CurrentVersion 沿后继走到头（ADR-0199 决定二），一条递归查询走完。每一步按（租户，前版）找唯一的那一行，走索引
 // reception_predecessor_unique。走 ReadExecutor：事务内读得到本事务刚追加的那一版。
 func (repository *Receptions) CurrentVersion(

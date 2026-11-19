@@ -127,11 +127,7 @@ func (catalogue *ReviewCatalogue) ListIdentityReviewUnits(
 		  WHERE r.tenant_id = $1
 		    AND r.intake IS NOT NULL
 		    AND (r.intake ->> 'unit') = ANY($2)
-		    AND NOT EXISTS (
-		        SELECT 1
-		          FROM node_operations.reception AS successor
-		         WHERE successor.tenant_id = r.tenant_id
-		           AND successor.predecessor_version = r.judgment_version)
+		    AND `+currentJudgmentPredicate+`
 		  ORDER BY r.intake ->> 'unit', r.source_id`,
 		tenant.String(),
 		units,

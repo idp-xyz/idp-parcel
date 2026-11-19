@@ -76,11 +76,7 @@ func (repository *Receptions) FindRecheckableByMark(
 		    AND r.source_document ->> 'mark' = $2::text
 		    AND r.intake ->> 'association' IS NULL
 		    AND r.judgment_version IS NOT NULL
-		    AND NOT EXISTS (
-		        SELECT 1
-		          FROM node_operations.reception AS successor
-		         WHERE successor.tenant_id = r.tenant_id
-		           AND successor.predecessor_version = r.judgment_version)
+		    AND `+currentJudgmentPredicate+`
 		  ORDER BY r.source_id`,
 		tenant.String(),
 		mark,

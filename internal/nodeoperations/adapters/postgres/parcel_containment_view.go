@@ -86,11 +86,7 @@ func (view *ParcelContainmentView) LoadParcelContainment(
 		            AND c.member_id = (r.intake ->> 'unit')
 		          WHERE r.tenant_id = $1
 		            AND r.identity_check = 'UNCHECKED'
-		            AND NOT EXISTS (
-		                SELECT 1
-		                  FROM node_operations.reception AS successor
-		                 WHERE successor.tenant_id = r.tenant_id
-		                   AND successor.predecessor_version = r.judgment_version)
+		            AND `+currentJudgmentPredicate+`
 		     ) AS unchecked_contained`,
 		tenant.String(), parcel.String(), ports.RecordPendingIdentification.String(),
 	).Scan(&identifiedContained, &candidateContained, &uncheckedContained)

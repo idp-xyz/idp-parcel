@@ -11,11 +11,8 @@ import (
 
 const actualMeasurementRegister = "node_operations.actual_measurement"
 
-// measurementVoidedText 与筛选词 true/false 同形。外层列按表名限定，子查询里的 tenant_id 才落到作废册自己那一列。
-const measurementVoidedText = `(EXISTS (
-	SELECT 1 FROM node_operations.measurement_invalidation AS invalidation
-	 WHERE invalidation.tenant_id = actual_measurement.tenant_id
-	   AND invalidation.target_source_id = actual_measurement.source_id))::text`
+// measurementVoidedText 与筛选词 true/false 同形。外层列按表名限定的缘由写在 measurementInvalidatedPredicate 上。
+const measurementVoidedText = `(` + measurementInvalidatedPredicate + `)::text`
 
 var actualMeasurementPages = ports.ActualMeasurementPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"recordedAt": "recorded_at"},

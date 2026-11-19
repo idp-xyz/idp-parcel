@@ -319,11 +319,7 @@ func (register *PhysicalControlTransitions) ResolveHandoverObject(
 		  WHERE r.tenant_id = $1
 		    AND r.intake IS NOT NULL
 		    AND (r.intake ->> 'association') = $2
-		    AND NOT EXISTS (
-		        SELECT 1
-		          FROM node_operations.reception AS successor
-		         WHERE successor.tenant_id = r.tenant_id
-		           AND successor.predecessor_version = r.judgment_version)
+		    AND `+currentJudgmentPredicate+`
 		  ORDER BY 1`,
 		tenant.String(), handover.Object(),
 	)

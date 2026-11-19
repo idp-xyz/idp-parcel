@@ -156,6 +156,14 @@ func describeSourceIdentityViolation(err error) error {
 	}
 }
 
+// measurementInvalidatedPredicate 是「有作废指过来」；仍有效就是它不成立。外层必须以未起别名的 actual_measurement 引用测量册：
+// 谓词里的 actual_measurement.tenant_id 与 actual_measurement.source_id 落在那一行上，内层作废册另起别名 invalidation，内层的
+// tenant_id 才落到作废册自己那一列。「仍有效」的列表与目录上的 voided 筛选都引用这一句，免得两处对「作废」的认法走岔。
+const measurementInvalidatedPredicate = `EXISTS (
+		        SELECT 1 FROM node_operations.measurement_invalidation AS invalidation
+		         WHERE invalidation.tenant_id = actual_measurement.tenant_id
+		           AND invalidation.target_source_id = actual_measurement.source_id)`
+
 func (repository *ActualMeasurements) ListStillValid(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -169,11 +177,7 @@ func (repository *ActualMeasurements) ListStillValid(
 	rows, err := querier.Query(ctx,
 		measurementSelect+`
 		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3
-		    AND NOT EXISTS (
-		        SELECT 1 FROM node_operations.measurement_invalidation AS invalidation
-		         WHERE invalidation.tenant_id = actual_measurement.tenant_id
-		           AND invalidation.target_source_id = actual_measurement.source_id
-		    )
+		    AND NOT `+measurementInvalidatedPredicate+`
 		  ORDER BY occurred_at, source_id`,
 		tenant.String(), objectKind.String(), objectID,
 	)

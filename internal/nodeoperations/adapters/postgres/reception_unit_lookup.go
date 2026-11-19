@@ -43,11 +43,7 @@ func (repository *Receptions) FindCurrentJudgmentsAtNode(
 		    AND COALESCE(r.intake ->> 'node', r.source_document ->> 'node') = $3
 		    AND r.kind <> 'MERGED_INTO_EXISTING_INTAKE'
 		    AND r.judgment_version IS NOT NULL
-		    AND NOT EXISTS (
-		        SELECT 1
-		          FROM node_operations.reception AS successor
-		         WHERE successor.tenant_id = r.tenant_id
-		           AND successor.predecessor_version = r.judgment_version)
+		    AND `+currentJudgmentPredicate+`
 		  ORDER BY r.source_id`,
 		tenant.String(),
 		unit.String(),

@@ -10,14 +10,6 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
-// currentJudgmentPredicate 只留判断链上的当前版本：没有后继判断把它当前驱的才算。两个方向的列表共用这一句，
-// 免得一边改了「当前」的算法、另一边还按旧的列。
-const currentJudgmentPredicate = `NOT EXISTS (
-		        SELECT 1
-		          FROM node_operations.reception AS successor
-		         WHERE successor.tenant_id = r.tenant_id
-		           AND successor.predecessor_version = r.judgment_version)`
-
 // ParcelAssociations 按正式包裹身份列出此刻关联着它的作业实物。
 // 谓词与交接对象按包裹认的那一支相同：只读判断链的当前有效版本。
 type ParcelAssociations struct {
