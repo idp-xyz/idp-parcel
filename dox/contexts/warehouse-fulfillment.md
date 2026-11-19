@@ -1,20 +1,45 @@
 # 仓配履约（`warehouse-fulfillment`）
 
-对照 main `99fc0037d`（2026-11-12）写成；「现状」一节 2026-11-18 对照 `9eef5267e` 改过。
+对照 main `99fc0037d`（2026-11-12）写成；「现状」与「已实现」两节 2026-11-19 对照 `c61bdfba4` 改过。
 
-**这份文件不是现行规则。** 本上下文的业务没有实现，「现状」之外写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
+**只有「现状」与「已实现：仓登记册」两节是现行规则。** 其余写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
 
 ## 现状
 
 - 可选能力，首发不含。用户 2026-11-18 点名继续，按 PN-09 开发交接逐包做。
-- main 上只有部署开关与依赖方向门禁，没有仓配业务：`internal/` 下没有 `warehousefulfillment` 目录，`cmd/` 下没有它的进程、端点或登记口，派发里没有它的路。
-- 部署开关是环境变量 `IDP_PARCEL_WAREHOUSE_FULFILLMENT_ENABLED`，去首尾空白后恰为 `true` 才开，默认关。读法在 `cmd/internal/warehouseswitch`。`parcel-api` 与 `parcel-dispatch` 启动时各读一次并写启动日志。今天开与关的行为相同：还没有任何端点或路读它。
+- main 上有部署开关、依赖方向门禁，与仓这一册的登记和查阅。别的都没有：库区、库位、库位类型、包材、商品、库存、入库、出库都没有代码；派发里没有仓配的路；没有登记 CLI、演示种子与管理台页面。
+- 部署开关是环境变量 `IDP_PARCEL_WAREHOUSE_FULFILLMENT_ENABLED`，去首尾空白后恰为 `true` 才开，默认关。读法在 `cmd/internal/warehouseswitch`。`parcel-api` 与 `parcel-dispatch` 启动时各读一次并写启动日志。
+- 开关关着时，仓配的端点答 `403 WAREHOUSE_FULFILLMENT_NOT_ENABLED`：在认证之前答，不读令牌、报文与册，不带 `outcome`。它与「接入渠道未配置」是两格，因为恢复动作是部署方打开开关。方法不对仍答 `405`。
+- 库表在 schema `warehouse_fulfillment`，进同一份迁移计划。开关关着的部署也建表，表是空的。
 - 派发里仓配的路只经 `registerWarehouseFulfillmentRoutes` 登记，开关关着时一路都不登记。它今天没有调用方。
 - 依赖方向门禁在 `internal/architecture/warehouse_fulfillment_dependency_gate_test.go`：别的上下文不得导入仓配，只留结算、计价、全程追踪各自的 `adapters/warehousefulfillment`。它不看测试文件，也不看库表与信封类型串。
-- 在 `internal/` 与 `cmd/` 里搜 `warehouse`，除上面几处外，命中的是测试夹具取值与一条被拒的 `"target_kind":"WAREHOUSE"` 用例，与本上下文无关。搜「仓储」命中的是持久化仓储（repository）的意思。
+- 搜「仓储」命中的是持久化仓储（repository）的意思，与本上下文无关。
 - 文档写到开发交接：用例、客户面、接入词与 PN-09 交接都在 main 的 `docs/` 里。库内用例只评过一部分，没评到的记在票 08；出库用例评过一轮，修订记在票 09。票 10 至 12 的非作者评审没交卷。
 
 入库、库内、出库、平台备货与代理仓各段的设计概览见 [scenarios.md](../scenarios.md)「仓配履约」。
+
+## 已实现：仓登记册
+
+代码在 `internal/warehousefulfillment`。三个接口，都在操作员面：
+
+| 方法 | 路径 | 接入面 |
+|---|---|---|
+| POST | `/warehouse-fulfillment-warehouse-registrations` | 登记册配置写 |
+| GET | `/warehouse-fulfillment-warehouses` | 主数据与运营查阅读 |
+| GET | `/warehouse-fulfillment-warehouse-revisions?warehouseCode=` | 主数据与运营查阅读 |
+
+- 仓的身份是（租户，仓编码）。仓编码、地址正文与同址物流节点逐字保存，不折大小写、不去空白。
+- 每笔修订是一份完整内容：名称、种类（`SELF_OPERATED` 自营仓或 `AGENT` 代理仓）、地址（国家码与正文）、业务时区、同址物流节点、是否停用。修订从 1 起连续，只追加。停用与再启用都是新修订。
+- 业务时区与同址物流节点可缺。业务时区不给就是没登记，不取任何默认值。同址物流节点只是指名，不向 `network-routing` 核对。
+- 登记的答复只有四种：`REGISTERED`、`ALREADY_REGISTERED`（同一修订号、内容相同，回显在册的那一笔）、`CONTENT_CONFLICT`（同一修订号、内容不同，在册的不变）、`NOT_ACCEPTED`。
+- `NOT_ACCEPTED` 带原因：`REVISION_OUT_OF_SEQUENCE`（回显在册最新修订号，没有在册的是 0）、`IMMUTABLE_FIELD`（种类登记后不改）、`CONTENT_INVALID`（国家码不在内置目录，或业务时区认不出）。
+- 先判重放与冲突，再判修订连续、种类、国家与时区。重放与冲突只比内容，不比登记责任方与登记时刻。
+- 并发提交同一修订号的两笔，至多一笔落册，另一笔按内容答重放或冲突。靠库表主键守。
+- 租户与登记责任方取自操作者信封。报文自带这两格是坏载荷，答 `400`。种类不在两种之内也是坏载荷。
+- 登记不判准入范围。持有登记册配置写的操作者能登记、也能停用任何一个仓，没有另开能力面。
+- 查阅：各仓当前修订的分页列表，可按是否停用筛；一个仓的修订史。空册答空列表。本租户查不到的仓，修订史答空列表，与别的租户有同编码的仓同答。
+- 产品不带任何默认仓。
+- 业务时区认不认得出，取决于运行环境有没有时区库。
 
 ## 设计意图：管什么，不管什么
 

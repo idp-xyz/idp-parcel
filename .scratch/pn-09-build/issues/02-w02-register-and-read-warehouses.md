@@ -1,7 +1,7 @@
 # 02 `PN09-W02` 第一部分：仓的登记与查阅
 
 Category: enhancement
-Status: in-progress（2026-11-18 认领，分支 `cursor/wf-w02-warehouse`）
+Status: resolved（2026-11-19 进 main，见「进 main 记录」）
 Blocked by: 01
 
 依据：[UC-WF-001](../../../docs/application/warehouse-fulfillment/UC-WF-001-REGISTER-WAREHOUSES-ZONES-LOCATIONS-AND-PACKAGING-MATERIALS.md)；[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md)「主数据登记」与「身份与边界」；[ADR-0375](../../../docs/adr/0375-warehouse-fulfillment-is-an-optional-capability-on-its-own-pn-09-slice-off-per-deployment-unless-switched-on-and-unconfigured-per-tenant-until-registered.md) 决定四、五；[ADR-0384](../../../docs/adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md) 决定五、七。
@@ -53,3 +53,38 @@ Blocked by: 01
 - 受控批量口与登记 CLI；演示种子；管理台页面。
 - 货主的客户系统查阅仓（要先有客户面能力 `WAREHOUSE_READ`）。
 - 停用对入库预报、建账导入的作用（那些用例还没有实现）。
+
+## 开关关着时的答法：选定与指针
+
+本票是第一张落仓配端点的票，照 [ADR-0384](../../../docs/adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md) 决定七选定「另立一格」：`403`，RFC 9457 问题详情，码 `WAREHOUSE_FULFILLMENT_NOT_ENABLED`，不带 `outcome`。这是会话代决，可以推翻。
+
+它碰到的两处既有记录：
+
+- [ADR-0055](../../../docs/adr/0055-business-endpoint-intake-has-an-unconfigured-grade.md) 决定三「状态码取 `403`，不取 404、401 或任何 5xx」。「接入渠道未配置」那一格的恢复动作不变。仓配的行在开关关着时不经任何 Intake，答旁边新立的这一格，同样 403，同样不是 404。开着时它们照旧从「接入渠道未配置」起步。
+- [ADR-0222](../../../docs/adr/0222-composition-roots-register-endpoints-and-routes-per-feature-file.md) 闭合用例那句「只有声明了那一面的行答复离开「接入渠道未配置」」。登记处的 `endpointLine` 多一格 `warehouseFulfillment`。装配测试只对带这一格的行、且只在开关关着时，认 `WAREHOUSE_FULFILLMENT_NOT_ENABLED`。别的行的断言不变。
+
+两处例外，都照既有端点的做法：方法不对仍答 `405` 并带 `Allow`；读口的请求目标里有 NUL 或非法 UTF-8，登记处在处理器之前答 `400`。
+
+## 评审记录
+
+作者是 Sonnet 5.5 子代理，分内外两半交。评审是主会话，钉分支 `cursor/wf-w02-warehouse` 的 `10b92a259`。一轮，没有阻断。
+
+- 读过的：登记用例、领域类型、迁移、报文译装、登记端点、开关关着的处理器、接入身份的登记写适配器、`cmd/parcel-api` 的特性文件与装配、共享件的全部改动。没有逐行读的：PostgreSQL 适配器、两个读端点与各测试文件。
+- 评审自己重跑：`gofmt -l .` 为空，`go vet ./...`、`go build ./...`、分片核对退 0；仓配各包、`internal/architecture`、`cmd/parcel-api` 整包通过。
+- 仓配的包只导入 `accessidentity` 与 `platform`，位置在 `adapters/accessidentity`。
+- 作者报告做过变异检查（`build` 忽略开关、`mount` 忽略开关、登记行声明错面），对应用例都变红。评审没有重做。
+
+不挡的几处，照收：
+
+- 同一个端点上两种问题体。开关关着那一格是 RFC 9457。信封各格、`400`、`405`、`500` 沿用操作者两个面在别的上下文的旧形状 `{"error":{"code"}}`，因为装配处的请求目标检查按字节比旧形状。这两个面整族迁到问题详情时一起迁。
+- 装配测试的未接线占位是开关开着的那一份。关着的那一格由生产装配的真库用例认。
+- 业务时区认不认得出取决于运行环境有没有时区库。仓库里没有内嵌时区库，别的上下文同样如此。镜像里没有时区库时，非空的业务时区都会答内容不合。
+- 登记时刻取应用时钟，多实例有时钟偏差时不保证随修订号单调。
+- 列表按仓编码排用数据库默认排序规则，不一定等于字节序。
+
+## 进 main 记录
+
+- 出处：分支 `cursor/wf-w02-warehouse` 的 `10b92a259`。main 在这期间多了别的会话的五笔，所以重放：七笔 cherry-pick 到 `7edbd1f50` 之上，无冲突，内容在 `c61bdfba4`。收口是随后这一笔。
+- 全量真库测试：`scripts/test-full.sh --detach` 对 `c61bdfba4` 跑，`FULL-EXIT=0`。
+- 演示种子没有灌：本票不带种子，开关默认关。库表多一个空的 `warehouse_fulfillment` schema。
+- 生成物不重算。

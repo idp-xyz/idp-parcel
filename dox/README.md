@@ -51,7 +51,7 @@
 | PN-06 | 追踪、异常与客户披露 | `visibility-exception` | 达标（留待项已认可） |
 | PN-07 | 计价、账单与运营结算 | `parcel-pricing`、`settlement-accounting` | 达标（留待项已认可） |
 | PN-08 | 端到端试点与阶段准入 | `pilotgovernance` | 达标；真实候选与证据包等租户 |
-| PN-09 | 仓配履约（可选，首发不含） | `warehouse-fulfillment` | 用例、客户面与开发交接已在 main；部署开关与依赖方向门禁已在 main，默认关；仓配业务无代码，在做 |
+| PN-09 | 仓配履约（可选，首发不含） | `warehouse-fulfillment` | 用例、客户面与开发交接已在 main；部署开关与仓登记册已在 main，默认关；其余在做 |
 
 ## 一条规则现在是什么，看哪
 
@@ -69,7 +69,7 @@
 | 小包计价 | [contexts/parcel-pricing.md](./contexts/parcel-pricing.md) |
 | 结算与经营核算 | [contexts/settlement-accounting.md](./contexts/settlement-accounting.md) |
 | 代收与清分 | [contexts/collection-remittance.md](./contexts/collection-remittance.md) |
-| 仓配履约（可选，未实现） | [contexts/warehouse-fulfillment.md](./contexts/warehouse-fulfillment.md) |
+| 仓配履约（可选，只实现了仓登记册） | [contexts/warehouse-fulfillment.md](./contexts/warehouse-fulfillment.md) |
 | 接入与身份（共享技术能力） | [contexts/access-identity.md](./contexts/access-identity.md) |
 | 试点治理 | [contexts/pilot-governance.md](./contexts/pilot-governance.md) |
 

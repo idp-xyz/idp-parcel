@@ -20,13 +20,13 @@
 | 小包计价（`parcel-pricing`） | 价卡及其版本发布、计价参考序列、纯价格评价及其解释、回放 | [parcel-pricing.md](./contexts/parcel-pricing.md) |
 | 结算与经营核算（`settlement-accounting`） | 评价请求，把评价采用成费用与预期成本，对账单与费用争议，供应商账单与审核应付，外部资金事实的采用与核销，运营结算余额，接受前财务控制 | [settlement-accounting.md](./contexts/settlement-accounting.md) |
 | 代收与清分（`collection-remittance`） | 代收货款本金：代收指令、代收事实、代收分户账、回汇批次、汇付主张、差异事项 | [collection-remittance.md](./contexts/collection-remittance.md) |
-| 仓配履约（`warehouse-fulfillment`） | 可选能力，未实现，没有代码包；设计上拥有商品库存与库内任务 | [warehouse-fulfillment.md](./contexts/warehouse-fulfillment.md) |
+| 仓配履约（`warehouse-fulfillment`） | 可选能力，默认关。只实现了仓登记册；设计上拥有商品库存与库内任务 | [warehouse-fulfillment.md](./contexts/warehouse-fulfillment.md) |
 | 接入与身份（`access-identity`） | 接入渠道登记、凭据验证、来源信封铸造。是共享技术能力，不是限界上下文，不拥有业务语言 | [access-identity.md](./contexts/access-identity.md) |
 | 试点治理（`pilot-governance`） | 生产归属与准入控制的判断和治理记录。是治理能力，不是限界上下文，不拥有物流业务事实 | [pilot-governance.md](./contexts/pilot-governance.md) |
 
 ## 谁读谁
 
-一行是一个消费方的非测试 Go 文件 import 了哪些别的上下文包。`platform` 与 `architecture` 不是上下文，不列。仓配履约没有代码，没有行。
+一行是一个消费方的非测试 Go 文件 import 了哪些别的上下文包。`platform` 与 `architecture` 不是上下文，不列。
 
 | 消费方 | 读的提供方 |
 |---|---|
@@ -42,6 +42,7 @@
 | `parcelpricing` | `accessidentity`、`parcelshipment`、`settlementaccounting`、`transportfulfillment` |
 | `settlementaccounting` | `accessidentity`、`customscompliance`、`parcelpricing`、`parcelshipment`、`partycommercial`、`transportfulfillment` |
 | `collectionremittance` | `accessidentity`、`settlementaccounting` |
+| `warehousefulfillment` | `accessidentity` |
 
 读法：
 
