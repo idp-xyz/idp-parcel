@@ -353,6 +353,63 @@ func TestHandoverLinesRefuseMalformedPayloads(t *testing.T) {
 	}
 }
 
+// Covers: 交接单作业事实三口（开立、归入、关闭）的作业范围种类不是 NODE——Intake 交回的错误文本逐字（头名拼在其中；服务端日志靠这句话
+// 认出是哪个口），经各口端点是 400 与结果码 MALFORMED_REQUEST，响应体不带问题详情文本、也不带任何别的格；认证方一次不被问、编排一次
+// 也不调。头名换了出处之后文本与应答都不许变。
+func TestHandoverWorkFactLinesAnswerANonNodeScopeWithTheExactTextStatusAndCode(t *testing.T) {
+	const wantText = "node operations http: malformed request: a delivery handover note lives at a node; Parcel-Work-Scope-Kind must be NODE"
+	for name, intakeCall := range map[string]func(*nodeopshttp.WorkFactHandoverNoteIntake, *http.Request) error{
+		"open": func(intake *nodeopshttp.WorkFactHandoverNoteIntake, request *http.Request) error {
+			_, err := intake.IntakeDeliveryHandoverNoteOpening(request.Context(), request)
+			return err
+		},
+		"assign": func(intake *nodeopshttp.WorkFactHandoverNoteIntake, request *http.Request) error {
+			_, err := intake.IntakeDeliveryHandoverAssignment(request.Context(), request)
+			return err
+		},
+		"close": func(intake *nodeopshttp.WorkFactHandoverNoteIntake, request *http.Request) error {
+			_, err := intake.IntakeDeliveryHandoverClosure(request.Context(), request)
+			return err
+		},
+	} {
+		for _, kind := range []string{"OFFSITE", "node"} {
+			t.Run(name+"/"+kind, func(t *testing.T) {
+				line := handoverLines[name]
+				build := func() *http.Request {
+					request := handoverRequest(line, line.body)
+					request.Header.Set("Parcel-Work-Scope-Kind", kind)
+					return request
+				}
+
+				var asked []string
+				err := intakeCall(handoverWorkFactIntake(t, nil, &asked), build())
+				if !errors.Is(err, nodeopshttp.ErrMalformedRequest) {
+					t.Fatalf("err = %v, want ErrMalformedRequest", err)
+				}
+				if err.Error() != wantText {
+					t.Fatalf("错误文本 = %q, want %q", err.Error(), wantText)
+				}
+				if len(asked) != 0 {
+					t.Fatalf("认证方被问 %v, want 一次也不问", asked)
+				}
+
+				handler := &handoverHandlerDouble{}
+				response := httptest.NewRecorder()
+				line.endpoint(t, handler, nil).ServeHTTP(response, build())
+				if response.Code != http.StatusBadRequest {
+					t.Fatalf("status = %d, want 400", response.Code)
+				}
+				if got, want := response.Body.String(), `{"error":{"code":"MALFORMED_REQUEST"}}`+"\n"; got != want {
+					t.Fatalf("body = %q, want %q", got, want)
+				}
+				if handler.calls() != 0 {
+					t.Fatal("被拒的请求进了编排")
+				}
+			})
+		}
+	}
+}
+
 // Covers: 票 12 完成判据「信封各格」的传输面——三族各自的未配置、令牌无效、未授予、不在准入范围、依赖读不动逐格映射，各对一种恢复
 // 动作；作业事实一族另有设备不在用一格；客户面两格用首方族自己的错误码；认证没过不进编排、不带 outcome。
 func TestHandoverLinesAnswerTheEnvelopeGrades(t *testing.T) {

@@ -121,3 +121,68 @@ func TestTheManualPayloadsKeepTheirNodeAndOriginalDocument(t *testing.T) {
 		t.Fatalf("手工作废缺原件号：err = %v，want ErrMalformedRequest", err)
 	}
 }
+
+// Covers: 作业端测量登记与作废两口的作业范围种类不是 NODE——Intake 交回的错误文本逐字（头名拼在其中；服务端日志靠这句话认出是
+// 哪个口），经两口端点是 400 与结果码 MALFORMED_REQUEST，响应体不带问题详情文本、也不带任何别的格；认证方一次也不被问。头名换了
+// 出处之后文本与应答都不许变。
+func TestADeviceMeasurementOnANonNodeScopeIsRefusedWithTheExactTextStatusAndCode(t *testing.T) {
+	const wantText = "node operations http: malformed request: node work requires Parcel-Work-Scope-Kind NODE"
+	for name, testCase := range map[string]struct {
+		body     string
+		intake   func(*nodeopshttp.WorkFactReceptionIntake, *http.Request) error
+		endpoint func(*nodeopshttp.WorkFactReceptionIntake) http.Handler
+	}{
+		"登记": {
+			body: devicePayload(deviceMeasurementRest, ""),
+			intake: func(intake *nodeopshttp.WorkFactReceptionIntake, request *http.Request) error {
+				_, err := intake.IntakeMeasurement(request.Context(), request)
+				return err
+			},
+			endpoint: func(intake *nodeopshttp.WorkFactReceptionIntake) http.Handler {
+				return nodeopshttp.NewRecordMeasurementEndpoint(intake, &recordingMeasurements{})
+			},
+		},
+		"作废": {
+			body: devicePayload(deviceInvalidationRest, ""),
+			intake: func(intake *nodeopshttp.WorkFactReceptionIntake, request *http.Request) error {
+				_, err := intake.IntakeMeasurementInvalidation(request.Context(), request)
+				return err
+			},
+			endpoint: func(intake *nodeopshttp.WorkFactReceptionIntake) http.Handler {
+				return nodeopshttp.NewInvalidateMeasurementEndpoint(intake, &recordingMeasurements{})
+			},
+		},
+	} {
+		for _, kind := range []string{"OFFSITE", "node"} {
+			t.Run(name+"/"+kind, func(t *testing.T) {
+				build := func() *http.Request {
+					request := receptionRequest(testCase.body)
+					request.Header.Set("Parcel-Work-Scope-Kind", kind)
+					return request
+				}
+
+				var asked []string
+				intake := receptionIntakeWith(t, receptionAuthenticatorFake{asked: &asked})
+				err := testCase.intake(intake, build())
+				if !errors.Is(err, nodeopshttp.ErrMalformedRequest) {
+					t.Fatalf("err = %v, want ErrMalformedRequest", err)
+				}
+				if err.Error() != wantText {
+					t.Fatalf("错误文本 = %q, want %q", err.Error(), wantText)
+				}
+				if len(asked) != 0 {
+					t.Fatalf("认证方被问 %v, want 一次也不问", asked)
+				}
+
+				response := httptest.NewRecorder()
+				testCase.endpoint(intake).ServeHTTP(response, build())
+				if response.Code != http.StatusBadRequest {
+					t.Fatalf("status = %d, want 400", response.Code)
+				}
+				if got, want := response.Body.String(), `{"error":{"code":"MALFORMED_REQUEST"}}`+"\n"; got != want {
+					t.Fatalf("body = %q, want %q", got, want)
+				}
+			})
+		}
+	}
+}

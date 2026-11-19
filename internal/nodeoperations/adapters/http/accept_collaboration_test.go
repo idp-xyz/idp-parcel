@@ -124,6 +124,49 @@ func TestTheCollaborationExecutionIntakeAuthenticatesBeforeReadingAndOnlyTakesAN
 	}
 }
 
+// Covers: 执行事实口的作业范围种类不是 NODE——Intake 交回的错误文本逐字（头名拼在其中；服务端日志靠这句话认出是哪个口），经执行事实
+// 端点是 400 与结果码 MALFORMED_REQUEST，响应体不带问题详情文本、也不带任何别的格；编排一次也不调。头名换了出处之后文本与应答都不许变。
+func TestTheCollaborationExecutionIntakeAnswersANonNodeScopeWithTheExactTextStatusAndCode(t *testing.T) {
+	const (
+		body     = `{"item":"I1","unit":"U1","action":"UNSEAL","evidence":"E1","performedAt":"2026-10-27T09:00:00Z"}`
+		wantText = "node operations http: malformed request: a collaboration execution fact is recorded at a node; Parcel-Work-Scope-Kind must be NODE"
+	)
+	intake, err := nodeopshttp.NewWorkFactCollaborationIntake(collaborationExecutionAuthenticator{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	build := func(kind string) *http.Request {
+		request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+		request.Header.Set("Parcel-Device-Id", "D1")
+		request.Header.Set("Parcel-Work-Scope-Kind", kind)
+		request.Header.Set("Parcel-Work-Scope-Reference", "N1")
+		return request
+	}
+	for _, kind := range []string{"OFFSITE", "node"} {
+		request := build(kind)
+		_, err := intake.IntakeCollaborationExecution(request.Context(), request)
+		if !errors.Is(err, nodeopshttp.ErrMalformedRequest) {
+			t.Fatalf("种类 %q：err = %v, want ErrMalformedRequest", kind, err)
+		}
+		if err.Error() != wantText {
+			t.Fatalf("种类 %q：错误文本 = %q, want %q", kind, err.Error(), wantText)
+		}
+
+		handler := &recordingCollaboration{}
+		response := httptest.NewRecorder()
+		nodeopshttp.NewRecordCollaborationExecutionEndpoint(intake, handler).ServeHTTP(response, build(kind))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("种类 %q：status = %d, want 400", kind, response.Code)
+		}
+		if got, want := response.Body.String(), `{"error":{"code":"MALFORMED_REQUEST"}}`+"\n"; got != want {
+			t.Fatalf("种类 %q：body = %q, want %q", kind, got, want)
+		}
+		if len(handler.accepted)+len(handler.executed) != 0 {
+			t.Fatalf("种类 %q：被拒的请求进了编排", kind)
+		}
+	}
+}
+
 func TestTheCollaborationEndpointsAnswerMethodAndIntakeFailuresBeforeTheOrchestration(t *testing.T) {
 	handler := &recordingCollaboration{}
 	denied, err := nodeopshttp.NewOperatorDecisionIntake(collaborationDecisionAuthenticator{err: nodeopshttp.ErrOperatorNotGranted})

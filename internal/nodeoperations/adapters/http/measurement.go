@@ -34,7 +34,7 @@ type ManualMeasurementIntake interface {
 	IntakeManualMeasurementInvalidation(context.Context, *http.Request) (application.InvalidateActualMeasurementCommand, error)
 }
 
-const measurementNotNode = "node work requires Parcel-Work-Scope-Kind NODE"
+const measurementNotNode = "node work requires " + httpapi.HeaderWorkScopeKind + " NODE"
 
 var _ MeasurementIntake = (*WorkFactReceptionIntake)(nil)
 var _ MeasurementIntake = UnconfiguredIntake{}

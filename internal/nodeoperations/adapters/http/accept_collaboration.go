@@ -172,7 +172,7 @@ var _ CollaborationExecutionIntake = (*WorkFactCollaborationIntake)(nil)
 // 不到载荷校验的结果。动作取封闭五值，放行、查验结论与处置决定不在其中。
 func (intake *WorkFactCollaborationIntake) IntakeCollaborationExecution(ctx context.Context, request *http.Request) (application.RecordExecutionCommand, error) {
 	none := application.RecordExecutionCommand{}
-	device, kind, reference, err := nodeWorkScope(request, "a collaboration execution fact is recorded at a node; Parcel-Work-Scope-Kind must be NODE")
+	device, kind, reference, err := nodeWorkScope(request, "a collaboration execution fact is recorded at a node; "+httpapi.HeaderWorkScopeKind+" must be NODE")
 	if err != nil {
 		return none, err
 	}

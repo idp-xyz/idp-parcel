@@ -93,7 +93,7 @@ func NewWorkFactHandoverNoteIntake(authenticator HandoverNoteWorkFactAuthenticat
 
 // authenticate 先认证、后解载荷：授予不过的调用方看不到载荷校验的结果。
 func (intake *WorkFactHandoverNoteIntake) authenticate(ctx context.Context, request *http.Request, fact DeliveryHandoverFact) (domain.TenantID, domain.NodeReference, error) {
-	device, kind, reference, err := nodeWorkScope(request, "a delivery handover note lives at a node; Parcel-Work-Scope-Kind must be NODE")
+	device, kind, reference, err := nodeWorkScope(request, "a delivery handover note lives at a node; "+httpapi.HeaderWorkScopeKind+" must be NODE")
 	if err != nil {
 		return domain.TenantID{}, domain.NodeReference{}, err
 	}
