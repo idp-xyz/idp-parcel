@@ -13,6 +13,9 @@ import (
 )
 
 const (
+	// measurementChangedConsumerName 是这个消费者在收件箱里的身份，收件箱按它记哪些事件已经消费过。名字里的 sell 是历史
+	// 叫法，如今销售与采购两路重评都由它转交的处理方办；它是收件箱身份，改了字面已经消费过的事件会被当成没消费过再办一遍，
+	// 所以不改。
 	measurementChangedConsumerName = "settlement-accounting/reevaluate-sell-on-measurement-change"
 	// MeasurementChangedEventType 与节点作业交出的那一串同字面。
 	MeasurementChangedEventType = "node-operations.actual-measurement.changed"
@@ -31,7 +34,8 @@ type ChangedMeasurementHandler interface {
 	HandleChangedMeasurement(ctx context.Context, changed ChangedMeasurement) error
 }
 
-// MeasurementChangedConsumer 把实际测量变化推进销售重评。
+// MeasurementChangedConsumer 把实际测量变化交给处理方推进重评：销售评价与采购评价各另起下一代由处理方分办，本消费者
+// 只管幂等消费与译码。
 type MeasurementChangedConsumer struct {
 	gate *inboxconsume.Gate[ChangedMeasurement]
 }

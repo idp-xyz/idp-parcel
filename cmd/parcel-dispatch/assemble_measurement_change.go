@@ -19,7 +19,9 @@ import (
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 )
 
-func reevaluateSellOnMeasurementChangeConsumer(
+// reevaluateOnMeasurementChangeConsumer 装出实测变化的收件箱消费者：销售与采购两路重评都挂在它转交的处理方上，
+// 先后次序见 measurementChangeProcessing。
+func reevaluateOnMeasurementChangeConsumer(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
 	inboxStore *inbox.Store,
