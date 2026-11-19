@@ -23,7 +23,7 @@ var WarehousePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 // 缺省序就是先按仓、再按库区。排序维取 warehouseCode 而不取 zoneCode：库区编码在仓内才唯一，单按它排没有稳定的行序，也不是
 // 登记方挑库区的顺序。
 //
-// 筛选维两个：仓编码（不设词表——仓是租户取值，词表只能是空的）与是否停用。仓编码按答复体的字段名点名、逐字比较。
+// 筛选维是仓编码（不设词表——仓是租户取值，词表只能是空的）与是否停用。仓编码按答复体的字段名点名、逐字比较。
 var ZonePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "warehouse-fulfillment-zones",
 	Sorts: []cataloguepage.SortDimension{

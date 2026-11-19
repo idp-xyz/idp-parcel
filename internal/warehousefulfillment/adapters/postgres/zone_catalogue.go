@@ -11,7 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
-// ZoneCatalogue 实现库区册的两个读口：各库区当前修订的分页列表（ADR-0077、ADR-0144）与一个库区的修订史。读的都是已落册的
+// ZoneCatalogue 实现库区册的读口：各库区当前修订的分页列表（ADR-0077、ADR-0144）与一个库区的修订史。读的都是已落册的
 // 修订，不读在途的写；每条语句显式带租户条件（作用域是身份的一部分，不是过滤器）。
 type ZoneCatalogue struct {
 	db *bentopg.DB
@@ -42,7 +42,7 @@ const zoneListed = `WITH latest AS (
      )`
 
 // zoneListBinding：排序维 warehouseCode 落仓编码列，行标识是（仓编码，库区编码）两段，所以缺省序是先仓后库区；q 覆盖仓编码、
-// 库区编码与名称——登记表单与下游挑库区时认的就是这三格。
+// 库区编码与名称——登记表单与下游挑库区时认的就是它们。
 var zoneListBinding = ports.ZonePages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"warehouseCode": "warehouse_code"},
 	Identity: []string{"warehouse_code", "zone_code"},

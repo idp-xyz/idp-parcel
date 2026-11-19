@@ -23,7 +23,7 @@ type WarehouseLookup interface {
 
 // ZoneRegistry 是库区登记册的写入面：键 = 租户 + 仓编码 + 库区编码 + 修订号，修订只追加、不覆盖。
 //
-// 读不动走 error，不折成 found=false，理由同 WarehouseRegistry。登记用例在同一个环境事务里调用两个读方法与保存；保存在没有
+// 读不动走 error，不折成 found=false，理由同 WarehouseRegistry。登记用例在同一个环境事务里调用读方法与保存；保存在没有
 // 环境事务时拒绝。库区编码在仓内才唯一：按（租户，仓编码，库区编码）读到，就同时是「库区已登记」与「库区属于这个仓」，别的
 // 册核所指的库区时用 LoadLatestZone 即可，不必另有读法。
 type ZoneRegistry interface {

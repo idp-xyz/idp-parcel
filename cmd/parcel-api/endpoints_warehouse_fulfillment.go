@@ -11,7 +11,7 @@ import (
 // 在 build 里定：为假时其余字段全是零值——关着的部署不构造任何仓配的适配器与编排，mount 也就没有东西可接。
 //
 // 仓配的各册同属一个特性、一个开关、一个依赖结构，不按册拆成几个特性：登记处不许两个特性共用一种依赖结构，而各册的行都带同一个
-// 开关，装配测试里「仓配的行」是一个整体（见 warehouseFulfillmentLines）。加一册就是在这里多三个字段、在下面多三行（ADR-0222）。
+// 开关，装配测试里「仓配的行」是一个整体（见 warehouseFulfillmentLines）。加一册就是在这里加它的依赖字段、在下面加它的行（ADR-0222）。
 type warehouseFulfillmentWiring struct {
 	enabled      bool
 	registration warehousehttp.WarehouseRegistrar
@@ -34,7 +34,7 @@ func init() {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-warehouse-revisions?warehouseCode=SYN-WH-01",
 			},
-			// 库区：三行的面与仓同族。库区的身份是（仓编码，库区编码），修订史口的探测目标两个编码都要带。
+			// 库区：各行的面与仓同族。库区的身份是（仓编码，库区编码），修订史口的探测目标要带上这两段。
 			"/warehouse-fulfillment-zone-registrations": {method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true},
 			"/warehouse-fulfillment-zones":              {method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true},
 			"/warehouse-fulfillment-zone-revisions": {

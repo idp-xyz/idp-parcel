@@ -94,7 +94,7 @@ func ZoneCommand(
 	}, nil
 }
 
-// zoneUsageWords 把封闭集的六个字面量写成理由里的一句，次序同封闭集。
+// zoneUsageWords 把封闭集的字面量写成理由里的一句，次序同封闭集。
 func zoneUsageWords() string {
 	usages := domain.ZoneUsages()
 	words := make([]string, len(usages))
