@@ -17,13 +17,13 @@ import (
 // 对不上包裹的变化（见 nodeoperations 适配器的 MeasuredParcel）这次不另起请求。
 type ReevaluateBuyForMeasuredParcel struct {
 	associations noports.CurrentParcelAssociation
-	occurrences  tfports.ChargeOccurrencesCarryingParcel
+	occurrences  tfports.ChargeOccurrencesCarryingObject
 	buy          *saapplication.ReevaluateBuyOnMeasurementChangeHandler
 }
 
 func NewReevaluateBuyForMeasuredParcel(
 	associations noports.CurrentParcelAssociation,
-	occurrences tfports.ChargeOccurrencesCarryingParcel,
+	occurrences tfports.ChargeOccurrencesCarryingObject,
 	buy *saapplication.ReevaluateBuyOnMeasurementChangeHandler,
 ) (*ReevaluateBuyForMeasuredParcel, error) {
 	if associations == nil || occurrences == nil || buy == nil {
