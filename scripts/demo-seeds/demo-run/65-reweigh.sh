@@ -44,6 +44,23 @@ for row in body.get("charges", []):
                 print(adjustment.get("settlementAmount"))
 PY
 }
+# adjustment_field 费用标识 方向 字段：打印这一笔上该方向的调整的那一格。尺寸列表拼成以 × 连接的串。
+adjustment_field() {
+  charge_row "$1"
+  python3 - "$LAST" "$1" "$2" "$3" <<'PY'
+import json, sys
+body = json.load(open(sys.argv[1]))
+field = sys.argv[4]
+for row in body.get("charges", []):
+    if row.get("charge") == sys.argv[2]:
+        for adjustment in row.get("adjustments") or []:
+            if adjustment.get("direction") == sys.argv[3]:
+                value = adjustment.get(field, "")
+                if isinstance(value, list):
+                    value = "×".join(str(part) for part in value)
+                print("" if value is None else value)
+PY
+}
 # weight_cells 费用标识：打印这一笔的「计价重量｜来源｜实重｜尺寸」。计价重量是评价进位之后的那一个，与实重是两格。
 weight_cells() {
   charge_row "$1"
@@ -172,6 +189,22 @@ _credit() { [[ -n "$(adjustments_of "$CHARGE" CREDIT)" ]]; }
 poll "作废复测形成贷项" 90 _credit
 CREDIT="$(adjustments_of "$CHARGE" CREDIT)"
 [[ "$CREDIT" == "$DEBIT" ]] || fail "作废复测的贷项是 $CREDIT，want 与借项 $DEBIT 相抵"
+# 借项看的是 30×25×20 那次复测实际用的测量，不是作废自己的来源身份；贷项与费用行看的是作废之后仍有效的第一条。
+DEBIT_EVAL="$(adjustment_field "$CHARGE" DEBIT evaluation)"
+CREDIT_EVAL="$(adjustment_field "$CHARGE" CREDIT evaluation)"
+[[ -n "$DEBIT_EVAL" ]] || fail "借项没有带出 evaluation"
+[[ -n "$CREDIT_EVAL" && "$CREDIT_EVAL" != "$DEBIT_EVAL" ]] || fail "贷项的 evaluation = $CREDIT_EVAL，want 与借项不同且非空"
+[[ "$(adjustment_field "$CHARGE" DEBIT weightSource)" == "actual-measurement" ]] || fail "借项来源不是 actual-measurement"
+DEBIT_SOURCE="$(adjustment_field "$CHARGE" DEBIT measurementSource)"
+CREDIT_SOURCE="$(adjustment_field "$CHARGE" CREDIT measurementSource)"
+[[ "$DEBIT_SOURCE" == "SYN-WEIGH-${STAMP}-M2" ]] || fail "借项的实测来源身份 = $DEBIT_SOURCE，want 30×25×20 那次复测 SYN-WEIGH-${STAMP}-M2"
+[[ "$CREDIT_SOURCE" == "SYN-WEIGH-${STAMP}-M1" ]] || fail "贷项的实测来源身份 = $CREDIT_SOURCE，want 仍有效的第一条 SYN-WEIGH-${STAMP}-M1"
+[[ "$(adjustment_field "$CHARGE" DEBIT dimensionSides)" == "30×25×20" ]] || fail "借项尺寸 = $(adjustment_field "$CHARGE" DEBIT dimensionSides)，want 30×25×20"
+charge_row "$CHARGE"
+CHARGE_SOURCE="$(jsel "$LAST" charges charge "$CHARGE" measurementSource)"
+[[ "$CHARGE_SOURCE" == "SYN-WEIGH-${STAMP}-M1" ]] || fail "费用 $CHARGE 的实测来源身份 = $CHARGE_SOURCE，want 第一条称重量方 SYN-WEIGH-${STAMP}-M1"
+DEBIT_PRICED="$(adjustment_field "$CHARGE" DEBIT pricedWeight) $(adjustment_field "$CHARGE" DEBIT pricedWeightUnit)"
+CREDIT_PRICED="$(adjustment_field "$CHARGE" CREDIT pricedWeight) $(adjustment_field "$CHARGE" CREDIT pricedWeightUnit)"
 
 # 费用已经出账，贷项不改那张单。这一户没有新费用也照出：一张只有调整行的对账单，净额为负。
 step "贷项单独出单" "$OP" POST /settlement-statement-publications \
@@ -183,6 +216,8 @@ CREDIT_TOTAL="$(jget "$LAST" total)"
 [[ "$CREDIT_TOTAL" == "-$CREDIT" ]] || fail "贷记单 $CREDIT_NOTE 合计 $CREDIT_TOTAL，want -$CREDIT"
 printf '%-34s → 对账单 %s 合计 %s（原账单 %s 不变）\n' "贷项出单" "$CREDIT_NOTE" "$CREDIT_TOTAL" "$BILLED_ON"
 
+printf '%-34s → 借项 %s 计价重量 %s；贷项 %s 计价重量 %s\n' \
+  "调整的实测来源" "$DEBIT_SOURCE" "$DEBIT_PRICED" "$CREDIT_SOURCE" "$CREDIT_PRICED"
 printf '\n复磅走查完成：申报预估 %s 被实测预估 %s 替代；确认后复测尺寸的借项 %s 分进了对账单 %s；作废复测的贷项 %s 分单独出了 %s。\n' \
   "$FIRST" "$CHARGE" "$DEBIT" "$BILLED_ON" "$CREDIT" "$CREDIT_NOTE"
 
