@@ -517,4 +517,11 @@ type OperatingCatalogueRead interface {
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[CostAllocationCatalogueRow], error)
+
+	// OperatingBasisAdoption 答这户有没有登记采用。没登记不是空的结果列表。
+	OperatingBasisAdoption(ctx context.Context, tenant domain.TenantID) (OperatingBasisAdoptionAnswer, error)
+
+	// ListDirectOperatingDispositions 交这户答不出毛利的当前答案，不跟快照册翻页：
+	// 判不出、成本不全、待判断与「还没有结果」不是同一句话。
+	ListDirectOperatingDispositions(ctx context.Context, tenant domain.TenantID) ([]DirectOperatingDispositionRecord, error)
 }
