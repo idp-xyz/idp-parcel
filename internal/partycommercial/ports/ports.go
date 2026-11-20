@@ -1932,6 +1932,8 @@ type CustomerContractCatalogueRow struct {
 	HasSelectionCut bool
 	RetiredAt       time.Time
 	Successor       string
+	// SigningEvidenceRegistered 说这一版旁边有没有至少一条签署证据。目录用一次 EXISTS 查出，不另查一趟。
+	SigningEvidenceRegistered bool
 }
 
 // SellPriceArrangementCatalogueRow 是一份客户合同版本的销售价格约定在目录上的转写。Sources 按合同声明的顺序，
@@ -1977,6 +1979,8 @@ type SupplierAgreementCatalogueRow struct {
 	HasSelectionCut bool
 	RetiredAt       time.Time
 	Successor       string
+	// SigningEvidenceRegistered 说这一版旁边有没有至少一条签署证据。目录用一次 EXISTS 查出，不另查一趟。
+	SigningEvidenceRegistered bool
 }
 
 // CommercialRelationCatalogueRead 是商业关系载体目录的伴生列表读端口(ADR-0077):

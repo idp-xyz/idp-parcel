@@ -729,6 +729,7 @@ var customerContractListed = `WITH listed AS (
                    ) FILTER (WHERE binding.charge_scope_ref IS NOT NULL),
                    '[]'::json
                ) AS bindings,` + deliveryConditionColumns + `,` + sellPriceArrangementColumns + `,
+               ` + signingEvidenceRegisteredColumn + `,
                ` + versionStatusCode + ` AS status_code
           FROM party_commercial.commercial_version AS version
           LEFT JOIN party_commercial.customer_contract_content AS content
@@ -754,12 +755,23 @@ var customerContractListed = `WITH listed AS (
                   delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at
      )`
 
+// signingEvidenceRegisteredColumn 用一次 EXISTS 回答这一版旁边有没有签署证据。相关子查询只引用版本键，
+// 客户合同那条带 GROUP BY 的语句里这些键都在分组列上。
+const signingEvidenceRegisteredColumn = `EXISTS (
+                   SELECT 1
+                     FROM party_commercial.signing_evidence AS evidence
+                    WHERE evidence.tenant_id = version.tenant_id
+                      AND evidence.object_kind = version.object_kind
+                      AND evidence.object_id = version.object_id
+                      AND evidence.version_label = version.version_label
+               ) AS signing_evidence_registered`
+
 // customerContractRead：q 另覆盖规则包与客户账户，管理台检索的就是这几格。
 var customerContractRead = catalogueRead[ports.CustomerContractCatalogueRow]{
 	binding: ports.CustomerContractPages.MustBind(versionShellColumns("rule_package_id", "customer_account_id")),
 	listed:  customerContractListed,
 	selection: versionShellSelection + `, rule_package_id, customer_account_id, content_declared_at, bindings, ` +
-		deliveryConditionSelection + `, ` + sellPriceArrangementSelection,
+		deliveryConditionSelection + `, ` + sellPriceArrangementSelection + `, signing_evidence_registered`,
 	scan: scanCustomerContract,
 	position: func(row ports.CustomerContractCatalogueRow, sortField string) cataloguepage.Position {
 		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt)
@@ -783,6 +795,7 @@ func scanCustomerContract(rows pgx.Rows) (ports.CustomerContractCatalogueRow, er
 	targets = append(targets, &rulePackage, &customerAccount, &declaredAt, &bindingsJSON)
 	targets = append(targets, delivery.targets()...)
 	targets = append(targets, sellPrice.targets()...)
+	targets = append(targets, &row.SigningEvidenceRegistered)
 	if err := rows.Scan(targets...); err != nil {
 		return row, err
 	}
@@ -1100,6 +1113,7 @@ var supplierAgreementListed = `WITH listed AS (
                content.agreement_scope_ref, content.effective_starts_at AS agreement_effective_starts_at,
                content.effective_ends_at AS agreement_effective_ends_at,
                content.registered_at AS agreement_registered_at,
+               ` + signingEvidenceRegisteredColumn + `,
                ` + versionStatusCode + ` AS status_code
           FROM party_commercial.commercial_version AS version
           LEFT JOIN party_commercial.supplier_agreement AS content
@@ -1118,7 +1132,8 @@ var supplierAgreementRead = catalogueRead[ports.SupplierAgreementCatalogueRow]{
 		"supplier_party_id", "legal_entity_ref", "purchase_plan_ref", "agreement_scope_ref")),
 	listed: supplierAgreementListed,
 	selection: versionShellSelection + `, supplier_party_id, legal_entity_ref, purchase_plan_ref,
-		        agreement_scope_ref, agreement_effective_starts_at, agreement_effective_ends_at, agreement_registered_at`,
+		        agreement_scope_ref, agreement_effective_starts_at, agreement_effective_ends_at, agreement_registered_at,
+		        signing_evidence_registered`,
 	scan: scanSupplierAgreement,
 	position: func(row ports.SupplierAgreementCatalogueRow, sortField string) cataloguepage.Position {
 		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt)
@@ -1137,7 +1152,7 @@ func scanSupplierAgreement(rows pgx.Rows) (ports.SupplierAgreementCatalogueRow, 
 		&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
 	targets = append(targets,
 		&supplier, &legalEntity, &purchasePlan, &agreementScope,
-		&agreementStartsAt, &agreementEndsAt, &registeredAt)
+		&agreementStartsAt, &agreementEndsAt, &registeredAt, &row.SigningEvidenceRegistered)
 	if err := rows.Scan(targets...); err != nil {
 		return row, err
 	}
