@@ -552,3 +552,50 @@ func TestACatchUpThatCannotRebuildAFormedPlanReturnsTheError(t *testing.T) {
 		t.Fatalf("err = %v, want ErrStoredRouteRecordUnreadable", err)
 	}
 }
+
+// Covers: 控制触发已经判成，补判读最近控制位置失败时，整次 Handle 答登记册未决，等位置的实测变化不落复核。
+// 吞掉这一格会让控制触发入账成功，而这条实测变化这一轮既没补判，也没有失败可重投。
+func TestACatchUpThatCannotReadTheControlPositionStaysUndecided(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	command := measurementCommand(t, "measure-position-unreadable", reassessedAt.Add(time.Hour))
+	measured := handleMeasurement(t, fixture, command)
+	if measured.Outcome() != application.ReassessTriggerNotJudged ||
+		measured.NotJudgedReason() != ports.NotJudgedControlPositionUnavailable {
+		t.Fatalf("实测变化 = %q/%s，want 未判/控制位置未定", measured.Outcome(), measured.NotJudgedReason())
+	}
+	fixture.store.positionErr = errors.New("control position unreadable")
+
+	result := handleOK(t, fixture, reassessCommand(t, "node-origin"))
+	if result.Outcome() != application.ReassessUndecided || result.UndecidedReason() != application.ReassessStoreUnavailable {
+		t.Fatalf("outcome = %q/%s，want 未决/登记册不可用", result.Outcome(), result.UndecidedReason())
+	}
+	if _, present := fixture.store.byCorrelation[command.Correlation]; present {
+		t.Fatal("读不出最近控制位置却把实测变化补判了")
+	}
+}
+
+// Covers: 最近控制位置已知，补判读等位置名单失败时，整次 Handle 答登记册未决，等位置的实测变化不落复核。
+func TestACatchUpThatCannotListWaitingMeasurementsStaysUndecided(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	command := measurementCommand(t, "measure-waiting-unreadable", reassessedAt.Add(time.Hour))
+	measured := handleMeasurement(t, fixture, command)
+	if measured.Outcome() != application.ReassessTriggerNotJudged ||
+		measured.NotJudgedReason() != ports.NotJudgedControlPositionUnavailable {
+		t.Fatalf("实测变化 = %q/%s，want 未判/控制位置未定", measured.Outcome(), measured.NotJudgedReason())
+	}
+	fixture.store.awaitingErr = errors.New("waiting list unreadable")
+
+	result := handleOK(t, fixture, reassessCommand(t, "node-origin"))
+	if result.Outcome() != application.ReassessUndecided || result.UndecidedReason() != application.ReassessStoreUnavailable {
+		t.Fatalf("outcome = %q/%s，want 未决/登记册不可用", result.Outcome(), result.UndecidedReason())
+	}
+	if _, present := fixture.store.byCorrelation[command.Correlation]; present {
+		t.Fatal("读不出等位置名单却把实测变化补判了")
+	}
+}

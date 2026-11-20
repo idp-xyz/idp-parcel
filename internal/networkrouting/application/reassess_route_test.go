@@ -126,6 +126,10 @@ type reassessmentStoreDouble struct {
 	// saveErr 在已经成功写入 saveErrAfter 条之后开始失败，用来让补判那一次停在未决。0 表示不设这条。
 	saveErr      error
 	saveErrAfter int
+	// positionErr 非空时最近控制位置读口失败。与 latestErr 分开：实测变化入账未判读的是这一口，不是判断键锁那一口。
+	positionErr error
+	// awaitingErr 非空时等位置名单读口失败。补判先读位置、位置已知才读名单，两口要能单独失败。
+	awaitingErr error
 }
 
 func newReassessmentStore() *reassessmentStoreDouble {
@@ -196,6 +200,9 @@ func (double *reassessmentStoreDouble) LatestControlPosition(
 	_ context.Context,
 	key domain.InitialRouteJudgmentKey,
 ) (ports.ControlPosition, error) {
+	if double.positionErr != nil {
+		return ports.ControlPosition{}, double.positionErr
+	}
 	var max time.Time
 	found := false
 	for _, record := range double.byCorrelation {
@@ -269,6 +276,9 @@ func (double *reassessmentStoreDouble) AwaitingMeasurementChanges(
 	_ context.Context,
 	key domain.InitialRouteJudgmentKey,
 ) ([]domain.RequestCorrelationID, error) {
+	if double.awaitingErr != nil {
+		return nil, double.awaitingErr
+	}
 	var waiting []ports.NotJudgedTrigger
 	for _, record := range double.notJudged {
 		if record.Key != key || record.Reason != ports.NotJudgedControlPositionUnavailable {
