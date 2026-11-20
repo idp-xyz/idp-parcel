@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
@@ -18,10 +19,30 @@ import (
 var rawMeasurementOccurredAt = time.Date(2026, 11, 17, 2, 0, 0, 0, time.UTC)
 
 // writeRawMeasurement 在一个隔离库里绕开领域直接写一行测量，只有重量数值与摘要由用例给。其余列与 savedMeasurement 同款：
-// 对象 unit-1、重量单位 KG、尺寸 20×15×10 CM，所以摘要对得上的那一行就用同款测量形成时的摘要。
+// 对象 unit-1、重量单位 KG、尺寸 20×15×10 CM，所以摘要对得上的那一行就用同款测量形成时的摘要。数量约束还在：写进去的行
+// 必须是库认的形状，用来证约束不拦合法行。
 func writeRawMeasurement(t *testing.T, sourceID, weightValue, digest string) (*bentopg.DB, ports.ActualMeasurementKey) {
 	t.Helper()
-	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	return writeRawMeasurementInto(t, pgtest.Pool(t), sourceID, weightValue, digest)
+}
+
+// writeRawMeasurementPastTheQuantityCheck 与 writeRawMeasurement 同款，只是先在这个用例自己的库里摘掉数量约束。
+// 重量不是正的十进制数的行库自己就拒，要证读回仍把它当坏行整份报错，只能先让它写得进来；摘约束只发生在调用它的
+// 这个隔离库里，别的用例的库不受影响。
+func writeRawMeasurementPastTheQuantityCheck(t *testing.T, sourceID, weightValue, digest string) (*bentopg.DB, ports.ActualMeasurementKey) {
+	t.Helper()
+	pool := pgtest.Pool(t)
+	// 不写 IF EXISTS：约束改名或被撤掉时，这里要红，而不是让后面的用例在没摘成的库上空过。
+	if _, err := pool.Exec(context.Background(),
+		`ALTER TABLE node_operations.actual_measurement DROP CONSTRAINT `+quantityConstraint); err != nil {
+		t.Fatalf("摘掉 %s：%v", quantityConstraint, err)
+	}
+	return writeRawMeasurementInto(t, pool, sourceID, weightValue, digest)
+}
+
+func writeRawMeasurementInto(t *testing.T, pool *pgxpool.Pool, sourceID, weightValue, digest string) (*bentopg.DB, ports.ActualMeasurementKey) {
+	t.Helper()
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
@@ -57,6 +78,10 @@ func genuineMeasurementDigest(t *testing.T, sourceID string) string {
 // Covers: 读回时按行上的值重建测量并重算摘要比对。绕开领域直接写进来的行，重量不是正的十进制数，或摘要与行上的值对不上，
 // 按来源身份读与按对象列仍有效清单都响亮报错，不把它当一条普通测量交出去；形状与摘要都对的同款行读得回来，证明夹具本身没毛病。
 // 每一格各用一个隔离库：坏行会让它所在对象的整张清单读不出，不能互相牵连。夹具为隔离合成，只记 `S`。
+//
+// 重量不是正的十进制数的格，库自己的数量约束现在就拒，写不进来；这几格先在自己的库里摘掉约束，证的是读回这一道不靠约束
+// 也站得住：约束若有一天被撤或被绕过，读回仍拒。摘约束只发生在这几格各自的库里。其余格（形状合法，错在摘要或写法）
+// 约束还在，写入必须成功，证明约束不拦合法行。
 func TestARowWrittenPastTheDomainDoesNotReadBackAsAMeasurement(t *testing.T) {
 	ctx := context.Background()
 	open := func(t *testing.T, db *bentopg.DB) *adapter.ActualMeasurements {
@@ -80,12 +105,16 @@ func TestARowWrittenPastTheDomainDoesNotReadBackAsAMeasurement(t *testing.T) {
 		}
 	})
 
-	for name, row := range map[string]struct{ weight, digest string }{
-		"重量不是数":  {"2.1x", ""},
-		"重量是零":   {"0", ""},
-		"重量带正号":  {"+2.10", ""},
-		"摘要对不上":  {"2.10", "NOC-1:00"},
-		"重量写法不同": {"2.100", ""},
+	for name, row := range map[string]struct {
+		weight, digest string
+		// pastQuantityCheck 为真的格，重量本身不是正的十进制数，库的数量约束会拒，要先摘掉才写得进来。
+		pastQuantityCheck bool
+	}{
+		"重量不是数":  {"2.1x", "", true},
+		"重量是零":   {"0", "", true},
+		"重量带正号":  {"+2.10", "", true},
+		"摘要对不上":  {"2.10", "NOC-1:00", false},
+		"重量写法不同": {"2.100", "", false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			digest := row.digest
@@ -93,7 +122,11 @@ func TestARowWrittenPastTheDomainDoesNotReadBackAsAMeasurement(t *testing.T) {
 				// 摘要取「重量是 2.10」那一条的：行上的值与它对不上，错就错在行上的值而不在摘要。
 				digest = genuineMeasurementDigest(t, "raw-bad")
 			}
-			db, key := writeRawMeasurement(t, "raw-bad", row.weight, digest)
+			write := writeRawMeasurement
+			if row.pastQuantityCheck {
+				write = writeRawMeasurementPastTheQuantityCheck
+			}
+			db, key := write(t, "raw-bad", row.weight, digest)
 			measurements := open(t, db)
 			if found, present, err := measurements.FindMeasurement(ctx, key); err == nil || present {
 				t.Fatalf("按来源身份读 = %+v present %v err %v，want 报错", found, present, err)
@@ -107,11 +140,13 @@ func TestARowWrittenPastTheDomainDoesNotReadBackAsAMeasurement(t *testing.T) {
 
 // Covers: 查阅册上列的测量行经两个值对象重建：绕开领域写进来、重量不是正的十进制数的行，查阅册整页报错，不照抄给查阅人。
 // 这与按来源身份读、仍有效清单同一条规矩；形状对的行照常列出。夹具为隔离合成，只记 `S`。
+// 坏行的两格先在各自的库里摘掉数量约束才写得进来（原因见 TestARowWrittenPastTheDomainDoesNotReadBackAsAMeasurement），
+// 形状对的行约束还在、照样写得进。
 func TestTheMeasurementCatalogueDoesNotTranscribeARowWrittenPastTheDomain(t *testing.T) {
 	ctx := context.Background()
 	for name, weight := range map[string]string{"重量是零": "0", "重量不是数": "2.1x"} {
 		t.Run(name, func(t *testing.T) {
-			db, key := writeRawMeasurement(t, "raw-bad", weight, genuineMeasurementDigest(t, "raw-bad"))
+			db, key := writeRawMeasurementPastTheQuantityCheck(t, "raw-bad", weight, genuineMeasurementDigest(t, "raw-bad"))
 			catalogue, err := adapter.NewReviewCatalogue(db)
 			if err != nil {
 				t.Fatalf("构造查阅册：%v", err)

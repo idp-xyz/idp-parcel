@@ -275,13 +275,15 @@ func TestTheMeasurementCatalogueKeepsVoidedRows(t *testing.T) {
 }
 
 // Covers: 重量与尺寸在库上都是必填。绕过领域直接写一行只有重量的测量，表自己拒：缺列被非空约束拦，空白被检查约束拦。
+// 长度空白时数量约束与非空约束都拒得掉它，PostgreSQL 按约束名序检查 CHECK，实测先拒的是数量约束，所以这一格两道都认；
+// 尺寸单位空白只有非空约束管得到（数量约束不收单位），那一格单独钉住它，非空约束不因被数量约束遮住而失去用例。
 func TestTheRegisterRefusesAMeasurementWithoutItsDimensions(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	insert := func(sourceID string, length any) error {
+	insert := func(sourceID string, length any, dimensionUnit string) error {
 		return db.Transactor().WithinTransaction(context.Background(), func(txCtx context.Context) error {
 			executor, err := db.RequireExecutor(txCtx)
 			if err != nil {
@@ -297,18 +299,17 @@ func TestTheRegisterRefusesAMeasurementWithoutItsDimensions(t *testing.T) {
 				 weight_value, weight_unit, length_value, width_value, height_value, dimension_unit,
 				 performed_by, evidence, occurred_at, recorded_at)
 				VALUES ('tenant-a', $1, 'digest', 'HANDLING_UNIT', 'unit-1', 'node-origin', 'bench-2', 'intake-1',
-				        '2.10', 'KG', $2, '15', '10', 'CM', 'scale-7', 'WEIGH/7', now(), now())`, sourceID, length)
+				        '2.10', 'KG', $2, '15', '10', $3, 'scale-7', 'WEIGH/7', now(), now())`, sourceID, length, dimensionUnit)
 			return err
 		})
 	}
 	var pgErr *pgconn.PgError
-	if err := insert("raw-null", nil); !errors.As(err, &pgErr) || pgErr.Code != "23502" || pgErr.ColumnName != "length_value" {
+	if err := insert("raw-null", nil, "CM"); !errors.As(err, &pgErr) || pgErr.Code != "23502" || pgErr.ColumnName != "length_value" {
 		t.Fatalf("缺长度的那一行没被非空约束拒：%v", err)
 	}
-	if err := insert("raw-blank", " "); !errors.As(err, &pgErr) || pgErr.ConstraintName != "actual_measurement_weight_and_dimensions_present" {
-		t.Fatalf("长度空白的那一行没被检查约束拒：%v", err)
-	}
-	if err := insert("raw-complete", "20"); err != nil {
+	wantCheckViolationOf(t, "长度空白的那一行", insert("raw-blank", " ", "CM"), quantityConstraint, presentConstraint)
+	wantPgError(t, "尺寸单位空白的那一行", insert("raw-blank-unit", "20", " "), "23514", presentConstraint)
+	if err := insert("raw-complete", "20", "CM"); err != nil {
 		t.Fatalf("重量与尺寸齐全的那一行应当写得进：%v", err)
 	}
 }
