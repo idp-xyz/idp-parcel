@@ -19,6 +19,8 @@ import (
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
+	ppnodeops "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/nodeoperations"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
@@ -154,10 +156,9 @@ func (broken brokenRerouteCustomsSource) AssessCustomsApplicability(
 	return nrports.CustomsApplicabilityAssessment{}, broken.err
 }
 
-// rerouteCosts 装配候选成本取数侧：目录依据、内部政策解析与方案装载全接库，包裹事实按判断点选来源（客户声明取自 PS，物理事实
-// 的来源与复核那一份同一种装法：路由的物理事实读口还没接到 node-operations 的实际测量上，装「一项都没取得」，授权改路决定
-// 因此退回客户声明出价并标明；读口接上之后，换装的是这一处），逐段区域取租户登的段计价区域，评价走 PP「对给定价卡形成试算」
-// 的入口。
+// rerouteCosts 装配候选成本取数侧：目录依据、内部政策解析与方案装载全接库，包裹事实按判断点选来源（客户声明取自 PS，
+// 物理事实与复核那一份同一种装法：来自计价按包裹读当前有效实测的那一只，取哪一条、单位怎么译不在这里再写），
+// 逐段区域取租户登的段计价区域，评价走 PP「对给定价卡形成试算」的入口。
 func rerouteCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSource {
 	catalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
@@ -179,7 +180,15 @@ func rerouteCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostS
 	if err != nil {
 		return brokenRerouteCostSource{err: fmt.Errorf("parcel-api: route declared parcel facts: %w", err)}
 	}
-	facts, err := nrpricing.NewPointedParcelFacts(declared, nrpricing.NoPhysicalParcelFacts{}, clock)
+	measured, err := actualMeasurements(db)
+	if err != nil {
+		return brokenRerouteCostSource{err: err}
+	}
+	physical, err := nrpricing.NewMeasurementPhysicalFacts(measured)
+	if err != nil {
+		return brokenRerouteCostSource{err: fmt.Errorf("parcel-api: physical parcel facts: %w", err)}
+	}
+	facts, err := nrpricing.NewPointedParcelFacts(declared, physical, clock)
 	if err != nil {
 		return brokenRerouteCostSource{err: fmt.Errorf("parcel-api: route parcel facts: %w", err)}
 	}
@@ -200,6 +209,28 @@ func rerouteCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostS
 		Plans:     priceCards,
 		Clock:     clock,
 	})
+}
+
+// actualMeasurements 与 parcel-dispatch 的 actualMeasurements 同一种装法：路由的物理事实来源要这只视图上
+// 带时点的读法，取哪一条、单位怎么译不在路由里再写一份。
+func actualMeasurements(db *bentopg.DB) (*ppnodeops.ParcelMeasurementView, error) {
+	associations, err := nopostgres.NewParcelAssociations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: parcel associations: %w", err)
+	}
+	measurements, err := nopostgres.NewActualMeasurements(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: actual measurements: %w", err)
+	}
+	adoptions, err := nopostgres.NewMeasurementSelectionAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: measurement selection adoptions: %w", err)
+	}
+	view, err := ppnodeops.NewParcelMeasurementView(associations, measurements, adoptions)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: actual measurement view: %w", err)
+	}
+	return view, nil
 }
 
 func reroutePlanGivenEstimates(db *bentopg.DB, clock systemClock) (*ppapplication.FormPlanGivenEstimateEvaluationsHandler, error) {

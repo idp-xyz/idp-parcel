@@ -1472,14 +1472,22 @@ func (broken brokenCustomsSource) AssessCustomsApplicability(
 // 序列取值（ADR-0189 决定一）。卡要的那一格没有（没登区、没有路线、没有在用版本），那一段待判断，候选缺成本依据——不给任何租户
 // 编一个区让候选假出价。计价时点取路由判断的时钟，与证据视图同一个。
 //
-// 包裹事实按判断点选来源（PointedParcelFacts）。路由的物理事实读口还没接到 node-operations 的实际测量上，所以物理事实的
-// 来源装的是「一项都没取得」（NoPhysicalParcelFacts）：复核因此恒退回客户声明出价，依据如实标退回，而不是读过一遍又读空。
-// 读口接上之后，换装的是这一处。
+// 包裹事实按判断点选来源（PointedParcelFacts）。物理事实来自计价按包裹读当前有效实测的那一只：
+// 取哪一条、单位怎么译只有那一处，路由不另写一套。没称过退回客户声明并标明，定不下不退回。
 func routeCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSource {
-	return routeCostsOver(db, clock, nrpricing.NoPhysicalParcelFacts{})
+	measured, err := actualMeasurements(db)
+	if err != nil {
+		return brokenCostSource{err: err}
+	}
+	physical, err := nrpricing.NewMeasurementPhysicalFacts(measured)
+	if err != nil {
+		return brokenCostSource{err: fmt.Errorf("parcel-dispatch: physical parcel facts: %w", err)}
+	}
+	return routeCostsOver(db, clock, physical)
 }
 
-// routeCostsOver 是 routeCosts 的本体，物理事实来源由调用方交入：真库用例交一份预置了实测的来源，走与生产同一份装配。
+// routeCostsOver 是 routeCosts 的本体，物理事实来源由调用方交入。生产交计价那只带时点的读法；
+// 真库用例要钉判断点本身时交一份预置答复。
 func routeCostsOver(db *bentopg.DB, clock systemClock, physical nrpricing.PhysicalParcelFactsSource) nrports.RouteCandidateCostSource {
 	catalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
@@ -2786,8 +2794,8 @@ func formEvaluationOnSellEvaluationRequestConsumer(
 }
 
 // actualMeasurements 装按包裹读当前有效实测的那一只。BUY 与 SELL 共用：没有关联实物、或实物上没有仍有效实测时，
-// 解析器改走申报。
-func actualMeasurements(db *bentopg.DB) (pptransport.ActualMeasurementView, error) {
+// 解析器改走申报。返回具体视图而不是计价消费口：带时点的读法不在那只消费口上，路由的物理事实来源要同一只视图。
+func actualMeasurements(db *bentopg.DB) (*ppnodeops.ParcelMeasurementView, error) {
 	associations, err := nopostgres.NewParcelAssociations(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: parcel associations: %w", err)

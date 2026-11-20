@@ -251,7 +251,7 @@ func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T)
 		t.Fatalf("候选路径 = %+v，want 带交付段——这条用例证的是交付段不进比价", evidence.Paths)
 	}
 
-	facts, err := routeParcelFacts(fixture.db, systemClock{}, nrpricing.NoPhysicalParcelFacts{})
+	facts, err := routeParcelFacts(fixture.db, systemClock{}, &physicalFactsDouble{answer: nrpricing.NoPhysicalFactsObtained()})
 	if err != nil {
 		t.Fatalf("装配包裹事实取数侧：%v", err)
 	}

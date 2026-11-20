@@ -291,12 +291,8 @@ func TestAnUnknownPointOrPhysicalAnswerFailsLoudly(t *testing.T) {
 	}
 }
 
-// Covers: 没有来源的部署如实装「一项都没取得」，复核据此退回声明；取得了却什么都没带、没带事实引用的物理事实立不起来。
+// Covers: 取得了却什么都没带、没带事实引用的物理事实立不起来；合成缺声明来源、物理来源或时钟也立不起来。
 func TestPhysicalFactsCannotBeObtainedWithoutContentOrProvenance(t *testing.T) {
-	answer, err := (adapter.NoPhysicalParcelFacts{}).PhysicalParcelFactsFor(context.Background(), judgmentKey(t), judgedAt)
-	if err != nil || answer.Answer() != adapter.PhysicalFactsNotObtained {
-		t.Fatalf("answer = %v err = %v，want 没取得", answer.Answer(), err)
-	}
 	reference := []ppdomain.VersionedFactReference{factReference(t, ppdomain.ArtifactActualMeasurement, "parcel-1", "measurement-1")}
 	weight, dimensions := weightOf(t, "1"), dimensionsOf(t, "30", "20", "10")
 	if _, err := adapter.ObtainedPhysicalFacts(ppdomain.Weight{}, ppdomain.Dimensions{}, reference); err == nil {

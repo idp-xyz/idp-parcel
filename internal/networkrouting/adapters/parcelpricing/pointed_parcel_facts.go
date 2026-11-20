@@ -17,7 +17,7 @@ import (
 //     外廓是客户声明的混合快照，与计价「实测整份取用」的口径相反。
 //   - 物理事实一项都没取得：退回客户声明出价，依据标 DECLARATION_FALLBACK，排序照常。复核一律排不了序的代价比一笔标明
 //     来源的估价大，而「没称过」是收寄当时的常态。
-//   - 物理事实在、却定不下用哪条（多于一条而没有已登记的取用规则）：不退回声明，各段待判断。客户声明不得顶替实测，
+//   - 物理事实在、却定不下用哪条：不退回声明，各段待判断。客户声明不得顶替实测，
 //     顶替之后的价看上去与正常出价没有区别，错得没有声响。
 
 // PhysicalFactsAnswer 是物理事实读口的三格答复。三格的恢复动作各不相同（ADR-0029）：没取得的退回声明，定不下的等取用规则
@@ -30,7 +30,8 @@ const (
 	PhysicalFactsNotObtained
 	// PhysicalFactsObtained 是取得了物理事实，且定得下用哪一条：重量与外廓都在，整份取用。
 	PhysicalFactsObtained
-	// PhysicalFactsUnresolved 是物理事实在，却有多条仍有效的实测而没有已登记的取用规则，机制不替租户挑「最近一次」。
+	// PhysicalFactsUnresolved 是物理事实在，却定不下用哪一条。计价读口答输入不可得时落这一格：多件实物、多条无采用、
+	// 发生时间并列、单位或数值译不出。机制不替租户挑一条，也不退回客户声明。
 	PhysicalFactsUnresolved
 )
 
@@ -87,18 +88,6 @@ type PhysicalParcelFactsSource interface {
 		key nrdomain.InitialRouteJudgmentKey,
 		asOf time.Time,
 	) (PhysicalParcelFacts, error)
-}
-
-// NoPhysicalParcelFacts 是没有物理事实来源的部署如实装的那一份：一项都没取得。它不是某个来源读空了，是根本没有来源，
-// 所以复核恒退回客户声明、依据如实标 DECLARATION_FALLBACK，而不是假装读过。
-type NoPhysicalParcelFacts struct{}
-
-var _ PhysicalParcelFactsSource = NoPhysicalParcelFacts{}
-
-func (NoPhysicalParcelFacts) PhysicalParcelFactsFor(
-	context.Context, nrdomain.InitialRouteJudgmentKey, time.Time,
-) (PhysicalParcelFacts, error) {
-	return NoPhysicalFactsObtained(), nil
 }
 
 // PointedParcelFacts 按判断点在客户声明与物理事实两路来源里整份选一路作包裹事实，两路不混用。

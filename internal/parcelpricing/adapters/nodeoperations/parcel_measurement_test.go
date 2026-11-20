@@ -160,6 +160,61 @@ func TestAMeasurementPricingCannotTranslateIsUndeterminedWithTheTrueReason(t *te
 	}
 }
 
+// Covers: 带时点的读法只认发生时间不晚于 asOf 的实测。滤掉晚于 asOf 的之后只剩一条时就取那一条，
+// 即便不带时点时两条无采用、定不下。不带时点的读法不受这道滤影响。
+func TestLoadActualMeasurementAsOfTakesTheOnlyMeasurementThatOccurredByThen(t *testing.T) {
+	earlier := measured(t, "measure-1", "2.10", time.Date(2026, 11, 17, 2, 0, 0, 0, time.UTC))
+	later := measured(t, "measure-2", "2.40", time.Date(2026, 11, 17, 3, 0, 0, 0, time.UTC))
+	view := measurementView(t, []string{"unit-1"}, []nodomain.ActualMeasurement{earlier, later}, false)
+
+	unbounded, err := view.LoadActualMeasurement(context.Background(), pricingTenant(t), "parcel-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unbounded.Found || unbounded.Undetermined != "输入不可得：实测多于一条" {
+		t.Fatalf("不带时点 = %+v，want 多于一条", unbounded)
+	}
+
+	load, err := view.LoadActualMeasurementAsOf(context.Background(), pricingTenant(t), "parcel-1", earlier.Source().OccurredAt())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !load.Found || load.Undetermined != "" || load.Weight.Value().String() != "2.1" {
+		t.Fatalf("截至较早那条 = %+v，want 取它", load)
+	}
+}
+
+// Covers: 发生时间恰等于 asOf 的算已取得。两条都还在、又没有采用形态时，带时点的读法仍答定不下，不把恰等于的那条滤掉。
+func TestLoadActualMeasurementAsOfKeepsAMeasurementThatOccurredAtTheBound(t *testing.T) {
+	earlier := measured(t, "measure-1", "2.10", time.Date(2026, 11, 17, 2, 0, 0, 0, time.UTC))
+	later := measured(t, "measure-2", "2.40", time.Date(2026, 11, 17, 3, 0, 0, 0, time.UTC))
+	view := measurementView(t, []string{"unit-1"}, []nodomain.ActualMeasurement{earlier, later}, false)
+
+	load, err := view.LoadActualMeasurementAsOf(context.Background(), pricingTenant(t), "parcel-1", later.Source().OccurredAt())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if load.Found || load.Undetermined != "输入不可得：实测多于一条" {
+		t.Fatalf("恰等于较晚那条 = %+v，want 两条都在、定不下", load)
+	}
+}
+
+// Covers: 滤掉发生时间晚于 asOf 的之后一条不剩，答没有实测，不定成不可得。
+func TestLoadActualMeasurementAsOfAnswersNoneWhenEveryMeasurementOccurredLater(t *testing.T) {
+	earlier := measured(t, "measure-1", "2.10", time.Date(2026, 11, 17, 2, 0, 0, 0, time.UTC))
+	later := measured(t, "measure-2", "2.40", time.Date(2026, 11, 17, 3, 0, 0, 0, time.UTC))
+	view := measurementView(t, []string{"unit-1"}, []nodomain.ActualMeasurement{earlier, later}, false)
+
+	load, err := view.LoadActualMeasurementAsOf(
+		context.Background(), pricingTenant(t), "parcel-1", earlier.Source().OccurredAt().Add(-time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if load.Found || load.Undetermined != "" {
+		t.Fatalf("都晚于 asOf = %+v，want 没有实测", load)
+	}
+}
+
 type measurementFixture struct {
 	units        []string
 	measurements []nodomain.ActualMeasurement

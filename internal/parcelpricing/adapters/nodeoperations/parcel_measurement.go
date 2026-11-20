@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
@@ -64,6 +65,31 @@ func (view *ParcelMeasurementView) LoadActualMeasurement(
 	tenant ppdomain.TenantID,
 	object string,
 ) (pptransport.ActualMeasurementLoad, error) {
+	return view.loadActualMeasurement(ctx, tenant, object, measurementBound{})
+}
+
+// LoadActualMeasurementAsOf 与 LoadActualMeasurement 走同一段实现，只声明发生时间上界。
+func (view *ParcelMeasurementView) LoadActualMeasurementAsOf(
+	ctx context.Context,
+	tenant ppdomain.TenantID,
+	object string,
+	asOf time.Time,
+) (pptransport.ActualMeasurementLoad, error) {
+	return view.loadActualMeasurement(ctx, tenant, object, measurementBound{limited: true, at: asOf})
+}
+
+// measurementBound 是发生时间上界。limited 为假时与不带时点的读法同一条路径，一点不多滤。
+type measurementBound struct {
+	limited bool
+	at      time.Time
+}
+
+func (view *ParcelMeasurementView) loadActualMeasurement(
+	ctx context.Context,
+	tenant ppdomain.TenantID,
+	object string,
+	bound measurementBound,
+) (pptransport.ActualMeasurementLoad, error) {
 	none := pptransport.ActualMeasurementLoad{}
 	nodeTenant, err := nodomain.NewTenantID(tenant.String())
 	if err != nil {
@@ -100,6 +126,19 @@ func (view *ParcelMeasurementView) LoadActualMeasurement(
 	measurements := make([]nodomain.ActualMeasurement, 0, len(records))
 	for _, record := range records {
 		measurements = append(measurements, record.Measurement)
+	}
+	// 时点只截发生时间，而且截在取当前有效实测之前。作废与采用形态仍按此刻读：后来作废的是登错的，
+	// 首次收寄复核也不该用；采用形态是租户此刻的取用规则，与不带时点的读法同一口径。
+	// 发生时间不晚于 asOf 才算截至那时已经取得，恰等于的算已取得。截在取用之后的话，多条无采用会先被定成不可得，
+	// 滤到只剩一条也救不回来。
+	if bound.limited {
+		still := make([]nodomain.ActualMeasurement, 0, len(measurements))
+		for _, measurement := range measurements {
+			if !measurement.Source().OccurredAt().After(bound.at) {
+				still = append(still, measurement)
+			}
+		}
+		measurements = still
 	}
 	current, answer, cause := nodomain.SelectCurrentMeasurement(measurements, useForm)
 	switch answer {
