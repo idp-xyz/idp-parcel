@@ -161,6 +161,10 @@ func (store *reprepareStore) Save(_ context.Context, record tfports.TransportPre
 	return tfports.TransportPreparationSaved, nil
 }
 
+func (store *reprepareStore) HoldPreparationObject(context.Context, tfdomain.TenantID, tfdomain.CarriedObjectReference) error {
+	return nil
+}
+
 func (store *reprepareStore) ListDeclaredPreparationLegs(
 	_ context.Context, tenant tfdomain.TenantID, object tfdomain.CarriedObjectReference, rule tfdomain.PreparationRuleVersion,
 ) ([]tfdomain.PreparationLeg, error) {

@@ -16,9 +16,13 @@ import (
 type measuredDemandDouble struct {
 	reading ports.MeasuredDemandReading
 	err     error
+	before  func()
 }
 
 func (double measuredDemandDouble) LoadMeasuredDemand(context.Context, domain.TenantID, domain.CarriedObjectReference) (ports.MeasuredDemandReading, error) {
+	if double.before != nil {
+		double.before()
+	}
 	if double.err != nil {
 		return ports.MeasuredDemandReading{}, double.err
 	}
@@ -331,6 +335,97 @@ func TestRePrepareRaisesAnUnreadableDeclaredListAndWaitsWhenTheStoreIsDown(t *te
 		down.UndecidedReason().String() != "TRANSPORT_PREPARATION_STORE_UNAVAILABLE" ||
 		down.ContinuationReference() == "" {
 		t.Fatalf("读不动 = %s %s %q %v", down.Outcome(), down.UndecidedReason(), down.ContinuationReference(), err)
+	}
+}
+
+type countingDeclaredDemand struct{ calls int }
+
+func (demand *countingDeclaredDemand) LoadDeclaredDemand(context.Context, domain.TenantID, domain.CarriedObjectReference) (domain.DemandSnapshot, error) {
+	demand.calls++
+	return domain.DeclaredDemand(domain.DeclaredDemandSpec{WeightValue: "1", WeightUnit: "KG"})
+}
+
+// Covers: 取锁失败按准备结果库未决、零写入。锁在读之前，读口不该被叫到。
+func TestAFailedPreparationLockLeavesBothEntriesUndecided(t *testing.T) {
+	down := errors.New("preparation lock down")
+	leg := plannedLeg(t, "RPV-1#1")
+	declared := &countingDeclaredDemand{}
+	store := &preparationStoreDouble{
+		records: map[ports.TransportPreparationKey]ports.TransportPreparationRecord{},
+		holdErr: down,
+	}
+	handler := application.NewPrepareOnPlannedLegsHandler(application.PrepareOnPlannedLegsDeps{
+		Demand: declared, Schedules: candidateSourceDouble{}, Pools: poolsOnSchedulesDouble{},
+		Preparations: store, Clock: clockDouble{}, Measured: noneMeasured(),
+	})
+	prepared, err := handler.Prepare(context.Background(), formedCommand(t, leg))
+	if err != nil || prepared.Outcome() != application.PreparationRunUndecided ||
+		prepared.UndecidedReason() != application.TransportPreparationStoreUnavailable ||
+		prepared.UndecidedReason().String() != "TRANSPORT_PREPARATION_STORE_UNAVAILABLE" ||
+		prepared.ContinuationReference() == "" || len(store.records) != 0 || declared.calls != 0 {
+		t.Fatalf("初始准备 = %s %s %q 行 %d 申报读 %d %v",
+			prepared.Outcome(), prepared.UndecidedReason(), prepared.ContinuationReference(), len(store.records), declared.calls, err)
+	}
+
+	seeded := &preparationStoreDouble{
+		records: map[ports.TransportPreparationKey]ports.TransportPreparationRecord{},
+		holdErr: down,
+	}
+	seedDeclaration(t, seeded, leg)
+	var loaded int
+	measured := measuredDemandDouble{
+		reading: measuredReading(t, "SYN-MEASURE-1", preparedAt),
+		before:  func() { loaded++ },
+	}
+	again, err := reprepareHandler(seeded, measured).RePrepareOnMeasurementChange(context.Background(), application.RePrepareOnMeasurementChangeCommand{
+		TenantID: opportunityTenant(t), Object: "SYN-PARCEL-01",
+	})
+	if err != nil || again.Outcome() != application.RePrepareRunUndecided ||
+		again.UndecidedReason() != application.TransportPreparationStoreUnavailable ||
+		again.UndecidedReason().String() != "TRANSPORT_PREPARATION_STORE_UNAVAILABLE" ||
+		again.ContinuationReference() == "" || countMeasured(seeded) != 0 || loaded != 0 || len(seeded.records) != 1 {
+		t.Fatalf("再准备 = %s %s %q 实测行 %d 实测读 %d 行 %d %v",
+			again.Outcome(), again.UndecidedReason(), again.ContinuationReference(), countMeasured(seeded), loaded, len(seeded.records), err)
+	}
+}
+
+// Covers: 实测再准备先取对象锁，再问实测、再列申报段。顺序倒了，称重已提交而申报行还没提交时会把空名单入账。
+func TestRePrepareHoldsTheObjectBeforeReadingDemandOrDeclaredLegs(t *testing.T) {
+	leg := plannedLeg(t, "RPV-1#1")
+	var steps []string
+	store := &preparationStoreDouble{
+		records:    map[ports.TransportPreparationKey]ports.TransportPreparationRecord{},
+		beforeHold: func() { steps = append(steps, "hold") },
+		beforeList: func() { steps = append(steps, "list") },
+	}
+	seedDeclaration(t, store, leg)
+	measured := measuredDemandDouble{
+		reading: measuredReading(t, "SYN-MEASURE-1", preparedAt),
+		before:  func() { steps = append(steps, "load") },
+	}
+	result := reprepare(t, reprepareHandler(store, measured))
+	if result.Outcome() != application.RePrepareRunAnswered {
+		t.Fatalf("再准备 = %s", result.Outcome())
+	}
+	holdAt, loadAt, listAt := -1, -1, -1
+	for index, step := range steps {
+		switch step {
+		case "hold":
+			if holdAt < 0 {
+				holdAt = index
+			}
+		case "load":
+			if loadAt < 0 {
+				loadAt = index
+			}
+		case "list":
+			if listAt < 0 {
+				listAt = index
+			}
+		}
+	}
+	if holdAt < 0 || loadAt < 0 || listAt < 0 || holdAt > loadAt || holdAt > listAt {
+		t.Fatalf("调用序 = %v，want 先 hold 再 load 与 list", steps)
 	}
 }
 

@@ -211,6 +211,10 @@ func (handler *PrepareOnPlannedLegsHandler) Prepare(
 		}
 		seen[leg.Reference().String()] = true
 	}
+	// 锁在读申报与补实测之前：拿到锁时对方若已提交，后面语句的快照才看得到那些行。
+	if err := handler.deps.Preparations.HoldPreparationObject(ctx, command.TenantID, object); err != nil {
+		return preparationUndecided(TransportPreparationStoreUnavailable, command.TenantID.String(), object.String()), nil
+	}
 
 	demand, err := handler.deps.Demand.LoadDeclaredDemand(ctx, command.TenantID, object)
 	if errors.Is(err, ports.ErrDeclaredDemandUntranslatable) {

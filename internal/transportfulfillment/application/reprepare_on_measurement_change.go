@@ -96,6 +96,10 @@ func (handler *PrepareOnPlannedLegsHandler) RePrepareOnMeasurementChange(
 	if err != nil {
 		return notAccepted, nil
 	}
+	// 锁在读实测与列申报段之前：申报行还没提交时列到的零段不能入账，否则这一次实测补不回来。
+	if err := handler.deps.Preparations.HoldPreparationObject(ctx, command.TenantID, object); err != nil {
+		return reprepareUndecided(preparationUndecidedPointer(TransportPreparationStoreUnavailable, command.TenantID.String(), object.String())), nil
+	}
 	reading, stopped, err := handler.readMeasuredDemand(ctx, command.TenantID, object)
 	if err != nil {
 		return RePrepareOnMeasurementChangeResult{}, err

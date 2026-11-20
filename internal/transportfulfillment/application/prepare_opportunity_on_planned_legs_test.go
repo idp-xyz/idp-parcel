@@ -40,6 +40,9 @@ type preparationStoreDouble struct {
 	findErr    error
 	failFind   string
 	listErr    error
+	holdErr    error
+	beforeHold func()
+	beforeList func()
 }
 
 func (double *preparationStoreDouble) FindByKey(_ context.Context, key ports.TransportPreparationKey) (ports.TransportPreparationRecord, bool, error) {
@@ -62,12 +65,22 @@ func (double *preparationStoreDouble) Save(_ context.Context, record ports.Trans
 	return ports.TransportPreparationSaved, nil
 }
 
+func (double *preparationStoreDouble) HoldPreparationObject(context.Context, domain.TenantID, domain.CarriedObjectReference) error {
+	if double.beforeHold != nil {
+		double.beforeHold()
+	}
+	return double.holdErr
+}
+
 func (double *preparationStoreDouble) ListDeclaredPreparationLegs(
 	_ context.Context,
 	tenant domain.TenantID,
 	object domain.CarriedObjectReference,
 	rule domain.PreparationRuleVersion,
 ) ([]domain.PreparationLeg, error) {
+	if double.beforeList != nil {
+		double.beforeList()
+	}
 	if double.listErr != nil {
 		return nil, double.listErr
 	}

@@ -390,6 +390,9 @@ func TestTransportPreparationsRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := stores.preparations.Save(t.Context(), record); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务落准备结果应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if err := stores.preparations.HoldPreparationObject(t.Context(), tenant, object); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("无事务取准备对象锁应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }
 
 // Covers: 初始准备读实测读不动时整次未决，调用方回滚后申报那一份也不留。

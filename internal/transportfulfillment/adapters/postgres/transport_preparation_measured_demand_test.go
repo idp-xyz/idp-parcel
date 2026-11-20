@@ -3,11 +3,15 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
@@ -364,6 +368,216 @@ func measuredPreparationRecord(t *testing.T, tenant domain.TenantID, leg domain.
 		t.Fatal(err)
 	}
 	return preparationRecord(t, tenant, leg, object, demand, sourceID)
+}
+
+// stagedMeasuredDemand 第一次被问时答没有实测，并停在这一问里：调用方事务已经写下申报行、却还没提交。
+// 主协程收到 readNone 后把后续答复换成 M1，再放行。停在答完之后、返回之前，申报行对别的事务仍不可见。
+type stagedMeasuredDemand struct {
+	mu       sync.Mutex
+	m1       ports.MeasuredDemandReading
+	released bool
+	readNone chan struct{}
+	release  chan struct{}
+}
+
+func (source *stagedMeasuredDemand) LoadMeasuredDemand(context.Context, domain.TenantID, domain.CarriedObjectReference) (ports.MeasuredDemandReading, error) {
+	source.mu.Lock()
+	released := source.released
+	reading := source.m1
+	source.mu.Unlock()
+	if released {
+		return reading, nil
+	}
+	select {
+	case <-source.readNone:
+	default:
+		close(source.readNone)
+	}
+	<-source.release
+	return ports.MeasuredDemandReading{Answer: ports.MeasuredDemandNone}, nil
+}
+
+func (source *stagedMeasuredDemand) publish(reading ports.MeasuredDemandReading) {
+	source.mu.Lock()
+	source.m1 = reading
+	source.released = true
+	source.mu.Unlock()
+}
+
+type preparationRaceEnd struct {
+	outcome string
+	err     error
+}
+
+// Covers: 初始准备与实测再准备并行时，后提交的那一笔必须看见先提交的申报段与实测。屏障停在初始准备已经写下申报行、
+// 实测读口却答了没有的那一问；称重侧把实测换成 M1 之后，再准备若不等锁，会在申报行提交前读到零段并入账
+// NO_DECLARATION_PREPARATION，M1 的实测准备行就漏了。
+func TestAMeasurementChangeRunningBeforeTheInitialPreparationCommitsStillRecordsTheMeasuredRow(t *testing.T) {
+	stores := newPreparationStores(t)
+	tenant := deliveryValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	object := "SYN-PARCEL-RACE-01"
+	leg := preparationLeg(t, "SYN-RPV-RACE#1", "SYN-CONN-EMPTY", departure, departure.Add(time.Hour))
+	measured := measuredReadingForRace(t, "SYN-MEASURE-RACE-1", departure)
+	source := &stagedMeasuredDemand{
+		readNone: make(chan struct{}),
+		release:  make(chan struct{}),
+	}
+	releaseOnce := sync.Once{}
+	release := func() { releaseOnce.Do(func() { close(source.release) }) }
+	t.Cleanup(release)
+
+	watcher, err := pgx.ConnectConfig(t.Context(), stores.pool.Config().ConnConfig.Copy())
+	if err != nil {
+		t.Fatalf("开看锁连接：%v", err)
+	}
+	t.Cleanup(func() { _ = watcher.Close(context.Background()) })
+
+	handler := application.NewPrepareOnPlannedLegsHandler(application.PrepareOnPlannedLegsDeps{
+		Demand: stores.demand, Schedules: stores.candidates, Pools: stores.pools,
+		Preparations: stores.preparations, Clock: fixedScheduleClock{at: departure}, Measured: source,
+	})
+	command := application.PrepareOnPlannedLegsCommand{
+		TenantID: tenant, Object: object, Route: application.PlannedRouteFormed,
+		Legs: []domain.PreparationLeg{leg},
+	}
+	reprepareCommand := application.RePrepareOnMeasurementChangeCommand{TenantID: tenant, Object: object}
+
+	initialDone := make(chan preparationRaceEnd, 1)
+	go func() {
+		var outcome string
+		err := stores.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			result, err := handler.Prepare(txCtx, command)
+			if err != nil {
+				return err
+			}
+			outcome = result.Outcome().String()
+			if result.Outcome() != application.PreparationRunAnswered {
+				return fmt.Errorf("初始准备 %s", outcome)
+			}
+			return nil
+		})
+		initialDone <- preparationRaceEnd{outcome: outcome, err: err}
+	}()
+
+	select {
+	case <-source.readNone:
+	case <-time.After(8 * time.Second):
+		t.Fatal("初始准备没有停在第一次实测读取上")
+	}
+	source.publish(measured)
+
+	changeDone := make(chan preparationRaceEnd, 1)
+	go func() {
+		var outcome string
+		err := stores.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			result, err := handler.RePrepareOnMeasurementChange(txCtx, reprepareCommand)
+			if err != nil {
+				return err
+			}
+			outcome = result.Outcome().String()
+			return nil
+		})
+		changeDone <- preparationRaceEnd{outcome: outcome, err: err}
+	}()
+
+	deadline := time.Now().Add(8 * time.Second)
+	var change preparationRaceEnd
+	changeFinished := false
+	sawWaiter := false
+	for !changeFinished && !sawWaiter && time.Now().Before(deadline) {
+		select {
+		case change = <-changeDone:
+			changeFinished = true
+		default:
+		}
+		if changeFinished {
+			break
+		}
+		var waiting int
+		if err := watcher.QueryRow(t.Context(),
+			`SELECT count(*) FROM pg_locks
+			  WHERE locktype = 'advisory' AND NOT granted
+			    AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+		).Scan(&waiting); err != nil {
+			t.Fatalf("看咨询锁：%v", err)
+		}
+		if waiting > 0 {
+			sawWaiter = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !changeFinished && !sawWaiter {
+		t.Fatal("再准备既没提交，也没等在咨询锁上")
+	}
+	release()
+
+	initial := waitPreparationRace(t, initialDone)
+	if !changeFinished {
+		change = waitPreparationRace(t, changeDone)
+	}
+	if initial.err != nil || change.err != nil {
+		t.Fatalf("初始准备 %s err=%v；再准备 %s err=%v；等锁=%v", initial.outcome, initial.err, change.outcome, change.err, sawWaiter)
+	}
+
+	rows, err := preparationSourceRows(t, stores)
+	if err != nil {
+		t.Fatalf("读准备行：%v", err)
+	}
+	want := map[string]string{
+		domain.DemandFromDeclaration.String():       "",
+		domain.DemandFromActualMeasurement.String(): "SYN-MEASURE-RACE-1",
+	}
+	if len(rows) != len(want) {
+		t.Fatalf("准备行 = %v，初始准备 %s，再准备 %s，等锁=%v；want 申报行与实测行并排", rows, initial.outcome, change.outcome, sawWaiter)
+	}
+	for sourceName, measurement := range want {
+		if got, ok := rows[sourceName]; !ok || got != measurement {
+			t.Fatalf("来源 %s 引用 %q，准备行 = %v，再准备 %s", sourceName, got, rows, change.outcome)
+		}
+	}
+}
+
+func waitPreparationRace(t *testing.T, done <-chan preparationRaceEnd) preparationRaceEnd {
+	t.Helper()
+	select {
+	case end := <-done:
+		return end
+	case <-time.After(8 * time.Second):
+		t.Fatal("事务没有在期限内结束")
+		return preparationRaceEnd{}
+	}
+}
+
+func preparationSourceRows(t *testing.T, stores preparationStores) (map[string]string, error) {
+	t.Helper()
+	queried, err := stores.pool.Query(t.Context(),
+		`SELECT demand_source, measurement_ref FROM transport_fulfillment.transport_preparation ORDER BY demand_source`)
+	if err != nil {
+		return nil, err
+	}
+	defer queried.Close()
+	rows := map[string]string{}
+	for queried.Next() {
+		var sourceName, measurement string
+		if err := queried.Scan(&sourceName, &measurement); err != nil {
+			return nil, err
+		}
+		rows[sourceName] = measurement
+	}
+	return rows, queried.Err()
+}
+
+func measuredReadingForRace(t *testing.T, anchor string, occurred time.Time) ports.MeasuredDemandReading {
+	t.Helper()
+	snapshot, err := domain.MeasuredDemand(domain.MeasuredDemandSpec{
+		Anchor: anchor, WeightValue: "2.00", WeightUnit: "KG",
+		Length: "20", Width: "15", Height: "10", DimensionUnit: "CM",
+	})
+	if err != nil {
+		t.Fatalf("实测快照：%v", err)
+	}
+	return ports.MeasuredDemandReading{Answer: ports.MeasuredDemandOne, Snapshot: snapshot, OccurredAt: occurred}
 }
 
 func preparationRecord(t *testing.T, tenant domain.TenantID, leg domain.PreparationLeg, object domain.CarriedObjectReference, demand domain.DemandSnapshot, measurement string) ports.TransportPreparationRecord {

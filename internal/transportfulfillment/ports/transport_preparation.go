@@ -161,4 +161,8 @@ type TransportPreparationStore interface {
 		object domain.CarriedObjectReference,
 		rule domain.PreparationRuleVersion,
 	) ([]domain.PreparationLeg, error)
+	// HoldPreparationObject 对（租户、载运对象）取事务级咨询锁，持到调用方事务结束。初始准备与实测再准备都在读写这一
+	// 对象之前取它：两笔并行时，后拿到锁的那一笔要在 READ COMMITTED 下看见先提交的申报段与实测，不能把对方还没提交时
+	// 读到的空当成答案入账。
+	HoldPreparationObject(ctx context.Context, tenant domain.TenantID, object domain.CarriedObjectReference) error
 }

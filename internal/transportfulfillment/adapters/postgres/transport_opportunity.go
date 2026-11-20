@@ -417,6 +417,30 @@ func (stored storedCandidate) candidate() (domain.PreparationCandidate, error) {
 	return candidate, nil
 }
 
+// HoldPreparationObject 把（租户、载运对象）收成一把事务级咨询锁。第一键是锁空间名的散列，第二键是两维以 chr(31) 拼接后的
+// 散列，与本仓其余事务级锁同一个双 int 形式。哈希撞上只让两组不相干的对象多等一会儿。锁随事务释放；不在事务里调用由
+// RequireExecutor 拒，否则这一把锁根本拿不住到提交。
+func (repository *TransportPreparations) HoldPreparationObject(
+	ctx context.Context,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("hold transport preparation object: %w", err)
+	}
+	if strings.TrimSpace(tenant.String()) == "" || strings.TrimSpace(object.String()) == "" {
+		return fmt.Errorf("hold transport preparation object: tenant or object is blank")
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('transport_fulfillment.transport_preparation.object'), hashtext($1 || chr(31) || $2))`,
+		tenant.String(), object.String(),
+	); err != nil {
+		return fmt.Errorf("取准备对象锁：%w", err)
+	}
+	return nil
+}
+
 // ListDeclaredPreparationLegs 只列申报来源的段。重建不过门的行包住读不懂：坏行重读不会变好，编排不拿它当读不动去重投。
 func (repository *TransportPreparations) ListDeclaredPreparationLegs(
 	ctx context.Context,
