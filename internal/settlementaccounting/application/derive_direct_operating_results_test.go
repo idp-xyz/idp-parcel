@@ -150,12 +150,60 @@ func TestDirectOperatingResultsDoNotInventAMargin(t *testing.T) {
 				Payables:    []ports.DirectAmount{{Source: "payable", Currency: "CNY", AmountMinor: 1000, Period: "2026-12-01", PeriodStated: true}},
 			},
 		}}
+		handler, results, _ := directHandler(t, facts, false, true)
+		if err := handler.AfterParcel(context.Background(), tenant, parcel); err != nil {
+			t.Fatal(err)
+		}
+		if results.saves != 1 || len(results.records) != 1 {
+			t.Fatalf("归属日与主张账期不是同一种标识，应仍派生，saves=%d records=%d", results.saves, len(results.records))
+		}
+		stored := directStored(t, results, tenant, parcel.String(), domain.ConfirmedBasis)
+		_, margin := stored.Result.Margin()
+		if stored.Result.Period().String() != "DIRECT" || margin != 9000 || len(stored.Result.Components()) != 2 {
+			t.Fatalf("应写入 DIRECT 且组成项都在：period=%s margin=%d components=%d", stored.Result.Period(), margin, len(stored.Result.Components()))
+		}
+	})
+
+	t.Run("主张上多个账期", func(t *testing.T) {
+		facts := &directFacts{byParcel: map[string]ports.ParcelDirectFacts{
+			parcel.String(): {
+				ServiceForm: ports.ServiceFormLabelChannel,
+				Receivables: customer,
+				Payables:    []ports.DirectAmount{{Source: "payable", Currency: "CNY", AmountMinor: 1000, Period: "", PeriodStated: true}},
+			},
+		}}
 		handler, results, dispositions := directHandler(t, facts, false, true)
 		if err := handler.AfterParcel(context.Background(), tenant, parcel); err != nil {
 			t.Fatal(err)
 		}
-		if results.saves != 0 || dispositions.saved != application.DirectOperatingPendingJudgment.String() {
-			t.Fatalf("账期不同应待判断，saves=%d disposition=%s", results.saves, dispositions.saved)
+		if results.saves != 0 || len(results.records) != 0 || dispositions.saved != application.DirectOperatingPendingJudgment.String() {
+			t.Fatalf("主张账期对不齐应待判断且不写毛利，saves=%d records=%d disposition=%s", results.saves, len(results.records), dispositions.saved)
+		}
+	})
+
+	t.Run("客户侧没有归属日", func(t *testing.T) {
+		facts := &directFacts{byParcel: map[string]ports.ParcelDirectFacts{
+			parcel.String(): {
+				ServiceForm: ports.ServiceFormLabelChannel,
+				Estimates: []ports.DirectAmount{
+					{Source: "charge-1", Currency: "CNY", AmountMinor: 10000, Period: "", PeriodStated: false},
+				},
+				ExpectedCosts: []ports.DirectAmount{
+					{Source: "cost-v1", Currency: "CNY", AmountMinor: 4000},
+				},
+			},
+		}}
+		handler, results, _ := directHandler(t, facts, true, false)
+		if err := handler.AfterParcel(context.Background(), tenant, parcel); err != nil {
+			t.Fatal(err)
+		}
+		if results.saves != 1 || len(results.records) != 1 {
+			t.Fatalf("没写下归属日不应挡住派生，saves=%d records=%d", results.saves, len(results.records))
+		}
+		stored := directStored(t, results, tenant, parcel.String(), domain.EstimatedBasis)
+		_, margin := stored.Result.Margin()
+		if stored.Result.Period().String() != "DIRECT" || margin != 6000 {
+			t.Fatalf("应写入 DIRECT：period=%s margin=%d", stored.Result.Period(), margin)
 		}
 	})
 }
@@ -405,7 +453,7 @@ func directStored(t *testing.T, results *resultStoreDouble, tenant domain.Tenant
 	if err != nil {
 		t.Fatal(err)
 	}
-	period, err := domain.NewBillingPeriodReference("2026-11-20")
+	period, err := domain.NewBillingPeriodReference("DIRECT")
 	if err != nil {
 		t.Fatal(err)
 	}

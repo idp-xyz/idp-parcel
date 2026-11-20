@@ -183,8 +183,9 @@ func (handler *DeriveDirectOperatingResultsHandler) one(
 	if basis == domain.ConfirmedBasis && (len(supplier) > 1 || len(credits) > 1) {
 		return handler.disposition(ctx, tenant, parcel, basis, DirectOperatingPendingJudgment)
 	}
-	period, ok := customerPeriod(customer)
-	if !ok || !supplierPeriodsAgree(supplier, period) || !supplierPeriodsAgree(credits, period) {
+	// 费用归属日和主张账期不是同一种标识，不对着比；归属日没写下也不挡派生。
+	// 按包裹的直接成本不占对账单账期，键上固定用产品词，同一包裹同一口径一行。预估与已确认都用它。
+	if basis == domain.ConfirmedBasis && !confirmedClaimPeriodsHold(supplier, credits) {
 		return handler.disposition(ctx, tenant, parcel, basis, DirectOperatingPendingJudgment)
 	}
 	currency, ok := oneCurrency(customer, supplier, credits)
@@ -192,8 +193,11 @@ func (handler *DeriveDirectOperatingResultsHandler) one(
 		return handler.disposition(ctx, tenant, parcel, basis, DirectOperatingPendingJudgment)
 	}
 	directives := componentsOf(basis, customer, supplier, credits)
-	return handler.persist(ctx, tenant, parcel.String(), period, basis, currency, directives)
+	return handler.persist(ctx, tenant, parcel.String(), directOperatingPeriod, basis, currency, directives)
 }
+
+// directOperatingPeriod 是按包裹直接成本经营结果的账期词。它不是对账单账期，也不是费用归属日。
+const directOperatingPeriod = "DIRECT"
 
 func sidesOf(basis domain.OperatingBasis, facts ports.ParcelDirectFacts) (customer, supplier, credits []ports.DirectAmount) {
 	switch basis {
@@ -206,28 +210,28 @@ func sidesOf(basis domain.OperatingBasis, facts ports.ParcelDirectFacts) (custom
 	}
 }
 
-func customerPeriod(amounts []ports.DirectAmount) (string, bool) {
-	if len(amounts) == 0 || amounts[0].Period == "" {
-		return "", false
-	}
-	period := amounts[0].Period
-	for _, amount := range amounts[1:] {
-		if amount.Period != period {
-			return "", false
-		}
-	}
-	return period, true
-}
-
-// supplierPeriodsAgree 只在供应商金额自己带着账期时才比。预期成本没有账期列，不把「没有」当成与客户侧不同，
-// 也不替它挑一个。带着账期却对不齐或与客户侧不同，才是待判断。
-func supplierPeriodsAgree(amounts []ports.DirectAmount, period string) bool {
-	for _, amount := range amounts {
-		if !amount.PeriodStated {
-			continue
-		}
-		if amount.Period == "" || amount.Period != period {
-			return false
+// confirmedClaimPeriodsHold 只看已确认口径里应付和贷项自己的主张账期。预期成本没有主张账期
+// （PeriodStated 为假），不参与。PeriodStated 为真而 Period 空，是同一主张上不止一个账期。
+// 应付与贷项都写下了主张账期但彼此不同，也不挑一侧。
+func confirmedClaimPeriodsHold(groups ...[]ports.DirectAmount) bool {
+	var stated string
+	have := false
+	for _, group := range groups {
+		for _, amount := range group {
+			if !amount.PeriodStated {
+				continue
+			}
+			if amount.Period == "" {
+				return false
+			}
+			if !have {
+				stated = amount.Period
+				have = true
+				continue
+			}
+			if amount.Period != stated {
+				return false
+			}
 		}
 	}
 	return true

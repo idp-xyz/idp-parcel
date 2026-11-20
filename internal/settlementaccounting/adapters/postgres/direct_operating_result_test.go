@@ -77,6 +77,33 @@ func TestLabelChannelParcelReadsBothAdoptedOperatingResults(t *testing.T) {
 	}
 }
 
+func TestConfirmedBasisDerivesWhenClaimPeriodIsNotTheAttributionDate(t *testing.T) {
+	ctx := t.Context()
+	db, pool, handler, catalogue := directOperatingStack(t)
+	tenant := "SYN-DIRECT-CLAIM-PERIOD"
+	parcel := "SYN-PARCEL-CLAIM-PERIOD"
+	seedServiceForm(t, pool, tenant, parcel, "SYN-PRODUCT-CLAIM", "LABEL_CHANNEL_SERVICE")
+	seedCustomerCharge(t, pool, tenant, parcel, "SYN-CHG-CLAIM", "2026-11-20", true)
+	seedExpectedCost(t, pool, tenant, parcel, "occ-claim", "occ-v1", "cost-claim", "", 4000)
+	seedPayable(t, pool, tenant, "claim-period", "SYN-PERIOD-DEMO-1", "cost-claim", "pay-claim", 4500)
+	adoptBoth(t, db, tenant)
+	saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+		return handler.AfterParcel(txCtx, directTenantID(t, tenant), directRef(t, parcel))
+	})
+	results := listDirectResults(t, catalogue, directTenantID(t, tenant))
+	var confirmed ports.OperatingResultCatalogueRow
+	found := false
+	for _, row := range results {
+		if row.Basis == "CONFIRMED" {
+			confirmed = row
+			found = true
+		}
+	}
+	if !found || len(confirmed.Components) < 2 || confirmed.Period != "DIRECT" {
+		t.Fatalf("主张账期与归属日不同仍应有已确认组成项，且账期是 DIRECT：found=%v %+v", found, confirmed)
+	}
+}
+
 func TestOnlyCustomerSideIsIndeterminate(t *testing.T) {
 	ctx := t.Context()
 	db, pool, handler, catalogue := directOperatingStack(t)
