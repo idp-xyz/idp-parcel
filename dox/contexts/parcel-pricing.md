@@ -1,6 +1,6 @@
 # 小包计价（`parcel-pricing`）
 
-代码在 `internal/parcelpricing`。适用期重叠只提示那一句对照 `9d94c7808`；其余对照 main `3dd72c42a`（2026-11-12）。
+代码在 `internal/parcelpricing`。适用期重叠只提示那一句对照 `9d94c7808`；工作簿读回那一句对照 `348ba3028`；其余对照 main `3dd72c42a`（2026-11-12）。
 
 **这份文件核到什么程度**：取值表、评价状态、问题码、入口三节是从代码里读出来的。「规则」一节的句子是从旧 `docs/domain/parcel-pricing/CONTEXT.md` 提炼的，每条只确认了代码里有对应的机制，没有逐条跑测试验证行为；旧文档写了而代码里没有的，单列在最后一节。
 
@@ -82,6 +82,7 @@
 - 发布要过依赖闭合、方向隔离与区间、单位、币种检查。发布失败只影响之后的选卡，不动已有评价。
 - 同一范围、方向、目的上同一方案两版同时适用时，旧版只经指名后继的显式收尾离开：后继晚于旧版起点的，旧版截止在后继起点；不晚于的，旧版整段退役。
 - 预览、存草稿、批准与发布会列出同时适用的在册版本，并指出后继截止、退役或要人裁。这只是提示，不拦校验、批准或发布。同层才算重叠：都不声明服务产品，或两边有共同产品。不同方案，或后继盖不住旧版尾部，要人裁。首尾相接不算重叠。
+- 已登记价卡和带内容的草稿可以按方案标识与版本读回成导入模板工作簿，原样再导入得到同一内容摘要。模板表达不了的结构答点名那一处，不交残缺工作簿。没过校验的草稿只有问题清单。
 - 规则只表达确定的组合与查找；任意脚本、隐式平台默认不是价卡规则。
 
 **选卡**
@@ -140,7 +141,7 @@
 |---|---|
 | 评价、试算、回放 | `/pricing-evaluations` `/pricing-estimates` `/pricing-evaluation-replays` `/pricing-pending-series-evaluations` |
 | 价卡草稿到发布 | `/pricing-price-card-previews` `/pricing-price-card-drafts` `/pricing-price-card-draft-views` `/pricing-price-card-draft-approvals` `/pricing-price-card-draft-publications` |
-| 价卡登记、读、收尾 | `/pricing-price-card-registrations` `/pricing-price-cards` `/pricing-price-cards/content` `/pricing-price-card-successor-cuts` `/pricing-price-card-retirements` `/pricing-price-card-template/spec` |
+| 价卡登记、读、收尾 | `/pricing-price-card-registrations` `/pricing-price-cards` `/pricing-price-cards/content` `/pricing-price-cards/workbook` `/pricing-price-card-successor-cuts` `/pricing-price-card-retirements` `/pricing-price-card-template/spec` |
 | 参考序列 | `/pricing-reference-series` `/pricing-reference-series-previews` `/pricing-reference-series-registrations` `/pricing-reference-series-reviews` `/pricing-reference-series-coverage` `/pricing-reference-catalogue-reviews` |
 
 离线口（运营在数据库网络内手跑，不监听端口）：`cmd/parcel-pricing-register`（配置登记）、`cmd/parcel-pricing-feed`（序列批量喂价）、`cmd/parcel-pricing-template`（写出价卡导入空白模板）。
