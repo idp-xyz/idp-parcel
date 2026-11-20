@@ -9,7 +9,7 @@
 // catalogueRequestPath 拼进查询串,答复多一格 page;不带参数即裸路径。每册收哪些键以 internal/parcelpricing/ports 的
 // catalogue_pages.go 为准——集外的键答 400,这里不自造。挂起评价计数与价卡内容查阅不是目录读,不翻页,照旧。
 
-import { exchangeMasterData, postMasterData, postMasterDataForm } from '../catalogue-api';
+import { exchangeMasterData, exchangeMasterDataFile, postMasterData, postMasterDataForm } from '../catalogue-api';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 import type { RegistrationResponseBody } from '../../components/registration';
@@ -590,6 +590,38 @@ export interface SellPriceScopeBody {
 /** 一个范围名此刻有几张在用的 SELL·客户费用卡。合同详情用来标来源，不翻价卡目录。 */
 export function readSellPriceScope(scope: string) {
   return exchangeMasterData<SellPriceScopeBody>(`/pricing-sell-price-scope?scope=${encodeURIComponent(scope)}`);
+}
+
+export const priceCardWorkbookPath = '/pricing-price-cards/workbook';
+
+/** 工作簿读口的业务结论。WORKBOOK 时 workbook 是可再提交的结构化工作簿；其余各格不带它。 */
+export interface PriceCardWorkbookReading {
+  outcome: 'WORKBOOK' | 'NOT_REPRESENTABLE' | 'NOT_FOUND' | 'DRAFT_WITHOUT_CONTENT' | 'CANONICALIZATION_UNSUPPORTED';
+  planId: string;
+  planVersion: string;
+  origin?: 'REGISTERED' | 'DRAFT';
+  templateVersion?: string;
+  canonicalization?: string;
+  contentDigest?: string;
+  where?: string;
+  conclusion?: string;
+  workbook?: PriceCardWorkbook;
+}
+
+export function priceCardWorkbookQuery(planId: string, planVersion: string, carrier: 'workbook' | 'spreadsheet' = 'workbook') {
+  const params = new URLSearchParams({ id: planId, version: planVersion });
+  if (carrier === 'spreadsheet') params.set('carrier', 'spreadsheet');
+  return `${priceCardWorkbookPath}?${params.toString()}`;
+}
+
+/** 按方案标识与版本把已登记价卡（或带内容的草稿）读回成结构化工作簿。 */
+export function readPriceCardWorkbook(planId: string, planVersion: string) {
+  return exchangeMasterData<PriceCardWorkbookReading>(priceCardWorkbookQuery(planId, planVersion));
+}
+
+/** 同一读口的电子表格下载。表达不了时服务端仍答 JSON 业务结论，不交残缺文件。 */
+export function downloadPriceCardSpreadsheet(planId: string, planVersion: string) {
+  return exchangeMasterDataFile(priceCardWorkbookQuery(planId, planVersion, 'spreadsheet'));
 }
 
 /**

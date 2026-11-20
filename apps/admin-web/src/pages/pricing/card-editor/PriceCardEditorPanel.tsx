@@ -36,6 +36,14 @@ import { useEditorEnv } from './use-editor-env';
  */
 const knownTemplateVersions: readonly string[] = ['PPT-2', 'PPT-3'];
 
+/** 从一张已登记价卡读回的开场：表单状态里的方案版本已经清空，等操作者填新版本号。 */
+export interface PriceCardRevision {
+  nonce: number;
+  planId: string;
+  fromVersion: string;
+  state: CardFormState;
+}
+
 type Phase = 'idle' | 'previewing' | 'saving';
 type Pending = null | 'sample' | 'clear';
 
@@ -60,9 +68,17 @@ function signatureOf(generated: GeneratedWorkbook | null): string {
  * 页面不抄一份。预览返回的问题按「行号 → 表单控件」的映射标回格子里，映射不到的放总清单。
  *
  * 离开保护：页面切到别的签时表单内容留着（签的内容不卸载）；载入示例或清空重填会覆盖已填的内容，先确认；刷新与关页
- * 由浏览器自己拦。没有「打开已有价卡改一版」——读口只交规范化内容，反推不回表单；要改已有价卡请新建一版，或导入 Excel。
+ * 由浏览器自己拦。价卡详情的「改出新版」用读回的工作簿开场，新版本号由操作者填，提交仍走预览与草稿。
  */
-export function PriceCardEditorPanel({ onOpenDrafts, onDraftSaved }: { onOpenDrafts: () => void; onDraftSaved: () => void }) {
+export function PriceCardEditorPanel({
+  onOpenDrafts,
+  onDraftSaved,
+  opening = null,
+}: {
+  onOpenDrafts: () => void;
+  onDraftSaved: () => void;
+  opening?: PriceCardRevision | null;
+}) {
   const { spec: specAnswer, env, reload } = useEditorEnv();
   if (specAnswer === null) {
     return <div className="flex-1 p-6 type-value text-idpxyz-breadcrumb">正在读取价卡填写规则…</div>;
@@ -84,7 +100,7 @@ export function PriceCardEditorPanel({ onOpenDrafts, onDraftSaved }: { onOpenDra
       </div>
     );
   }
-  return <Editor spec={specAnswer.body} env={env} onOpenDrafts={onOpenDrafts} onDraftSaved={onDraftSaved} />;
+  return <Editor spec={specAnswer.body} env={env} onOpenDrafts={onOpenDrafts} onDraftSaved={onDraftSaved} opening={opening} />;
 }
 
 function Editor({
@@ -92,11 +108,13 @@ function Editor({
   env,
   onOpenDrafts,
   onDraftSaved,
+  opening,
 }: {
   spec: PriceCardTemplateSpec;
   env: ReturnType<typeof useEditorEnv>['env'];
   onOpenDrafts: () => void;
   onDraftSaved: () => void;
+  opening: PriceCardRevision | null;
 }) {
   // 干净的初始状态只造一次：行与费用项的键每次现造都不同，拿两份各造的比较会一开始就「有改动」。
   const [initial] = useState<CardFormState>(() => emptyState());
@@ -111,7 +129,9 @@ function Editor({
   const [cleanState, setCleanState] = useState(() => JSON.stringify(initial));
   const [sampleLoaded, setSampleLoaded] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
+  const [revision, setRevision] = useState<PriceCardRevision | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ field: string; nonce: number } | null>(null);
+  const appliedOpening = useRef(0);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const update = useCallback((change: (draftState: CardFormState) => CardFormState) => setState(change), []);
@@ -248,7 +268,16 @@ function Editor({
     setSavedSignature(null);
     setCleanState(JSON.stringify(loadedSample ? emptyState() : next));
     setSampleLoaded(loadedSample);
+    setRevision(null);
   };
+
+  // 详情里点「改出新版」时这个签可能已经挂着。nonce 变了才换开场，避免每次渲染把操作者刚填的版本号清掉。
+  useEffect(() => {
+    if (opening === null || opening.nonce === appliedOpening.current) return;
+    appliedOpening.current = opening.nonce;
+    load(opening.state, false);
+    setRevision(opening);
+  }, [opening]);
 
   const confirmPending = () => {
     if (pending === 'sample') load(sampleState(), true);
@@ -290,9 +319,11 @@ function Editor({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-idpxyz-border px-4 py-2.5">
           <div className="min-w-0">
-            <h2 className="type-title font-semibold text-idpxyz-textBright">新建价卡</h2>
+            <h2 className="type-title font-semibold text-idpxyz-textBright">{revision ? '改出新版' : '新建价卡'}</h2>
             <p className="type-body text-idpxyz-breadcrumb">
-              按步骤填写，预览通过后存为草稿。要改已有的价卡，请新建一个版本，或用「导入价卡」上传 Excel。
+              {revision
+                ? `从 ${revision.planId} 版本 ${revision.fromVersion} 读回。请填写新的版本号；预览通过后存为草稿。`
+                : '按步骤填写，预览通过后存为草稿。要改已有的价卡，在详情里点「改出新版」，或用「导入价卡」上传 Excel。'}
             </p>
           </div>
           <div className="flex items-center gap-2">

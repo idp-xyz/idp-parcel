@@ -22,7 +22,7 @@ import { mapProblems, problemCountsByStep, problemWords, unlocatedWords } from '
 import { sampleState } from './sample';
 import { validateAll, validateStep } from './validate';
 import { formToWorkbook, specTakesServiceProducts } from './workbook';
-import { workbookToForm } from './workbook-to-form';
+import { workbookAsNewVersion, workbookToForm } from './workbook-to-form';
 
 // 价卡编辑器的纯函数验收。参照物有两个，各自独立：
 //   1. 后端测试数据里的 FULL-03 结构化工作簿（internal/parcelpricing/adapters/pricecardtemplate/testdata）——
@@ -75,6 +75,13 @@ function assertSameWorkbook(actual: PriceCardWorkbook, expected: PriceCardWorkbo
 }
 
 // ---- FULL-03 回环 ----
+
+test('FULL-03 读回后改出新版：方案标识留下，版本号清空给操作者填', () => {
+  const state = workbookAsNewVersion(full03Workbook());
+  equal(state.basics.planId, 'SYN-PLAN-CN-SG-FULL-03');
+  equal(state.basics.planVersion, '');
+  ok(state.base.rows.length > 0);
+});
 
 test('FULL-03 样例工作簿还原成表单状态，再生成回来，逐表逐行逐列相等', () => {
   const original = full03Workbook();

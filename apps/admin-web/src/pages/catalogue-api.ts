@@ -124,6 +124,37 @@ export async function postMasterDataForm<Body>(
   return classifyMasterDataResponse<Body>(response, payload);
 }
 
+/** 读一口可能交回文件而不是 JSON 的查阅。JSON 答复（含业务结论）走与查阅相同的判别；文件答复交回字节与文件名。 */
+export async function exchangeMasterDataFile(path: string): Promise<{ kind: 'file'; blob: Blob; fileName: string } | ApiResult<unknown>> {
+  let response: Response;
+  try {
+    response = await fetch(requestUrl(path), {
+      method: 'GET',
+      headers: await withBearer({}),
+    });
+  } catch (error) {
+    return {
+      kind: 'transport',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+  const type = response.headers.get('Content-Type') ?? '';
+  if (type.includes('json') || !response.ok) {
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return {
+        kind: 'transport',
+        message: `响应不是 JSON（HTTP ${response.status}），请求可能未到达 parcel-api`,
+      };
+    }
+    return classifyMasterDataResponse(response, payload);
+  }
+  const matched = response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/);
+  return { kind: 'file', blob: await response.blob(), fileName: matched?.[1] ?? 'download' };
+}
+
 function classifyMasterDataResponse<Body>(
   response: Response,
   payload: unknown,

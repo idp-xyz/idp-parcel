@@ -1,12 +1,9 @@
 // 工作簿 → 表单状态（「表单 → 工作簿」的反方向）。
 //
-// 产品页面不用它：后端没有「已登记价卡反推成模板」的读口（ADR-0349 决定八），编辑器只能新建。它留着是验收的办法：拿一份
-// 现成的、服务端认可的工作簿（FULL-03 样例）还原成表单状态，再生成回来，核「表单能表达这张卡、而且表达得一字不差」。
-// 将来后端有了反向读口，打开已有价卡改一版就接在这里。
-//
-// 还原时把现成的标识记进 idHints，生成时原样用回，所以生成的工作簿连标识都与原件相同，内容摘要也就相同。
+// 价卡详情的「改出新版」把读口交回的工作簿从这里开场。还原时把现成的标识记进 idHints，生成时原样用回，
+// 所以没改过的内容再交回去，内容摘要与原卡相同。新版本号由操作者填，workbookAsNewVersion 把方案版本清空。
 // 表单表达不了的结构（取较大者、排除条款、条件最低计价重量、版本清单依赖、嵌套条件组……）抛 NotRepresentable，
-// 不静默丢掉。
+// 不静默丢掉；那种卡改用同一读口的电子表格下载。
 
 import type { PriceCardWorkbook } from '../api';
 import { featureMeasure } from '../price-card-content';
@@ -29,6 +26,12 @@ import { serviceProductsCardField, serviceProductsOfCell } from './workbook';
 export class NotRepresentable extends Error {}
 
 type Row = Record<string, string | number | null>;
+
+export function workbookAsNewVersion(workbook: PriceCardWorkbook): CardFormState {
+  const state = workbookToForm(workbook);
+  state.basics.planVersion = '';
+  return state;
+}
 
 export function workbookToForm(workbook: PriceCardWorkbook): CardFormState {
   const state = emptyState();

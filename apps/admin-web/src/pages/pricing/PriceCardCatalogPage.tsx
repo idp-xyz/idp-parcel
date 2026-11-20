@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { WorkbenchPageTemplate, type WorkbenchChip, type WorkbenchColumn } from '../../templates';
@@ -13,7 +13,7 @@ import { InstantRange } from '../party/detail-primitives';
 import { CursorPager } from '../shipment-request/cursor-pager';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { useMayWriteRegistry } from '../use-operator-grants';
-import { PriceCardEditorPanel } from './card-editor/PriceCardEditorPanel';
+import { PriceCardEditorPanel, type PriceCardRevision } from './card-editor/PriceCardEditorPanel';
 import { PriceCardDraftsPanel } from './PriceCardDraftsPanel';
 import { PriceCardImportPanel } from './PriceCardImportPanel';
 import { PriceCardDetailPanel, PriceCardUnits } from './PriceCardDetailPanel';
@@ -111,7 +111,15 @@ const columns: WorkbenchColumn<PriceCardRecord>[] = [
  * 换胶囊即换条件，回第一页。读口另有方向一维，本页没有对应的筛选条，不另加。导入签与草稿签今天在发行方未设时答 403
  * 「接入渠道未配置」，那是诚实答案，页面不拿演示数据顶替。
  */
-function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCreate: () => void }) {
+function PriceCardCatalogTable({
+  mayWrite,
+  onCreate,
+  onRevise,
+}: {
+  mayWrite: boolean;
+  onCreate: () => void;
+  onRevise: (revision: PriceCardRevision) => void;
+}) {
   const [search, setSearch] = useAddressKeyword();
   const [status, setStatus] = useState<PriceCardStatusFilter>('ALL');
   const conditions = priceCardListConditions(useSettledKeyword(search), status);
@@ -160,7 +168,16 @@ function PriceCardCatalogTable({ mayWrite, onCreate }: { mayWrite: boolean; onCr
       }}
       renderDetail={(key) => {
         const row = visible.find((card) => priceCardRowKey(card) === key);
-        return row ? <PriceCardDetailPanel row={row} onClose={() => setSelectedKey(null)} /> : null;
+        return row ? (
+          <PriceCardDetailPanel
+            row={row}
+            mayWrite={mayWrite}
+            onClose={() => setSelectedKey(null)}
+            onRevise={(revision) =>
+              onRevise({ nonce: Date.now(), planId: row.planId, fromVersion: revision.fromVersion, state: revision.state })
+            }
+          />
+        ) : null;
       }}
       // 筛出为空不是空态：viewState 按这一页答回的行数与下推的条件判，表格区另显 noMatchText。
       viewState={catalogueViewState(answer, rows.length, retry, {
@@ -187,6 +204,8 @@ export function PriceCardCatalogPage() {
   }, [mayWrite, tab]);
   // 「新建价卡」存下草稿后让「草稿与审批」签重取一次：签的内容不卸载，不通知就停在旧册上。
   const [draftsSignal, setDraftsSignal] = useState(0);
+  const [opening, setOpening] = useState<PriceCardRevision | null>(null);
+  const revisionNonce = useRef(0);
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
@@ -201,7 +220,15 @@ export function PriceCardCatalogPage() {
           value="catalog"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <PriceCardCatalogTable mayWrite={mayWrite} onCreate={() => setTab('create')} />
+          <PriceCardCatalogTable
+            mayWrite={mayWrite}
+            onCreate={() => setTab('create')}
+            onRevise={(revision) => {
+              revisionNonce.current += 1;
+              setOpening({ ...revision, nonce: revisionNonce.current });
+              setTab('create');
+            }}
+          />
         </TabsContent>
         {mayWrite ? (
           // forceMount：切到别的签时表单不卸载，填了一半的内容与预览结果留着，切回来接着填。
@@ -210,7 +237,11 @@ export function PriceCardCatalogPage() {
             forceMount
             className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
           >
-            <PriceCardEditorPanel onOpenDrafts={() => setTab('drafts')} onDraftSaved={() => setDraftsSignal((value) => value + 1)} />
+            <PriceCardEditorPanel
+              opening={opening}
+              onOpenDrafts={() => setTab('drafts')}
+              onDraftSaved={() => setDraftsSignal((value) => value + 1)}
+            />
           </TabsContent>
         ) : null}
         {mayWrite ? (

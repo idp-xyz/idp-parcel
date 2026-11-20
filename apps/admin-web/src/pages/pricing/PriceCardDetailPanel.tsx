@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { OperatorRefusalNote, SectionError, TechnicalDetails, httpRows } from '../../components/states';
@@ -9,7 +9,9 @@ import { CurrencyLabel } from '../refdata-labels';
 import { formatInstant } from '../moment';
 import { Fact, FactStrip, InstantRange } from '../party/detail-primitives';
 import { problemNote } from './presentation';
-import type { PriceCardContentFoundBody, PriceCardRecord } from './api';
+import { downloadPriceCardSpreadsheet, readPriceCardWorkbook, type PriceCardContentFoundBody, type PriceCardRecord } from './api';
+import { NotRepresentable, workbookAsNewVersion } from './card-form/workbook-to-form';
+import type { CardFormState } from './card-form/model';
 import {
   parsePriceCardContent,
   priceCardStatus,
@@ -260,13 +262,71 @@ function useParsedView(answer: ReturnType<typeof usePriceCardContent>['answer'])
   }, [answer]);
 }
 
-export function PriceCardDetailPanel({ row, onClose }: { row: PriceCardRecord; onClose: () => void }) {
+export function PriceCardDetailPanel({
+  row,
+  mayWrite,
+  onClose,
+  onRevise,
+}: {
+  row: PriceCardRecord;
+  mayWrite: boolean;
+  onClose: () => void;
+  onRevise: (revision: { state: CardFormState; fromVersion: string }) => void;
+}) {
   const { answer, retry } = usePriceCardContent(row);
   const view = useParsedView(answer);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const status = priceCardStatusLabel(priceCardStatus(row, new Date()));
   const direction = priceDirectionLabels[row.direction] ?? row.direction;
   const purpose = priceCardPurposeLabels[row.purpose] ?? row.purpose;
   const products = servedProductsText(row.direction, row.serviceProducts);
+
+  const revise = async () => {
+    setBusy(true);
+    setNotice(null);
+    const answer = await readPriceCardWorkbook(row.planId, row.planVersion);
+    setBusy(false);
+    if (answer.kind !== 'outcome') {
+      setNotice(answer.kind === 'transport' ? answer.message : '这张卡的工作簿没有读回来');
+      return;
+    }
+    if (answer.body.outcome !== 'WORKBOOK' || answer.body.workbook === undefined) {
+      setNotice(answer.body.conclusion ?? '这张卡交不回可编辑的工作簿');
+      return;
+    }
+    try {
+      onRevise({ state: workbookAsNewVersion(answer.body.workbook), fromVersion: row.planVersion });
+    } catch (error) {
+      if (error instanceof NotRepresentable) {
+        setNotice(`表单表达不了这张卡（${error.message}）。可以下载电子表格再改。`);
+        return;
+      }
+      throw error;
+    }
+  };
+
+  const download = async () => {
+    setBusy(true);
+    setNotice(null);
+    const answer = await downloadPriceCardSpreadsheet(row.planId, row.planVersion);
+    setBusy(false);
+    if (answer.kind === 'file') {
+      const url = URL.createObjectURL(answer.blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = answer.fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    if (answer.kind === 'outcome') {
+      const body = answer.body as { conclusion?: string };
+      setNotice(body.conclusion ?? '这张卡交不回电子表格');
+      return;
+    }
+    setNotice(answer.kind === 'transport' ? answer.message : '电子表格没有下载下来');
+  };
 
   return (
     <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`价卡 ${row.planId}`}>
@@ -287,17 +347,32 @@ export function PriceCardDetailPanel({ row, onClose }: { row: PriceCardRecord; o
               </p>
             ) : null}
           </div>
-          <Button
-            className="shrink-0 text-idpxyz-breadcrumb"
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            aria-label="关闭详情"
-            title="关闭（Esc）"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            {mayWrite ? (
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => void revise()}>
+                改出新版
+              </Button>
+            ) : null}
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void download()}>
+              下载电子表格
+            </Button>
+            <Button
+              className="shrink-0 text-idpxyz-breadcrumb"
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label="关闭详情"
+              title="关闭（Esc）"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
         </div>
+        {notice ? (
+          <p role="status" className="type-body text-idpxyz-text">
+            {notice}
+          </p>
+        ) : null}
       </div>
 
       <FactStrip>
