@@ -1,7 +1,7 @@
 # 10 `PN09-W05` 第 2 段：收货确认的作业事实口
 
 Category: enhancement
-Status: in-progress（代码写完；还没有非作者评审；没有进 main）
+Status: resolved（2026-11-20 进 main，见「进 main 记录」）
 Blocked by: 09
 
 依据：[UC-WF-004](../../../docs/application/warehouse-fulfillment/UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md) 的收货确认口；[ADR-0384](../../../docs/adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md) 决定三、决定八。
@@ -30,3 +30,11 @@ Blocked by: 09
 代码与测试由 Grok 4.7 子代理写，主会话拆包与验收。
 
 验证：全仓 `go test ./...` 连真库跑过并通过。仓配各包与 `cmd/parcel-api` 整包另带 `-race` 跑过。证据层级是隔离合成 `S`。演示种子没有另造。没有非作者评审。代码写完，没有进 main。
+
+## 进 main 记录
+
+- 出处：分支 `cursor/wf-w03-goods` 的 `0c9fb7ba5`（PR #5，连同票 04 第 1–2 段、票 05–09 与票 11 一起落成）。三笔 cherry-pick 重放到 `b5e6d9ed6` 之上，无冲突，main 上内容在 `81e190099`（对应三笔 `895c401f3` / `7d96ccf52` / `81e190099`）。收口是随后这一笔。
+- 评审：非作者 `/code-review` 双轴钉 `5d652d903`（相对 `8a97e4d9`）：Standards 0；Spec 3 处阻断，修订轮 `0c9fb7ba5` 为 HTTP 口在 `CONTENT_INVALID` 上带出逐行 `issues`，阻断清零。
+- 全量真库测试：`scripts/test-full.sh` 对 `81e190099` 跑，`TEST_FULL_EXIT=0`；受影响包另带 `-race` 跑，`RACE_EXIT=0`。
+- 种子灌一次性库：`scripts/demo-seeds/seed.sh` 对一次性 PG 16.14 容器跑，`SEED_EXIT=0`，用后删容器。
+- 生成物不重算。

@@ -1,7 +1,7 @@
 # 11 `PN09-W05` 后四段：完结与少收、收货差异结论、整箱库存与整箱收货、取消或完结后到达的收货转待认领
 
 Category: enhancement
-Status: in-progress（非作者评审已评 `5d652d903`；Spec 三处阻断已修订并重跑探针通过；还没有进 main）
+Status: resolved（2026-11-20 进 main，见「进 main 记录」）
 Blocked by: 09、10
 
 这四段当时没有先写票面，直接按任务说明做的。本票是事后对着代码补记，不是事先的规则稿。
@@ -44,4 +44,11 @@ Blocked by: 09、10
 
 ## 评审记录
 
-钉 `5d652d903`（相对 review base `8a97e4d9`）。Standards：0。Spec：3 处阻断——（1）已取消/已完结须先于内容筛转待认领；（2）按码认商品与贴标别名须用事实发生时刻生效修订上的别名（含库存记数核贴标别名）；（3）`CONTENT_INVALID` 须逐行指出全部不合。交付模式只评一轮、只修挡上线的；三处修订已落同分支并在当前 tip 重跑探针：`gofmt` 洁净、`go vet` 通过、`internal/warehousefulfillment/...` 全包与 `cmd/parcel-api` 整包连真库带 `-race` 全绿。阻断清零，待重放 `main`、全量真库与灌种子后进 `main`。
+钉 `5d652d903`（相对 review base `8a97e4d9`）。Standards：0。Spec：3 处阻断——（1）已取消/已完结须先于内容筛转待认领；（2）按码认商品与贴标别名须用事实发生时刻生效修订上的别名（含库存记数核贴标别名）；（3）`CONTENT_INVALID` 须逐行指出全部不合。交付模式只评一轮、只修挡上线的；三处修订已落同分支并在 `0c9fb7ba5` 重跑探针：`gofmt` 洁净、`go vet` 通过、`internal/warehousefulfillment/...` 全包与 `cmd/parcel-api` 整包连真库带 `-race` 全绿。阻断清零。
+
+## 进 main 记录
+
+- 出处：分支 `cursor/wf-w03-goods` 的 `0c9fb7ba5`（PR #5，主体 `5d652d903` + 评审修订 `0c9fb7ba5`）。三笔 cherry-pick 重放到 `b5e6d9ed6` 之上，无冲突，main 上内容在 `81e190099`（对应三笔 `895c401f3` / `7d96ccf52` / `81e190099`）。收口是随后这一笔。
+- 全量真库测试：`scripts/test-full.sh` 对 `81e190099` 跑，`TEST_FULL_EXIT=0`；受影响包（`internal/warehousefulfillment/...`、`internal/accessidentity/...`、`internal/architecture/...`、`cmd/internal/docnumbering`、`cmd/parcel-api/`）另带 `-race` 跑，`RACE_EXIT=0`。
+- 种子灌一次性库：`scripts/demo-seeds/seed.sh` 对一次性 PG 16.14 容器跑，`SEED_EXIT=0`，用后删容器（本批不带仓配种子，开关默认关）。
+- 生成物不重算。

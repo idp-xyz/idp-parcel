@@ -1,7 +1,7 @@
 # 05 `PN09-W05` 第 1 段：库存账与库存流水的核心
 
 Category: enhancement
-Status: in-progress（代码写完；还没有非作者评审；没有进 main）
+Status: resolved（2026-11-20 进 main，见「进 main 记录」）
 Blocked by: 04（只依赖其中第 1 段「商品的核心」，它在本分支的工作树里，还没有进 main）
 
 依据：[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md)「库存账」「库存流水」「库存状态」「贴标别名」「入库批次」「批号」「效期」词条与「库存账与守恒」；[UC-WF-002](../../../docs/application/warehouse-fulfillment/UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md)「一致性、幂等与并发」里改跟踪属性与收货入账的先后；[UC-WF-004](../../../docs/application/warehouse-fulfillment/UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md)（第一个往账里记数的用例，本段不做它）；[PN-09 开发交接](../../../docs/design/pn-09-warehouse-fulfillment-development-handoff.md)。
@@ -94,3 +94,11 @@ Blocked by: 04（只依赖其中第 1 段「商品的核心」，它在本分支
 - 领域与应用层用例带 `-race`，头注写 `Covers: CONTEXT「库存账与守恒」（库存账的核心）` 并点出守的是哪一句。
 - 真库用例：流水只追加；判重位置唯一；并发两笔取走同一格，合计超过余额的那一笔不落；改跟踪属性与记数并发，两种先后各一条，不会同时成立。
 - `AT-WF-016` 里「商品有在库库存时改是否跟踪批号」「没有在库库存时改」两格，用真账各走一遍。
+
+## 进 main 记录
+
+- 出处：分支 `cursor/wf-w03-goods` 的 `0c9fb7ba5`（PR #5，连同票 04 第 1–2 段与票 06–11 一起落成）。三笔 cherry-pick 重放到 `b5e6d9ed6` 之上，无冲突，main 上内容在 `81e190099`（对应三笔 `895c401f3` / `7d96ccf52` / `81e190099`）。收口是随后这一笔。
+- 评审：非作者 `/code-review` 双轴钉 `5d652d903`（相对 `8a97e4d9`）：Standards 0；Spec 3 处阻断，修订轮 `0c9fb7ba5` 为库存记数新增 `LoadGoodsAt` 使贴标别名按事实发生时刻生效修订核对，阻断清零。
+- 全量真库测试：`scripts/test-full.sh` 对 `81e190099` 跑，`TEST_FULL_EXIT=0`；受影响包另带 `-race` 跑，`RACE_EXIT=0`。
+- 种子灌一次性库：`scripts/demo-seeds/seed.sh` 对一次性 PG 16.14 容器跑，`SEED_EXIT=0`，用后删容器。
+- 生成物不重算。

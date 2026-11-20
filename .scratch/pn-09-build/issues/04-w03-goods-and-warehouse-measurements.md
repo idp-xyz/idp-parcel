@@ -1,7 +1,7 @@
 # 04 `PN09-W03`：货主商品与仓测尺寸重量
 
 Category: enhancement
-Status: in-progress（第 1、2 段代码写完；还没有非作者评审；没有进 main）
+Status: in-progress（第 1、2 段已于 2026-11-20 进 main，见「进 main 记录」；第 3、4 段货主口与仓测未做）
 Blocked by: 03
 
 依据：[UC-WF-002](../../../docs/application/warehouse-fulfillment/UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md)；[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md)「商品」「商品别名」「组合商品」「包装层级」「仓测尺寸重量」「商品申报资料」词条与「主数据登记」「身份与边界」；[ADR-0384](../../../docs/adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)；现行做法见 [dox 仓配履约](../../../dox/contexts/warehouse-fulfillment.md)「已实现」。
@@ -96,3 +96,11 @@ Blocked by: 03
 第 1、2 段的代码由主会话写。
 
 验证：全仓 `go test ./...` 连真库跑过并通过。仓配各包与 `cmd/parcel-api` 整包另带 `-race` 跑过。证据层级是隔离合成 `S`。演示种子没有另造。没有非作者评审。代码写完第 1、2 段，没有进 main。
+
+## 进 main 记录（第 1、2 段）
+
+- 出处：分支 `cursor/wf-w03-goods` 的 `0c9fb7ba5`（PR #5，连同票 05–11 一起提交并经修订轮）。三笔 cherry-pick 重放到 `b5e6d9ed6` 之上，无冲突，main 上内容在 `81e190099`（对应三笔 `895c401f3` / `7d96ccf52` / `81e190099`）。收口是随后这一笔。第 3、4 段（货主口与仓测）未做，本票维持 `in-progress`。
+- 评审：非作者 `/code-review` 双轴钉 `5d652d903`（相对 `8a97e4d9`）：Standards 0；Spec 3 处阻断（转待认领次序、按事实发生时刻生效修订解析识别码与贴标别名、`CONTENT_INVALID` 逐行指出），修订轮 `0c9fb7ba5` 阻断清零。
+- 全量真库测试：`scripts/test-full.sh` 对 `81e190099` 跑，`TEST_FULL_EXIT=0`；受影响包（`internal/warehousefulfillment/...`、`internal/accessidentity/...`、`internal/architecture/...`、`cmd/internal/docnumbering`、`cmd/parcel-api/`）另带 `-race` 跑，`RACE_EXIT=0`。
+- 种子灌一次性库：`scripts/demo-seeds/seed.sh` 对一次性 PG 16.14 容器跑，`SEED_EXIT=0`，用后删容器（本批不带仓配种子，开关默认关）。
+- 生成物不重算。
