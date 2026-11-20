@@ -142,11 +142,11 @@ var ErrConditionalMinimumReadsChargeableWeight = fmt.Errorf("%w: a conditional m
 // 与正式计价重量同一件实现：先按不换算的老路算，老路答了单位不一致才带着换算器再算（ADR-0346 决定二）；换算记录
 // 一并交回，供本次失败时留在评价上——成功时正式计价重量那一遍会记下同样的换算，这里不重复记。
 func packageOwnWeights(request EvaluationRequest) (PricingWeightResult, []UnitConversionStep, error) {
-	result, err := CalculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit)
+	result, err := calculatePricingWeightForPlan(request, nil)
 	if errors.Is(err, ErrWeightUnitMismatch) || errors.Is(err, ErrLengthUnitMismatch) {
 		converter := newUnitConverter(request.conversionsFrozen, request.recordedConversions)
 		converter.conditionScale = request.plan.structures.volumetricThresholdScale()
-		result, err = calculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit, converter)
+		result, err = calculatePricingWeightForPlan(request, converter)
 		return result, converter.recordedSteps(), err
 	}
 	return result, nil, err

@@ -438,6 +438,8 @@ func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalRefe
 // 带的写 PPC-6。canonicalizationVersion 是其中基础的那一版 PPC-5。
 // PPC-7 同一做法再加一个可缺键：售价卡声明的适用服务产品（ADR-0382 决定四）。它是 PPC-6 的超集——带产品的卡同时带
 // 总额上下限也写 PPC-7；不带产品的卡照旧取 PPC-5 或 PPC-6，字节不动。
+// PPC-8 再加票级计价重量的聚合方式与逐件求和的进位点（ADR-0364 决定三、决定五，单独换一次号）。它是 PPC-7 的超集：
+// 声明了聚合方式的卡即使同时带适用服务产品或总额上下限也写 PPC-8；不声明的卡照旧取 PPC-5、PPC-6 或 PPC-7，字节不动。
 const canonicalizationVersion = "PPC-5"
 
 // canonicalizationVersionTotalBounds 是 PPC-6：带总额上下限或按偏远档位查档价表的方案写它。
@@ -446,11 +448,14 @@ const canonicalizationVersionTotalBounds = "PPC-6"
 // canonicalizationVersionServiceProducts 是 PPC-7：声明了适用服务产品的方案写它。
 const canonicalizationVersionServiceProducts = "PPC-7"
 
+// canonicalizationVersionShipmentWeight 是 PPC-8：声明了票级计价重量聚合方式的方案写它。
+const canonicalizationVersionShipmentWeight = "PPC-8"
+
 // supportedCanonicalizations 是本构建能重新规范化的全部版本，基础版在前。
-var supportedCanonicalizations = []string{canonicalizationVersion, canonicalizationVersionTotalBounds, canonicalizationVersionServiceProducts}
+var supportedCanonicalizations = []string{canonicalizationVersion, canonicalizationVersionTotalBounds, canonicalizationVersionServiceProducts, canonicalizationVersionShipmentWeight}
 
 // CurrentCanonicalizationVersion 报出本构建写下的基础规范化版本 PPC-5：不带较新内容的方案按它写。带较新内容的方案写
-// PPC-6 或 PPC-7，本构建同样认得（supportedCanonicalization）；按这几版之外记录的工件，在这里无法重新算出其摘要。
+// PPC-6、PPC-7 或 PPC-8，本构建同样认得（supportedCanonicalization）；按这几版之外记录的工件，在这里无法重新算出其摘要。
 func CurrentCanonicalizationVersion() string { return canonicalizationVersion }
 
 // supportedCanonicalization 报出本构建能不能按某个规范化版本重新规范化。
@@ -479,21 +484,24 @@ func (structures PricingPlanStructures) requiredCanonicalization() string {
 }
 
 type canonicalPricingPlan struct {
-	Canonicalization string                              `json:"canonicalization"`
-	Reference        canonicalVersionReference           `json:"reference"`
-	Scope            string                              `json:"scope"`
-	Direction        string                              `json:"direction"`
-	Purpose          string                              `json:"purpose"`
-	BaseCode         string                              `json:"base_charge_code"`
-	Aggregation      string                              `json:"aggregation"`
-	Period           string                              `json:"period"`
-	RateTable        canonicalRateTableDocument          `json:"rate_table"`
-	Weight           canonicalWeightPolicyDocument       `json:"weight_policy"`
-	Rules            []canonicalChargeRuleDocument       `json:"rules"`
-	SurchargeRules   []canonicalSurchargeRuleDocument    `json:"surcharge_rules"`
-	Dependencies     []canonicalChargeDependencyDocument `json:"charge_dependencies"`
-	ReferenceSeries  []canonicalReferenceSeriesDocument  `json:"reference_series"`
-	Manifest         []canonicalVersionReference         `json:"manifest"`
+	Canonicalization string                    `json:"canonicalization"`
+	Reference        canonicalVersionReference `json:"reference"`
+	Scope            string                    `json:"scope"`
+	Direction        string                    `json:"direction"`
+	Purpose          string                    `json:"purpose"`
+	BaseCode         string                    `json:"base_charge_code"`
+	Aggregation      string                    `json:"aggregation"`
+	// 票级计价重量的聚合方式与逐件求和的进位点（ADR-0364 决定三）。只有声明了的票级方案写这两键，写 PPC-8；没声明的省略，旧版字节不变。
+	ShipmentWeightAggregation   string                              `json:"shipment_weight_aggregation,omitempty"`
+	ShipmentWeightRoundingPoint string                              `json:"shipment_weight_rounding_point,omitempty"`
+	Period                      string                              `json:"period"`
+	RateTable                   canonicalRateTableDocument          `json:"rate_table"`
+	Weight                      canonicalWeightPolicyDocument       `json:"weight_policy"`
+	Rules                       []canonicalChargeRuleDocument       `json:"rules"`
+	SurchargeRules              []canonicalSurchargeRuleDocument    `json:"surcharge_rules"`
+	Dependencies                []canonicalChargeDependencyDocument `json:"charge_dependencies"`
+	ReferenceSeries             []canonicalReferenceSeriesDocument  `json:"reference_series"`
+	Manifest                    []canonicalVersionReference         `json:"manifest"`
 	// 方案不拒收任何东西时省略该字段，使得所有在排除规则出现之前发布的方案规范化成
 	// 相同的字节、摘要继续可比，而不必额外花掉一个规范化版本。
 	Exclusions []canonicalExclusionRuleDocument `json:"exclusions,omitempty"`
@@ -624,26 +632,28 @@ func calculatePricingPlanContentDigest(plan PricingPlanVersion) string {
 		totalBounds = &bounds
 	}
 	document := canonicalPricingPlan{
-		Canonicalization:    plan.requiredCanonicalization(),
-		TotalBounds:         totalBounds,
-		ServiceProducts:     serviceProductTexts(plan.serviceProducts),
-		Exclusions:          exclusions,
-		AmountRounding:      amountRounding,
-		ReferenceCatalogues: catalogues,
-		Reference:           canonicalReference(plan.reference),
-		Scope:               plan.scope.String(),
-		Direction:           plan.direction.String(),
-		Purpose:             plan.purpose.String(),
-		BaseCode:            plan.baseChargeCode.String(),
-		Aggregation:         string(plan.aggregation),
-		Period:              plan.period.canonicalString(),
-		RateTable:           canonicalRateTableValue(plan.rateTable),
-		Weight:              canonicalWeightPolicyValue(plan.weight),
-		Rules:               rules,
-		SurchargeRules:      surcharges,
-		Dependencies:        dependencies,
-		ReferenceSeries:     series,
-		Manifest:            manifest,
+		Canonicalization:            plan.requiredCanonicalization(),
+		TotalBounds:                 totalBounds,
+		ServiceProducts:             serviceProductTexts(plan.serviceProducts),
+		Exclusions:                  exclusions,
+		AmountRounding:              amountRounding,
+		ReferenceCatalogues:         catalogues,
+		Reference:                   canonicalReference(plan.reference),
+		Scope:                       plan.scope.String(),
+		Direction:                   plan.direction.String(),
+		Purpose:                     plan.purpose.String(),
+		BaseCode:                    plan.baseChargeCode.String(),
+		Aggregation:                 string(plan.aggregation),
+		ShipmentWeightAggregation:   string(plan.shipmentWeightAggregation),
+		ShipmentWeightRoundingPoint: string(plan.shipmentWeightRoundingPoint),
+		Period:                      plan.period.canonicalString(),
+		RateTable:                   canonicalRateTableValue(plan.rateTable),
+		Weight:                      canonicalWeightPolicyValue(plan.weight),
+		Rules:                       rules,
+		SurchargeRules:              surcharges,
+		Dependencies:                dependencies,
+		ReferenceSeries:             series,
+		Manifest:                    manifest,
 	}
 	return hashCanonical(document)
 }
@@ -750,6 +760,14 @@ type canonicalMemberManifestDocument struct {
 	TotalActual     string   `json:"total_actual"`
 	TotalVolumetric string   `json:"total_volumetric,omitempty"`
 	Unit            string   `json:"unit"`
+	// 逐件实重与尺寸只在清单带了它们时写入。没带的清单与引入这一格之前字节相同。
+	Pieces []canonicalMemberPieceDocument `json:"pieces,omitempty"`
+}
+
+type canonicalMemberPieceDocument struct {
+	ID         string                       `json:"id"`
+	Actual     string                       `json:"actual"`
+	Dimensions *canonicalDimensionsDocument `json:"dimensions,omitempty"`
 }
 
 func canonicalMemberManifestValue(manifest MemberManifest) canonicalMemberManifestDocument {
@@ -763,6 +781,17 @@ func canonicalMemberManifestValue(manifest MemberManifest) canonicalMemberManife
 	}
 	if manifest.totalVolumetric != nil {
 		document.TotalVolumetric = manifest.totalVolumetric.value.String()
+	}
+	if len(manifest.pieces) > 0 {
+		document.Pieces = make([]canonicalMemberPieceDocument, 0, len(manifest.pieces))
+		for _, piece := range manifest.pieces {
+			row := canonicalMemberPieceDocument{ID: piece.id.String(), Actual: piece.actual.value.String()}
+			if piece.dimensions != nil {
+				sides := canonicalDimensionsValue(*piece.dimensions)
+				row.Dimensions = &sides
+			}
+			document.Pieces = append(document.Pieces, row)
+		}
 	}
 	return document
 }

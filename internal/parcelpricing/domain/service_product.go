@@ -97,9 +97,13 @@ func (plan PricingPlanVersion) serviceProductsHold() bool {
 	return true
 }
 
-// requiredCanonicalization 取能表达这张卡内容的最低一版（ADR-0267 决定一）：声明了适用服务产品的写 PPC-7，其余照结构件取
-// PPC-5 或 PPC-6，字节不动（ADR-0382 决定四）。
+// requiredCanonicalization 取能表达这张卡内容的最低一版（ADR-0267 决定一）：声明了票级计价重量聚合方式的写 PPC-8，
+// 声明了适用服务产品的写 PPC-7，其余照结构件取 PPC-5 或 PPC-6，字节不动（ADR-0382 决定四、ADR-0364 决定五）。
+// 票级聚合这一键单独换号：档位边界与总额上下限的基数不在这一版里。
 func (plan PricingPlanVersion) requiredCanonicalization() string {
+	if plan.shipmentWeightAggregation != "" {
+		return canonicalizationVersionShipmentWeight
+	}
 	if len(plan.serviceProducts) > 0 {
 		return canonicalizationVersionServiceProducts
 	}

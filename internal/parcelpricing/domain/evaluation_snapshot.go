@@ -85,6 +85,14 @@ type memberManifestSnapshot struct {
 	Members         []string        `json:"members"`
 	TotalActual     weightSnapshot  `json:"totalActual"`
 	TotalVolumetric *weightSnapshot `json:"totalVolumetric,omitempty"`
+	// 逐件实重与尺寸可缺。旧快照没有这一键，读回仍是合计后派生用的那份清单。
+	Pieces []memberPieceSnapshot `json:"pieces,omitempty"`
+}
+
+type memberPieceSnapshot struct {
+	ID         string              `json:"id"`
+	Actual     weightSnapshot      `json:"actual"`
+	Dimensions *dimensionsSnapshot `json:"dimensions,omitempty"`
 }
 
 type inputSnapshotDocument struct {
@@ -576,6 +584,22 @@ func inputDocumentOf(input PricingInputSnapshot) inputSnapshotDocument {
 			volumetric := weightOf(*input.members.totalVolumetric)
 			manifest.TotalVolumetric = &volumetric
 		}
+		if len(input.members.pieces) > 0 {
+			manifest.Pieces = make([]memberPieceSnapshot, 0, len(input.members.pieces))
+			for _, piece := range input.members.pieces {
+				row := memberPieceSnapshot{ID: piece.id.String(), Actual: weightOf(piece.actual)}
+				if piece.dimensions != nil {
+					sides := dimensionsSnapshot{
+						Longest:  decimalOf(piece.dimensions.longest),
+						Second:   decimalOf(piece.dimensions.second),
+						Shortest: decimalOf(piece.dimensions.shortest),
+						Unit:     string(piece.dimensions.unit),
+					}
+					row.Dimensions = &sides
+				}
+				manifest.Pieces = append(manifest.Pieces, row)
+			}
+		}
 		document.Members = &manifest
 	}
 	for _, reading := range input.catalogueReadings {
@@ -648,6 +672,22 @@ func inputFrom(document inputSnapshotDocument) PricingInputSnapshot {
 		if document.Members.TotalVolumetric != nil {
 			volumetric := weightFrom(*document.Members.TotalVolumetric)
 			manifest.totalVolumetric = &volumetric
+		}
+		if len(document.Members.Pieces) > 0 {
+			manifest.pieces = make([]MemberPiece, 0, len(document.Members.Pieces))
+			for _, piece := range document.Members.Pieces {
+				row := MemberPiece{id: PackageID{identifier{value: piece.ID}}, actual: weightFrom(piece.Actual)}
+				if piece.Dimensions != nil {
+					sides := Dimensions{
+						longest:  decimalFrom(piece.Dimensions.Longest),
+						second:   decimalFrom(piece.Dimensions.Second),
+						shortest: decimalFrom(piece.Dimensions.Shortest),
+						unit:     LengthUnit(piece.Dimensions.Unit),
+					}
+					row.dimensions = &sides
+				}
+				manifest.pieces = append(manifest.pieces, row)
+			}
 		}
 		input.members = &manifest
 	}

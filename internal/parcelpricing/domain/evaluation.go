@@ -409,6 +409,10 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if product, declared := request.input.ServiceProduct(); declared {
 		evaluation.explanation = append(evaluation.explanation, fmt.Sprintf("price card selected for declared service product %s", product.String()))
 	}
+	// 票级聚合用的是哪一种写在解释里。未声明记按旧版读法；这一行不进语义摘要，旧卡的摘要与金额不动。
+	if line := request.plan.explainShipmentWeightAggregation(); line != "" {
+		evaluation.explanation = append(evaluation.explanation, line)
+	}
 
 	// 分区与偏远档位在一切判定之前先定下来（ADR-0109 Decision 四）：拒收条款与附加费条件可能读分区，
 	// 基础运费查表更离不开它。绑了目录的卡只认目录读数，没绑的卡读调用方给的分区；两边都没有即待判断。
@@ -546,11 +550,11 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	// 今天已经算对的评价」的结构保证。只有老路答了单位不一致，才带着换算器再算一遍（ADR-0346 决定二）。
 	// 换算记录无论后面成败都留在评价上：换算之后才待判断的评价（如换算了实重、尺寸还没到），重放要靠这条记录
 	// 才走得到同一个待判断。
-	pricingWeight, err := CalculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit, floors...)
+	pricingWeight, err := calculatePricingWeightForPlan(request, nil, floors...)
 	if errors.Is(err, ErrWeightUnitMismatch) || errors.Is(err, ErrLengthUnitMismatch) {
 		converter := newUnitConverter(request.conversionsFrozen, request.recordedConversions)
 		converter.conditionScale = request.plan.structures.volumetricThresholdScale()
-		pricingWeight, err = calculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit, converter, floors...)
+		pricingWeight, err = calculatePricingWeightForPlan(request, converter, floors...)
 		// 正式这一遍带着抬高的下限，换算保留的小数位可能比自身重量那一遍更细，所以以这一遍的记录为准：撤掉那一遍
 		// 留下的换算行再记，记录与解释都只有一份。
 		evaluation.explanation = withoutLines(evaluation.explanation, ownConversionLines)
@@ -1252,6 +1256,8 @@ func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvalu
 	switch {
 	case errors.Is(err, ErrMissingDimensions):
 		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("DIMENSIONS_REQUIRED", err.Error()))
+	case errors.Is(err, ErrMissingPieceMeasurements):
+		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("PIECE_MEASUREMENTS_REQUIRED", err.Error()))
 	// 卡上有规则按地址性质判定而输入没声明：缺的是发起方补得上的事实，答待判断（ADR-0347 决定四）。
 	case errors.Is(err, ErrAddressNatureRequired):
 		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("ADDRESS_NATURE_REQUIRED", err.Error()))

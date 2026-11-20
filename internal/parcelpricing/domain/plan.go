@@ -169,6 +169,11 @@ type PricingPlanVersion struct {
 	contentDigest    string
 	// serviceProducts 是卡声明的适用服务产品（ADR-0382 决定一），去重后按标识升序；空即不声明，接其余产品。
 	serviceProducts []ServiceProductReference
+	// shipmentWeightAggregation 是票级卡声明的计价重量聚合方式（ADR-0364 决定三）。空即未声明，按合计后派生读。
+	// 主单级与逐包裹保持空：那两个主体不开这一选项。
+	shipmentWeightAggregation ShipmentWeightAggregation
+	// shipmentWeightRoundingPoint 只在逐件求和时有值：逐件进位后求和，或求和之后进位一次。
+	shipmentWeightRoundingPoint ShipmentWeightRoundingPoint
 }
 
 // NewPricingPlanVersion 立一张逐包裹的定价方案版本。逐委托 / 逐主单的卡走 NewAggregatePricingPlanVersion；本签名
@@ -334,10 +339,10 @@ func (plan PricingPlanVersion) valid() bool {
 	if !plan.aggregation.aggregate() && plan.structures.declaresPerPiece(plan.rules) {
 		return false
 	}
-	// 方案记的规范化版本必须是能表达它内容的最低一版：声明了适用服务产品的写 PPC-7，带总额上下限或偏远档位查档价表的
-	// 写 PPC-6，其余写 PPC-5。反过来也成立——不带新内容却记着新版、或带了新内容却记着旧版，都是读回的数据对不上
-	// （ADR-0348 决定四、ADR-0382 决定四）。
-	if plan.canonicalization != plan.requiredCanonicalization() || !plan.serviceProductsHold() {
+	// 方案记的规范化版本必须是能表达它内容的最低一版：声明了票级计价重量聚合方式的写 PPC-8，声明了适用服务产品的写
+	// PPC-7，带总额上下限或偏远档位查档价表的写 PPC-6，其余写 PPC-5。反过来也成立——不带新内容却记着新版、或带了
+	// 新内容却记着旧版，都是读回的数据对不上（ADR-0348 决定四、ADR-0382 决定四、ADR-0364 决定五）。
+	if plan.canonicalization != plan.requiredCanonicalization() || !plan.serviceProductsHold() || !plan.shipmentWeightHolds() {
 		return false
 	}
 	seenRuleIDs := make(map[string]struct{}, len(plan.rules))

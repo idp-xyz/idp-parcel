@@ -196,24 +196,27 @@ type totalBoundsSnapshot struct {
 }
 
 type pricingPlanSnapshot struct {
-	Canonicalization string                           `json:"canonicalization"`
-	Reference        versionReferenceSnapshot         `json:"reference"`
-	Scope            string                           `json:"scope"`
-	Direction        string                           `json:"direction"`
-	Purpose          string                           `json:"purpose"`
-	BaseChargeCode   string                           `json:"baseChargeCode"`
-	Aggregation      string                           `json:"aggregation"`
-	Period           periodSnapshot                   `json:"period"`
-	RateTable        rateTableSnapshot                `json:"rateTable"`
-	WeightPolicy     weightPolicySnapshot             `json:"weightPolicy"`
-	Rules            []fixedChargeRuleSnapshot        `json:"rules,omitempty"`
-	SurchargeRules   []surchargeRuleSnapshot          `json:"surchargeRules,omitempty"`
-	Dependencies     []chargeDependencySnapshot       `json:"chargeDependencies,omitempty"`
-	ReferenceSeries  []referenceSeriesBindingSnapshot `json:"referenceSeries,omitempty"`
-	Exclusions       []exclusionRuleSnapshot          `json:"exclusions,omitempty"`
-	AmountRounding   *amountRoundingSnapshot          `json:"amountRounding,omitempty"`
-	Catalogues       []referenceCatalogueLinkSnapshot `json:"referenceCatalogues,omitempty"`
-	TotalBounds      *totalBoundsSnapshot             `json:"totalChargeBounds,omitempty"`
+	Canonicalization string                   `json:"canonicalization"`
+	Reference        versionReferenceSnapshot `json:"reference"`
+	Scope            string                   `json:"scope"`
+	Direction        string                   `json:"direction"`
+	Purpose          string                   `json:"purpose"`
+	BaseChargeCode   string                   `json:"baseChargeCode"`
+	Aggregation      string                   `json:"aggregation"`
+	// 票级计价重量的聚合方式与进位点。不声明即缺键，既有各卡的快照读回不变（ADR-0364 决定五）。
+	ShipmentWeightAggregation   string                           `json:"shipmentWeightAggregation,omitempty"`
+	ShipmentWeightRoundingPoint string                           `json:"shipmentWeightRoundingPoint,omitempty"`
+	Period                      periodSnapshot                   `json:"period"`
+	RateTable                   rateTableSnapshot                `json:"rateTable"`
+	WeightPolicy                weightPolicySnapshot             `json:"weightPolicy"`
+	Rules                       []fixedChargeRuleSnapshot        `json:"rules,omitempty"`
+	SurchargeRules              []surchargeRuleSnapshot          `json:"surchargeRules,omitempty"`
+	Dependencies                []chargeDependencySnapshot       `json:"chargeDependencies,omitempty"`
+	ReferenceSeries             []referenceSeriesBindingSnapshot `json:"referenceSeries,omitempty"`
+	Exclusions                  []exclusionRuleSnapshot          `json:"exclusions,omitempty"`
+	AmountRounding              *amountRoundingSnapshot          `json:"amountRounding,omitempty"`
+	Catalogues                  []referenceCatalogueLinkSnapshot `json:"referenceCatalogues,omitempty"`
+	TotalBounds                 *totalBoundsSnapshot             `json:"totalChargeBounds,omitempty"`
 	// ServiceProducts 是卡声明的适用服务产品（ADR-0382 决定一）；不声明即缺键，既有各卡的快照读回不变。
 	ServiceProducts []string                   `json:"serviceProducts,omitempty"`
 	Manifest        []versionReferenceSnapshot `json:"manifest"`
@@ -222,18 +225,20 @@ type pricingPlanSnapshot struct {
 
 func pricingPlanDocumentOf(plan PricingPlanVersion) pricingPlanSnapshot {
 	document := pricingPlanSnapshot{
-		Canonicalization: plan.canonicalization,
-		Reference:        versionReferenceOf(plan.reference),
-		Scope:            plan.scope.String(),
-		Direction:        string(plan.direction),
-		Purpose:          string(plan.purpose),
-		BaseChargeCode:   plan.baseChargeCode.String(),
-		Aggregation:      string(plan.aggregation),
-		Period:           periodSnapshot{StartsAt: plan.period.startsAt, EndsAt: plan.period.endsAt},
-		RateTable:        rateTableDocumentOf(plan.rateTable),
-		WeightPolicy:     weightPolicyDocumentOf(plan.weight),
-		ContentDigest:    plan.contentDigest,
-		Manifest:         make([]versionReferenceSnapshot, 0, len(plan.manifest.references)),
+		Canonicalization:            plan.canonicalization,
+		Reference:                   versionReferenceOf(plan.reference),
+		Scope:                       plan.scope.String(),
+		Direction:                   string(plan.direction),
+		Purpose:                     string(plan.purpose),
+		BaseChargeCode:              plan.baseChargeCode.String(),
+		Aggregation:                 string(plan.aggregation),
+		ShipmentWeightAggregation:   string(plan.shipmentWeightAggregation),
+		ShipmentWeightRoundingPoint: string(plan.shipmentWeightRoundingPoint),
+		Period:                      periodSnapshot{StartsAt: plan.period.startsAt, EndsAt: plan.period.endsAt},
+		RateTable:                   rateTableDocumentOf(plan.rateTable),
+		WeightPolicy:                weightPolicyDocumentOf(plan.weight),
+		ContentDigest:               plan.contentDigest,
+		Manifest:                    make([]versionReferenceSnapshot, 0, len(plan.manifest.references)),
 	}
 	for _, rule := range plan.rules {
 		document.Rules = append(document.Rules, fixedChargeRuleSnapshot{
@@ -287,17 +292,19 @@ func pricingPlanDocumentOf(plan PricingPlanVersion) pricingPlanSnapshot {
 
 func pricingPlanFrom(document pricingPlanSnapshot) PricingPlanVersion {
 	plan := PricingPlanVersion{
-		reference:        versionReferenceFrom(document.Reference),
-		scope:            PricingScopeID{identifier{value: document.Scope}},
-		direction:        PricingDirection(document.Direction),
-		purpose:          PricingPurpose(document.Purpose),
-		baseChargeCode:   ChargeCode{value: document.BaseChargeCode},
-		aggregation:      AggregationMode(document.Aggregation),
-		period:           EffectivePeriod{startsAt: document.Period.StartsAt, endsAt: document.Period.EndsAt},
-		rateTable:        rateTableFrom(document.RateTable),
-		weight:           weightPolicyFrom(document.WeightPolicy),
-		canonicalization: document.Canonicalization,
-		contentDigest:    document.ContentDigest,
+		reference:                   versionReferenceFrom(document.Reference),
+		scope:                       PricingScopeID{identifier{value: document.Scope}},
+		direction:                   PricingDirection(document.Direction),
+		purpose:                     PricingPurpose(document.Purpose),
+		baseChargeCode:              ChargeCode{value: document.BaseChargeCode},
+		aggregation:                 AggregationMode(document.Aggregation),
+		shipmentWeightAggregation:   ShipmentWeightAggregation(document.ShipmentWeightAggregation),
+		shipmentWeightRoundingPoint: ShipmentWeightRoundingPoint(document.ShipmentWeightRoundingPoint),
+		period:                      EffectivePeriod{startsAt: document.Period.StartsAt, endsAt: document.Period.EndsAt},
+		rateTable:                   rateTableFrom(document.RateTable),
+		weight:                      weightPolicyFrom(document.WeightPolicy),
+		canonicalization:            document.Canonicalization,
+		contentDigest:               document.ContentDigest,
 	}
 	for _, rule := range document.Rules {
 		plan.rules = append(plan.rules, FixedChargeRule{

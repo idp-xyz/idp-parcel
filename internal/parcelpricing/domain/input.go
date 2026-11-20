@@ -60,10 +60,50 @@ func NewMasterDocumentSubject(reference string) (EvaluationSubject, error) {
 // MemberManifest 是票级 / 主单级评价输入的成员清单（ADR-0111 Decision 二）：成员包裹引用、合计实重、可缺的合计
 // 体积重。件数就是成员数；合计计价重量是评价内按重量策略派生的中间结果，不在这里。它进语义摘要——同一主单
 // 成员变了就是另一次评价。
+// pieces 只在逐件求和时用：逐件实重与可缺的尺寸。没带（nil）的清单字节与引入这一格之前相同；合计后派生不读它。
 type MemberManifest struct {
 	members         []PackageID
 	totalActual     Weight
 	totalVolumetric *Weight
+	pieces          []MemberPiece
+}
+
+// MemberPiece 是逐件求和的快照里的一件：实重必备，尺寸可缺。卡要体积重而尺寸缺了，评价待判断，不退回合计体积重。
+type MemberPiece struct {
+	id         PackageID
+	actual     Weight
+	dimensions *Dimensions
+}
+
+// NewMemberPiece 立一件的实重与可缺的尺寸。尺寸按传入的值复制，调用方随后改自己的那份不影响这一件。
+func NewMemberPiece(id PackageID, actual Weight, dimensions *Dimensions) (MemberPiece, error) {
+	piece := MemberPiece{id: id, actual: actual}
+	if dimensions != nil {
+		sides := *dimensions
+		piece.dimensions = &sides
+	}
+	if !piece.valid() {
+		return MemberPiece{}, ErrPricingInputInvalid
+	}
+	return piece, nil
+}
+
+func (piece MemberPiece) valid() bool {
+	if !piece.id.valid() || !piece.actual.valid() {
+		return false
+	}
+	return piece.dimensions == nil || piece.dimensions.valid()
+}
+
+func (piece MemberPiece) ID() PackageID        { return piece.id }
+func (piece MemberPiece) ActualWeight() Weight { return piece.actual }
+
+// Dimensions 只在这一件带了尺寸时给出。
+func (piece MemberPiece) Dimensions() (Dimensions, bool) {
+	if piece.dimensions == nil {
+		return Dimensions{}, false
+	}
+	return *piece.dimensions, true
 }
 
 // NewMemberManifest 立一份成员清单：至少一个成员、不重复；合计体积重可缺——缺了而卡按 MAX 计价时评价待判断，
@@ -97,6 +137,49 @@ func (manifest MemberManifest) TotalVolumetricWeight() (Weight, bool) {
 	return *manifest.totalVolumetric, true
 }
 
+// Pieces 只在清单带了逐件实重时给出，次序与成员清单一致。
+func (manifest MemberManifest) Pieces() ([]MemberPiece, bool) {
+	if manifest.pieces == nil {
+		return nil, false
+	}
+	copied := make([]MemberPiece, len(manifest.pieces))
+	for index, piece := range manifest.pieces {
+		copied[index] = piece
+		if piece.dimensions != nil {
+			sides := *piece.dimensions
+			copied[index].dimensions = &sides
+		}
+	}
+	return copied, true
+}
+
+// WithPieces 交回带上逐件实重与尺寸的清单。件数与成员一一对应，实重单位与合计实重相同；尺寸可缺，带了的各件长度单位相同。
+// 逐件实重之和不必等于合计实重：合计后派生读合计，逐件求和读逐件，两格各记各的事实。
+func (manifest MemberManifest) WithPieces(pieces []MemberPiece) (MemberManifest, error) {
+	if len(pieces) == 0 {
+		return MemberManifest{}, ErrPricingInputInvalid
+	}
+	copied := make([]MemberPiece, len(pieces))
+	for index, piece := range pieces {
+		if !piece.valid() {
+			return MemberManifest{}, ErrPricingInputInvalid
+		}
+		copied[index] = piece
+		if piece.dimensions != nil {
+			sides := *piece.dimensions
+			copied[index].dimensions = &sides
+		}
+	}
+	sort.SliceStable(copied, func(left, right int) bool {
+		return copied[left].id.String() < copied[right].id.String()
+	})
+	manifest.pieces = copied
+	if !manifest.valid() {
+		return MemberManifest{}, ErrPricingInputInvalid
+	}
+	return manifest, nil
+}
+
 func (manifest MemberManifest) valid() bool {
 	if len(manifest.members) == 0 || !manifest.totalActual.valid() {
 		return false
@@ -106,7 +189,31 @@ func (manifest MemberManifest) valid() bool {
 			return false
 		}
 	}
-	return manifest.totalVolumetric == nil || (manifest.totalVolumetric.valid() && manifest.totalVolumetric.unit == manifest.totalActual.unit)
+	if manifest.totalVolumetric != nil && (!manifest.totalVolumetric.valid() || manifest.totalVolumetric.unit != manifest.totalActual.unit) {
+		return false
+	}
+	if manifest.pieces == nil {
+		return true
+	}
+	if len(manifest.pieces) != len(manifest.members) {
+		return false
+	}
+	var lengthUnit LengthUnit
+	haveLength := false
+	for index, piece := range manifest.pieces {
+		if !piece.valid() || piece.id != manifest.members[index] || piece.actual.unit != manifest.totalActual.unit {
+			return false
+		}
+		if piece.dimensions == nil {
+			continue
+		}
+		if haveLength && piece.dimensions.unit != lengthUnit {
+			return false
+		}
+		lengthUnit = piece.dimensions.unit
+		haveLength = true
+	}
+	return true
 }
 
 type EvaluationSubject struct {
