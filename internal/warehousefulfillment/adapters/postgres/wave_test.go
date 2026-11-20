@@ -239,6 +239,32 @@ func TestAnAcceptanceEnvelopeAdvancesTheMatchingParcel(t *testing.T) {
 	if posted != application.SupplementPosted || commissionState(t, world, "OBR-SUP", 1) != "AWAITING_SUPPLEMENT" {
 		t.Fatalf("别的来源 %s 状态 %s", posted, commissionState(t, world, "OBR-SUP", 1))
 	}
+	if _, err := world.pool.Exec(t.Context(),
+		`UPDATE warehouse_fulfillment.outbound_parcel SET declared_parcel_id = 'DPCL-SUP', shipment_request_id = 'SHR-SUP'
+		  WHERE tenant_id = 'SYN-TENANT-01' AND request_id = 'OBR-SUP'`); err != nil {
+		t.Fatal(err)
+	}
+	follow := application.NewFollowUpHandler(outboundRequests(t, world), wavesOf(t, world), scriptedReviser{outcome: "SUPPLEMENT_RECORDED"}, acceptanceClock{})
+	resubmitted := world.resubmit(t, follow, tenant, "OBR-SUP")
+	if resubmitted != application.FollowUpRecorded || commissionState(t, world, "OBR-SUP", 1) != "" {
+		t.Fatalf("再提交 %s 状态 %q", resubmitted, commissionState(t, world, "OBR-SUP", 1))
+	}
+	held := world.recordSourceData(t, follow, "SDV-1", domain.WarehouseOutboundSource, "OBR-SUP/1", "AWAITING_REVIEW")
+	if held != application.FollowUpAwaitingReview || correctionState(t, world, "OBR-SUP") != "AWAITING_REVIEW" {
+		t.Fatalf("未采用 %s 更正 %s", held, correctionState(t, world, "OBR-SUP"))
+	}
+	otherData := world.recordSourceData(t, follow, "SDV-2", "CUSTOMER_CHANNEL", "REQ-1", "ADOPTED")
+	if otherData != application.FollowUpPosted || correctionState(t, world, "OBR-SUP") != "AWAITING_REVIEW" {
+		t.Fatalf("别的资料版本 %s 更正 %s", otherData, correctionState(t, world, "OBR-SUP"))
+	}
+	cancelled := world.recordCancellation(t, follow, "cancel-sup", "DPCL-SUP")
+	if cancelled != application.FollowUpCancelled || commissionState(t, world, "OBR-SUP", 1) != "CANCELLED" {
+		t.Fatalf("取消 %s 状态 %s", cancelled, commissionState(t, world, "OBR-SUP", 1))
+	}
+	foreign := world.recordCancellation(t, follow, "cancel-other", "DPCL-OTHER")
+	if foreign != application.FollowUpPosted {
+		t.Fatalf("别的取消 %s", foreign)
+	}
 }
 
 func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
@@ -264,7 +290,7 @@ func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
 	if err := waves.SavePack(ctx, tenant, valueOf(t, domain.NewPickFactID, "SYN-FACT-PACK"), valueOf(t, domain.NewOutboundRequestID, "OBR-1"), nil, preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SavePack：%v", err)
 	}
-	if err := waves.MarkShipment(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), 1, "SHR-1"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+	if err := waves.MarkShipment(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), 1, "SHR-1", "DPCL-1"); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("MarkShipment：%v", err)
 	}
 	if err := waves.SaveAcceptance(ctx, tenant, "ADEC-1", domain.WarehouseOutboundSource, "OBR-1/1", "ACCEPTED", preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
@@ -275,6 +301,18 @@ func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 	if err := waves.SaveSupplement(ctx, tenant, "SUBV-1", domain.WarehouseOutboundSource, "OBR-1/1", preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveSupplement：%v", err)
+	}
+	if err := waves.SaveSourceData(ctx, tenant, "SDV-1", domain.WarehouseOutboundSource, "OBR-1/1", "ADOPTED", preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveSourceData：%v", err)
+	}
+	if err := waves.SaveCancellation(ctx, tenant, "cancel-1", "DPCL-1", true, preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveCancellation：%v", err)
+	}
+	if err := waves.ClearAwaiting(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), 1); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("ClearAwaiting：%v", err)
+	}
+	if err := waves.SetCorrection(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), 1, "ADOPTED"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SetCorrection：%v", err)
 	}
 }
 
@@ -493,6 +531,78 @@ func commissionState(t *testing.T, world receiptWorld, requestID string, sequenc
 		`SELECT commission_state FROM warehouse_fulfillment.outbound_parcel
 		  WHERE tenant_id = $1 AND request_id = $2 AND parcel_sequence = $3`,
 		"SYN-TENANT-01", requestID, sequence).Scan(&state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state == nil {
+		return ""
+	}
+	return *state
+}
+
+type scriptedReviser struct{ outcome string }
+
+func (reviser scriptedReviser) Revise(context.Context, ports.CommissionRevision) (ports.CommissionAnswer, error) {
+	return ports.CommissionAnswer{Outcome: reviser.outcome}, nil
+}
+
+func outboundRequests(t *testing.T, world receiptWorld) *adapter.OutboundRequests {
+	t.Helper()
+	requests, err := adapter.NewOutboundRequests(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return requests
+}
+
+func (world receiptWorld) resubmit(t *testing.T, handler *application.FollowUpHandler, tenant domain.TenantID, requestID string) application.FollowUpOutcome {
+	t.Helper()
+	return world.follow(t, func(ctx context.Context) (application.FollowUpResult, error) {
+		return handler.Resubmit(ctx, application.ResubmitCommand{
+			Tenant: tenant, Owner: valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"),
+			Request: valueOf(t, domain.NewOutboundRequestID, requestID), Sequence: 1, RequestKey: "outbound-supplement:SYN-1",
+		})
+	})
+}
+
+func (world receiptWorld) recordSourceData(t *testing.T, handler *application.FollowUpHandler, version, source, key, adoption string) application.FollowUpOutcome {
+	t.Helper()
+	return world.follow(t, func(ctx context.Context) (application.FollowUpResult, error) {
+		return handler.RecordSourceData(ctx, application.SourceDataCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Version: version, Source: source, SourceRequestKey: key, Adoption: adoption,
+		})
+	})
+}
+
+func (world receiptWorld) recordCancellation(t *testing.T, handler *application.FollowUpHandler, requestKey, parcelID string) application.FollowUpOutcome {
+	t.Helper()
+	return world.follow(t, func(ctx context.Context) (application.FollowUpResult, error) {
+		return handler.RecordCancellation(ctx, application.CancellationCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), RequestKey: requestKey, ParcelID: parcelID,
+		})
+	})
+}
+
+func (world receiptWorld) follow(t *testing.T, run func(context.Context) (application.FollowUpResult, error)) application.FollowUpOutcome {
+	t.Helper()
+	var result application.FollowUpResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var runErr error
+		result, runErr = run(ctx)
+		return runErr
+	})
+	if err != nil {
+		t.Fatalf("后续信封：%v", err)
+	}
+	return result.Outcome()
+}
+
+func correctionState(t *testing.T, world receiptWorld, requestID string) string {
+	t.Helper()
+	var state *string
+	err := world.pool.QueryRow(t.Context(),
+		`SELECT correction_state FROM warehouse_fulfillment.outbound_parcel WHERE tenant_id = $1 AND request_id = $2`,
+		"SYN-TENANT-01", requestID).Scan(&state)
 	if err != nil {
 		t.Fatal(err)
 	}

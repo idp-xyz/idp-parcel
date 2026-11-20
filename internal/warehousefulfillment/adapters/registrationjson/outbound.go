@@ -2,6 +2,7 @@ package registrationjson
 
 import (
 	"io"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
@@ -199,6 +200,42 @@ func ReadOwnerOutboundSplit(reader io.Reader) (string, application.SplitOutbound
 		return "", none, err
 	}
 	return rawAccessRequestID(document.AccessRequestID), command, nil
+}
+
+type outboundSupplementDocument struct {
+	carriedIdentity
+	refusedOwner
+	AccessRequestID *string `json:"accessRequestId"`
+	RequestID       *string `json:"requestId"`
+	ParcelSequence  *int    `json:"parcelSequence"`
+}
+
+// ReadOwnerOutboundSupplement 把货主补正译成命令。货主与请求键由信封填。
+func ReadOwnerOutboundSupplement(reader io.Reader) (string, application.ResubmitCommand, error) {
+	var none application.ResubmitCommand
+	document, err := decodeDocument[outboundSupplementDocument](reader, "outbound supplement")
+	if err != nil {
+		return "", none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return "", none, err
+	}
+	if len(document.OwnerAccount) > 0 {
+		return "", none, malformed("ownerAccount must not be carried in the payload")
+	}
+	if document.RequestID == nil {
+		return "", none, malformed("requestId is required")
+	}
+	requestID, err := domain.NewOutboundRequestID(strings.TrimSpace(*document.RequestID))
+	if err != nil {
+		return "", none, malformed("requestId is required")
+	}
+	if document.ParcelSequence == nil || *document.ParcelSequence < 1 {
+		return "", none, malformed("parcelSequence must be a positive integer")
+	}
+	return rawAccessRequestID(document.AccessRequestID), application.ResubmitCommand{
+		Request: requestID, Sequence: *document.ParcelSequence,
+	}, nil
 }
 
 type operatorSplitDocument struct {

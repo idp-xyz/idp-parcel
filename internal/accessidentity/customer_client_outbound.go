@@ -40,3 +40,19 @@ func (minter *CustomerClientMinter) MintOutboundRequestSplit(
 func (customerAPIRequestKeys) DeriveOutboundRequestSplitRequestKey(_ context.Context, request ChannelRequest) (string, error) {
 	return prefixedRequestKeyRejectingReserved(requestKeyPrefixOutboundSplit, request)
 }
+
+// MintOutboundRequestSupplement 铸一次出库补正。准入词与提交相同，来源请求键用补正前缀。
+func (minter *CustomerClientMinter) MintOutboundRequestSupplement(
+	ctx context.Context, credential IntegrationClientCredential, readRequest func() (ChannelRequest, error),
+) (OutboundRequestSubmissionEnvelope, error) {
+	envelope, err := minter.mintWarehouseCustomerWrite(ctx, credential, readRequest, CustomerCapabilityOutboundRequestSubmission,
+		customerAPIRequestKeys{}.DeriveOutboundRequestSupplementRequestKey)
+	if err != nil {
+		return OutboundRequestSubmissionEnvelope{}, err
+	}
+	return OutboundRequestSubmissionEnvelope{envelope: envelope}, nil
+}
+
+func (customerAPIRequestKeys) DeriveOutboundRequestSupplementRequestKey(_ context.Context, request ChannelRequest) (string, error) {
+	return prefixedRequestKeyRejectingReserved(requestKeyPrefixOutboundSupplement, request)
+}
