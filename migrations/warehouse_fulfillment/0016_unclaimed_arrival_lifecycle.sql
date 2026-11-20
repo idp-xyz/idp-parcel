@@ -86,11 +86,14 @@ ALTER TABLE warehouse_fulfillment.unclaimed_arrival
             AND (observation IS NULL OR btrim(observation) <> '')
             AND (storage_location IS NULL OR btrim(storage_location) <> '')
         ),
+    -- diverted_receipt_fact_id 可空。NULL = fact_id 是 UNKNOWN，CHECK 把 UNKNOWN 当通过，
+    -- 外键在 MATCH SIMPLE 下也不会拦这一列为空的行。转出来源必须另写 IS NOT NULL。
     ADD CONSTRAINT unclaimed_arrival_origin_shape
         CHECK (
             (
                 origin = 'DIVERTED_RECEIPT'
                 AND kind = 'INBOUND'
+                AND diverted_receipt_fact_id IS NOT NULL
                 AND diverted_receipt_fact_id = fact_id
                 AND pre_advice_id IS NOT NULL
                 AND owner_account_id IS NOT NULL
@@ -227,8 +230,14 @@ CREATE TABLE warehouse_fulfillment.unclaimed_disposal_rule_revision (
             AND btrim(registrant) <> ''
         ),
 
+    -- 9223372036 是 time.Duration 能表示的最大整秒。再大则秒数乘 time.Second 回绕成负数，
+    -- 期限未到会被判成已到。应用层同一道门；这里挡住绕过写入侧的直插。
     CONSTRAINT unclaimed_disposal_rule_revision_positive
-        CHECK (revision >= 1 AND claim_window_seconds > 0)
+        CHECK (
+            revision >= 1
+            AND claim_window_seconds > 0
+            AND claim_window_seconds <= 9223372036
+        )
 );
 
 CREATE TABLE warehouse_fulfillment.unclaimed_disposal_rule_method (

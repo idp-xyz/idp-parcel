@@ -512,8 +512,8 @@ func (handler *ManageUnclaimedArrivalHandler) Dispose(
 	}
 
 	now := handler.clock.Now()
-	// 认领期限自到货发生时刻起按经过的时长算，不按业务日，不依赖仓业务时区（AT-WF-065）。
-	if now.Before(detail.Arrival.OccurredAt().Add(rule.Content().ClaimWindow())) {
+	// 认领期限自到货发生时刻起按经过的秒数算，不按业务日，不依赖仓业务时区（AT-WF-065）。
+	if !rule.Content().ClaimWindowElapsed(detail.Arrival.OccurredAt(), now) {
 		return DisposeUnclaimedArrivalResult{
 			outcome: DisposeUnclaimedNotAllowed,
 			reason:  DispositionClaimWindowNotElapsed,

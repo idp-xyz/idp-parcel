@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -472,6 +475,12 @@ func TestUnclaimedDisposalRuleAndDispositionLifecycle(t *testing.T) {
 	}
 	if r := world.registerRule(t, now, application.RegisterDisposalRuleCommand{
 		Tenant: tenant, Warehouse: whNoTZ, Revision: 1,
+		Content: domain.NewDisposalRuleContent(math.MaxInt64/int64(time.Second)+1, []domain.UnclaimedDisposalMethod{valueOf(t, domain.NewUnclaimedDisposalMethod, "DONATE")}), Registrant: op,
+	}); r.Outcome() != application.RegistrationNotAccepted || r.Refusal() != application.RegistrationRefusalContentInvalid || r.Field() != domain.DisposalRuleFieldClaimWindowSeconds {
+		t.Fatalf("期限大到会回绕 = %s/%s/%s", r.Outcome(), r.Refusal(), r.Field())
+	}
+	if r := world.registerRule(t, now, application.RegisterDisposalRuleCommand{
+		Tenant: tenant, Warehouse: whNoTZ, Revision: 1,
 		Content: domain.NewDisposalRuleContent(3600, nil), Registrant: op,
 	}); r.Outcome() != application.RegistrationNotAccepted || r.Refusal() != application.RegistrationRefusalContentInvalid || r.Field() != domain.DisposalRuleFieldDisposalMethods {
 		t.Fatalf("空方式 = %s/%s/%s", r.Outcome(), r.Refusal(), r.Field())
@@ -810,6 +819,55 @@ func (m txUnclaimedManager) Dispose(ctx context.Context, command application.Dis
 type txUnclaimedRegistrar struct {
 	transactor bentoapp.Transactor
 	inner      *application.RegisterUnclaimedArrivalHandler
+}
+
+// Covers: 来源形状与认领期限的库上门。转出来源把事实标识留空时，NULL 比较是 UNKNOWN，CHECK 会放行；
+// 认领期限大到乘进 time.Duration 会回绕时，直插也须被拒。两条都不走应用层。
+func TestUnclaimedArrivalShapeAndClaimWindowRejectDirectInserts(t *testing.T) {
+	world := newUnclaimedLifecycleWorld(t)
+	ctx := t.Context()
+	pgCode := func(err error) string {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			return pgErr.Code
+		}
+		return ""
+	}
+
+	_, err := world.pool.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.unclaimed_arrival
+		    (tenant_id, arrival_id, fact_id, origin, kind, warehouse_code, device_id, operator_id,
+		     occurred_at, device_sequence, received_at, observation, status)
+		 VALUES ('SYN-TENANT-01', 'ARR-WORK', 'FACT-WORK', 'WORK_FACT', 'RETURN', 'SYN-WH-01', 'DEV-1', 'OP-1',
+		         now(), 1, now(), '一线观察', 'UNCLAIMED')`)
+	if err != nil {
+		t.Fatalf("作业事实来源应能插入：%v", err)
+	}
+
+	_, err = world.pool.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.unclaimed_arrival
+		    (tenant_id, arrival_id, fact_id, pre_advice_id, owner_account_id, origin, kind, warehouse_code,
+		     device_id, operator_id, occurred_at, received_at, status)
+		 VALUES ('SYN-TENANT-01', 'ARR-DIVERT', 'FACT-DIVERT', 'ADV-1', 'SYN-OWNER-01', 'DIVERTED_RECEIPT', 'INBOUND',
+		         'SYN-WH-01', 'DEV-1', 'OP-1', now(), now(), 'UNCLAIMED')`)
+	if pgCode(err) != "23514" {
+		t.Fatalf("转出来源缺事实标识应被 CHECK 拒（23514），实得 %v", err)
+	}
+
+	_, err = world.pool.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.unclaimed_disposal_rule_revision
+		    (tenant_id, warehouse_code, revision, claim_window_seconds, registrant, registered_at)
+		 VALUES ('SYN-TENANT-01', 'SYN-WH-01', 1, 9223372036, 'op-1', now())`)
+	if err != nil {
+		t.Fatalf("最大可表示整秒应能插入：%v", err)
+	}
+	_, err = world.pool.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.unclaimed_disposal_rule_revision
+		    (tenant_id, warehouse_code, revision, claim_window_seconds, registrant, registered_at)
+		 VALUES ('SYN-TENANT-01', 'SYN-WH-01', 2, 9223372037, 'op-1', now())`)
+	if pgCode(err) != "23514" {
+		t.Fatalf("再大一秒应被 CHECK 拒（23514），实得 %v", err)
+	}
 }
 
 func (r txUnclaimedRegistrar) Register(ctx context.Context, command application.RegisterUnclaimedArrivalCommand) (application.RegisterUnclaimedArrivalResult, error) {

@@ -41,7 +41,7 @@ func NewRegisterDisposalRuleHandler(
 //  1. 按（租户，仓，修订号）认重放与冲突；
 //  2. 核指名的仓在本租户已登记（停用也算；无仓或仓查不到答 NOT_ACCEPTED/REFERENCE_NOT_FOUND）；
 //  3. 核修订号等于在册最新加一（首笔为 1）；
-//  4. 核认领期限为正且处置方式非空、非空白、不重复（否则 NOT_ACCEPTED/CONTENT_INVALID）；
+//  4. 核认领期限为正、不超过 time.Duration 能表示的最大整秒，且处置方式非空、非空白、不重复（否则 NOT_ACCEPTED/CONTENT_INVALID）；
 //  5. 落册。
 func (handler *RegisterDisposalRuleHandler) Register(
 	ctx context.Context,

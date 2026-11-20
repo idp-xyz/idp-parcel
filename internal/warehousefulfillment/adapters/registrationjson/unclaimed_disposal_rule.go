@@ -8,7 +8,7 @@ import (
 )
 
 // unclaimedDisposalRuleDocument 是一笔待认领处置规则修订的线格式（登记册配置写面）。
-// 租户与登记责任方取自信封，载荷里再带即坏载荷；认领期限不为正与方式为空/重复留给应用层答 NOT_ACCEPTED/CONTENT_INVALID。
+// 租户与登记责任方取自信封，载荷里再带即坏载荷；认领期限不为正、大到乘进 time.Duration 会回绕，以及方式为空/重复，留给应用层答 NOT_ACCEPTED/CONTENT_INVALID。
 type unclaimedDisposalRuleDocument struct {
 	carriedIdentity
 	WarehouseCode      *string   `json:"warehouseCode"`

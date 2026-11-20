@@ -2,9 +2,13 @@ package domain
 
 import (
 	"errors"
+	"math"
 	"slices"
 	"time"
 )
+
+// maxClaimWindowSeconds 是 time.Duration 能表示的最大整秒。再大则秒数乘 time.Second 回绕成负数。
+const maxClaimWindowSeconds = math.MaxInt64 / int64(time.Second)
 
 var (
 	// ErrInvalidDisposalRuleRevision 是一笔处置规则修订缺了身份、登记责任方或登记时刻。
@@ -34,8 +38,8 @@ func (field DisposalRuleField) String() string {
 	}
 }
 
-// DisposalRuleContent 是一笔待认领处置规则修订的完整内容：认领期限（按经过秒数，须为正）与期满后可用的处置方式（租户原词，至少一种、不重复）。
-// 构造器不拦「期限不为正」与「方式为空/重复」：让登记用例在判过重放、冲突、仓存在与修订连续之后答 NOT_ACCEPTED/CONTENT_INVALID 并指出那一格。
+// DisposalRuleContent 是一笔待认领处置规则修订的完整内容：认领期限（按经过秒数，须为正，且不得大到乘进 time.Duration 会回绕）与期满后可用的处置方式（租户原词，至少一种、不重复）。
+// 构造器不拦这些：让登记用例在判过重放、冲突、仓存在与修订连续之后答 NOT_ACCEPTED/CONTENT_INVALID 并指出那一格。
 type DisposalRuleContent struct {
 	claimWindowSeconds int64
 	methods            []UnclaimedDisposalMethod
@@ -50,9 +54,21 @@ func NewDisposalRuleContent(claimWindowSeconds int64, methods []UnclaimedDisposa
 
 func (content DisposalRuleContent) ClaimWindowSeconds() int64 { return content.claimWindowSeconds }
 
-// ClaimWindow 是自到货发生时刻起经过的认领期限，不依赖仓的业务时区（UC-WF-005、AT-WF-065）。
-func (content DisposalRuleContent) ClaimWindow() time.Duration {
-	return time.Duration(content.claimWindowSeconds) * time.Second
+// ClaimWindowElapsed 报告从 occurredAt 到 now 是否已经走完认领期限。
+// 按整秒比较，不把秒数乘进 time.Duration：超过 maxClaimWindowSeconds 会回绕成负数，期限未到会被当成已到（UC-WF-005、AT-WF-065）。
+// 期限本身放不进 time.Duration 时答未走完。now.Sub 自身回绕（间隔超过可表示范围）时，认领期限一定已经走完。
+func (content DisposalRuleContent) ClaimWindowElapsed(occurredAt, now time.Time) bool {
+	if content.claimWindowSeconds <= 0 || content.claimWindowSeconds > maxClaimWindowSeconds {
+		return false
+	}
+	if now.Before(occurredAt) {
+		return false
+	}
+	elapsed := now.Sub(occurredAt)
+	if elapsed < 0 {
+		return true
+	}
+	return int64(elapsed/time.Second) >= content.claimWindowSeconds
 }
 
 func (content DisposalRuleContent) Methods() []UnclaimedDisposalMethod {
@@ -64,9 +80,9 @@ func (content DisposalRuleContent) HasMethod(method UnclaimedDisposalMethod) boo
 	return slices.Contains(content.methods, method)
 }
 
-// InvalidField 核新修订的业务门：认领期限须为正，处置方式至少一种、非空白且不重复。
+// InvalidField 核新修订的业务门：认领期限须为正且不超过 time.Duration 能表示的最大整秒，处置方式至少一种、非空白且不重复。
 func (content DisposalRuleContent) InvalidField() DisposalRuleField {
-	if content.claimWindowSeconds <= 0 {
+	if content.claimWindowSeconds <= 0 || content.claimWindowSeconds > maxClaimWindowSeconds {
 		return DisposalRuleFieldClaimWindowSeconds
 	}
 	if len(content.methods) == 0 {
