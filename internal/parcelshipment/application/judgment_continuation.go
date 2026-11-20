@@ -646,6 +646,7 @@ func awaitOperatorRegistration(
 func awaitCustomerSupplement(
 	ctx context.Context,
 	requests ports.ShipmentRequestRepository,
+	handoff ports.CustomerSupplementHandoff,
 	identity domain.SourceIdentity,
 	version domain.SubmissionVersionID,
 	stall JudgmentPendingReason,
@@ -678,7 +679,31 @@ func awaitCustomerSupplement(
 	if !ok {
 		return stall, none, nil
 	}
+	if err := handOffCustomerSupplement(ctx, handoff, identity, waiting, version); err != nil {
+		return PendingReasonNone, none, err
+	}
 	return stall, judged.RequestedServiceProduct(), nil
+}
+
+func handOffCustomerSupplement(
+	ctx context.Context,
+	handoff ports.CustomerSupplementHandoff,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequest,
+	version domain.SubmissionVersionID,
+) error {
+	if handoff == nil {
+		return nil
+	}
+	gaps := request.AcceptanceDecisionTask().SupplementGaps()
+	copied := make([]ports.CustomerSupplementGap, 0, len(gaps))
+	for _, gap := range gaps {
+		parcel, _ := gap.Parcel()
+		copied = append(copied, ports.CustomerSupplementGap{Group: gap.Group().String(), Parcel: parcel.String(), Reason: gap.Reason().String()})
+	}
+	return handoff.HandOffCustomerSupplement(ctx, ports.CustomerSupplementHandoffIntent{
+		Identity: identity, ShipmentRequestID: request.ShipmentRequestID(), SubmissionVersion: version, Gaps: copied,
+	})
 }
 
 // attemptDetail 是处理尝试在原因、续办方、续办引用、时刻之外另记的几格（ADR-0383 决定三；ADR-0381 决定四）。

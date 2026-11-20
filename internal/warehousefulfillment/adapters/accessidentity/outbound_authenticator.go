@@ -66,3 +66,21 @@ func NewOperatorOutboundAuthenticator(minter Minter) (*OperatorOutboundAuthentic
 func (authenticator *OperatorOutboundAuthenticator) AuthenticateOutboundOnBehalf(ctx context.Context, bearerToken string) (warehousehttp.OperatorIdentity, error) {
 	return mintWarehouseDecision(ctx, authenticator.minter, bearerToken, identity.DecisionOutboundRequestRecordOnBehalf)
 }
+
+// OperatorWaveAuthenticator 认证放波次。
+type OperatorWaveAuthenticator struct {
+	minter Minter
+}
+
+var _ warehousehttp.WaveReleaseAuthenticator = (*OperatorWaveAuthenticator)(nil)
+
+func NewOperatorWaveAuthenticator(minter Minter) (*OperatorWaveAuthenticator, error) {
+	if minter == nil {
+		return nil, errors.New("warehouse fulfillment accessidentity: wave authenticator needs a minter")
+	}
+	return &OperatorWaveAuthenticator{minter: minter}, nil
+}
+
+func (authenticator *OperatorWaveAuthenticator) AuthenticateWaveRelease(ctx context.Context, bearerToken string) (warehousehttp.OperatorIdentity, error) {
+	return mintWarehouseDecision(ctx, authenticator.minter, bearerToken, identity.DecisionWaveRelease)
+}

@@ -345,6 +345,31 @@ func TestACustomerAccountMayOnlyRequestClosureAndReopening(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0371 — 仓配代办只由货主客户账户自己获准。没登记是未配置。运营角色提出不成立，也不走合同委派。
+func TestWarehouseAgencyIsGrantedOnlyToTheCustomerAccount(t *testing.T) {
+	customer := customerRequester(t, "account-1")
+	action := domain.WarehouseFulfillmentAgencyAction
+	if action.String() != "WAREHOUSE_FULFILLMENT_AGENCY" {
+		t.Fatalf("action = %s", action.String())
+	}
+	if _, err := domain.Authorize(nil, nil, requestBy(t, customer, action, "WAREHOUSE_FULFILLMENT_AGENT", "scope-a")); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
+		t.Fatalf("error = %v, want 未配置", err)
+	}
+	grants := []domain.AuthorityGrant{authorityGrant(t, "auth-agency", action, "WAREHOUSE_FULFILLMENT_AGENT", "scope-a")}
+	authorized, err := domain.Authorize(grants, nil, requestBy(t, customer, action, "WAREHOUSE_FULFILLMENT_AGENT", "scope-a"))
+	if err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	decider, present := authorized.Decider()
+	if !present || decider.Reference() != "account-1" {
+		t.Fatalf("决定方 = %s，want 货主客户账户", decider.Reference())
+	}
+	operator := operatorRequester(t, "operator-1", "account-1")
+	if _, err := domain.Authorize(grants, nil, requestBy(t, operator, action, "WAREHOUSE_FULFILLMENT_AGENT", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
+		t.Fatalf("error = %v, want 运营角色不成立", err)
+	}
+}
+
 // Covers: CONTEXT 商业版本共同不变量 — 授权挂在一个当前可用的授权规则版本上。
 func TestAuthorityGrantNeedsAUsableAuthorizationRuleVersion(t *testing.T) {
 	t.Run("refuses a draft", func(t *testing.T) {

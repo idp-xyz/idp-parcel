@@ -70,6 +70,7 @@ func NewEvidenceReference(value string) (EvidenceReference, error) {
 // 本上下文比较等级——谁可重开由登进 REOPENING 那一格的等级集合承担（CONTEXT Rules，
 // 票 party-commercial-context-gaps/13 裁决 ①）。
 // 撤回不在集内：一票一格，它归 `PAR-COM-14`「客户及其授权代表」那条线。
+// 仓配代办再占一格（ADR-0371）：实际决定方是货主客户账户，合同委派不挂它，与上面五格互不蕴含。
 type AuthorizedAction uint8
 
 const (
@@ -79,10 +80,11 @@ const (
 	SourceDataAmendmentAction
 	ControlledClosureAction
 	ReopeningAction
+	WarehouseFulfillmentAgencyAction
 )
 
 func (action AuthorizedAction) valid() bool {
-	return action >= ManualReviewAction && action <= ReopeningAction
+	return action >= ManualReviewAction && action <= WarehouseFulfillmentAgencyAction
 }
 
 // decidedByCustomer 回答这个动作的决定权归不归客户。资料修订改的是客户已接受委托的原始资料，
@@ -112,6 +114,8 @@ func (action AuthorizedAction) String() string {
 		return "CONTROLLED_CLOSURE"
 	case ReopeningAction:
 		return "REOPENING"
+	case WarehouseFulfillmentAgencyAction:
+		return "WAREHOUSE_FULFILLMENT_AGENCY"
 	default:
 		return ""
 	}
@@ -452,6 +456,10 @@ func resolveDecider(delegations []ContractDelegation, request AuthorizationReque
 	}
 	if request.requester.kind == CustomerAccountRequester && request.action.formedOnlyByOperatorRole() {
 		return Decider{}, ErrCustomerAccountCannotDecide
+	}
+	// 仓配代办只接受货主客户账户自己作请求方。运营角色提出时不走合同委派，直接不成立。
+	if request.action == WarehouseFulfillmentAgencyAction && request.requester.kind != CustomerAccountRequester {
+		return Decider{}, ErrNotAuthorized
 	}
 	if request.requester.kind == CustomerAccountRequester || !request.action.decidedByCustomer() {
 		return request.requester.decider(), nil

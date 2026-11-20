@@ -70,7 +70,7 @@
 | 信用比例基数 | `POSTED_BALANCE` `PRIOR_PERIOD_CONFIRMED_CHARGES` |
 | 接受前控制种类 | `PREPAID_FREEZE` `CREDIT_CHECK` |
 | 控制失败处置 / 共同通过条件 | `REJECT` `AUTHORIZED_DISPOSITION` / `ALL_CONTROLS_PASS` |
-| 授权动作 | `MANUAL_REVIEW` `ACTIVE_REJECTION` `SOURCE_DATA_AMENDMENT` `CONTROLLED_CLOSURE` `REOPENING` |
+| 授权动作 | `MANUAL_REVIEW` `ACTIVE_REJECTION` `SOURCE_DATA_AMENDMENT` `CONTROLLED_CLOSURE` `REOPENING` `WAREHOUSE_FULFILLMENT_AGENCY` |
 | 资料修订阶段 | `ACCEPTED_NOT_YET_RECEIVED` `RECEIVED_OR_MEASURED` `LABELLED_OR_BAGGED` `CUSTOMS_DATA_FORMING_NOT_SUBMITTED` `CUSTOMS_SUBMITTED` `CASE_CLOSED_OR_SERVICE_COMPLETED` |
 | 修订意图 / 允许性 | `SUPPLEMENT` `CORRECTION` `EXPLICIT_CLEAR` / `NOT_DECLARED` `ALLOWED` `DISALLOWED` |
 | 可声明终局的责任结果 | `EFFECTIVE_DELIVERY` `RETURN_COMPLETED` `SERVICE_TERMINATED` `REGULATORY_DISPOSITION` `LABEL_SERVICE_COMPLETED` `LABEL_SERVICE_FAILED` |
@@ -116,7 +116,7 @@
 - 参与方关系必须有双方、角色、适用范围、依据和有效区间。到期、撤销或替代只影响此后的新决定。
 - 已结束的关系不再收新修订；要恢复就登一段新关系。替代只换持有方，并在同一笔里登记接替关系。
 - 渠道账号使用授权必须显式、可撤销。技术上能访问账号不等于业务上获得授权。
-- 人工复核、主动拒绝、资料修订、受控关闭、重开是五个分开的授权动作，各按责任法人、等级、范围和有效期间授予，互不蕴含。
+- 人工复核、主动拒绝、资料修订、受控关闭、重开、仓配代办是六个分开的授权动作，各按责任法人、等级、范围和有效期间授予，互不蕴含。仓配代办的等级常量是 `WAREHOUSE_FULFILLMENT_AGENT`，实际决定方是货主客户账户，合同委派不挂它。没授予答未配置。
 - 运营角色代客户请求资料修订时，实际决定方由合同委派解出；没有委派即无权，登录操作人不能顶替。
 - 同一请求同一刻被多条授予允许，或被委派方不同的多条委派命中，答适用冲突。
 - 授予随所挂授权规则版本、委派随所挂合同版本的收尾离开新的裁定。某个范围没有现行授权规则，答未配置，不答拒绝。
@@ -191,7 +191,7 @@
 ## 旧文档写了、代码里还没有的
 
 - **保价条件**：旧文档写成服务产品与客户合同上的现行条件。搜 `Insur`、`保价`、`Deductible`、`免赔` 无一命中。
-- **仓配代办授权动作**：授权动作封闭集只有五个，没有这一格；搜 `Warehouse`、`仓配` 无一命中。它属可选的仓配履约，在做，还没做到这一格。
+- **仓配代办的其余信封**：授权动作已经在封闭集里。接受决定与待受控补充已由仓配履约入账。资料版本与包裹取消还没接。
 - **人工费用调整授权**：搜 `Adjustment`、`人工调整` 无一命中。信用政策正文只有信用额度。
 - **客户服务规则合同层「只能收紧」**：继承是有的，没找到比较合同层与产品层孰严的校验（在 `customer_service_rule.go` 与相关适配器里搜 `收紧`、`Widened`）。
 - **指定渠道产品的锁定与显式渠道变更授权**：本上下文只有渠道约束的收窄（`CandidatesAllowedBy`），该类型明说不提供锁定；搜 `锁定`、`Lock` 没有别的机制。锁定结果按旧文档本就归拥有交易的上下文，这里没核。

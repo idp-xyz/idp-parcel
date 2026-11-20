@@ -271,6 +271,254 @@ func splitLines(lines *[]outboundLineDocument) ([]domain.OutboundLine, error) {
 
 func stringPtr(value string) *string { return &value }
 
+type allocationStrategyDocument struct {
+	carriedIdentity
+	Revision *int `json:"revision"`
+}
+
+// AllocationStrategyCommand 把采用参考分配策略译成命令。
+func AllocationStrategyCommand(reader io.Reader, tenant domain.TenantID, operator domain.Registrant) (application.AdoptStrategyCommand, error) {
+	var none application.AdoptStrategyCommand
+	document, err := decodeDocument[allocationStrategyDocument](reader, "allocation strategy")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	if document.Revision == nil || *document.Revision < 1 {
+		return none, malformed("revision must be a positive integer")
+	}
+	return application.AdoptStrategyCommand{Tenant: tenant, Revision: *document.Revision, Operator: operator}, nil
+}
+
+type waveDocument struct {
+	carriedIdentity
+	WaveID    *string   `json:"waveId"`
+	Warehouse *string   `json:"warehouse"`
+	Requests  *[]string `json:"requests"`
+	Prefetch  *bool     `json:"prefetch"`
+}
+
+// ReleaseWaveCommand 把放波次译成命令。
+func ReleaseWaveCommand(reader io.Reader) (application.ReleaseWaveCommand, error) {
+	var none application.ReleaseWaveCommand
+	document, err := decodeDocument[waveDocument](reader, "wave")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	id, err := requiredText("waveId", document.WaveID, domain.NewWaveID)
+	if err != nil {
+		return none, err
+	}
+	warehouse, err := requiredText("warehouse", document.Warehouse, domain.NewWarehouseCode)
+	if err != nil {
+		return none, err
+	}
+	if document.Requests == nil || len(*document.Requests) == 0 {
+		return none, malformed("requests is required")
+	}
+	requests := make([]domain.OutboundRequestID, 0, len(*document.Requests))
+	for _, raw := range *document.Requests {
+		request, err := domain.NewOutboundRequestID(raw)
+		if err != nil {
+			return none, malformed("requests must not be blank")
+		}
+		requests = append(requests, request)
+	}
+	prefetch := false
+	if document.Prefetch != nil {
+		prefetch = *document.Prefetch
+	}
+	return application.ReleaseWaveCommand{ID: id, Warehouse: warehouse, Requests: requests, Prefetch: prefetch}, nil
+}
+
+type pickDocument struct {
+	carriedIdentity
+	FactID    *string `json:"factId"`
+	TaskID    *string `json:"taskId"`
+	Warehouse *string `json:"warehouse"`
+	Quantity  *int64  `json:"quantity"`
+	Target    *string `json:"targetLocation"`
+}
+
+// PickCommand 把拣货事实译成命令。
+func PickCommand(reader io.Reader) (application.PickCommand, error) {
+	var none application.PickCommand
+	document, err := decodeDocument[pickDocument](reader, "pick")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	fact, err := requiredText("factId", document.FactID, domain.NewPickFactID)
+	if err != nil {
+		return none, err
+	}
+	task, err := requiredText("taskId", document.TaskID, domain.NewPickTaskID)
+	if err != nil {
+		return none, err
+	}
+	warehouse, err := requiredText("warehouse", document.Warehouse, domain.NewWarehouseCode)
+	if err != nil {
+		return none, err
+	}
+	if document.Quantity == nil || *document.Quantity < 1 {
+		return none, malformed("quantity must be a positive integer")
+	}
+	target, err := requiredText("targetLocation", document.Target, domain.NewLocationCode)
+	if err != nil {
+		return none, err
+	}
+	return application.PickCommand{FactID: fact, TaskID: task, Warehouse: warehouse, Quantity: *document.Quantity, Target: target}, nil
+}
+
+type checkDocument struct {
+	carriedIdentity
+	FactID    *string `json:"factId"`
+	RequestID *string `json:"requestId"`
+	Warehouse *string `json:"warehouse"`
+	Observed  *int64  `json:"observed"`
+}
+
+// CheckCommand 把出库复核译成命令。
+func CheckCommand(reader io.Reader) (application.CheckCommand, error) {
+	var none application.CheckCommand
+	document, err := decodeDocument[checkDocument](reader, "outbound check")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	fact, err := requiredText("factId", document.FactID, domain.NewPickFactID)
+	if err != nil {
+		return none, err
+	}
+	request, err := requiredText("requestId", document.RequestID, domain.NewOutboundRequestID)
+	if err != nil {
+		return none, err
+	}
+	warehouse, err := requiredText("warehouse", document.Warehouse, domain.NewWarehouseCode)
+	if err != nil {
+		return none, err
+	}
+	if document.Observed == nil || *document.Observed < 0 {
+		return none, malformed("observed must not be negative")
+	}
+	return application.CheckCommand{FactID: fact, Request: request, Warehouse: warehouse, Observed: *document.Observed}, nil
+}
+
+type packLineDocument struct {
+	Sequence   *int    `json:"sequence"`
+	Packaging  *string `json:"packagingMaterial"`
+	Weight     *string `json:"weight"`
+	WeightUnit *string `json:"weightUnit"`
+	Length     *string `json:"length"`
+	Width      *string `json:"width"`
+	Height     *string `json:"height"`
+	Dimension  *string `json:"dimensionUnit"`
+	GoodsCode  *string `json:"goodsCode"`
+	Unit       *string `json:"unit"`
+	Quantity   *int64  `json:"quantity"`
+}
+
+type packDocument struct {
+	carriedIdentity
+	FactID    *string             `json:"factId"`
+	RequestID *string             `json:"requestId"`
+	Warehouse *string             `json:"warehouse"`
+	Parcels   *[]packLineDocument `json:"parcels"`
+}
+
+// PackCommand 把打包事实译成命令。包材只记下文本，不查册。
+func PackCommand(reader io.Reader) (application.PackCommand, error) {
+	var none application.PackCommand
+	document, err := decodeDocument[packDocument](reader, "pack")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	fact, err := requiredText("factId", document.FactID, domain.NewPickFactID)
+	if err != nil {
+		return none, err
+	}
+	request, err := requiredText("requestId", document.RequestID, domain.NewOutboundRequestID)
+	if err != nil {
+		return none, err
+	}
+	warehouse, err := requiredText("warehouse", document.Warehouse, domain.NewWarehouseCode)
+	if err != nil {
+		return none, err
+	}
+	if document.Parcels == nil || len(*document.Parcels) == 0 {
+		return none, malformed("parcels is required")
+	}
+	parcels := make([]application.PackParcelCommand, 0, len(*document.Parcels))
+	for _, item := range *document.Parcels {
+		if item.Sequence == nil || *item.Sequence < 1 {
+			return none, malformed("sequence must be a positive integer")
+		}
+		if item.Quantity == nil || *item.Quantity < 1 {
+			return none, malformed("quantity must be a positive integer")
+		}
+		goods, err := requiredText("goodsCode", item.GoodsCode, domain.NewGoodsCode)
+		if err != nil {
+			return none, err
+		}
+		unit, err := requiredText("unit", item.Unit, domain.NewGoodsUnitName)
+		if err != nil {
+			return none, err
+		}
+		text := func(name string, raw *string) (string, error) {
+			if raw == nil || *raw == "" {
+				return "", malformed("%s is required", name)
+			}
+			return *raw, nil
+		}
+		packaging, err := text("packagingMaterial", item.Packaging)
+		if err != nil {
+			return none, err
+		}
+		weight, err := text("weight", item.Weight)
+		if err != nil {
+			return none, err
+		}
+		weightUnit, err := text("weightUnit", item.WeightUnit)
+		if err != nil {
+			return none, err
+		}
+		length, err := text("length", item.Length)
+		if err != nil {
+			return none, err
+		}
+		width, err := text("width", item.Width)
+		if err != nil {
+			return none, err
+		}
+		height, err := text("height", item.Height)
+		if err != nil {
+			return none, err
+		}
+		dimension, err := text("dimensionUnit", item.Dimension)
+		if err != nil {
+			return none, err
+		}
+		parcels = append(parcels, application.PackParcelCommand{
+			Sequence: *item.Sequence, Packaging: packaging, Weight: weight, WeightUnit: weightUnit,
+			Length: length, Width: width, Height: height, Dimension: dimension,
+			Goods: goods, Unit: unit, Quantity: *item.Quantity,
+		})
+	}
+	return application.PackCommand{FactID: fact, Request: request, Warehouse: warehouse, Parcels: parcels}, nil
+}
+
 // ShortagePolicyCommand 把缺货处置译成命令。租户与登记人由 Intake 填。
 func ShortagePolicyCommand(reader io.Reader, tenant domain.TenantID, operator domain.Registrant) (application.RegisterShortagePolicyCommand, error) {
 	var none application.RegisterShortagePolicyCommand

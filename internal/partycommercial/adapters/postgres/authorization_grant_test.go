@@ -257,7 +257,7 @@ func TestClosureAndReopeningGrantsRoundTripAndTheChecksHold(t *testing.T) {
 	mustSaveDelegations(t, transactor, ctx, publications, delegationsOn(t, contract,
 		delegationRow(t, accountDelegatorRow(t, "account-1"), "level-commercial", "scope-1", delegationInterval(t)),
 	))
-	for _, action := range []string{"CONTROLLED_CLOSURE", "REOPENING"} {
+	for _, action := range []string{"CONTROLLED_CLOSURE", "REOPENING", "WAREHOUSE_FULFILLMENT_AGENCY"} {
 		_, err := pool.Exec(ctx,
 			`INSERT INTO party_commercial.contract_delegation
 				(tenant_id, object_kind, object_id, version_label, action, scope_ref, authority_level,
@@ -265,7 +265,7 @@ func TestClosureAndReopeningGrantsRoundTripAndTheChecksHold(t *testing.T) {
 			 VALUES ('tenant-1', 2, 'contract-1', 'v1', $1, 'scope-1', 'level-clerk', 'CUSTOMER_ACCOUNT', 'account-1', now())`,
 			action)
 		if err == nil || !strings.Contains(err.Error(), "contract_delegation_action_delegable") {
-			t.Fatalf("%s: err = %v; 委派册的动作 CHECK 收下了关闭 / 重开", action, err)
+			t.Fatalf("%s: err = %v; 委派册的动作 CHECK 收下了不该委派的动作", action, err)
 		}
 	}
 }

@@ -180,7 +180,7 @@ func (store *OutboundRequests) ListReservations(ctx context.Context, tenant doma
 		     ON request.tenant_id = reservation.tenant_id AND request.request_id = reservation.request_id
 		  WHERE request.tenant_id = $1 AND request.owner_account_id = $2
 		    AND ($3 = '' OR request.warehouse_code = $3)
-		    AND request.status IN ('RESERVED', 'PARTIALLY_RESERVED')
+		    AND request.status IN ('RESERVED', 'PARTIALLY_RESERVED', 'ALLOCATED')
 		  ORDER BY reservation.request_id, reservation.line_index`,
 		tenant.String(), owner.String(), warehouse.String())
 	if err != nil {
@@ -218,7 +218,7 @@ func (store *OutboundRequests) UnassignedReservation(ctx context.Context, tenant
 		   JOIN warehouse_fulfillment.outbound_request request
 		     ON request.tenant_id = reservation.tenant_id AND request.request_id = reservation.request_id
 		  WHERE request.tenant_id = $1 AND request.owner_account_id = $2 AND request.warehouse_code = $3
-		    AND request.status IN ('RESERVED', 'PARTIALLY_RESERVED')
+		    AND request.status IN ('RESERVED', 'PARTIALLY_RESERVED', 'ALLOCATED')
 		    AND reservation.goods_code = $4 AND reservation.stock_state = $5
 		    AND reservation.batch_number IS NOT DISTINCT FROM $6
 		    AND reservation.expiry_date IS NOT DISTINCT FROM $7`+aliasSQL,

@@ -104,6 +104,32 @@ func TestDecisionIntentFollowsTheTransactionalTemplate(t *testing.T) {
 	}
 }
 
+func TestCustomerSupplementHandoffRefusesToRunOutsideATransaction(t *testing.T) {
+	_, db, _ := newDecisionHandoffFixture(t)
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handoff, err := adapter.NewOutboxCustomerSupplementHandoff(db, store, handoffClock{at: time.Date(2026, 8, 14, 11, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestID, err := domain.NewShipmentRequestID("request-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err := domain.NewSubmissionVersionID("submission-v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = handoff.HandOffCustomerSupplement(context.Background(), ports.CustomerSupplementHandoffIntent{
+		Identity: identity(t, "tenant-a", "customer-a", "portal", "req-1"), ShipmentRequestID: requestID, SubmissionVersion: version,
+	})
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("无事务入队：%v", err)
+	}
+}
+
 func countOutboxEventsIn(t *testing.T, pool *pgxpool.Pool, eventID string) int {
 	t.Helper()
 

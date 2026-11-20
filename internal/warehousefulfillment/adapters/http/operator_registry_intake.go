@@ -45,6 +45,7 @@ var (
 	_ PackagingMaterialRegistrationIntake = (*OperatorRegistryIntake)(nil)
 	_ ApprovalDutyIntake                  = (*OperatorRegistryIntake)(nil)
 	_ ShortagePolicyIntake                = (*OperatorRegistryIntake)(nil)
+	_ AllocationStrategyIntake            = (*OperatorRegistryIntake)(nil)
 	_ DisposalRuleRegistrationIntake      = (*OperatorRegistryIntake)(nil)
 )
 

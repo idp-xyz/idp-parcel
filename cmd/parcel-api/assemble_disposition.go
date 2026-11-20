@@ -6,6 +6,7 @@ import (
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
@@ -96,6 +97,14 @@ func dispositionOrchestrationWith(
 		return nil, fmt.Errorf("parcel-api: acceptance decision identities: %w", err)
 	}
 	clock := systemClock{}
+	outboxStore, err := outbox.NewStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: disposition outbox: %w", err)
+	}
+	supplement, err := pspostgres.NewOutboxCustomerSupplementHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer supplement handoff: %w", err)
+	}
 
 	release := pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, scopeLocks, clock),
@@ -111,6 +120,7 @@ func dispositionOrchestrationWith(
 		ScopeLock:  pssettlement.NewControlScopeLocks(scopeLocks),
 		Identities: identities,
 		Clock:      clock,
+		Supplement: supplement,
 	})
 	return transactionalDisposition{transactor: db.Transactor(), inner: handler}, nil
 }

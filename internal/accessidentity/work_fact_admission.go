@@ -49,6 +49,12 @@ const (
 	WorkFactUnboxing WorkFactKind = "UNBOXING"
 	// WorkFactCountEntry 是盘点清点（UC-WF-010；ADR-0384 决定三）。
 	WorkFactCountEntry WorkFactKind = "COUNT_ENTRY"
+	// WorkFactPick 是拣货（UC-WF-013；ADR-0384 决定三）。
+	WorkFactPick WorkFactKind = "PICK"
+	// WorkFactOutboundCheck 是出库复核（UC-WF-013；ADR-0384 决定三）。
+	WorkFactOutboundCheck WorkFactKind = "OUTBOUND_CHECK"
+	// WorkFactPack 是打包（UC-WF-013；ADR-0384 决定三）。
+	WorkFactPack WorkFactKind = "PACK"
 )
 
 // workFactKindsAdmittedAtMint 是准入范围对照收哪几个词、认证方问哪一对准入要求的唯一来源：两处各抄一份，改了一份，登在旧词下的
@@ -69,6 +75,9 @@ var workFactKindsAdmittedAtMint = []WorkFactKind{
 	WorkFactRelabelExecution,
 	WorkFactUnboxing,
 	WorkFactCountEntry,
+	WorkFactPick,
+	WorkFactOutboundCheck,
+	WorkFactPack,
 }
 
 // ParseWorkFactKind 按字面取值认作业事实类型，大小写不折叠：对照册里存的就是这些字面量。

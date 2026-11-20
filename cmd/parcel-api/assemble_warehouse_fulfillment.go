@@ -7,9 +7,13 @@ import (
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	psparty "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	whidentity "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/identity"
+	whparcel "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/parcelshipment"
 	whparty "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/partycommercial"
 	whpostgres "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/postgres"
 	warehouseapp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
@@ -164,6 +168,7 @@ type warehouseFulfillmentOrchestration struct {
 	adjustments        transactionalAdjustment
 	jobDiscrepancies   transactionalJobDiscrepancy
 	outbounds          transactionalOutbound
+	waves              transactionalWave
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -335,7 +340,7 @@ func (management transactionalUnclaimedArrivalManagement) Dispose(
 	})
 }
 
-func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.Assigner) (warehouseFulfillmentOrchestration, error) {
+func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.Assigner, isolated *isolatedWriteAdmission, selfAuthority string) (warehouseFulfillmentOrchestration, error) {
 	none := warehouseFulfillmentOrchestration{}
 	warehouses, err := whpostgres.NewWarehouses(db)
 	if err != nil {
@@ -590,6 +595,25 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 			holds, owners, systemClock{}, warehouses,
 		),
 	}
+	waveStore, err := whpostgres.NewWaves(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: waves: %w", err)
+	}
+	pickTaskIDs, err := whidentity.NewPickTaskIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: pick tasks: %w", err)
+	}
+	opener, err := buildWarehouseOutboundOpener(db, isolated, selfAuthority, assigner)
+	if err != nil {
+		return none, err
+	}
+	waves := transactionalWave{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewWaveHandler(
+			waveStore, outboundStore, pickTaskIDs, discrepancyIDs, poster, stock, locations, zones, goods, holds, systemClock{}, warehouses,
+		),
+		commissions: warehouseapp.NewCommissionHandler(outboundStore, waveStore, opener, warehouses),
+	}
 	jobDiscrepancies := transactionalJobDiscrepancy{
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewJobDiscrepancyHandler(
@@ -671,6 +695,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		adjustments:              adjustments,
 		jobDiscrepancies:         jobDiscrepancies,
 		outbounds:                outbounds,
+		waves:                    waves,
 	}, nil
 }
 
@@ -765,6 +790,80 @@ func (registration transactionalOutbound) RegisterPolicy(ctx context.Context, co
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.OutboundResult, error) {
 		return registration.inner.RegisterPolicy(txCtx, command)
 	})
+}
+
+type transactionalWave struct {
+	transactor  bentoapp.Transactor
+	inner       *warehouseapp.WaveHandler
+	commissions *warehouseapp.CommissionHandler
+}
+
+func buildWarehouseOutboundOpener(db *bentopg.DB, isolated *isolatedWriteAdmission, selfAuthority string, assigner *docnumber.Assigner) (*whparcel.Opener, error) {
+	submission, err := buildSubmissionOrchestration(db, isolated, selfAuthority, assigner)
+	if err != nil {
+		return nil, err
+	}
+	ownership, err := buildProductionOwnership(db, isolated, selfAuthority)
+	if err != nil {
+		return nil, err
+	}
+	grants, err := pcpostgres.NewAuthorityGrants(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: warehouse agency grants: %w", err)
+	}
+	keys, err := pspostgres.NewCommercialResolutionKeyStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: warehouse agency resolution keys: %w", err)
+	}
+	authorizer, err := psparty.NewWarehouseAgencyAuthorizer(keys, pcapplication.NewAdjudicateCommercialAuthorizationHandler(grants), systemClock{})
+	if err != nil {
+		return nil, err
+	}
+	return whparcel.NewOpener(authorizer, submission, ownership, systemClock{})
+}
+
+func (registration transactionalWave) Release(ctx context.Context, command warehouseapp.ReleaseWaveCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.Release(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) Adopt(ctx context.Context, command warehouseapp.AdoptStrategyCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.Adopt(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) Pick(ctx context.Context, command warehouseapp.PickCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.Pick(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) Check(ctx context.Context, command warehouseapp.CheckCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.Check(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) Pack(ctx context.Context, command warehouseapp.PackCommand) (warehouseapp.WaveResult, error) {
+	packed, err := inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.Pack(txCtx, command)
+	})
+	if err != nil || registration.commissions == nil {
+		return packed, err
+	}
+	if packed.Outcome() != warehouseapp.WavePacked && packed.Outcome() != warehouseapp.WaveExisting {
+		return packed, nil
+	}
+	// 委托提交另开一笔。打包已经落定；这一笔没提交成，重放打包口会接着提交。
+	commissioned, err := inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.CommissionResult, error) {
+		return registration.commissions.Submit(txCtx, command.Tenant, command.Request)
+	})
+	if err != nil {
+		return warehouseapp.WaveResult{}, err
+	}
+	return packed.AfterCommission(commissioned), nil
 }
 
 func (registration transactionalOutbound) Split(ctx context.Context, command warehouseapp.SplitOutboundCommand) (warehouseapp.SplitResult, error) {

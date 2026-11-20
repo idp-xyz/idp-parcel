@@ -285,6 +285,7 @@ func authorizedActionFrom(raw string) (domain.AuthorizedAction, error) {
 		domain.SourceDataAmendmentAction,
 		domain.ControlledClosureAction,
 		domain.ReopeningAction,
+		domain.WarehouseFulfillmentAgencyAction,
 	} {
 		if action.String() == raw {
 			return action, nil
