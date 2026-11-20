@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
-import type { ExternalResultBody, SubmissionVersionBody } from './api';
+import type { ExternalResultBody, MemberMeasurementNowBody, SubmissionVersionBody } from './api';
 import {
   caseNumberNote,
   caseNumberOf,
@@ -10,6 +10,8 @@ import {
   externalResultRows,
   judgementRows,
   manifestReferenceRows,
+  measuredWeightText,
+  measurementNowText,
   submissionRows,
   unitRows,
 } from './record-rows';
@@ -24,7 +26,7 @@ function version(over: Partial<SubmissionVersionBody> = {}): SubmissionVersionBo
   return {
     version: 'SUBV-1', unit: 'UNIT-1', procedure: 'proc-1', contentDigest: 'dg', members: ['PCL-1'],
     dossier: 'dossier-1', roles: 'roles-1', readinessBasis: 'b', authority: 'auth-1', fixedAt: at,
-    isCurrent: true, attempts: [], ...over,
+    isCurrent: true, attempts: [], memberWeights: [], ...over,
   };
 }
 
@@ -218,4 +220,29 @@ test('舱单引用行：来源只凭留痕在不在场，未关联写尚未关�
   equal(rows[1].values.entryWord, '接口送达');
   equal(rows[1].values.association, '尚未关联');
   equal(rows[1].values.priorVersion, '');
+});
+
+test('实测毛重与此刻的对照按状态写成关务人员能读的话', () => {
+  equal(measuredWeightText([]), '申报时没有实测毛重');
+  equal(
+    measuredWeightText([{ parcel: 'PCL-1', grossWeight: '2.1', grossWeightUnit: 'KG', measurementSource: 'SYN-WEIGH-M1', measuredAt: at }]),
+    'PCL-1 实测毛重 2.1 KG（称重量方 SYN-WEIGH-M1）',
+  );
+  const now = (state: string, extra: Partial<MemberMeasurementNowBody> = {}): SubmissionVersionBody =>
+    version({
+      memberWeights: [{ parcel: 'PCL-1', grossWeight: '2.1', grossWeightUnit: 'KG', measurementSource: 'SYN-WEIGH-M1', measuredAt: at }],
+      measurementsNow: [{ parcel: 'PCL-1', state, ...extra }],
+    });
+  equal(
+    measurementNowText(now('SAME', { grossWeight: '2.1', grossWeightUnit: 'KG', measurementSource: 'SYN-WEIGH-M1' })),
+    'PCL-1 实测毛重 2.1 KG（称重量方 SYN-WEIGH-M1），与申报时相同',
+  );
+  equal(
+    measurementNowText(now('CHANGED', { grossWeight: '3', grossWeightUnit: 'KG', measurementSource: 'SYN-WEIGH-M2' })),
+    'PCL-1 现已复测为 3 KG（称重量方 SYN-WEIGH-M2），与申报时不同',
+  );
+  equal(measurementNowText(now('NONE_NOW')), 'PCL-1 申报时的实测已作废');
+  equal(measurementNowText(now('UNDETERMINED')), 'PCL-1 现有多条实测，定不下用哪一条');
+  equal(measurementNowText(now('UNAVAILABLE')), 'PCL-1 此刻的实测读不到');
+  equal(measurementNowText(version({ isCurrent: false, measurementsNow: [{ parcel: 'PCL-1', state: 'CHANGED' }] })), '');
 });

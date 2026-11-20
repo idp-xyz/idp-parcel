@@ -45,3 +45,10 @@ test('录入海关结果的提示说清放行内容怎么填、标识会加前�
   equal(target?.outcomeLabels.EXISTING_RESULT, '这条结果已经录过，内容相同');
   ok(target?.undecidedReasonLabels?.RELEASE_SEMANTICS_UNINTERPRETED);
 });
+
+test('申报提交的未决把实测定不下和读不到分开，并说出恢复动作', () => {
+  const target = caseDecisionTargets.find((candidate) => candidate.id === 'declaration-submission');
+  ok(target?.undecidedReasonLabels?.MEMBER_MEASUREMENT_UNDETERMINED?.includes('采用'));
+  ok(target?.undecidedReasonLabels?.MEMBER_MEASUREMENT_UNDETERMINED?.includes('作废'));
+  ok(target?.undecidedReasonLabels?.MEMBER_MEASUREMENT_UNAVAILABLE?.includes('重试'));
+});

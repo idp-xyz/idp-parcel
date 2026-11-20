@@ -166,6 +166,7 @@ const snapshotColumns = recordColumns(
   [
     { id: 'unit', header: '批次号', mono: true, nowrap: true },
     { id: 'members', header: parcelNumberName, mono: true, multi: true },
+    { id: 'measured', header: '实测毛重', multi: true },
     { id: 'current', header: '现况', nowrap: true },
     { id: 'fixedAt', header: '固定时间', mono: true, nowrap: true },
   ],
@@ -182,6 +183,7 @@ const submissionColumns = recordColumns(
   [
     { id: 'unit', header: '批次号', mono: true, nowrap: true },
     { id: 'members', header: parcelNumberName, mono: true, multi: true },
+    { id: 'measured', header: '实测毛重', multi: true },
     { id: 'latestSend', header: '发送', nowrap: true },
     { id: 'received', header: '海关接收' },
     { id: 'accepted', header: '海关受理' },

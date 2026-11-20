@@ -504,6 +504,14 @@ export const scopedStatusVocabulary: Record<string, Record<string, StatusEntry>>
   'customs-obligation': { HANDED_OVER: good('已承接'), CONCLUDED: muted('已终结') },
   // 技术回执层：ACKNOWLEDGED / FAILED 说的是报文有没有送达，不是业务受理。
   'customs-receipt': { ACKNOWLEDGED: good('技术成功'), FAILED: bad('技术失败') },
+  // 提交版本上此刻的实测与申报时记下的那一条是否还是同一条。UNDETERMINED 在总表是「未能判定」，这里说的是哪一条实测。
+  'member-measurement': {
+    SAME: good('与申报时相同'),
+    CHANGED: warn('与申报时不同'),
+    NONE_NOW: warn('申报时的实测已作废'),
+    UNDETERMINED: warn('定不下用哪一条'),
+    UNAVAILABLE: bad('此刻读不到'),
+  },
   // 集运单元阶段：OPEN 是还能往里装。
   consolidation: { OPEN: info('开放装入') },
   // 称重量方册的「是否作废」（册读口 ports.ActualMeasurementPages 的 voided 筛选维，布尔）：false 是没有作废指过来，true 是已有作废指过来。

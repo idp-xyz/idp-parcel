@@ -168,6 +168,12 @@ export const manualLodgementOutcomeLabels: Record<string, string> = {
   SOURCE_NOT_ACCEPTED: '内容不完整或不成立（版本不在册、没有递交凭据、递交时间在未来或早于这一版形成的时间），没有受理',
 };
 
+/** 申报提交停在实测上的两格。定不下要先让租户能选出一条；读不动是过一会儿再试。 */
+export const declarationSubmissionUndecidedLabels: Record<string, string> = {
+  MEMBER_MEASUREMENT_UNDETERMINED: '定不下用哪一条实测。请先让租户采用当前有效实测的形态，或作废多余的那一条，然后再提交',
+  MEMBER_MEASUREMENT_UNAVAILABLE: '此刻读不到实测。请稍后重试',
+};
+
 export const externalResultEntryUndecidedLabels: Record<string, string> = {
   RELEASE_SEMANTICS_UNINTERPRETED: '放行结果没有填 release，或读不出放行内容',
   EVALUATION_INSTANT_UNTRUSTED: '回执上的业务时间没填，或晚于现在',
@@ -197,6 +203,18 @@ export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTa
       snapshotHint: customsDecisionHints[kind],
       submit: (snapshot: unknown) => submitCustomsDecision(kind, snapshot),
       outcomeLabels: manifestEntryOutcomeLabels,
+    };
+  }
+  if (kind === 'declaration-submission') {
+    return {
+      id: kind,
+      label: customsDecisionTitles[kind],
+      title: customsDecisionTitles[kind],
+      endpoint: `POST ${customsDecisionEndpoints[kind]}`,
+      snapshotHint: customsDecisionHints[kind],
+      submit: (snapshot: unknown) => submitCustomsDecision(kind, snapshot),
+      outcomeLabels: customsDecisionOutcomeLabels,
+      undecidedReasonLabels: declarationSubmissionUndecidedLabels,
     };
   }
   if (kind === 'external-result-entry') {

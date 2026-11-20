@@ -677,6 +677,25 @@ export interface SubmissionAttemptBody {
   receipts: TechnicalReceiptBody[];
 }
 
+/** 成版时记下的一件成员实测毛重。数组为空是这一版没有称到。 */
+export interface MemberMeasuredWeightBody {
+  parcel: string;
+  grossWeight: string;
+  grossWeightUnit: string;
+  measurementSource: string;
+  measuredAt: string;
+}
+
+/** 当前版上，此刻的实测与申报时记下的那一条是否还是同一条。重量四格只在此刻有一条时在场。 */
+export interface MemberMeasurementNowBody {
+  parcel: string;
+  state: string;
+  grossWeight?: string;
+  grossWeightUnit?: string;
+  measurementSource?: string;
+  measuredAt?: string;
+}
+
 export interface SubmissionVersionBody {
   version: string;
   unit: string;
@@ -691,6 +710,8 @@ export interface SubmissionVersionBody {
   isCurrent: boolean;
   correctedFrom?: string;
   attempts: SubmissionAttemptBody[];
+  memberWeights: MemberMeasuredWeightBody[];
+  measurementsNow?: MemberMeasurementNowBody[];
 }
 
 export interface SubmissionVersionListResponseBody {

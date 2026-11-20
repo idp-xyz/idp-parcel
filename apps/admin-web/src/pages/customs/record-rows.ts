@@ -10,6 +10,8 @@ import type {
   ExternalManifestReferenceBody,
   ExternalResultBody,
   SubmissionAttemptBody,
+  MemberMeasurementNowBody,
+  MemberMeasuredWeightBody,
   SubmissionVersionBody,
 } from './api';
 import { formatInstant } from '../catalogue-view';
@@ -168,10 +170,43 @@ export function snapshotRows(submissions: SubmissionVersionBody[]): RegisterRow[
       roles: version.roles,
       digest: version.contentDigest,
       members: parcelList(version.members),
+      measured: measuredWeightText(version.memberWeights),
       current: version.isCurrent ? '当前版' : '已被更正取代',
       fixedAt: formatInstant(version.fixedAt),
     },
   }));
+}
+
+/** 申报时记下的实测毛重。空数组要说成「没有称到」，不能留白让人以为这一版没带这一格。 */
+export function measuredWeightText(weights: MemberMeasuredWeightBody[] | undefined): string {
+  if (!weights || weights.length === 0) return '申报时没有实测毛重';
+  return weights
+    .map((weight) => `${weight.parcel} 实测毛重 ${weight.grossWeight} ${weight.grossWeightUnit}（称重量方 ${weight.measurementSource}）`)
+    .join('\n');
+}
+
+/** 当前版此刻的对照。非当前版没有这一组，不显示。 */
+export function measurementNowText(version: SubmissionVersionBody): string {
+  if (!version.isCurrent || !version.measurementsNow || version.measurementsNow.length === 0) return '';
+  return version.measurementsNow.map(measurementNowLine).join('\n');
+}
+
+function measurementNowLine(row: MemberMeasurementNowBody): string {
+  const parcel = row.parcel;
+  switch (row.state) {
+    case 'SAME':
+      return `${parcel} 实测毛重 ${row.grossWeight} ${row.grossWeightUnit}（称重量方 ${row.measurementSource}），与申报时相同`;
+    case 'CHANGED':
+      return `${parcel} 现已复测为 ${row.grossWeight} ${row.grossWeightUnit}（称重量方 ${row.measurementSource}），与申报时不同`;
+    case 'NONE_NOW':
+      return `${parcel} 申报时的实测已作废`;
+    case 'UNDETERMINED':
+      return `${parcel} 现有多条实测，定不下用哪一条`;
+    case 'UNAVAILABLE':
+      return `${parcel} 此刻的实测读不到`;
+    default:
+      return `${parcel} ${labelFor(row.state, 'member-measurement')}`;
+  }
 }
 
 /** 发送事实一格：缺席是还没有越过发送边界（待发送），不写成「失败」。 */
@@ -226,6 +261,7 @@ export function submissionRows(submissions: SubmissionVersionBody[], results: Ex
         unit: version.unit,
         procedure: version.procedure,
         members: parcelList(version.members),
+        measured: [measuredWeightText(version.memberWeights), measurementNowText(version)].filter(Boolean).join('\n'),
         authority: shortenEmbeddedPrincipalRefs(version.authority),
         readinessBasis: version.readinessBasis,
         current: version.isCurrent ? '当前版' : '已被更正取代',
