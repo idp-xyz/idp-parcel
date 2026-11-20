@@ -46,11 +46,13 @@ func (outcome ConfirmReceiptOutcome) String() string {
 	}
 }
 
-// ConfirmReceiptResult 携带落册的事实。只有 CONFIRMED、EXISTING_RESULT 与 DIVERTED_TO_UNCLAIMED 上回显。
+// ConfirmReceiptResult 携带落册的事实，或 CONTENT_INVALID 上的逐行指出。
+// 只有 CONFIRMED、EXISTING_RESULT 与 DIVERTED_TO_UNCLAIMED 上回显事实。
 type ConfirmReceiptResult struct {
 	outcome ConfirmReceiptOutcome
 	receipt domain.RecordedReceipt
 	has     bool
+	issues  []domain.ReceiptContentIssue
 }
 
 func (result ConfirmReceiptResult) Outcome() ConfirmReceiptOutcome { return result.outcome }
@@ -59,12 +61,22 @@ func (result ConfirmReceiptResult) Receipt() (domain.RecordedReceipt, bool) {
 	return result.receipt, result.has
 }
 
+// Issues 是 CONTENT_INVALID 上全部不合之处，按行的先后、再按同一行里先遇到的种类。别的结果上是空的。
+func (result ConfirmReceiptResult) Issues() []domain.ReceiptContentIssue {
+	return slices.Clone(result.issues)
+}
+
 func confirmReceiptEcho(outcome ConfirmReceiptOutcome, receipt domain.RecordedReceipt) ConfirmReceiptResult {
 	return ConfirmReceiptResult{outcome: outcome, receipt: receipt, has: true}
 }
 
 func confirmReceiptBare(outcome ConfirmReceiptOutcome) ConfirmReceiptResult {
 	return ConfirmReceiptResult{outcome: outcome}
+}
+
+// ContentInvalidReceipt 是整条不落、并逐行指出不合之处的结果。
+func ContentInvalidReceipt(issues []domain.ReceiptContentIssue) ConfirmReceiptResult {
+	return ConfirmReceiptResult{outcome: ConfirmReceiptContentInvalid, issues: slices.Clone(issues)}
 }
 
 // ConfirmReceiptCommand 是一次商品入库的收货。事实身份由设备签发。租户不取自载荷。
@@ -166,17 +178,20 @@ func NewConfirmReceiptHandler(
 //  2. 先拿事实身份这把锁，再按事实身份认重放。内容相同答 EXISTING_RESULT，不再入账；
 //     内容不同答 CONTENT_CONFLICT，在册的与库存都不变。重放排在后面的校验之前。
 //  3. 仓在本租户没登记：WAREHOUSE_NOT_FOUND，不落册。
-//  4. 预报在本租户查不到：PRE_ADVICE_NOT_FOUND。预报的仓不是这一条事实的仓：CONTENT_INVALID，整条不落。
-//  5. 行的形态与预报的入库方式不符：CONTENT_INVALID，整条不落，不占事实身份。
-//     形态相符而且是整箱入库时，改走整箱收货：入整箱账，不进商品库存。
-//  6. 整条先核，任一处不合就 CONTENT_INVALID，一行都不入账：库位在这个仓不存在，或所属库区不是收货暂存；
-//     认得出的商品计量单位不是当前修订的包装层级；跟踪批号或效期的没带，不跟踪的却带了；
-//     贴标别名不是该商品在事实发生时刻有效的平台商品码；数量不为正。库位已停用仍可入账。
-//     别名按事实发生时刻判。解不出的码是认不出，不把整条判死，也不跨货主找。
-//  7. 锁这份预报（与撤回同一把锁），再 NoteReceiptStarted。这一步必须先于入账：
+//  4. 预报在本租户查不到：PRE_ADVICE_NOT_FOUND。预报的仓不是这一条事实的仓，或行的形态与预报的入库方式不符：
+//     CONTENT_INVALID，整条不落，不占事实身份。
+//  5. 锁这份预报（与撤回同一把锁），再看它此刻的状态。已取消或已完结：原事实保全为一件待认领到货，
+//     答 DIVERTED_TO_UNCLAIMED，不入商品库存，也不入整箱库存，预报状态不变。这一步不核行上的库位、
+//     计量单位、批号、效期与贴标别名。没有行，或数量不为正，落不了册，仍答 CONTENT_INVALID。
+//     命令不带待认领到货的引用；已经引用着一件到货又来转待认领的，不在这条路径上。
+//  6. 还能收货才整条先核。有任何一处不合就 CONTENT_INVALID 并逐行指出全部不合，一行都不入账，也不推进预报：
+//     库位在这个仓不存在，或所属库区不是收货暂存；认得出的商品，计量单位不是入账这一刻当前修订的包装层级；
+//     跟踪批号或效期的没带，不跟踪的却带了；贴标别名不是该商品在事实发生时刻生效的那一笔修订上、且当时有效的平台商品码。
+//     库位已停用仍可入账。识别码按事实发生时刻生效的修订解析。解不出的码是认不出，不把整条判死，也不跨货主找。
+//     形态相符而且是整箱入库时，核的是箱行的库位，然后入整箱账，不进商品库存。
+//  7. 核过之后再 NoteReceiptStarted，把已预报推进收货中。这一步必须先于入账：
 //     入账会去拿货主锁与记数锁。若先拿货主锁再拿预报锁，会和改跟踪属性那一边成环——
-//     商品修订先拿货主锁再问在库。已取消或已完结：原事实保全为一件待认领到货，
-//     答 DIVERTED_TO_UNCLAIMED，不入商品库存，也不入整箱库存，预报状态不变。
+//     商品修订先拿货主锁再问在库。
 //  8. 同一笔里入账。成立的行合成一笔原因是收货的流水，来源事实引用是这条事实的身份。
 //     认不出的行不进流水。没有任何成立的行也答 CONFIRMED，预报仍进入收货中。
 //     入账没有落成，交 error，调用方回滚，预报状态也不许单独推进。
@@ -214,26 +229,34 @@ func (handler *ConfirmReceiptHandler) Confirm(ctx context.Context, command Confi
 		return confirmReceiptBare(ConfirmReceiptPreAdviceNotFound), nil
 	}
 	if advice.Warehouse() != command.Warehouse {
-		return confirmReceiptBare(ConfirmReceiptContentInvalid), nil
+		return ContentInvalidReceipt([]domain.ReceiptContentIssue{domain.WholeReceiptIssue(domain.ReceiptIssueWarehouseMismatch)}), nil
 	}
 	if command.Shape != advice.Inbound() || receiptShapeMixed(command) {
-		return confirmReceiptBare(ConfirmReceiptContentInvalid), nil
+		return ContentInvalidReceipt([]domain.ReceiptContentIssue{domain.WholeReceiptIssue(domain.ReceiptIssueShapeMismatch)}), nil
+	}
+	// 先锁再看状态。撤回若已经落定，这里读到的是已取消，行上的库位与别名不再拿来挡转待认领。
+	advice, err = handler.adviceUnderLock(ctx, command.Tenant, advice.ID())
+	if err != nil {
+		return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: %w", err)
+	}
+	if !preAdviceReceivable(advice) {
+		return handler.divertUnscreened(ctx, warehouse, advice, command)
 	}
 	if advice.Inbound() == domain.InboundByCarton {
 		return handler.confirmCarton(ctx, warehouse, advice, command)
 	}
-	prepared, invalid, err := handler.screen(ctx, advice, command)
+	prepared, issues, err := handler.screen(ctx, advice, command)
 	if err != nil {
 		return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: %w", err)
 	}
-	if invalid {
-		return confirmReceiptBare(ConfirmReceiptContentInvalid), nil
+	if len(issues) > 0 {
+		return ContentInvalidReceipt(issues), nil
 	}
 	if warehouse.Content().Kind() != domain.WarehouseKindSelfOperated {
 		return ConfirmReceiptResult{}, errors.New("confirm receipt: 仓不是自营仓，收货入账无由落")
 	}
 
-	// 先拿预报锁，再让入账去拿货主锁与记数锁。次序反了会和改跟踪属性成环：那边先拿货主锁，再读库存账。
+	// 预报锁已经在 adviceUnderLock 里。NoteReceiptStarted 再拿同一把，把已预报推进收货中，然后入账才去拿货主锁。
 	noted, err := handler.notices.NoteReceiptStarted(ctx, NotePreAdviceCommand{Tenant: command.Tenant, ID: advice.ID()})
 	if err != nil {
 		return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: %w", err)
@@ -241,11 +264,7 @@ func (handler *ConfirmReceiptHandler) Confirm(ctx context.Context, command Confi
 	receivedAt := handler.clock.Now()
 	switch noted.Outcome() {
 	case PreAdviceReceiptNotReceivable:
-		lines, err := markNotReceivable(command.Lines)
-		if err != nil {
-			return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: %w", err)
-		}
-		return handler.divert(ctx, advice, command, receivedAt, lines, nil)
+		return handler.divertUnscreened(ctx, warehouse, advice, command)
 	case PreAdviceReceiptStarted, PreAdviceReceiptAlreadyReceiving:
 	default:
 		return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: unexpected pre-advice receipt %s", noted.Outcome())
@@ -278,50 +297,61 @@ func (handler *ConfirmReceiptHandler) Confirm(ctx context.Context, command Confi
 }
 
 type preparedLine struct {
-	input    domain.ReceiptLine
-	goods    domain.GoodsCode
-	known    bool
-	revision domain.GoodsRevision
+	input domain.ReceiptLine
+	goods domain.GoodsCode
+	known bool
+}
+
+// identifiedGoods 是一行认出来的商品。posting 是入账这一刻的当前修订，核包装层级与是否跟踪批号、效期。
+// aliases 是事实发生时刻生效的那一笔修订上的别名，核贴标别名。两格不是同一笔修订。
+type identifiedGoods struct {
+	posting domain.GoodsRevision
+	aliases []domain.GoodsAlias
 }
 
 func (handler *ConfirmReceiptHandler) screen(
 	ctx context.Context,
 	advice domain.PreAdvice,
 	command ConfirmReceiptCommand,
-) ([]preparedLine, bool, error) {
+) ([]preparedLine, []domain.ReceiptContentIssue, error) {
 	if len(command.Lines) == 0 {
-		return nil, true, nil
+		return nil, []domain.ReceiptContentIssue{domain.WholeReceiptIssue(domain.ReceiptIssueNoLines)}, nil
 	}
-	seenLocation := map[string]struct{}{}
+	seenLocation := map[string]bool{}
 	var prepared []preparedLine
-	for _, line := range command.Lines {
+	var issues []domain.ReceiptContentIssue
+	for index, line := range command.Lines {
 		if line.Quantity() <= 0 {
-			return nil, true, nil
+			issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueQuantityNotPositive))
 		}
-		if _, seen := seenLocation[line.Location().String()]; !seen {
-			rejected, err := handler.locationRejected(ctx, command.Tenant, command.Warehouse, line.Location())
+		location := line.Location().String()
+		rejected, seen := seenLocation[location]
+		if !seen {
+			var err error
+			rejected, err = handler.locationRejected(ctx, command.Tenant, command.Warehouse, line.Location())
 			if err != nil {
-				return nil, false, err
+				return nil, nil, err
 			}
-			if rejected {
-				return nil, true, nil
-			}
-			seenLocation[line.Location().String()] = struct{}{}
+			seenLocation[location] = rejected
+		}
+		if rejected {
+			issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueLocationNotReceiving))
 		}
 		known, err := handler.resolve(ctx, advice, command.OccurredAt, line)
 		if err != nil {
-			return nil, false, err
+			return nil, nil, err
 		}
 		if known == nil {
 			prepared = append(prepared, preparedLine{input: line})
 			continue
 		}
-		if !lineAccepted(*known, line, command.OccurredAt) {
-			return nil, true, nil
-		}
-		prepared = append(prepared, preparedLine{input: line, goods: known.Code(), known: true, revision: *known})
+		issues = append(issues, lineDefects(known.posting, known.aliases, line, command.OccurredAt, index)...)
+		prepared = append(prepared, preparedLine{input: line, goods: known.posting.Code(), known: true})
 	}
-	return prepared, false, nil
+	if len(issues) > 0 {
+		return nil, issues, nil
+	}
+	return prepared, nil, nil
 }
 
 func (handler *ConfirmReceiptHandler) locationRejected(
@@ -355,7 +385,7 @@ func (handler *ConfirmReceiptHandler) resolve(
 	advice domain.PreAdvice,
 	occurred time.Time,
 	line domain.ReceiptLine,
-) (*domain.GoodsRevision, error) {
+) (*identifiedGoods, error) {
 	code, err := domain.NewIdentifierCode(line.Observed())
 	if err != nil {
 		return nil, nil
@@ -371,25 +401,48 @@ func (handler *ConfirmReceiptHandler) resolve(
 	if err != nil {
 		return nil, err
 	}
-	revision, found, err := handler.goods.LoadLatestGoods(ctx, advice.Tenant(), advice.Owner(), goods)
+	posting, found, err := handler.goods.LoadLatestGoods(ctx, advice.Tenant(), advice.Owner(), goods)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
 		return nil, fmt.Errorf("按码找到商品 %s，当前修订却读不到", goods)
 	}
-	return &revision, nil
+	aliases, err := aliasesOfRow(row)
+	if err != nil {
+		return nil, err
+	}
+	return &identifiedGoods{posting: posting, aliases: aliases}, nil
 }
 
-func lineAccepted(revision domain.GoodsRevision, line domain.ReceiptLine, occurred time.Time) bool {
-	if _, ok := unitFactor(revision, line.Unit()); !ok {
-		return false
+func lineDefects(
+	posting domain.GoodsRevision,
+	aliases []domain.GoodsAlias,
+	line domain.ReceiptLine,
+	occurred time.Time,
+	index int,
+) []domain.ReceiptContentIssue {
+	var issues []domain.ReceiptContentIssue
+	if _, ok := unitFactor(posting, line.Unit()); !ok {
+		issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueUnitNotPackagingLevel))
 	}
-	content := revision.Content()
-	if content.TrackBatch() != line.Batch().Given() || content.TrackExpiry() != line.Expiry().Given() {
-		return false
+	content := posting.Content()
+	switch {
+	case content.TrackBatch() && !line.Batch().Given():
+		issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueBatchRequired))
+	case !content.TrackBatch() && line.Batch().Given():
+		issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueBatchNotTracked))
 	}
-	return aliasAccepted(revision, line.Alias(), occurred)
+	switch {
+	case content.TrackExpiry() && !line.Expiry().Given():
+		issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueExpiryRequired))
+	case !content.TrackExpiry() && line.Expiry().Given():
+		issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueExpiryNotTracked))
+	}
+	if !aliasAccepted(aliases, line.Alias(), occurred) {
+		issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueLabelAliasNotValid))
+	}
+	return issues
 }
 
 func unitFactor(revision domain.GoodsRevision, unit domain.GoodsUnitName) (int64, bool) {
@@ -401,17 +454,48 @@ func unitFactor(revision domain.GoodsRevision, unit domain.GoodsUnitName) (int64
 	return 0, false
 }
 
-func aliasAccepted(revision domain.GoodsRevision, alias domain.GoodsAliasCode, at time.Time) bool {
+func aliasAccepted(aliases []domain.GoodsAlias, alias domain.GoodsAliasCode, at time.Time) bool {
 	if alias.String() == "" {
 		return true
 	}
-	for _, item := range revision.Content().Aliases() {
+	for _, item := range aliases {
 		if item.Code() != alias {
 			continue
 		}
 		return item.Kind() == domain.GoodsAliasPlatformCode && item.Validity().Contains(at)
 	}
 	return false
+}
+
+// aliasesOfRow 把按码找到的那一笔修订上的别名还原出来。找码交回的就是事实发生时刻生效的那一笔，不是入账时的当前修订。
+func aliasesOfRow(row ports.GoodsRow) ([]domain.GoodsAlias, error) {
+	aliases := make([]domain.GoodsAlias, 0, len(row.Aliases))
+	for _, item := range row.Aliases {
+		code, err := domain.NewGoodsAliasCode(item.Code)
+		if err != nil {
+			return nil, err
+		}
+		kind, err := domain.NewGoodsAliasKind(item.Type)
+		if err != nil {
+			return nil, err
+		}
+		var platform domain.PlatformName
+		if item.Platform != "" {
+			platform, err = domain.NewPlatformName(item.Platform)
+			if err != nil {
+				return nil, err
+			}
+		}
+		var from, to time.Time
+		if item.ValidFrom != nil {
+			from = *item.ValidFrom
+		}
+		if item.ValidTo != nil {
+			to = *item.ValidTo
+		}
+		aliases = append(aliases, domain.NewGoodsAlias(code, kind, platform, domain.NewAliasValidity(from, to)))
+	}
+	return aliases, nil
 }
 
 func markNotReceivable(lines []domain.ReceiptLine) ([]domain.ReceiptLine, error) {
@@ -514,8 +598,9 @@ func (handler *ConfirmReceiptHandler) record(
 }
 
 // divert 把已经不能收货的预报上迟到的事实保全成一件待认领到货。
-// 原事实原样留下，不入商品库存，也不入整箱库存。预报状态已由 NoteReceiptStarted 保持不动。
+// 原事实原样留下，不入商品库存，也不入整箱库存。预报状态保持调用前的已取消或已完结。
 // 同一事实再投走前面的重放：内容相同不另建，内容不同答冲突、在册的不变。
+// 命令不带待认领到货的引用，这里也不会为已经引用着的到货再转一件。
 func (handler *ConfirmReceiptHandler) divert(
 	ctx context.Context,
 	advice domain.PreAdvice,
@@ -754,4 +839,76 @@ func mustGoods(code string) domain.GoodsCode {
 		return domain.GoodsCode{}
 	}
 	return goods
+}
+
+// preAdviceReceivable 是还能收货的两种状态：已预报与收货中。已取消与已完结都不是。
+func preAdviceReceivable(advice domain.PreAdvice) bool {
+	switch advice.Status() {
+	case domain.PreAdviceAdvised, domain.PreAdviceReceiving:
+		return true
+	default:
+		return false
+	}
+}
+
+// adviceUnderLock 先拿这份预报的锁，再读回当前那一笔。撤回与完结用同一把锁，读到的状态才是定论。
+func (handler *ConfirmReceiptHandler) adviceUnderLock(
+	ctx context.Context,
+	tenant domain.TenantID,
+	id domain.PreAdviceID,
+) (domain.PreAdvice, error) {
+	if err := handler.preAdvices.HoldPreAdvice(ctx, tenant, id); err != nil {
+		return domain.PreAdvice{}, err
+	}
+	advice, found, err := handler.preAdvices.Find(ctx, tenant, id)
+	if err != nil {
+		return domain.PreAdvice{}, err
+	}
+	if !found {
+		return domain.PreAdvice{}, errors.New("锁内预报读不到")
+	}
+	return advice, nil
+}
+
+// divertUnscreened 在预报已不能收货时，把原事实原样保全为待认领到货，不核行上的库位、计量单位、批号、效期与贴标别名。
+// 没有行，或数量不为正，落不了册，仍答 CONTENT_INVALID。
+func (handler *ConfirmReceiptHandler) divertUnscreened(
+	ctx context.Context,
+	warehouse domain.WarehouseRevision,
+	advice domain.PreAdvice,
+	command ConfirmReceiptCommand,
+) (ConfirmReceiptResult, error) {
+	_ = warehouse
+	receivedAt := handler.clock.Now()
+	switch command.Shape {
+	case domain.InboundByGoods:
+		if len(command.Lines) == 0 {
+			return ContentInvalidReceipt([]domain.ReceiptContentIssue{domain.WholeReceiptIssue(domain.ReceiptIssueNoLines)}), nil
+		}
+		var issues []domain.ReceiptContentIssue
+		for index, line := range command.Lines {
+			if line.Quantity() <= 0 {
+				issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueQuantityNotPositive))
+			}
+		}
+		if len(issues) > 0 {
+			return ContentInvalidReceipt(issues), nil
+		}
+		lines, err := markNotReceivable(command.Lines)
+		if err != nil {
+			return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: %w", err)
+		}
+		return handler.divert(ctx, advice, command, receivedAt, lines, nil)
+	case domain.InboundByCarton:
+		if len(command.CartonLines) == 0 {
+			return ContentInvalidReceipt([]domain.ReceiptContentIssue{domain.WholeReceiptIssue(domain.ReceiptIssueNoLines)}), nil
+		}
+		lines, err := markCartonsNotReceivable(command.CartonLines)
+		if err != nil {
+			return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: %w", err)
+		}
+		return handler.divert(ctx, advice, command, receivedAt, nil, lines)
+	default:
+		return ContentInvalidReceipt([]domain.ReceiptContentIssue{domain.WholeReceiptIssue(domain.ReceiptIssueShapeMismatch)}), nil
+	}
 }

@@ -142,19 +142,20 @@ func (catalogue *GoodsCatalogue) FindGoodsByCode(
 		return ports.GoodsRow{}, false, fmt.Errorf("%s: %w", operation, err)
 	}
 	rows, err := querier.Query(ctx,
-		`WITH latest AS (
+		`WITH at_revision AS (
 		    SELECT DISTINCT ON (goods_code) goods_code, revision
 		      FROM warehouse_fulfillment.goods_revision
 		     WHERE tenant_id = $1 AND owner_account_id = $2
+		       AND registered_at <= $4
 		     ORDER BY goods_code, revision DESC
 		 )
-		 SELECT latest.goods_code
-		   FROM latest
-		  WHERE latest.goods_code = $3
+		 SELECT at_revision.goods_code, at_revision.revision
+		   FROM at_revision
+		  WHERE at_revision.goods_code = $3
 		     OR EXISTS (
 		        SELECT 1 FROM warehouse_fulfillment.goods_alias alias
 		         WHERE alias.tenant_id = $1 AND alias.owner_account_id = $2
-		           AND alias.goods_code = latest.goods_code AND alias.revision = latest.revision
+		           AND alias.goods_code = at_revision.goods_code AND alias.revision = at_revision.revision
 		           AND alias.alias_code = $3
 		           AND (alias.valid_from IS NULL OR alias.valid_from <= $4)
 		           AND (alias.valid_to IS NULL OR $4 < alias.valid_to)
@@ -164,13 +165,17 @@ func (catalogue *GoodsCatalogue) FindGoodsByCode(
 		return ports.GoodsRow{}, false, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
-	var matched []string
+	type match struct {
+		goodsCode string
+		revision  int
+	}
+	var matched []match
 	for rows.Next() {
-		var goodsCode string
-		if err := rows.Scan(&goodsCode); err != nil {
+		var item match
+		if err := rows.Scan(&item.goodsCode, &item.revision); err != nil {
 			return ports.GoodsRow{}, false, fmt.Errorf("%s: %w", operation, err)
 		}
-		matched = append(matched, goodsCode)
+		matched = append(matched, item)
 	}
 	if err := rows.Err(); err != nil {
 		return ports.GoodsRow{}, false, fmt.Errorf("%s: %w", operation, err)
@@ -179,13 +184,13 @@ func (catalogue *GoodsCatalogue) FindGoodsByCode(
 	case 0:
 		return ports.GoodsRow{}, false, nil
 	case 1:
-		goodsCode, err := domain.NewGoodsCode(matched[0])
+		goodsCode, err := domain.NewGoodsCode(matched[0].goodsCode)
 		if err != nil {
 			return ports.GoodsRow{}, false, fmt.Errorf("%s: %w", operation, err)
 		}
-		revision, found, err := loadLatestGoodsRevision(ctx, querier, tenant, owner, goodsCode)
+		revision, found, err := loadGoodsRevision(ctx, querier, tenant, owner, goodsCode, matched[0].revision)
 		if err != nil || !found {
-			return ports.GoodsRow{}, false, fmt.Errorf("%s: 读商品 %q：%w", operation, matched[0], err)
+			return ports.GoodsRow{}, false, fmt.Errorf("%s: 读商品 %q 修订 %d：%w", operation, matched[0].goodsCode, matched[0].revision, err)
 		}
 		return goodsRowOf(revision), true, nil
 	default:

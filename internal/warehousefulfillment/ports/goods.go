@@ -189,8 +189,9 @@ type GoodsCurrentRead interface {
 		owner domain.OwnerAccountID,
 		code domain.GoodsCode,
 	) (GoodsRow, bool, error)
-	// FindGoodsByCode 按各商品的当前修订找 code 在 at 这一刻指向的商品：码是它的商品编码，或是它的某个别名且 at 落在别名的有效区间里
-	// （起含、止不含，没给的那一端无界）。同一货主内一个码在同一时刻至多指向一个商品，所以至多一行。
+	// FindGoodsByCode 找 code 在 at 这一刻指向的商品：先取各商品在 at 生效的那一笔修订（registered_at ≤ at 的最大修订号）；
+	// 码是它的商品编码，或是那一笔上的某个别名且 at 落在别名的有效区间里（起含、止不含，没给的那一端无界）。
+	// 交回的是那一笔修订的行，不是入账时的当前修订。同一货主内一个码在同一时刻至多指向一个商品，所以至多一行。
 	FindGoodsByCode(
 		ctx context.Context,
 		tenant domain.TenantID,

@@ -595,6 +595,113 @@ func TestReceiptLabelAliasUsesTheFactInstant(t *testing.T) {
 	}
 }
 
+// Covers: UC-WF-002 与 AT-WF-043——迟到事实的识别码与贴标别名按发生时刻生效的修订解析，
+// 计量单位与是否跟踪批号按入账时的当前修订判。
+func TestReceiptLateFactResolvesOldRevisionAliasAndChecksCurrentTracking(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedReceiving(t)
+	// rev 1 登记于 baseInstant+1m，带着旧条码与旧平台别名（有效期在事实到达之前已结束）。
+	rev1At := baseInstant.Add(time.Minute)
+	rev2At := baseInstant.Add(2 * time.Minute)
+	world.saveGoodsRevision(t, goodsRevisionFixture(t, "SYN-OWNER-01", "SYN-LATE-01", 1, "REQ-LATE-1", func(spec *domain.GoodsContentSpec) {
+		spec.PackagingLevels = []domain.PackagingLevel{goodsLevelFixture(t, "件", 1)}
+		spec.Aliases = []domain.GoodsAlias{
+			domain.NewGoodsAlias(
+				valueOf(t, domain.NewGoodsAliasCode, "SYN-OLD-SCAN"), domain.GoodsAliasBarcode, domain.PlatformName{},
+				domain.NewAliasValidity(rev1At, time.Time{}),
+			),
+			domain.NewGoodsAlias(
+				valueOf(t, domain.NewGoodsAliasCode, "SYN-OLD-PLAT"), domain.GoodsAliasPlatformCode,
+				valueOf(t, domain.NewPlatformName, "SYN-PLATFORM"),
+				domain.NewAliasValidity(rev1At, rev1At.Add(45*time.Second)),
+			),
+		}
+	}))
+	// rev 2 登记于 baseInstant+2m，删掉旧别名，新加包装层级「箱」并改成跟踪批号。
+	world.saveGoodsRevision(t, goodsRevisionFixture(t, "SYN-OWNER-01", "SYN-LATE-01", 2, "REQ-LATE-2", func(spec *domain.GoodsContentSpec) {
+		spec.Aliases = nil
+		spec.TrackBatch = true
+		spec.PackagingLevels = []domain.PackagingLevel{goodsLevelFixture(t, "件", 1), goodsLevelFixture(t, "箱", 12)}
+	}))
+	advice := world.adviseGoods(t, "REQ-LATE-ADV", "SYN-LATE-01", "件", 24)
+	occurredDuringRev1 := rev1At.Add(30 * time.Second)
+
+	// 发生于 rev 1 期间但没带批号：跟踪批号按入账时当前修订（rev 2）判，答 CONTENT_INVALID。
+	missingBatch := receiptCommand(t, "SYN-FACT-LATE-NOBATCH", advice.ID().String(), mustReceiptLine(t, receiptLineSpec{
+		observed: "SYN-OLD-SCAN", unit: "箱", quantity: 1, alias: "SYN-OLD-PLAT",
+	}))
+	missingBatch.OccurredAt = occurredDuringRev1
+	refused := world.confirm(t, missingBatch)
+	if refused.Outcome() != application.ConfirmReceiptContentInvalid || len(refused.Issues()) != 1 ||
+		refused.Issues()[0].Kind() != domain.ReceiptIssueBatchRequired || refused.Issues()[0].Line() != 0 {
+		t.Fatalf("入账时已跟踪批号：%s %+v", refused.Outcome(), refused.Issues())
+	}
+
+	// 补齐批号：扫描旧条码、贴标旧平台别名（有效区间在到达时已过期但在发生时刻有效）、用 rev 2 新加的「箱」入账。
+	validLate := receiptCommand(t, "SYN-FACT-LATE-OK", advice.ID().String(), mustReceiptLine(t, receiptLineSpec{
+		observed: "SYN-OLD-SCAN", unit: "箱", quantity: 1, batch: "LOT-REV2", alias: "SYN-OLD-PLAT",
+	}))
+	validLate.OccurredAt = occurredDuringRev1
+	confirmed := world.confirm(t, validLate)
+	if confirmed.Outcome() != application.ConfirmReceiptConfirmed || world.stockOf(t, "SYN-LATE-01") != 1 {
+		t.Fatalf("迟到事实按发生时刻解析：%s 库存 %d", confirmed.Outcome(), world.stockOf(t, "SYN-LATE-01"))
+	}
+	var labelAlias *string
+	err := world.pool.QueryRow(t.Context(),
+		`SELECT label_alias FROM warehouse_fulfillment.stock_movement_line WHERE tenant_id = $1 AND goods_code = $2`,
+		"SYN-TENANT-01", "SYN-LATE-01").Scan(&labelAlias)
+	if err != nil || labelAlias == nil || *labelAlias != "SYN-OLD-PLAT" {
+		t.Fatalf("贴标别名 %v %v", labelAlias, err)
+	}
+
+	// 发生于 rev 2 之后再带已删除的旧平台别名：答 CONTENT_INVALID。
+	afterRev2 := receiptCommand(t, "SYN-FACT-AFTER-REV2", advice.ID().String(), mustReceiptLine(t, receiptLineSpec{
+		observed: "SYN-LATE-01", unit: "件", quantity: 1, batch: "LOT-REV2", alias: "SYN-OLD-PLAT",
+	}))
+	afterRev2.OccurredAt = rev2At.Add(time.Minute)
+	rejectedAfter := world.confirm(t, afterRev2)
+	if rejectedAfter.Outcome() != application.ConfirmReceiptContentInvalid || len(rejectedAfter.Issues()) != 1 ||
+		rejectedAfter.Issues()[0].Kind() != domain.ReceiptIssueLabelAliasNotValid {
+		t.Fatalf("新修订已删旧别名：%s %+v", rejectedAfter.Outcome(), rejectedAfter.Issues())
+	}
+}
+
+// Covers: UC-WF-004 结果语义——收货内容不合时整条不落，逐行指出全部不合之处，不止于第一处。
+func TestReceiptContentInvalidListsEveryLineDefect(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedReceiving(t)
+	world.saveGoodsRevision(t, goodsRevisionFixture(t, "SYN-OWNER-01", "SYN-STRICT-01", 1, "REQ-STRICT", func(spec *domain.GoodsContentSpec) {
+		spec.TrackBatch = true
+		spec.TrackExpiry = true
+		spec.Aliases = nil
+	}))
+	advice := world.adviseGoods(t, "REQ-MULTI-DEFECT", "SYN-STRICT-01", "件", 10)
+	refused := world.confirm(t, receiptCommand(t, "SYN-FACT-MULTI-DEFECT", advice.ID().String(),
+		mustReceiptLine(t, receiptLineSpec{observed: "SYN-STRICT-01", unit: "托", quantity: 1, location: "SYN-LOC-MISSING"}),
+		mustReceiptLine(t, receiptLineSpec{observed: "SYN-GOODS-01", unit: "件", quantity: 1, batch: "UNEXPECTED-LOT", alias: "SYN-BAR-01"}),
+	))
+	if refused.Outcome() != application.ConfirmReceiptContentInvalid || world.receiptCount(t) != 0 || world.adviceStatus(t, advice.ID()) != "ADVISED" {
+		t.Fatalf("多行不合：%s 事实 %d 状态 %s", refused.Outcome(), world.receiptCount(t), world.adviceStatus(t, advice.ID()))
+	}
+	want := []domain.ReceiptContentIssue{
+		domain.ReceiptLineIssue(0, domain.ReceiptIssueLocationNotReceiving),
+		domain.ReceiptLineIssue(0, domain.ReceiptIssueUnitNotPackagingLevel),
+		domain.ReceiptLineIssue(0, domain.ReceiptIssueBatchRequired),
+		domain.ReceiptLineIssue(0, domain.ReceiptIssueExpiryRequired),
+		domain.ReceiptLineIssue(1, domain.ReceiptIssueBatchNotTracked),
+		domain.ReceiptLineIssue(1, domain.ReceiptIssueLabelAliasNotValid),
+	}
+	got := refused.Issues()
+	if len(got) != len(want) {
+		t.Fatalf("逐行指出 = %+v，want %+v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("第 %d 处 = %v，want %v", index, got[index], want[index])
+		}
+	}
+}
+
 // Covers: AT-WF-045（收货确认的核心）
 func TestReceiptLocationMustBeReceivingStaging(t *testing.T) {
 	world := newReceiptWorld(t)

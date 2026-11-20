@@ -127,6 +127,32 @@ func loadLatestGoodsRevision(
 	return loaded, true, nil
 }
 
+func loadGoodsRevisionAt(
+	ctx context.Context,
+	querier bentopg.Querier,
+	tenant domain.TenantID,
+	owner domain.OwnerAccountID,
+	code domain.GoodsCode,
+	at time.Time,
+) (domain.GoodsRevision, bool, error) {
+	stored, err := scanStoredGoodsHeader(querier.QueryRow(ctx,
+		`SELECT `+goodsHeaderColumns+`
+		   FROM warehouse_fulfillment.goods_revision
+		  WHERE tenant_id = $1 AND owner_account_id = $2 AND goods_code = $3
+		    AND registered_at <= $4
+		  ORDER BY revision DESC
+		  LIMIT 1`,
+		tenant.String(), owner.String(), code.String(), at.UTC()))
+	if err != nil {
+		return domain.GoodsRevision{}, false, err
+	}
+	loaded, err := goodsRevisionOfStored(ctx, querier, stored)
+	if err != nil {
+		return domain.GoodsRevision{}, false, err
+	}
+	return loaded, true, nil
+}
+
 func goodsRevisionOfStored(ctx context.Context, querier bentopg.Querier, stored storedGoodsHeader) (domain.GoodsRevision, error) {
 	fail := func(cell string, err error) (domain.GoodsRevision, error) {
 		return domain.GoodsRevision{}, fmt.Errorf("在册的商品 %q 修订 %d 的%s读不回：%w", stored.code, stored.revision, cell, err)

@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 )
@@ -82,7 +83,9 @@ type StockIdentities interface {
 	NextInboundBatchID() (domain.InboundBatchID, error)
 }
 
-// StockGoodsLookup 是记数核「这个货主已登记这个商品」要的那一点读法。真实现是商品登记册的 LoadLatestGoods。
+// StockGoodsLookup 是记数核商品要的那一点读法。真实现是商品登记册。
+// LoadLatestGoods 取入账这一刻的当前修订（包装层级与是否跟踪批号、效期）；
+// LoadGoodsAt 取某一时刻生效的那一笔修订（贴标别名按事实发生时刻判）。
 // 读不动走 error，不折成「没登记」：折成没登记会把一次该重试的故障答成拒绝。
 type StockGoodsLookup interface {
 	LoadLatestGoods(
@@ -90,6 +93,13 @@ type StockGoodsLookup interface {
 		tenant domain.TenantID,
 		owner domain.OwnerAccountID,
 		code domain.GoodsCode,
+	) (domain.GoodsRevision, bool, error)
+	LoadGoodsAt(
+		ctx context.Context,
+		tenant domain.TenantID,
+		owner domain.OwnerAccountID,
+		code domain.GoodsCode,
+		at time.Time,
 	) (domain.GoodsRevision, bool, error)
 }
 
