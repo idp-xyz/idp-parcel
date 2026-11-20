@@ -79,6 +79,14 @@ func (intake *WarehouseMeasurementWorkFactIntake) IntakeWarehouseMeasurement(
 	if err != nil {
 		return none, err
 	}
+	// 先认证、核授予、查设备与判准入，再读请求体：未配置渠道、未授予或停用设备在读载荷之前即答其格，
+	// 防止未授权调用方驱动载荷解析或借 400 探测。
+	tenant, operator, recordedDevice, err := intake.authenticator.AuthenticateWarehouseMeasurement(
+		ctx, httpapi.BearerToken(request), device, kind, reference,
+	)
+	if err != nil {
+		return none, err
+	}
 	body := request.Body
 	if body == nil {
 		body = http.NoBody
@@ -91,15 +99,8 @@ func (intake *WarehouseMeasurementWorkFactIntake) IntakeWarehouseMeasurement(
 		}
 		return none, err
 	}
-	// 作业范围引用必须等于载荷里的仓，不读册：免得对不上的请求探出设备登没登。
 	if reference != command.Warehouse.String() {
 		return none, &malformedRequest{reason: httpapi.HeaderWorkScopeReference + " must equal warehouse"}
-	}
-	tenant, operator, recordedDevice, err := intake.authenticator.AuthenticateWarehouseMeasurement(
-		ctx, httpapi.BearerToken(request), device, kind, reference,
-	)
-	if err != nil {
-		return none, err
 	}
 	command.Tenant = tenant
 	command.Operator = operator

@@ -93,7 +93,11 @@ func (workFactOperators) FindOperator(_ context.Context, subject accessidentity.
 		return accessidentity.OperatorStanding{}, false, err
 	}
 	var grants []accessidentity.RecordedGrant
-	for _, scope := range []accessidentity.WorkScope{mustScope("OFFSITE", "SYN-OFFSITE-01"), mustScope("NODE", "SYN-NODE-SHA-HUB")} {
+	for _, scope := range []accessidentity.WorkScope{
+		mustScope("OFFSITE", "SYN-OFFSITE-01"),
+		mustScope("NODE", "SYN-NODE-SHA-HUB"),
+		mustScope("WAREHOUSE", "SYN-WH-01"),
+	} {
 		grant, err := accessidentity.NewWorkFactRegistrationGrant("SYN-TENANT-01", "SYN-GRANT-"+scope.Reference(), subject, scope, interval, "SYN-BASIS")
 		if err != nil {
 			return accessidentity.OperatorStanding{}, false, err
@@ -117,6 +121,8 @@ func (workFactDevices) FindDevice(_ context.Context, tenantID, deviceID string) 
 		scope = mustScope("OFFSITE", "SYN-OFFSITE-01")
 	case "SYN-DEVICE-NODE":
 		scope = mustScope("NODE", "SYN-NODE-SHA-HUB")
+	case "SYN-DEVICE-WAREHOUSE":
+		scope = mustScope("WAREHOUSE", "SYN-WH-01")
 	default:
 		return accessidentity.RecordedDevice{}, false, nil
 	}

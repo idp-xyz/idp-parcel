@@ -257,8 +257,9 @@ func (reader staticGoodsReader) FindGoods(context.Context, domain.TenantID, doma
 	return reader.row, true, nil
 }
 
-// Covers: 仓测作业事实 HTTP 入口的信封约束：自带 tenantId/deviceId/operator、范围种类非 WAREHOUSE、
-// 范围引用不等于载荷 warehouse 均答 400 且不调认证与核心；问题详情用作业事实码。
+// Covers: 仓测作业事实 HTTP 入口的信封约束：范围种类非 WAREHOUSE 直接答 400 且不认证；
+// 认证先于读请求体（未配置、设备停用或未授予在读载荷之前即答其格）；认证通过后自带 tenantId/deviceId/operator
+// 或范围引用不等于载荷 warehouse 答 400 且不调用核心。
 func TestWarehouseMeasurementEndpointEnforcesWorkFactEnvelope(t *testing.T) {
 	doc := `{"factId":"SYN-MEAS-01","occurredAt":"2026-11-20T01:00:00Z","deviceSequence":1,"warehouse":"SYN-WH-01","targetKind":"GOODS_LEVEL","ownerAccount":"SYN-OWNER-01","goodsCode":"SYN-GOODS-01","packagingLevel":"件","dimensions":{"length":"30","width":"20","height":"10","unit":"CM"},"weight":{"value":"1.5","unit":"KG"}}`
 	post := func(handler http.Handler, kind, ref, body string) *httptest.ResponseRecorder {
@@ -272,6 +273,39 @@ func TestWarehouseMeasurementEndpointEnforcesWorkFactEnvelope(t *testing.T) {
 		return response
 	}
 
+	// 认证先于读载荷：渠道未配置或设备停用时即使请求体为空对象，仍答 403 且不调用核心。
+	for _, tc := range []struct {
+		name string
+		err  error
+		code string
+	}{
+		{"channel unconfigured", warehousehttp.ErrAccessChannelNotConfigured, "ACCESS_CHANNEL_NOT_CONFIGURED"},
+		{"device not in use", warehousehttp.ErrDeviceNotInUse, "DEVICE_NOT_IN_USE"},
+	} {
+		auth := &measurementAuthStub{err: tc.err}
+		rec := &measurementRecorderStub{}
+		intake, err := warehousehttp.NewWarehouseMeasurementWorkFactIntake(auth)
+		if err != nil {
+			t.Fatal(err)
+		}
+		endpoint := warehousehttp.NewRecordWarehouseMeasurementEndpoint(intake, rec)
+		if r := post(endpoint, "NODE", "SYN-WH-01", `{}`); r.Code != http.StatusBadRequest || auth.calls != 0 {
+			t.Fatalf("%s NODE 范围：答 %d 认证 %d", tc.name, r.Code, auth.calls)
+		}
+		r := post(endpoint, "WAREHOUSE", "SYN-WH-01", `{}`)
+		if r.Code != http.StatusForbidden || r.Header().Get("Content-Type") != httpapi.ProblemMediaType || rec.calls != 0 || auth.calls != 1 {
+			t.Fatalf("%s：答 %d %s 认证 %d 核心 %d", tc.name, r.Code, r.Body.String(), auth.calls, rec.calls)
+		}
+		var problem map[string]any
+		if err := json.Unmarshal(r.Body.Bytes(), &problem); err != nil {
+			t.Fatal(err)
+		}
+		if problem["code"] != tc.code {
+			t.Fatalf("%s 问题码 = %v，want %s", tc.name, problem, tc.code)
+		}
+	}
+
+	// 认证通过后，自带身份格或仓引用不等于载荷 warehouse 均答 400 且不调核心。
 	for _, extra := range []string{`"tenantId":"SYN-TENANT-01"`, `"deviceId":"SYN-DEVICE-WH"`, `"operator":"SYN-OP"`} {
 		auth := &measurementAuthStub{}
 		rec := &measurementRecorderStub{}
@@ -281,35 +315,18 @@ func TestWarehouseMeasurementEndpointEnforcesWorkFactEnvelope(t *testing.T) {
 		}
 		badBody := doc[:len(doc)-1] + "," + extra + "}"
 		response := post(warehousehttp.NewRecordWarehouseMeasurementEndpoint(intake, rec), "WAREHOUSE", "SYN-WH-01", badBody)
-		if response.Code != http.StatusBadRequest || auth.calls != 0 || rec.calls != 0 {
+		if response.Code != http.StatusBadRequest || auth.calls != 1 || rec.calls != 0 {
 			t.Fatalf("%s：答 %d 认证 %d 核心 %d", extra, response.Code, auth.calls, rec.calls)
 		}
 	}
-
-	auth := &measurementAuthStub{err: warehousehttp.ErrDeviceNotInUse}
+	auth := &measurementAuthStub{}
 	rec := &measurementRecorderStub{}
 	intake, err := warehousehttp.NewWarehouseMeasurementWorkFactIntake(auth)
 	if err != nil {
 		t.Fatal(err)
 	}
-	endpoint := warehousehttp.NewRecordWarehouseMeasurementEndpoint(intake, rec)
-
-	if r := post(endpoint, "NODE", "SYN-WH-01", doc); r.Code != http.StatusBadRequest || auth.calls != 0 {
-		t.Fatalf("NODE 范围：答 %d 认证 %d", r.Code, auth.calls)
-	}
-	if r := post(endpoint, "WAREHOUSE", "SYN-WH-02", doc); r.Code != http.StatusBadRequest || auth.calls != 0 {
-		t.Fatalf("仓引用不等：答 %d 认证 %d", r.Code, auth.calls)
-	}
-	r := post(endpoint, "WAREHOUSE", "SYN-WH-01", doc)
-	if r.Code != http.StatusForbidden || r.Header().Get("Content-Type") != httpapi.ProblemMediaType || rec.calls != 0 {
-		t.Fatalf("设备停用：答 %d %s 核心 %d", r.Code, r.Body.String(), rec.calls)
-	}
-	var problem map[string]any
-	if err := json.Unmarshal(r.Body.Bytes(), &problem); err != nil {
-		t.Fatal(err)
-	}
-	if problem["code"] != "DEVICE_NOT_IN_USE" {
-		t.Fatalf("问题码 = %v", problem)
+	if r := post(warehousehttp.NewRecordWarehouseMeasurementEndpoint(intake, rec), "WAREHOUSE", "SYN-WH-02", doc); r.Code != http.StatusBadRequest || auth.calls != 1 || rec.calls != 0 {
+		t.Fatalf("仓引用不等：答 %d 认证 %d 核心 %d", r.Code, auth.calls, rec.calls)
 	}
 }
 

@@ -1,7 +1,7 @@
 # 04 `PN09-W03`：货主商品与仓测尺寸重量
 
 Category: enhancement
-Status: in-progress（第 1、2 段已于 2026-11-20 进 main；第 3、4 段货主口与仓测代码与测试已写完，待非作者评审后进 main）
+Status: in-progress（第 1、2 段已于 2026-11-20 进 main；第 3、4 段货主口与仓测已通过非作者双轴评审并修完唯一 Standards 阻断，待进 main）
 Blocked by: 03
 
 依据：[UC-WF-002](../../../docs/application/warehouse-fulfillment/UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md)；[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md)「商品」「商品别名」「组合商品」「包装层级」「仓测尺寸重量」「商品申报资料」词条与「主数据登记」「身份与边界」；[ADR-0384](../../../docs/adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)；现行做法见 [dox 仓配履约](../../../dox/contexts/warehouse-fulfillment.md)「已实现」。
@@ -109,4 +109,8 @@ Blocked by: 03
 
 - **第 3 段（货主口）**：新增客户面能力 `GOODS_MAINTENANCE`（迁移 `access_identity/0062`）、命令前缀 `goods:`（并入首方保留前缀表）、准入两格同取字面量 `GOODS_MAINTENANCE`；挂出 `POST /v1/warehouse/goods` 与四条货主商品读口（`/v1/warehouse/reads/goods`、`goods-current`、`goods-revisions`、`goods-by-code`，能力 `WAREHOUSE_READ` 不判准入）。货主口与代录写同一条修订序列；货主读口带出代录的提交途径与依据引用，不带登记责任方，也不带仓测上的设备与操作者。
 - **第 4 段（仓测）**：新增作业事实类型 `WAREHOUSE_MEASUREMENT`（准入能力词 `WORK_FACT_REGISTRATION`，作业范围 `WAREHOUSE`）；新建表 `warehouse_fulfillment.warehouse_measurement`（迁移 `warehouse_fulfillment/0015`），只追加版本，按 `(occurred_at, device_sequence, received_at, fact_id)` 派生当前那一版，迟到旧事实照记不顶掉更新的一版。支持按（商品，包装层级）与按在库一箱（到达服务端时查整箱账 `CartonOnHand`）；挂出写口 `POST /warehouse-fulfillment-warehouse-measurements` 与运营/货主各两条读口（`goods-measurements`、`carton-measurements`），商品当前修订与列表逐包装层级附 `warehouseMeasurements`（未仓测如实答未测量并附 `OWNER_DECLARED` 货主声明参照）。
-- 验证（证据层级 `S`，含真库 PostgreSQL 16）：`gofmt` 洁净、`go vet` 通过，`internal/accessidentity/...`、`internal/warehousefulfillment/...` 与 `cmd/parcel-api/` 整包带 `-race` 全绿。待非作者评审。
+- 验证（证据层级 `S`，含真库 PostgreSQL 16）：`gofmt` 洁净、`go vet` 通过，`internal/accessidentity/...`、`internal/warehousefulfillment/...` 与 `cmd/parcel-api/` 整包带 `-race` 全绿。
+
+## 第 3、4 段评审记录
+
+钉 `525a5235c`（相对 review base `f21b03e01`）。Spec：0 阻断。Standards：1 处阻断——`WarehouseMeasurementWorkFactIntake.IntakeWarehouseMeasurement` 在认证之前解 JSON 载荷，导致未配置渠道或未授权方在读载荷阶段先拿到 400。修订轮已将认证挪至解析载荷之前（并把仓范围设备夹具补进 `unstorable_request_bodies_test.go` / `node_operations_reception_line_test.go`、把 `/v1/warehouse/goods` 的 `ownerAccount` 拒绝文案改为客户渠道口径），重跑 `gofmt`、`go vet`、`internal/warehousefulfillment/...` 与 `cmd/parcel-api/` 全量带 `-race` 全绿，阻断清零。
