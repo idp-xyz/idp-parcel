@@ -8,10 +8,14 @@ import (
 	"testing"
 	"time"
 
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	warehouseapp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	warehousedomain "go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	warehouseports "go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
@@ -184,7 +188,137 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		packagingMaterialRegistration: unwiredPackagingMaterialRegistration{},
 		packagingMaterialCatalogue:    unwiredPackagingMaterialCatalogue{},
 		packagingMaterialRevisions:    unwiredPackagingMaterialCatalogue{},
+
+		goodsRegistration: unwiredGoodsRegistration{},
+		goodsCatalogue:    unwiredGoodsCatalogue{},
+		goodsCurrent:      unwiredGoodsCatalogue{},
+		goodsRevisions:    unwiredGoodsCatalogue{},
+		goodsFinder:       unwiredGoodsCatalogue{},
+
+		preAdviceOnBehalf:     unwiredPreAdvice{},
+		preAdviceQueries:      unwiredPreAdviceQueries{},
+		preAdviceClose:        unwiredPreAdviceClose{},
+		discrepancyConclusion: unwiredDiscrepancyConclusion{},
+		receiptConfirm:        unwiredReceiptConfirmation{},
 	}
+}
+
+type unwiredDiscrepancyConclusion struct{}
+
+func (unwiredDiscrepancyConclusion) Conclude(
+	context.Context,
+	warehouseapp.ConcludeDiscrepancyCommand,
+) (warehouseapp.ConcludeDiscrepancyResult, error) {
+	return warehouseapp.ConcludeDiscrepancyResult{}, errOrchestrationNotWired
+}
+
+type unwiredReceiptConfirmation struct{}
+
+func (unwiredReceiptConfirmation) Confirm(
+	context.Context,
+	warehouseapp.ConfirmReceiptCommand,
+) (warehouseapp.ConfirmReceiptResult, error) {
+	return warehouseapp.ConfirmReceiptResult{}, errOrchestrationNotWired
+}
+
+type unwiredPreAdviceClose struct{}
+
+func (unwiredPreAdviceClose) ClosePreAdvice(
+	context.Context,
+	warehouseapp.ClosePreAdviceCommand,
+) (warehouseapp.ClosePreAdviceResult, error) {
+	return warehouseapp.ClosePreAdviceResult{}, errOrchestrationNotWired
+}
+
+type unwiredPreAdvice struct{}
+
+func (unwiredPreAdvice) Accept(context.Context, warehouseapp.AcceptPreAdviceCommand) (warehouseapp.AcceptPreAdviceResult, error) {
+	return warehouseapp.AcceptPreAdviceResult{}, errOrchestrationNotWired
+}
+
+func (unwiredPreAdvice) UpdateNotice(context.Context, warehouseapp.UpdatePreAdviceNoticeCommand) (warehouseapp.AcceptPreAdviceResult, error) {
+	return warehouseapp.AcceptPreAdviceResult{}, errOrchestrationNotWired
+}
+
+func (unwiredPreAdvice) Withdraw(context.Context, warehouseapp.WithdrawPreAdviceCommand) (warehouseapp.AcceptPreAdviceResult, error) {
+	return warehouseapp.AcceptPreAdviceResult{}, errOrchestrationNotWired
+}
+
+type unwiredPreAdviceQueries struct{}
+
+func (unwiredPreAdviceQueries) ListPreAdvices(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.OwnerAccountID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseapp.PreAdviceReading], error) {
+	return cataloguepage.Result[warehouseapp.PreAdviceReading]{}, errOrchestrationNotWired
+}
+
+func (unwiredPreAdviceQueries) PreAdviceForOwner(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.OwnerAccountID,
+	warehousedomain.PreAdviceID,
+) (warehouseapp.PreAdviceReading, bool, error) {
+	return warehouseapp.PreAdviceReading{}, false, errOrchestrationNotWired
+}
+
+func (unwiredPreAdviceQueries) PreAdviceByDocumentNumber(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.DocumentNumber,
+) (warehouseapp.PreAdviceReading, bool, error) {
+	return warehouseapp.PreAdviceReading{}, false, errOrchestrationNotWired
+}
+
+type unwiredGoodsRegistration struct{}
+
+func (unwiredGoodsRegistration) Register(
+	context.Context,
+	warehouseapp.RegisterGoodsCommand,
+) (warehouseapp.RegisterGoodsResult, error) {
+	return warehouseapp.RegisterGoodsResult{}, errOrchestrationNotWired
+}
+
+type unwiredGoodsCatalogue struct{}
+
+func (unwiredGoodsCatalogue) ListGoods(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.OwnerAccountID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.GoodsRow], error) {
+	return cataloguepage.Result[warehouseports.GoodsRow]{}, errOrchestrationNotWired
+}
+
+func (unwiredGoodsCatalogue) CurrentGoods(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.OwnerAccountID,
+	warehousedomain.GoodsCode,
+) (warehouseports.GoodsRow, bool, error) {
+	return warehouseports.GoodsRow{}, false, errOrchestrationNotWired
+}
+
+func (unwiredGoodsCatalogue) GoodsRevisions(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.OwnerAccountID,
+	warehousedomain.GoodsCode,
+) ([]warehouseports.GoodsRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredGoodsCatalogue) FindGoods(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.OwnerAccountID,
+	warehousedomain.IdentifierCode,
+) (warehouseports.GoodsRow, bool, error) {
+	return warehouseports.GoodsRow{}, false, errOrchestrationNotWired
 }
 
 func init() {
@@ -210,11 +344,48 @@ const (
 	packagingMaterialRegistrationsLine = "/warehouse-fulfillment-packaging-material-registrations"
 	packagingMaterialListLine          = "/warehouse-fulfillment-packaging-materials"
 	packagingMaterialRevisionsLine     = "/warehouse-fulfillment-packaging-material-revisions"
+
+	goodsOnBehalfLine  = "/warehouse-fulfillment-goods-on-behalf"
+	goodsListLine      = "/warehouse-fulfillment-goods"
+	goodsCurrentLine   = "/warehouse-fulfillment-goods-current"
+	goodsRevisionsLine = "/warehouse-fulfillment-goods-revisions"
+	goodsByCodeLine    = "/warehouse-fulfillment-goods-by-code"
+
+	preAdviceOnBehalfLine   = "/warehouse-fulfillment-inbound-pre-advice-on-behalf"
+	preAdviceNoticeLine     = "/warehouse-fulfillment-inbound-pre-advice-notice-on-behalf"
+	preAdviceWithdrawalLine = "/warehouse-fulfillment-inbound-pre-advice-withdrawal-on-behalf"
+	preAdviceCloseLine      = "/warehouse-fulfillment-inbound-pre-advice-closures"
+	preAdviceListLine       = "/warehouse-fulfillment-inbound-pre-advices"
+	preAdviceOneLine        = "/warehouse-fulfillment-inbound-pre-advice"
+	preAdviceByNumberLine   = "/warehouse-fulfillment-inbound-pre-advice-by-number"
+
+	receiptConfirmationsLine = "/warehouse-fulfillment-receipt-confirmations"
+
+	discrepancyConclusionLine         = "/warehouse-fulfillment-receipt-discrepancy-conclusion-on-behalf"
+	customerDiscrepancyConclusionLine = "/v1/warehouse/receipt-discrepancy-conclusions"
 )
 
 // warehouseFulfillmentLines 是登记处里声明了仓配开关的各行，按路径排序。
 func warehouseFulfillmentLines() []string {
 	return declaredPatterns(func(line endpointLine) bool { return line.warehouseFulfillment })
+}
+
+// channelsFor 同时打开操作者的登记写面、查阅读与运营决定：商品代录认的是决定授予，各读口认的是查阅读。
+func channelsFor(t *testing.T, register accessidentity.OperatorRegistry) endpointChannels {
+	t.Helper()
+	minter, err := buildOperatorMinter(acceptingVerifier{}, register, admissionScopeUnset())
+	if err != nil {
+		t.Fatal(err)
+	}
+	registries, err := buildOperatorRegistryIntakes(minter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, unwiredDecisionTargets{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return unwiredChannels(decisions, registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil)
 }
 
 // warehouseFulfillmentRouter 只挂仓配特性的各行（经登记处的 mountWith，请求体与目标检查照挂），接入渠道与开关由调用方给。
@@ -277,15 +448,69 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		packagingMaterialRegistrationsLine: {http.MethodPost, faceRegistryWrite},
 		packagingMaterialListLine:          {http.MethodGet, faceOperationsRead},
 		packagingMaterialRevisionsLine:     {http.MethodGet, faceOperationsRead},
+
+		goodsOnBehalfLine:  {http.MethodPost, faceOperationDecision},
+		goodsListLine:      {http.MethodGet, faceOperationsRead},
+		goodsCurrentLine:   {http.MethodGet, faceOperationsRead},
+		goodsRevisionsLine: {http.MethodGet, faceOperationsRead},
+		goodsByCodeLine:    {http.MethodGet, faceOperationsRead},
+
+		preAdviceOnBehalfLine:   {http.MethodPost, faceOperationDecision},
+		preAdviceNoticeLine:     {http.MethodPost, faceOperationDecision},
+		preAdviceWithdrawalLine: {http.MethodPost, faceOperationDecision},
+		preAdviceCloseLine:      {http.MethodPost, faceOperationDecision},
+		preAdviceListLine:       {http.MethodGet, faceOperationsRead},
+		preAdviceOneLine:        {http.MethodGet, faceOperationsRead},
+		preAdviceByNumberLine:   {http.MethodGet, faceOperationsRead},
+
+		"/v1/warehouse/inbound-pre-advices":                 {http.MethodPost, faceCustomerClient},
+		"/v1/warehouse/inbound-pre-advices/arrival-notices": {http.MethodPost, faceCustomerClient},
+		"/v1/warehouse/inbound-pre-advices/withdrawals":     {http.MethodPost, faceCustomerClient},
+		"/v1/warehouse/reads/inbound-pre-advices":           {http.MethodGet, faceCustomerClient},
+		"/v1/warehouse/reads/inbound-pre-advice":            {http.MethodGet, faceCustomerClient},
+		"/v1/warehouse/reads/inbound-pre-advice-by-number":  {http.MethodGet, faceCustomerClient},
+
+		discrepancyConclusionLine:         {http.MethodPost, faceOperationDecision},
+		customerDiscrepancyConclusionLine: {http.MethodPost, faceCustomerClient},
+
+		receiptConfirmationsLine: {http.MethodPost, faceWorkFact},
 	}
 	lines := declaredEndpointLines()
 	if got := warehouseFulfillmentLines(); len(got) != len(want) {
 		t.Fatalf("声明了仓配开关的行 = %v，want 恰是 %d 行：%v", got, len(want), want)
 	}
+	customerCapabilities := map[string]accessidentity.CustomerCapability{
+		"/v1/warehouse/inbound-pre-advices":                 accessidentity.CustomerCapabilityInboundPreAdviceSubmission,
+		"/v1/warehouse/inbound-pre-advices/arrival-notices": accessidentity.CustomerCapabilityInboundPreAdviceArrivalNotice,
+		"/v1/warehouse/inbound-pre-advices/withdrawals":     accessidentity.CustomerCapabilityInboundPreAdviceWithdrawal,
+		"/v1/warehouse/reads/inbound-pre-advices":           accessidentity.CustomerCapabilityWarehouseRead,
+		"/v1/warehouse/reads/inbound-pre-advice":            accessidentity.CustomerCapabilityWarehouseRead,
+		"/v1/warehouse/reads/inbound-pre-advice-by-number":  accessidentity.CustomerCapabilityWarehouseRead,
+		customerDiscrepancyConclusionLine:                   accessidentity.CustomerCapabilityReceiptDiscrepancyConclusion,
+	}
 	for pattern, expected := range want {
 		line, declared := lines[pattern]
-		if !declared || !line.warehouseFulfillment || line.method != expected.method || line.face.family != expected.face || line.ownIntake {
-			t.Fatalf("%s 的声明 = %+v，want %s %s、声明仓配开关、经共享渠道", pattern, line, expected.method, expected.face)
+		capability, customer := customerCapabilities[pattern]
+		ownIntake := customer || pattern == receiptConfirmationsLine
+		if !declared || !line.warehouseFulfillment || line.method != expected.method || line.face.family != expected.face || line.ownIntake != ownIntake {
+			t.Fatalf("%s 的声明 = %+v，want %s %s、声明仓配开关、自建 Intake=%t", pattern, line, expected.method, expected.face, ownIntake)
+		}
+		if pattern == receiptConfirmationsLine && line.face.workScope != accessidentity.WorkScopeWarehouse {
+			t.Fatalf("%s 的作业范围 = %s，want WAREHOUSE", pattern, line.face.workScope)
+		}
+		if customer && line.face.capability != capability {
+			t.Fatalf("%s 的能力词 = %s，want %s", pattern, line.face.capability, capability)
+		}
+		decisionLines := map[string]accessidentity.DecisionKind{
+			goodsOnBehalfLine:         accessidentity.DecisionGoodsRecordOnBehalf,
+			preAdviceOnBehalfLine:     accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
+			preAdviceNoticeLine:       accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
+			preAdviceWithdrawalLine:   accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
+			preAdviceCloseLine:        accessidentity.DecisionInboundPreAdviceClose,
+			discrepancyConclusionLine: accessidentity.DecisionReceiptDiscrepancyRecordOnBehalf,
+		}
+		if kind, writesOnBehalf := decisionLines[pattern]; writesOnBehalf && line.face.decision != kind {
+			t.Fatalf("%s 的决定种类 = %s，want %s", pattern, line.face.decision, kind)
 		}
 	}
 }
@@ -308,8 +533,6 @@ func TestWarehouseFulfillmentLinesOpenOnlyOnTheOperatorChannelWhenSwitchedOn(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	operatorOpen := registriesFor(t, everyOperatorGrant{})
-
 	nothing := unwiredChannels(unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil)
 	cases := []struct {
 		name     string
@@ -320,15 +543,18 @@ func TestWarehouseFulfillmentLinesOpenOnlyOnTheOperatorChannelWhenSwitchedOn(t *
 		{"isolated read", unwiredChannels(unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), isolated, nil, nil, nil), false},
 		{"first-party customer", unwiredChannels(unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, customer, nil, nil), false},
 		{"integration client", unwiredChannels(unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(), clients, nil, nil, nil, nil), false},
-		{"operator", unwiredChannels(unconfiguredOperatorDecisions(), operatorOpen, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil), true},
+		{"operator", channelsFor(t, everyOperatorGrant{}), true},
 	}
 	for _, testCase := range cases {
 		router := warehouseFulfillmentRouter(t, testCase.channels, unwiredWarehouseFulfillment(true))
+		lines := declaredEndpointLines()
 		for _, pattern := range warehouseFulfillmentLines() {
 			response := probeWarehouseFulfillment(router, pattern, presentedOperatorToken, `{}`)
-			if got := leftUnconfigured(t, response); got == testCase.opens {
+			// 货主六口与收货确认的 Intake 由特性自建，不吃这里换上的共享渠道。开关开着、Intake 未接线时它们仍是未配置。
+			wantOpen := testCase.opens && !lines[pattern].ownIntake
+			if got := leftUnconfigured(t, response); got == wantOpen {
 				t.Fatalf("%s 打开、开关开着：%s 答 %d %s（离开了「接入渠道未配置」=%t，want %t）",
-					testCase.name, pattern, response.Code, response.Body.String(), !got, testCase.opens)
+					testCase.name, pattern, response.Code, response.Body.String(), !got, wantOpen)
 			}
 			assertNoOutcome(t, response, pattern)
 		}
@@ -350,6 +576,13 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			locationTypeRegistrationsLine: {status, code}, locationTypeListLine: {status, code}, locationTypeRevisionsLine: {status, code},
 			locationRegistrationsLine: {status, code}, locationListLine: {status, code}, locationRevisionsLine: {status, code},
 			packagingMaterialRegistrationsLine: {status, code}, packagingMaterialListLine: {status, code}, packagingMaterialRevisionsLine: {status, code},
+			goodsOnBehalfLine: {status, code}, goodsListLine: {status, code}, goodsCurrentLine: {status, code},
+			goodsRevisionsLine: {status, code}, goodsByCodeLine: {status, code},
+			preAdviceOnBehalfLine: {status, code}, preAdviceNoticeLine: {status, code}, preAdviceWithdrawalLine: {status, code},
+			preAdviceCloseLine:        {status, code},
+			discrepancyConclusionLine: {status, code},
+			preAdviceListLine:         {status, code}, preAdviceOneLine: {status, code}, preAdviceByNumberLine: {status, code},
+			receiptConfirmationsLine: {status, code},
 		}
 	}
 	cases := []struct {
@@ -377,6 +610,23 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			packagingMaterialRegistrationsLine: {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			packagingMaterialListLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packagingMaterialRevisionsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+
+			goodsOnBehalfLine:  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			goodsListLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			goodsCurrentLine:   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			goodsRevisionsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			goodsByCodeLine:    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+
+			preAdviceOnBehalfLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			preAdviceNoticeLine:       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			preAdviceWithdrawalLine:   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			preAdviceCloseLine:        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			discrepancyConclusionLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			preAdviceListLine:         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			preAdviceOneLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			preAdviceByNumberLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+
+			receiptConfirmationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		}},
 		{"read grant only", operationsReaderRegister{}, presentedOperatorToken, map[string]answer{
 			warehouseRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -397,21 +647,104 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			packagingMaterialRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packagingMaterialListLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			packagingMaterialRevisionsLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+
+			goodsOnBehalfLine:  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			goodsListLine:      {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			goodsCurrentLine:   {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			goodsRevisionsLine: {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			goodsByCodeLine:    {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+
+			preAdviceOnBehalfLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			preAdviceNoticeLine:       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			preAdviceWithdrawalLine:   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			preAdviceCloseLine:        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			discrepancyConclusionLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			preAdviceListLine:         {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			preAdviceOneLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			preAdviceByNumberLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+
+			receiptConfirmationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		}},
 		{"no bearer token", everyOperatorGrant{}, "", same(http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED")},
 		{"register is down", failingRegister{}, presentedOperatorToken, same(http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE")},
 	}
 	for _, testCase := range cases {
-		channels := unwiredChannels(unconfiguredOperatorDecisions(), registriesFor(t, testCase.register), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil)
-		router := warehouseFulfillmentRouter(t, channels, unwiredWarehouseFulfillment(true))
+		channels := channelsFor(t, testCase.register)
+		wiring := unwiredWarehouseFulfillment(true)
+		intake, err := buildReceiptConfirmationIntake(acceptingVerifier{}, testCase.register, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		wiring.receiptIntake = intake
+		router := warehouseFulfillmentRouter(t, channels, wiring)
 		for pattern, want := range testCase.want {
-			response := probeWarehouseFulfillment(router, pattern, testCase.token, `{}`)
+			var response *httptest.ResponseRecorder
+			if pattern == receiptConfirmationsLine {
+				response = probeReceiptConfirmation(router, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", receiptConfirmationBody())
+			} else {
+				response = probeWarehouseFulfillment(router, pattern, testCase.token, `{}`)
+			}
 			if response.Code != want.status || problemCode(t, response) != want.code {
 				t.Fatalf("%s, %s：答 %d %s，want %d %s", testCase.name, pattern, response.Code, response.Body.String(), want.status, want.code)
 			}
 			assertNoOutcome(t, response, pattern)
 		}
 	}
+
+	// 登在节点上的设备，拿仓的作业范围去收货：授予在仓上，设备册上的范围仍是节点，答设备未登记或已停用。
+	nodeDevice := unwiredWarehouseFulfillment(true)
+	nodeIntake, err := buildReceiptConfirmationIntake(acceptingVerifier{}, warehouseWorkFactRegister{}, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeDevice.receiptIntake = nodeIntake
+	nodeRouter := warehouseFulfillmentRouter(t, channelsFor(t, warehouseWorkFactRegister{}), nodeDevice)
+	nodeResponse := probeReceiptConfirmation(nodeRouter, presentedOperatorToken, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", receiptConfirmationBody())
+	if nodeResponse.Code != http.StatusForbidden || problemCode(t, nodeResponse) != "DEVICE_NOT_IN_USE" {
+		t.Fatalf("节点上的设备去收货：答 %d %s，want 403 DEVICE_NOT_IN_USE", nodeResponse.Code, nodeResponse.Body.String())
+	}
+	assertNoOutcome(t, nodeResponse, receiptConfirmationsLine)
+}
+
+// warehouseWorkFactRegister 只持 SYN-WH-01 上的作业事实登记授予，没有登记册配置写。
+type warehouseWorkFactRegister struct{}
+
+func (warehouseWorkFactRegister) FindOperator(_ context.Context, subject accessidentity.OperatorSubject) (accessidentity.OperatorStanding, bool, error) {
+	binding, err := accessidentity.NewOperatorBinding(subject, "SYN-TENANT-01", "SYN-BASIS-BINDING")
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	interval, err := accessidentity.NewEffectiveInterval(time.Now().Add(-time.Hour), time.Time{})
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	grant, err := accessidentity.NewWorkFactRegistrationGrant("SYN-TENANT-01", "SYN-GRANT-WH", subject, mustScope("WAREHOUSE", "SYN-WH-01"), interval, "SYN-BASIS-GRANT")
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	recorded, err := accessidentity.NewRecordedGrant(grant, nil)
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	standing, err := accessidentity.NewOperatorStanding(binding, []accessidentity.RecordedGrant{recorded})
+	return standing, err == nil, err
+}
+
+func receiptConfirmationBody() string {
+	return `{"factId":"SYN-FACT-01","occurredAt":"2026-11-20T01:00:00Z","warehouse":"SYN-WH-01","preAdviceId":"SYN-IPA-01","shape":"BY_GOODS","lines":[{"observed":"SYN-GOODS-01","unit":"EA","stockState":"GOOD","quantity":1,"locationCode":"SYN-LOC-01"}]}`
+}
+
+func probeReceiptConfirmation(router http.Handler, token, device, kind, reference, body string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodPost, receiptConfirmationsLine, strings.NewReader(body))
+	request.Header.Set("Parcel-Work-Scope-Kind", kind)
+	request.Header.Set("Parcel-Work-Scope-Reference", reference)
+	request.Header.Set("Parcel-Device-Id", device)
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	return response
 }
 
 // Covers: AT-WF-012（端点那一半）——开关关着时仓配各行都答 403 WAREHOUSE_FULFILLMENT_NOT_ENABLED，不是 404，也不是「接入渠道未配置」，
@@ -495,6 +828,7 @@ func assembleUnwiredEndpointsReplacing(channels endpointChannels, wiring warehou
 
 // Covers: ADR-0375 决定四「关着时不构造任何仓配的适配器与编排」——开关关着时特性的 build 不碰库：db 传 nil 也装得起来，装出的
 // 依赖没有任何编排；开着时 build 要构造仓配的适配器，db 为空装不起来（证明上面「装得起来」不是因为 build 什么都不做）。
+// 开着时的失败不得是缺分配器：那一判若排在任何适配器之前，build 什么都不做也会红，证不出构造过适配器。
 func TestTheSwitchedOffFeatureBuildsNoAdaptersAndTheSwitchedOnOneNeedsTheDatabase(t *testing.T) {
 	var feature registeredEndpoints
 	for _, registered := range endpointRegistry {
@@ -513,7 +847,30 @@ func TestTheSwitchedOffFeatureBuildsNoAdaptersAndTheSwitchedOnOneNeedsTheDatabas
 	if len(endpoints) != len(warehouseFulfillmentLines()) {
 		t.Fatalf("开关关着挂出 %d 个端点，want 与声明的行数一致", len(endpoints))
 	}
-	if _, err := feature.production(endpointSources{warehouseFulfillment: true}, endpointChannels{}); err == nil {
-		t.Fatal("开关开着、db 为空装起来了：build 没有构造仓配的适配器")
+	_, err = feature.production(endpointSources{warehouseFulfillment: true}, endpointChannels{})
+	if err == nil || strings.Contains(err.Error(), "inbound pre-advice numbers need the document number assigner") {
+		t.Fatalf("开关开着、db 为空：%v，want 来自构造仓配适配器", err)
+	}
+}
+
+// Covers: 入库预报取号要单据号分配器。开关开着、库在、分配器没给时，装配必须失败，而且失败就是缺分配器这一句。
+func TestTheSwitchedOnAssemblyFailsWithoutTheDocumentNumberAssigner(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var feature registeredEndpoints
+	for _, registered := range endpointRegistry {
+		if registered.wiringKey == any((*warehouseFulfillmentWiring)(nil)) {
+			feature = registered
+		}
+	}
+	if feature.production == nil {
+		t.Fatal("登记处没有仓配履约这个特性")
+	}
+	_, err = feature.production(endpointSources{db: db, warehouseFulfillment: true}, endpointChannels{})
+	if err == nil || !strings.Contains(err.Error(), "inbound pre-advice numbers need the document number assigner") {
+		t.Fatalf("缺分配器：%v", err)
 	}
 }

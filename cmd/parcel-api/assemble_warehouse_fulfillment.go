@@ -7,6 +7,10 @@ import (
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
+	whidentity "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/identity"
+	whparty "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/partycommercial"
 	whpostgres "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/postgres"
 	warehouseapp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 )
@@ -129,9 +133,113 @@ type warehouseFulfillmentOrchestration struct {
 
 	packagingMaterialRegistration transactionalPackagingMaterialRegistration
 	packagingMaterialQueries      *warehouseapp.QueryPackagingMaterialsHandler
+
+	goodsRegistration transactionalGoodsRegistration
+	goodsQueries      *warehouseapp.QueryGoodsHandler
+
+	preAdvices       transactionalPreAdvice
+	preAdviceQueries *warehouseapp.QueryPreAdviceHandler
+	preAdviceClose   transactionalPreAdviceClosure
+
+	receiptConfirm        transactionalReceiptConfirmation
+	discrepancyConclusion transactionalDiscrepancyConclusion
 }
 
-func buildWarehouseFulfillmentOrchestration(db *bentopg.DB) (warehouseFulfillmentOrchestration, error) {
+// transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
+type transactionalGoodsRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.RegisterGoodsHandler
+}
+
+func (registration transactionalGoodsRegistration) Register(
+	ctx context.Context,
+	command warehouseapp.RegisterGoodsCommand,
+) (warehouseapp.RegisterGoodsResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.RegisterGoodsResult, error) {
+		return registration.inner.Register(txCtx, command)
+	})
+}
+
+// transactionalPreAdvice 是入库预报代录的事务壳。核货主、核仓、取号与落册在同一个事务里。
+type transactionalPreAdvice struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.AcceptPreAdviceHandler
+}
+
+func (registration transactionalPreAdvice) Accept(
+	ctx context.Context,
+	command warehouseapp.AcceptPreAdviceCommand,
+) (warehouseapp.AcceptPreAdviceResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.AcceptPreAdviceResult, error) {
+		return registration.inner.Accept(txCtx, command)
+	})
+}
+
+func (registration transactionalPreAdvice) UpdateNotice(
+	ctx context.Context,
+	command warehouseapp.UpdatePreAdviceNoticeCommand,
+) (warehouseapp.AcceptPreAdviceResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.AcceptPreAdviceResult, error) {
+		return registration.inner.UpdateNotice(txCtx, command)
+	})
+}
+
+func (registration transactionalPreAdvice) Withdraw(
+	ctx context.Context,
+	command warehouseapp.WithdrawPreAdviceCommand,
+) (warehouseapp.AcceptPreAdviceResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.AcceptPreAdviceResult, error) {
+		return registration.inner.Withdraw(txCtx, command)
+	})
+}
+
+// transactionalReceiptConfirmation 是收货确认的事务壳。入账与推进预报状态在同一笔里：任一成立的行落不下，整笔回滚。
+// 转到待认领到货时，收货事实与那件到货也落在这一笔里，任一落不下整笔回滚。
+type transactionalReceiptConfirmation struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.ConfirmReceiptHandler
+}
+
+// transactionalPreAdviceClosure 是入库预报完结的事务壳。少收与推进预报状态在同一笔里。
+type transactionalPreAdviceClosure struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.ClosePreAdviceHandler
+}
+
+func (closure transactionalPreAdviceClosure) ClosePreAdvice(
+	ctx context.Context,
+	command warehouseapp.ClosePreAdviceCommand,
+) (warehouseapp.ClosePreAdviceResult, error) {
+	return inTransaction(ctx, closure.transactor, func(txCtx context.Context) (warehouseapp.ClosePreAdviceResult, error) {
+		return closure.inner.ClosePreAdvice(txCtx, command)
+	})
+}
+
+func (confirmation transactionalReceiptConfirmation) Confirm(
+	ctx context.Context,
+	command warehouseapp.ConfirmReceiptCommand,
+) (warehouseapp.ConfirmReceiptResult, error) {
+	return inTransaction(ctx, confirmation.transactor, func(txCtx context.Context) (warehouseapp.ConfirmReceiptResult, error) {
+		return confirmation.inner.Confirm(txCtx, command)
+	})
+}
+
+// transactionalDiscrepancyConclusion 是收货差异结论的事务壳。货主口与代录口共用这一只，锁与落册在同一笔里。
+type transactionalDiscrepancyConclusion struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.ConcludeDiscrepancyHandler
+}
+
+func (conclusion transactionalDiscrepancyConclusion) Conclude(
+	ctx context.Context,
+	command warehouseapp.ConcludeDiscrepancyCommand,
+) (warehouseapp.ConcludeDiscrepancyResult, error) {
+	return inTransaction(ctx, conclusion.transactor, func(txCtx context.Context) (warehouseapp.ConcludeDiscrepancyResult, error) {
+		return conclusion.inner.Conclude(txCtx, command)
+	})
+}
+
+func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.Assigner) (warehouseFulfillmentOrchestration, error) {
 	none := warehouseFulfillmentOrchestration{}
 	warehouses, err := whpostgres.NewWarehouses(db)
 	if err != nil {
@@ -173,6 +281,114 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB) (warehouseFulfillmen
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: packaging material catalogue: %w", err)
 	}
+	goods, err := whpostgres.NewGoods(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: goods registry: %w", err)
+	}
+	goodsCatalogue, err := whpostgres.NewGoodsCatalogue(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: goods catalogue: %w", err)
+	}
+	accounts, err := pcpostgres.NewPartyIdentityRegistrations(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: owner account lookup: %w", err)
+	}
+	owners, err := whparty.NewOwnerAccountLookup(accounts)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: owner account lookup: %w", err)
+	}
+	stock, err := whpostgres.NewStockLedger(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: stock ledger: %w", err)
+	}
+	stockIDs, err := whidentity.NewStockIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: stock identities: %w", err)
+	}
+	cartons, err := whpostgres.NewCartonLedger(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: carton ledger: %w", err)
+	}
+	cartonIDs, err := whidentity.NewCartonIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: carton identities: %w", err)
+	}
+	discrepancies, err := whidentity.NewReceiptDiscrepancyIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: receipt discrepancy identities: %w", err)
+	}
+	arrivals, err := whpostgres.NewUnclaimedArrivals(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: unclaimed arrivals: %w", err)
+	}
+	arrivalIDs, err := whidentity.NewUnclaimedArrivalIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: unclaimed arrival identities: %w", err)
+	}
+	// 记数用例的生产调用方是收货确认。商品登记仍用这本账问「有没有在库库存」，不另建一套账。
+	goodsRegistration := transactionalGoodsRegistration{
+		transactor: db.Transactor(),
+		inner:      warehouseapp.NewRegisterGoodsHandler(goods, warehouses, stock, owners, systemClock{}),
+	}
+	preAdviceStore, err := whpostgres.NewPreAdvices(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: inbound pre-advices: %w", err)
+	}
+	preAdviceCatalogue, err := whpostgres.NewPreAdviceCatalogue(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: inbound pre-advice catalogue: %w", err)
+	}
+	receipts, err := whpostgres.NewReceipts(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: receipt confirmations: %w", err)
+	}
+	closures, err := whpostgres.NewPreAdviceClosures(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: inbound pre-advice closures: %w", err)
+	}
+	// 缺分配器必须在取号器之前失败。这一判不能放在函数开头：开关开着、库为空时，build 还没构造任何适配器就会返回，
+	// 「开着时装不起来」就证不出它真的去构造了适配器。
+	if assigner == nil {
+		return none, fmt.Errorf("parcel-api: inbound pre-advice numbers need the document number assigner")
+	}
+	preAdviceNumbers, err := whpostgres.NewPreAdviceNumbers(db, assigner)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: inbound pre-advice numbers: %w", err)
+	}
+	preAdviceIdentities, err := whidentity.NewPreAdviceIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: inbound pre-advice identities: %w", err)
+	}
+	preAdviceHandler := warehouseapp.NewAcceptPreAdviceHandler(
+		preAdviceStore, warehouses, warehouses, goods, preAdviceNumbers, preAdviceIdentities, owners, systemClock{},
+	)
+	preAdvices := transactionalPreAdvice{transactor: db.Transactor(), inner: preAdviceHandler}
+	preAdviceClose := transactionalPreAdviceClosure{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewClosePreAdviceHandler(
+			closures, preAdviceStore, preAdviceHandler, receipts, goods, warehouses, discrepancies, systemClock{},
+		),
+	}
+	conclusionStore, err := whpostgres.NewDiscrepancyConclusions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: receipt discrepancy conclusions: %w", err)
+	}
+	discrepancyConclusion := transactionalDiscrepancyConclusion{
+		transactor: db.Transactor(),
+		inner:      warehouseapp.NewConcludeDiscrepancyHandler(conclusionStore, warehouses, systemClock{}),
+	}
+	poster := warehouseapp.NewPostStockMovementHandler(
+		stock, warehouses, locations, zones, goods, stockIDs, systemClock{},
+	)
+	receiptConfirm := transactionalReceiptConfirmation{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewConfirmReceiptHandler(
+			receipts, preAdviceStore, preAdviceHandler, poster,
+			cartons, cartonIDs,
+			warehouses, locations, zones, goodsCatalogue, goods,
+			discrepancies, arrivals, arrivalIDs, systemClock{},
+		),
+	}
 	return warehouseFulfillmentOrchestration{
 		registration: transactionalWarehouseRegistration{
 			transactor: db.Transactor(),
@@ -204,5 +420,12 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB) (warehouseFulfillmen
 			inner: warehouseapp.NewRegisterPackagingMaterialHandler(packagingMaterials, warehouses, systemClock{}),
 		},
 		packagingMaterialQueries: warehouseapp.NewQueryPackagingMaterialsHandler(packagingMaterialCatalogue, packagingMaterialCatalogue),
+		goodsRegistration:        goodsRegistration,
+		goodsQueries:             warehouseapp.NewQueryGoodsHandler(goodsCatalogue, goodsCatalogue, goodsCatalogue, systemClock{}),
+		preAdvices:               preAdvices,
+		preAdviceQueries:         warehouseapp.NewQueryPreAdviceHandler(preAdviceCatalogue, receipts, goods, closures, conclusionStore, arrivals),
+		preAdviceClose:           preAdviceClose,
+		receiptConfirm:           receiptConfirm,
+		discrepancyConclusion:    discrepancyConclusion,
 	}, nil
 }

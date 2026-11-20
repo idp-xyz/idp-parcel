@@ -196,7 +196,7 @@ func TestWorkFactRegistrationIsGrantedPerWorkScope(t *testing.T) {
 }
 
 func TestWorkScopeKindsAreAClosedLiteralSet(t *testing.T) {
-	for _, value := range []string{"NODE", "OFFSITE"} {
+	for _, value := range []string{"NODE", "OFFSITE", "WAREHOUSE"} {
 		if _, err := accessidentity.ParseWorkScopeKind(value); err != nil {
 			t.Fatalf("ParseWorkScopeKind(%q): %v", value, err)
 		}

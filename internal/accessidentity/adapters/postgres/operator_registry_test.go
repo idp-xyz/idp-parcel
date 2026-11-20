@@ -247,6 +247,72 @@ func TestManualMeasurementEntryGrantPassesTheDecisionKindCheck(t *testing.T) {
 	}
 }
 
+func TestGoodsRecordOnBehalfGrantPassesTheDecisionKindCheck(t *testing.T) {
+	register := newOperatorRegister(t)
+	subject := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-GOODS-BEHALF")
+	expectOutcome(t, "bind", register.bind(t, bindingOf(t, subject, "SYN-TENANT-01", "SYN-BIND-BASIS")), accessidentity.OperatorRegistrationRecorded)
+	interval, err := accessidentity.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := accessidentity.NewOperationDecisionGrant("SYN-TENANT-01", "SYN-DECISION-GOODS-BEHALF", subject,
+		accessidentity.DecisionGoodsRecordOnBehalf, interval, "SYN-GRANT-BASIS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectOutcome(t, "goods on behalf grant", register.grant(t, grant), accessidentity.OperatorRegistrationRecorded)
+	at := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	standing := register.standing(t, subject)
+	if !standing.HoldsDecisionAt(accessidentity.DecisionGoodsRecordOnBehalf, at) ||
+		standing.HoldsDecisionAt(accessidentity.DecisionManualMeasurementEntry, at) {
+		t.Fatalf("商品代录授予没有单独留下：grants = %+v", standing.Grants())
+	}
+}
+
+func TestInboundPreAdviceCloseGrantPassesTheDecisionKindCheck(t *testing.T) {
+	register := newOperatorRegister(t)
+	subject := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-PRE-ADVICE-CLOSE")
+	expectOutcome(t, "bind", register.bind(t, bindingOf(t, subject, "SYN-TENANT-01", "SYN-BIND-BASIS")), accessidentity.OperatorRegistrationRecorded)
+	interval, err := accessidentity.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := accessidentity.NewOperationDecisionGrant("SYN-TENANT-01", "SYN-DECISION-PRE-ADVICE-CLOSE", subject,
+		accessidentity.DecisionInboundPreAdviceClose, interval, "SYN-GRANT-BASIS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectOutcome(t, "inbound pre-advice close grant", register.grant(t, grant), accessidentity.OperatorRegistrationRecorded)
+	at := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	standing := register.standing(t, subject)
+	if !standing.HoldsDecisionAt(accessidentity.DecisionInboundPreAdviceClose, at) ||
+		standing.HoldsDecisionAt(accessidentity.DecisionInboundPreAdviceRecordOnBehalf, at) {
+		t.Fatalf("入库预报完结授予没有单独留下：grants = %+v", standing.Grants())
+	}
+}
+
+func TestInboundPreAdviceRecordOnBehalfGrantPassesTheDecisionKindCheck(t *testing.T) {
+	register := newOperatorRegister(t)
+	subject := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-PRE-ADVICE-BEHALF")
+	expectOutcome(t, "bind", register.bind(t, bindingOf(t, subject, "SYN-TENANT-01", "SYN-BIND-BASIS")), accessidentity.OperatorRegistrationRecorded)
+	interval, err := accessidentity.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := accessidentity.NewOperationDecisionGrant("SYN-TENANT-01", "SYN-DECISION-PRE-ADVICE-BEHALF", subject,
+		accessidentity.DecisionInboundPreAdviceRecordOnBehalf, interval, "SYN-GRANT-BASIS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectOutcome(t, "inbound pre-advice on behalf grant", register.grant(t, grant), accessidentity.OperatorRegistrationRecorded)
+	at := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	standing := register.standing(t, subject)
+	if !standing.HoldsDecisionAt(accessidentity.DecisionInboundPreAdviceRecordOnBehalf, at) ||
+		standing.HoldsDecisionAt(accessidentity.DecisionGoodsRecordOnBehalf, at) {
+		t.Fatalf("入库预报代录授予没有单独留下：grants = %+v", standing.Grants())
+	}
+}
+
 // Covers: 票 demo-chain-gaps/20——容量预占与容量释放两种决定过得了库上的决定种类 CHECK（迁移 access_identity/0012
 // 重建的全集），各自往返；只持预占的不因此持释放。
 func TestCapacityReservationAndReleaseGrantsPassTheDecisionKindCheck(t *testing.T) {

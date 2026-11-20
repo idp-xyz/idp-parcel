@@ -47,6 +47,14 @@ type operatorDecisionIntakes struct {
 	networkRouting *networkhttp.OperatorDecisionIntake
 	// visibility 是异常案件的接单、关闭与归并（UC-VE-005）。
 	visibility *visibilityhttp.OperatorDecisionIntake
+	// warehouseGoods 是商品代录（ADR-0384 决定二）。仓配开关关着时它照样建出来，只是没有任何端点问到它。
+	warehouseGoods *warehousehttp.OperatorGoodsIntake
+	// warehousePreAdvice 是入库预报代录（ADR-0384 决定二）。三个写口共用这一只。开关关着时照样建出来，没有任何端点问到它。
+	warehousePreAdvice *warehousehttp.OperatorPreAdviceIntake
+	// warehousePreAdviceClose 是入库预报完结（ADR-0384 决定二）。开关关着时照样建出来，没有任何端点问到它。
+	warehousePreAdviceClose *warehousehttp.OperatorPreAdviceCloseIntake
+	// warehouseDiscrepancyConclusion 是收货差异结论代录（ADR-0384 决定二）。开关关着时照样建出来，没有任何端点问到它。
+	warehouseDiscrepancyConclusion *warehousehttp.OperatorDiscrepancyConclusionIntake
 }
 
 // buildOperatorMinter 建本进程唯一一只操作者铸造器：运营决定与登记写面各口共用它。
@@ -189,8 +197,42 @@ func buildOperatorDecisionIntakes(
 	if err != nil {
 		return operatorDecisionIntakes{}, err
 	}
+	goodsAuthenticator, err := whaccess.NewOperatorGoodsAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseGoods, err := warehousehttp.NewOperatorGoodsIntake(goodsAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	preAdviceAuthenticator, err := whaccess.NewOperatorPreAdviceAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehousePreAdvice, err := warehousehttp.NewOperatorPreAdviceIntake(preAdviceAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	closeAuthenticator, err := whaccess.NewOperatorPreAdviceCloseAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehousePreAdviceClose, err := warehousehttp.NewOperatorPreAdviceCloseIntake(closeAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	conclusionAuthenticator, err := whaccess.NewOperatorDiscrepancyConclusionAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseDiscrepancyConclusion, err := warehousehttp.NewOperatorDiscrepancyConclusionIntake(conclusionAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
 	return operatorDecisionIntakes{shipment: shipment, transport: transport, nodeOperations: nodeOperations, customs: customs,
-		settlement: settlement, networkRouting: networkRouting, visibility: visibility}, nil
+		settlement: settlement, networkRouting: networkRouting, visibility: visibility, warehouseGoods: warehouseGoods,
+		warehousePreAdvice: warehousePreAdvice, warehousePreAdviceClose: warehousePreAdviceClose,
+		warehouseDiscrepancyConclusion: warehouseDiscrepancyConclusion}, nil
 }
 
 // operatorRegistryIntakes 是操作者渠道登记册配置写能力面在各上下文的 Intake（ADR-0100 决定四；票 operator-channel/04）。

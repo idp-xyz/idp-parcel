@@ -178,9 +178,10 @@ func isSelectorOf(expression ast.Expr, qualifier, name string) bool {
 }
 
 // Covers: ADR-0375 决定四、AT-WF-012（端点那一半）——开关值从 startupChannels 经 endpointSources 进到仓配的各行：经
-// assembleProductionEndpoints 对真库装配，startupChannels.warehouseFulfillment 为真，打仓配的各行答「接入渠道未配置」（渠道配了时
-// 答真渠道的答复：核验方放行、操作者册里没有这个操作者，答 OPERATOR_NOT_GRANTED）；为假，不论渠道配没配，各行都答
-// WAREHOUSE_FULFILLMENT_NOT_ENABLED。零值就是关：缺省不提供仓配的业务答复。
+// assembleProductionEndpoints 对真库装配，startupChannels.warehouseFulfillment 为真，打仓配的操作者行答「接入渠道未配置」（渠道配了时
+// 答真渠道的答复：核验方放行、操作者册里没有这个操作者，答 OPERATOR_NOT_GRANTED）；货主行自建首方 Intake，本测试的客户发行方未设，
+// 开关开着时它们仍是「接入渠道未配置」，不吃操作者渠道。为假，不论渠道配没配，各行都答 WAREHOUSE_FULFILLMENT_NOT_ENABLED。
+// 零值就是关：缺省不提供仓配的业务答复。
 func TestTheWarehouseFulfillmentSwitchTravelsFromStartupChannelsIntoTheWarehouseLines(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -224,13 +225,26 @@ func TestTheWarehouseFulfillmentSwitchTravelsFromStartupChannelsIntoTheWarehouse
 		router := assemble(testCase.startup)
 		for _, pattern := range warehouseFulfillmentLines() {
 			probe := businessEndpointProbes()[pattern]
-			request := httptest.NewRequest(probe.method, probe.target, strings.NewReader(`{}`))
+			body := `{}`
+			if pattern == receiptConfirmationsLine {
+				body = receiptConfirmationBody()
+			}
+			request := httptest.NewRequest(probe.method, probe.target, strings.NewReader(body))
+			if pattern == receiptConfirmationsLine {
+				request.Header.Set("Parcel-Work-Scope-Kind", "WAREHOUSE")
+				request.Header.Set("Parcel-Work-Scope-Reference", "SYN-WH-01")
+				request.Header.Set("Parcel-Device-Id", "SYN-DEVICE-NODE")
+			}
 			request.Header.Set("Authorization", "Bearer "+presentedOperatorToken)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
 
-			if response.Code != http.StatusForbidden || problemCode(t, response) != testCase.code {
-				t.Fatalf("%s：%s 答 %d %s，want 403 %s", testCase.name, pattern, response.Code, response.Body.String(), testCase.code)
+			want := testCase.code
+			if declaredEndpointLines()[pattern].face.family == faceCustomerClient && testCase.startup.warehouseFulfillment {
+				want = "ACCESS_CHANNEL_NOT_CONFIGURED"
+			}
+			if response.Code != http.StatusForbidden || problemCode(t, response) != want {
+				t.Fatalf("%s：%s 答 %d %s，want 403 %s", testCase.name, pattern, response.Code, response.Body.String(), want)
 			}
 			assertNoOutcome(t, response, pattern)
 		}

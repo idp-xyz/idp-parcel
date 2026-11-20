@@ -205,7 +205,7 @@ footer .wrap{padding-block:22px 40px}
     <tr><td><b>集运</b></td><td><span class="pill p-wait">待接入</span></td><td>多个包裹装进一个集运单元，封装留快照。机制可用，作业只能离线导入。</td></tr>
     <tr><td><b>退运与收寄后处置</b></td><td><span class="pill p-ok">可用</span></td><td>越过取消边界后形成处置决定：继续、拦截、改送、退运、服务终止。</td></tr>
     <tr><td><b>代收货款</b></td><td><span class="pill p-hold">不启用</span></td><td>分户账机制已在，首发试点不启用。</td></tr>
-    <tr><td><b>仓配履约</b>（入库、库内、出库、平台备货、代理仓）</td><td><span class="pill p-off">未实现</span></td><td>默认关。只能登记与查阅仓、库区、库位与包材，其余只有设计，在做。出库走本产品网络时，以货主名义提交委托，之后进入主链。</td></tr>
+    <tr><td><b>仓配履约</b>（入库、库内、出库、平台备货、代理仓）</td><td><span class="pill p-hold">在做</span></td><td>默认关。入库一段已有代码：主数据登记册、商品代录、预报、收货入账、完结与少收、差异结论、取消或完结后的到货转待认领。上架、库内、出库还没有。出库走本产品网络时，以货主名义提交委托，之后进入主链。</td></tr>
     <tr><td><b>货代型头程</b>（海运整柜拼箱、海卡、托盘、预约送仓）</td><td><span class="pill p-off">不在产品内</span></td><td>以订舱、提单、托盘为核心的头程不做。空派、海派里尾程走卡派的那一截也不在内。</td></tr>
   </table></div>
 
@@ -247,8 +247,8 @@ footer .wrap{padding-block:22px 40px}
     </div>
   </div>
 
-  <h3>仓配履约的设计（未实现）</h3>
-  <p>可选能力，在首发之外，在做。下图是设计意图，不是产品现在的行为：main 上只有默认关着的部署开关，没有业务代码。</p>
+  <h3>仓配履约</h3>
+  <p>可选能力，在首发之外，默认关，在做。下图是整段场景的设计，不是每一格都已有代码。已有代码的是入库预报、收货入账（商品与整箱）、完结与少收、收货差异结论，以及取消或完结后到达的收货转待认领；上架、库内作业与出库还没有。</p>
   <figure>
     <div class="scroll">
     <svg viewBox="0 0 1120 290" role="img" aria-label="仓配履约的设计：入库预报、收货入账、上架与库内作业、出库请求；出库请求有本产品网络、自备面单、自提三种发运方式，其中本产品网络以货主名义提交委托后进入主链">
@@ -273,10 +273,10 @@ footer .wrap{padding-block:22px 40px}
         <rect class="band" x="378" y="206" width="330" height="40" rx="4"/><text x="392" y="231">代理仓：出库经连接器转交，库存不进库存账</text>
         <rect class="band" x="726" y="206" width="368" height="40" rx="4"/><text x="740" y="231">仓储作业收费发生项 → 小包计价评价 → 结算形成费用</text>
       </g>
-      <text class="t-m" x="30" y="274" font-size="12">虚线框表示只有设计。库存账只经库存流水改变；商品库存与包裹是两种身份，打包并提交委托之后才有包裹。保税仓不进产品。</text>
+      <text class="t-m" x="30" y="274" font-size="12">上架、出库与下面三格仍是设计。库存账只经库存流水改变；商品库存与包裹是两种身份，打包并提交委托之后才有包裹。保税仓不进产品。</text>
     </svg>
     </div>
-    <figcaption>仓配与主链的接口只有一处：出库走本产品网络时提交委托。文档进度：用例写到收费发生项，都在 main，没有代码。</figcaption>
+    <figcaption>仓配与主链的接口设计只有一处：出库走本产品网络时提交委托。那一处还没有代码。入库预报与收货入账已经有代码。</figcaption>
   </figure>
 
 </section>
@@ -750,7 +750,7 @@ footer .wrap{padding-block:22px 40px}
     <tr><td><b>小包计价</b></td><td><span class="pill p-ok">可用</span> 价卡草稿到发布、评价、试算、回放、参考序列登记与复核</td><td><span class="pill p-wait">在做</span> 销售卡按有序范围列表选卡<br><span class="pill p-off">未实现</span> 仓储计费方案</td><td>价格表、汇率与燃油费率、计价试算可用；计费记录只能看</td></tr>
     <tr><td><b>结算与经营核算</b></td><td><span class="pill p-ok">可用</span> 评价请求、费用形成与确认、费用调整、对账单发布与作废、后续对账纳入、供应商账单与审核、资金采用与核销、接受前财务控制</td><td><span class="pill p-wait">待接入</span> 成本分摊与经营结果、赔付与追偿金额<br><span class="pill p-off">未实现</span> 周期费用的形成、自动核销</td><td>供应商账单与应付、收付款核销可用；对账单部分可用；客户费用、经营核算只能看；费用确认、对账单发布没有页面</td></tr>
     <tr><td><b>代收与清分</b></td><td><span class="pill p-hold">不启用</span> 分户账与各资金位置的机制已在</td><td>首发试点不启用代收货款服务</td><td>代收货款只能看</td></tr>
-    <tr><td><b>仓配履约</b></td><td><span class="pill p-hold">在做</span> 可选能力，首发不含。设计见上文「仓配履约的设计」</td><td><span class="pill p-off">未实现</span> main 上有默认关着的部署开关与主数据登记册；其余用例只有文档</td><td>没有页面</td></tr>
+    <tr><td><b>仓配履约</b></td><td><span class="pill p-hold">在做</span> 可选能力，首发不含，默认关。主数据登记册、商品代录与查阅、库存账、入库预报、收货确认、整箱库存、完结与少收、收货差异结论、取消或完结后的到货转待认领已有入口</td><td><span class="pill p-off">未实现</span> 商品货主口与仓测、认领与处置、建账导入、上架与库内作业、出库</td><td>没有页面</td></tr>
     <tr><td><b>试点治理</b></td><td><span class="pill p-ok">可用</span> 候选版本组、阶段评审决定、权威区间、暂停恢复的记录</td><td>阶段评审的 <code>Go</code> 在代码里没有读者：准入读的是权威区间与暂停</td><td>试点治理只能看，登记走离线命令</td></tr>
     <tr><td><b>接入与身份</b></td><td><span class="pill p-ok">可用</span> 接入渠道登记、凭据验证、来源信封、操作员授予</td><td><span class="pill p-off">未实现</span> 签名推送的铸造、租户既有通道适配</td><td>操作者与授予可用；扫描设备只能看</td></tr>
   </table></div>

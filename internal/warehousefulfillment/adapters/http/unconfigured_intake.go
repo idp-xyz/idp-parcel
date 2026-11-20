@@ -21,6 +21,10 @@ var (
 	_ LocationRegistrationIntake          = UnconfiguredIntake{}
 	_ PackagingMaterialRegistrationIntake = UnconfiguredIntake{}
 	_ CatalogueIntake                     = UnconfiguredIntake{}
+	_ GoodsOnBehalfIntake                 = UnconfiguredIntake{}
+	_ PreAdviceOnBehalfIntake             = UnconfiguredIntake{}
+	_ ClosePreAdviceIntake                = UnconfiguredIntake{}
+	_ DiscrepancyConclusionIntake         = UnconfiguredIntake{}
 )
 
 // IntakeWarehouseRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
@@ -54,4 +58,30 @@ func (UnconfiguredIntake) IntakePackagingMaterialRegistration(
 
 func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {
 	return CatalogueQuery{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeGoodsOnBehalf(context.Context, *http.Request) (application.RegisterGoodsCommand, error) {
+	return application.RegisterGoodsCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakePreAdvice(context.Context, *http.Request) (application.AcceptPreAdviceCommand, error) {
+	return application.AcceptPreAdviceCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakePreAdviceNotice(
+	context.Context, *http.Request,
+) (application.UpdatePreAdviceNoticeCommand, error) {
+	return application.UpdatePreAdviceNoticeCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakePreAdviceWithdrawal(
+	context.Context, *http.Request,
+) (application.WithdrawPreAdviceCommand, error) {
+	return application.WithdrawPreAdviceCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeClosePreAdvice(
+	context.Context, *http.Request,
+) (application.ClosePreAdviceCommand, error) {
+	return application.ClosePreAdviceCommand{}, ErrAccessChannelNotConfigured
 }

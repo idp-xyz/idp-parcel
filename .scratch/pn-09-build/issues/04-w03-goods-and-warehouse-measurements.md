@@ -1,12 +1,12 @@
 # 04 `PN09-W03`：货主商品与仓测尺寸重量
 
 Category: enhancement
-Status: in-progress（2026-11-19 认领，分支 `cursor/wf-w03-goods`）
+Status: in-progress（第 1、2 段代码写完；还没有非作者评审；没有进 main）
 Blocked by: 03
 
 依据：[UC-WF-002](../../../docs/application/warehouse-fulfillment/UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md)；[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md)「商品」「商品别名」「组合商品」「包装层级」「仓测尺寸重量」「商品申报资料」词条与「主数据登记」「身份与边界」；[ADR-0384](../../../docs/adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)；现行做法见 [dox 仓配履约](../../../dox/contexts/warehouse-fulfillment.md)「已实现」。
 
-用户 2026-11-19 说「继续」。分工同前：拆包、任务说明与验收由主会话做，代码与测试由 Sonnet 5.5 子代理写。
+用户 2026-11-19 说「继续」。分工同前：拆包、任务说明与验收由主会话做，代码与测试由 Sonnet 5.5 子代理写。Sonnet 子代理因账单两次起不来，第 1 段与第 2 段的代码由主会话写成；2026-11-20 起用户改定代码与测试由 Grok 4.7 写。
 
 ## 分四段
 
@@ -86,3 +86,13 @@ Blocked by: 03
 - 受控批量口与登记 CLI；演示种子；管理台页面。
 - 向一线作业端下发商品与别名。
 - 仓测对收费发生项的作用。
+
+## 进展
+
+四段里只做了第 1 段（商品的核心）和第 2 段（运营代录与运营查阅）。货主口与仓测没做：客户面能力里没有商品维护，端点登记里没有商品的货主口，也没有仓测的作业事实类型。
+
+出入：代决 5 写「有没有在库库存」先接一只恒答没有的实现。库存账落地后，这一格改读真账；商品有在库库存时改是否跟踪批号或效期，答 `IMMUTABLE_FIELD`。代决 1 仍成立：货主口没落地，不因为商品代录就把商品维护写进客户面词表。`WAREHOUSE_READ` 是入库预报读口加上的，不是本票第 3 段。
+
+第 1、2 段的代码由主会话写。
+
+验证：全仓 `go test ./...` 连真库跑过并通过。仓配各包与 `cmd/parcel-api` 整包另带 `-race` 跑过。证据层级是隔离合成 `S`。演示种子没有另造。没有非作者评审。代码写完第 1、2 段，没有进 main。

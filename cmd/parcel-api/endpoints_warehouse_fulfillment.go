@@ -1,9 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
+	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	whaccess "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/accessidentity"
 	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
 )
 
@@ -33,6 +37,26 @@ type warehouseFulfillmentWiring struct {
 	packagingMaterialRegistration warehousehttp.PackagingMaterialRegistrar
 	packagingMaterialCatalogue    warehousehttp.PackagingMaterialCatalogueReader
 	packagingMaterialRevisions    warehousehttp.PackagingMaterialRevisionsReader
+
+	goodsRegistration warehousehttp.GoodsRegistrar
+	goodsCatalogue    warehousehttp.GoodsCatalogueReader
+	goodsCurrent      warehousehttp.GoodsCurrentReader
+	goodsRevisions    warehousehttp.GoodsRevisionsReader
+	goodsFinder       warehousehttp.GoodsFinder
+
+	preAdviceOnBehalf warehousehttp.PreAdviceOnBehalf
+	preAdviceQueries  warehousehttp.PreAdviceQueries
+	preAdviceClose    warehousehttp.PreAdviceCloser
+
+	// customerPreAdvice 缺席时货主六口是字面量未配置。开关关着时这一格不被问到。
+	customerPreAdvice *warehousehttp.CustomerInboundPreAdviceIntake
+	// customerConclusion 缺席时货主结论口是字面量未配置。开关关着时这一格不被问到。
+	customerConclusion    *warehousehttp.CustomerDiscrepancyConclusionIntake
+	discrepancyConclusion warehousehttp.DiscrepancyConcluder
+
+	// receiptIntake 缺席时收货确认是字面量未配置。receiptConfirm 是开关开着时的编排；关着时不被问到。
+	receiptIntake  *warehousehttp.ReceiptWorkFactIntake
+	receiptConfirm warehousehttp.ReceiptConfirmer
 }
 
 func init() {
@@ -74,14 +98,124 @@ func init() {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-packaging-material-revisions?packagingMaterialCode=SYN-BOX-01",
 			},
+			// 商品代录挂运营决定，要判准入范围。读口挂主数据与运营查阅读，不判准入范围；货主是查询串里的业务内容。
+			"/warehouse-fulfillment-goods-on-behalf": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionGoodsRecordOnBehalf), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-goods": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-goods?ownerAccount=SYN-OWNER-01",
+			},
+			"/warehouse-fulfillment-goods-current": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-goods-current?ownerAccount=SYN-OWNER-01&goodsCode=SYN-GOODS-01",
+			},
+			"/warehouse-fulfillment-goods-revisions": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-goods-revisions?ownerAccount=SYN-OWNER-01&goodsCode=SYN-GOODS-01",
+			},
+			"/warehouse-fulfillment-goods-by-code": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-goods-by-code?ownerAccount=SYN-OWNER-01&code=SYN-GOODS-01",
+			},
+			// 入库预报代录三个写口挂同一种运营决定，都判准入。读口挂主数据与运营查阅读，不判准入。一路径一行。
+			"/warehouse-fulfillment-inbound-pre-advice-on-behalf": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionInboundPreAdviceRecordOnBehalf), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-inbound-pre-advice-notice-on-behalf": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionInboundPreAdviceRecordOnBehalf), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-inbound-pre-advice-withdrawal-on-behalf": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionInboundPreAdviceRecordOnBehalf), warehouseFulfillment: true,
+			},
+			// 入库预报完结挂运营决定，不挂作业事实登记。准入的能力词与事实类型词都是这一种决定的字面量。
+			"/warehouse-fulfillment-inbound-pre-advice-closures": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionInboundPreAdviceClose), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-inbound-pre-advices": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01",
+			},
+			"/warehouse-fulfillment-inbound-pre-advice": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-inbound-pre-advice?ownerAccount=SYN-OWNER-01&preAdviceId=SYN-IPA-01",
+			},
+			"/warehouse-fulfillment-inbound-pre-advice-by-number": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-inbound-pre-advice-by-number?documentNumber=IB-20261120-00001",
+			},
+			// 货主六口挂首方客户渠道，Intake 由本特性从客户铸造器自建。写口与读口都在这份登记里，开关关着时仍是
+			// WAREHOUSE_FULFILLMENT_NOT_ENABLED，在认证之前。读口是契约「落端点时按对象拆开」的那三行，能力词不拆。
+			"/v1/warehouse/inbound-pre-advices": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityInboundPreAdviceSubmission),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/inbound-pre-advices/arrival-notices": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityInboundPreAdviceArrivalNotice),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/inbound-pre-advices/withdrawals": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityInboundPreAdviceWithdrawal),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/reads/inbound-pre-advices": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/reads/inbound-pre-advice": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+				probe: "/v1/warehouse/reads/inbound-pre-advice?preAdviceId=SYN-IPA-01",
+			},
+			"/v1/warehouse/reads/inbound-pre-advice-by-number": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+				probe: "/v1/warehouse/reads/inbound-pre-advice-by-number?documentNumber=IB-20261120-00001",
+			},
+			// 收货差异结论代录挂运营决定。准入的能力词与事实类型词都是这一种决定的字面量。不带决定标识。
+			"/warehouse-fulfillment-receipt-discrepancy-conclusion-on-behalf": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionReceiptDiscrepancyRecordOnBehalf), warehouseFulfillment: true,
+			},
+			// 货主结论口挂首方客户渠道。准入两格都是这一口的字面量，不用 CUSTOMER_COMMAND。开关关着时在认证之前答未启用。
+			"/v1/warehouse/receipt-discrepancy-conclusions": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityReceiptDiscrepancyConclusion),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			// 收货确认挂作业事实登记，不挂运营决定。铸造侧判准入：能力词是作业事实登记，事实类型是收货确认。
+			// Intake 由本特性自建，不经节点收寄那一只——那一只只认 NODE。
+			"/warehouse-fulfillment-receipt-confirmations": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
 		},
 		build: func(sources endpointSources) (warehouseFulfillmentWiring, error) {
 			if !sources.warehouseFulfillment {
 				return warehouseFulfillmentWiring{}, nil
 			}
-			orchestration, err := buildWarehouseFulfillmentOrchestration(sources.db)
+			orchestration, err := buildWarehouseFulfillmentOrchestration(sources.db, sources.documentNumbers.Assigner)
 			if err != nil {
 				return warehouseFulfillmentWiring{}, err
+			}
+			var customerPreAdvice *warehousehttp.CustomerInboundPreAdviceIntake
+			var customerConclusion *warehousehttp.CustomerDiscrepancyConclusionIntake
+			if sources.customerClientMinter != nil {
+				customerPreAdvice, err = buildCustomerInboundPreAdviceIntake(sources.customerClientMinter)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+				customerConclusion, err = buildCustomerDiscrepancyConclusionIntake(sources.customerClientMinter)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+			}
+			var receiptIntake *warehousehttp.ReceiptWorkFactIntake
+			if sources.operatorVerifier != nil && sources.operatorRegistry != nil && sources.deviceRegistry != nil && sources.admission != nil {
+				receiptIntake, err = buildReceiptConfirmationIntake(
+					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
+				)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
 			}
 			return warehouseFulfillmentWiring{
 				enabled:          true,
@@ -103,6 +237,21 @@ func init() {
 				packagingMaterialRegistration: orchestration.packagingMaterialRegistration,
 				packagingMaterialCatalogue:    orchestration.packagingMaterialQueries,
 				packagingMaterialRevisions:    orchestration.packagingMaterialQueries,
+
+				goodsRegistration: orchestration.goodsRegistration,
+				goodsCatalogue:    orchestration.goodsQueries,
+				goodsCurrent:      orchestration.goodsQueries,
+				goodsRevisions:    orchestration.goodsQueries,
+				goodsFinder:       orchestration.goodsQueries,
+
+				preAdviceOnBehalf:     orchestration.preAdvices,
+				preAdviceQueries:      orchestration.preAdviceQueries,
+				preAdviceClose:        orchestration.preAdviceClose,
+				customerPreAdvice:     customerPreAdvice,
+				customerConclusion:    customerConclusion,
+				discrepancyConclusion: orchestration.discrepancyConclusion,
+				receiptIntake:         receiptIntake,
+				receiptConfirm:        orchestration.receiptConfirm,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring warehouseFulfillmentWiring) []httpapi.BusinessEndpoint {
@@ -124,6 +273,27 @@ func init() {
 			packagingMaterialRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			packagingMaterials := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			packagingMaterialRevisions := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			goodsOnBehalf := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			goods := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			goodsCurrent := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			goodsRevisions := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			goodsByCode := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			preAdviceOnBehalf := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			preAdviceNotice := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			preAdviceWithdrawal := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			preAdviceClose := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			preAdvices := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			preAdvice := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			preAdviceByNumber := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			customerSubmission := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerNotice := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerWithdrawal := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerList := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			customerOne := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			customerByNumber := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			customerConclusion := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			discrepancyConclusion := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			receiptConfirmation := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			// 开着：与别的登记写行、查阅行行为一致——渠道没配答「接入渠道未配置」，配了走真编排。各读口共用一个 Intake，各册的
 			// 登记口共用同一个认证器。
 			if wiring.enabled {
@@ -144,6 +314,33 @@ func init() {
 					channels.packagingMaterialRegistration(), wiring.packagingMaterialRegistration)
 				packagingMaterials = warehousehttp.NewQueryPackagingMaterialsEndpoint(catalogueIntake, wiring.packagingMaterialCatalogue)
 				packagingMaterialRevisions = warehousehttp.NewQueryPackagingMaterialRevisionsEndpoint(catalogueIntake, wiring.packagingMaterialRevisions)
+				goodsOnBehalf = warehousehttp.NewRegisterGoodsOnBehalfEndpoint(channels.goodsOnBehalf(), wiring.goodsRegistration)
+				goods = warehousehttp.NewQueryGoodsEndpoint(catalogueIntake, wiring.goodsCatalogue)
+				goodsCurrent = warehousehttp.NewQueryCurrentGoodsEndpoint(catalogueIntake, wiring.goodsCurrent)
+				goodsRevisions = warehousehttp.NewQueryGoodsRevisionsEndpoint(catalogueIntake, wiring.goodsRevisions)
+				goodsByCode = warehousehttp.NewFindGoodsEndpoint(catalogueIntake, wiring.goodsFinder)
+				preAdviceOnBehalf = warehousehttp.NewAcceptPreAdviceOnBehalfEndpoint(channels.preAdviceOnBehalf(), wiring.preAdviceOnBehalf)
+				preAdviceNotice = warehousehttp.NewUpdatePreAdviceNoticeOnBehalfEndpoint(channels.preAdviceOnBehalf(), wiring.preAdviceOnBehalf)
+				preAdviceWithdrawal = warehousehttp.NewWithdrawPreAdviceOnBehalfEndpoint(channels.preAdviceOnBehalf(), wiring.preAdviceOnBehalf)
+				preAdviceClose = warehousehttp.NewClosePreAdviceEndpoint(channels.preAdviceClose(), wiring.preAdviceClose)
+				preAdvices = warehousehttp.NewQueryPreAdvicesEndpoint(catalogueIntake, wiring.preAdviceQueries)
+				preAdvice = warehousehttp.NewQueryPreAdviceEndpoint(catalogueIntake, wiring.preAdviceQueries)
+				preAdviceByNumber = warehousehttp.NewQueryPreAdviceByNumberEndpoint(catalogueIntake, wiring.preAdviceQueries)
+				customerPorts := warehousehttp.OpenCustomerInboundPreAdviceIntake(wiring.customerPreAdvice)
+				customerSubmission = warehousehttp.NewSubmitInboundPreAdviceEndpoint(customerPorts, wiring.preAdviceOnBehalf)
+				customerNotice = warehousehttp.NewUpdateInboundPreAdviceNoticeEndpoint(customerPorts, wiring.preAdviceOnBehalf)
+				customerWithdrawal = warehousehttp.NewWithdrawInboundPreAdviceEndpoint(customerPorts, wiring.preAdviceOnBehalf)
+				customerList = warehousehttp.NewListCustomerInboundPreAdvicesEndpoint(customerPorts, wiring.preAdviceQueries)
+				customerOne = warehousehttp.NewGetCustomerInboundPreAdviceEndpoint(customerPorts, wiring.preAdviceQueries)
+				customerByNumber = warehousehttp.NewGetCustomerInboundPreAdviceByNumberEndpoint(customerPorts, wiring.preAdviceQueries)
+				conclusionPorts := warehousehttp.OpenCustomerDiscrepancyConclusionIntake(wiring.customerConclusion)
+				customerConclusion = warehousehttp.NewConcludeDiscrepancyEndpoint(conclusionPorts, wiring.discrepancyConclusion)
+				discrepancyConclusion = warehousehttp.NewConcludeDiscrepancyOnBehalfEndpoint(channels.discrepancyConclusion(), wiring.discrepancyConclusion)
+				receiptIntake := warehousehttp.ReceiptConfirmationIntake(warehousehttp.UnconfiguredReceiptIntake{})
+				if wiring.receiptIntake != nil {
+					receiptIntake = wiring.receiptIntake
+				}
+				receiptConfirmation = warehousehttp.NewConfirmReceiptEndpoint(receiptIntake, wiring.receiptConfirm)
 			}
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/warehouse-fulfillment-warehouse-registrations", Handler: registration},
@@ -161,7 +358,65 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-packaging-material-registrations", Handler: packagingMaterialRegistration},
 				{Pattern: "/warehouse-fulfillment-packaging-materials", Handler: packagingMaterials},
 				{Pattern: "/warehouse-fulfillment-packaging-material-revisions", Handler: packagingMaterialRevisions},
+				{Pattern: "/warehouse-fulfillment-goods-on-behalf", Handler: goodsOnBehalf},
+				{Pattern: "/warehouse-fulfillment-goods", Handler: goods},
+				{Pattern: "/warehouse-fulfillment-goods-current", Handler: goodsCurrent},
+				{Pattern: "/warehouse-fulfillment-goods-revisions", Handler: goodsRevisions},
+				{Pattern: "/warehouse-fulfillment-goods-by-code", Handler: goodsByCode},
+				{Pattern: "/warehouse-fulfillment-inbound-pre-advice-on-behalf", Handler: preAdviceOnBehalf},
+				{Pattern: "/warehouse-fulfillment-inbound-pre-advice-notice-on-behalf", Handler: preAdviceNotice},
+				{Pattern: "/warehouse-fulfillment-inbound-pre-advice-withdrawal-on-behalf", Handler: preAdviceWithdrawal},
+				{Pattern: "/warehouse-fulfillment-inbound-pre-advice-closures", Handler: preAdviceClose},
+				{Pattern: "/warehouse-fulfillment-inbound-pre-advices", Handler: preAdvices},
+				{Pattern: "/warehouse-fulfillment-inbound-pre-advice", Handler: preAdvice},
+				{Pattern: "/warehouse-fulfillment-inbound-pre-advice-by-number", Handler: preAdviceByNumber},
+				{Pattern: "/v1/warehouse/inbound-pre-advices", Handler: customerSubmission},
+				{Pattern: "/v1/warehouse/inbound-pre-advices/arrival-notices", Handler: customerNotice},
+				{Pattern: "/v1/warehouse/inbound-pre-advices/withdrawals", Handler: customerWithdrawal},
+				{Pattern: "/v1/warehouse/reads/inbound-pre-advices", Handler: customerList},
+				{Pattern: "/v1/warehouse/reads/inbound-pre-advice", Handler: customerOne},
+				{Pattern: "/v1/warehouse/reads/inbound-pre-advice-by-number", Handler: customerByNumber},
+				{Pattern: "/v1/warehouse/receipt-discrepancy-conclusions", Handler: customerConclusion},
+				{Pattern: "/warehouse-fulfillment-receipt-discrepancy-conclusion-on-behalf", Handler: discrepancyConclusion},
+				{Pattern: "/warehouse-fulfillment-receipt-confirmations", Handler: receiptConfirmation},
 			}
 		},
 	})
+}
+
+// buildCustomerInboundPreAdviceIntake 装配入库预报货主口的首方 Intake。铸造器与别的首方口同一只。铸造器缺席时不调用本函数，
+// 六口保持字面量未配置。
+func buildCustomerDiscrepancyConclusionIntake(minter *accessidentity.CustomerClientMinter) (*warehousehttp.CustomerDiscrepancyConclusionIntake, error) {
+	authenticator, err := whaccess.NewCustomerDiscrepancyConclusionAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewCustomerDiscrepancyConclusionIntake(authenticator)
+}
+
+func buildCustomerInboundPreAdviceIntake(minter *accessidentity.CustomerClientMinter) (*warehousehttp.CustomerInboundPreAdviceIntake, error) {
+	authenticator, err := whaccess.NewCustomerInboundPreAdviceAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewCustomerInboundPreAdviceIntake(authenticator)
+}
+
+// buildReceiptConfirmationIntake 装配收货确认的作业事实 Intake。铸造器与收寄口同一组核验方、操作者册、设备册与准入范围，分开建。
+// 四件缺一就不调用本函数，这一口保持字面量未配置。
+func buildReceiptConfirmationIntake(
+	verifier accessidentity.OperatorCredentialVerifier,
+	operators accessidentity.OperatorRegistry,
+	devices accessidentity.DeviceRegistry,
+	admission accessidentity.AdmissionScope,
+) (*warehousehttp.ReceiptWorkFactIntake, error) {
+	minter, err := accessidentity.NewWorkFactMinter(verifier, operators, devices, admission, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: receipt confirmation work fact minter: %w", err)
+	}
+	authenticator, err := whaccess.NewReceiptConfirmationAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewReceiptWorkFactIntake(authenticator)
 }

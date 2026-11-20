@@ -449,3 +449,35 @@ func (channels endpointChannels) packagingMaterialRegistration() warehousehttp.P
 	}
 	return warehousehttp.UnconfiguredIntake{}
 }
+
+// goodsOnBehalf 是商品代录的运营决定 Intake。渠道没配答未配置；开关关着时这一只不被问到。
+func (channels endpointChannels) goodsOnBehalf() warehousehttp.GoodsOnBehalfIntake {
+	if channels.operatorDecisions.warehouseGoods != nil {
+		return channels.operatorDecisions.warehouseGoods
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
+// preAdviceOnBehalf 是入库预报代录的运营决定 Intake。三个写口共用这一只。渠道没配答未配置；开关关着时不被问到。
+func (channels endpointChannels) preAdviceOnBehalf() warehousehttp.PreAdviceOnBehalfIntake {
+	if channels.operatorDecisions.warehousePreAdvice != nil {
+		return channels.operatorDecisions.warehousePreAdvice
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
+// preAdviceClose 是入库预报完结的运营决定 Intake。渠道没配答未配置；开关关着时不被问到。
+func (channels endpointChannels) preAdviceClose() warehousehttp.ClosePreAdviceIntake {
+	if channels.operatorDecisions.warehousePreAdviceClose != nil {
+		return channels.operatorDecisions.warehousePreAdviceClose
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
+// discrepancyConclusion 是收货差异结论代录的运营决定 Intake。渠道没配答未配置；开关关着时不被问到。
+func (channels endpointChannels) discrepancyConclusion() warehousehttp.DiscrepancyConclusionIntake {
+	if channels.operatorDecisions.warehouseDiscrepancyConclusion != nil {
+		return channels.operatorDecisions.warehouseDiscrepancyConclusion
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}

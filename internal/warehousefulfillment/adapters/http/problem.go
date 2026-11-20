@@ -3,8 +3,9 @@
 //
 // 业务判别只在 `outcome`（ADR-0022）：问题体只说明为什么没有 `outcome`。本包是操作者渠道的两个面（登记册配置写、主数据与运营
 // 查阅读），问题体沿用这两个面在别的上下文里的旧形状 {"error":{"code"}}：装配处对这两个面的读口挂的请求目标检查答的就是这个形状，
-// 同一个上下文里的同一格不该有两种写法；这两个面迁到 RFC 9457 问题详情（ADR-0140 决定三）时整族一起迁。唯一的例外是开关关着时
-// 的那一格——它是新立的一格，没有旧形状要对齐，按 ADR-0140 决定三写问题详情（见 not_enabled.go）。
+// 同一个上下文里的同一格不该有两种写法；这两个面迁到 RFC 9457 问题详情（ADR-0140 决定三）时整族一起迁。开关关着时
+// 的那一格是新立的，没有旧形状要对齐，按 ADR-0140 决定三写问题详情（见 not_enabled.go）。收货确认是作业事实口，
+// 问题体用作业事实族的码，同样写问题详情，不沿用运营口的 {"error":{"code"}}（见 confirm_receipt.go）。
 package warehousehttp
 
 import (
@@ -28,6 +29,10 @@ var (
 	ErrIdentityDependencyUnavailable = errors.New("warehouse fulfillment http: identity dependency unavailable")
 	// ErrMalformedRequest：这次请求构造不出命令或查询，重发同样的内容不会好（400）。
 	ErrMalformedRequest = errors.New("warehouse fulfillment http: malformed request")
+	// ErrOutsideAdmissionScope：代录形成生产事实，这一笔不落在治理登记的准入范围内（403）。登记册配置写不判这一格。
+	ErrOutsideAdmissionScope = errors.New("warehouse fulfillment http: outside the admission scope")
+	// ErrDeviceNotInUse：作业事实口上的设备不在本租户册上、已停用，或登在别的作业范围上（403）。登记册配置写与查阅读不核设备。
+	ErrDeviceNotInUse = errors.New("warehouse fulfillment http: device is not registered for this work scope or has been deactivated")
 )
 
 // 传输层错误码。码只命名状态，不命名参数（ADR-0055）。
@@ -36,10 +41,15 @@ const (
 	codeOperatorCredentialRejected    = "OPERATOR_CREDENTIAL_REJECTED"
 	codeOperatorNotGranted            = "OPERATOR_NOT_GRANTED"
 	codeIdentityDependencyUnavailable = "IDENTITY_DEPENDENCY_UNAVAILABLE"
-	codeMethodNotAllowed              = "METHOD_NOT_ALLOWED"
-	codeMalformedRequest              = "MALFORMED_REQUEST"
-	codeIntakeFailed                  = "INTAKE_FAILED"
-	codeNoAnswerFormed                = "NO_ANSWER_FORMED"
+	codeOutsideAdmissionScope         = "OUTSIDE_ADMISSION_SCOPE"
+	codeDeviceNotInUse                = "DEVICE_NOT_IN_USE"
+	// codeOwnerAccountNotVisible：代录指名的货主客户账户在本租户查不到。与越权探针同答（404），不带 outcome，
+	// 也不说「没登记」——说了，探针就分得出这个账户在不在。
+	codeOwnerAccountNotVisible = "OWNER_ACCOUNT_NOT_VISIBLE"
+	codeMethodNotAllowed       = "METHOD_NOT_ALLOWED"
+	codeMalformedRequest       = "MALFORMED_REQUEST"
+	codeIntakeFailed           = "INTAKE_FAILED"
+	codeNoAnswerFormed         = "NO_ANSWER_FORMED"
 	// codeUnnamedOutcome：应用层交回没有名字的结果是编程错误，不是业务答案，不能带空 `outcome` 上线——空串会被调用侧当成
 	// 一种新的业务结果。
 	codeUnnamedOutcome = "UNNAMED_OUTCOME"
@@ -88,6 +98,8 @@ func writeIntakeProblem(response http.ResponseWriter, err error) {
 		writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
 	case errors.Is(err, ErrOperatorNotGranted):
 		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
+	case errors.Is(err, ErrOutsideAdmissionScope):
+		writeProblem(response, http.StatusForbidden, codeOutsideAdmissionScope)
 	case errors.Is(err, ErrIdentityDependencyUnavailable):
 		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
 	case errors.Is(err, ErrMalformedRequest):

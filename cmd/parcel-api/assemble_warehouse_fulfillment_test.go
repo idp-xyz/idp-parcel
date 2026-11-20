@@ -15,6 +15,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
+	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -86,7 +87,10 @@ func warehouseProductionRouter(t *testing.T, db *bentopg.DB, warehouseFulfillmen
 			continue
 		}
 		endpoints, err := feature.production(
-			endpointSources{db: db, warehouseFulfillment: warehouseFulfillment},
+			endpointSources{
+				db: db, warehouseFulfillment: warehouseFulfillment,
+				documentNumbers: documentNumberingComponents(t, db, docnumber.SecretTable{}),
+			},
 			endpointChannels{operatorRegistries: registries})
 		if err != nil {
 			t.Fatalf("装配仓配特性：%v", err)

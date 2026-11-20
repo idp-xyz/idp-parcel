@@ -30,8 +30,9 @@ type workScopeFixture struct {
 }
 
 var workScopeFixtures = map[accessidentity.WorkScopeKind]workScopeFixture{
-	accessidentity.WorkScopeNode:    {reference: "SYN-NODE-SHA-HUB", device: "SYN-DEVICE-NODE"},
-	accessidentity.WorkScopeOffsite: {reference: "SYN-OFFSITE-01", device: "SYN-DEVICE-OFFSITE"},
+	accessidentity.WorkScopeNode:      {reference: "SYN-NODE-SHA-HUB", device: "SYN-DEVICE-NODE"},
+	accessidentity.WorkScopeOffsite:   {reference: "SYN-OFFSITE-01", device: "SYN-DEVICE-OFFSITE"},
+	accessidentity.WorkScopeWarehouse: {reference: "SYN-WH-01", device: "SYN-DEVICE-WAREHOUSE"},
 }
 
 // workFactProbeBodies 是作业事实各口能越过载荷译装、走到编排的那一份探测载荷，由各特性的 endpoints_<特性>_test.go 登记。

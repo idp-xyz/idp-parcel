@@ -293,7 +293,9 @@ func TestEveryOwnIntakeWriteLineReadsItsBodyThroughTheCheck(t *testing.T) {
 	}
 	sources := endpointSources{
 		db: db, operatorMinter: operatorMinter, customerClientMinter: customerMinter,
-		operatorVerifier: acceptingVerifier{}, operatorRegistry: workFactOperators{}, deviceRegistry: devices, admission: admitEverything{},
+		// 货主写口挂在仓配特性上、且自建 Intake。开关关着时它们不读请求体。这里打开开关，请求体检查才探得到那三口。
+		warehouseFulfillment: true,
+		operatorVerifier:     acceptingVerifier{}, operatorRegistry: workFactOperators{}, deviceRegistry: devices, admission: admitEverything{},
 		documentNumbers: documentNumberingComponents(t, db, docnumber.SecretTable{}),
 		isolatedWrite:   isolatedWriteAdmissionForTest(t), selfAuthority: isolatedSelfAuthority,
 	}

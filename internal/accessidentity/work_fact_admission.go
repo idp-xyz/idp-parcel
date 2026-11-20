@@ -11,9 +11,9 @@ var ErrWorkFactKindUnknown = errors.New("access identity: work fact kind is unkn
 // WorkFactKind 是「作业事实登记」能力面在治理登记册上的事实类型（ADR-0180 决定四末项「一个能力词，事实类型逐口取」）。能力词就是
 // 能力面 CapabilityWorkFactRegistration 那一个串，与运营决定口取 CapabilityOperationDecision 同一个取法。
 //
-// 词表只收在铸造侧判准入的作业事实：送站交接单的开立、归入、关闭（ADR-0212 决定三；票 ps-external-mark-relations/12）与节点监管协作的执行事实（ADR-0338 决定二）。节点收寄与
-// 运输履约各口今天不在铸造侧判准入，它们的词随把它们接上准入的那一票加进来——先登进对照却没有一口会问，等于让阶段治理去登一个
-// 不起作用的区间。
+// 词表只收在铸造侧判准入的作业事实：送站交接单的开立、归入、关闭（ADR-0212 决定三；票 ps-external-mark-relations/12）、节点监管协作的执行事实（ADR-0338 决定二），
+// 以及仓配收货确认（ADR-0384 决定三、决定八）。节点收寄与运输履约各口今天不在铸造侧判准入，它们的词随把它们接上准入的那一票加进来——先登进对照却没有一口会问，等于让阶段治理去登一个
+// 不起作用的区间。仓配其余作业事实类型还没接入口，不在这张表里。
 type WorkFactKind string
 
 const (
@@ -23,6 +23,9 @@ const (
 	// WorkFactNodeCollaborationExecution 是节点现场登记一次监管协作执行事实（开封、隔离、呈验、清点、观察；ADR-0338 决定二）。它是
 	// 不可逆的现场记录，与承接决定分开授权。
 	WorkFactNodeCollaborationExecution WorkFactKind = "NODE_COLLABORATION_EXECUTION"
+	// WorkFactReceiptConfirmation 是仓内确认一次收货（ADR-0384 决定三）。这一口在铸造侧判准入：能力词取
+	// CapabilityWorkFactRegistration 的字面量，事实类型词取本常量；两格不都写成事实类型（决定八）。
+	WorkFactReceiptConfirmation WorkFactKind = "RECEIPT_CONFIRMATION"
 )
 
 // workFactKindsAdmittedAtMint 是准入范围对照收哪几个词、认证方问哪一对准入要求的唯一来源：两处各抄一份，改了一份，登在旧词下的
@@ -32,6 +35,7 @@ var workFactKindsAdmittedAtMint = []WorkFactKind{
 	WorkFactDeliveryHandoverNoteAssignment,
 	WorkFactDeliveryHandoverNoteClosure,
 	WorkFactNodeCollaborationExecution,
+	WorkFactReceiptConfirmation,
 }
 
 // ParseWorkFactKind 按字面取值认作业事实类型，大小写不折叠：对照册里存的就是这些字面量。
