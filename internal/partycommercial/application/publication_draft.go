@@ -367,6 +367,8 @@ const (
 	PublicationDraftPublicationNotLanded
 	PublicationDraftChanged
 	PublicationDraftNotReadable
+	// PublicationDraftSigningEvidenceRequired：发布用例答了缺签署证据。载体留在已批准，版本不入册。
+	PublicationDraftSigningEvidenceRequired
 )
 
 func (outcome PublishPublicationDraftOutcome) String() string {
@@ -387,6 +389,8 @@ func (outcome PublishPublicationDraftOutcome) String() string {
 		return "DRAFT_CHANGED"
 	case PublicationDraftNotReadable:
 		return "DRAFT_NOT_READABLE"
+	case PublicationDraftSigningEvidenceRequired:
+		return "SIGNING_EVIDENCE_REQUIRED"
 	default:
 		return ""
 	}
@@ -493,6 +497,9 @@ func (handler *PublishPublicationDraftHandler) Handle(
 	result := PublishPublicationDraftResult{publication: publication, hasPublication: true}
 	switch publication.Outcome() {
 	case CommercialVersionPublishedEffective, CommercialVersionPlannedEffective, CommercialPublicationReplayed:
+	case CommercialPublicationSigningEvidenceRequired:
+		result.outcome = PublicationDraftSigningEvidenceRequired
+		return result, nil
 	default:
 		result.outcome = PublicationDraftPublicationNotLanded
 		return result, nil

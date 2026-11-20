@@ -26,6 +26,9 @@ const (
 	CommercialPublicationConflicted
 	CommercialPublicationPending
 	CommercialPublicationNotAccepted
+	// CommercialPublicationSigningEvidenceRequired：租户登记了这一类要有签署证据，这一版还没有。
+	// 版本不入册。载体发布口据此把载体留在已批准。
+	CommercialPublicationSigningEvidenceRequired
 )
 
 func (outcome PublishCommercialAuthorityOutcome) String() string {
@@ -42,6 +45,8 @@ func (outcome PublishCommercialAuthorityOutcome) String() string {
 		return "PENDING"
 	case CommercialPublicationNotAccepted:
 		return "NOT_ACCEPTED"
+	case CommercialPublicationSigningEvidenceRequired:
+		return "SIGNING_EVIDENCE_REQUIRED"
 	default:
 		return ""
 	}
@@ -423,6 +428,9 @@ type PublishCommercialAuthorityHandler struct {
 	registry ports.PublicationRegistry
 	clock    ports.Clock
 	handoff  ports.OperatorRegistrationCompletedHandoff
+	// evidence 接上之后，客户合同与供应商协议才过签署证据这道门。没接时无从知道租户登过没有，
+	// 表现与「要求没登记」相同；生产装配必须接上，登记了要求才拦得住。
+	evidence ports.SigningEvidenceView
 }
 
 // NewPublishCommercialAuthorityHandler 收交接口为必需依赖而不是可选项：ADR-0094 决定四要求
@@ -434,6 +442,12 @@ func NewPublishCommercialAuthorityHandler(
 	handoff ports.OperatorRegistrationCompletedHandoff,
 ) *PublishCommercialAuthorityHandler {
 	return &PublishCommercialAuthorityHandler{registry: registry, clock: clock, handoff: handoff}
+}
+
+// WithSigningEvidence 把签署证据读口接到发布编排上。要求没登记时这道门不存在。
+func (handler *PublishCommercialAuthorityHandler) WithSigningEvidence(view ports.SigningEvidenceView) *PublishCommercialAuthorityHandler {
+	handler.evidence = view
+	return handler
 }
 
 // Handle 执行一次单对象发布（UC-PC-001 步骤 5–7 的机制半边）。批次不是聚合
@@ -521,6 +535,16 @@ func (handler *PublishCommercialAuthorityHandler) Handle(
 		return PublishCommercialAuthorityResult{
 			outcome:      CommercialPublicationNotAccepted,
 			refusalCause: fmt.Errorf("%w: a customer contract version must carry its body, where its customer account is named", domain.ErrInvalidCustomerContract),
+		}, nil
+	}
+
+	// 签署证据门在任何写入之前：缺证据时版本不入册，声明通道也不写。没登记要求则这道门不存在。
+	if blocked, blockErr := handler.signingEvidenceRequired(ctx, version); blockErr != nil {
+		return PublishCommercialAuthorityResult{}, fmt.Errorf("publish commercial authority: %w", blockErr)
+	} else if blocked {
+		return PublishCommercialAuthorityResult{
+			outcome:      CommercialPublicationSigningEvidenceRequired,
+			refusalCause: domain.ErrSigningEvidenceRequired,
 		}, nil
 	}
 
@@ -626,6 +650,26 @@ func operatorRegistrationKindOf(channel DeclarationChannel) (ports.OperatorRegis
 	default:
 		return ports.OperatorRegistrationKindInvalid, false
 	}
+}
+
+// signingEvidenceRequired 只拦客户合同与供应商协议，而且只在租户登记了「这一类要有签署证据」时。
+// 读口没接、要求没登记、这一类不要求、或这一版已经有证据，都不拦。
+func (handler *PublishCommercialAuthorityHandler) signingEvidenceRequired(ctx context.Context, version domain.CommercialVersion) (bool, error) {
+	if handler.evidence == nil {
+		return false, nil
+	}
+	if version.Kind() != domain.CustomerContractObject && version.Kind() != domain.SupplierAgreementObject {
+		return false, nil
+	}
+	rule, found, err := handler.evidence.LoadSigningEvidenceRequirement(ctx, version.Tenant())
+	if err != nil || !found || !rule.Requires(version.Kind()) {
+		return false, err
+	}
+	registered, err := handler.evidence.HasSigningEvidence(ctx, version.Tenant(), version.Kind(), version.ObjectID(), version.Version())
+	if err != nil {
+		return false, err
+	}
+	return !registered, nil
 }
 
 // reconcileDeclaredDigest 是受控批文那一半的对账门（ADR-0126 Decision 二）。只对已接进规范化的册
