@@ -505,3 +505,11 @@ func (channels endpointChannels) unclaimedArrivalDisposition() warehousehttp.Unc
 	}
 	return warehousehttp.UnconfiguredIntake{}
 }
+
+// conditionRestore 是次品转良品口的运营决定 Intake。
+func (channels endpointChannels) conditionRestore() warehousehttp.ConditionRestoreIntake {
+	if channels.operatorDecisions.warehouseConditionRestore != nil {
+		return channels.operatorDecisions.warehouseConditionRestore
+	}
+	return warehousehttp.UnconfiguredConditionRestoreIntake{}
+}

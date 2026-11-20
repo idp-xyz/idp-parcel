@@ -377,6 +377,9 @@ func TestCartonLedgerRefusesToRunOutsideATransaction(t *testing.T) {
 		t.Fatalf("Serialize：%v", err)
 	}
 	if err := world.cartons.Append(ctx, domain.CartonMovement{}, nil); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("无事务 Append：%v", err)
+	}
+	if err := world.cartons.AppendRelocation(ctx, domain.CartonMovement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("Append：%v", err)
 	}
 }

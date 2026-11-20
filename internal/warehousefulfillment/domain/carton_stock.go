@@ -25,18 +25,21 @@ func NewCartonInboundBatchID(value string) (CartonInboundBatchID, error) {
 	return CartonInboundBatchID{required}, err
 }
 
-// CartonMovementReason 是整箱流水的原因。这一段只有收货。
+// CartonMovementReason 是整箱流水的原因。收货写 +1；库内移动同一箱写 -1 与 +1，不新起入库批次。
 type CartonMovementReason uint8
 
 const (
 	CartonMovementReasonInvalid CartonMovementReason = iota
 	CartonMovementReceipt
+	CartonMovementInternalMove
 )
 
 func (reason CartonMovementReason) String() string {
 	switch reason {
 	case CartonMovementReceipt:
 		return "RECEIPT"
+	case CartonMovementInternalMove:
+		return "INTERNAL_MOVE"
 	default:
 		return ""
 	}
@@ -60,6 +63,7 @@ type CartonMovementLine struct {
 	carton      CartonNumber
 	ownerCarton CartonNumber
 	batch       CartonInboundBatchID
+	delta       int64
 }
 
 func NewCartonMovementLine(
@@ -68,15 +72,36 @@ func NewCartonMovementLine(
 	ownerCarton CartonNumber,
 	batch CartonInboundBatchID,
 ) (CartonMovementLine, error) {
-	if !location.valid() || !carton.valid() || !batch.valid() {
+	return newCartonMovementLine(location, carton, ownerCarton, batch, 1)
+}
+
+// NewCartonMovementDeltaLine 是整箱移动的一行。移出记 -1，移入记 +1，入库批次沿用账上的那一个。
+func NewCartonMovementDeltaLine(
+	location LocationCode,
+	carton CartonNumber,
+	batch CartonInboundBatchID,
+	delta int64,
+) (CartonMovementLine, error) {
+	return newCartonMovementLine(location, carton, CartonNumber{}, batch, delta)
+}
+
+func newCartonMovementLine(
+	location LocationCode,
+	carton CartonNumber,
+	ownerCarton CartonNumber,
+	batch CartonInboundBatchID,
+	delta int64,
+) (CartonMovementLine, error) {
+	if !location.valid() || !carton.valid() || !batch.valid() || (delta != 1 && delta != -1) {
 		return CartonMovementLine{}, ErrInvalidCartonStock
 	}
 	if ownerCarton.valid() && ownerCarton == carton {
 		return CartonMovementLine{}, ErrInvalidCartonStock
 	}
-	return CartonMovementLine{location: location, carton: carton, ownerCarton: ownerCarton, batch: batch}, nil
+	return CartonMovementLine{location: location, carton: carton, ownerCarton: ownerCarton, batch: batch, delta: delta}, nil
 }
 
+func (line CartonMovementLine) Delta() int64                { return line.delta }
 func (line CartonMovementLine) Location() LocationCode      { return line.location }
 func (line CartonMovementLine) Carton() CartonNumber        { return line.carton }
 func (line CartonMovementLine) OwnerCarton() CartonNumber   { return line.ownerCarton }
@@ -146,17 +171,19 @@ func NewCartonMovement(
 	if !tenant.valid() || !id.valid() || !owner.valid() || !warehouse.valid() || reason.String() == "" || !source.valid() || occurredAt.IsZero() || postedAt.IsZero() || len(lines) == 0 {
 		return CartonMovement{}, ErrInvalidCartonStock
 	}
-	seen := map[string]struct{}{}
+	seen := map[string]int64{}
 	stored := make([]CartonMovementLine, len(lines))
 	for index, line := range lines {
-		if !line.location.valid() || !line.carton.valid() || !line.batch.valid() {
+		if !line.location.valid() || !line.carton.valid() || !line.batch.valid() || (line.delta != 1 && line.delta != -1) {
 			return CartonMovement{}, ErrInvalidCartonStock
 		}
-		if _, duplicate := seen[line.carton.String()]; duplicate {
-			return CartonMovement{}, ErrInvalidCartonStock
-		}
-		seen[line.carton.String()] = struct{}{}
+		seen[line.carton.String()] += line.delta
 		stored[index] = line
+	}
+	for _, net := range seen {
+		if net != 1 && net != 0 {
+			return CartonMovement{}, ErrInvalidCartonStock
+		}
 	}
 	return CartonMovement{
 		tenant: tenant, id: id, owner: owner, warehouse: warehouse, reason: reason, source: source,

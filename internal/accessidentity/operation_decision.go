@@ -290,6 +290,10 @@ const DecisionUnclaimedArrivalClaim DecisionKind = "UNCLAIMED_ARRIVAL_CLAIM"
 // 与认领分开授予：能认领的不因此能处置。谁持有是租户取值。
 const DecisionUnclaimedArrivalDisposition DecisionKind = "UNCLAIMED_ARRIVAL_DISPOSITION"
 
+// DecisionConditionRestore 是次品转良品（UC-WF-007；ADR-0384 决定二）。
+// 与库内作业事实分开授予：能登记移库的不因此能把次品转回良品。谁持有是租户取值。
+const DecisionConditionRestore DecisionKind = "CONDITION_RESTORE"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -342,6 +346,7 @@ var decisionKinds = []DecisionKind{
 	DecisionReceiptDiscrepancyRecordOnBehalf,
 	DecisionUnclaimedArrivalClaim,
 	DecisionUnclaimedArrivalDisposition,
+	DecisionConditionRestore,
 }
 
 // DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。

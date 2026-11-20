@@ -12,7 +12,8 @@ var ErrWorkFactKindUnknown = errors.New("access identity: work fact kind is unkn
 // 能力面 CapabilityWorkFactRegistration 那一个串，与运营决定口取 CapabilityOperationDecision 同一个取法。
 //
 // 词表只收在铸造侧判准入的作业事实：送站交接单的开立、归入、关闭（ADR-0212 决定三；票 ps-external-mark-relations/12）、节点监管协作的执行事实（ADR-0338 决定二），
-// 以及仓配收货确认（ADR-0384 决定三、决定八）。节点收寄与运输履约各口今天不在铸造侧判准入，它们的词随把它们接上准入的那一票加进来——先登进对照却没有一口会问，等于让阶段治理去登一个
+// 以及仓配已经接上入口的作业事实（ADR-0384 决定三、决定八）：收货确认、仓测、待认领到货、库内移动、形态转换、状态转换与短少。
+// 节点收寄与运输履约各口今天不在铸造侧判准入，它们的词随把它们接上准入的那一票加进来——先登进对照却没有一口会问，等于让阶段治理去登一个
 // 不起作用的区间。仓配其余作业事实类型还没接入口，不在这张表里。
 type WorkFactKind string
 
@@ -32,6 +33,14 @@ const (
 	// WorkFactUnclaimedArrival 是仓内登记一件待认领到货（UC-WF-005；ADR-0384 决定三）。
 	// 铸造侧准入能力词取 CapabilityWorkFactRegistration 的字面量，事实类型词取本常量。
 	WorkFactUnclaimedArrival WorkFactKind = "UNCLAIMED_ARRIVAL"
+	// WorkFactInternalMove 是库内移动登记：上架、移库与拣选位补货都是这一种（UC-WF-007；ADR-0384 决定三）。
+	WorkFactInternalMove WorkFactKind = "INTERNAL_MOVE"
+	// WorkFactFormConversion 是形态转换登记（UC-WF-007；ADR-0384 决定三）。
+	WorkFactFormConversion WorkFactKind = "FORM_CONVERSION"
+	// WorkFactConditionConversion 是状态转换登记（UC-WF-007；ADR-0384 决定三）。
+	WorkFactConditionConversion WorkFactKind = "CONDITION_CONVERSION"
+	// WorkFactShortage 是短少登记（UC-WF-007；ADR-0384 决定三）。
+	WorkFactShortage WorkFactKind = "SHORTAGE"
 )
 
 // workFactKindsAdmittedAtMint 是准入范围对照收哪几个词、认证方问哪一对准入要求的唯一来源：两处各抄一份，改了一份，登在旧词下的
@@ -44,6 +53,10 @@ var workFactKindsAdmittedAtMint = []WorkFactKind{
 	WorkFactReceiptConfirmation,
 	WorkFactWarehouseMeasurement,
 	WorkFactUnclaimedArrival,
+	WorkFactInternalMove,
+	WorkFactFormConversion,
+	WorkFactConditionConversion,
+	WorkFactShortage,
 }
 
 // ParseWorkFactKind 按字面取值认作业事实类型，大小写不折叠：对照册里存的就是这些字面量。

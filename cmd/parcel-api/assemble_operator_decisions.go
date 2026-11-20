@@ -56,8 +56,10 @@ type operatorDecisionIntakes struct {
 	// warehouseDiscrepancyConclusion 是收货差异结论代录（ADR-0384 决定二）。开关关着时照样建出来，没有任何端点问到它。
 	warehouseDiscrepancyConclusion *warehousehttp.OperatorDiscrepancyConclusionIntake
 	// warehouseUnclaimedClaim 是待认领到货认领与撤销（ADR-0384 决定二）；warehouseUnclaimedDisposition 是处置。
+	// warehouseConditionRestore 是次品转良品（UC-WF-007）。
 	warehouseUnclaimedClaim       *warehousehttp.OperatorUnclaimedClaimIntake
 	warehouseUnclaimedDisposition *warehousehttp.OperatorUnclaimedDispositionIntake
+	warehouseConditionRestore     *warehousehttp.OperatorConditionRestoreIntake
 }
 
 // buildOperatorMinter 建本进程唯一一只操作者铸造器：运营决定与登记写面各口共用它。
@@ -248,12 +250,21 @@ func buildOperatorDecisionIntakes(
 	if err != nil {
 		return operatorDecisionIntakes{}, err
 	}
+	conditionRestoreAuthenticator, err := whaccess.NewOperatorConditionRestoreAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseConditionRestore, err := warehousehttp.NewOperatorConditionRestoreIntake(conditionRestoreAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
 	return operatorDecisionIntakes{shipment: shipment, transport: transport, nodeOperations: nodeOperations, customs: customs,
 		settlement: settlement, networkRouting: networkRouting, visibility: visibility, warehouseGoods: warehouseGoods,
 		warehousePreAdvice: warehousePreAdvice, warehousePreAdviceClose: warehousePreAdviceClose,
 		warehouseDiscrepancyConclusion: warehouseDiscrepancyConclusion,
 		warehouseUnclaimedClaim:        warehouseUnclaimedClaim,
-		warehouseUnclaimedDisposition:  warehouseUnclaimedDisposition}, nil
+		warehouseUnclaimedDisposition:  warehouseUnclaimedDisposition,
+		warehouseConditionRestore:      warehouseConditionRestore}, nil
 }
 
 // operatorRegistryIntakes 是操作者渠道登记册配置写能力面在各上下文的 Intake（ADR-0100 决定四；票 operator-channel/04）。

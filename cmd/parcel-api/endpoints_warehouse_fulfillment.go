@@ -9,6 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	whaccess "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/accessidentity"
 	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
+	warehousedomain "go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 )
 
 // warehouseFulfillmentWiring 是仓配履约各册的依赖：仓、库区、库位类型、库位与包材。enabled 是部署开关（ADR-0375 决定四）的值，从 endpointSources 来、
@@ -72,6 +73,14 @@ type warehouseFulfillmentWiring struct {
 	unclaimedArrivalRegister warehousehttp.UnclaimedArrivalRegistrar
 	unclaimedArrivalManage   warehousehttp.UnclaimedArrivalManager
 	unclaimedArrivalQueries  warehousehttp.UnclaimedArrivalQueries
+
+	internalMoveIntake        *warehousehttp.InternalJobWorkFactIntake
+	formConversionIntake      *warehousehttp.InternalJobWorkFactIntake
+	conditionConversionIntake *warehousehttp.InternalJobWorkFactIntake
+	shortageIntake            *warehousehttp.InternalJobWorkFactIntake
+	internalJobs              warehousehttp.InternalJobRegistrar
+	conditionRestore          warehousehttp.ConditionRestorer
+	internalJobQueries        warehousehttp.InternalJobQueries
 }
 
 func init() {
@@ -282,6 +291,37 @@ func init() {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-unclaimed-arrival?arrivalId=SYN-UCA-01",
 			},
+			// 库内作业四个登记口挂作业事实登记（范围种类 WAREHOUSE）。上架、移库与补货都是 INTERNAL_MOVE。
+			"/warehouse-fulfillment-internal-moves": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-form-conversions": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-condition-conversions": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-shortage-registrations": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-condition-restores": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionConditionRestore), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-internal-jobs": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-internal-job": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-internal-job?factId=SYN-FACT-01",
+			},
+			"/warehouse-fulfillment-condition-restore": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-condition-restore?decisionId=SYN-DEC-01",
+			},
 		},
 		build: func(sources endpointSources) (warehouseFulfillmentWiring, error) {
 			if !sources.warehouseFulfillment {
@@ -311,6 +351,10 @@ func init() {
 			var receiptIntake *warehousehttp.ReceiptWorkFactIntake
 			var measurementIntake *warehousehttp.WarehouseMeasurementWorkFactIntake
 			var unclaimedArrivalIntake *warehousehttp.UnclaimedArrivalWorkFactIntake
+			var internalMoveIntake *warehousehttp.InternalJobWorkFactIntake
+			var formConversionIntake *warehousehttp.InternalJobWorkFactIntake
+			var conditionConversionIntake *warehousehttp.InternalJobWorkFactIntake
+			var shortageIntake *warehousehttp.InternalJobWorkFactIntake
 			if sources.operatorVerifier != nil && sources.operatorRegistry != nil && sources.deviceRegistry != nil && sources.admission != nil {
 				receiptIntake, err = buildReceiptConfirmationIntake(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
@@ -325,6 +369,12 @@ func init() {
 					return warehouseFulfillmentWiring{}, err
 				}
 				unclaimedArrivalIntake, err = buildUnclaimedArrivalIntake(
+					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
+				)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+				internalMoveIntake, formConversionIntake, conditionConversionIntake, shortageIntake, err = buildInternalJobIntakes(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
 				)
 				if err != nil {
@@ -358,25 +408,32 @@ func init() {
 				goodsRevisions:    orchestration.goodsQueries,
 				goodsFinder:       orchestration.goodsQueries,
 
-				preAdviceOnBehalf:        orchestration.preAdvices,
-				preAdviceQueries:         orchestration.preAdviceQueries,
-				preAdviceClose:           orchestration.preAdviceClose,
-				customerPreAdvice:        customerPreAdvice,
-				customerGoods:            customerGoods,
-				customerConclusion:       customerConclusion,
-				discrepancyConclusion:    orchestration.discrepancyConclusion,
-				receiptIntake:            receiptIntake,
-				receiptConfirm:           orchestration.receiptConfirm,
-				measurementIntake:        measurementIntake,
-				measurementRecord:        orchestration.measurementRecord,
-				measurementQueries:       orchestration.measurementQueries,
-				disposalRuleRegistration: orchestration.disposalRuleRegistration,
-				disposalRuleCatalogue:    orchestration.disposalRuleQueries,
-				disposalRuleRevisions:    orchestration.disposalRuleQueries,
-				unclaimedArrivalIntake:   unclaimedArrivalIntake,
-				unclaimedArrivalRegister: orchestration.unclaimedArrivalRegister,
-				unclaimedArrivalManage:   orchestration.unclaimedArrivalManage,
-				unclaimedArrivalQueries:  orchestration.unclaimedArrivalQueries,
+				preAdviceOnBehalf:         orchestration.preAdvices,
+				preAdviceQueries:          orchestration.preAdviceQueries,
+				preAdviceClose:            orchestration.preAdviceClose,
+				customerPreAdvice:         customerPreAdvice,
+				customerGoods:             customerGoods,
+				customerConclusion:        customerConclusion,
+				discrepancyConclusion:     orchestration.discrepancyConclusion,
+				receiptIntake:             receiptIntake,
+				receiptConfirm:            orchestration.receiptConfirm,
+				measurementIntake:         measurementIntake,
+				measurementRecord:         orchestration.measurementRecord,
+				measurementQueries:        orchestration.measurementQueries,
+				disposalRuleRegistration:  orchestration.disposalRuleRegistration,
+				disposalRuleCatalogue:     orchestration.disposalRuleQueries,
+				disposalRuleRevisions:     orchestration.disposalRuleQueries,
+				unclaimedArrivalIntake:    unclaimedArrivalIntake,
+				unclaimedArrivalRegister:  orchestration.unclaimedArrivalRegister,
+				unclaimedArrivalManage:    orchestration.unclaimedArrivalManage,
+				unclaimedArrivalQueries:   orchestration.unclaimedArrivalQueries,
+				internalMoveIntake:        internalMoveIntake,
+				formConversionIntake:      formConversionIntake,
+				conditionConversionIntake: conditionConversionIntake,
+				shortageIntake:            shortageIntake,
+				internalJobs:              orchestration.internalJobs,
+				conditionRestore:          orchestration.internalJobs,
+				internalJobQueries:        orchestration.internalJobQueries,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring warehouseFulfillmentWiring) []httpapi.BusinessEndpoint {
@@ -438,6 +495,14 @@ func init() {
 			unclaimedArrivalDispose := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			unclaimedArrivalList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			unclaimedArrivalOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			internalMove := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			formConversion := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			conditionConversion := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			shortageRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			conditionRestore := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			internalJobList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			internalJobOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			conditionRestoreOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			// 开着：与别的登记写行、查阅行行为一致——渠道没配答「接入渠道未配置」，配了走真编排。各读口共用一个 Intake，各册的
 			// 登记口共用同一个认证器。
 			if wiring.enabled {
@@ -513,6 +578,34 @@ func init() {
 				unclaimedArrivalDispose = warehousehttp.NewDisposeUnclaimedArrivalEndpoint(channels.unclaimedArrivalDisposition(), wiring.unclaimedArrivalManage)
 				unclaimedArrivalList = warehousehttp.NewQueryUnclaimedArrivalsEndpoint(catalogueIntake, wiring.unclaimedArrivalQueries)
 				unclaimedArrivalOne = warehousehttp.NewQueryUnclaimedArrivalEndpoint(catalogueIntake, wiring.unclaimedArrivalQueries)
+				internalMoveIntake := warehousehttp.UnconfiguredInternalJobIntake{}
+				if wiring.internalMoveIntake != nil {
+					internalMove = warehousehttp.NewRegisterInternalJobEndpoint(wiring.internalMoveIntake, wiring.internalJobs)
+				} else {
+					internalMove = warehousehttp.NewRegisterInternalJobEndpoint(internalMoveIntake, wiring.internalJobs)
+				}
+				formIntake := warehousehttp.UnconfiguredInternalJobIntake{}
+				if wiring.formConversionIntake != nil {
+					formConversion = warehousehttp.NewRegisterInternalJobEndpoint(wiring.formConversionIntake, wiring.internalJobs)
+				} else {
+					formConversion = warehousehttp.NewRegisterInternalJobEndpoint(formIntake, wiring.internalJobs)
+				}
+				conditionIntake := warehousehttp.UnconfiguredInternalJobIntake{}
+				if wiring.conditionConversionIntake != nil {
+					conditionConversion = warehousehttp.NewRegisterInternalJobEndpoint(wiring.conditionConversionIntake, wiring.internalJobs)
+				} else {
+					conditionConversion = warehousehttp.NewRegisterInternalJobEndpoint(conditionIntake, wiring.internalJobs)
+				}
+				shortageFactIntake := warehousehttp.UnconfiguredInternalJobIntake{}
+				if wiring.shortageIntake != nil {
+					shortageRegistration = warehousehttp.NewRegisterInternalJobEndpoint(wiring.shortageIntake, wiring.internalJobs)
+				} else {
+					shortageRegistration = warehousehttp.NewRegisterInternalJobEndpoint(shortageFactIntake, wiring.internalJobs)
+				}
+				conditionRestore = warehousehttp.NewRestoreConditionEndpoint(channels.conditionRestore(), wiring.conditionRestore)
+				internalJobList = warehousehttp.NewQueryInternalJobsEndpoint(catalogueIntake, wiring.internalJobQueries)
+				internalJobOne = warehousehttp.NewQueryInternalJobEndpoint(catalogueIntake, wiring.internalJobQueries)
+				conditionRestoreOne = warehousehttp.NewQueryConditionRestoreEndpoint(catalogueIntake, wiring.internalJobQueries)
 			}
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/warehouse-fulfillment-warehouse-registrations", Handler: registration},
@@ -570,6 +663,14 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrival-dispositions", Handler: unclaimedArrivalDispose},
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrivals", Handler: unclaimedArrivalList},
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrival", Handler: unclaimedArrivalOne},
+				{Pattern: "/warehouse-fulfillment-internal-moves", Handler: internalMove},
+				{Pattern: "/warehouse-fulfillment-form-conversions", Handler: formConversion},
+				{Pattern: "/warehouse-fulfillment-condition-conversions", Handler: conditionConversion},
+				{Pattern: "/warehouse-fulfillment-shortage-registrations", Handler: shortageRegistration},
+				{Pattern: "/warehouse-fulfillment-condition-restores", Handler: conditionRestore},
+				{Pattern: "/warehouse-fulfillment-internal-jobs", Handler: internalJobList},
+				{Pattern: "/warehouse-fulfillment-internal-job", Handler: internalJobOne},
+				{Pattern: "/warehouse-fulfillment-condition-restore", Handler: conditionRestoreOne},
 			}
 		},
 	})
@@ -654,4 +755,41 @@ func buildUnclaimedArrivalIntake(
 		return nil, err
 	}
 	return warehousehttp.NewUnclaimedArrivalWorkFactIntake(authenticator)
+}
+
+// buildInternalJobIntakes 装配库内移动、形态转换、状态转换与短少四个作业事实 Intake。四口共用一只铸造器，事实种类各绑一个。
+func buildInternalJobIntakes(
+	verifier accessidentity.OperatorCredentialVerifier,
+	operators accessidentity.OperatorRegistry,
+	devices accessidentity.DeviceRegistry,
+	admission accessidentity.AdmissionScope,
+) (*warehousehttp.InternalJobWorkFactIntake, *warehousehttp.InternalJobWorkFactIntake, *warehousehttp.InternalJobWorkFactIntake, *warehousehttp.InternalJobWorkFactIntake, error) {
+	minter, err := accessidentity.NewWorkFactMinter(verifier, operators, devices, admission, time.Now)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("parcel-api: internal job work fact minter: %w", err)
+	}
+	build := func(kind accessidentity.WorkFactKind, domainKind warehousedomain.InternalJobKind) (*warehousehttp.InternalJobWorkFactIntake, error) {
+		authenticator, err := whaccess.NewInternalJobAuthenticator(minter, kind)
+		if err != nil {
+			return nil, err
+		}
+		return warehousehttp.NewInternalJobWorkFactIntake(authenticator, domainKind)
+	}
+	move, err := build(accessidentity.WorkFactInternalMove, warehousedomain.InternalJobMove)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	form, err := build(accessidentity.WorkFactFormConversion, warehousedomain.InternalJobForm)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	condition, err := build(accessidentity.WorkFactConditionConversion, warehousedomain.InternalJobCondition)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	shortage, err := build(accessidentity.WorkFactShortage, warehousedomain.InternalJobShortage)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	return move, form, condition, shortage, nil
 }

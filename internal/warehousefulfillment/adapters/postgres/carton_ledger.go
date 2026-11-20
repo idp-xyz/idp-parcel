@@ -148,6 +148,116 @@ func (ledger *CartonLedger) Append(
 	return nil
 }
 
+// Locate 回答这一箱此刻在哪。同一箱在两个库位余额都为正，是册不自洽，交 error。
+func (ledger *CartonLedger) Locate(
+	ctx context.Context,
+	tenant domain.TenantID,
+	owner domain.OwnerAccountID,
+	warehouse domain.WarehouseCode,
+	carton domain.CartonNumber,
+) (ports.CartonPlace, error) {
+	const operation = "locate carton"
+	querier, err := ledger.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.CartonPlace{}, fmt.Errorf("%s: %w", operation, err)
+	}
+	return locateCarton(ctx, querier, tenant, owner, warehouse, carton)
+}
+
+// AppendRelocation 记一笔整箱移动。箱必须已经在库，移出的库位必须是它此刻所在的库位，不新起入库批次。
+func (ledger *CartonLedger) AppendRelocation(ctx context.Context, movement domain.CartonMovement) error {
+	const operation = "append carton relocation"
+	executor, err := ledger.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	if movement.Reason() != domain.CartonMovementInternalMove {
+		return fmt.Errorf("%s: reason %s", operation, movement.Reason())
+	}
+	if err := lockCartonPosting(ctx, executor, movement.Tenant(), movement.Owner(), movement.Warehouse()); err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	seen := map[string]int64{}
+	for _, line := range movement.Lines() {
+		seen[line.Carton().String()] += line.Delta()
+		if line.Delta() != -1 {
+			continue
+		}
+		place, err := locateCarton(ctx, executor, movement.Tenant(), movement.Owner(), movement.Warehouse(), line.Carton())
+		if err != nil {
+			return fmt.Errorf("%s: %w", operation, err)
+		}
+		if !place.Found || place.Location != line.Location() || place.Batch != line.Batch() {
+			return fmt.Errorf("%s: carton %s is not on hand at the source", operation, line.Carton())
+		}
+	}
+	for carton, net := range seen {
+		if net != 0 {
+			return fmt.Errorf("%s: carton %s does not balance", operation, carton)
+		}
+	}
+	inserted, err := insertCartonMovement(ctx, executor, movement)
+	if err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	if !inserted {
+		return fmt.Errorf("%s: source already posted", operation)
+	}
+	for position, line := range movement.Lines() {
+		if err := insertCartonMovementLine(ctx, executor, movement, position, line); err != nil {
+			return fmt.Errorf("%s: %w", operation, err)
+		}
+	}
+	return nil
+}
+
+func locateCarton(
+	ctx context.Context,
+	querier bentopg.Querier,
+	tenant domain.TenantID,
+	owner domain.OwnerAccountID,
+	warehouse domain.WarehouseCode,
+	carton domain.CartonNumber,
+) (ports.CartonPlace, error) {
+	rows, err := querier.Query(ctx,
+		`SELECT location_code, inbound_batch_id
+		   FROM warehouse_fulfillment.carton_movement_line
+		  WHERE tenant_id = $1 AND owner_account_id = $2 AND warehouse_code = $3 AND carton_number = $4
+		  GROUP BY location_code, inbound_batch_id
+		 HAVING sum(quantity_delta) > 0`,
+		tenant.String(), owner.String(), warehouse.String(), carton.String(),
+	)
+	if err != nil {
+		return ports.CartonPlace{}, err
+	}
+	defer rows.Close()
+	var place ports.CartonPlace
+	count := 0
+	for rows.Next() {
+		var location, batch string
+		if err := rows.Scan(&location, &batch); err != nil {
+			return ports.CartonPlace{}, err
+		}
+		parsedLocation, err := domain.NewLocationCode(location)
+		if err != nil {
+			return ports.CartonPlace{}, err
+		}
+		parsedBatch, err := domain.NewCartonInboundBatchID(batch)
+		if err != nil {
+			return ports.CartonPlace{}, err
+		}
+		place = ports.CartonPlace{Location: parsedLocation, Batch: parsedBatch, Found: true}
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return ports.CartonPlace{}, err
+	}
+	if count > 1 {
+		return ports.CartonPlace{}, fmt.Errorf("carton %s is on hand in more than one place", carton)
+	}
+	return place, nil
+}
+
 func lockCartonPosting(
 	ctx context.Context,
 	executor bentopg.Executor,

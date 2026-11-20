@@ -152,6 +152,9 @@ type warehouseFulfillmentOrchestration struct {
 	unclaimedArrivalRegister transactionalUnclaimedArrivalRegistration
 	unclaimedArrivalManage   transactionalUnclaimedArrivalManagement
 	unclaimedArrivalQueries  *warehouseapp.QueryUnclaimedArrivalsHandler
+
+	internalJobs       transactionalInternalJob
+	internalJobQueries *warehouseapp.QueryInternalJobsHandler
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -501,6 +504,21 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 			arrivals, disposalRules, preAdviceStore, warehouses, owners, systemClock{},
 		),
 	}
+	internalJobStore, err := whpostgres.NewInternalJobs(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: internal jobs: %w", err)
+	}
+	discrepancyIDs, err := whidentity.NewStockDiscrepancyIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: stock discrepancy identities: %w", err)
+	}
+	internalJobs := transactionalInternalJob{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewRegisterInternalJobHandler(
+			internalJobStore, internalJobStore, poster, stock, stock, cartons, cartonIDs,
+			warehouses, locations, zones, goods, warehouseapp.ZeroStockHolds{}, discrepancyIDs, systemClock{},
+		),
+	}
 	return warehouseFulfillmentOrchestration{
 		registration: transactionalWarehouseRegistration{
 			transactor: db.Transactor(),
@@ -546,5 +564,31 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		unclaimedArrivalRegister: unclaimedArrivalRegister,
 		unclaimedArrivalManage:   unclaimedArrivalManage,
 		unclaimedArrivalQueries:  warehouseapp.NewQueryUnclaimedArrivalsHandler(arrivals),
+		internalJobs:             internalJobs,
+		internalJobQueries:       warehouseapp.NewQueryInternalJobsHandler(internalJobStore, internalJobStore),
 	}, nil
+}
+
+// transactionalInternalJob 是库内作业与次品转良品的事务壳。事实、流水与库存差异在同一笔里。
+type transactionalInternalJob struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.RegisterInternalJobHandler
+}
+
+func (registration transactionalInternalJob) Register(
+	ctx context.Context,
+	command warehouseapp.RegisterInternalJobCommand,
+) (warehouseapp.RegisterInternalJobResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.RegisterInternalJobResult, error) {
+		return registration.inner.Register(txCtx, command)
+	})
+}
+
+func (registration transactionalInternalJob) Restore(
+	ctx context.Context,
+	command warehouseapp.RestoreConditionCommand,
+) (warehouseapp.RestoreConditionResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.RestoreConditionResult, error) {
+		return registration.inner.Restore(txCtx, command)
+	})
 }

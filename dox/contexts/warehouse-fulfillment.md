@@ -2,7 +2,7 @@
 
 主数据登记册、商品（货主口与代录）、仓测尺寸重量、库存账、入库预报、收货确认、整箱库存、完结与少收、收货差异结论、待认领转记均按已进 main 的代码写（2026-11-20 入库一段及商品货主口/仓测各经一轮非作者评审并清零阻断后进 main）。
 
-**只有「现状」「已实现：主数据登记册」「已实现：商品与仓测」「已实现：库存账」「已实现：入库预报」「已实现：收货确认」「已实现：整箱库存」「已实现：完结与少收」「已实现：收货差异结论」「已实现：待认领到货」是现行规则。** 其余写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
+**只有「现状」「已实现：主数据登记册」「已实现：商品与仓测」「已实现：库存账」「已实现：入库预报」「已实现：收货确认」「已实现：整箱库存」「已实现：完结与少收」「已实现：收货差异结论」「已实现：待认领到货」「已实现：库内作业」是现行规则。** 其余写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
 
 ## 现状
 
@@ -177,6 +177,13 @@
 - `internal/parcelpricing` 与 `internal/settlementaccounting` 里没有仓储作业收费发生项、仓储计费方案或对应的评价对象。
 - `internal/visibilityexception` 里没有 `warehouse-outbound-confirmed` 这个类型词。
 - 小包托运不发「委托待受控补充」信封，派发里也没有它的收工路。
+
+## 已实现：库内作业
+
+- 四个登记口挂作业事实登记，范围种类 `WAREHOUSE`，引用等于载荷仓，先认证再读载荷：`POST /warehouse-fulfillment-internal-moves`（`INTERNAL_MOVE`，上架、移库与拣选位补货）、`form-conversions`（`FORM_CONVERSION`）、`condition-conversions`（`CONDITION_CONVERSION`）、`shortage-registrations`（`SHORTAGE`）。答复 `REGISTERED` 或 `SHORTAGE_REGISTERED`（201）、`EXISTING_RESULT`、`CONTENT_CONFLICT`、`CONTENT_INVALID`、`WAREHOUSE_NOT_FOUND`、`WAREHOUSE_NOT_ACCEPTING`。停用的仓、库区与库位照记；代理仓不受理。
+- 取得走的部分入账，其余各成一份待处理库存差异，写口不拒。没点名入库批次的从早到晚取。移入次品库区的同一笔转为次品。形态转换与带转入单位的补货只入账两头都折成整数个单位的部分，入库批次不另起。短少只记观察，不改账。
+- 次品转良品 `POST /warehouse-fulfillment-condition-restores`，运营决定 `CONDITION_RESTORE`，整份成立或整份不成立，库位须在收货暂存或退货暂存。答复 `RESTORED`、`EXISTING_RESULT`、`SOURCE_CONFLICT`、`NOT_VALID`。
+- 运营查阅：`GET /warehouse-fulfillment-internal-jobs`、`internal-job`、`condition-restore`。冻结、分配、作业锁定与未分配预占还没有账，这几项先按零读，减法留在入账里。整箱移动写 `-1` 与 `+1`，不新起入库批次。
 
 ## 要做它时先看
 
