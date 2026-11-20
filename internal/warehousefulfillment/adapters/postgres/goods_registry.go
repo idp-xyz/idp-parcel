@@ -126,6 +126,39 @@ func (repository *Goods) LoadGoodsAt(
 	return loaded, found, nil
 }
 
+func (repository *Goods) LoadGoodsRevision(
+	ctx context.Context,
+	tenant domain.TenantID,
+	owner domain.OwnerAccountID,
+	code domain.GoodsCode,
+	revision int,
+) (domain.GoodsRevision, bool, error) {
+	const operation = "load goods revision"
+	if tenant.String() == "" || owner.String() == "" || code.String() == "" || revision < 1 {
+		return domain.GoodsRevision{}, false, fmt.Errorf("%s: tenant, owner, goods code and revision are required", operation)
+	}
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.GoodsRevision{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	stored, err := scanStoredGoodsHeader(querier.QueryRow(ctx,
+		`SELECT `+goodsHeaderColumns+`
+		   FROM warehouse_fulfillment.goods_revision
+		  WHERE tenant_id = $1 AND owner_account_id = $2 AND goods_code = $3 AND revision = $4`,
+		tenant.String(), owner.String(), code.String(), revision))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.GoodsRevision{}, false, nil
+	}
+	if err != nil {
+		return domain.GoodsRevision{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	loaded, err := goodsRevisionOfStored(ctx, querier, stored)
+	if err != nil {
+		return domain.GoodsRevision{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	return loaded, true, nil
+}
+
 func (repository *Goods) LoadGoodsRevisionBySubmission(
 	ctx context.Context,
 	tenant domain.TenantID,

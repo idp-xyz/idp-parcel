@@ -41,6 +41,14 @@ const (
 	WorkFactConditionConversion WorkFactKind = "CONDITION_CONVERSION"
 	// WorkFactShortage 是短少登记（UC-WF-007；ADR-0384 决定三）。
 	WorkFactShortage WorkFactKind = "SHORTAGE"
+	// WorkFactProcessingExecution 是照加工指令执行一次（UC-WF-008；ADR-0384 决定三）。
+	WorkFactProcessingExecution WorkFactKind = "PROCESSING_EXECUTION"
+	// WorkFactRelabelExecution 是照商品换标指令执行一次（UC-WF-008；ADR-0384 决定三）。
+	WorkFactRelabelExecution WorkFactKind = "RELABEL_EXECUTION"
+	// WorkFactUnboxing 是开箱（UC-WF-008；ADR-0384 决定三）。
+	WorkFactUnboxing WorkFactKind = "UNBOXING"
+	// WorkFactCountEntry 是盘点清点（UC-WF-010；ADR-0384 决定三）。
+	WorkFactCountEntry WorkFactKind = "COUNT_ENTRY"
 )
 
 // workFactKindsAdmittedAtMint 是准入范围对照收哪几个词、认证方问哪一对准入要求的唯一来源：两处各抄一份，改了一份，登在旧词下的
@@ -57,6 +65,10 @@ var workFactKindsAdmittedAtMint = []WorkFactKind{
 	WorkFactFormConversion,
 	WorkFactConditionConversion,
 	WorkFactShortage,
+	WorkFactProcessingExecution,
+	WorkFactRelabelExecution,
+	WorkFactUnboxing,
+	WorkFactCountEntry,
 }
 
 // ParseWorkFactKind 按字面取值认作业事实类型，大小写不折叠：对照册里存的就是这些字面量。

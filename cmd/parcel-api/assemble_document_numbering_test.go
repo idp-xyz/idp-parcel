@@ -182,8 +182,8 @@ func TestDocumentNumberingRegisterRoundTrip(t *testing.T) {
 	body := documentNumberingBody(t, documentNumberingRequest(t, readHandlers.read, http.MethodGet, docnumberhttp.RulesPath, token, ""))
 	zone, _ := body["numberingTimeZone"].(map[string]any)
 	types, _ := body["documentTypes"].([]any)
-	// ADR-0355 决定二的十一类仍在，入库预报是后来加的第十二类。只数长度会把丢了哪一类也看成过。
-	if zone["status"] != "NOT_CONFIGURED" || len(types) != 12 {
+	// ADR-0355 决定二的十一类仍在，入库预报与出库请求是后来加的。只数长度会把丢了哪一类也看成过。
+	if zone["status"] != "NOT_CONFIGURED" || len(types) != 13 {
 		t.Fatalf("empty register: %v", body)
 	}
 	sawInboundPreAdvice := false

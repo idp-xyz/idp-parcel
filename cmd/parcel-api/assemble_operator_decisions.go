@@ -57,9 +57,16 @@ type operatorDecisionIntakes struct {
 	warehouseDiscrepancyConclusion *warehousehttp.OperatorDiscrepancyConclusionIntake
 	// warehouseUnclaimedClaim 是待认领到货认领与撤销（ADR-0384 决定二）；warehouseUnclaimedDisposition 是处置。
 	// warehouseConditionRestore 是次品转良品（UC-WF-007）。
-	warehouseUnclaimedClaim       *warehousehttp.OperatorUnclaimedClaimIntake
-	warehouseUnclaimedDisposition *warehousehttp.OperatorUnclaimedDispositionIntake
-	warehouseConditionRestore     *warehousehttp.OperatorConditionRestoreIntake
+	warehouseUnclaimedClaim        *warehousehttp.OperatorUnclaimedClaimIntake
+	warehouseUnclaimedDisposition  *warehousehttp.OperatorUnclaimedDispositionIntake
+	warehouseConditionRestore      *warehousehttp.OperatorConditionRestoreIntake
+	warehouseProcessingInstruction *warehousehttp.OperatorInstructionIntake
+	warehouseRelabelInstruction    *warehousehttp.OperatorInstructionIntake
+	warehouseStockFreeze           *warehousehttp.OperatorStockFreezeIntake
+	warehouseStockCount            *warehousehttp.OperatorStockCountIntake
+	warehouseStockApproval         *warehousehttp.OperatorStockApprovalIntake
+	warehouseStockAdjustment       *warehousehttp.OperatorStockAdjustmentIntake
+	warehouseOutbound              *warehousehttp.OperatorOutboundIntake
 }
 
 // buildOperatorMinter 建本进程唯一一只操作者铸造器：运营决定与登记写面各口共用它。
@@ -258,13 +265,76 @@ func buildOperatorDecisionIntakes(
 	if err != nil {
 		return operatorDecisionIntakes{}, err
 	}
+	processingAuthenticator, err := whaccess.NewOperatorInstructionAuthenticator(minter, accessidentity.DecisionProcessingInstruction)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseProcessingInstruction, err := warehousehttp.NewOperatorInstructionIntake(processingAuthenticator, true)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	relabelAuthenticator, err := whaccess.NewOperatorInstructionAuthenticator(minter, accessidentity.DecisionRelabelInstruction)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseRelabelInstruction, err := warehousehttp.NewOperatorInstructionIntake(relabelAuthenticator, false)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	stockFreezeAuthenticator, err := whaccess.NewOperatorStockFreezeAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseStockFreeze, err := warehousehttp.NewOperatorStockFreezeIntake(stockFreezeAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	stockCountAuthenticator, err := whaccess.NewOperatorStockCountAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseStockCount, err := warehousehttp.NewOperatorStockCountIntake(stockCountAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	stockApprovalAuthenticator, err := whaccess.NewOperatorStockApprovalAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseStockApproval, err := warehousehttp.NewOperatorStockApprovalIntake(stockApprovalAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	stockAdjustmentAuthenticator, err := whaccess.NewOperatorStockAdjustmentAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseStockAdjustment, err := warehousehttp.NewOperatorStockAdjustmentIntake(stockAdjustmentAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	outboundAuthenticator, err := whaccess.NewOperatorOutboundAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseOutbound, err := warehousehttp.NewOperatorOutboundIntake(outboundAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
 	return operatorDecisionIntakes{shipment: shipment, transport: transport, nodeOperations: nodeOperations, customs: customs,
 		settlement: settlement, networkRouting: networkRouting, visibility: visibility, warehouseGoods: warehouseGoods,
 		warehousePreAdvice: warehousePreAdvice, warehousePreAdviceClose: warehousePreAdviceClose,
 		warehouseDiscrepancyConclusion: warehouseDiscrepancyConclusion,
 		warehouseUnclaimedClaim:        warehouseUnclaimedClaim,
 		warehouseUnclaimedDisposition:  warehouseUnclaimedDisposition,
-		warehouseConditionRestore:      warehouseConditionRestore}, nil
+		warehouseConditionRestore:      warehouseConditionRestore,
+		warehouseProcessingInstruction: warehouseProcessingInstruction,
+		warehouseRelabelInstruction:    warehouseRelabelInstruction,
+		warehouseStockFreeze:           warehouseStockFreeze,
+		warehouseStockCount:            warehouseStockCount,
+		warehouseStockApproval:         warehouseStockApproval,
+		warehouseStockAdjustment:       warehouseStockAdjustment,
+		warehouseOutbound:              warehouseOutbound}, nil
 }
 
 // operatorRegistryIntakes 是操作者渠道登记册配置写能力面在各上下文的 Intake（ADR-0100 决定四；票 operator-channel/04）。

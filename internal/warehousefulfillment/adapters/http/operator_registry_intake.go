@@ -19,6 +19,11 @@ type OperatorIdentity struct {
 	Registrant domain.Registrant
 }
 
+// ApprovalDutyIntake 是批准职责规则登记口的 Intake。
+type ApprovalDutyIntake interface {
+	IntakeApprovalDuty(ctx context.Context, request *http.Request) (application.RegisterApprovalDutyCommand, error)
+}
+
 // OperatorRegistryAuthenticator 认证一次登记册配置写出示，交回认证出的身份。失败只交回本包的格；从共享接入身份能力译过来
 // 的那一层在 adapters/accessidentity（跨上下文翻译的位置，见 internal/architecture 的边界门禁）。
 type OperatorRegistryAuthenticator interface {
@@ -38,6 +43,8 @@ var (
 	_ LocationTypeRegistrationIntake      = (*OperatorRegistryIntake)(nil)
 	_ LocationRegistrationIntake          = (*OperatorRegistryIntake)(nil)
 	_ PackagingMaterialRegistrationIntake = (*OperatorRegistryIntake)(nil)
+	_ ApprovalDutyIntake                  = (*OperatorRegistryIntake)(nil)
+	_ ShortagePolicyIntake                = (*OperatorRegistryIntake)(nil)
 	_ DisposalRuleRegistrationIntake      = (*OperatorRegistryIntake)(nil)
 )
 
@@ -88,6 +95,11 @@ func (intake *OperatorRegistryIntake) IntakeDisposalRuleRegistration(
 	request *http.Request,
 ) (application.RegisterDisposalRuleCommand, error) {
 	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.UnclaimedDisposalRuleCommand)
+}
+
+// IntakeApprovalDuty 先认证再读批准职责规则。登记不判准入范围。
+func (intake *OperatorRegistryIntake) IntakeApprovalDuty(ctx context.Context, request *http.Request) (application.RegisterApprovalDutyCommand, error) {
+	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.ApprovalDutyCommand)
 }
 
 // intakeRegistration 是各册登记 Intake 共用的一步：令牌不过的请求，请求体一个字节都不读；过了才把请求体按这一册的译法译成命令，

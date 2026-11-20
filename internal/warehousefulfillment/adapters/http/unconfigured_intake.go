@@ -22,6 +22,8 @@ var (
 	_ PackagingMaterialRegistrationIntake = UnconfiguredIntake{}
 	_ DisposalRuleRegistrationIntake      = UnconfiguredIntake{}
 	_ CatalogueIntake                     = UnconfiguredIntake{}
+	_ ApprovalDutyIntake                  = UnconfiguredIntake{}
+	_ ShortagePolicyIntake                = UnconfiguredIntake{}
 	_ GoodsOnBehalfIntake                 = UnconfiguredIntake{}
 	_ PreAdviceOnBehalfIntake             = UnconfiguredIntake{}
 	_ ClosePreAdviceIntake                = UnconfiguredIntake{}
@@ -35,6 +37,10 @@ func (UnconfiguredIntake) IntakeWarehouseRegistration(
 	context.Context, *http.Request,
 ) (application.RegisterWarehouseCommand, error) {
 	return application.RegisterWarehouseCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeApprovalDuty(context.Context, *http.Request) (application.RegisterApprovalDutyCommand, error) {
+	return application.RegisterApprovalDutyCommand{}, ErrAccessChannelNotConfigured
 }
 
 func (UnconfiguredIntake) IntakeZoneRegistration(context.Context, *http.Request) (application.RegisterZoneCommand, error) {

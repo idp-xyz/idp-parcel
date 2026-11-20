@@ -148,6 +148,12 @@ func TestInternalJobsRefuseToRunOutsideATransaction(t *testing.T) {
 	if err := jobs.SaveDecision(ctx, domain.ConditionRestore{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveDecision：%v", err)
 	}
+	if err := jobs.MarkDiscrepancyApproved(ctx, tenant, valueOf(t, domain.NewStockDiscrepancyID, "SDP-1"), valueOf(t, domain.NewRegistrant, "operator-1"), preAdviceNumberingInstant, "", 1); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("MarkDiscrepancyApproved：%v", err)
+	}
+	if err := jobs.MarkDiscrepancyRejected(ctx, tenant, valueOf(t, domain.NewStockDiscrepancyID, "SDP-1"), valueOf(t, domain.NewRegistrant, "operator-1"), preAdviceNumberingInstant, "不做"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("MarkDiscrepancyRejected：%v", err)
+	}
 }
 
 func (world receiptWorld) internalJobs(t *testing.T) *application.RegisterInternalJobHandler {

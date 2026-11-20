@@ -10,7 +10,14 @@ var InboundPreAdviceDocumentNumberType = docnumber.TypeDeclaration{
 	DateTimeZone:    docnumber.DateTimeZoneFromIssuer,
 }
 
+// OutboundRequestDocumentNumberType 是出库请求的单据号类型声明。日期时区来路与入库预报相同：交仓已登记的业务时区。
+var OutboundRequestDocumentNumberType = docnumber.TypeDeclaration{
+	Code:            "OUTBOUND_REQUEST",
+	DefaultTemplate: "OB-{yyyy}{mm}{dd}-{seq:5}",
+	DateTimeZone:    docnumber.DateTimeZoneFromIssuer,
+}
+
 // DocumentNumberTypes 交回本上下文声明的全部单据编号类型，由组合根汇总进规则册。
 func DocumentNumberTypes() []docnumber.TypeDeclaration {
-	return []docnumber.TypeDeclaration{InboundPreAdviceDocumentNumberType}
+	return []docnumber.TypeDeclaration{InboundPreAdviceDocumentNumberType, OutboundRequestDocumentNumberType}
 }

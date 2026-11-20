@@ -32,6 +32,7 @@ const (
 	CartonMovementReasonInvalid CartonMovementReason = iota
 	CartonMovementReceipt
 	CartonMovementInternalMove
+	CartonMovementUnboxing
 )
 
 func (reason CartonMovementReason) String() string {
@@ -40,6 +41,8 @@ func (reason CartonMovementReason) String() string {
 		return "RECEIPT"
 	case CartonMovementInternalMove:
 		return "INTERNAL_MOVE"
+	case CartonMovementUnboxing:
+		return "UNBOXING"
 	default:
 		return ""
 	}
@@ -181,7 +184,8 @@ func NewCartonMovement(
 		stored[index] = line
 	}
 	for _, net := range seen {
-		if net != 1 && net != 0 {
+		// 收货净增 1，库内移动相抵为 0，开箱净减 1。
+		if net != 1 && net != 0 && net != -1 {
 			return CartonMovement{}, ErrInvalidCartonStock
 		}
 	}

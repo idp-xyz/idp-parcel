@@ -227,6 +227,10 @@ func (request StockMovementRequest) ShapeDefect() bool {
 	case StockReasonDecrease:
 		return inbound > 0
 	case StockReasonConserving, StockReasonOffsetting:
+		// 开箱的取走记在整箱账。商品账这一笔只有记入，沿用该箱的入库时间形成商品入库批次。
+		if request.reason == StockReasonUnboxing {
+			return inbound == 0 || outbound > 0
+		}
 		return inbound == 0 || outbound == 0
 	default:
 		return true

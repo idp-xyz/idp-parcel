@@ -13,6 +13,7 @@ import (
 	whparty "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/partycommercial"
 	whpostgres "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/postgres"
 	warehouseapp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
+	warehousedomain "go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 )
 
 // 仓配履约各册的生产装配（ADR-0375 决定四）。只在部署开关打开时调用：关着时特性的 build 不走到这里，仓配的适配器与编排
@@ -155,6 +156,14 @@ type warehouseFulfillmentOrchestration struct {
 
 	internalJobs       transactionalInternalJob
 	internalJobQueries *warehouseapp.QueryInternalJobsHandler
+	instructions       transactionalInstruction
+	freezes            transactionalFreeze
+	stockQueries       *warehouseapp.QueryStockHandler
+	counts             transactionalCount
+	approvals          transactionalApproval
+	adjustments        transactionalAdjustment
+	jobDiscrepancies   transactionalJobDiscrepancy
+	outbounds          transactionalOutbound
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -512,11 +521,99 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: stock discrepancy identities: %w", err)
 	}
+	instructionIDs, err := whidentity.NewInstructionIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: instruction identities: %w", err)
+	}
+	instructionStore, err := whpostgres.NewInstructions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: instructions: %w", err)
+	}
+	freezeStore, err := whpostgres.NewFreezes(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: freezes: %w", err)
+	}
+	countStore, err := whpostgres.NewCounts(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: counts: %w", err)
+	}
+	outboundStore, err := whpostgres.NewOutboundRequests(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: outbound requests: %w", err)
+	}
+	outboundNumbers, err := whpostgres.NewOutboundNumbers(db, assigner)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: outbound numbers: %w", err)
+	}
+	outboundIDs, err := whidentity.NewOutboundIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: outbound identities: %w", err)
+	}
+	holds := whpostgres.LedgerHolds{Freezes: whpostgres.NewFreezeHolds(freezeStore), Counts: countStore, Reservations: outboundStore}
+	freezeIDs, err := whidentity.NewFreezeIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: freeze identities: %w", err)
+	}
+	stockReads, err := whpostgres.NewStockReads(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: stock reads: %w", err)
+	}
+	stockQueries := warehouseapp.NewQueryStockHandler(stockReads, warehouses, warehouses, locations, zones)
+	countIDs, err := whidentity.NewCountIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: count identities: %w", err)
+	}
+	counts := transactionalCount{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewCountHandler(
+			countStore, countIDs, discrepancyIDs, warehouses, locations, zones, goods, holds, stock, systemClock{}, warehouses,
+		),
+	}
+	adjustmentStore, err := whpostgres.NewAdjustments(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: adjustments: %w", err)
+	}
+	adjustments := transactionalAdjustment{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewAdjustmentHandler(
+			adjustmentStore, countStore, poster, stock, warehouses, locations, zones, goods, owners, holds, systemClock{}, warehouses,
+		),
+	}
+	approvals := transactionalApproval{
+		transactor: db.Transactor(),
+		inner:      warehouseapp.NewCountApprovalHandler(countStore, countStore, poster, holds, systemClock{}, warehouses),
+	}
+	outbounds := transactionalOutbound{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewOutboundHandler(
+			outboundStore, outboundIDs, outboundNumbers, stock, warehouses, locations, zones, goods,
+			holds, owners, systemClock{}, warehouses,
+		),
+	}
+	jobDiscrepancies := transactionalJobDiscrepancy{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewJobDiscrepancyHandler(
+			internalJobStore, countStore, poster, stock, holds, systemClock{}, warehouses,
+		),
+	}
+	freezes := transactionalFreeze{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewFreezeHandler(
+			freezeStore, freezeIDs, stock, cartons, warehouses, locations, zones, goods, holds, systemClock{}, warehouses,
+		),
+	}
+	instructions := transactionalInstruction{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewInstructionHandler(
+			instructionStore, instructionIDs, poster, stock, stock, warehouses, locations, zones, goods, goods,
+			owners, holds, systemClock{}, warehouses, instructionStore, cartons, cartonIDs, stockIDs,
+		),
+	}
 	internalJobs := transactionalInternalJob{
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewRegisterInternalJobHandler(
 			internalJobStore, internalJobStore, poster, stock, stock, cartons, cartonIDs,
-			warehouses, locations, zones, goods, warehouseapp.ZeroStockHolds{}, discrepancyIDs, systemClock{},
+			warehouses, locations, zones, goods, holds, discrepancyIDs, systemClock{},
 		),
 	}
 	return warehouseFulfillmentOrchestration{
@@ -566,7 +663,184 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		unclaimedArrivalQueries:  warehouseapp.NewQueryUnclaimedArrivalsHandler(arrivals),
 		internalJobs:             internalJobs,
 		internalJobQueries:       warehouseapp.NewQueryInternalJobsHandler(internalJobStore, internalJobStore),
+		instructions:             instructions,
+		freezes:                  freezes,
+		stockQueries:             stockQueries,
+		counts:                   counts,
+		approvals:                approvals,
+		adjustments:              adjustments,
+		jobDiscrepancies:         jobDiscrepancies,
+		outbounds:                outbounds,
 	}, nil
+}
+
+// transactionalFreeze 是冻结与解冻的事务壳。判定与落册在同一笔里，并与记数串行。
+type transactionalFreeze struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.FreezeHandler
+}
+
+func (registration transactionalFreeze) Freeze(ctx context.Context, command warehouseapp.FreezeCommand) (warehouseapp.FreezeResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.FreezeResult, error) {
+		return registration.inner.Freeze(txCtx, command)
+	})
+}
+
+func (registration transactionalCount) Create(ctx context.Context, command warehouseapp.CreateCountCommand) (warehouseapp.CountResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.CountResult, error) {
+		return registration.inner.Create(txCtx, command)
+	})
+}
+
+func (registration transactionalCount) Start(ctx context.Context, command warehouseapp.CountCommand) (warehouseapp.CountResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.CountResult, error) {
+		return registration.inner.Start(txCtx, command)
+	})
+}
+
+func (registration transactionalCount) Record(ctx context.Context, command warehouseapp.RecordCountCommand) (warehouseapp.CountResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.CountResult, error) {
+		return registration.inner.Record(txCtx, command)
+	})
+}
+
+func (registration transactionalCount) Complete(ctx context.Context, command warehouseapp.CountCommand) (warehouseapp.CountResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.CountResult, error) {
+		return registration.inner.Complete(txCtx, command)
+	})
+}
+
+func (registration transactionalCount) Void(ctx context.Context, command warehouseapp.CountCommand) (warehouseapp.CountResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.CountResult, error) {
+		return registration.inner.Void(txCtx, command)
+	})
+}
+
+type transactionalAdjustment struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.AdjustmentHandler
+}
+
+func (registration transactionalAdjustment) Submit(ctx context.Context, command warehouseapp.SubmitAdjustmentCommand) (warehouseapp.AdjustmentResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.AdjustmentResult, error) {
+		return registration.inner.Submit(txCtx, command)
+	})
+}
+
+func (registration transactionalAdjustment) Approve(ctx context.Context, command warehouseapp.ApproveAdjustmentCommand) (warehouseapp.AdjustmentResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.AdjustmentResult, error) {
+		return registration.inner.Approve(txCtx, command)
+	})
+}
+
+func (registration transactionalAdjustment) Reject(ctx context.Context, command warehouseapp.RejectAdjustmentCommand) (warehouseapp.AdjustmentResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.AdjustmentResult, error) {
+		return registration.inner.Reject(txCtx, command)
+	})
+}
+
+type transactionalJobDiscrepancy struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.JobDiscrepancyHandler
+}
+
+func (registration transactionalJobDiscrepancy) Approve(ctx context.Context, command warehouseapp.ApproveCountCommand) (warehouseapp.ApprovalResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ApprovalResult, error) {
+		return registration.inner.Approve(txCtx, command)
+	})
+}
+
+type transactionalOutbound struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.OutboundHandler
+}
+
+func (registration transactionalOutbound) Accept(ctx context.Context, command warehouseapp.AcceptOutboundCommand) (warehouseapp.OutboundResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.OutboundResult, error) {
+		return registration.inner.Accept(txCtx, command)
+	})
+}
+
+func (registration transactionalOutbound) RegisterPolicy(ctx context.Context, command warehouseapp.RegisterShortagePolicyCommand) (warehouseapp.OutboundResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.OutboundResult, error) {
+		return registration.inner.RegisterPolicy(txCtx, command)
+	})
+}
+
+func (registration transactionalJobDiscrepancy) Reject(ctx context.Context, command warehouseapp.RejectCountCommand) (warehouseapp.ApprovalResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ApprovalResult, error) {
+		return registration.inner.Reject(txCtx, command)
+	})
+}
+
+type transactionalApproval struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.CountApprovalHandler
+}
+
+func (registration transactionalApproval) Approve(ctx context.Context, command warehouseapp.ApproveCountCommand) (warehouseapp.ApprovalResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ApprovalResult, error) {
+		return registration.inner.Approve(txCtx, command)
+	})
+}
+
+func (registration transactionalApproval) Reject(ctx context.Context, command warehouseapp.RejectCountCommand) (warehouseapp.ApprovalResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ApprovalResult, error) {
+		return registration.inner.Reject(txCtx, command)
+	})
+}
+
+func (registration transactionalApproval) RegisterDuty(ctx context.Context, command warehouseapp.RegisterApprovalDutyCommand) (warehouseapp.ApprovalResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ApprovalResult, error) {
+		return registration.inner.RegisterDuty(txCtx, command)
+	})
+}
+
+type transactionalCount struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.CountHandler
+}
+
+func (registration transactionalFreeze) Unfreeze(ctx context.Context, command warehouseapp.UnfreezeCommand) (warehouseapp.FreezeResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.FreezeResult, error) {
+		return registration.inner.Unfreeze(txCtx, command)
+	})
+}
+
+// transactionalInstruction 是加工、换标与开箱的事务壳。
+type transactionalInstruction struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.InstructionHandler
+}
+
+func (registration transactionalInstruction) Execute(ctx context.Context, command warehouseapp.ExecuteInstructionCommand) (warehouseapp.InstructionResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.InstructionResult, error) {
+		return registration.inner.Execute(txCtx, command)
+	})
+}
+
+func (registration transactionalInstruction) Unbox(ctx context.Context, command warehouseapp.UnboxCommand) (warehouseapp.InstructionResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.InstructionResult, error) {
+		return registration.inner.Unbox(txCtx, command)
+	})
+}
+
+func (registration transactionalInstruction) Accept(ctx context.Context, command warehouseapp.AcceptInstructionCommand) (warehouseapp.InstructionResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.InstructionResult, error) {
+		return registration.inner.Accept(txCtx, command)
+	})
+}
+
+func (registration transactionalInstruction) Withdraw(ctx context.Context, tenant warehousedomain.TenantID, owner warehousedomain.OwnerAccountID, id warehousedomain.InstructionID, key warehousedomain.RequestKey, allowed []warehousedomain.InstructionKind) (warehouseapp.InstructionResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.InstructionResult, error) {
+		return registration.inner.Withdraw(txCtx, tenant, owner, id, key, allowed)
+	})
+}
+
+func (registration transactionalInstruction) Void(ctx context.Context, tenant warehousedomain.TenantID, id warehousedomain.InstructionID, operator warehousedomain.Registrant, reason string, allowed []warehousedomain.InstructionKind) (warehouseapp.InstructionResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.InstructionResult, error) {
+		return registration.inner.Void(txCtx, tenant, id, operator, reason, allowed)
+	})
 }
 
 // transactionalInternalJob 是库内作业与次品转良品的事务壳。事实、流水与库存差异在同一笔里。

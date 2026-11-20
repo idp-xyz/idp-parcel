@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
@@ -209,6 +211,66 @@ func (ledger *CartonLedger) AppendRelocation(ctx context.Context, movement domai
 		}
 	}
 	return nil
+}
+
+// AppendDeparture 记开箱。箱必须在库，这一笔只有移出。
+func (ledger *CartonLedger) AppendDeparture(ctx context.Context, movement domain.CartonMovement) error {
+	const operation = "append carton departure"
+	executor, err := ledger.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	if movement.Reason() != domain.CartonMovementUnboxing {
+		return fmt.Errorf("%s: reason %s", operation, movement.Reason())
+	}
+	if err := lockCartonPosting(ctx, executor, movement.Tenant(), movement.Owner(), movement.Warehouse()); err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	for _, line := range movement.Lines() {
+		if line.Delta() != -1 {
+			return fmt.Errorf("%s: unboxing only removes the carton", operation)
+		}
+		place, err := locateCarton(ctx, executor, movement.Tenant(), movement.Owner(), movement.Warehouse(), line.Carton())
+		if err != nil {
+			return fmt.Errorf("%s: %w", operation, err)
+		}
+		if !place.Found || place.Location != line.Location() || place.Batch != line.Batch() {
+			return fmt.Errorf("%s: carton %s is not on hand", operation, line.Carton())
+		}
+	}
+	inserted, err := insertCartonMovement(ctx, executor, movement)
+	if err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	if !inserted {
+		return fmt.Errorf("%s: source already posted", operation)
+	}
+	for position, line := range movement.Lines() {
+		if err := insertCartonMovementLine(ctx, executor, movement, position, line); err != nil {
+			return fmt.Errorf("%s: %w", operation, err)
+		}
+	}
+	return nil
+}
+
+func (ledger *CartonLedger) LoadInboundAt(ctx context.Context, tenant domain.TenantID, id domain.CartonInboundBatchID) (time.Time, bool, error) {
+	const operation = "load carton inbound time"
+	querier, err := ledger.db.ReadExecutor(ctx)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	var at time.Time
+	err = querier.QueryRow(ctx,
+		`SELECT inbound_at FROM warehouse_fulfillment.carton_inbound_batch WHERE tenant_id = $1 AND inbound_batch_id = $2`,
+		tenant.String(), id.String(),
+	).Scan(&at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	return at, true, nil
 }
 
 func locateCarton(

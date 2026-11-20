@@ -13,7 +13,12 @@ func warehouseCustomerWriteAdmission(capability CustomerCapability) *AdmissionRe
 		CustomerCapabilityInboundPreAdviceSubmission,
 		CustomerCapabilityInboundPreAdviceArrivalNotice,
 		CustomerCapabilityInboundPreAdviceWithdrawal,
-		CustomerCapabilityReceiptDiscrepancyConclusion:
+		CustomerCapabilityReceiptDiscrepancyConclusion,
+		CustomerCapabilityProcessingInstructionSubmission,
+		CustomerCapabilityProcessingInstructionWithdrawal,
+		CustomerCapabilityRelabelInstructionSubmission,
+		CustomerCapabilityRelabelInstructionWithdrawal,
+		CustomerCapabilityOutboundRequestSubmission:
 		requirement := AdmissionRequirement{Capability: capability.String(), FactKind: capability.String()}
 		return &requirement
 	default:

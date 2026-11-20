@@ -55,6 +55,8 @@ type warehouseFulfillmentWiring struct {
 	customerGoods *warehousehttp.CustomerGoodsIntake
 	// customerConclusion 缺席时货主结论口是字面量未配置。开关关着时这一格不被问到。
 	customerConclusion    *warehousehttp.CustomerDiscrepancyConclusionIntake
+	customerInstructions  *warehousehttp.CustomerInstructionIntake
+	customerOutbound      *warehousehttp.CustomerOutboundIntake
 	discrepancyConclusion warehousehttp.DiscrepancyConcluder
 
 	// receiptIntake 缺席时收货确认是字面量未配置。receiptConfirm 是开关开着时的编排；关着时不被问到。
@@ -78,6 +80,18 @@ type warehouseFulfillmentWiring struct {
 	formConversionIntake      *warehousehttp.InternalJobWorkFactIntake
 	conditionConversionIntake *warehousehttp.InternalJobWorkFactIntake
 	shortageIntake            *warehousehttp.InternalJobWorkFactIntake
+	processingExecutionIntake *warehousehttp.InstructionExecutionIntake
+	relabelExecutionIntake    *warehousehttp.InstructionExecutionIntake
+	unboxIntake               *warehousehttp.UnboxIntake
+	instructions              warehousehttp.InstructionService
+	freezes                   warehousehttp.StockFreezer
+	stockQueries              warehousehttp.StockReader
+	counts                    warehousehttp.StockCounter
+	approvals                 warehousehttp.CountApprover
+	adjustments               warehousehttp.StockAdjuster
+	jobDiscrepancies          warehousehttp.JobDiscrepancyApprover
+	outbounds                 warehousehttp.OutboundService
+	countEntryIntake          *warehousehttp.CountEntryIntake
 	internalJobs              warehousehttp.InternalJobRegistrar
 	conditionRestore          warehousehttp.ConditionRestorer
 	internalJobQueries        warehousehttp.InternalJobQueries
@@ -205,6 +219,22 @@ func init() {
 				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityReceiptDiscrepancyConclusion),
 				ownIntake: true, warehouseFulfillment: true,
 			},
+			"/v1/warehouse/processing-instructions": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityProcessingInstructionSubmission),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/processing-instructions/withdrawals": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityProcessingInstructionWithdrawal),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/relabel-instructions": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityRelabelInstructionSubmission),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/relabel-instructions/withdrawals": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityRelabelInstructionWithdrawal),
+				ownIntake: true, warehouseFulfillment: true,
+			},
 			// 收货确认挂作业事实登记，不挂运营决定。铸造侧判准入：能力词是作业事实登记，事实类型是收货确认。
 			// Intake 由本特性自建，不经节点收寄那一只——那一只只认 NODE。
 			"/warehouse-fulfillment-receipt-confirmations": {
@@ -308,8 +338,97 @@ func init() {
 				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
 				ownIntake: true, warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-processing-executions": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-relabel-executions": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-unboxings": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-condition-restores": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionConditionRestore), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-processing-instructions": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionProcessingInstruction), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-processing-instruction-voids": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionProcessingInstruction), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-relabel-instructions": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionRelabelInstruction), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-relabel-instruction-voids": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionRelabelInstruction), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-freezes": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockFreeze), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-unfreezes": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockFreeze), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-stock?ownerAccount=SYN-OWNER-01&warehouseCode=SYN-WH-01&view=cells",
+			},
+			"/warehouse-fulfillment-stock-counts": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockCount), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-count-starts": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockCount), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-count-completions": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockCount), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-count-voids": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockCount), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-approval-duty-rules": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-count-approvals": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentApproval), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-adjustments": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentSubmission), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-adjustment-approvals": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentApproval), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-adjustment-rejections": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentApproval), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-job-discrepancy-approvals": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentApproval), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-job-discrepancy-rejections": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentApproval), warehouseFulfillment: true,
+			},
+			"/v1/warehouse/outbound-requests": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityOutboundRequestSubmission),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-outbound-requests": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-shortage-policies": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-count-rejections": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentApproval), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-count-entries": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/reads/stock": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+				probe: "/v1/warehouse/reads/stock?warehouseCode=SYN-WH-01&view=cells",
 			},
 			"/warehouse-fulfillment-internal-jobs": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
@@ -334,6 +453,8 @@ func init() {
 			var customerPreAdvice *warehousehttp.CustomerInboundPreAdviceIntake
 			var customerGoods *warehousehttp.CustomerGoodsIntake
 			var customerConclusion *warehousehttp.CustomerDiscrepancyConclusionIntake
+			var customerInstructions *warehousehttp.CustomerInstructionIntake
+			var customerOutbound *warehousehttp.CustomerOutboundIntake
 			if sources.customerClientMinter != nil {
 				customerPreAdvice, err = buildCustomerInboundPreAdviceIntake(sources.customerClientMinter)
 				if err != nil {
@@ -347,6 +468,14 @@ func init() {
 				if err != nil {
 					return warehouseFulfillmentWiring{}, err
 				}
+				customerInstructions, err = buildCustomerInstructionIntake(sources.customerClientMinter)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+				customerOutbound, err = buildCustomerOutboundIntake(sources.customerClientMinter)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
 			}
 			var receiptIntake *warehousehttp.ReceiptWorkFactIntake
 			var measurementIntake *warehousehttp.WarehouseMeasurementWorkFactIntake
@@ -355,6 +484,10 @@ func init() {
 			var formConversionIntake *warehousehttp.InternalJobWorkFactIntake
 			var conditionConversionIntake *warehousehttp.InternalJobWorkFactIntake
 			var shortageIntake *warehousehttp.InternalJobWorkFactIntake
+			var processingExecutionIntake *warehousehttp.InstructionExecutionIntake
+			var relabelExecutionIntake *warehousehttp.InstructionExecutionIntake
+			var unboxIntake *warehousehttp.UnboxIntake
+			var countEntryIntake *warehousehttp.CountEntryIntake
 			if sources.operatorVerifier != nil && sources.operatorRegistry != nil && sources.deviceRegistry != nil && sources.admission != nil {
 				receiptIntake, err = buildReceiptConfirmationIntake(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
@@ -375,6 +508,18 @@ func init() {
 					return warehouseFulfillmentWiring{}, err
 				}
 				internalMoveIntake, formConversionIntake, conditionConversionIntake, shortageIntake, err = buildInternalJobIntakes(
+					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
+				)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+				countEntryIntake, err = buildCountEntryIntake(
+					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
+				)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+				processingExecutionIntake, relabelExecutionIntake, unboxIntake, err = buildInstructionIntakes(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
 				)
 				if err != nil {
@@ -414,6 +559,8 @@ func init() {
 				customerPreAdvice:         customerPreAdvice,
 				customerGoods:             customerGoods,
 				customerConclusion:        customerConclusion,
+				customerInstructions:      customerInstructions,
+				customerOutbound:          customerOutbound,
 				discrepancyConclusion:     orchestration.discrepancyConclusion,
 				receiptIntake:             receiptIntake,
 				receiptConfirm:            orchestration.receiptConfirm,
@@ -431,6 +578,18 @@ func init() {
 				formConversionIntake:      formConversionIntake,
 				conditionConversionIntake: conditionConversionIntake,
 				shortageIntake:            shortageIntake,
+				processingExecutionIntake: processingExecutionIntake,
+				relabelExecutionIntake:    relabelExecutionIntake,
+				unboxIntake:               unboxIntake,
+				instructions:              orchestration.instructions,
+				freezes:                   orchestration.freezes,
+				stockQueries:              orchestration.stockQueries,
+				counts:                    orchestration.counts,
+				approvals:                 orchestration.approvals,
+				adjustments:               orchestration.adjustments,
+				jobDiscrepancies:          orchestration.jobDiscrepancies,
+				outbounds:                 orchestration.outbounds,
+				countEntryIntake:          countEntryIntake,
 				internalJobs:              orchestration.internalJobs,
 				conditionRestore:          orchestration.internalJobs,
 				internalJobQueries:        orchestration.internalJobQueries,
@@ -474,6 +633,10 @@ func init() {
 			customerOne := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
 			customerByNumber := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
 			customerConclusion := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerProcessing := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerProcessingWithdrawal := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerRelabel := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerRelabelWithdrawal := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			discrepancyConclusion := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			receiptConfirmation := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			customerGoodsWrite := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
@@ -499,7 +662,34 @@ func init() {
 			formConversion := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			conditionConversion := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			shortageRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			processingExecution := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			relabelExecution := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			unboxing := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			conditionRestore := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			processingInstruction := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			processingInstructionVoid := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			relabelInstruction := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			relabelInstructionVoid := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockFreeze := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockUnfreeze := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockRead := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			customerStockRead := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			stockCount := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockCountStart := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockCountComplete := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockCountVoid := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			countEntry := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			approvalDuty := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			countApproval := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			countRejection := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockAdjustment := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockAdjustmentApproval := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockAdjustmentRejection := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			jobDiscrepancyApproval := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			jobDiscrepancyRejection := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			customerOutboundRequest := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			outboundOnBehalf := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			shortagePolicy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			internalJobList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			internalJobOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			conditionRestoreOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
@@ -544,6 +734,11 @@ func init() {
 				customerByNumber = warehousehttp.NewGetCustomerInboundPreAdviceByNumberEndpoint(customerPorts, wiring.preAdviceQueries)
 				conclusionPorts := warehousehttp.OpenCustomerDiscrepancyConclusionIntake(wiring.customerConclusion)
 				customerConclusion = warehousehttp.NewConcludeDiscrepancyEndpoint(conclusionPorts, wiring.discrepancyConclusion)
+				instructionPorts := warehousehttp.OpenCustomerInstructionIntake(wiring.customerInstructions)
+				customerProcessing = warehousehttp.NewSubmitProcessingInstructionEndpoint(instructionPorts, wiring.instructions)
+				customerProcessingWithdrawal = warehousehttp.NewWithdrawProcessingInstructionEndpoint(instructionPorts, wiring.instructions)
+				customerRelabel = warehousehttp.NewSubmitRelabelInstructionEndpoint(instructionPorts, wiring.instructions)
+				customerRelabelWithdrawal = warehousehttp.NewWithdrawRelabelInstructionEndpoint(instructionPorts, wiring.instructions)
 				discrepancyConclusion = warehousehttp.NewConcludeDiscrepancyOnBehalfEndpoint(channels.discrepancyConclusion(), wiring.discrepancyConclusion)
 				receiptIntake := warehousehttp.ReceiptConfirmationIntake(warehousehttp.UnconfiguredReceiptIntake{})
 				if wiring.receiptIntake != nil {
@@ -602,7 +797,66 @@ func init() {
 				} else {
 					shortageRegistration = warehousehttp.NewRegisterInternalJobEndpoint(shortageFactIntake, wiring.internalJobs)
 				}
+				processingIntake := warehousehttp.UnconfiguredInstructionExecutionIntake{}
+				if wiring.processingExecutionIntake != nil {
+					processingExecution = warehousehttp.NewExecuteInstructionEndpoint(wiring.processingExecutionIntake, wiring.instructions)
+				} else {
+					processingExecution = warehousehttp.NewExecuteInstructionEndpoint(processingIntake, wiring.instructions)
+				}
+				relabelIntake := warehousehttp.UnconfiguredInstructionExecutionIntake{}
+				if wiring.relabelExecutionIntake != nil {
+					relabelExecution = warehousehttp.NewExecuteInstructionEndpoint(wiring.relabelExecutionIntake, wiring.instructions)
+				} else {
+					relabelExecution = warehousehttp.NewExecuteInstructionEndpoint(relabelIntake, wiring.instructions)
+				}
+				plainUnbox := warehousehttp.UnconfiguredUnboxIntake{}
+				if wiring.unboxIntake != nil {
+					unboxing = warehousehttp.NewUnboxEndpoint(wiring.unboxIntake, wiring.instructions)
+				} else {
+					unboxing = warehousehttp.NewUnboxEndpoint(plainUnbox, wiring.instructions)
+				}
 				conditionRestore = warehousehttp.NewRestoreConditionEndpoint(channels.conditionRestore(), wiring.conditionRestore)
+				plainProcessing := warehousehttp.UnconfiguredOperatorInstructionIntake{}
+				if live := channels.processingInstruction(); live != nil {
+					processingInstruction = warehousehttp.NewInitiateInstructionEndpoint(live, wiring.instructions)
+					processingInstructionVoid = warehousehttp.NewVoidInstructionEndpoint(live, wiring.instructions)
+				} else {
+					processingInstruction = warehousehttp.NewInitiateInstructionEndpoint(plainProcessing, wiring.instructions)
+					processingInstructionVoid = warehousehttp.NewVoidInstructionEndpoint(plainProcessing, wiring.instructions)
+				}
+				plainRelabel := warehousehttp.UnconfiguredOperatorInstructionIntake{}
+				if live := channels.relabelInstruction(); live != nil {
+					relabelInstruction = warehousehttp.NewInitiateInstructionEndpoint(live, wiring.instructions)
+					relabelInstructionVoid = warehousehttp.NewVoidInstructionEndpoint(live, wiring.instructions)
+				} else {
+					relabelInstruction = warehousehttp.NewInitiateInstructionEndpoint(plainRelabel, wiring.instructions)
+					relabelInstructionVoid = warehousehttp.NewVoidInstructionEndpoint(plainRelabel, wiring.instructions)
+				}
+				stockFreeze = warehousehttp.NewFreezeEndpoint(channels.stockFreeze(), wiring.freezes)
+				stockUnfreeze = warehousehttp.NewUnfreezeEndpoint(channels.stockFreeze(), wiring.freezes)
+				approvalDuty = warehousehttp.NewRegisterApprovalDutyEndpoint(channels.approvalDuty(), wiring.approvals)
+				countApproval = warehousehttp.NewApproveCountEndpoint(channels.stockApproval(), wiring.approvals)
+				countRejection = warehousehttp.NewRejectCountEndpoint(channels.stockApproval(), wiring.approvals)
+				stockAdjustment = warehousehttp.NewSubmitAdjustmentEndpoint(channels.stockAdjustment(), wiring.adjustments)
+				stockAdjustmentApproval = warehousehttp.NewApproveAdjustmentEndpoint(channels.stockApproval(), wiring.adjustments)
+				stockAdjustmentRejection = warehousehttp.NewRejectAdjustmentEndpoint(channels.stockApproval(), wiring.adjustments)
+				jobDiscrepancyApproval = warehousehttp.NewApproveJobDiscrepancyEndpoint(channels.stockApproval(), wiring.jobDiscrepancies)
+				jobDiscrepancyRejection = warehousehttp.NewRejectJobDiscrepancyEndpoint(channels.stockApproval(), wiring.jobDiscrepancies)
+				customerOutboundRequest = warehousehttp.NewSubmitOutboundEndpoint(warehousehttp.OpenCustomerOutboundIntake(wiring.customerOutbound), wiring.outbounds)
+				outboundOnBehalf = warehousehttp.NewRecordOutboundEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
+				shortagePolicy = warehousehttp.NewRegisterShortagePolicyEndpoint(channels.shortagePolicy(), wiring.outbounds)
+				stockCount = warehousehttp.NewCreateCountEndpoint(channels.stockCount(), wiring.counts)
+				stockCountStart = warehousehttp.NewStartCountEndpoint(channels.stockCount(), wiring.counts)
+				stockCountComplete = warehousehttp.NewCompleteCountEndpoint(channels.stockCount(), wiring.counts)
+				stockCountVoid = warehousehttp.NewVoidCountEndpoint(channels.stockCount(), wiring.counts)
+				plainCount := warehousehttp.UnconfiguredCountEntryIntake{}
+				if wiring.countEntryIntake != nil {
+					countEntry = warehousehttp.NewRecordCountEndpoint(wiring.countEntryIntake, wiring.counts)
+				} else {
+					countEntry = warehousehttp.NewRecordCountEndpoint(plainCount, wiring.counts)
+				}
+				stockRead = warehousehttp.NewQueryStockEndpoint(catalogueIntake, wiring.stockQueries)
+				customerStockRead = warehousehttp.NewQueryCustomerStockEndpoint(warehousehttp.OpenCustomerInboundPreAdviceIntake(wiring.customerPreAdvice), wiring.stockQueries)
 				internalJobList = warehousehttp.NewQueryInternalJobsEndpoint(catalogueIntake, wiring.internalJobQueries)
 				internalJobOne = warehousehttp.NewQueryInternalJobEndpoint(catalogueIntake, wiring.internalJobQueries)
 				conditionRestoreOne = warehousehttp.NewQueryConditionRestoreEndpoint(catalogueIntake, wiring.internalJobQueries)
@@ -642,6 +896,10 @@ func init() {
 				{Pattern: "/v1/warehouse/reads/inbound-pre-advice", Handler: customerOne},
 				{Pattern: "/v1/warehouse/reads/inbound-pre-advice-by-number", Handler: customerByNumber},
 				{Pattern: "/v1/warehouse/receipt-discrepancy-conclusions", Handler: customerConclusion},
+				{Pattern: "/v1/warehouse/processing-instructions", Handler: customerProcessing},
+				{Pattern: "/v1/warehouse/processing-instructions/withdrawals", Handler: customerProcessingWithdrawal},
+				{Pattern: "/v1/warehouse/relabel-instructions", Handler: customerRelabel},
+				{Pattern: "/v1/warehouse/relabel-instructions/withdrawals", Handler: customerRelabelWithdrawal},
 				{Pattern: "/warehouse-fulfillment-receipt-discrepancy-conclusion-on-behalf", Handler: discrepancyConclusion},
 				{Pattern: "/warehouse-fulfillment-receipt-confirmations", Handler: receiptConfirmation},
 				{Pattern: "/v1/warehouse/goods", Handler: customerGoodsWrite},
@@ -667,7 +925,34 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-form-conversions", Handler: formConversion},
 				{Pattern: "/warehouse-fulfillment-condition-conversions", Handler: conditionConversion},
 				{Pattern: "/warehouse-fulfillment-shortage-registrations", Handler: shortageRegistration},
+				{Pattern: "/warehouse-fulfillment-processing-executions", Handler: processingExecution},
+				{Pattern: "/warehouse-fulfillment-relabel-executions", Handler: relabelExecution},
+				{Pattern: "/warehouse-fulfillment-unboxings", Handler: unboxing},
 				{Pattern: "/warehouse-fulfillment-condition-restores", Handler: conditionRestore},
+				{Pattern: "/warehouse-fulfillment-processing-instructions", Handler: processingInstruction},
+				{Pattern: "/warehouse-fulfillment-processing-instruction-voids", Handler: processingInstructionVoid},
+				{Pattern: "/warehouse-fulfillment-relabel-instructions", Handler: relabelInstruction},
+				{Pattern: "/warehouse-fulfillment-relabel-instruction-voids", Handler: relabelInstructionVoid},
+				{Pattern: "/warehouse-fulfillment-stock-freezes", Handler: stockFreeze},
+				{Pattern: "/warehouse-fulfillment-stock-unfreezes", Handler: stockUnfreeze},
+				{Pattern: "/warehouse-fulfillment-stock", Handler: stockRead},
+				{Pattern: "/v1/warehouse/reads/stock", Handler: customerStockRead},
+				{Pattern: "/warehouse-fulfillment-stock-counts", Handler: stockCount},
+				{Pattern: "/warehouse-fulfillment-stock-count-starts", Handler: stockCountStart},
+				{Pattern: "/warehouse-fulfillment-stock-count-completions", Handler: stockCountComplete},
+				{Pattern: "/warehouse-fulfillment-stock-count-voids", Handler: stockCountVoid},
+				{Pattern: "/warehouse-fulfillment-count-entries", Handler: countEntry},
+				{Pattern: "/warehouse-fulfillment-approval-duty-rules", Handler: approvalDuty},
+				{Pattern: "/warehouse-fulfillment-count-approvals", Handler: countApproval},
+				{Pattern: "/warehouse-fulfillment-count-rejections", Handler: countRejection},
+				{Pattern: "/warehouse-fulfillment-stock-adjustments", Handler: stockAdjustment},
+				{Pattern: "/warehouse-fulfillment-stock-adjustment-approvals", Handler: stockAdjustmentApproval},
+				{Pattern: "/warehouse-fulfillment-stock-adjustment-rejections", Handler: stockAdjustmentRejection},
+				{Pattern: "/warehouse-fulfillment-job-discrepancy-approvals", Handler: jobDiscrepancyApproval},
+				{Pattern: "/warehouse-fulfillment-job-discrepancy-rejections", Handler: jobDiscrepancyRejection},
+				{Pattern: "/v1/warehouse/outbound-requests", Handler: customerOutboundRequest},
+				{Pattern: "/warehouse-fulfillment-outbound-requests", Handler: outboundOnBehalf},
+				{Pattern: "/warehouse-fulfillment-shortage-policies", Handler: shortagePolicy},
 				{Pattern: "/warehouse-fulfillment-internal-jobs", Handler: internalJobList},
 				{Pattern: "/warehouse-fulfillment-internal-job", Handler: internalJobOne},
 				{Pattern: "/warehouse-fulfillment-condition-restore", Handler: conditionRestoreOne},
@@ -678,6 +963,22 @@ func init() {
 
 // buildCustomerInboundPreAdviceIntake 装配入库预报货主口的首方 Intake。铸造器与别的首方口同一只。铸造器缺席时不调用本函数，
 // 六口保持字面量未配置。
+func buildCustomerOutboundIntake(minter *accessidentity.CustomerClientMinter) (*warehousehttp.CustomerOutboundIntake, error) {
+	authenticator, err := whaccess.NewCustomerOutboundAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewCustomerOutboundIntake(authenticator)
+}
+
+func buildCustomerInstructionIntake(minter *accessidentity.CustomerClientMinter) (*warehousehttp.CustomerInstructionIntake, error) {
+	authenticator, err := whaccess.NewCustomerInstructionAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewCustomerInstructionIntake(authenticator)
+}
+
 func buildCustomerDiscrepancyConclusionIntake(minter *accessidentity.CustomerClientMinter) (*warehousehttp.CustomerDiscrepancyConclusionIntake, error) {
 	authenticator, err := whaccess.NewCustomerDiscrepancyConclusionAuthenticator(minter)
 	if err != nil {
@@ -792,4 +1093,58 @@ func buildInternalJobIntakes(
 		return nil, nil, nil, nil, err
 	}
 	return move, form, condition, shortage, nil
+}
+
+// buildInstructionIntakes 装配加工执行、换标执行与开箱三个作业事实 Intake。
+func buildInstructionIntakes(
+	verifier accessidentity.OperatorCredentialVerifier,
+	operators accessidentity.OperatorRegistry,
+	devices accessidentity.DeviceRegistry,
+	admission accessidentity.AdmissionScope,
+) (*warehousehttp.InstructionExecutionIntake, *warehousehttp.InstructionExecutionIntake, *warehousehttp.UnboxIntake, error) {
+	minter, err := accessidentity.NewWorkFactMinter(verifier, operators, devices, admission, time.Now)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("parcel-api: instruction work fact minter: %w", err)
+	}
+	execution := func(kind accessidentity.WorkFactKind) (*warehousehttp.InstructionExecutionIntake, error) {
+		authenticator, err := whaccess.NewInternalJobAuthenticator(minter, kind)
+		if err != nil {
+			return nil, err
+		}
+		return warehousehttp.NewInstructionExecutionIntake(authenticator)
+	}
+	processing, err := execution(accessidentity.WorkFactProcessingExecution)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	relabel, err := execution(accessidentity.WorkFactRelabelExecution)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	unboxAuthenticator, err := whaccess.NewInternalJobAuthenticator(minter, accessidentity.WorkFactUnboxing)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	unbox, err := warehousehttp.NewUnboxIntake(unboxAuthenticator)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return processing, relabel, unbox, nil
+}
+
+func buildCountEntryIntake(
+	verifier accessidentity.OperatorCredentialVerifier,
+	operators accessidentity.OperatorRegistry,
+	devices accessidentity.DeviceRegistry,
+	admission accessidentity.AdmissionScope,
+) (*warehousehttp.CountEntryIntake, error) {
+	minter, err := accessidentity.NewWorkFactMinter(verifier, operators, devices, admission, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: count entry minter: %w", err)
+	}
+	authenticator, err := whaccess.NewInternalJobAuthenticator(minter, accessidentity.WorkFactCountEntry)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewCountEntryIntake(authenticator)
 }
