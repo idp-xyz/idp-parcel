@@ -57,7 +57,7 @@
 | 首次有效收寄结果 | `FORMED` `PENDING`（原因 `SOURCE_CONFLICT` `IDENTITY_NOT_REGISTERED`） `VOIDED` |
 | 承运答复 | `ACCEPTED` `REFUSED` `EXPIRED` `WITHDRAWN` `WAITLISTED` |
 | 容量维度 | `WEIGHT` `VOLUME` `PIECES` `PALLET_POSITIONS` `BAG_POSITIONS` `CARGO_SLOTS` |
-| 运输准备结果 | `NOT_CONFIGURED` `NO_CURRENT_OPPORTUNITY` `CAPACITY_UNCONFIRMED` `OPPORTUNITY_UNAVAILABLE` `OPPORTUNITY_PREPARED` |
+| 运输准备结果／需求量来源 | `NOT_CONFIGURED` `NO_CURRENT_OPPORTUNITY` `CAPACITY_UNCONFIRMED` `OPPORTUNITY_UNAVAILABLE` `OPPORTUNITY_PREPARED`；`declaration` `actual-measurement` |
 | 移动事实种类 | `DEPARTURE` `IN_TRANSIT` `ARRIVAL` |
 | 发生项原因 | `BOOKING` `CANCELLATION` `FAILED_ATTEMPT` `ACTUAL_FULFILLMENT` |
 | 总单适用状态／修订 | `IN_FORCE` `REVOKED` `SUPERSEDED`；`REVOKE` `SUPERSEDE` `RESTATE_ASSOCIATIONS` |
@@ -123,6 +123,7 @@
 
 - 班次方向是连接代码加起点、终点节点，三格缺一不可。周期安排物化的班次身份由（周期安排代码、运行日期）派生。同一身份再登记，内容相同是已有结果，内容不同成下一版。
 - 连接上没有任何当前版的周期安排或班次时，运输准备答`未配置`，不建占位班次。
+- 运输准备按需求量来源各留一份，互不覆盖。初始路由形成后逐段按客户申报判一份；包裹此刻恰有一条当前有效实测时，在申报那一份旁边按这条实测再判一份。实际测量登记或作废后，对已有申报那一份的各段按此刻的当前有效实测补判，每条实测各一份。没有实测或实测定不下时不补，也不退回申报重判；窗口在这条实测发生之前已结束的段不补。只认作业实物上恰好一件包裹的测量。
 
 **收费发生项**
 
@@ -181,7 +182,7 @@
 
 离线口：`cmd/parcel-transport-register`（周期安排、班次、容量池三本册子的受控登记，运营在数据库网络内手跑，不监听端口；命令 `schedule-template` `schedule` `capacity-pool`）。
 
-后台节拍在 `cmd/parcel-dispatch`（各上下文共用的分发进程）。本上下文挂在上面的有：随交接发起派送任务、参与结束时形成实际履约发生项及其补形成、出发门禁补问（随控制事实、随成员识别）、初始路由形成后的运输准备。
+后台节拍在 `cmd/parcel-dispatch`（各上下文共用的分发进程）。本上下文挂在上面的有：随交接发起派送任务、参与结束时形成实际履约发生项及其补形成、出发门禁补问（随控制事实、随成员识别）、初始路由形成后的运输准备、实际测量变化后按实测的补判。
 
 ## 旧文档写了、代码里还没有的
 
