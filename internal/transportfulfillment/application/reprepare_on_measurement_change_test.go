@@ -267,6 +267,73 @@ func TestInitialPreparationAddsAMeasuredCopyBesideTheDeclaration(t *testing.T) {
 	}
 }
 
+// Covers: 初始准备交来两段时，申报两段都判；窗口结束早于实测发生时刻的那段不补实测，结束时刻不早于发生时刻的才补。
+func TestInitialPreparationSupplementsOnlyLegsOpenAtTheMeasurement(t *testing.T) {
+	occurred := preparedAt.Add(2 * time.Hour)
+	closed := plannedLegBetween(t, "RPV-1#1", preparedAt, preparedAt.Add(time.Hour))
+	open := plannedLegBetween(t, "RPV-1#2", preparedAt, occurred)
+	store := &preparationStoreDouble{records: map[ports.TransportPreparationKey]ports.TransportPreparationRecord{}}
+	answered, err := reprepareHandler(store, measuredDemandDouble{reading: measuredReading(t, "SYN-MEASURE-1", occurred)}).
+		Prepare(context.Background(), formedCommand(t, closed, open))
+	if err != nil || answered.Outcome() != application.PreparationRunAnswered {
+		t.Fatalf("初始准备 = %s %v", answered.Outcome(), err)
+	}
+	var declared, measured []string
+	for _, leg := range answered.Legs() {
+		if leg.Answer != application.LegPreparationFormed {
+			t.Fatalf("作答 %s %s", leg.Answer, leg.Record.Key.Leg)
+		}
+		switch leg.Record.Key.Source {
+		case domain.DemandFromDeclaration:
+			if leg.Record.Key.MeasurementRef != "" {
+				t.Fatalf("申报引用 %q", leg.Record.Key.MeasurementRef)
+			}
+			declared = append(declared, leg.Record.Key.Leg.String())
+		case domain.DemandFromActualMeasurement:
+			if leg.Record.Key.MeasurementRef != "SYN-MEASURE-1" {
+				t.Fatalf("实测引用 %q", leg.Record.Key.MeasurementRef)
+			}
+			measured = append(measured, leg.Record.Key.Leg.String())
+		default:
+			t.Fatalf("来源 %s", leg.Record.Key.Source)
+		}
+	}
+	if len(declared) != 2 || declared[0] != closed.Reference().String() || declared[1] != open.Reference().String() ||
+		len(measured) != 1 || measured[0] != open.Reference().String() || countMeasured(store) != 1 {
+		t.Fatalf("申报 %v 实测 %v 实测行 %d", declared, measured, countMeasured(store))
+	}
+}
+
+// Covers: 列申报段时读不懂的行原样上抛、不答未决；别的错误才答未决并点名准备结果库。
+func TestRePrepareRaisesAnUnreadableDeclaredListAndWaitsWhenTheStoreIsDown(t *testing.T) {
+	reading := measuredReading(t, "SYN-MEASURE-1", preparedAt)
+	command := application.RePrepareOnMeasurementChangeCommand{TenantID: opportunityTenant(t), Object: "SYN-PARCEL-01"}
+	ask := func(listErr error) (application.RePrepareOnMeasurementChangeResult, error) {
+		t.Helper()
+		store := &preparationStoreDouble{
+			records: map[ports.TransportPreparationKey]ports.TransportPreparationRecord{},
+			listErr: listErr,
+		}
+		result, err := reprepareHandler(store, measuredDemandDouble{reading: reading}).
+			RePrepareOnMeasurementChange(context.Background(), command)
+		if len(store.records) != 0 {
+			t.Fatalf("写了 %d 行", len(store.records))
+		}
+		return result, err
+	}
+	unreadable, err := ask(errors.Join(ports.ErrTransportPreparationRecordUnreadable, errors.New("bad row")))
+	if !errors.Is(err, ports.ErrTransportPreparationRecordUnreadable) || unreadable.Outcome() == application.RePrepareRunUndecided {
+		t.Fatalf("读不懂 = %s %v", unreadable.Outcome(), err)
+	}
+	down, err := ask(errors.New("preparation store down"))
+	if err != nil || down.Outcome() != application.RePrepareRunUndecided ||
+		down.UndecidedReason() != application.TransportPreparationStoreUnavailable ||
+		down.UndecidedReason().String() != "TRANSPORT_PREPARATION_STORE_UNAVAILABLE" ||
+		down.ContinuationReference() == "" {
+		t.Fatalf("读不动 = %s %s %q %v", down.Outcome(), down.UndecidedReason(), down.ContinuationReference(), err)
+	}
+}
+
 func plannedLegBetween(t *testing.T, reference string, start, end time.Time) domain.PreparationLeg {
 	t.Helper()
 	direction, err := domain.NewScheduleDirection("SYN-CONN-1", "SYN-NODE-A", "SYN-NODE-B")

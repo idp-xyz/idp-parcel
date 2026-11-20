@@ -300,3 +300,43 @@ func TestRePreparationResultsBecomeAckRetryOrALoudFailure(t *testing.T) {
 		t.Fatalf("译不成 = %v", err)
 	}
 }
+
+// Covers: 编排拒收，以及封闭集以外的结果，都响亮失败，不进本路的未决重投名单。
+func TestRefusedAndUnexpectedRePreparationResultsAreNotRetried(t *testing.T) {
+	// 结果字段不外露，适配器自己组的命令又过了受理门，拒收样本只能从一次空命令上取。
+	refused, err := tfapplication.NewPrepareOnPlannedLegsHandler(tfapplication.PrepareOnPlannedLegsDeps{}).
+		RePrepareOnMeasurementChange(context.Background(), tfapplication.RePrepareOnMeasurementChangeCommand{})
+	if err != nil || refused.Outcome() != tfapplication.RePrepareRunNotAccepted {
+		t.Fatalf("拒收样本 = %s %v", refused.Outcome(), err)
+	}
+	one := associationDouble{parcels: []nodomain.ParcelAssociationReference{parcelRef(t, "SYN-PARCEL-01")}}
+	change := changedMeasurement(nodomain.HandlingUnitObject.String(), "SYN-HU-1")
+	for _, test := range []struct {
+		name   string
+		result tfapplication.RePrepareOnMeasurementChangeResult
+	}{
+		{"拒收", refused},
+		{"封闭集以外", tfapplication.RePrepareOnMeasurementChangeResult{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			adapter, err := tfnode.NewRePrepareOnMeasurementChange(one, fixedRePreparation{result: test.result})
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = adapter.HandleChangedMeasurement(context.Background(), change)
+			if err == nil || errors.Is(err, tfnode.ErrRePreparationUndecided) {
+				t.Fatalf("%s = %v", test.name, err)
+			}
+		})
+	}
+}
+
+type fixedRePreparation struct {
+	result tfapplication.RePrepareOnMeasurementChangeResult
+}
+
+func (double fixedRePreparation) RePrepareOnMeasurementChange(
+	context.Context, tfapplication.RePrepareOnMeasurementChangeCommand,
+) (tfapplication.RePrepareOnMeasurementChangeResult, error) {
+	return double.result, nil
+}

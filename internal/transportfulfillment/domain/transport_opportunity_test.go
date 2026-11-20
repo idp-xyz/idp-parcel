@@ -151,6 +151,39 @@ func TestMeasuredDemandTakesWeightVolumeAndOnePiece(t *testing.T) {
 	}
 }
 
+// Covers: 实测的重量与外廓都不能整格缺席。只缺半格会在后面的数量检查上被拒，整格都空则那一维会被当成待补充放行。
+func TestMeasuredDemandRejectsAnEmptyCellWhetherTheRestOfItIsEmptyToo(t *testing.T) {
+	complete := domain.MeasuredDemandSpec{
+		Anchor:      "SYN-DEVICE/WEIGH-1",
+		WeightValue: "1.50", WeightUnit: "KG",
+		Length: "20", Width: "15", Height: "10", DimensionUnit: "CM",
+	}
+	cases := []struct {
+		name  string
+		blank func(*domain.MeasuredDemandSpec)
+	}{
+		{"重量值与单位同时为空", func(spec *domain.MeasuredDemandSpec) { spec.WeightValue, spec.WeightUnit = "", "" }},
+		{"三边与边长单位同时为空", func(spec *domain.MeasuredDemandSpec) {
+			spec.Length, spec.Width, spec.Height, spec.DimensionUnit = "", "", "", ""
+		}},
+		{"重量值为空", func(spec *domain.MeasuredDemandSpec) { spec.WeightValue = "" }},
+		{"重量单位为空", func(spec *domain.MeasuredDemandSpec) { spec.WeightUnit = "" }},
+		{"长为空", func(spec *domain.MeasuredDemandSpec) { spec.Length = "" }},
+		{"宽为空", func(spec *domain.MeasuredDemandSpec) { spec.Width = "" }},
+		{"高为空", func(spec *domain.MeasuredDemandSpec) { spec.Height = "" }},
+		{"边长单位为空", func(spec *domain.MeasuredDemandSpec) { spec.DimensionUnit = "" }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			spec := complete
+			test.blank(&spec)
+			if _, err := domain.MeasuredDemand(spec); !errors.Is(err, domain.ErrInvalidDemandSnapshot) {
+				t.Fatalf("%s：err = %v, want ErrInvalidDemandSnapshot", test.name, err)
+			}
+		})
+	}
+}
+
 // Covers: 两种来源都能经读回的门回来；零值来源、实测不带锚立不成快照。
 func TestDemandSnapshotsReadBackBothSourcesAndRejectAZeroSource(t *testing.T) {
 	declared := declaredParcel(t)

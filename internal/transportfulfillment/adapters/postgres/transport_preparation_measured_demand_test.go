@@ -186,6 +186,97 @@ func TestListDeclaredPreparationLegsKeepsToThatObjectAndRule(t *testing.T) {
 	}
 }
 
+// Covers: 键上的来源必须与快照的来源一致，实测键上的引用必须与快照的锚一致。对不上时适配器直接拒，一行都不落。
+func TestSaveRejectsAKeyThatDisagreesWithTheDemandSnapshot(t *testing.T) {
+	stores := newPreparationStores(t)
+	tenant := deliveryValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	object := deliveryValue(t, domain.NewCarriedObjectReference, "SYN-PARCEL-01")
+	leg := func(reference string) domain.PreparationLeg {
+		t.Helper()
+		return preparationLeg(t, reference, "SYN-CONN-EMPTY", departure, departure.Add(time.Hour))
+	}
+
+	keyDeclared := measuredPreparationRecord(t, tenant, leg("SYN-RPV-1#1"), object, "SYN-MEASURE-1")
+	keyDeclared.Key.Source = domain.DemandFromDeclaration
+	keyDeclared.Key.MeasurementRef = ""
+
+	keyMeasured := declaredPreparationRecord(t, tenant, leg("SYN-RPV-1#2"), object)
+	// 引用写成与锚同一串，这一格就只剩来源对不上。锚不等由下一格钉；库上的 CHECK 也看锚，不能拿来顶来源这一道。
+	anchor, present := keyMeasured.Preparation.Demand().Anchor()
+	if !present {
+		t.Fatal("申报快照没有锚，引用没法与锚写成同一串")
+	}
+	keyMeasured.Key.Source = domain.DemandFromActualMeasurement
+	keyMeasured.Key.MeasurementRef = anchor
+
+	anchorDisagrees := measuredPreparationRecord(t, tenant, leg("SYN-RPV-1#3"), object, "SYN-MEASURE-1")
+	anchorDisagrees.Key.MeasurementRef = "SYN-MEASURE-2"
+
+	for _, test := range []struct {
+		name   string
+		record ports.TransportPreparationRecord
+	}{
+		{"键是申报快照是实测", keyDeclared},
+		{"键是实测快照是申报", keyMeasured},
+		{"实测引用与锚不等", anchorDisagrees},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assertAdapterRefusesPreparationSave(t, stores, test.record)
+		})
+	}
+}
+
+// Covers: 申报键带了实测引用时，Save 与 FindByKey 都在适配器这一道拒。FindByKey 碰不到库约束，Save 的错误也不是约束违反。
+func TestADeclarationKeyCarryingAMeasurementReferenceIsRefusedByTheAdapter(t *testing.T) {
+	stores := newPreparationStores(t)
+	tenant := deliveryValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	object := deliveryValue(t, domain.NewCarriedObjectReference, "SYN-PARCEL-01")
+	record := declaredPreparationRecord(t, tenant,
+		preparationLeg(t, "SYN-RPV-1#1", "SYN-CONN-EMPTY", departure, departure.Add(time.Hour)), object)
+	record.Key.MeasurementRef = "SYN-MEASURE-1"
+
+	t.Run("FindByKey", func(t *testing.T) {
+		_, found, err := stores.preparations.FindByKey(t.Context(), record.Key)
+		if err == nil {
+			t.Fatalf("found=%v，适配器应直接拒；没找到是库上没这一行，不是这一道", found)
+		}
+	})
+	t.Run("Save", func(t *testing.T) {
+		assertAdapterRefusesPreparationSave(t, stores, record)
+	})
+}
+
+func countPreparationRows(t *testing.T, stores preparationStores) int {
+	t.Helper()
+	var count int
+	if err := stores.pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM transport_fulfillment.transport_preparation`).Scan(&count); err != nil {
+		t.Fatalf("数行：%v", err)
+	}
+	return count
+}
+
+func assertAdapterRefusesPreparationSave(t *testing.T, stores preparationStores, record ports.TransportPreparationRecord) {
+	t.Helper()
+	before := countPreparationRows(t, stores)
+	var saveErr error
+	_ = stores.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		_, saveErr = stores.preparations.Save(txCtx, record)
+		return saveErr
+	})
+	var pgErr *pgconn.PgError
+	if saveErr == nil || (errors.As(saveErr, &pgErr) && pgErr.Code == "23514") {
+		constraint := ""
+		if pgErr != nil {
+			constraint = pgErr.ConstraintName
+		}
+		t.Fatalf("Save = %v 约束 %s，适配器应拒且不是约束违反", saveErr, constraint)
+	}
+	if after := countPreparationRows(t, stores); after != before {
+		t.Fatalf("落了 %d 行", after-before)
+	}
+}
+
 type preparationInsert struct {
 	tenant, leg, object, rule, source, measurement string
 	anchor                                         *string
