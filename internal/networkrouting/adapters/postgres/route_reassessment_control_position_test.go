@@ -255,6 +255,66 @@ func TestAwaitingMeasurementChangesSkipsOnesAlreadyReassessed(t *testing.T) {
 	}
 }
 
+// Covers: 已判时刻之后还有一次更晚的控制触发入账未判、关联还没有复核行，最近控制位置定不下。
+// 那条未判后来落了复核，位置改答那次的；更早、恰好同一时刻、等位置的实测变化、别的判断键都不把已定的位置搅掉。
+func TestALaterUnjudgedControlTriggerLeavesThePositionUndetermined(t *testing.T) {
+	_, reassessments, transactor, _ := newRouteStores(t)
+	ctx := t.Context()
+	key := routeKey(t, "tenant-cp", "parcel-late")
+	t1 := notJudgedTriggerAt
+	t2 := t1.Add(time.Hour)
+
+	saveReassessment(t, transactor, ctx, reassessments,
+		scalar(t, domain.NewRequestCorrelationID, "late-t1"),
+		anchored(t, key, "late-t1", domain.NodeIntakeControl, "node-origin", t1))
+	within(t, transactor, ctx, func(txCtx context.Context) error {
+		record := notJudged(t, key, "late-freeze", ports.NotJudgedFreezeFormUnconfigured)
+		record.TriggerOccurredAt = t2
+		return reassessments.RecordNotJudged(txCtx, record)
+	})
+	if got := positionOf(t, transactor, ctx, reassessments, key); got.Status != ports.ControlPositionUndetermined {
+		t.Fatalf("更晚的未判控制触发 = %v，want 定不下", got.Status)
+	}
+
+	saveReassessment(t, transactor, ctx, reassessments,
+		scalar(t, domain.NewRequestCorrelationID, "late-freeze"),
+		anchored(t, key, "late-freeze", domain.TransportHandoverControl, "node-later", t2))
+	got := positionOf(t, transactor, ctx, reassessments, key)
+	if got.Status != ports.ControlPositionKnown || got.Control != domain.TransportHandoverControl ||
+		got.Location.String() != "node-later" || !got.OccurredAt.Equal(t2) {
+		t.Fatalf("未判落成复核之后 = %v %s %s %s，want 已知、权威交接、node-later、%s",
+			got.Status, got.Control, got.Location, got.OccurredAt, t2)
+	}
+
+	quiet := routeKey(t, "tenant-cp", "parcel-quiet")
+	other := routeKey(t, "tenant-cp", "parcel-quiet-other")
+	saveReassessment(t, transactor, ctx, reassessments,
+		scalar(t, domain.NewRequestCorrelationID, "quiet-t1"),
+		anchored(t, quiet, "quiet-t1", domain.NodeIntakeControl, "node-origin", t1))
+	within(t, transactor, ctx, func(txCtx context.Context) error {
+		earlier := notJudged(t, quiet, "quiet-earlier", ports.NotJudgedFreezeFormUnconfigured)
+		earlier.TriggerOccurredAt = t1.Add(-time.Minute)
+		same := notJudged(t, quiet, "quiet-same", ports.NotJudgedEvidenceNotConfigured)
+		same.TriggerOccurredAt = t1
+		waiting := notJudged(t, quiet, "quiet-waiting", ports.NotJudgedControlPositionUnavailable)
+		waiting.TriggerOccurredAt = t2
+		foreign := notJudged(t, other, "quiet-foreign", ports.NotJudgedFreezeFormUnconfigured)
+		foreign.TriggerOccurredAt = t2
+		for _, record := range []ports.NotJudgedTrigger{earlier, same, waiting, foreign} {
+			if err := reassessments.RecordNotJudged(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	kept := positionOf(t, transactor, ctx, reassessments, quiet)
+	if kept.Status != ports.ControlPositionKnown || kept.Control != domain.NodeIntakeControl ||
+		kept.Location.String() != "node-origin" || !kept.OccurredAt.Equal(t1) {
+		t.Fatalf("不该搅动的未判之后 = %v %s %s %s，want 仍是 T1 的节点收寄 node-origin",
+			kept.Status, kept.Control, kept.Location, kept.OccurredAt)
+	}
+}
+
 func waitingAt(t *testing.T, key domain.InitialRouteJudgmentKey, correlation string, at time.Time) ports.NotJudgedTrigger {
 	t.Helper()
 	record := notJudged(t, key, correlation, ports.NotJudgedControlPositionUnavailable)

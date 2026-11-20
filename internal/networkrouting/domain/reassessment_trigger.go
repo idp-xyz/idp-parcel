@@ -162,8 +162,10 @@ func NewMeasurementChangeRejudge(spec ReassessmentTriggerSpec) (ReassessmentTrig
 	return trigger, nil
 }
 
-// measurementChangeCorrelationPrefix 与 handover/、intake/ 错开。字面含「实测变化」，读关联就知道是哪一路。
-const measurementChangeCorrelationPrefix = "实测变化/"
+// measurementChangeCorrelationKind 是实测变化关联的族标记，与 intake、handover 错开，并且用 ASCII。
+// 关联会落库、进改路触发引用、进查询参数与日志，落库之后就改不了。斜杠留在拼接处。
+// 常量名不以 Prefix 结尾：身份前缀门禁把那样的常量里的横线当成身份段分隔符，而这里的横线是族标记自己的一部分。
+const measurementChangeCorrelationKind = "measurement-change"
 
 // NewMeasurementChangeCorrelation 组实测变化的关联：租户、包裹、这次变化的来源身份各写成「字节长度:原串」。
 // 来源身份是登记方给的串，可能含斜杠，直拼会让两次不同的变化拼成同一个关联。登记与作废各有自己的来源身份，关联因此不同。
@@ -171,7 +173,7 @@ func NewMeasurementChangeCorrelation(tenant TenantID, parcel DeclaredParcelID, s
 	if !tenant.valid() || !parcel.valid() || strings.TrimSpace(sourceID) == "" {
 		return RequestCorrelationID{}, ErrInvalidReassessmentTrigger
 	}
-	raw := measurementChangeCorrelationPrefix +
+	raw := measurementChangeCorrelationKind + "/" +
 		prefixedCorrelationPart(tenant.String()) + "/" +
 		prefixedCorrelationPart(parcel.String()) + "/" +
 		prefixedCorrelationPart(sourceID)
@@ -182,7 +184,7 @@ func NewMeasurementChangeCorrelation(tenant TenantID, parcel DeclaredParcelID, s
 // 重判触发的来源版本是这次变化自己的，不是锚点那次控制触发的。
 func MeasurementChangeSourceVersion(correlation RequestCorrelationID) (SourceFactVersionReference, error) {
 	raw := correlation.String()
-	rest, ok := strings.CutPrefix(raw, measurementChangeCorrelationPrefix)
+	rest, ok := strings.CutPrefix(raw, measurementChangeCorrelationKind+"/")
 	if !ok {
 		return SourceFactVersionReference{}, ErrInvalidReassessmentTrigger
 	}

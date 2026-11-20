@@ -663,9 +663,9 @@ const (
 	// 比的是起点计划本身的生效。判出仍适用不在此格，那一次不动计划。同样是终局的入账：业务时间不变，重投推不动，恢复动作是等下一次
 	// 控制触发从它的位置判。
 	NotJudgedTriggerPrecedesPlanEffectiveFrom
-	// NotJudgedControlPositionUnavailable 是实测变化重判时，这一判断键上还没有可抄的控制位置：没有任何已判复核，或最近一次
-	// 业务时刻上的控制依据与位置定不下来（迁移前的旧行，或同一时刻不止一组）。登记与作废不区分。等下一次控制触发补判；
-	// 重投这一封推不动，因为位置不是这封信封能带来的。
+	// NotJudgedControlPositionUnavailable 是实测变化重判时，这一判断键上还没有可抄的控制位置：没有任何已判复核，或最近控制位置定不下来。
+	// 定不下来包括最近已判时刻上两列为空或不止一组，也包括那之后还有一次更晚的控制触发入账未判、关联尚未落复核。
+	// 登记与作废不区分。等下一次控制触发补判；重投这一封推不动，因为位置不是这封信封能带来的。
 	NotJudgedControlPositionUnavailable
 )
 
@@ -699,10 +699,13 @@ const (
 	ControlPositionStatusInvalid ControlPositionStatus = iota
 	// ControlPositionAbsent 是这一判断键上没有任何带业务时间的已判复核。
 	ControlPositionAbsent
-	// ControlPositionKnown 是最近一次业务时刻上只有一组控制依据与位置。
+	// ControlPositionKnown 是最近一次业务时刻上只有一组控制依据与位置，且那之后没有更晚的控制触发还悬在未判册上。
 	ControlPositionKnown
-	// ControlPositionUndetermined 是那个时刻上有行两列为空（迁移前的旧行），或出现多于一组不同的控制依据与位置。
-	// 抄任何一组都会把位置定死，所以不定。
+	// ControlPositionUndetermined 是抄任何一组都会把位置定死，所以不定。三种情形：那个时刻上有行两列为空（迁移前的旧行）；
+	// 同一时刻出现多于一组不同的控制依据与位置；或者同一判断键上还有一次业务时间严格更晚的控制触发入账未判，且那一关联在复核册没有行。
+	// 最后一种是包裹可能已经走到更后面的位置，只是当时判不了（冻结形态或证据没配置之类）。按旧位置算已执行前缀，会自动改掉已经走完的段。
+	// 等位置的实测变化不算：它的原因是控制位置未定，记的是变化的业务时间，不是一次新的控制位置。时间恰等于最近已判的也不算：
+	// 实测变化重判自己入账未判时记的是锚点时刻，不能让它把刚抄到的位置再搅成定不下。
 	ControlPositionUndetermined
 )
 
@@ -760,6 +763,7 @@ type ReassessmentStore interface {
 	// 落册之前可能已被另一次复核换掉。在册计划重建不出来时交 ErrStoredRouteRecordUnreadable。
 	FormedPlans(ctx context.Context, key domain.InitialRouteJudgmentKey) ([]domain.InitialRoutePlan, error)
 	// LatestControlPosition 交回这一判断键上 trigger_occurred_at 最大的那些行所据的控制位置。三种答案见 ControlPositionStatus。
+	// 最近已判时刻能定下一组时，还要看未判册：有一次严格更晚的控制触发、关联还没有复核行，就改答定不下。
 	// 它自己取与 LatestTriggerAt 同一把判断键锁（同事务可重入）：编排在 LatestTriggerAt 之后再调，锁已在手里；单独调用也串行到事务结束。
 	LatestControlPosition(ctx context.Context, key domain.InitialRouteJudgmentKey) (ControlPosition, error)
 	// AwaitingMeasurementChanges 交回这一判断键上原因为控制位置未定、且复核册还没有对应行的实测变化关联，按触发业务时间再按关联排序。

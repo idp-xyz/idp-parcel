@@ -365,3 +365,56 @@ func TestAControlTriggerCatchesUpMeasurementChangesThatWereWaitingForAPosition(t
 		}
 	})
 }
+
+// Covers: 收寄已判之后，更晚的交接入账未判，实测变化不按那个旧位置重判：答控制位置未定，复核册无新行。
+// 下一次交接判成之后，这条实测变化被补判，锚点是这次交接的控制依据与位置。
+func TestAMeasurementChangeWaitsWhenALaterControlTriggerWasNotJudged(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+
+	t1 := reassessedAt
+	intake := handleOK(t, fixture, reassessCommandAt(t, "intake-t1", "node-origin", t1))
+	if intake.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("收寄 = %q, want STILL_APPLICABLE", intake.Outcome())
+	}
+
+	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+	t2 := t1.Add(time.Hour)
+	handover := reassessCommandAt(t, "handover-t2", "node-destination", t2)
+	handover.Trigger.Control = domain.TransportHandoverControl
+	unjudged := handleOK(t, fixture, handover)
+	if unjudged.Outcome() != application.ReassessTriggerNotJudged ||
+		unjudged.NotJudgedReason() != ports.NotJudgedFreezeFormUnconfigured {
+		t.Fatalf("交接 = %q/%s，want 未判/冻结形态未配置", unjudged.Outcome(), unjudged.NotJudgedReason())
+	}
+
+	// 冻结形态随后补上。位置仍定不下：按收寄那个旧位置重判，会把已经走到交接处的段算成还没执行。
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	saved := fixture.store.saved
+	changedAt := t2.Add(time.Hour)
+	command := measurementCommand(t, "measure-after-gap", changedAt)
+	measured := handleMeasurement(t, fixture, command)
+	if measured.Outcome() != application.ReassessTriggerNotJudged ||
+		measured.NotJudgedReason() != ports.NotJudgedControlPositionUnavailable {
+		t.Fatalf("实测变化 = %q/%s，want 未判/控制位置未定", measured.Outcome(), measured.NotJudgedReason())
+	}
+	if _, present := fixture.store.byCorrelation[command.Correlation]; present || fixture.store.saved != saved {
+		t.Fatalf("复核册 present %v、新落 %d 条，want 无新行", present, fixture.store.saved-saved)
+	}
+
+	t3 := changedAt.Add(time.Hour)
+	next := reassessCommandAt(t, "handover-t3", "node-destination", t3)
+	next.Trigger.Control = domain.TransportHandoverControl
+	judged := handleOK(t, fixture, next)
+	if judged.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("下一次交接 = %q, want STILL_APPLICABLE", judged.Outcome())
+	}
+	caught, present := fixture.store.byCorrelation[command.Correlation]
+	if !present || caught.TriggerControl != domain.TransportHandoverControl ||
+		caught.TriggerLocation.String() != "node-destination" || !caught.TriggerOccurredAt.Equal(t3) {
+		t.Fatalf("补判 = present %v、%s %s %s，want 权威交接 node-destination %s",
+			present, caught.TriggerControl, caught.TriggerLocation, caught.TriggerOccurredAt, t3)
+	}
+}

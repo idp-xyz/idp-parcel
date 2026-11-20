@@ -460,6 +460,8 @@ func judgmentKeyDims(key domain.InitialRouteJudgmentKey) []any {
 
 // LatestControlPosition 取这一判断键上业务时间最大的那些行的控制依据与位置。没有任何带业务时间的已判复核即没有；
 // 那个时刻上有行两列为空，或出现多于一组不同的（控制依据，位置），即定不下。重判行抄的是同一组，不会把一组变成两组。
+// 本来能定下一组时，未判册上若还有一次严格更晚的控制触发、其关联还没有复核行，也定不下：位置已经往前走了，只是那一次没判成。
+// 等位置的实测变化排除在外，它不是控制位置；时间不严格晚于最近已判的也排除，重判自己入账未判记的是锚点时刻。
 func (repository *RouteReassessments) LatestControlPosition(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
@@ -542,6 +544,33 @@ func (repository *RouteReassessments) LatestControlPosition(
 		return ports.ControlPosition{Status: ports.ControlPositionAbsent}, nil
 	}
 	if len(seen) != 1 {
+		return ports.ControlPosition{Status: ports.ControlPositionUndetermined}, nil
+	}
+	// 上一份结果集还占着连接时，接着查未判册会撞上「连接忙」。
+	rows.Close()
+	var later bool
+	if err := executor.QueryRow(ctx,
+		`SELECT EXISTS (
+		    SELECT 1
+		      FROM network_routing.route_reassessment_not_judged nj
+		     WHERE nj.tenant_id = $1
+		       AND nj.customer_account_id = $2
+		       AND nj.shipment_request_id = $3
+		       AND nj.acceptance_baseline = $4
+		       AND nj.declared_parcel_id = $5
+		       AND nj.service_purpose = $6
+		       AND nj.reason <> $7
+		       AND nj.trigger_occurred_at > $8
+		       AND NOT EXISTS (
+		           SELECT 1
+		             FROM network_routing.route_reassessment judged
+		            WHERE judged.tenant_id = nj.tenant_id
+		              AND judged.correlation_id = nj.correlation_id))`,
+		append(append([]any{}, dims...), ports.NotJudgedControlPositionUnavailable.String(), known.OccurredAt)...,
+	).Scan(&later); err != nil {
+		return none, fmt.Errorf("latest control position: %w", err)
+	}
+	if later {
 		return ports.ControlPosition{Status: ports.ControlPositionUndetermined}, nil
 	}
 	return known, nil

@@ -1349,7 +1349,7 @@ func (handler *ReassessRouteHandler) catchUpAwaitingMeasurements(
 }
 
 // measurementChangeDigest 是这次实测变化的指纹，不含锚点的控制依据、位置与时间：锚点是处理时现读的，两次投递之间锚点变了仍是同一变化。
-// 地理投影算进去，理由同 triggerDigest：同一变化换了地址就不是重放。
+// 地理投影算进去，理由同 triggerDigest：同一变化换了地址就不是重放。固定标记与关联族标记同一串：指纹落登记册，两处字面分叉会让同一变化对不上。
 func measurementChangeDigest(command RejudgeOnMeasurementChangeCommand) string {
 	key := command.Key
 	digest := sha256.Sum256([]byte(strings.Join([]string{
@@ -1359,7 +1359,7 @@ func measurementChangeDigest(command RejudgeOnMeasurementChangeCommand) string {
 		key.AcceptanceBaseline.String(),
 		key.DeclaredParcelID.String(),
 		key.ServicePurpose.String(),
-		"实测变化",
+		"measurement-change",
 		command.SourceVersion.String(),
 		command.Carried.Geo.ContentDigest(),
 	}, "\x00")))

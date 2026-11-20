@@ -234,10 +234,35 @@ func (double *reassessmentStoreDouble) LatestControlPosition(
 	if undetermined || len(seen) != 1 {
 		return ports.ControlPosition{Status: ports.ControlPositionUndetermined}, nil
 	}
+	if laterControlTriggerNotJudged(double, key, max) {
+		return ports.ControlPosition{Status: ports.ControlPositionUndetermined}, nil
+	}
 	for _, position := range seen {
 		return position, nil
 	}
 	return ports.ControlPosition{Status: ports.ControlPositionUndetermined}, nil
+}
+
+// laterControlTriggerNotJudged 与库上的最近控制位置同一口径：更晚的控制触发入账未判、关联还没有复核行，位置已经往前走了。
+// 等位置的实测变化和业务时间不严格晚于最近已判的都不算。
+func laterControlTriggerNotJudged(
+	double *reassessmentStoreDouble,
+	key domain.InitialRouteJudgmentKey,
+	judgedAt time.Time,
+) bool {
+	for _, record := range double.notJudged {
+		if record.Key != key || record.Reason == ports.NotJudgedControlPositionUnavailable {
+			continue
+		}
+		if !record.TriggerOccurredAt.After(judgedAt) {
+			continue
+		}
+		if _, judged := double.byCorrelation[record.Correlation]; judged {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func (double *reassessmentStoreDouble) AwaitingMeasurementChanges(

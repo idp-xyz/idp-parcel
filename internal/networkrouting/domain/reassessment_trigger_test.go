@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -133,7 +134,7 @@ func TestATriggerPrecedesTheAcceptanceOnlyWhenItsBusinessTimeIsStrictlyEarlier(t
 }
 
 // Covers: 实测变化重判抄锚点立得起来，线索级控制依据照旧立不成；缺位置、缺时间、缺来源版本也拒。
-// 关联带「实测变化」、包裹与来源身份，过得了改路触发引用的门，来源身份能从关联还原（含斜杠）。
+// 关联前缀是 measurement-change/，带包裹与来源身份，过得了改路触发引用的门，来源身份能从关联还原（含斜杠）。
 func TestAMeasurementChangeRejudgeCopiesTheAnchorAndRefusesASourceHint(t *testing.T) {
 	spec := triggerSpec(t, domain.NodeIntakeControl)
 	rejudge, err := domain.NewMeasurementChangeRejudge(spec)
@@ -181,6 +182,9 @@ func TestAMeasurementChangeRejudgeCopiesTheAnchorAndRefusesASourceHint(t *testin
 	correlation, err := domain.NewMeasurementChangeCorrelation(tenant, parcel, "src/1")
 	if err != nil {
 		t.Fatalf("关联：%v", err)
+	}
+	if !strings.HasPrefix(correlation.String(), "measurement-change/") {
+		t.Fatalf("关联 = %q，want 前缀 measurement-change/", correlation)
 	}
 	if _, err := domain.NewRerouteTriggerReference(correlation.String()); err != nil {
 		t.Fatalf("关联当不了改路触发引用：%v", err)
