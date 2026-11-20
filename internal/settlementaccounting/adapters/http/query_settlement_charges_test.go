@@ -10,8 +10,11 @@ import (
 	"testing"
 	"time"
 
+	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/pptest"
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
+	sapricing "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/parcelpricing"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
@@ -447,17 +450,27 @@ func TestCustomerChargeQueryShowsTheAttributionDateAndTheStatementItIsOn(t *test
 	}
 }
 
-// stubPricedWeights 是计价重量与来源读口的替身：记下被问的评价标识，交回预置的计价重量与来源或故障。
+// stubPricedWeights 是计价重量与来源读口的替身：记下被问的次数与两组标识，交回预置的计价重量与来源或故障。
 type stubPricedWeights struct {
 	origins map[string]settlementhttp.PricedWeightAndOrigin
 	err     error
 	asked   []string
+	strict  []string
+	lenient []string
+	calls   int
 }
 
 func (stub *stubPricedWeights) PricedWeightsAndOrigins(
-	_ context.Context, _ domain.TenantID, evaluationIDs []string,
+	_ context.Context,
+	_ domain.TenantID,
+	mustTranslate settlementhttp.MustTranslateEvaluationRefs,
+	absentIfUntranslatable settlementhttp.AbsentIfUntranslatableEvaluationRefs,
 ) (map[string]settlementhttp.PricedWeightAndOrigin, error) {
-	stub.asked = append(stub.asked, evaluationIDs...)
+	stub.calls++
+	stub.strict = append(stub.strict, mustTranslate...)
+	stub.lenient = append(stub.lenient, absentIfUntranslatable...)
+	stub.asked = append(stub.asked, mustTranslate...)
+	stub.asked = append(stub.asked, absentIfUntranslatable...)
 	return stub.origins, stub.err
 }
 
@@ -477,6 +490,7 @@ func TestCustomerChargeQueryCarriesThePricedWeightAndWhatItCameFrom(t *testing.T
 			Kind: "actual-measurement", PricedWeight: "3", PricedWeightUnit: "KG",
 			ActualWeight: "2.1", ActualWeightUnit: "KG",
 			DimensionSides: []string{"30", "25", "20"}, DimensionUnit: "CM",
+			MeasurementSource: "SYN-WEIGH-M1",
 		},
 		"SYN-EVAL-02": {
 			Kind: "declared-measurement", PricedWeight: "1.5", PricedWeightUnit: "KG",
@@ -488,8 +502,8 @@ func TestCustomerChargeQueryCarriesThePricedWeightAndWhatItCameFrom(t *testing.T
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
-	if asked := "SYN-EVAL-01,SYN-EVAL-02,SYN-EVAL-03"; strings.Join(weights.asked, ",") != asked {
-		t.Fatalf("问来源读口的评价 = %v，want %s", weights.asked, asked)
+	if asked := "SYN-EVAL-01,SYN-EVAL-02,SYN-EVAL-03"; strings.Join(weights.asked, ",") != asked || weights.calls != 1 {
+		t.Fatalf("问来源读口 %d 次、评价 = %v，want 一次且 %s", weights.calls, weights.asked, asked)
 	}
 	var body struct {
 		Charges []map[string]any `json:"charges"`
@@ -499,6 +513,7 @@ func TestCustomerChargeQueryCarriesThePricedWeightAndWhatItCameFrom(t *testing.T
 	}
 	originKeys := []string{
 		"weightSource", "pricedWeight", "pricedWeightUnit", "actualWeight", "actualWeightUnit", "dimensionSides", "dimensionUnit",
+		"measurementSource",
 	}
 	originOf := func(row map[string]any) map[string]any {
 		picked := map[string]any{}
@@ -514,6 +529,7 @@ func TestCustomerChargeQueryCarriesThePricedWeightAndWhatItCameFrom(t *testing.T
 			"weightSource": "actual-measurement", "pricedWeight": "3", "pricedWeightUnit": "KG",
 			"actualWeight": "2.1", "actualWeightUnit": "KG",
 			"dimensionSides": []any{"30", "25", "20"}, "dimensionUnit": "CM",
+			"measurementSource": "SYN-WEIGH-M1",
 		},
 		{
 			"weightSource": "declared-measurement", "pricedWeight": "1.5", "pricedWeightUnit": "KG",
@@ -545,4 +561,289 @@ func TestAnUnreadablePricedWeightAndOriginIsNoAnswerRatherThanBlankCells(t *test
 		t.Fatalf("code = %q, want NO_ANSWER_FORMED", got)
 	}
 	assertNoOutcome(t, response)
+}
+
+// Covers: 调整的计价重量与来源来自调整自己的评价，不来自费用行那一份——两份评价的计价重量不同，串起来才证得出取的是哪一份。
+// 商业让利没有评价，JSON 里不出现 evaluation 与重量各键。既有四键的名字与值不动。费用行与调整只问读口一次。
+func TestCustomerChargeAdjustmentsCarryTheWeightOfTheirOwnEvaluation(t *testing.T) {
+	register := &stubChargeCatalogue{
+		charges: []ports.CustomerChargeCatalogueRow{{
+			Charge: "SYN-CHG-01", Evaluation: "SYN-EVAL-CHARGE", Stage: "CONFIRMED",
+			OriginalCurrency: "CNY", OriginalMinor: 10000, SettlementCurrency: "CNY", SettlementMinor: 10000,
+			FormedAt: catalogueBaseAt,
+			Adjustments: []ports.CustomerChargeAdjustmentEntry{
+				{
+					Adjustment: "SYN-ADJ-DEBIT", Kind: "PRICING_CORRECTION", Direction: "DEBIT",
+					SettlementMinor: 1500, Evaluation: "SYN-EVAL-REWEIGH",
+				},
+				{
+					Adjustment: "SYN-ADJ-CONC", Kind: "COMMERCIAL_CONCESSION", Direction: "CREDIT",
+					SettlementMinor: 400,
+				},
+			},
+		}},
+	}
+	weights := &stubPricedWeights{origins: map[string]settlementhttp.PricedWeightAndOrigin{
+		"SYN-EVAL-CHARGE": {
+			Kind: "actual-measurement", PricedWeight: "2.5", PricedWeightUnit: "KG",
+			ActualWeight: "2.1", ActualWeightUnit: "KG",
+			DimensionSides: []string{"22", "16", "11"}, DimensionUnit: "CM",
+			MeasurementSource: "SYN-WEIGH-M1",
+		},
+		"SYN-EVAL-REWEIGH": {
+			Kind: "actual-measurement", PricedWeight: "3", PricedWeightUnit: "KG",
+			ActualWeight: "2.1", ActualWeightUnit: "KG",
+			DimensionSides: []string{"30", "25", "20"}, DimensionUnit: "CM",
+			MeasurementSource: "SYN-WEIGH-M2",
+		},
+	}}
+	response := serveGet(settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), register, weights),
+		"/settlement-charges?registry=customer-charge")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	if weights.calls != 1 {
+		t.Fatalf("问了 %d 次，want 一次", weights.calls)
+	}
+	if !reflect.DeepEqual(weights.strict, []string{"SYN-EVAL-CHARGE"}) ||
+		!reflect.DeepEqual(weights.lenient, []string{"SYN-EVAL-REWEIGH"}) {
+		t.Fatalf("两组标识 strict=%v lenient=%v", weights.strict, weights.lenient)
+	}
+	var body struct {
+		Charges []map[string]any `json:"charges"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	row := body.Charges[0]
+	if row["pricedWeight"] != "2.5" || row["measurementSource"] != "SYN-WEIGH-M1" {
+		t.Fatalf("费用行取成了调整的重量：%v", row)
+	}
+	adjustments, _ := row["adjustments"].([]any)
+	if len(adjustments) != 2 {
+		t.Fatalf("调整 = %v", row["adjustments"])
+	}
+	debit, _ := adjustments[0].(map[string]any)
+	if debit["adjustment"] != "SYN-ADJ-DEBIT" || debit["kind"] != "PRICING_CORRECTION" ||
+		debit["direction"] != "DEBIT" || debit["settlementAmount"] != "1500" ||
+		debit["evaluation"] != "SYN-EVAL-REWEIGH" || debit["pricedWeight"] != "3" ||
+		debit["weightSource"] != "actual-measurement" || debit["measurementSource"] != "SYN-WEIGH-M2" ||
+		!reflect.DeepEqual(debit["dimensionSides"], []any{"30", "25", "20"}) || debit["dimensionUnit"] != "CM" {
+		t.Fatalf("计价纠错 = %v", debit)
+	}
+	concession, _ := adjustments[1].(map[string]any)
+	if concession["adjustment"] != "SYN-ADJ-CONC" || concession["kind"] != "COMMERCIAL_CONCESSION" ||
+		concession["direction"] != "CREDIT" || concession["settlementAmount"] != "400" {
+		t.Fatalf("商业让利的既有四格 = %v", concession)
+	}
+	for _, key := range []string{"evaluation", "pricedWeight", "pricedWeightUnit", "weightSource", "actualWeight", "actualWeightUnit", "dimensionSides", "dimensionUnit", "measurementSource"} {
+		if _, present := concession[key]; present {
+			t.Fatalf("商业让利不该有 %s：%v", key, concession)
+		}
+	}
+}
+
+// Covers: 调整的评价在计价一侧造不出标识，或登记册里没有，整页仍 200：这笔调整只带 evaluation，没有重量各键；同页另一笔费用的计价重量还在。
+// 费用行自己的评价造不出标识仍是 500，登记册不被问。同一条造不出的引用两边都在时也是 500。
+func TestAnAdjustmentEvaluationThatCannotBeReadDoesNotBlankThePage(t *testing.T) {
+	chargeEval := completedChargeEvaluation(t, "SYN-EVAL-CHARGE", "2.10")
+	sibling := completedChargeEvaluation(t, "SYN-EVAL-SIBLING", "5")
+	chargeWeight, chargePresent := chargeEval.PricingWeight()
+	siblingWeight, siblingPresent := sibling.PricingWeight()
+	if !chargePresent || !siblingPresent {
+		t.Fatal("夹具没有计价重量")
+	}
+	wantCharge := chargeWeight.RoundedWeight().Value().String()
+	wantSibling := siblingWeight.RoundedWeight().Value().String()
+	registered := map[string]ppdomain.PricingEvaluation{
+		chargeEval.ID().String(): chargeEval,
+		sibling.ID().String():    sibling,
+	}
+
+	page := func(chargeEvaluation, adjustmentEvaluation string) []ports.CustomerChargeCatalogueRow {
+		return []ports.CustomerChargeCatalogueRow{
+			{
+				Charge: "SYN-CHG-ADJ", Evaluation: chargeEvaluation, Stage: "CONFIRMED",
+				OriginalCurrency: "CNY", OriginalMinor: 10000, SettlementCurrency: "CNY", SettlementMinor: 10000,
+				FormedAt: catalogueBaseAt,
+				Adjustments: []ports.CustomerChargeAdjustmentEntry{{
+					Adjustment: "SYN-ADJ-01", Kind: "PRICING_CORRECTION", Direction: "DEBIT",
+					SettlementMinor: 1500, Evaluation: adjustmentEvaluation,
+				}},
+			},
+			{
+				Charge: "SYN-CHG-OK", Evaluation: "SYN-EVAL-SIBLING", Stage: "CONFIRMED",
+				OriginalCurrency: "CNY", OriginalMinor: 800, SettlementCurrency: "CNY", SettlementMinor: 800,
+				FormedAt: catalogueBaseAt,
+			},
+		}
+	}
+	assertAdjustmentAbsent := func(t *testing.T, responseBody []byte) {
+		t.Helper()
+		var body struct {
+			Charges []map[string]any `json:"charges"`
+		}
+		if err := json.Unmarshal(responseBody, &body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body.Charges) != 2 || body.Charges[0]["pricedWeight"] != wantCharge ||
+			body.Charges[1]["charge"] != "SYN-CHG-OK" || body.Charges[1]["pricedWeight"] != wantSibling ||
+			body.Charges[1]["settlementAmount"] != "800" {
+			t.Fatalf("同页费用行 = %v，want 计价重量 %s 与 %s 仍在", body.Charges, wantCharge, wantSibling)
+		}
+		adjustments, _ := body.Charges[0]["adjustments"].([]any)
+		adjustment, _ := adjustments[0].(map[string]any)
+		if adjustment["evaluation"] == "" || adjustment["settlementAmount"] != "1500" {
+			t.Fatalf("调整 = %v", adjustment)
+		}
+		for _, key := range []string{"pricedWeight", "pricedWeightUnit", "weightSource", "actualWeight", "actualWeightUnit", "dimensionSides", "dimensionUnit", "measurementSource"} {
+			if _, present := adjustment[key]; present {
+				t.Fatalf("读不出的调整不该有 %s：%v", key, adjustment)
+			}
+		}
+	}
+
+	t.Run("untranslatable", func(t *testing.T) {
+		register := &weightRegisterDouble{byID: registered}
+		response := serveGet(chargesEndpointWithRegister(t, register, page("SYN-EVAL-CHARGE", " eval-padded ")),
+			"/settlement-charges?registry=customer-charge")
+		if response.Code != http.StatusOK {
+			t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+		}
+		if register.calls != 1 || !reflect.DeepEqual(register.asked, []string{"SYN-EVAL-CHARGE", "SYN-EVAL-SIBLING"}) {
+			t.Fatalf("问登记册 %d 次 %v，want 一次且不把造不出的标识拿去问", register.calls, register.asked)
+		}
+		assertAdjustmentAbsent(t, response.Body.Bytes())
+		var body struct {
+			Charges []map[string]any `json:"charges"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		adjustments, _ := body.Charges[0]["adjustments"].([]any)
+		adjustment, _ := adjustments[0].(map[string]any)
+		if adjustment["evaluation"] != " eval-padded " {
+			t.Fatalf("evaluation = %v", adjustment["evaluation"])
+		}
+	})
+
+	t.Run("not in the register", func(t *testing.T) {
+		register := &weightRegisterDouble{byID: registered}
+		response := serveGet(chargesEndpointWithRegister(t, register, page("SYN-EVAL-CHARGE", "SYN-EVAL-MISSING")),
+			"/settlement-charges?registry=customer-charge")
+		if response.Code != http.StatusOK {
+			t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+		}
+		if register.calls != 1 || !reflect.DeepEqual(register.asked, []string{"SYN-EVAL-CHARGE", "SYN-EVAL-SIBLING", "SYN-EVAL-MISSING"}) {
+			t.Fatalf("问登记册 %d 次 %v", register.calls, register.asked)
+		}
+		assertAdjustmentAbsent(t, response.Body.Bytes())
+	})
+
+	t.Run("the charge's own reference", func(t *testing.T) {
+		register := &weightRegisterDouble{byID: registered}
+		response := serveGet(chargesEndpointWithRegister(t, register, page(" eval-padded ", " eval-padded ")),
+			"/settlement-charges?registry=customer-charge")
+		if response.Code != http.StatusInternalServerError {
+			t.Fatalf("status = %d body = %s，want 500", response.Code, response.Body.String())
+		}
+		if got := problemCode(t, response); got != "NO_ANSWER_FORMED" {
+			t.Fatalf("code = %q, want NO_ANSWER_FORMED", got)
+		}
+		assertNoOutcome(t, response)
+		if register.calls != 0 {
+			t.Fatalf("费用行自己的引用造不出标识仍去问了登记册 %d 次", register.calls)
+		}
+	})
+}
+
+// weightRegisterDouble 是计价评价登记册按标识读的替身：只交回被问到且预置了的评价。
+type weightRegisterDouble struct {
+	byID  map[string]ppdomain.PricingEvaluation
+	calls int
+	asked []string
+}
+
+func (double *weightRegisterDouble) FindByIDs(
+	_ context.Context, _ ppdomain.TenantID, ids []ppdomain.EvaluationID,
+) ([]ppdomain.PricingEvaluation, error) {
+	double.calls++
+	found := make([]ppdomain.PricingEvaluation, 0, len(ids))
+	for _, id := range ids {
+		double.asked = append(double.asked, id.String())
+		if evaluation, ok := double.byID[id.String()]; ok {
+			found = append(found, evaluation)
+		}
+	}
+	return found, nil
+}
+
+func chargesEndpointWithRegister(t *testing.T, register *weightRegisterDouble, charges []ports.CustomerChargeCatalogueRow) http.Handler {
+	t.Helper()
+	origins, err := sapricing.NewPricedWeightsAndOrigins(register)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return settlementhttp.NewQuerySettlementChargesEndpoint(grantedIntake(), &stubChargeCatalogue{charges: charges}, httpWeightBridge{origins: origins})
+}
+
+type httpWeightBridge struct {
+	origins *sapricing.PricedWeightsAndOrigins
+}
+
+func (bridge httpWeightBridge) PricedWeightsAndOrigins(
+	ctx context.Context,
+	tenant domain.TenantID,
+	mustTranslate settlementhttp.MustTranslateEvaluationRefs,
+	absentIfUntranslatable settlementhttp.AbsentIfUntranslatableEvaluationRefs,
+) (map[string]settlementhttp.PricedWeightAndOrigin, error) {
+	loaded, err := bridge.origins.PricedWeightsAndOrigins(ctx, tenant,
+		sapricing.MustTranslateEvaluationRefs(mustTranslate),
+		sapricing.AbsentIfUntranslatableEvaluationRefs(absentIfUntranslatable))
+	if err != nil {
+		return nil, err
+	}
+	answered := make(map[string]settlementhttp.PricedWeightAndOrigin, len(loaded))
+	for id, origin := range loaded {
+		answered[id] = settlementhttp.PricedWeightAndOrigin(origin)
+	}
+	return answered, nil
+}
+
+func completedChargeEvaluation(t *testing.T, id, kilograms string) ppdomain.PricingEvaluation {
+	t.Helper()
+	period := pptest.Period{
+		StartsAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndsAt:   time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	card := pptest.Plan(t, pptest.PlanSpec{
+		Reference:             pptest.IdentityReference(t, ppdomain.ArtifactPricingPlan, "SYN-SELL-CARD-HALF-KG", "v1"),
+		TableReference:        pptest.IdentityReference(t, ppdomain.ArtifactRateTable, "SYN-SELL-TABLE-HALF-KG", "v1"),
+		WeightPolicyReference: pptest.IdentityReference(t, ppdomain.ArtifactWeightPolicy, "SYN-SELL-WEIGHT-HALF-KG", "v1"),
+		Scope:                 "scope-1",
+		Direction:             ppdomain.PricingDirectionSell,
+		Purpose:               ppdomain.PricingPurposeCustomerCharge,
+		BaseChargeCode:        "BASE_FREIGHT",
+		Currency:              "CNY",
+		Period:                period,
+		RateEntryID:           "entry",
+		RateZone:              "Z1",
+		MinimumKilograms:      "0",
+		MaximumKilograms:      "10",
+		RateAmount:            "100",
+		WeightRounding:        ppdomain.RoundingCeiling,
+		WeightStepKilograms:   "0.5",
+		AmountRounding: &pptest.AmountRoundingSpec{
+			Mode:      ppdomain.RoundingHalfUp,
+			Increment: "0.01",
+			Points:    []ppdomain.AmountRoundingPoint{ppdomain.AmountRoundingTotal},
+		},
+	})
+	evaluation := pptest.Evaluate(t, id, card, pptest.Input(t, pptest.InputSpec{
+		Tenant: "TENANT-1", Scope: "scope-1", PackageID: "pkg-1", Zone: "Z1", Kilograms: kilograms, BusinessAt: catalogueBaseAt,
+	}))
+	if evaluation.Status() != ppdomain.EvaluationCompleted {
+		t.Fatalf("夹具 %s 状态 = %s %#v", id, evaluation.Status(), evaluation.Issues())
+	}
+	return evaluation
 }

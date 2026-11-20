@@ -362,6 +362,49 @@ func TestCustomerChargeCatalogueKeepsUnconfiguredConditionApartFromMissingBasis(
 	}
 }
 
+// Covers: 客户费用册上的调整照调整册转写既有四格（标识、种类、方向、结算金额），并带出造成它的评价引用。
+// 计价纠错的评价引用就是那一格；商业让利没有评价，这一格为空。没有调整的费用是空列表。
+func TestCustomerChargeCatalogueTranscribesAdjustmentsAndTheEvaluationThatCausedThem(t *testing.T) {
+	fixture := newCatalogueFixture(t)
+	fixture.seedCustomerCharge(t, catalogueTenant, "SYN-CHG-01", "SYN-FEE-01", "CONFIRMED",
+		"SYN-CUR-01", 120000, "SYN-CUR-01", 120000, "", "SYN-CBASIS-01")
+	fixture.seedCustomerCharge(t, catalogueTenant, "SYN-CHG-02", "SYN-FEE-01", "CONFIRMED",
+		"SYN-CUR-01", 5000, "SYN-CUR-01", 5000, "", "SYN-CBASIS-02")
+	fixture.seed(t,
+		`INSERT INTO settlement_accounting.charge_adjustment
+			(tenant_id, adjustment_id, charge_id, kind, direction, evaluation_ref, authorization_ref,
+			 original_currency, original_minor, settlement_currency, settlement_minor,
+			 formed_at, recorded_at)
+		 VALUES
+			($1, 'SYN-ADJ-CORR', 'SYN-CHG-01', 'PRICING_CORRECTION', 'DEBIT', 'SYN-EVAL-REWEIGH', NULL,
+			 'SYN-CUR-01', 1500, 'SYN-CUR-01', 1500, $2, $2),
+			($1, 'SYN-ADJ-CONC', 'SYN-CHG-01', 'COMMERCIAL_CONCESSION', 'CREDIT', NULL, 'SYN-AUTH-01',
+			 'SYN-CUR-01', 400, 'SYN-CUR-01', 400, $3, $3)`,
+		catalogueTenant, catalogueBaseAt, catalogueBaseAt.Add(time.Minute))
+
+	rows, err := rowsOf(fixture.charges.ListCustomerCharges(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10, firstPage(t, ports.CustomerChargePages)))
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("上列客户费用走样：err=%v rows=%d", err, len(rows))
+	}
+	if rows[0].Charge != "SYN-CHG-01" || len(rows[0].Adjustments) != 2 {
+		t.Fatalf("带调整的那一笔 = %+v", rows[0])
+	}
+	correction, concession := rows[0].Adjustments[0], rows[0].Adjustments[1]
+	if correction.Adjustment != "SYN-ADJ-CORR" || correction.Kind != "PRICING_CORRECTION" ||
+		correction.Direction != "DEBIT" || correction.SettlementMinor != 1500 ||
+		correction.Evaluation != "SYN-EVAL-REWEIGH" {
+		t.Fatalf("计价纠错 = %+v", correction)
+	}
+	if concession.Adjustment != "SYN-ADJ-CONC" || concession.Kind != "COMMERCIAL_CONCESSION" ||
+		concession.Direction != "CREDIT" || concession.SettlementMinor != 400 || concession.Evaluation != "" {
+		t.Fatalf("商业让利 = %+v", concession)
+	}
+	if rows[1].Charge != "SYN-CHG-02" || rows[1].Adjustments == nil || len(rows[1].Adjustments) != 0 {
+		t.Fatalf("没有调整应是空列表：%+v", rows[1].Adjustments)
+	}
+}
+
 // Covers: 供应商预期成本版本链 — 首版与纠错版本同为多行（纠错换版本、原版本保留），
 // 排序把同一（发生项＋费用项目）的版本排在一起；纠错两件成对上列。
 func TestSupplierExpectedCostCatalogueKeepsTheVersionChain(t *testing.T) {

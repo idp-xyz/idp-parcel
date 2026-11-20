@@ -105,7 +105,10 @@ const (
 		                    'adjustment', adjustment_id,
 		                    'kind', kind,
 		                    'direction', direction,
-		                    'settlementMinor', settlement_minor
+		                    'settlementMinor', settlement_minor,
+		                    -- 商业让利的 evaluation_ref 在库上是 NULL。json 的 null 解不进字符串，而读口对
+		                    -- 「这一格没有登记」的词是空串，所以在语句里折成空串。
+		                    'evaluation', COALESCE(evaluation_ref, '')
 		                ) ORDER BY formed_at, adjustment_id), '[]'::json)
 		           FROM settlement_accounting.charge_adjustment
 		          WHERE tenant_id = c.tenant_id AND charge_id = c.charge_id)`

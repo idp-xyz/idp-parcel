@@ -89,11 +89,14 @@ type CustomerChargeCatalogueRow struct {
 }
 
 // CustomerChargeAdjustmentEntry 是客户费用册上的一笔调整，照调整册转写。
+// Evaluation 是造成这笔调整的销售评价。计价纠错必有；商业让利没有评价，这一格为空——重量与来源只在评价上有一份，
+// 册上只带出引用，不在调整行上另抄重量。
 type CustomerChargeAdjustmentEntry struct {
 	Adjustment      string `json:"adjustment"`
 	Kind            string `json:"kind"`
 	Direction       string `json:"direction"`
 	SettlementMinor int64  `json:"settlementMinor"`
+	Evaluation      string `json:"evaluation"`
 }
 
 // SupplierExpectedCostCatalogueRow 是供应商预期成本版本册上列的一行。

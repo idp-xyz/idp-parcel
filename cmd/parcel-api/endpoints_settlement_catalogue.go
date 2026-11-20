@@ -117,9 +117,14 @@ type pricedWeightBridge struct {
 func (bridge pricedWeightBridge) PricedWeightsAndOrigins(
 	ctx context.Context,
 	tenant sadomain.TenantID,
-	evaluationIDs []string,
+	mustTranslate settlementhttp.MustTranslateEvaluationRefs,
+	absentIfUntranslatable settlementhttp.AbsentIfUntranslatableEvaluationRefs,
 ) (map[string]settlementhttp.PricedWeightAndOrigin, error) {
-	loaded, err := bridge.origins.PricedWeightsAndOrigins(ctx, tenant, evaluationIDs)
+	loaded, err := bridge.origins.PricedWeightsAndOrigins(
+		ctx, tenant,
+		sapricing.MustTranslateEvaluationRefs(mustTranslate),
+		sapricing.AbsentIfUntranslatableEvaluationRefs(absentIfUntranslatable),
+	)
 	if err != nil {
 		return nil, err
 	}

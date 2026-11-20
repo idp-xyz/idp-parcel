@@ -44,29 +44,38 @@ const (
 	registrySupplierExpectedCost = "supplier-expected-cost"
 )
 
-// PricedWeightAndOriginReader 按评价标识回答一笔费用的计价重量，连同评价用的实重、尺寸与它们的来源。缺席时费用册仍列出，
-// 这几格空着；在场而读不回时整份答未形成。
+// MustTranslateEvaluationRefs 是费用行自己的评价引用：计价一侧造不出标识，读口整批报错。
+type MustTranslateEvaluationRefs []string
+
+// AbsentIfUntranslatableEvaluationRefs 是调整上的评价引用：造不出标识的那一个缺席，其余照常交回。
+type AbsentIfUntranslatableEvaluationRefs []string
+
+// PricedWeightAndOriginReader 按评价标识回答计价重量，连同评价用的实重、尺寸与它们的来源。费用行与调整共用这一口，
+// 一页只问一次：费用行那组必须译得出，调整那组读不出就缺席。缺席时费用册仍列出，这几格空着；读口本身报错时整份答未形成。
 type PricedWeightAndOriginReader interface {
 	PricedWeightsAndOrigins(
 		ctx context.Context,
 		tenant domain.TenantID,
-		evaluationIDs []string,
+		mustTranslate MustTranslateEvaluationRefs,
+		absentIfUntranslatable AbsentIfUntranslatableEvaluationRefs,
 	) (map[string]PricedWeightAndOrigin, error)
 }
 
 // PricedWeightAndOrigin 是费用册上计价重量与来源的几格，两样分开印。PricedWeight 是评价进位之后的计价重量；ActualWeight 与
 // DimensionSides（三边由长到短）是评价用的实重与尺寸，Kind 用评价事实的种类词说它们出自实测还是申报。实重不印在计价
-// 重量的键上：取较大者的卡上复测只把尺寸量大时，实重不变而计价重量变了。
+// 重量的键上：取较大者的卡上复测只把尺寸量大时，实重不变而计价重量变了。MeasurementSource 是恰好一条实际测量事实引用时
+// 那次测量的来源身份，没有或多于一条时为空。
 //
 // 字段与提供方那一份逐一相同，装配处靠类型转换交过来：哪一边加了格另一边没加，编译就过不去，不会悄悄丢一格。
 type PricedWeightAndOrigin struct {
-	Kind             string
-	PricedWeight     string
-	PricedWeightUnit string
-	ActualWeight     string
-	ActualWeightUnit string
-	DimensionSides   []string
-	DimensionUnit    string
+	Kind              string
+	PricedWeight      string
+	PricedWeightUnit  string
+	ActualWeight      string
+	ActualWeightUnit  string
+	DimensionSides    []string
+	DimensionUnit     string
+	MeasurementSource string
 }
 
 // NewQuerySettlementChargesEndpoint 交回费用与计费页两本册子的 HTTP 入口
@@ -137,11 +146,17 @@ func serveCustomerCharges(
 	}
 	origins := map[string]PricedWeightAndOrigin{}
 	if weights != nil {
-		ids := make([]string, 0, len(page.Rows))
+		mustTranslate := make(MustTranslateEvaluationRefs, 0, len(page.Rows))
+		var absentIfUntranslatable AbsentIfUntranslatableEvaluationRefs
 		for _, row := range page.Rows {
-			ids = append(ids, row.Evaluation)
+			mustTranslate = append(mustTranslate, row.Evaluation)
+			for _, adjustment := range row.Adjustments {
+				if adjustment.Evaluation != "" {
+					absentIfUntranslatable = append(absentIfUntranslatable, adjustment.Evaluation)
+				}
+			}
 		}
-		loaded, err := weights.PricedWeightsAndOrigins(request.Context(), tenant, ids)
+		loaded, err := weights.PricedWeightsAndOrigins(request.Context(), tenant, mustTranslate, absentIfUntranslatable)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
@@ -161,12 +176,17 @@ func serveCustomerCharges(
 		}
 		adjustments := make([]chargeAdjustmentBody, 0, len(row.Adjustments))
 		for _, adjustment := range row.Adjustments {
-			adjustments = append(adjustments, chargeAdjustmentBody{
+			body := chargeAdjustmentBody{
 				Adjustment: adjustment.Adjustment, Kind: adjustment.Kind, Direction: adjustment.Direction,
 				SettlementAmount: minorAmount(adjustment.SettlementMinor),
-			})
+				Evaluation:       adjustment.Evaluation,
+			}
+			// 调整的重量取它自己的评价，不取费用行那一份：两代评价的计价重量可以不同，借项正是这个差。
+			if adjustment.Evaluation != "" {
+				body.pricedWeightBody = pricedWeightBodyOf(origins[adjustment.Evaluation])
+			}
+			adjustments = append(adjustments, body)
 		}
-		origin := origins[row.Evaluation]
 		bodies = append(bodies, customerChargeBody{
 			Charge:               row.Charge,
 			FeeItem:              row.FeeItem,
@@ -194,13 +214,7 @@ func serveCustomerCharges(
 			Superseded:           row.Superseded,
 			SupersededBy:         row.SupersededBy,
 			Adjustments:          adjustments,
-			WeightSource:         origin.Kind,
-			PricedWeight:         origin.PricedWeight,
-			PricedWeightUnit:     origin.PricedWeightUnit,
-			ActualWeight:         origin.ActualWeight,
-			ActualWeightUnit:     origin.ActualWeightUnit,
-			DimensionSides:       origin.DimensionSides,
-			DimensionUnit:        origin.DimensionUnit,
+			pricedWeightBody:     pricedWeightBodyOf(origins[row.Evaluation]),
 		})
 	}
 	writeJSON(response, http.StatusOK, customerChargeListResponse{
@@ -307,14 +321,34 @@ type customerChargeBody struct {
 	Superseded   bool                   `json:"superseded,omitempty"`
 	SupersededBy string                 `json:"supersededBy,omitempty"`
 	Adjustments  []chargeAdjustmentBody `json:"adjustments"`
-	// 计价重量与它的来源（见 PricedWeightAndOrigin）。读口没答的评价这几键整个不出现。
-	PricedWeight     string   `json:"pricedWeight,omitempty"`
-	PricedWeightUnit string   `json:"pricedWeightUnit,omitempty"`
-	WeightSource     string   `json:"weightSource,omitempty"`
-	ActualWeight     string   `json:"actualWeight,omitempty"`
-	ActualWeightUnit string   `json:"actualWeightUnit,omitempty"`
-	DimensionSides   []string `json:"dimensionSides,omitempty"`
-	DimensionUnit    string   `json:"dimensionUnit,omitempty"`
+	// 计价重量与它的来源。读口没答的评价这几键整个不出现。键名写在 pricedWeightBody 一处，调整行嵌同一份。
+	pricedWeightBody
+}
+
+// pricedWeightBody 是费用行与调整共用的计价重量与来源。键名只在这里写一次：调整上的同一组格必须与费用行逐字相同，
+// 各写一遍会在加一格时只改到其中一边。
+type pricedWeightBody struct {
+	PricedWeight      string   `json:"pricedWeight,omitempty"`
+	PricedWeightUnit  string   `json:"pricedWeightUnit,omitempty"`
+	WeightSource      string   `json:"weightSource,omitempty"`
+	ActualWeight      string   `json:"actualWeight,omitempty"`
+	ActualWeightUnit  string   `json:"actualWeightUnit,omitempty"`
+	DimensionSides    []string `json:"dimensionSides,omitempty"`
+	DimensionUnit     string   `json:"dimensionUnit,omitempty"`
+	MeasurementSource string   `json:"measurementSource,omitempty"`
+}
+
+func pricedWeightBodyOf(origin PricedWeightAndOrigin) pricedWeightBody {
+	return pricedWeightBody{
+		PricedWeight:      origin.PricedWeight,
+		PricedWeightUnit:  origin.PricedWeightUnit,
+		WeightSource:      origin.Kind,
+		ActualWeight:      origin.ActualWeight,
+		ActualWeightUnit:  origin.ActualWeightUnit,
+		DimensionSides:    origin.DimensionSides,
+		DimensionUnit:     origin.DimensionUnit,
+		MeasurementSource: origin.MeasurementSource,
+	}
 }
 
 type chargeAdjustmentBody struct {
@@ -322,6 +356,9 @@ type chargeAdjustmentBody struct {
 	Kind             string `json:"kind"`
 	Direction        string `json:"direction"`
 	SettlementAmount string `json:"settlementAmount"`
+	// 造成这笔调整的销售评价。商业让利没有评价，整键不出现；重量与来源读不出时也不出现。
+	Evaluation string `json:"evaluation,omitempty"`
+	pricedWeightBody
 }
 
 // chargeConfirmationBasisBody 逐字段透出一种已到达的确认依据。「到了哪几种」与

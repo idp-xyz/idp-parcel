@@ -442,19 +442,26 @@ func (input PricingInputSnapshot) FactReferences() []VersionedFactReference {
 // 尺寸变了，计价重量照样会变，所以来源要连尺寸一起答。实测整份取用：一条实测同时带重量与尺寸，快照带着实测事实时
 // 两样都出自那一条；只带申报测量事实时都出自申报，申报没报尺寸时 HasDimensions 为假。两类事实都没有时第二个
 // 返回值为假。
+//
+// MeasurementSource 是恰好一条实际测量事实引用时，那条引用的版本，即这次计价采用的那次实际测量的来源身份。
+// 一条都没有时为空（出自申报，或根本没有测量事实）。多于一条时也为空：聚合主体上每条实测各是一个成员的，
+// 挑其中一条会把计价重量说成出自没被采用的那次测量。不取触发这一代的变化号——作废造成的那一代，触发号是作废
+// 自己的来源身份，而这里要的是评价实际用了哪条测量。
 type WeightAndDimensionsOrigin struct {
-	Kind          ArtifactKind
-	ActualWeight  Weight
-	Dimensions    Dimensions
-	HasDimensions bool
+	Kind              ArtifactKind
+	ActualWeight      Weight
+	Dimensions        Dimensions
+	HasDimensions     bool
+	MeasurementSource string
 }
 
 func WeightAndDimensionsOriginOf(input PricingInputSnapshot) (WeightAndDimensionsOrigin, bool) {
-	var measured, declared bool
+	var actuals []VersionedFactReference
+	var declared bool
 	for _, fact := range input.FactReferences() {
 		switch fact.Reference().Kind() {
 		case ArtifactActualMeasurement:
-			measured = true
+			actuals = append(actuals, fact)
 		case ArtifactDeclaredMeasurement:
 			declared = true
 		}
@@ -462,8 +469,11 @@ func WeightAndDimensionsOriginOf(input PricingInputSnapshot) (WeightAndDimension
 	origin := WeightAndDimensionsOrigin{ActualWeight: input.ActualWeight()}
 	origin.Dimensions, origin.HasDimensions = input.Dimensions()
 	switch {
-	case measured:
+	case len(actuals) > 0:
 		origin.Kind = ArtifactActualMeasurement
+		if len(actuals) == 1 {
+			origin.MeasurementSource = actuals[0].Reference().Version()
+		}
 		return origin, true
 	case declared:
 		origin.Kind = ArtifactDeclaredMeasurement
