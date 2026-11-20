@@ -152,6 +152,8 @@ type warehouseFulfillmentOrchestration struct {
 	unclaimedArrivalRegister transactionalUnclaimedArrivalRegistration
 	unclaimedArrivalManage   transactionalUnclaimedArrivalManagement
 	unclaimedArrivalQueries  *warehouseapp.QueryUnclaimedArrivalsHandler
+	stockImportSubmit        transactionalStockImport
+	stockImportQueries       *whpostgres.StockImports
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -314,6 +316,20 @@ func (management transactionalUnclaimedArrivalManagement) RevokeClaim(
 	})
 }
 
+type transactionalStockImport struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.StockImportHandler
+}
+
+func (submission transactionalStockImport) Submit(
+	ctx context.Context,
+	command warehouseapp.SubmitStockImportCommand,
+) (warehouseapp.StockImportResult, error) {
+	return inTransaction(ctx, submission.transactor, func(txCtx context.Context) (warehouseapp.StockImportResult, error) {
+		return submission.inner.Submit(txCtx, command)
+	})
+}
+
 func (management transactionalUnclaimedArrivalManagement) Dispose(
 	ctx context.Context,
 	command warehouseapp.DisposeUnclaimedArrivalCommand,
@@ -400,6 +416,10 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	discrepancies, err := whidentity.NewReceiptDiscrepancyIdentities()
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: receipt discrepancy identities: %w", err)
+	}
+	stockImports, err := whpostgres.NewStockImports(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: stock imports: %w", err)
 	}
 	arrivals, err := whpostgres.NewUnclaimedArrivals(db)
 	if err != nil {
@@ -546,5 +566,12 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		unclaimedArrivalRegister: unclaimedArrivalRegister,
 		unclaimedArrivalManage:   unclaimedArrivalManage,
 		unclaimedArrivalQueries:  warehouseapp.NewQueryUnclaimedArrivalsHandler(arrivals),
+		stockImportSubmit: transactionalStockImport{
+			transactor: db.Transactor(),
+			inner: warehouseapp.NewStockImportHandler(
+				stockImports, owners, warehouses, locations, zones, goods, cartons, cartonIDs, poster, systemClock{},
+			),
+		},
+		stockImportQueries: stockImports,
 	}, nil
 }

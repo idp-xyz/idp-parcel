@@ -72,6 +72,8 @@ type warehouseFulfillmentWiring struct {
 	unclaimedArrivalRegister warehousehttp.UnclaimedArrivalRegistrar
 	unclaimedArrivalManage   warehousehttp.UnclaimedArrivalManager
 	unclaimedArrivalQueries  warehousehttp.UnclaimedArrivalQueries
+	stockImportSubmit        warehousehttp.StockImportSubmissions
+	stockImportQueries       warehousehttp.StockImportQueries
 }
 
 func init() {
@@ -282,6 +284,17 @@ func init() {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-unclaimed-arrival?arrivalId=SYN-UCA-01",
 			},
+			// 建账导入提交挂运营决定；查阅只在操作者面（UC-WF-006、BD-WF-014）。批准与驳回的口不在这一包。
+			"/warehouse-fulfillment-stock-import-submissions": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockImportSubmission), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-imports": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-import": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-stock-import?importId=SYN-IMP-01",
+			},
 		},
 		build: func(sources endpointSources) (warehouseFulfillmentWiring, error) {
 			if !sources.warehouseFulfillment {
@@ -377,6 +390,8 @@ func init() {
 				unclaimedArrivalRegister: orchestration.unclaimedArrivalRegister,
 				unclaimedArrivalManage:   orchestration.unclaimedArrivalManage,
 				unclaimedArrivalQueries:  orchestration.unclaimedArrivalQueries,
+				stockImportSubmit:        orchestration.stockImportSubmit,
+				stockImportQueries:       orchestration.stockImportQueries,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring warehouseFulfillmentWiring) []httpapi.BusinessEndpoint {
@@ -438,6 +453,9 @@ func init() {
 			unclaimedArrivalDispose := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			unclaimedArrivalList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			unclaimedArrivalOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			stockImportSubmission := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockImportList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			stockImportOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			// 开着：与别的登记写行、查阅行行为一致——渠道没配答「接入渠道未配置」，配了走真编排。各读口共用一个 Intake，各册的
 			// 登记口共用同一个认证器。
 			if wiring.enabled {
@@ -513,6 +531,9 @@ func init() {
 				unclaimedArrivalDispose = warehousehttp.NewDisposeUnclaimedArrivalEndpoint(channels.unclaimedArrivalDisposition(), wiring.unclaimedArrivalManage)
 				unclaimedArrivalList = warehousehttp.NewQueryUnclaimedArrivalsEndpoint(catalogueIntake, wiring.unclaimedArrivalQueries)
 				unclaimedArrivalOne = warehousehttp.NewQueryUnclaimedArrivalEndpoint(catalogueIntake, wiring.unclaimedArrivalQueries)
+				stockImportSubmission = warehousehttp.NewSubmitStockImportEndpoint(channels.stockImportSubmission(), wiring.stockImportSubmit)
+				stockImportList = warehousehttp.NewQueryStockImportsEndpoint(catalogueIntake, wiring.stockImportQueries)
+				stockImportOne = warehousehttp.NewQueryStockImportEndpoint(catalogueIntake, wiring.stockImportQueries)
 			}
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/warehouse-fulfillment-warehouse-registrations", Handler: registration},
@@ -570,6 +591,9 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrival-dispositions", Handler: unclaimedArrivalDispose},
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrivals", Handler: unclaimedArrivalList},
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrival", Handler: unclaimedArrivalOne},
+				{Pattern: "/warehouse-fulfillment-stock-import-submissions", Handler: stockImportSubmission},
+				{Pattern: "/warehouse-fulfillment-stock-imports", Handler: stockImportList},
+				{Pattern: "/warehouse-fulfillment-stock-import", Handler: stockImportOne},
 			}
 		},
 	})

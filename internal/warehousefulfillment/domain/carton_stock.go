@@ -25,18 +25,21 @@ func NewCartonInboundBatchID(value string) (CartonInboundBatchID, error) {
 	return CartonInboundBatchID{required}, err
 }
 
-// CartonMovementReason 是整箱流水的原因。这一段只有收货。
+// CartonMovementReason 是整箱流水的原因。收货与建账导入各记各的，不把建账导入写成收货。
 type CartonMovementReason uint8
 
 const (
 	CartonMovementReasonInvalid CartonMovementReason = iota
 	CartonMovementReceipt
+	CartonMovementTakeOnImport
 )
 
 func (reason CartonMovementReason) String() string {
 	switch reason {
 	case CartonMovementReceipt:
 		return "RECEIPT"
+	case CartonMovementTakeOnImport:
+		return "TAKE_ON_IMPORT"
 	default:
 		return ""
 	}

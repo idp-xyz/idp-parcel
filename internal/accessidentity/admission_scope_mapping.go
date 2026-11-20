@@ -76,6 +76,10 @@ func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 		if requirement.FactKind == DecisionUnclaimedArrivalDisposition.String() {
 			return nil
 		}
+	case DecisionStockImportSubmission.String():
+		if requirement.FactKind == DecisionStockImportSubmission.String() {
+			return nil
+		}
 	case CustomerCapabilityGoodsMaintenance.String(),
 		CustomerCapabilityInboundPreAdviceSubmission.String(),
 		CustomerCapabilityInboundPreAdviceArrivalNotice.String(),

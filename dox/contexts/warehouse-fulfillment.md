@@ -2,13 +2,13 @@
 
 主数据登记册、商品（货主口与代录）、仓测尺寸重量、库存账、入库预报、收货确认、整箱库存、完结与少收、收货差异结论、待认领转记均按已进 main 的代码写（2026-11-20 入库一段及商品货主口/仓测各经一轮非作者评审并清零阻断后进 main）。
 
-**只有「现状」「已实现：主数据登记册」「已实现：商品与仓测」「已实现：库存账」「已实现：入库预报」「已实现：收货确认」「已实现：整箱库存」「已实现：完结与少收」「已实现：收货差异结论」「已实现：待认领到货」是现行规则。** 其余写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
+**只有「现状」「已实现：主数据登记册」「已实现：商品与仓测」「已实现：库存账」「已实现：入库预报」「已实现：收货确认」「已实现：整箱库存」「已实现：完结与少收」「已实现：收货差异结论」「已实现：待认领到货」「已实现：建账导入」是现行规则。** 其余写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
 
 ## 现状
 
 - 可选能力，首发不含。用户 2026-11-18 点名继续，按 PN-09 开发交接逐包做。部署默认关。
-- 已有代码：部署开关与依赖方向门禁；仓、库区、库位类型、库位、包材的登记和查阅；商品的货主口、运营代录、货主与运营查阅；仓测尺寸重量（按商品包装层级与按在库一箱，作业事实登记与货主/运营查阅）；库存账；入库预报的受理、告知版本、撤回、单据号、运营代录、运营查阅与货主口；收货确认（商品入库与整箱入库，支持引用已认领待认领到货）；整箱库存；完结与少收（整箱按箱）；收货差异结论（货主与代录）；待认领到货完整链路（一线直接登记、取消/完结收货转来、认领与撤销、处置规则修订册、按规则处置与运营查阅）。路径、词与判定在下面各节。
-- 还没有：货主查阅仓；建账导入；上架与库内作业；占用；库存读口的端点；出库、退货、代理仓执行与收费发生项。派发里没有仓配的路。没有受控批量口、登记 CLI、演示种子与管理台页面。
+- 已有代码：部署开关与依赖方向门禁；仓、库区、库位类型、库位、包材的登记和查阅；商品的货主口、运营代录、货主与运营查阅；仓测尺寸重量（按商品包装层级与按在库一箱，作业事实登记与货主/运营查阅）；库存账；入库预报的受理、告知版本、撤回、单据号、运营代录、运营查阅与货主口；收货确认（商品入库与整箱入库，支持引用已认领待认领到货）；整箱库存；完结与少收（整箱按箱）；收货差异结论（货主与代录）；待认领到货完整链路（一线直接登记、取消/完结收货转来、认领与撤销、处置规则修订册、按规则处置与运营查阅）；建账导入的提交、待批准与批准成立后的同笔入账。路径、词与判定在下面各节。
+- 还没有：货主查阅仓；建账导入的批准口与批准职责规则；上架与库内作业；占用；库存读口的端点；出库、退货、代理仓执行与收费发生项。派发里没有仓配的路。没有受控批量口、登记 CLI、演示种子与管理台页面。
 - 部署开关是环境变量 `IDP_PARCEL_WAREHOUSE_FULFILLMENT_ENABLED`，去首尾空白后恰为 `true` 才开，默认关。读法在 `cmd/internal/warehouseswitch`。`parcel-api` 与 `parcel-dispatch` 启动时各读一次并写启动日志。
 - 开关关着时，仓配的端点（含 `/v1/warehouse/`）答 `403 WAREHOUSE_FULFILLMENT_NOT_ENABLED`：在认证之前答，不读令牌、报文与册，不带 `outcome`。它与「接入渠道未配置」是两格，因为恢复动作是部署方打开开关。方法不对仍答 `405`。下面各口都受这一条管，不逐口再写。
 - 库表在 schema `warehouse_fulfillment`，进同一份迁移计划。开关关着的部署也建表，表是空的。
@@ -128,6 +128,14 @@
 - **收货转来**：取消或完结后到达的收货走收货确认口同笔落成 `DIVERTED_TO_UNCLAIMED` 与一件待认领到货；预报读口只对这类转来标 `unclaimedArrival`，不带内容与数量。收货确认载荷另带可选 `unclaimedArrivalId`：引用的到货须在 `CLAIMED` 且认给该预报，预报不能收货或对不上均答 `CONTENT_INVALID`、不另建新到货。
 - **认领与撤销**：`POST /warehouse-fulfillment-unclaimed-arrival-claims`、`claim-revocations`，挂运营决定 `UNCLAIMED_ARRIVAL_CLAIM`（准入两格同字面量），按各自决定标识判重；认领向 `party-commercial` 核货主（查不到答 `404 OWNER_ACCOUNT_NOT_VISIBLE`），入库到货须指名同货主同仓可收货预报，退件不带预报；已有确认收货引用的认领答 `REVOCATION_NOT_ALLOWED`。
 - **处置规则与处置**：规则修订走登记册配置写 `POST /warehouse-fulfillment-unclaimed-disposal-rule-registrations`（不判准入）与查阅 `GET /warehouse-fulfillment-unclaimed-disposal-rules`、`rule-revisions`，按（租户，仓）只追加，认领期限按经过秒数算、不依赖仓业务时区，方式逐字保存。处置走 `POST /warehouse-fulfillment-unclaimed-arrival-dispositions`（运营决定 `UNCLAIMED_ARRIVAL_DISPOSITION`），无规则答 `NOT_CONFIGURED`、不借用别仓，期限未到或方式不在规则答 `DISPOSITION_NOT_ALLOWED`，同方式重放答 `EXISTING_RESULT`，换方式答 `STATUS_MISMATCH` 并回显原处置。运营查阅：`GET /warehouse-fulfillment-unclaimed-arrivals`、`unclaimed-arrival`。没有：更正观察、向货主公开、退货入库引用（等退货包）。
+
+## 已实现：建账导入
+
+提交与入账在这一包。批准口、驳回口与批准职责规则还没有，调用方在测试里直接走入账与驳回。
+
+- **提交**：`POST /warehouse-fulfillment-stock-import-submissions`，运营决定 `STOCK_IMPORT_SUBMISSION`，准入两格同字面量，先认证再读载荷。货主从载荷指名，查不到答 `404 OWNER_ACCOUNT_NOT_VISIBLE`。答复 `SUBMITTED`（201）、`EXISTING_RESULT`、`SOURCE_CONFLICT`、`WAREHOUSE_NOT_FOUND`、`WAREHOUSE_NOT_ACCEPTING`（`DEACTIVATED` 或 `AGENT`）、`CONTENT_INVALID`（逐行 `issues`）。待批准不改账。
+- **入账**：批准成立后按提交时刻重判。库位后来停用、箱号已在库、跟踪属性或贴标别名变了，答 `NO_LONGER_VALID`，导入留在待批准。都成立则商品行与整箱行各记一笔 `TAKE_ON_IMPORT` 流水，同笔形成入库批次；声明的入库时间不得晚于提交时刻，没声明的取入账时刻。仓在提交之后停用不挡这一份。
+- **查阅**：`GET /warehouse-fulfillment-stock-imports`、`stock-import`，只在操作者面。客户面没有建账导入读口。
 
 ## 设计意图：管什么，不管什么
 

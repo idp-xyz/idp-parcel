@@ -208,6 +208,8 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		unclaimedArrivalRegister: unwiredUnclaimedArrival{},
 		unclaimedArrivalManage:   unwiredUnclaimedArrival{},
 		unclaimedArrivalQueries:  unwiredUnclaimedArrival{},
+		stockImportSubmit:        unwiredStockImport{},
+		stockImportQueries:       unwiredStockImport{},
 	}
 }
 
@@ -237,6 +239,20 @@ func (unwiredDisposalRuleCatalogue) DisposalRuleRevisions(
 	warehousedomain.WarehouseCode,
 ) ([]warehouseports.DisposalRuleRow, error) {
 	return nil, errOrchestrationNotWired
+}
+
+type unwiredStockImport struct{}
+
+func (unwiredStockImport) Submit(context.Context, warehouseapp.SubmitStockImportCommand) (warehouseapp.StockImportResult, error) {
+	return warehouseapp.StockImportResult{}, errOrchestrationNotWired
+}
+
+func (unwiredStockImport) Load(context.Context, warehousedomain.TenantID, warehousedomain.StockImportID) (warehousedomain.StockImport, bool, error) {
+	return warehousedomain.StockImport{}, false, errOrchestrationNotWired
+}
+
+func (unwiredStockImport) List(context.Context, warehousedomain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[warehousedomain.StockImport], error) {
+	return cataloguepage.Result[warehousedomain.StockImport]{}, errOrchestrationNotWired
 }
 
 type unwiredUnclaimedArrival struct{}
@@ -488,6 +504,9 @@ const (
 	unclaimedArrivalDisposeLine   = "/warehouse-fulfillment-unclaimed-arrival-dispositions"
 	unclaimedArrivalListLine      = "/warehouse-fulfillment-unclaimed-arrivals"
 	unclaimedArrivalOneLine       = "/warehouse-fulfillment-unclaimed-arrival"
+	stockImportSubmissionsLine    = "/warehouse-fulfillment-stock-import-submissions"
+	stockImportListLine           = "/warehouse-fulfillment-stock-imports"
+	stockImportOneLine            = "/warehouse-fulfillment-stock-import"
 
 	customerGoodsWriteLine         = "/v1/warehouse/goods"
 	customerGoodsListLine          = "/v1/warehouse/reads/goods"
@@ -623,6 +642,9 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		unclaimedArrivalDisposeLine:   {http.MethodPost, faceOperationDecision},
 		unclaimedArrivalListLine:      {http.MethodGet, faceOperationsRead},
 		unclaimedArrivalOneLine:       {http.MethodGet, faceOperationsRead},
+		stockImportSubmissionsLine:    {http.MethodPost, faceOperationDecision},
+		stockImportListLine:           {http.MethodGet, faceOperationsRead},
+		stockImportOneLine:            {http.MethodGet, faceOperationsRead},
 
 		customerGoodsWriteLine:         {http.MethodPost, faceCustomerClient},
 		customerGoodsListLine:          {http.MethodGet, faceCustomerClient},
@@ -675,6 +697,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 			unclaimedArrivalClaimLine:   accessidentity.DecisionUnclaimedArrivalClaim,
 			unclaimedArrivalRevokeLine:  accessidentity.DecisionUnclaimedArrivalClaim,
 			unclaimedArrivalDisposeLine: accessidentity.DecisionUnclaimedArrivalDisposition,
+			stockImportSubmissionsLine:  accessidentity.DecisionStockImportSubmission,
 		}
 		if kind, writesOnBehalf := decisionLines[pattern]; writesOnBehalf && line.face.decision != kind {
 			t.Fatalf("%s 的决定种类 = %s，want %s", pattern, line.face.decision, kind)
@@ -762,6 +785,9 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			unclaimedArrivalDisposeLine:   {status, code},
 			unclaimedArrivalListLine:      {status, code},
 			unclaimedArrivalOneLine:       {status, code},
+			stockImportSubmissionsLine:    {status, code},
+			stockImportListLine:           {status, code},
+			stockImportOneLine:            {status, code},
 		}
 	}
 	cases := []struct {
@@ -818,6 +844,9 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			unclaimedArrivalDisposeLine:   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			unclaimedArrivalListLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			unclaimedArrivalOneLine:       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			stockImportSubmissionsLine:    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			stockImportListLine:           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			stockImportOneLine:            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		}},
 		{"read grant only", operationsReaderRegister{}, presentedOperatorToken, map[string]answer{
 			warehouseRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -867,6 +896,9 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			unclaimedArrivalDisposeLine:   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			unclaimedArrivalListLine:      {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			unclaimedArrivalOneLine:       {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			stockImportSubmissionsLine:    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			stockImportListLine:           {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			stockImportOneLine:            {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 		}},
 		{"no bearer token", everyOperatorGrant{}, "", same(http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED")},
 		{"register is down", failingRegister{}, presentedOperatorToken, same(http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE")},
