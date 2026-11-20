@@ -9,6 +9,7 @@ import { priceCardPurposeLabels, priceDirectionLabels } from '../../vocabulary/p
 import { TechnicalDetails, httpRows } from '../../components/TechnicalDetails';
 import { technicalRows } from '../settlement/ops-ui';
 import { servedProductsLabel, servedProductsText } from './service-products';
+import { PriceCardOverlapNotice } from './PriceCardOverlapNotice';
 import {
   previewPriceCardImport,
   priceCardTemplateFileName,
@@ -119,7 +120,7 @@ export function PriceCardImportPanel() {
   );
 }
 
-function ReadingAnswer({
+export function ReadingAnswer({
   title,
   answer,
   labels,
@@ -143,6 +144,7 @@ function ReadingAnswer({
         </p>
       ) : null}
       {reading.content ? <ContentSummary content={reading.content} /> : null}
+      <PriceCardOverlapNotice overlaps={reading.overlaps} />
       <ProblemTable problems={sortPriceCardProblems(reading.problems ?? [])} />
       <TechnicalDetails
         rows={technicalRows([

@@ -84,6 +84,17 @@ export interface PriceCardPlanReference {
   version: string;
 }
 
+/** 与这张卡同时适用的一版在册价卡。无上界时终点缺席。resolution 取 SUCCESSOR_CUT / RETIRE_PREDECESSOR / GOVERNANCE_DECISION。 */
+export interface PriceCardOverlap {
+  plan: PriceCardPlanReference;
+  selectionStart: string;
+  selectionEnd?: string;
+  overlapStart: string;
+  overlapEnd?: string;
+  samePlan: boolean;
+  resolution: string;
+}
+
 export interface PriceCardImportContent {
   canonicalization: string;
   contentDigest: string;
@@ -117,6 +128,8 @@ export interface PriceCardImportReading {
   plan?: PriceCardPlanReference;
   content?: PriceCardImportContent;
   problems?: PriceCardProblem[];
+  /** 已校验时，与这张卡适用期有交的在册版本。没有则缺席。不改变 outcome。 */
+  overlaps?: PriceCardOverlap[];
 }
 
 export interface PriceCardDraftRow {
@@ -253,6 +266,8 @@ export interface PriceCardDraftProgressBody {
   outcome: string;
   registration?: string;
   draft?: PriceCardDraftRow;
+  /** 批准或发布成功时，与这张卡同时适用的在册版本。不改变 outcome，也不拦这一步。 */
+  overlaps?: PriceCardOverlap[];
 }
 
 export interface PriceCardDraftReferencePayload {

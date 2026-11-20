@@ -17,6 +17,7 @@ import { stepTitles } from '../card-form/model';
 import { stepOfField } from '../card-form/fields';
 import { CurrencyLabel } from '../../refdata-labels';
 import { servedProductsLabel, servedProductsText } from '../service-products';
+import { PriceCardOverlapNotice } from '../PriceCardOverlapNotice';
 
 /** 存草稿的结果，用运营听得懂的话。 */
 const draftOutcomeText: Record<string, string> = {
@@ -171,6 +172,7 @@ export function StepPreview({
                   {priceCardDraftStatusLabels[draft.body.draft.status] ?? draft.body.draft.status}
                 </p>
               ) : null}
+              <PriceCardOverlapNotice overlaps={draft.body.reading.overlaps} />
               {draft.body.draft ? (
                 <Button variant="outline" size="sm" className="mt-2" onClick={onOpenDrafts}>
                   去草稿签批准
@@ -214,6 +216,9 @@ export function StepPreview({
           <p className="mb-3 rounded border border-idpxyz-border border-l-2 border-l-[color:var(--ds-status-success-fg)] px-3 py-2 type-body text-idpxyz-text">
             预览通过：这张价卡没有发现问题。
           </p>
+          <div className="mb-3">
+            <PriceCardOverlapNotice overlaps={reading?.overlaps} />
+          </div>
           <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 type-body text-idpxyz-text">
             <dt className="text-idpxyz-breadcrumb">方案</dt>
             <dd className="font-mono">

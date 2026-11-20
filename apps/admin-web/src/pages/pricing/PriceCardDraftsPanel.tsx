@@ -13,8 +13,10 @@ import {
   publishPriceCardDraft,
   type PriceCardDraftListResponseBody,
   type PriceCardDraftRow,
+  type PriceCardOverlap,
 } from './api';
 import { ProblemTable } from './PriceCardImportPanel';
+import { PriceCardOverlapNotice } from './PriceCardOverlapNotice';
 import {
   draftActionNoteOf,
   draftActionOf,
@@ -45,10 +47,31 @@ const noteClass: Record<DraftActionNote['tone'], string> = {
   problem: 'text-idpxyz-danger',
 };
 
+/** 一次批准或发布的答复，连同适用期重叠提示。提示不改那一句结果。 */
+export function DraftActionFeedback({
+  note,
+  overlaps,
+}: {
+  note: DraftActionNote;
+  overlaps?: readonly PriceCardOverlap[];
+}) {
+  return (
+    <>
+      <p className={noteClass[note.tone]}>
+        {note.text}
+        {note.tone === 'refused' && note.kind === 'loginRequired' ? <ReloginButton size="inline" /> : null}
+      </p>
+      {note.tone === 'answered' || note.tone === 'problem' ? <TechnicalDetails rows={note.technical} className="mt-1" /> : null}
+      <PriceCardOverlapNotice overlaps={overlaps} />
+    </>
+  );
+}
+
 interface DraftOverlay {
   source: PriceCardDraftListResponseBody;
   rows: PriceCardDraftRow[];
   notes: Record<string, DraftActionNote>;
+  overlaps: Record<string, PriceCardOverlap[] | undefined>;
 }
 
 /**
@@ -77,6 +100,7 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
   const overlaid = body !== null && overlay?.source === body ? overlay : null;
   const rows = overlaid?.rows ?? body?.drafts ?? [];
   const notes = overlaid?.notes ?? {};
+  const overlapByKey = overlaid?.overlaps ?? {};
 
   function toggle(key: string) {
     setExpanded((current) => {
@@ -95,11 +119,12 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
     const payload = draftReferencePayload(row.plan);
     const result = action === 'approve' ? await approvePriceCardDraft(payload) : await publishPriceCardDraft(payload);
     setOverlay((previous) => {
-      const base = previous?.source === source ? previous : { source, rows: source.drafts, notes: {} };
+      const base = previous?.source === source ? previous : { source, rows: source.drafts, notes: {}, overlaps: {} };
       return {
         source,
         rows: withProgressedDraft(base.rows, result),
         notes: { ...base.notes, [key]: draftActionNoteOf(action, result) },
+        overlaps: { ...base.overlaps, [key]: result.kind === 'outcome' ? result.body.overlaps : undefined },
       };
     });
     setPending(null);
@@ -162,15 +187,7 @@ export function PriceCardDraftsPanel({ refreshSignal = 0 }: { refreshSignal?: nu
                       {note ? (
                         <tr>
                           <td colSpan={columnCount} className="pb-2">
-                            <p className={noteClass[note.tone]}>
-                              {note.text}
-                              {note.tone === 'refused' && note.kind === 'loginRequired' ? (
-                                <ReloginButton size="inline" />
-                              ) : null}
-                            </p>
-                            {note.tone === 'answered' || note.tone === 'problem' ? (
-                              <TechnicalDetails rows={note.technical} className="mt-1" />
-                            ) : null}
+                            <DraftActionFeedback note={note} overlaps={overlapByKey[key]} />
                           </td>
                         </tr>
                       ) : null}
