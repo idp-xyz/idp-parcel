@@ -53,7 +53,8 @@ type AbsentIfUntranslatableEvaluationRefs []string
 
 // PricedWeightsAndOrigins 空标识与重复标识不问；登记册里没有的评价在答复里缺席。必须译出的那一组里，计价一侧造不出
 // 评价标识的引用报 ErrUntranslatableReference 并点名它，整批不交回。读不出就缺席的那一组里，造不出标识只让这一个
-// 缺席。同一条引用两组都有时必须译出的那一组先走，造不出标识就不会被缺席吞掉。两组并成一次问登记册。
+// 缺席。造不出标识的引用不记入已问过的集合，所以它在哪一组被遇到就按哪一组的口径办；两组都有时从严的那一组一定会
+// 遇到它并报错，与两组的先后无关。两组并成一次问登记册。
 func (origins *PricedWeightsAndOrigins) PricedWeightsAndOrigins(
 	ctx context.Context,
 	tenant sadomain.TenantID,
@@ -66,7 +67,8 @@ func (origins *PricedWeightsAndOrigins) PricedWeightsAndOrigins(
 	}
 	ids := make([]ppdomain.EvaluationID, 0, len(mustTranslate)+len(absentIfUntranslatable))
 	seen := map[string]struct{}{}
-	// 必须译出的一组先走：同一条引用也在从宽组里时，造不出标识要报错，不能先被从宽组跳成缺席。
+	// 先处理必须译出的一组只是写法。造不出标识的引用不记入已问过的集合，在哪一组遇到就按哪一组办；
+	// 两组都有时从严的那一组一定会报错，与先后无关。
 	for _, raw := range mustTranslate {
 		id, include, err := evaluationIDToAsk(raw, seen)
 		if err != nil {
