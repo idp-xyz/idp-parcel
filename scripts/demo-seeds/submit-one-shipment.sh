@@ -51,14 +51,16 @@ access_request="SYN-ACCESS-REQUEST-${stamp}"
 
 # 收件邮编缺省 018000（分区目录里的 Z1）。IDP_PARCEL_DEMO_RECIPIENT_POSTAL_CODE 可改，例如 238000 是 Z2：销售价格来源那一段
 # 用它发一件走专属卡没谈到的线路的包裹（demo-run/60-sell-price-sources.sh）。
+# 服务产品缺省快递 SYN-PROD-CN-SG-EXPRESS。面单渠道那一段改设 IDP_PARCEL_DEMO_SERVICE_PRODUCT，不改这一缺省。
 recipient_postal="${IDP_PARCEL_DEMO_RECIPIENT_POSTAL_CODE:-018000}"
+service_product="${IDP_PARCEL_DEMO_SERVICE_PRODUCT:-SYN-PROD-CN-SG-EXPRESS}"
 
-body="$(python3 - "$ref" "$parcel_ref" "$access_request" "$recipient_postal" <<'PY'
+body="$(python3 - "$ref" "$parcel_ref" "$access_request" "$recipient_postal" "$service_product" <<'PY'
 import json, sys
 print(json.dumps({
     "accessRequestId": sys.argv[3],
     "customerShipmentReference": sys.argv[1],
-    "requestedServiceProduct": "SYN-PROD-CN-SG-EXPRESS",
+    "requestedServiceProduct": sys.argv[5],
     "senderRelation": "SYN-SENDER-01",
     "senderAddress": "合成寄件地址",
     "senderPostalCode": "200000",
