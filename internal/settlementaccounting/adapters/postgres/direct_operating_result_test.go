@@ -120,6 +120,97 @@ func TestNetworkServiceProductIsIncompleteCost(t *testing.T) {
 	}
 }
 
+func TestSharedCostRemovesAnExistingMargin(t *testing.T) {
+	ctx := t.Context()
+	db, pool, handler, catalogue := directOperatingStack(t)
+	tenant := "SYN-DIRECT-SHARED"
+	parcel := "SYN-PARCEL-SHARED"
+	seedServiceForm(t, pool, tenant, parcel, "SYN-PRODUCT-SHARED", "LABEL_CHANNEL_SERVICE")
+	seedCustomerCharge(t, pool, tenant, parcel, "SYN-CHG-SHARED", "2026-11-20", true)
+	seedExpectedCost(t, pool, tenant, parcel, "occ-shared", "occ-v1", "cost-shared", "", 4000)
+	seedPayable(t, pool, tenant, "claim-shared", "2026-11-20", "cost-shared", "pay-shared", 4500)
+	adoptBoth(t, db, tenant)
+	tenantID := directTenantID(t, tenant)
+	parcelRef := directRef(t, parcel)
+	saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+		return handler.AfterParcel(txCtx, tenantID, parcelRef)
+	})
+	if got := countOperatingResults(t, pool, tenant); got != 2 {
+		t.Fatalf("落进共享成本之前应有两份毛利，got %d", got)
+	}
+
+	mustExec(t, pool, ctx, `
+		INSERT INTO node_operations.consolidation_unit
+			(tenant_id, unit_id, asset_ref, phase, opened_source)
+		VALUES ($1, 'SYN-UNIT-SHARED', 'asset', 'OPEN',
+		        '{"sourceId":"src","performedBy":"op","evidence":"ev","occurredAt":"2026-11-20T00:00:00Z"}')`,
+		tenant)
+	mustExec(t, pool, ctx, `
+		INSERT INTO node_operations.containment_current (tenant_id, member_id, unit_id)
+		VALUES ($1, $2, 'SYN-UNIT-SHARED')`,
+		tenant, parcel)
+	saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+		return handler.AfterParcel(txCtx, tenantID, parcelRef)
+	})
+	if got := countOperatingResults(t, pool, tenant); got != 0 {
+		t.Fatalf("挂进集运单元之后毛利行应撤下，还剩 %d", got)
+	}
+	assertDispositions(t, catalogue, tenantID, "INCOMPLETE_COST", 2)
+}
+
+func TestNonUniqueOccurrenceMembersAreIncompleteCost(t *testing.T) {
+	ctx := t.Context()
+	db, pool, handler, catalogue := directOperatingStack(t)
+	tenant := "SYN-DIRECT-MULTI"
+	parcel := "SYN-PARCEL-MULTI"
+	seedServiceForm(t, pool, tenant, parcel, "SYN-PRODUCT-MULTI", "LABEL_CHANNEL_SERVICE")
+	seedCustomerCharge(t, pool, tenant, parcel, "SYN-CHG-MULTI", "2026-11-20", true)
+	seedExpectedCost(t, pool, tenant, parcel, "occ-multi", "occ-v1", "cost-multi", "", 4000)
+	seedPayable(t, pool, tenant, "claim-multi", "2026-11-20", "cost-multi", "pay-multi", 4500)
+	mustExec(t, pool, ctx, `
+		INSERT INTO transport_fulfillment.transport_charge_occurrence_member
+			(tenant_id, occurrence_ref, validity_version, object_ref)
+		VALUES ($1, 'occ-multi', 'occ-v1', 'SYN-OTHER-OBJECT')`,
+		tenant)
+	adoptBoth(t, db, tenant)
+	saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+		return handler.AfterParcel(txCtx, directTenantID(t, tenant), directRef(t, parcel))
+	})
+	if got := countOperatingResults(t, pool, tenant); got != 0 {
+		t.Fatalf("发生项成员不止这一件时不应有毛利，got %d", got)
+	}
+	assertDispositions(t, catalogue, directTenantID(t, tenant), "INCOMPLETE_COST", 2)
+}
+
+func TestLosingTheSupplierSideRemovesTheMargin(t *testing.T) {
+	ctx := t.Context()
+	db, pool, handler, catalogue := directOperatingStack(t)
+	tenant := "SYN-DIRECT-LOST-COST"
+	parcel := "SYN-PARCEL-LOST-COST"
+	seedServiceForm(t, pool, tenant, parcel, "SYN-PRODUCT-LOST", "LABEL_CHANNEL_SERVICE")
+	seedCustomerCharge(t, pool, tenant, parcel, "SYN-CHG-LOST", "2026-11-20", true)
+	seedExpectedCost(t, pool, tenant, parcel, "occ-lost", "occ-v1", "cost-lost", "", 4000)
+	seedPayable(t, pool, tenant, "claim-lost", "2026-11-20", "cost-lost", "pay-lost", 4500)
+	adoptBoth(t, db, tenant)
+	tenantID := directTenantID(t, tenant)
+	saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+		return handler.AfterParcel(txCtx, tenantID, directRef(t, parcel))
+	})
+	if got := countOperatingResults(t, pool, tenant); got != 2 {
+		t.Fatalf("撤下供应商侧之前应有两份毛利，got %d", got)
+	}
+
+	mustExec(t, pool, ctx, `DELETE FROM settlement_accounting.audited_payable WHERE tenant_id = $1`, tenant)
+	mustExec(t, pool, ctx, `DELETE FROM settlement_accounting.supplier_expected_cost WHERE tenant_id = $1`, tenant)
+	saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+		return handler.AfterParcel(txCtx, tenantID, directRef(t, parcel))
+	})
+	if got := countOperatingResults(t, pool, tenant); got != 0 {
+		t.Fatalf("只剩客户侧时旧毛利应撤下，还剩 %d", got)
+	}
+	assertDispositions(t, catalogue, tenantID, "INDETERMINATE", 2)
+}
+
 func TestMissingOperatingBasisAdoptionReadsUnconfigured(t *testing.T) {
 	ctx := t.Context()
 	_, _, _, catalogue := directOperatingStack(t)
@@ -264,6 +355,31 @@ func adoptBoth(t *testing.T, db *bentopg.DB, tenant string) {
 		}
 		return nil
 	})
+}
+
+func countOperatingResults(t *testing.T, pool *pgxpool.Pool, tenant string) int {
+	t.Helper()
+	var count int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM settlement_accounting.operating_result WHERE tenant_id = $1`, tenant).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
+func assertDispositions(t *testing.T, catalogue *adapter.OperatingCatalogue, tenant domain.TenantID, want string, count int) {
+	t.Helper()
+	dispositions, err := catalogue.ListDirectOperatingDispositions(t.Context(), tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dispositions) != count {
+		t.Fatalf("答案条数 = %d，want %d：%+v", len(dispositions), count, dispositions)
+	}
+	for _, disposition := range dispositions {
+		if disposition.Disposition != want {
+			t.Fatalf("答案 = %s，want %s", disposition.Disposition, want)
+		}
+	}
 }
 
 func listDirectResults(t *testing.T, catalogue *adapter.OperatingCatalogue, tenant domain.TenantID) []ports.OperatingResultCatalogueRow {

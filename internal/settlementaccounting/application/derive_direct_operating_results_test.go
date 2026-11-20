@@ -160,6 +160,113 @@ func TestDirectOperatingResultsDoNotInventAMargin(t *testing.T) {
 	})
 }
 
+func TestDirectOperatingResultsStayIncompleteWhenCostCannotBeAttributed(t *testing.T) {
+	tenant := directTenant(t)
+	parcel := directParcel(t, "parcel-1")
+	paired := ports.ParcelDirectFacts{
+		ServiceForm: ports.ServiceFormLabelChannel,
+		Estimates: []ports.DirectAmount{
+			{Source: "charge-1", Currency: "CNY", AmountMinor: 10000, Period: "2026-11-20", PeriodStated: true},
+		},
+		ExpectedCosts: []ports.DirectAmount{
+			{Source: "cost-v1", Currency: "CNY", AmountMinor: 4000},
+		},
+		Receivables: []ports.DirectAmount{
+			{Source: "charge-1", Currency: "CNY", AmountMinor: 10000, Period: "2026-11-20", PeriodStated: true},
+		},
+		Payables: []ports.DirectAmount{
+			{Source: "payable-1", Currency: "CNY", AmountMinor: 4500, Period: "2026-11-20", PeriodStated: true},
+		},
+	}
+	for _, tc := range []struct {
+		name  string
+		alter func(*ports.ParcelDirectFacts)
+	}{
+		{name: "共享成本", alter: func(facts *ports.ParcelDirectFacts) { facts.SharedCost = true }},
+		{name: "供应商金额不能唯一指到这一件", alter: func(facts *ports.ParcelDirectFacts) { facts.NonUniqueSupplier = true }},
+		{name: "服务形态不可观察", alter: func(facts *ports.ParcelDirectFacts) { facts.ServiceForm = "" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			facts := paired
+			tc.alter(&facts)
+			handler, results, dispositions := directHandler(t, &directFacts{byParcel: map[string]ports.ParcelDirectFacts{
+				parcel.String(): facts,
+			}}, true, true)
+			if err := handler.AfterParcel(context.Background(), tenant, parcel); err != nil {
+				t.Fatal(err)
+			}
+			if results.saves != 0 || len(results.records) != 0 || dispositions.saved != application.DirectOperatingIncompleteCost.String() {
+				t.Fatalf("%s 应成本不全且不出毛利，saves=%d records=%d disposition=%s", tc.name, results.saves, len(results.records), dispositions.saved)
+			}
+		})
+	}
+}
+
+func TestDirectOperatingResultsDoNotTreatSupplierAloneAsAMargin(t *testing.T) {
+	tenant := directTenant(t)
+	parcel := directParcel(t, "parcel-1")
+	facts := &directFacts{byParcel: map[string]ports.ParcelDirectFacts{
+		parcel.String(): {
+			ServiceForm:   ports.ServiceFormLabelChannel,
+			ExpectedCosts: []ports.DirectAmount{{Source: "cost-v1", Currency: "CNY", AmountMinor: 4000}},
+			Payables:      []ports.DirectAmount{{Source: "payable-1", Currency: "CNY", AmountMinor: 4500, Period: "2026-11-20", PeriodStated: true}},
+		},
+	}}
+	handler, results, dispositions := directHandler(t, facts, true, true)
+	if err := handler.AfterParcel(context.Background(), tenant, parcel); err != nil {
+		t.Fatal(err)
+	}
+	if results.saves != 0 || len(results.records) != 0 || dispositions.saved != application.DirectOperatingIndeterminate.String() {
+		t.Fatalf("只有供应商侧应判不出且不出毛利，saves=%d records=%d disposition=%s", results.saves, len(results.records), dispositions.saved)
+	}
+}
+
+func TestConfirmedBasisDoesNotCollapseMultiplePayablesOrCredits(t *testing.T) {
+	tenant := directTenant(t)
+	parcel := directParcel(t, "parcel-1")
+	receivable := []ports.DirectAmount{{Source: "charge-1", Currency: "CNY", AmountMinor: 10000, Period: "2026-11-20", PeriodStated: true}}
+	for _, tc := range []struct {
+		name     string
+		payables []ports.DirectAmount
+		credits  []ports.DirectAmount
+	}{
+		{
+			name: "两笔审核应付",
+			payables: []ports.DirectAmount{
+				{Source: "payable-1", Currency: "CNY", AmountMinor: 4500, Period: "2026-11-20", PeriodStated: true},
+				{Source: "payable-2", Currency: "CNY", AmountMinor: 1500, Period: "2026-11-20", PeriodStated: true},
+			},
+		},
+		{
+			name: "两笔贷项",
+			payables: []ports.DirectAmount{
+				{Source: "payable-1", Currency: "CNY", AmountMinor: 4500, Period: "2026-11-20", PeriodStated: true},
+			},
+			credits: []ports.DirectAmount{
+				{Source: "credit-1@v1", Currency: "CNY", AmountMinor: 500, Period: "2026-11-20", PeriodStated: true},
+				{Source: "credit-2@v1", Currency: "CNY", AmountMinor: 200, Period: "2026-11-20", PeriodStated: true},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler, results, dispositions := directHandler(t, &directFacts{byParcel: map[string]ports.ParcelDirectFacts{
+				parcel.String(): {
+					ServiceForm: ports.ServiceFormLabelChannel,
+					Receivables: receivable,
+					Payables:    tc.payables,
+					Credits:     tc.credits,
+				},
+			}}, false, true)
+			if err := handler.AfterParcel(context.Background(), tenant, parcel); err != nil {
+				t.Fatalf("%s 应待判断，派生却失败：%v", tc.name, err)
+			}
+			if results.saves != 0 || len(results.records) != 0 || dispositions.saved != application.DirectOperatingPendingJudgment.String() {
+				t.Fatalf("%s 应待判断且不加总、不挑一笔，saves=%d records=%d disposition=%s", tc.name, results.saves, len(results.records), dispositions.saved)
+			}
+		})
+	}
+}
+
 func TestDirectOperatingDispositionNamesEveryNonZeroValue(t *testing.T) {
 	for _, disposition := range []application.DirectOperatingDisposition{
 		application.DirectOperatingIndeterminate,
