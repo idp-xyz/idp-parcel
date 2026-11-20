@@ -616,7 +616,11 @@ type ReassessmentRecord struct {
 	// TriggerOccurredAt 是这次复核所判触发的业务时间（ADR-0235）：它是路由历史里的「当前位置」时刻，较早的触发
 	// 据它不判。ReassessedAt 是处理时钟，两者不可互代——按处理时刻比，就又成了按到达顺序裁决。
 	TriggerOccurredAt time.Time
-	ReassessedAt      time.Time
+	// TriggerControl 与 TriggerLocation 是这次复核所据的控制依据与位置。实测变化重判抄最近一次已判控制触发的这两格，
+	// 不另立位置；业务时间同样抄那一次，当前位置才不会被一次称重推后。迁移前的行两格为空，读回为零值。
+	TriggerControl  domain.ControlEvidenceKind
+	TriggerLocation domain.ActualLocationReference
+	ReassessedAt    time.Time
 }
 
 // ReassessmentSaveOutcome 与其余判断库同一套写入代数（ADR-0031）。
@@ -659,6 +663,10 @@ const (
 	// 比的是起点计划本身的生效。判出仍适用不在此格，那一次不动计划。同样是终局的入账：业务时间不变，重投推不动，恢复动作是等下一次
 	// 控制触发从它的位置判。
 	NotJudgedTriggerPrecedesPlanEffectiveFrom
+	// NotJudgedControlPositionUnavailable 是实测变化重判时，这一判断键上还没有可抄的控制位置：没有任何已判复核，或最近一次
+	// 业务时刻上的控制依据与位置定不下来（迁移前的旧行，或同一时刻不止一组）。登记与作废不区分。等下一次控制触发补判；
+	// 重投这一封推不动，因为位置不是这封信封能带来的。
+	NotJudgedControlPositionUnavailable
 )
 
 func (reason NotJudgedReason) String() string {
@@ -677,9 +685,33 @@ func (reason NotJudgedReason) String() string {
 		return "PLAN_APPLICABILITY_UNCLEAR"
 	case NotJudgedTriggerPrecedesPlanEffectiveFrom:
 		return "TRIGGER_PRECEDES_PLAN_EFFECTIVE_FROM"
+	case NotJudgedControlPositionUnavailable:
+		return "CONTROL_POSITION_UNAVAILABLE"
 	default:
 		return ""
 	}
+}
+
+// ControlPositionStatus 是「最近一次已判复核所据的控制位置」的三种答案。
+type ControlPositionStatus uint8
+
+const (
+	ControlPositionStatusInvalid ControlPositionStatus = iota
+	// ControlPositionAbsent 是这一判断键上没有任何带业务时间的已判复核。
+	ControlPositionAbsent
+	// ControlPositionKnown 是最近一次业务时刻上只有一组控制依据与位置。
+	ControlPositionKnown
+	// ControlPositionUndetermined 是那个时刻上有行两列为空（迁移前的旧行），或出现多于一组不同的控制依据与位置。
+	// 抄任何一组都会把位置定死，所以不定。
+	ControlPositionUndetermined
+)
+
+// ControlPosition 是最近一次已判复核所据的控制位置。只有 Known 时控制依据、位置与业务时间有值。
+type ControlPosition struct {
+	Status     ControlPositionStatus
+	Control    domain.ControlEvidenceKind
+	Location   domain.ActualLocationReference
+	OccurredAt time.Time
 }
 
 // NotJudgedTrigger 是一次入账未判的复核触发留下的原因。触发本身已由 RouteHandoffLog 保全，
@@ -727,6 +759,12 @@ type ReassessmentStore interface {
 	// （ADR-0284 决定五），按业务时间排，只为读来可复现，先后不作判断依据。复核据它与初始路由定判断起点，所以要在 LatestTriggerAt 取的判断键锁里读：锁外读到的起点，
 	// 落册之前可能已被另一次复核换掉。在册计划重建不出来时交 ErrStoredRouteRecordUnreadable。
 	FormedPlans(ctx context.Context, key domain.InitialRouteJudgmentKey) ([]domain.InitialRoutePlan, error)
+	// LatestControlPosition 交回这一判断键上 trigger_occurred_at 最大的那些行所据的控制位置。三种答案见 ControlPositionStatus。
+	// 它自己取与 LatestTriggerAt 同一把判断键锁（同事务可重入）：编排在 LatestTriggerAt 之后再调，锁已在手里；单独调用也串行到事务结束。
+	LatestControlPosition(ctx context.Context, key domain.InitialRouteJudgmentKey) (ControlPosition, error)
+	// AwaitingMeasurementChanges 交回这一判断键上原因为控制位置未定、且复核册还没有对应行的实测变化关联，按触发业务时间再按关联排序。
+	// 补判用这些关联再走一次；已经落了复核的不再交回。同样在判断键锁里读，理由同 LatestControlPosition。
+	AwaitingMeasurementChanges(ctx context.Context, key domain.InitialRouteJudgmentKey) ([]domain.RequestCorrelationID, error)
 }
 
 // ErrStoredRouteRecordUnreadable 说明路由历史里落了册的一行经领域构造门重建不出来：初始路由的计划或无路由判断、复核

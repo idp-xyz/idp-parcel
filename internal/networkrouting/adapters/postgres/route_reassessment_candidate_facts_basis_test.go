@@ -183,11 +183,11 @@ func TestTheCandidateFactsBasisColumnIsAClosedSetWithoutThePreRouteBasis(t *test
 				(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 				 acceptance_baseline, declared_parcel_id, service_purpose,
 				 conclusion, reviewed_plan, lapse_basis, candidate_state, candidate_facts_basis,
-				 trigger_occurred_at, reassessed_at)
+				 trigger_control, trigger_location, trigger_occurred_at, reassessed_at)
 			 VALUES ('tenant-1', $1, 'customer-a', 'request-1',
 			         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
 			         'PLAN_LAPSED', 'RPV-0001', 'closure-7', 'NO_QUALIFIED_CANDIDATES', $2,
-			         now(), now())`, correlation, basis)
+			         'NODE_INTAKE_CONTROL', 'node-origin', now(), now())`, correlation, basis)
 		return err
 	}
 	text := func(value string) *string { return &value }

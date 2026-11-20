@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -81,6 +82,7 @@ func (repository *RouteReassessments) FindByCorrelation(
 		improvementJSON                               []byte
 		candidateFactsBasis                           *string
 		triggerOccurredAt                             *time.Time
+		triggerControl, triggerLocation               *string
 		reassessedAt                                  time.Time
 	)
 	err = querier.QueryRow(ctx,
@@ -88,7 +90,8 @@ func (repository *RouteReassessments) FindByCorrelation(
 		        acceptance_baseline, declared_parcel_id, service_purpose,
 		        conclusion, reviewed_plan, lapse_basis,
 		        candidate_state, reroute_state, reroute_blockers,
-		        new_plan, suggestion, decision, improvement_basis, candidate_facts_basis, trigger_occurred_at, reassessed_at
+		        new_plan, suggestion, decision, improvement_basis, candidate_facts_basis,
+		        trigger_occurred_at, trigger_control, trigger_location, reassessed_at
 		   FROM network_routing.route_reassessment
 		  WHERE tenant_id = $1
 		    AND correlation_id = $2`,
@@ -98,7 +101,8 @@ func (repository *RouteReassessments) FindByCorrelation(
 		&acceptanceBaseline, &declaredParcel, &purpose,
 		&conclusion, &reviewedPlan, &lapseBasis,
 		&candidateState, &rerouteState, &blockersJSON,
-		&planJSON, &suggJSON, &decisionRaw, &improvementJSON, &candidateFactsBasis, &triggerOccurredAt, &reassessedAt)
+		&planJSON, &suggJSON, &decisionRaw, &improvementJSON, &candidateFactsBasis,
+		&triggerOccurredAt, &triggerControl, &triggerLocation, &reassessedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ReassessmentRecord{}, false, nil
 	}
@@ -125,6 +129,22 @@ func (repository *RouteReassessments) FindByCorrelation(
 	// 迁移 0022 之前落的行没有触发业务时间，读回零值，与「不参与当前位置」同一个意思。
 	if triggerOccurredAt != nil {
 		record.TriggerOccurredAt = triggerOccurredAt.UTC()
+	}
+	// 迁移 0037 之前落的行两列都空，读回零值。有一列空一列有是坏数据：同有同无的 CHECK 不该放行。
+	switch {
+	case triggerControl == nil && triggerLocation == nil:
+	case triggerControl != nil && triggerLocation != nil:
+		record.TriggerControl, err = domain.ParseControlEvidenceKind(*triggerControl)
+		if err != nil {
+			return ports.ReassessmentRecord{}, false, fmt.Errorf("find reassessment: %w", err)
+		}
+		record.TriggerLocation, err = domain.NewActualLocationReference(*triggerLocation)
+		if err != nil {
+			return ports.ReassessmentRecord{}, false, fmt.Errorf("find reassessment: %w", err)
+		}
+	default:
+		return ports.ReassessmentRecord{}, false, fmt.Errorf(
+			"find reassessment: trigger control and location must both be present or both be absent")
 	}
 	record.Conclusion, err = reassessmentConclusionFrom(conclusion)
 	if err != nil {
@@ -220,6 +240,12 @@ func (repository *RouteReassessments) Save(
 	if record.TriggerOccurredAt.IsZero() {
 		return ports.ReassessmentSaveOutcomeInvalid, fmt.Errorf("save reassessment: trigger business time is zero")
 	}
+	// 新行必带控制依据与位置（迁移 0037 的 NOT VALID CHECK 也拒）。缺了它们，下一次实测变化读最近控制位置时会把这一行当成定不下。
+	control := record.TriggerControl.String()
+	location := strings.TrimSpace(record.TriggerLocation.String())
+	if _, err := domain.ParseControlEvidenceKind(control); err != nil || location == "" {
+		return ports.ReassessmentSaveOutcomeInvalid, fmt.Errorf("save reassessment: trigger control position is absent")
+	}
 
 	key := record.Key
 	tag, err := executor.Exec(ctx,
@@ -229,8 +255,9 @@ func (repository *RouteReassessments) Save(
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis,
 			 candidate_state, reroute_state, reroute_blockers,
-			 new_plan, suggestion, decision, improvement_basis, candidate_facts_basis, trigger_occurred_at, reassessed_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+			 new_plan, suggestion, decision, improvement_basis, candidate_facts_basis,
+			 trigger_occurred_at, trigger_control, trigger_location, reassessed_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		correlation.String(),
@@ -251,6 +278,8 @@ func (repository *RouteReassessments) Save(
 		columns.improvementJSON,
 		columns.candidateFactsBasis,
 		record.TriggerOccurredAt.UTC(),
+		control,
+		location,
 		record.ReassessedAt.UTC(),
 	)
 	if err != nil {
@@ -368,25 +397,14 @@ func (repository *RouteReassessments) LatestTriggerAt(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
 ) (time.Time, bool, error) {
+	if err := repository.lockJudgmentKey(ctx, key); err != nil {
+		return time.Time{}, false, fmt.Errorf("latest reassessment trigger: %w", err)
+	}
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
 		return time.Time{}, false, fmt.Errorf("latest reassessment trigger: %w", err)
 	}
-	dims := []any{
-		key.TenantID.String(),
-		key.CustomerAccountID.String(),
-		key.ShipmentRequestID.String(),
-		key.AcceptanceBaseline.String(),
-		key.DeclaredParcelID.String(),
-		key.ServicePurpose.String(),
-	}
-	if _, err := executor.Exec(ctx,
-		`SELECT pg_advisory_xact_lock(hashtext('network_routing.route_reassessment.judgment_key'),
-		        hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4 || chr(31) || $5 || chr(31) || $6))`,
-		dims...,
-	); err != nil {
-		return time.Time{}, false, fmt.Errorf("latest reassessment trigger: 取判断键锁：%w", err)
-	}
+	dims := judgmentKeyDims(key)
 	var latest *time.Time
 	if err := executor.QueryRow(ctx,
 		`SELECT max(trigger_occurred_at)
@@ -405,6 +423,182 @@ func (repository *RouteReassessments) LatestTriggerAt(
 		return time.Time{}, false, nil
 	}
 	return latest.UTC(), true, nil
+}
+
+// lockJudgmentKey 取 LatestTriggerAt 那把判断键锁。同事务可重入：LatestControlPosition 与 AwaitingMeasurementChanges
+// 自己也取，编排在 LatestTriggerAt 之后再调时锁已在手里；单独调用也串到事务结束。没有事务时锁在语句结束就放掉，所以走
+// RequireExecutor，静默放过比报错更糟。
+func (repository *RouteReassessments) lockJudgmentKey(
+	ctx context.Context,
+	key domain.InitialRouteJudgmentKey,
+) error {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return err
+	}
+	dims := judgmentKeyDims(key)
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('network_routing.route_reassessment.judgment_key'),
+		        hashtext($1 || chr(31) || $2 || chr(31) || $3 || chr(31) || $4 || chr(31) || $5 || chr(31) || $6))`,
+		dims...,
+	); err != nil {
+		return fmt.Errorf("取判断键锁：%w", err)
+	}
+	return nil
+}
+
+func judgmentKeyDims(key domain.InitialRouteJudgmentKey) []any {
+	return []any{
+		key.TenantID.String(),
+		key.CustomerAccountID.String(),
+		key.ShipmentRequestID.String(),
+		key.AcceptanceBaseline.String(),
+		key.DeclaredParcelID.String(),
+		key.ServicePurpose.String(),
+	}
+}
+
+// LatestControlPosition 取这一判断键上业务时间最大的那些行的控制依据与位置。没有任何带业务时间的已判复核即没有；
+// 那个时刻上有行两列为空，或出现多于一组不同的（控制依据，位置），即定不下。重判行抄的是同一组，不会把一组变成两组。
+func (repository *RouteReassessments) LatestControlPosition(
+	ctx context.Context,
+	key domain.InitialRouteJudgmentKey,
+) (ports.ControlPosition, error) {
+	none := ports.ControlPosition{}
+	if err := repository.lockJudgmentKey(ctx, key); err != nil {
+		return none, fmt.Errorf("latest control position: %w", err)
+	}
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return none, fmt.Errorf("latest control position: %w", err)
+	}
+	dims := judgmentKeyDims(key)
+	rows, err := executor.Query(ctx,
+		`SELECT trigger_occurred_at, trigger_control, trigger_location
+		   FROM network_routing.route_reassessment
+		  WHERE tenant_id = $1
+		    AND customer_account_id = $2
+		    AND shipment_request_id = $3
+		    AND acceptance_baseline = $4
+		    AND declared_parcel_id = $5
+		    AND service_purpose = $6
+		    AND trigger_occurred_at = (
+		        SELECT max(trigger_occurred_at)
+		          FROM network_routing.route_reassessment
+		         WHERE tenant_id = $1
+		           AND customer_account_id = $2
+		           AND shipment_request_id = $3
+		           AND acceptance_baseline = $4
+		           AND declared_parcel_id = $5
+		           AND service_purpose = $6)`,
+		dims...,
+	)
+	if err != nil {
+		return none, fmt.Errorf("latest control position: %w", err)
+	}
+	defer rows.Close()
+
+	var (
+		occurredAt time.Time
+		seen       map[string]struct{}
+		known      ports.ControlPosition
+		sawRow     bool
+	)
+	seen = map[string]struct{}{}
+	for rows.Next() {
+		var (
+			at       time.Time
+			control  *string
+			location *string
+		)
+		if err := rows.Scan(&at, &control, &location); err != nil {
+			return none, fmt.Errorf("latest control position: %w", err)
+		}
+		sawRow = true
+		occurredAt = at.UTC()
+		if control == nil || location == nil || strings.TrimSpace(*location) == "" {
+			return ports.ControlPosition{Status: ports.ControlPositionUndetermined}, rows.Err()
+		}
+		parsed, err := domain.ParseControlEvidenceKind(*control)
+		if err != nil {
+			return none, fmt.Errorf("latest control position: %w", err)
+		}
+		place, err := domain.NewActualLocationReference(*location)
+		if err != nil {
+			return none, fmt.Errorf("latest control position: %w", err)
+		}
+		seen[*control+"\x00"+place.String()] = struct{}{}
+		known = ports.ControlPosition{
+			Status:     ports.ControlPositionKnown,
+			Control:    parsed,
+			Location:   place,
+			OccurredAt: occurredAt,
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return none, fmt.Errorf("latest control position: %w", err)
+	}
+	if !sawRow {
+		return ports.ControlPosition{Status: ports.ControlPositionAbsent}, nil
+	}
+	if len(seen) != 1 {
+		return ports.ControlPosition{Status: ports.ControlPositionUndetermined}, nil
+	}
+	return known, nil
+}
+
+// AwaitingMeasurementChanges 交回等位置的实测变化：未判原因是控制位置未定，且同（租户，关联）在复核册没有行。
+// 已经补判落册的不再交回。顺序按触发业务时间再按关联，补判按这个顺序走，两次读到的先后不因 map 迭代而变。
+func (repository *RouteReassessments) AwaitingMeasurementChanges(
+	ctx context.Context,
+	key domain.InitialRouteJudgmentKey,
+) ([]domain.RequestCorrelationID, error) {
+	if err := repository.lockJudgmentKey(ctx, key); err != nil {
+		return nil, fmt.Errorf("awaiting measurement changes: %w", err)
+	}
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("awaiting measurement changes: %w", err)
+	}
+	dims := judgmentKeyDims(key)
+	rows, err := executor.Query(ctx,
+		`SELECT correlation_id
+		   FROM network_routing.route_reassessment_not_judged nj
+		  WHERE tenant_id = $1
+		    AND customer_account_id = $2
+		    AND shipment_request_id = $3
+		    AND acceptance_baseline = $4
+		    AND declared_parcel_id = $5
+		    AND service_purpose = $6
+		    AND reason = $7
+		    AND NOT EXISTS (
+		        SELECT 1
+		          FROM network_routing.route_reassessment judged
+		         WHERE judged.tenant_id = nj.tenant_id
+		           AND judged.correlation_id = nj.correlation_id)
+		  ORDER BY trigger_occurred_at, correlation_id`,
+		append(dims, ports.NotJudgedControlPositionUnavailable.String())...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("awaiting measurement changes: %w", err)
+	}
+	defer rows.Close()
+	var correlations []domain.RequestCorrelationID
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, fmt.Errorf("awaiting measurement changes: %w", err)
+		}
+		correlation, err := domain.NewRequestCorrelationID(raw)
+		if err != nil {
+			return nil, fmt.Errorf("awaiting measurement changes: %w", err)
+		}
+		correlations = append(correlations, correlation)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("awaiting measurement changes: %w", err)
+	}
+	return correlations, nil
 }
 
 // FormedPlans 交回这一判断键在册复核里形成过的全部新计划，并读授权改路决定册的新计划（ADR-0284 决定五）：决定形成的计划同样

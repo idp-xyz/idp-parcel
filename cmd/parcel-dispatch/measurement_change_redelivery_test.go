@@ -12,6 +12,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
@@ -170,10 +171,21 @@ func redeliverMeasurementChange(t *testing.T, confirmed bool) {
 	if status := outboxStatus(t, db, measurementRedeliveryEnvelope); status != "PUBLISHED" {
 		t.Fatalf("重办的信封 status = %q；失败码 = %q 原文 = %v", status, recordedFailureCode(t, db, measurementRedeliveryEnvelope), observed[measurementRedeliveryEnvelope])
 	}
-	// 重办确实被处理方办了一遍而不是被收件箱拦掉：同一个消费者名下，新信封身份各记一行，原来那行还在。
+	// 重办确实被处理方办了一遍而不是被收件箱拦掉：每一路消费者名下，新信封身份各记一行，原来那行还在。
+	// 同一封实测变化现在有两路：结算重评与路由复核，各记各的 inbox 账。
 	original, redelivered := inboxConsumersOf(t, db, changeEnvelope), inboxConsumersOf(t, db, measurementRedeliveryEnvelope)
-	if len(original) != 1 || len(redelivered) != 1 || original[0] != redelivered[0] {
-		t.Fatalf("收件箱消费者：原信封 %v、重办信封 %v，want 各一行且同一个消费者", original, redelivered)
+	wantConsumers := []string{
+		nrinbox.ReassessOnMeasurementChangeConsumerName,
+		"settlement-accounting/reevaluate-on-measurement-change",
+	}
+	sort.Strings(wantConsumers)
+	if len(original) != len(wantConsumers) || len(redelivered) != len(wantConsumers) {
+		t.Fatalf("收件箱消费者：原信封 %v、重办信封 %v，want 两路各一行 %v", original, redelivered, wantConsumers)
+	}
+	for i := range wantConsumers {
+		if original[i] != wantConsumers[i] || redelivered[i] != wantConsumers[i] {
+			t.Fatalf("收件箱消费者：原信封 %v、重办信封 %v，want 两路各一行 %v", original, redelivered, wantConsumers)
+		}
 	}
 	settleBeats(t, beat)
 	assertEveryEnvelopePublished(t, db, observed, "重办")

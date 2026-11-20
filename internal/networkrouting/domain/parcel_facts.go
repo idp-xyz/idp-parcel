@@ -24,6 +24,9 @@ const (
 	// DecisionFactsPoint 是授权角色据复核建议形成改路决定：决定由操作者此刻发起、不是复核触发，新计划从决定时刻生效，
 	// 与到站复核同取判断此刻仍有效的物理实测。
 	DecisionFactsPoint
+	// MeasurementChangeFactsPoint 是实测变化重判：称重不是控制依据，不带来新位置，只认判断此刻仍有效的物理实测。
+	// 不能按抄来的控制依据落到首次收寄——那一格把物理事实截到锚点的业务时间，锚点之后才登记的实测就读不到。
+	MeasurementChangeFactsPoint
 )
 
 // ParcelFactsPoint 是判断点加上它要的业务时点。零值不合法：每个取成本的调用点都得自己指名判断点，不落进默认。
@@ -38,6 +41,10 @@ func NewArrivalFactsPoint() ParcelFactsPoint { return ParcelFactsPoint{kind: Arr
 
 func NewDecisionFactsPoint() ParcelFactsPoint { return ParcelFactsPoint{kind: DecisionFactsPoint} }
 
+func NewMeasurementChangeFactsPoint() ParcelFactsPoint {
+	return ParcelFactsPoint{kind: MeasurementChangeFactsPoint}
+}
+
 // NewFirstIntakeFactsPoint 以收寄的业务时间立首次收寄复核的判断点。时间必填：「当时已经取得」没有时点就无从截。
 func NewFirstIntakeFactsPoint(intakeAt time.Time) (ParcelFactsPoint, error) {
 	if intakeAt.IsZero() {
@@ -50,7 +57,7 @@ func (point ParcelFactsPoint) Kind() ParcelFactsPointKind { return point.kind }
 
 func (point ParcelFactsPoint) Valid() bool {
 	switch point.kind {
-	case PreRouteFactsPoint, ArrivalFactsPoint, DecisionFactsPoint:
+	case PreRouteFactsPoint, ArrivalFactsPoint, DecisionFactsPoint, MeasurementChangeFactsPoint:
 		return true
 	case FirstIntakeFactsPoint:
 		return !point.at.IsZero()
@@ -70,7 +77,7 @@ func (point ParcelFactsPoint) PhysicalFactsAsOf(now time.Time) (time.Time, bool)
 	switch point.kind {
 	case FirstIntakeFactsPoint:
 		return point.at, true
-	case ArrivalFactsPoint, DecisionFactsPoint:
+	case ArrivalFactsPoint, DecisionFactsPoint, MeasurementChangeFactsPoint:
 		return now.UTC(), true
 	default:
 		return time.Time{}, false
@@ -139,6 +146,9 @@ func ParseParcelFactsBasis(raw string) (ParcelFactsBasis, error) {
 // 取收寄的业务时间；把包裹交进接收节点的权威运输交接是到站复核。场外揽收没有节点能称重，当时没有物理事实是常态，由取数侧
 // 如实退回声明，不在这里另立一格。
 func (trigger ReassessmentTrigger) ParcelFactsPoint() ParcelFactsPoint {
+	if trigger.measurementRejudge {
+		return NewMeasurementChangeFactsPoint()
+	}
 	switch trigger.control {
 	case NodeIntakeControl, OffsitePickupControl:
 		point, err := NewFirstIntakeFactsPoint(trigger.occurredAt)

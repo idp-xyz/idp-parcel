@@ -80,9 +80,10 @@ func TestTheLatestTriggerIsReadPerJudgmentKey(t *testing.T) {
 		`INSERT INTO network_routing.route_reassessment
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
-			 conclusion, reviewed_plan, reassessed_at)
+			 conclusion, reviewed_plan, trigger_control, trigger_location, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-p-raw', 'customer-a', 'request-1',
-		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY', 'STILL_APPLICABLE', 'RPV-0001', now())`); err == nil {
+		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY', 'STILL_APPLICABLE', 'RPV-0001',
+		         'NODE_INTAKE_CONTROL', 'node-origin', now())`); err == nil {
 		t.Fatal("绕过适配器直插的新行缺触发业务时间也进了库")
 	}
 	if _, _, err := reassessments.LatestTriggerAt(ctx, key); !errors.Is(err, bentopg.ErrTransactionRequired) {
@@ -295,7 +296,7 @@ func TestReadingTheLatestTriggerSerializesPerJudgmentKey(t *testing.T) {
 	ctx := t.Context()
 	key := routeKey(t, "tenant-1", "parcel-1")
 	held, release, firstDone := make(chan struct{}), make(chan struct{}), make(chan error, 1)
-	record := stillApplicableAt(t, key, "trigger-p-first", notJudgedTriggerAt)
+	record := withTriggerControl(t, stillApplicableAt(t, key, "trigger-p-first", notJudgedTriggerAt))
 
 	go func() {
 		firstDone <- transactor.WithinTransaction(ctx, func(txCtx context.Context) error {

@@ -272,6 +272,18 @@ func (double *reassessStoreDouble) FormedPlans(
 	return plans, nil
 }
 
+func (double *reassessStoreDouble) LatestControlPosition(
+	context.Context, nrdomain.InitialRouteJudgmentKey,
+) (nrports.ControlPosition, error) {
+	return nrports.ControlPosition{Status: nrports.ControlPositionAbsent}, nil
+}
+
+func (double *reassessStoreDouble) AwaitingMeasurementChanges(
+	context.Context, nrdomain.InitialRouteJudgmentKey,
+) ([]nrdomain.RequestCorrelationID, error) {
+	return nil, nil
+}
+
 func (double *reassessStoreDouble) RecordNotJudged(_ context.Context, record nrports.NotJudgedTrigger) error {
 	if double.notJudged == nil {
 		double.notJudged = map[nrdomain.RequestCorrelationID]nrports.NotJudgedTrigger{}

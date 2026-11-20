@@ -131,3 +131,65 @@ func TestATriggerPrecedesTheAcceptanceOnlyWhenItsBusinessTimeIsStrictlyEarlier(t
 		}
 	}
 }
+
+// Covers: 实测变化重判抄锚点立得起来，线索级控制依据照旧立不成；缺位置、缺时间、缺来源版本也拒。
+// 关联带「实测变化」、包裹与来源身份，过得了改路触发引用的门，来源身份能从关联还原（含斜杠）。
+func TestAMeasurementChangeRejudgeCopiesTheAnchorAndRefusesASourceHint(t *testing.T) {
+	spec := triggerSpec(t, domain.NodeIntakeControl)
+	rejudge, err := domain.NewMeasurementChangeRejudge(spec)
+	if err != nil {
+		t.Fatalf("重判：%v", err)
+	}
+	if rejudge.Control() != domain.NodeIntakeControl || rejudge.Location().String() != spec.Location.String() ||
+		!rejudge.OccurredAt().Equal(spec.OccurredAt) {
+		t.Fatalf("重判没有抄下锚点：%s %s %s", rejudge.Control(), rejudge.Location(), rejudge.OccurredAt())
+	}
+	plain, err := domain.NewReassessmentTrigger(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.ParcelFactsPoint().Kind() == domain.MeasurementChangeFactsPoint {
+		t.Fatal("既有控制触发的判断点被改成了实测变化重判")
+	}
+
+	hint := spec
+	hint.Control = domain.SourceHint
+	if _, err := domain.NewMeasurementChangeRejudge(hint); !errors.Is(err, domain.ErrSourceHintDoesNotTrigger) {
+		t.Fatalf("线索：err = %v, want ErrSourceHintDoesNotTrigger", err)
+	}
+	for name, mutate := range map[string]func(domain.ReassessmentTriggerSpec) domain.ReassessmentTriggerSpec{
+		"没位置": func(spec domain.ReassessmentTriggerSpec) domain.ReassessmentTriggerSpec {
+			spec.Location = domain.ActualLocationReference{}
+			return spec
+		},
+		"没业务时间": func(spec domain.ReassessmentTriggerSpec) domain.ReassessmentTriggerSpec {
+			spec.OccurredAt = time.Time{}
+			return spec
+		},
+		"没来源版本": func(spec domain.ReassessmentTriggerSpec) domain.ReassessmentTriggerSpec {
+			spec.SourceVersion = domain.SourceFactVersionReference{}
+			return spec
+		},
+	} {
+		if _, err := domain.NewMeasurementChangeRejudge(mutate(spec)); !errors.Is(err, domain.ErrInvalidReassessmentTrigger) {
+			t.Fatalf("%s：err = %v, want ErrInvalidReassessmentTrigger", name, err)
+		}
+	}
+
+	tenant := spec.Key.TenantID
+	parcel := spec.Key.DeclaredParcelID
+	correlation, err := domain.NewMeasurementChangeCorrelation(tenant, parcel, "src/1")
+	if err != nil {
+		t.Fatalf("关联：%v", err)
+	}
+	if _, err := domain.NewRerouteTriggerReference(correlation.String()); err != nil {
+		t.Fatalf("关联当不了改路触发引用：%v", err)
+	}
+	source, err := domain.MeasurementChangeSourceVersion(correlation)
+	if err != nil || source.String() != "src/1" {
+		t.Fatalf("还原来源身份 = %q, err = %v, want src/1", source, err)
+	}
+	if _, err := domain.NewMeasurementChangeCorrelation(tenant, parcel, " "); !errors.Is(err, domain.ErrInvalidReassessmentTrigger) {
+		t.Fatalf("空白来源：err = %v", err)
+	}
+}

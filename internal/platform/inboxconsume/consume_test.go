@@ -206,3 +206,78 @@ func TestAForeignEventTypeIsLoudNotRecorded(t *testing.T) {
 		t.Fatalf("处理次数 = %d, want 0", len(handler.calls))
 	}
 }
+
+type timedPayload struct {
+	Token string
+	At    time.Time
+}
+
+// Covers: 按信封译码能拿到 OccurredAt；两只译码函数都填时只用信封那一只；两只都空则拒绝装配。
+// 只填载荷译码的既有消费者不经过这条路，它们的行为由上面几则用例守着。
+func TestAnEnvelopeDecoderSeesTheBusinessTimeAndAMissingDecoderIsRefused(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	store, err := inbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Inbox Store：%v", err)
+	}
+	var payloadDecoded bool
+	var seen timedPayload
+	gate, err := inboxconsume.New(inboxconsume.Spec[timedPayload]{
+		Transactor: db.Transactor(),
+		Store:      store,
+		Name:       "platform/inboxconsume-envelope",
+		EventType:  fixtureType,
+		Decode: func([]byte) (timedPayload, error) {
+			payloadDecoded = true
+			return timedPayload{}, errors.New("payload decoder must not run")
+		},
+		DecodeEnvelope: func(envelope eventing.Envelope) (timedPayload, error) {
+			var body payload
+			if err := json.Unmarshal(envelope.Payload, &body); err != nil || body.Token == "" {
+				return timedPayload{}, errors.New("poison")
+			}
+			if envelope.OccurredAt.IsZero() {
+				return timedPayload{}, errors.New("poison: no business time")
+			}
+			return timedPayload{Token: body.Token, At: envelope.OccurredAt}, nil
+		},
+		Handle: func(_ context.Context, decoded timedPayload) error {
+			seen = decoded
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope := fixtureEnvelope(t, "event-envelope", "token-1")
+	if err := gate.Consume(t.Context(), envelope); err != nil {
+		t.Fatalf("按信封译码：%v", err)
+	}
+	if payloadDecoded || seen.Token != "token-1" || !seen.At.Equal(envelope.OccurredAt) {
+		t.Fatalf("载荷译码被调用 %v、收到 %q @ %s，want 只用信封、token-1 @ %s",
+			payloadDecoded, seen.Token, seen.At, envelope.OccurredAt)
+	}
+
+	undated := fixtureEnvelope(t, "event-undated", "token-1")
+	undated.OccurredAt = time.Time{}
+	if err := gate.Consume(t.Context(), undated); err != nil {
+		t.Fatalf("没有业务时间应拒收入账：%v", err)
+	}
+	if !seen.At.Equal(envelope.OccurredAt) {
+		t.Fatal("没有业务时间的信封仍被处理了")
+	}
+
+	if _, err := inboxconsume.New(inboxconsume.Spec[payload]{
+		Transactor: db.Transactor(),
+		Store:      store,
+		Name:       "platform/inboxconsume-nodecoder",
+		EventType:  fixtureType,
+		Handle:     func(context.Context, payload) error { return nil },
+	}); err == nil {
+		t.Fatal("两只译码函数都空也装配成功了")
+	}
+}

@@ -146,9 +146,10 @@ func TestPhysicalFactsAreReadAsOfTheMomentTheJudgmentPointNames(t *testing.T) {
 		point nrdomain.ParcelFactsPoint
 		asOf  time.Time
 	}{
-		"首次收寄": {firstIntake(t), intakeAt},
-		"到站":   {nrdomain.NewArrivalFactsPoint(), judgedAt},
-		"授权决定": {nrdomain.NewDecisionFactsPoint(), judgedAt},
+		"首次收寄":   {firstIntake(t), intakeAt},
+		"到站":     {nrdomain.NewArrivalFactsPoint(), judgedAt},
+		"授权决定":   {nrdomain.NewDecisionFactsPoint(), judgedAt},
+		"实测变化重判": {nrdomain.NewMeasurementChangeFactsPoint(), judgedAt},
 	} {
 		t.Run(name, func(t *testing.T) {
 			physical := &physicalDouble{answer: obtained(t, "9", dimensionsOf(t, "50", "40", "30"))}
@@ -187,6 +188,7 @@ func TestObtainedPhysicalFactsPriceInsteadOfTheDeclaration(t *testing.T) {
 func TestObtainedPhysicalFactsAreTakenWholeAndTheDeclarationIsNeverRead(t *testing.T) {
 	for name, point := range map[string]nrdomain.ParcelFactsPoint{
 		"首次收寄": firstIntake(t), "到站": nrdomain.NewArrivalFactsPoint(), "授权决定": nrdomain.NewDecisionFactsPoint(),
+		"实测变化重判": nrdomain.NewMeasurementChangeFactsPoint(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			measured := dimensionsOf(t, "50", "40", "30")

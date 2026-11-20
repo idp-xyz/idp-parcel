@@ -246,10 +246,12 @@ func insertReassessmentRowOn(
 		`INSERT INTO network_routing.route_reassessment
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose, conclusion,
-			 reviewed_plan, lapse_basis, candidate_state, trigger_occurred_at, reassessed_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+			 reviewed_plan, lapse_basis, candidate_state, trigger_control, trigger_location,
+			 trigger_occurred_at, reassessed_at, recorded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 		key[0], correlationID, key[1], key[2], key[3], key[4], key[5], conclusion,
-		reviewedValue, lapseValue, candidateValue, recordedAt.Add(-time.Hour), recordedAt.Add(-time.Minute), recordedAt,
+		reviewedValue, lapseValue, candidateValue, "NODE_INTAKE_CONTROL", "node-origin",
+		recordedAt.Add(-time.Hour), recordedAt.Add(-time.Minute), recordedAt,
 	); err != nil {
 		t.Fatalf("插复核行 %s：%v", correlationID, err)
 	}

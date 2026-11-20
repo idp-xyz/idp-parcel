@@ -18,6 +18,10 @@ const PoisonFailureCode = "inbox.poison_envelope"
 // Decoder 把信封载荷译成处理方要的值。返回错误即毒丸：重投同样内容不会改变结果。
 type Decoder[T any] func(payload []byte) (T, error)
 
+// EnvelopeDecoder 按整封信封译码。业务时间在信封的 OccurredAt 上、不在载荷里时用它。
+// 只看载荷的消费者继续用 Decode，行为不变。
+type EnvelopeDecoder[T any] func(envelope eventing.Envelope) (T, error)
+
 // Handler 在消费门已经占住的同一事务里处理译码结果。返回错误让整笔事务回滚，inbox
 // 无痕，重投可以再试。
 type Handler[T any] func(ctx context.Context, decoded T) error
@@ -29,8 +33,11 @@ type Spec[T any] struct {
 	Store      *inbox.Store
 	Name       string
 	EventType  eventing.EventType
-	Decode     Decoder[T]
-	Handle     Handler[T]
+	// Decode 与 DecodeEnvelope 至少填一个。都填时用 DecodeEnvelope，Decode 不再被调用。
+	// 既有消费者只填 Decode，译码入参仍是载荷。
+	Decode         Decoder[T]
+	DecodeEnvelope EnvelopeDecoder[T]
+	Handle         Handler[T]
 	// UnexpectedType 是认不得的类型那句错误的前缀（「network routing inbox」）。
 	// 空则用本包默认前缀。
 	UnexpectedType string
@@ -45,7 +52,7 @@ type Gate[T any] struct {
 	store          *inbox.Store
 	name           string
 	eventType      eventing.EventType
-	decode         Decoder[T]
+	decode         EnvelopeDecoder[T]
 	handle         Handler[T]
 	unexpectedType string
 	handleVerb     string
@@ -64,8 +71,15 @@ func New[T any](spec Spec[T]) (*Gate[T], error) {
 	if spec.EventType == "" {
 		return nil, fmt.Errorf("inbox consume: event type is empty")
 	}
-	if spec.Decode == nil {
+	if spec.Decode == nil && spec.DecodeEnvelope == nil {
 		return nil, fmt.Errorf("inbox consume: decoder is nil")
+	}
+	decode := spec.DecodeEnvelope
+	if decode == nil {
+		payloadDecode := spec.Decode
+		decode = func(envelope eventing.Envelope) (T, error) {
+			return payloadDecode(envelope.Payload)
+		}
 	}
 	if spec.Handle == nil {
 		return nil, fmt.Errorf("inbox consume: handler is nil")
@@ -83,7 +97,7 @@ func New[T any](spec Spec[T]) (*Gate[T], error) {
 		store:          spec.Store,
 		name:           spec.Name,
 		eventType:      spec.EventType,
-		decode:         spec.Decode,
+		decode:         decode,
 		handle:         spec.Handle,
 		unexpectedType: unexpected,
 		handleVerb:     verb,
@@ -98,7 +112,7 @@ func (gate *Gate[T]) Consume(ctx context.Context, envelope eventing.Envelope) er
 		return fmt.Errorf("%s: unexpected event type %q", gate.unexpectedType, envelope.Type)
 	}
 
-	decoded, decodeErr := gate.decode(envelope.Payload)
+	decoded, decodeErr := gate.decode(envelope)
 
 	return gate.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		started, err := gate.store.Start(txCtx, eventing.InboxKey{

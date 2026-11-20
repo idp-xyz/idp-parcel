@@ -2,6 +2,9 @@ package domain
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -45,6 +48,21 @@ func (kind ControlEvidenceKind) String() string {
 		return "OFFSITE_PICKUP_CONTROL"
 	default:
 		return ""
+	}
+}
+
+// ParseControlEvidenceKind 把册上的控制依据读回来。只认能立成复核触发的三格：线索立不成触发，
+// 不会被写成一次复核所据的控制依据；认不出的文本不兜底成某一格。
+func ParseControlEvidenceKind(raw string) (ControlEvidenceKind, error) {
+	switch raw {
+	case NodeIntakeControl.String():
+		return NodeIntakeControl, nil
+	case TransportHandoverControl.String():
+		return TransportHandoverControl, nil
+	case OffsitePickupControl.String():
+		return OffsitePickupControl, nil
+	default:
+		return ControlEvidenceKindInvalid, fmt.Errorf("network routing: unknown control evidence %q", raw)
 	}
 }
 
@@ -98,6 +116,9 @@ type ReassessmentTrigger struct {
 	sourceVersion SourceFactVersionReference
 	occurredAt    time.Time
 	acceptedAt    time.Time
+	// measurementRejudge 为真时，控制依据、位置与业务时间是抄来的锚点，判断点不按控制依据答。
+	// 称重不是控制依据：按锚点答首次收寄会把物理事实截到锚点时刻，锚点之后才登记的实测就读不到。
+	measurementRejudge bool
 }
 
 // NewReassessmentTrigger 拒绝两类输入：缺件的（位置、版本、时间齐备才可关联）与线索级
@@ -127,6 +148,78 @@ func NewReassessmentTrigger(spec ReassessmentTriggerSpec) (ReassessmentTrigger, 
 		occurredAt:    spec.OccurredAt.UTC(),
 		acceptedAt:    spec.AcceptedAt.UTC(),
 	}, nil
+}
+
+// NewMeasurementChangeRejudge 立一次实测变化重判。spec 里的控制依据、位置与业务时间必须是最近一次已判控制触发抄来的，
+// 不是这次称重自己的：称重不带来新位置，业务时间若用更晚的变化时刻，复核册上的当前位置会被推后，夹在中间的交接会被判成
+// 早于当前位置而不判。线索级控制依据照旧立不成。判断点见 ParcelFactsPoint：答此刻的实测，不按抄来的控制依据截到收寄时刻。
+func NewMeasurementChangeRejudge(spec ReassessmentTriggerSpec) (ReassessmentTrigger, error) {
+	trigger, err := NewReassessmentTrigger(spec)
+	if err != nil {
+		return ReassessmentTrigger{}, err
+	}
+	trigger.measurementRejudge = true
+	return trigger, nil
+}
+
+// measurementChangeCorrelationPrefix 与 handover/、intake/ 错开。字面含「实测变化」，读关联就知道是哪一路。
+const measurementChangeCorrelationPrefix = "实测变化/"
+
+// NewMeasurementChangeCorrelation 组实测变化的关联：租户、包裹、这次变化的来源身份各写成「字节长度:原串」。
+// 来源身份是登记方给的串，可能含斜杠，直拼会让两次不同的变化拼成同一个关联。登记与作废各有自己的来源身份，关联因此不同。
+func NewMeasurementChangeCorrelation(tenant TenantID, parcel DeclaredParcelID, sourceID string) (RequestCorrelationID, error) {
+	if !tenant.valid() || !parcel.valid() || strings.TrimSpace(sourceID) == "" {
+		return RequestCorrelationID{}, ErrInvalidReassessmentTrigger
+	}
+	raw := measurementChangeCorrelationPrefix +
+		prefixedCorrelationPart(tenant.String()) + "/" +
+		prefixedCorrelationPart(parcel.String()) + "/" +
+		prefixedCorrelationPart(sourceID)
+	return NewRequestCorrelationID(raw)
+}
+
+// MeasurementChangeSourceVersion 从实测变化关联里取出这次变化的来源身份。补判时复核册上只留着关联，来源身份要能从它还原：
+// 重判触发的来源版本是这次变化自己的，不是锚点那次控制触发的。
+func MeasurementChangeSourceVersion(correlation RequestCorrelationID) (SourceFactVersionReference, error) {
+	raw := correlation.String()
+	rest, ok := strings.CutPrefix(raw, measurementChangeCorrelationPrefix)
+	if !ok {
+		return SourceFactVersionReference{}, ErrInvalidReassessmentTrigger
+	}
+	parts, err := splitPrefixedCorrelation(rest)
+	if err != nil || len(parts) != 3 {
+		return SourceFactVersionReference{}, ErrInvalidReassessmentTrigger
+	}
+	return NewSourceFactVersionReference(parts[2])
+}
+
+func prefixedCorrelationPart(part string) string {
+	return strconv.Itoa(len(part)) + ":" + part
+}
+
+func splitPrefixedCorrelation(raw string) ([]string, error) {
+	var parts []string
+	rest := raw
+	for rest != "" {
+		colon := strings.IndexByte(rest, ':')
+		if colon <= 0 {
+			return nil, ErrInvalidReassessmentTrigger
+		}
+		n, err := strconv.Atoi(rest[:colon])
+		if err != nil || n < 0 || colon+1+n > len(rest) {
+			return nil, ErrInvalidReassessmentTrigger
+		}
+		parts = append(parts, rest[colon+1:colon+1+n])
+		rest = rest[colon+1+n:]
+		if rest == "" {
+			break
+		}
+		if !strings.HasPrefix(rest, "/") {
+			return nil, ErrInvalidReassessmentTrigger
+		}
+		rest = rest[1:]
+	}
+	return parts, nil
 }
 
 func (trigger ReassessmentTrigger) Correlation() RequestCorrelationID {

@@ -109,11 +109,12 @@ func TestAReroutedRowCarriesExactlyOneReason(t *testing.T) {
 				(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 				 acceptance_baseline, declared_parcel_id, service_purpose,
 				 conclusion, reviewed_plan, lapse_basis, candidate_state,
-				 reroute_state, new_plan, decision, improvement_basis, trigger_occurred_at, reassessed_at)
+				 reroute_state, new_plan, decision, improvement_basis,
+				 trigger_control, trigger_location, trigger_occurred_at, reassessed_at)
 			 VALUES ('tenant-1', '%s', 'customer-a', 'request-1',
 			         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
 			         '%s', 'RPV-0001', %s, %s,
-			         %s, %s, %s, %s, now(), now())`,
+			         %s, %s, %s, %s, 'NODE_INTAKE_CONTROL', 'node-origin', now(), now())`,
 			correlation, conclusion, lapseBasis, candidateState, rerouteState, newPlan, decision, improvementBasis))
 		return err
 	}

@@ -119,11 +119,11 @@ func insertLapsedReassessment(ctx context.Context, db sqlExecutor, correlation s
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis, candidate_state,
-			 trigger_occurred_at, reassessed_at)
+			 trigger_control, trigger_location, trigger_occurred_at, reassessed_at)
 		 VALUES ('SYN-TENANT-CC', $1, 'SYN-CUSTOMER-CC', 'SYN-REQUEST-CC',
 		         'baseline-v1', 'SYN-PARCEL-CC', 'LAST_MILE_DELIVERY',
 		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', 'NO_QUALIFIED_CANDIDATES',
-		         now(), now())`, correlation)
+		         'NODE_INTAKE_CONTROL', 'node-origin', now(), now())`, correlation)
 	return err
 }
 
@@ -136,11 +136,12 @@ func insertReroutedReassessment(
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis, candidate_state, reroute_state,
-			 new_plan, decision, improvement_basis, trigger_occurred_at, reassessed_at)
+			 new_plan, decision, improvement_basis, trigger_control, trigger_location,
+			 trigger_occurred_at, reassessed_at)
 		 VALUES ('SYN-TENANT-CC', $1, 'SYN-CUSTOMER-CC', 'SYN-REQUEST-CC',
 		         'baseline-v1', 'SYN-PARCEL-CC', 'LAST_MILE_DELIVERY',
 		         'REROUTED', 'RPV-0001', $2, 'CANDIDATES_AVAILABLE', 'AUTOMATIC_ALLOWED',
-		         $3::jsonb, '{}'::jsonb, $4::jsonb, now(), now())`,
+		         $3::jsonb, '{}'::jsonb, $4::jsonb, 'NODE_INTAKE_CONTROL', 'node-origin', now(), now())`,
 		correlation, lapseBasis, newPlan, improvementBasis)
 	return err
 }
@@ -160,6 +161,74 @@ func insertReassessmentImprovementBasis(ctx context.Context, db sqlExecutor, lab
 		return insertReroutedReassessment(ctx, db, label, &lapse, &emptyPlan, nil)
 	}
 	return insertReroutedReassessment(ctx, db, label, nil, &emptyPlan, document)
+}
+
+// insertLapsedReassessmentBeforeTriggerPosition 落在迁移 0037 之前的库上：那时还没有控制依据与位置两列。
+// 0036 的迁移测试停在 0036 之前插行，用这一支；全量迁移之后的用例用带这两列的那一支。
+func insertLapsedReassessmentBeforeTriggerPosition(ctx context.Context, db sqlExecutor, correlation string) error {
+	_, err := db.Exec(ctx,
+		`INSERT INTO network_routing.route_reassessment
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
+			 acceptance_baseline, declared_parcel_id, service_purpose,
+			 conclusion, reviewed_plan, lapse_basis, candidate_state,
+			 trigger_occurred_at, reassessed_at)
+		 VALUES ('SYN-TENANT-CC', $1, 'SYN-CUSTOMER-CC', 'SYN-REQUEST-CC',
+		         'baseline-v1', 'SYN-PARCEL-CC', 'LAST_MILE_DELIVERY',
+		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', 'NO_QUALIFIED_CANDIDATES',
+		         now(), now())`, correlation)
+	return err
+}
+
+func insertReroutedReassessmentBeforeTriggerPosition(
+	ctx context.Context, db sqlExecutor, correlation string, lapseBasis, newPlan, improvementBasis *string,
+) error {
+	_, err := db.Exec(ctx,
+		`INSERT INTO network_routing.route_reassessment
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
+			 acceptance_baseline, declared_parcel_id, service_purpose,
+			 conclusion, reviewed_plan, lapse_basis, candidate_state, reroute_state,
+			 new_plan, decision, improvement_basis, trigger_occurred_at, reassessed_at)
+		 VALUES ('SYN-TENANT-CC', $1, 'SYN-CUSTOMER-CC', 'SYN-REQUEST-CC',
+		         'baseline-v1', 'SYN-PARCEL-CC', 'LAST_MILE_DELIVERY',
+		         'REROUTED', 'RPV-0001', $2, 'CANDIDATES_AVAILABLE', 'AUTOMATIC_ALLOWED',
+		         $3::jsonb, '{}'::jsonb, $4::jsonb, now(), now())`,
+		correlation, lapseBasis, newPlan, improvementBasis)
+	return err
+}
+
+func insertReassessmentNewPlanBeforeTriggerPosition(ctx context.Context, db sqlExecutor, label string, document *string) error {
+	if document == nil {
+		return insertLapsedReassessmentBeforeTriggerPosition(ctx, db, label)
+	}
+	lapse := "closure-7"
+	return insertReroutedReassessmentBeforeTriggerPosition(ctx, db, label, &lapse, document, nil)
+}
+
+func insertReassessmentImprovementBasisBeforeTriggerPosition(ctx context.Context, db sqlExecutor, label string, document *string) error {
+	emptyPlan := `{}`
+	lapse := "closure-7"
+	if document == nil {
+		return insertReroutedReassessmentBeforeTriggerPosition(ctx, db, label, &lapse, &emptyPlan, nil)
+	}
+	return insertReroutedReassessmentBeforeTriggerPosition(ctx, db, label, nil, &emptyPlan, document)
+}
+
+func insertDecisionNewPlanBeforeTriggerPosition(ctx context.Context, db sqlExecutor, label string, document *string) error {
+	if err := insertLapsedReassessmentBeforeTriggerPosition(ctx, db, label); err != nil {
+		return err
+	}
+	_, err := db.Exec(ctx,
+		`INSERT INTO network_routing.authorized_reroute_decision
+			(tenant_id, suggestion_correlation_id, customer_account_id, shipment_request_id,
+			 acceptance_baseline, declared_parcel_id, service_purpose,
+			 chosen_candidate, original_plan, new_plan_version, new_plan,
+			 decided_by, decision_basis, decided_at)
+		 VALUES ('SYN-TENANT-CC', $1, 'SYN-CUSTOMER-CC', 'SYN-REQUEST-CC',
+		         'baseline-v1', 'SYN-PARCEL-CC', 'LAST_MILE_DELIVERY',
+		         'candidate-1', 'RPV-0001', 'RPV-CC-NEW', $2::jsonb,
+		         'OPERATOR/https://issuer.example#ops-7', 'SYN-APPROVAL-CC', now())`,
+		label, document)
+	return err
 }
 
 func insertDecisionNewPlan(ctx context.Context, db sqlExecutor, label string, document *string) error {

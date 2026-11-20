@@ -43,6 +43,33 @@ func TestAReassessmentTriggerNamesItsParcelFactsPoint(t *testing.T) {
 	}
 }
 
+// Covers: 实测变化重判的判断点是此刻的物理实测，不按抄来的控制依据答。锚点是节点收寄时尤其不能落到首次收寄：
+// 那一格把物理事实截到收寄的业务时间，锚点之后才登记的实测就读不到。既有控制触发的判断点不因此改变。
+func TestAMeasurementChangeRejudgeReadsPhysicalFactsAsOfNowEvenWhenTheAnchorIsIntake(t *testing.T) {
+	spec := triggerSpec(t, domain.NodeIntakeControl)
+	rejudge, err := domain.NewMeasurementChangeRejudge(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	point := rejudge.ParcelFactsPoint()
+	now := spec.OccurredAt.Add(48 * time.Hour)
+	asOf, ok := point.PhysicalFactsAsOf(now)
+	if point.Kind() != domain.MeasurementChangeFactsPoint || !point.Valid() || !point.WantsPhysicalFacts() || !ok || !asOf.Equal(now) {
+		t.Fatalf("重判判断点 = %v、截至 %s（ok %v），want 实测变化重判、截至判断此刻 %s", point.Kind(), asOf, ok, now)
+	}
+	if asOf.Equal(spec.OccurredAt) {
+		t.Fatal("节点收寄锚点上的重判把物理事实截到了收寄的业务时间")
+	}
+
+	plain, err := domain.NewReassessmentTrigger(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.ParcelFactsPoint().Kind() != domain.FirstIntakeFactsPoint {
+		t.Fatalf("节点收寄触发的判断点 = %v，want 首次收寄", plain.ParcelFactsPoint().Kind())
+	}
+}
+
 // Covers: 预路由不读物理事实；零值判断点不合法，每个取成本的调用点都得自己指名；首次收寄没有收寄业务时间就无从截。
 func TestParcelFactsPointsRefuseWhatNamesNoJudgmentPoint(t *testing.T) {
 	pre := domain.NewPreRouteFactsPoint()

@@ -123,6 +123,9 @@ type reassessmentStoreDouble struct {
 	saved    int
 	// decided 是授权改路决定册里同判断键的新计划：真库的 FormedPlans 并读那一册（ADR-0284 决定五），替身由决定册替身接上。
 	decided func(domain.InitialRouteJudgmentKey) []domain.InitialRoutePlan
+	// saveErr 在已经成功写入 saveErrAfter 条之后开始失败，用来让补判那一次停在未决。0 表示不设这条。
+	saveErr      error
+	saveErrAfter int
 }
 
 func newReassessmentStore() *reassessmentStoreDouble {
@@ -189,6 +192,81 @@ func latestTriggerAt(
 	return latest, !latest.IsZero(), nil
 }
 
+func (double *reassessmentStoreDouble) LatestControlPosition(
+	_ context.Context,
+	key domain.InitialRouteJudgmentKey,
+) (ports.ControlPosition, error) {
+	var max time.Time
+	found := false
+	for _, record := range double.byCorrelation {
+		if record.Key != key || record.TriggerOccurredAt.IsZero() {
+			continue
+		}
+		if !found || record.TriggerOccurredAt.After(max) {
+			max = record.TriggerOccurredAt
+			found = true
+		}
+	}
+	if !found {
+		return ports.ControlPosition{Status: ports.ControlPositionAbsent}, nil
+	}
+	type pair struct {
+		control  domain.ControlEvidenceKind
+		location string
+	}
+	seen := map[pair]ports.ControlPosition{}
+	undetermined := false
+	for _, record := range double.byCorrelation {
+		if record.Key != key || !record.TriggerOccurredAt.Equal(max) {
+			continue
+		}
+		if record.TriggerControl == 0 || record.TriggerLocation.String() == "" {
+			undetermined = true
+			continue
+		}
+		seen[pair{record.TriggerControl, record.TriggerLocation.String()}] = ports.ControlPosition{
+			Status:     ports.ControlPositionKnown,
+			Control:    record.TriggerControl,
+			Location:   record.TriggerLocation,
+			OccurredAt: max,
+		}
+	}
+	if undetermined || len(seen) != 1 {
+		return ports.ControlPosition{Status: ports.ControlPositionUndetermined}, nil
+	}
+	for _, position := range seen {
+		return position, nil
+	}
+	return ports.ControlPosition{Status: ports.ControlPositionUndetermined}, nil
+}
+
+func (double *reassessmentStoreDouble) AwaitingMeasurementChanges(
+	_ context.Context,
+	key domain.InitialRouteJudgmentKey,
+) ([]domain.RequestCorrelationID, error) {
+	var waiting []ports.NotJudgedTrigger
+	for _, record := range double.notJudged {
+		if record.Key != key || record.Reason != ports.NotJudgedControlPositionUnavailable {
+			continue
+		}
+		if _, judged := double.byCorrelation[record.Correlation]; judged {
+			continue
+		}
+		waiting = append(waiting, record)
+	}
+	sort.Slice(waiting, func(i, j int) bool {
+		if !waiting[i].TriggerOccurredAt.Equal(waiting[j].TriggerOccurredAt) {
+			return waiting[i].TriggerOccurredAt.Before(waiting[j].TriggerOccurredAt)
+		}
+		return waiting[i].Correlation.String() < waiting[j].Correlation.String()
+	})
+	ids := make([]domain.RequestCorrelationID, 0, len(waiting))
+	for _, record := range waiting {
+		ids = append(ids, record.Correlation)
+	}
+	return ids, nil
+}
+
 // RecordNotJudged 与真库同一条：同一关联已有一行时保留先到那一行。
 func (double *reassessmentStoreDouble) RecordNotJudged(_ context.Context, record ports.NotJudgedTrigger) error {
 	if double.notJudgedErr != nil {
@@ -214,6 +292,9 @@ func (double *reassessmentStoreDouble) Save(
 	correlation domain.RequestCorrelationID,
 	record ports.ReassessmentRecord,
 ) (ports.ReassessmentSaveOutcome, error) {
+	if double.saveErr != nil && double.saved >= double.saveErrAfter {
+		return ports.ReassessmentSaveOutcomeInvalid, double.saveErr
+	}
 	if _, exists := double.byCorrelation[correlation]; exists {
 		return ports.ReassessmentAlreadyRecorded, nil
 	}

@@ -149,12 +149,15 @@ func seedFormedPlan(
 		t.Fatalf("构造适用性库：%v", err)
 	}
 	record := nrports.ReassessmentRecord{
-		Correlation:       mustNR(t, nrdomain.NewRequestCorrelationID, correlation),
-		Key:               reassessHandoverKey(t),
-		Conclusion:        nrports.ReassessmentFirstPlanFormed,
-		CandidateState:    nrports.CandidatesAvailable,
-		NewPlan:           plan,
-		HasNewPlan:        true,
+		Correlation:    mustNR(t, nrdomain.NewRequestCorrelationID, correlation),
+		Key:            reassessHandoverKey(t),
+		Conclusion:     nrports.ReassessmentFirstPlanFormed,
+		CandidateState: nrports.CandidatesAvailable,
+		NewPlan:        plan,
+		HasNewPlan:     true,
+		// 新行必带控制依据与位置。这三行是已判的控制触发；业务时间缺席的那一行仍靠后面拆掉时刻约束来演，不靠这两列为空。
+		TriggerControl:    nrdomain.NodeIntakeControl,
+		TriggerLocation:   mustNR(t, nrdomain.NewActualLocationReference, "SYN-NODE-SHA-HUB"),
 		TriggerOccurredAt: at,
 		ReassessedAt:      processedAt,
 	}

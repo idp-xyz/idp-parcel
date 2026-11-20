@@ -10,6 +10,21 @@ import (
 	"go.idp.xyz/idp-parcel/migrations"
 )
 
+// insertBeforeTriggerPosition 在 0036 的库上插行。复核册的控制依据与位置是更后面的迁移加的，
+// 这里还没有那两列；初始路由那一列本来就不带它们，沿用全量迁移之后的插入。
+func insertBeforeTriggerPosition(column costCitationColumn) func(context.Context, sqlExecutor, string, *string) error {
+	switch column.name {
+	case "route_reassessment.new_plan":
+		return insertReassessmentNewPlanBeforeTriggerPosition
+	case "route_reassessment.improvement_basis":
+		return insertReassessmentImprovementBasisBeforeTriggerPosition
+	case "authorized_reroute_decision.new_plan":
+		return insertDecisionNewPlanBeforeTriggerPosition
+	default:
+		return column.insert
+	}
+}
+
 // Covers: 逐段成本出处的包裹事实依据在库里收封闭集（迁移 0036）。任何一处落出处的 jsonb 列里要是真有封闭集之外的字面（这里取
 // 已退役的 PHYSICAL_WITH_DECLARATION），加约束时失败、整份迁移回滚——别处的约束也不留下，行原样不动；这是该停下来看的信号，
 // 迁移不用 NOT VALID 绕过，也不替人改写那些行。没有这样的行（缺席即客户声明的存量出处、封闭集里的字面）时照常施加，行一件不动，
@@ -68,8 +83,9 @@ func TestMigration0036ClosesTheCostCitationFactsBasisOnlyWhenNoRowCarriesAnOutsi
 				return count
 			}
 
+			insert := insertBeforeTriggerPosition(column)
 			retired := column.document(citationArray(costCitation(`"PHYSICAL_WITH_DECLARATION"`)))
-			if err := column.insert(ctx, conn, "legacy-retired", &retired); err != nil {
+			if err := insert(ctx, conn, "legacy-retired", &retired); err != nil {
 				t.Fatalf("落 0036 之前带 PHYSICAL_WITH_DECLARATION 的行：%v", err)
 			}
 			rowsBefore := rowsOfTable()
@@ -92,7 +108,7 @@ func TestMigration0036ClosesTheCostCitationFactsBasisOnlyWhenNoRowCarriesAnOutsi
 			legacy := column.document(citationArray(costCitation("")))
 			declared := column.document(citationArray(costCitation(`"DECLARATION"`)))
 			for label, document := range map[string]*string{"legacy-no-basis": &legacy, "legacy-declaration": &declared} {
-				if err := column.insert(ctx, conn, label, document); err != nil {
+				if err := insert(ctx, conn, label, document); err != nil {
 					t.Fatalf("落存量形状的行 %s：%v", label, err)
 				}
 			}
@@ -107,10 +123,10 @@ func TestMigration0036ClosesTheCostCitationFactsBasisOnlyWhenNoRowCarriesAnOutsi
 				t.Fatalf("施加之后 %s 的行数 %d → %d，迁移动了行", column.table, rowsBefore, rowsAfter)
 			}
 
-			err = column.insert(ctx, conn, "after-closing-retired", &retired)
+			err = insert(ctx, conn, "after-closing-retired", &retired)
 			requireCheckViolation(t, err, column.constraint, "0036 之后退役的字面")
 			physical := column.document(citationArray(costCitation(`"PHYSICAL"`)))
-			if err := column.insert(ctx, conn, "after-closing-physical", &physical); err != nil {
+			if err := insert(ctx, conn, "after-closing-physical", &physical); err != nil {
 				t.Fatalf("0036 之后封闭集里的字面应照收：%v", err)
 			}
 		})

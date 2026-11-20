@@ -343,10 +343,10 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 		`INSERT INTO network_routing.route_reassessment
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
-			 conclusion, reviewed_plan, lapse_basis, trigger_occurred_at, reassessed_at)
+			 conclusion, reviewed_plan, lapse_basis, trigger_control, trigger_location, trigger_occurred_at, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-9', 'customer-a', 'request-1',
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
-		         'STILL_APPLICABLE', 'RPV-0001', 'closure-7', now(), now())`); err == nil {
+		         'STILL_APPLICABLE', 'RPV-0001', 'closure-7', 'NODE_INTAKE_CONTROL', 'node-origin', now(), now())`); err == nil {
 		t.Fatal("一行「仍适用却带失效依据」进了复核库")
 	}
 
@@ -354,10 +354,10 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 		`INSERT INTO network_routing.route_reassessment
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
-			 conclusion, reviewed_plan, lapse_basis, candidate_state, trigger_occurred_at, reassessed_at)
+			 conclusion, reviewed_plan, lapse_basis, candidate_state, trigger_control, trigger_location, trigger_occurred_at, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-10', 'customer-a', 'request-1',
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
-		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', NULL, now(), now())`); err == nil {
+		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', NULL, 'NODE_INTAKE_CONTROL', 'node-origin', now(), now())`); err == nil {
 		t.Fatal("一行「已失效却没有候选评估状态」按 NULL 溜进了复核库")
 	}
 
@@ -366,11 +366,11 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis, candidate_state,
-			 reroute_state, new_plan, decision, trigger_occurred_at, reassessed_at)
+			 reroute_state, new_plan, decision, trigger_control, trigger_location, trigger_occurred_at, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-11', 'customer-a', 'request-1',
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
 		         'REROUTED', 'RPV-0001', 'closure-7', 'CANDIDATES_AVAILABLE',
-		         NULL, '{}', '{}', now(), now())`); err == nil {
+		         NULL, '{}', '{}', 'NODE_INTAKE_CONTROL', 'node-origin', now(), now())`); err == nil {
 		t.Fatal("一行「已改路却没有改路判定」按 NULL 溜进了复核库")
 	}
 
@@ -379,11 +379,11 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis, candidate_state,
-			 reroute_state, reroute_blockers, suggestion, trigger_occurred_at, reassessed_at)
+			 reroute_state, reroute_blockers, suggestion, trigger_control, trigger_location, trigger_occurred_at, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-12', 'customer-a', 'request-1',
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
 		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', 'CANDIDATES_AVAILABLE',
-		         'SUGGESTION_ONLY', NULL, '{}', now(), now())`); err == nil {
+		         'SUGGESTION_ONLY', NULL, '{}', 'NODE_INTAKE_CONTROL', 'node-origin', now(), now())`); err == nil {
 		t.Fatal("一行「仅建议却没有阻塞清单」按 NULL 溜进了复核库")
 	}
 
@@ -392,11 +392,11 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
 			 acceptance_baseline, declared_parcel_id, service_purpose,
 			 conclusion, reviewed_plan, lapse_basis, candidate_state,
-			 reroute_state, reroute_blockers, suggestion, trigger_occurred_at, reassessed_at)
+			 reroute_state, reroute_blockers, suggestion, trigger_control, trigger_location, trigger_occurred_at, reassessed_at)
 		 VALUES ('tenant-1', 'trigger-13', 'customer-a', 'request-1',
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
 		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', 'CANDIDATES_AVAILABLE',
-		         'SUGGESTION_ONLY', '{}', '{}', now(), now())`); err == nil {
+		         'SUGGESTION_ONLY', '{}', '{}', 'NODE_INTAKE_CONTROL', 'node-origin', now(), now())`); err == nil {
 		t.Fatal("一行「阻塞清单是对象不是数组」按 jsonb 类型缝溜进了复核库")
 	}
 }
@@ -438,14 +438,14 @@ func TestRouteRollbackLeavesNothingBehind(t *testing.T) {
 		}); err != nil {
 			return err
 		}
-		if _, err := reassessments.Save(txCtx, correlation, ports.ReassessmentRecord{
+		if _, err := reassessments.Save(txCtx, correlation, withTriggerControl(t, ports.ReassessmentRecord{
 			Correlation:       correlation,
 			Key:               key,
 			Conclusion:        ports.ReassessmentStillApplicable,
 			ReviewedPlan:      scalar(t, domain.NewRoutePlanVersionID, "RPV-0001"),
 			ReassessedAt:      reassessedAtTS,
 			TriggerOccurredAt: reassessedAtTS.Add(-time.Hour),
-		}); err != nil {
+		})); err != nil {
 			return err
 		}
 		return rollback
@@ -502,6 +502,18 @@ func saveRoute(
 	})
 }
 
+// withTriggerControl 给既有用例补上控制依据与位置。新行必带这两格；这些用例造的是控制触发留下的复核，缺省就是节点收寄。
+// 专测这两列的用例自己填，这里见到已有值就不改。
+func withTriggerControl(t *testing.T, record ports.ReassessmentRecord) ports.ReassessmentRecord {
+	t.Helper()
+	if record.TriggerControl != 0 {
+		return record
+	}
+	record.TriggerControl = domain.NodeIntakeControl
+	record.TriggerLocation = scalar(t, domain.NewActualLocationReference, "node-origin")
+	return record
+}
+
 func saveReassessment(
 	t *testing.T,
 	transactor bentoapp.Transactor,
@@ -511,6 +523,7 @@ func saveReassessment(
 	record ports.ReassessmentRecord,
 ) {
 	t.Helper()
+	record = withTriggerControl(t, record)
 	within(t, transactor, ctx, func(txCtx context.Context) error {
 		outcome, err := reassessments.Save(txCtx, correlation, record)
 		if err != nil {
@@ -652,7 +665,7 @@ func reroutedRecord(
 	if err != nil {
 		t.Fatalf("形成改路决定：%v", err)
 	}
-	return ports.ReassessmentRecord{
+	return withTriggerControl(t, ports.ReassessmentRecord{
 		Correlation:       correlation,
 		Key:               key,
 		Conclusion:        ports.ReassessmentRerouted,
@@ -666,5 +679,5 @@ func reroutedRecord(
 		HasDecision:       true,
 		ReassessedAt:      reassessedAtTS,
 		TriggerOccurredAt: reassessedAtTS.Add(-time.Hour),
-	}
+	})
 }

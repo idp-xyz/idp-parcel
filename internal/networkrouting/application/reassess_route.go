@@ -117,6 +117,9 @@ type ReassessRouteResult struct {
 	reason       ReassessUndecidedReason
 	notJudged    ports.NotJudgedReason
 	continuation ContinuationReference
+	// freshlyJudged 只在这一笔刚刚写入一条已判复核时为真。重放、已有结果、未判都不补判等位置的实测变化：
+	// 那些出口没有新的控制位置可抄，补判会拿一份没落成的锚点去改路。
+	freshlyJudged bool
 }
 
 func (result ReassessRouteResult) Outcome() ReassessOutcome {
@@ -239,6 +242,21 @@ func (handler *ReassessRouteHandler) Handle(
 		})
 	}
 
+	result, err := handler.judgeFromHistory(ctx, trigger, command.Carried)
+	if err != nil || !result.freshlyJudged {
+		return result, err
+	}
+	return handler.catchUpAwaitingMeasurements(ctx, command, trigger, result)
+}
+
+// judgeFromHistory 从载入路由历史判到提交。控制触发与实测变化重判共用这一段：重判的锚点时刻已经过了「早于委托接受」
+// 「早于当前位置」两道门，不再重跑；「早于计划生效」在 reassessPlan 里面，照旧适用。
+func (handler *ReassessRouteHandler) judgeFromHistory(
+	ctx context.Context,
+	trigger domain.ReassessmentTrigger,
+	carried ports.RequestCarriedContent,
+) (ReassessRouteResult, error) {
+	key := trigger.Key()
 	history, found, err := handler.deps.Routes.FindByKey(ctx, key)
 	if errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
 		return ReassessRouteResult{}, fmt.Errorf("load routing history: %w", err)
@@ -258,7 +276,7 @@ func (handler *ReassessRouteHandler) Handle(
 		return handler.undecided(key, stalled), nil
 	}
 
-	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key, command.Carried)
+	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key, carried)
 	if err != nil {
 		return handler.undecided(key, ReassessEvidenceUnavailable), nil
 	}
@@ -270,9 +288,9 @@ func (handler *ReassessRouteHandler) Handle(
 	}
 
 	if start.hasPlan {
-		return handler.reassessPlan(ctx, trigger, start, evidence, command.Carried)
+		return handler.reassessPlan(ctx, trigger, start, evidence, carried)
 	}
-	return handler.reassessNoRoute(ctx, trigger, evidence, command.Carried)
+	return handler.reassessNoRoute(ctx, trigger, evidence, carried)
 }
 
 // routeStart 是复核的判断起点：这件包裹此刻的当前有效计划连同它的适用性，或无当前有效路由（hasPlan 为假）。
@@ -1109,8 +1127,9 @@ func loadRouteCandidateCosts(
 	return evidence, costs, false, nil
 }
 
-// commit 提交复核记录。并发下另一方先提交时读回赢家。触发的业务时间在这里一处写上：每条提交路都经过这里，
-// 漏写一条，那次复核就不再算进当前位置（ADR-0235）。
+// commit 提交复核记录。并发下另一方先提交时读回赢家。触发的业务时间、控制依据与位置在这里一处写上：每条提交路都经过这里。
+// 漏写业务时间，那次复核就不再算进当前位置（ADR-0235）。漏写控制位置，下一次实测变化就抄不到这次的锚点；实测变化重判
+// 抄的也是锚点的这三格，写在这里才不会有一条提交路带上称重自己的时刻，把当前位置推后。
 func (handler *ReassessRouteHandler) commit(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,
@@ -1118,13 +1137,17 @@ func (handler *ReassessRouteHandler) commit(
 ) (ReassessRouteResult, error) {
 	key := trigger.Key()
 	record.TriggerOccurredAt = trigger.OccurredAt()
+	record.TriggerControl = trigger.Control()
+	record.TriggerLocation = trigger.Location()
 	saved, err := handler.deps.Store.Save(ctx, trigger.Correlation(), record)
 	if err != nil {
 		return handler.undecided(key, ReassessStoreUnavailable), nil
 	}
 	switch saved {
 	case ports.ReassessmentSaved:
-		return ReassessRouteResult{outcome: outcomeFor(record), record: record, hasRecord: true}, nil
+		return ReassessRouteResult{
+			outcome: outcomeFor(record), record: record, hasRecord: true, freshlyJudged: true,
+		}, nil
 	case ports.ReassessmentAlreadyRecorded:
 		winner, present, err := handler.deps.Store.FindByCorrelation(ctx, key.TenantID, trigger.Correlation())
 		if err != nil || !present {
@@ -1203,6 +1226,144 @@ func outcomeFor(record ports.ReassessmentRecord) ReassessOutcome {
 	default:
 		return ReassessOutcomeInvalid
 	}
+}
+
+// RejudgeOnMeasurementChangeCommand 是一次实测变化。锚点不在命令里：控制依据、位置与业务时间是处理时现读的，
+// 不是这次变化的内容，所以也不进指纹。OccurredAt 是这次变化的业务时间，只在还没有控制位置、入账未判时记下。
+type RejudgeOnMeasurementChangeCommand struct {
+	Correlation   domain.RequestCorrelationID
+	Key           domain.InitialRouteJudgmentKey
+	SourceVersion domain.SourceFactVersionReference
+	OccurredAt    time.Time
+	AcceptedAt    time.Time
+	Carried       ports.RequestCarriedContent
+}
+
+// HandleMeasurementChange 在最近一次已判控制触发的位置与业务时间上，按此刻仍有效的实测再判一次。没有可抄的位置就入账未判。
+// 登记与作废走同一条路。不在这里补判：补判挂在控制触发新落一条已判复核之后，避免称重自己再抄自己。
+func (handler *ReassessRouteHandler) HandleMeasurementChange(
+	ctx context.Context,
+	command RejudgeOnMeasurementChangeCommand,
+) (ReassessRouteResult, error) {
+	if !command.Correlation.Valid() || !command.Key.MinimumIdentityEstablished() ||
+		command.SourceVersion.String() == "" || command.OccurredAt.IsZero() || command.AcceptedAt.IsZero() {
+		return ReassessRouteResult{outcome: ReassessTriggerNotAccepted}, nil
+	}
+	key := command.Key
+	digest := measurementChangeDigest(command)
+	recorded, logged, err := handler.deps.Log.FindDigest(ctx, key.TenantID, command.Correlation)
+	if err != nil {
+		return handler.undecided(key, ReassessLogUnavailable), nil
+	}
+	if logged && recorded != digest {
+		return ReassessRouteResult{outcome: ReassessTriggerConflict}, nil
+	}
+	if !logged {
+		if err := handler.deps.Log.Append(ctx, key.TenantID, command.Correlation, digest); err != nil {
+			return handler.undecided(key, ReassessLogUnavailable), nil
+		}
+	}
+
+	if _, _, err := handler.deps.Store.LatestTriggerAt(ctx, key); err != nil {
+		return handler.undecided(key, ReassessStoreUnavailable), nil
+	}
+	existing, present, err := handler.deps.Store.FindByCorrelation(ctx, key.TenantID, command.Correlation)
+	if err != nil {
+		return handler.undecided(key, ReassessStoreUnavailable), nil
+	}
+	if present {
+		outcome := outcomeFor(existing)
+		if !logged {
+			outcome = ReassessExistingResult
+		}
+		return ReassessRouteResult{outcome: outcome, record: existing, hasRecord: true}, nil
+	}
+
+	position, err := handler.deps.Store.LatestControlPosition(ctx, key)
+	if err != nil {
+		return handler.undecided(key, ReassessStoreUnavailable), nil
+	}
+	if position.Status != ports.ControlPositionKnown {
+		return handler.notJudged(ctx, ports.NotJudgedTrigger{
+			Correlation:       command.Correlation,
+			Key:               key,
+			Reason:            ports.NotJudgedControlPositionUnavailable,
+			TriggerOccurredAt: command.OccurredAt,
+		})
+	}
+	trigger, err := domain.NewMeasurementChangeRejudge(domain.ReassessmentTriggerSpec{
+		Correlation:   command.Correlation,
+		Key:           key,
+		Control:       position.Control,
+		Location:      position.Location,
+		SourceVersion: command.SourceVersion,
+		OccurredAt:    position.OccurredAt,
+		AcceptedAt:    command.AcceptedAt,
+	})
+	if err != nil {
+		return ReassessRouteResult{outcome: ReassessTriggerNotAccepted}, nil
+	}
+	return handler.judgeFromHistory(ctx, trigger, command.Carried)
+}
+
+// catchUpAwaitingMeasurements 在控制触发刚刚落成一条已判复核之后，把等位置的实测变化按这一次的锚点各判一次。
+// 收寄采用要经两跳才到路由，称重只一跳：收寄后马上称重时，实测变化可能先到、当时还没有控制位置，入账未判；
+// 收寄复核只认截到收寄业务时间的物理事实，读不到这条稍晚的实测。不在这里补，这条实测对路由的影响要等到下一次交接。
+// 补判再入账未判时不改写旧行：未判登记同（租户，关联）是先到保留，下一次控制触发还会再试；改写旧原因会把「当时为什么没判」抹掉。
+func (handler *ReassessRouteHandler) catchUpAwaitingMeasurements(
+	ctx context.Context,
+	command ReassessRouteCommand,
+	anchor domain.ReassessmentTrigger,
+	judged ReassessRouteResult,
+) (ReassessRouteResult, error) {
+	waiting, err := handler.deps.Store.AwaitingMeasurementChanges(ctx, anchor.Key())
+	if err != nil {
+		return handler.undecided(anchor.Key(), ReassessStoreUnavailable), nil
+	}
+	for _, correlation := range waiting {
+		source, err := domain.MeasurementChangeSourceVersion(correlation)
+		if err != nil {
+			return judged, fmt.Errorf("measurement change correlation %q: %w", correlation, err)
+		}
+		trigger, err := domain.NewMeasurementChangeRejudge(domain.ReassessmentTriggerSpec{
+			Correlation:   correlation,
+			Key:           anchor.Key(),
+			Control:       anchor.Control(),
+			Location:      anchor.Location(),
+			SourceVersion: source,
+			OccurredAt:    anchor.OccurredAt(),
+			AcceptedAt:    anchor.AcceptedAt(),
+		})
+		if err != nil {
+			return judged, fmt.Errorf("measurement change rejudge %q: %w", correlation, err)
+		}
+		caught, err := handler.judgeFromHistory(ctx, trigger, command.Carried)
+		if err != nil {
+			return judged, err
+		}
+		if caught.Outcome() == ReassessUndecided {
+			return caught, nil
+		}
+	}
+	return judged, nil
+}
+
+// measurementChangeDigest 是这次实测变化的指纹，不含锚点的控制依据、位置与时间：锚点是处理时现读的，两次投递之间锚点变了仍是同一变化。
+// 地理投影算进去，理由同 triggerDigest：同一变化换了地址就不是重放。
+func measurementChangeDigest(command RejudgeOnMeasurementChangeCommand) string {
+	key := command.Key
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		key.TenantID.String(),
+		key.CustomerAccountID.String(),
+		key.ShipmentRequestID.String(),
+		key.AcceptanceBaseline.String(),
+		key.DeclaredParcelID.String(),
+		key.ServicePurpose.String(),
+		"实测变化",
+		command.SourceVersion.String(),
+		command.Carried.Geo.ContentDigest(),
+	}, "\x00")))
+	return hex.EncodeToString(digest[:])
 }
 
 // triggerDigest 是触发内容的稳定指纹：同关联异指纹即触发冲突。携带的地理投影也算进去，理由同 handoffDigest：同一

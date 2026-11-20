@@ -98,9 +98,10 @@ func TestTheJudgmentPointChangesWhichCandidateIsCheapest(t *testing.T) {
 		t.Fatalf("预路由：最便宜 %s、依据 %s，want 按声明的 line-light", got, preRoute.FactsBasis)
 	}
 	for name, point := range map[string]nrdomain.ParcelFactsPoint{
-		"首次收寄": firstIntake(t),
-		"到站":   nrdomain.NewArrivalFactsPoint(),
-		"授权决定": nrdomain.NewDecisionFactsPoint(),
+		"首次收寄":   firstIntake(t),
+		"到站":     nrdomain.NewArrivalFactsPoint(),
+		"授权决定":   nrdomain.NewDecisionFactsPoint(),
+		"实测变化重判": nrdomain.NewMeasurementChangeFactsPoint(),
 	} {
 		costs := loadAt(t, source, point)
 		if got := cheapest(t, costs); got != "line-flat" {
