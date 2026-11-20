@@ -507,6 +507,12 @@ func (handler *FormAcceptanceDecisionHandler) revalidateReachability(
 	judgments []domain.ReachabilityJudgment,
 ) (JudgmentPendingReason, error) {
 	for _, judgment := range judgments {
+		// 不适用没有网络判断可核对。面单渠道服务不要求端到端网络判断，network-routing 不落这一支，
+		// 判断标识因此是空的。拿空标识派生关联再去重校，查无此判断，会对着本不该问的问题无休止内部重试。
+		// 重校只留给真正形成过的三值判断；这一支的接受语言仍是「通过」。
+		if judgment.Value() == domain.ReachabilityNotApplicable {
+			continue
+		}
 		revalidation, err := handler.deps.Reachability.RevalidateReachabilityJudgment(ctx, ports.ReachabilityRevalidationQuery{
 			Identity:          command.Identity,
 			ShipmentRequestID: command.ShipmentRequestID,

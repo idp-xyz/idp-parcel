@@ -1390,6 +1390,28 @@ func TestADecisionStopsWhenAReachabilityJudgmentWasSuperseded(t *testing.T) {
 	}
 }
 
+// 面单渠道服务的可达性是不适用：没有判断标识，也不该拿派生关联去重校。重校口即使答查无此判断，
+// 也不停住接受。
+func TestANotApplicableReachabilityJudgmentIsNotRevalidated(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.judgments.reachability = map[string]domain.ReachabilityValue{
+		"parcel-1": domain.ReachabilityNotApplicable,
+		"parcel-2": domain.ReachabilityNotApplicable,
+	}
+	fixture.reachability.outcome = ports.ReachabilityRevalidationJudgmentNotFound
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.AcceptanceDecided || result.State() != domain.ShipmentRequestAccepted {
+		t.Fatalf("outcome = %q state = %q，不适用仍被拿去重校", result.Outcome(), result.State())
+	}
+	if len(fixture.reachability.asked) != 0 {
+		t.Fatalf("重校被问了 %d 次，不适用不该问", len(fixture.reachability.asked))
+	}
+}
+
 // Covers: 同一 AT 的其余落点——未找回/无法判定/入参未受理/答不出各停各格，续办引用互不
 // 相认（原因参与派生）。
 func TestEveryReachabilityRevalidationAnswerLandsOnItsOwnPendingReason(t *testing.T) {
