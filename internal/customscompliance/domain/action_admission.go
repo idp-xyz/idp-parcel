@@ -85,6 +85,9 @@ const (
 	CauseDeclarationUnitNotFormed
 	CauseDutyVerificationAbsent
 	CauseDutyVerificationPending
+	CauseDeclarationSubmissionAbsent
+	CauseMemberMeasurementAbsent
+	CauseMemberMeasurementUndetermined
 	CauseReleasePartialOnly
 	CauseReleaseConditionalOnly
 	CauseGateReleaseDiscrepancy
@@ -98,6 +101,8 @@ const (
 	CauseGateCatalogNotRegistered
 	CauseDutyPaymentRuleNotRegistered
 	CauseDutyPaymentFindingBesideRule
+	CauseWeightDiscrepancyRuleNotRegistered
+	CauseWeightDiscrepancyFindingBesideRule
 
 	// 阻断
 	// CauseRestrictionInForce 沿用旧词，专指监管限制：已记下的判断与消费方留存的依据字串不换标识（ADR-0334 决定四）。
@@ -118,11 +123,13 @@ func (cause AdmissionCause) Answer() AdmissionAnswer {
 		return AdmissionAdmitted
 	case CauseCustomsScopeUnresolved, CauseDeclarationUnitNotFormed,
 		CauseDutyVerificationAbsent, CauseDutyVerificationPending,
+		CauseDeclarationSubmissionAbsent, CauseMemberMeasurementAbsent, CauseMemberMeasurementUndetermined,
 		CauseReleasePartialOnly, CauseReleaseConditionalOnly, CauseGateReleaseDiscrepancy,
 		CauseInternalRestrictionUnconfirmed, CauseInternalRestrictionConflicting:
 		return AdmissionUndecided
 	case CauseNodeZoneNotRegistered, CauseGateCatalogNotRegistered,
-		CauseDutyPaymentRuleNotRegistered, CauseDutyPaymentFindingBesideRule:
+		CauseDutyPaymentRuleNotRegistered, CauseDutyPaymentFindingBesideRule,
+		CauseWeightDiscrepancyRuleNotRegistered, CauseWeightDiscrepancyFindingBesideRule:
 		return AdmissionNotConfigured
 	case CauseRestrictionInForce, CauseInternalRestrictionInForce, CauseGateUnmet, CauseGatePartiallyMet,
 		CauseGateConflicting, CauseReleaseNotReceived:
@@ -148,6 +155,12 @@ func (cause AdmissionCause) String() string {
 		return "DUTY_VERIFICATION_ABSENT"
 	case CauseDutyVerificationPending:
 		return "DUTY_VERIFICATION_PENDING"
+	case CauseDeclarationSubmissionAbsent:
+		return "DECLARATION_SUBMISSION_ABSENT"
+	case CauseMemberMeasurementAbsent:
+		return "MEMBER_MEASUREMENT_ABSENT"
+	case CauseMemberMeasurementUndetermined:
+		return "MEMBER_MEASUREMENT_UNDETERMINED"
 	case CauseReleasePartialOnly:
 		return "RELEASE_PARTIAL_ONLY"
 	case CauseReleaseConditionalOnly:
@@ -162,6 +175,10 @@ func (cause AdmissionCause) String() string {
 		return "DUTY_PAYMENT_RULE_NOT_REGISTERED"
 	case CauseDutyPaymentFindingBesideRule:
 		return "DUTY_PAYMENT_FINDING_BESIDE_RULE"
+	case CauseWeightDiscrepancyRuleNotRegistered:
+		return "WEIGHT_DISCREPANCY_RULE_NOT_REGISTERED"
+	case CauseWeightDiscrepancyFindingBesideRule:
+		return "WEIGHT_DISCREPANCY_FINDING_BESIDE_RULE"
 	case CauseInternalRestrictionUnconfirmed:
 		return "INTERNAL_RESTRICTION_UNCONFIRMED"
 	case CauseInternalRestrictionConflicting:
@@ -230,10 +247,15 @@ const (
 	GateReadingDutyFindingBesideRule
 	GateReadingDutyVerificationAbsent
 	GateReadingDutyVerificationPending
+	GateReadingWeightRuleNotRegistered
+	GateReadingWeightFindingBesideRule
+	GateReadingDeclarationSubmissionAbsent
+	GateReadingMemberMeasurementAbsent
+	GateReadingMemberMeasurementUndetermined
 )
 
 func (state GateReadingState) valid() bool {
-	return state >= GateReadingFormed && state <= GateReadingDutyVerificationPending
+	return state >= GateReadingFormed && state <= GateReadingMemberMeasurementUndetermined
 }
 
 // GateReading 是一次门禁读数。Conclusion 与 Preconditions 只在「已形成」上有意义。
@@ -546,6 +568,16 @@ func (input ActionAdmissionInput) unitBases(action GuardedAction, unit UnitScope
 		return on(CauseDutyVerificationAbsent), nil
 	case GateReadingDutyVerificationPending:
 		return on(CauseDutyVerificationPending), nil
+	case GateReadingWeightRuleNotRegistered:
+		return on(CauseWeightDiscrepancyRuleNotRegistered), nil
+	case GateReadingWeightFindingBesideRule:
+		return on(CauseWeightDiscrepancyFindingBesideRule), nil
+	case GateReadingDeclarationSubmissionAbsent:
+		return on(CauseDeclarationSubmissionAbsent), nil
+	case GateReadingMemberMeasurementAbsent:
+		return on(CauseMemberMeasurementAbsent), nil
+	case GateReadingMemberMeasurementUndetermined:
+		return on(CauseMemberMeasurementUndetermined), nil
 	}
 	if gate.Conclusion == GateNotApplicable {
 		return on(CauseGateNotApplicable), nil

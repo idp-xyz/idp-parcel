@@ -419,6 +419,9 @@ type ReleaseGateVerification struct {
 	// 挂法在 duty_payment_gate_rule.go。
 	dutyPayment    DutyPaymentGateReading
 	hasDutyPayment bool
+	// 「毛重差异」那一道按登记规则判出的读数；出口与挂法在 weight_discrepancy_gate_rule.go。
+	weightDiscrepancy    WeightDiscrepancyGateReading
+	hasWeightDiscrepancy bool
 }
 
 func VerifyReleaseGate(

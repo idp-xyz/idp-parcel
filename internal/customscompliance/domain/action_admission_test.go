@@ -235,6 +235,11 @@ func TestGateStopsFoldIntoNotConfiguredOrUndecided(t *testing.T) {
 		"规则旁另登认定":   {domain.GateReadingDutyFindingBesideRule, domain.AdmissionNotConfigured, domain.CauseDutyPaymentFindingBesideRule},
 		"没有付款核对":    {domain.GateReadingDutyVerificationAbsent, domain.AdmissionUndecided, domain.CauseDutyVerificationAbsent},
 		"付款核对待确认":   {domain.GateReadingDutyVerificationPending, domain.AdmissionUndecided, domain.CauseDutyVerificationPending},
+		"毛重差异规则未登记": {domain.GateReadingWeightRuleNotRegistered, domain.AdmissionNotConfigured, domain.CauseWeightDiscrepancyRuleNotRegistered},
+		"毛重差异旁另登认定": {domain.GateReadingWeightFindingBesideRule, domain.AdmissionNotConfigured, domain.CauseWeightDiscrepancyFindingBesideRule},
+		"提交版本未形成":   {domain.GateReadingDeclarationSubmissionAbsent, domain.AdmissionUndecided, domain.CauseDeclarationSubmissionAbsent},
+		"成员没有实测":    {domain.GateReadingMemberMeasurementAbsent, domain.AdmissionUndecided, domain.CauseMemberMeasurementAbsent},
+		"成员实测定不下":   {domain.GateReadingMemberMeasurementUndetermined, domain.AdmissionUndecided, domain.CauseMemberMeasurementUndetermined},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

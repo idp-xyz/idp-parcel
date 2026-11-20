@@ -179,6 +179,8 @@ func (gate ReleaseGateVerification) WithDutyPayment(reading DutyPaymentGateReadi
 	attached.preconditions = append([]PreconditionReference(nil), gate.preconditions...)
 	attached.dutyPayment = reading
 	attached.hasDutyPayment = true
+	// 毛重读数的成员切片若跟着浅拷走，后挂的这一道会让外部改到已经交出的判断。
+	attached.weightDiscrepancy = cloneWeightDiscrepancyReading(gate.weightDiscrepancy)
 	return attached, nil
 }
 
