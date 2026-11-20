@@ -10,21 +10,24 @@ import (
 // ErrInvalidDemandSnapshot：需求量快照不成立——来源不认得、同一维度出现两次、数量不是正十进制或单位缺席。
 var ErrInvalidDemandSnapshot = errors.New("transport fulfillment: invalid demand snapshot")
 
-// DemandSource 说需求量快照取自哪里。今天只内置收寄前的客户申报一种（ADR-0201 决定八）：节点实测后的再准备另立票，
-// 那时多一个来源词，原有快照的来源不被改写——同一段同一包裹按申报与按实测各判一次，是两份可以并排看的依据。
+// DemandSource 说需求量快照取自哪里。收寄前的客户申报与节点上的当前有效实测是两种来源（ADR-0201 决定八）：
+// 原有快照的来源不被改写，同一段同一包裹按申报与按实测各判一次，是两份可以并排看的依据。两个词与计价、结算侧同一个，
+// 对账的人不必翻译。
 type DemandSource uint8
 
 const (
 	DemandSourceInvalid DemandSource = iota
 	DemandFromDeclaration
+	DemandFromActualMeasurement
 )
 
-// String 写出来源词。用计划与 ADR 原文的 `declaration`，与计价侧申报测量引用的写法同一个词：同一份客户申报在两个上下文
-// 里叫同一个名字，对账的人不必翻译。
+// String 写出来源词。`declaration` 与计价侧申报测量引用同一个词；`actual-measurement` 与计价、结算侧实测来源同一个词。
 func (source DemandSource) String() string {
 	switch source {
 	case DemandFromDeclaration:
 		return "declaration"
+	case DemandFromActualMeasurement:
+		return "actual-measurement"
 	default:
 		return ""
 	}
@@ -32,10 +35,18 @@ func (source DemandSource) String() string {
 
 // ParseDemandSource 把 String 写出的词认回来，供读回走构造门。
 func ParseDemandSource(word string) (DemandSource, error) {
-	if word == DemandFromDeclaration.String() {
+	switch word {
+	case DemandFromDeclaration.String():
 		return DemandFromDeclaration, nil
+	case DemandFromActualMeasurement.String():
+		return DemandFromActualMeasurement, nil
+	default:
+		return DemandSourceInvalid, ErrInvalidDemandSnapshot
 	}
-	return DemandSourceInvalid, ErrInvalidDemandSnapshot
+}
+
+func (source DemandSource) admitted() bool {
+	return source == DemandFromDeclaration || source == DemandFromActualMeasurement
 }
 
 // DemandQuantity 是需求量快照在一个容量维度上的数量与单位。数量是正十进制串，按原样保存：申报的「1.50」不折成浮点，
@@ -59,10 +70,14 @@ type DemandSnapshot struct {
 	quantities []DemandQuantity
 }
 
-// RehydrateDemandSnapshot 是读回一份快照的门：来源可认、各维数量成立、同一维度只出现一次。锚可缺席——客户没报或
-// 提供方此刻说不出按哪一版时，快照如实不带锚。
+// RehydrateDemandSnapshot 是读回一份快照的门：来源可认、各维数量成立、同一维度只出现一次。申报的锚可缺席——客户没报或
+// 提供方此刻说不出按哪一版时，快照如实不带锚。实测的锚是那条实测的来源身份，缺了就分不出是按哪一条判的，立不成快照。
 func RehydrateDemandSnapshot(source DemandSource, anchor string, quantities []DemandQuantity) (DemandSnapshot, error) {
-	if source != DemandFromDeclaration || strings.IndexByte(anchor, 0) >= 0 {
+	if !source.admitted() || strings.IndexByte(anchor, 0) >= 0 {
+		return DemandSnapshot{}, ErrInvalidDemandSnapshot
+	}
+	anchor = strings.TrimSpace(anchor)
+	if source == DemandFromActualMeasurement && anchor == "" {
 		return DemandSnapshot{}, ErrInvalidDemandSnapshot
 	}
 	seen := map[CapacityDimension]bool{}
@@ -77,7 +92,7 @@ func RehydrateDemandSnapshot(source DemandSource, anchor string, quantities []De
 	slices.SortFunc(normalized, func(left, right DemandQuantity) int {
 		return CompareCapacityDimensions(left.Dimension, right.Dimension)
 	})
-	return DemandSnapshot{source: source, anchor: strings.TrimSpace(anchor), quantities: normalized}, nil
+	return DemandSnapshot{source: source, anchor: anchor, quantities: normalized}, nil
 }
 
 // DeclaredDemandSpec 是客户申报里与需求量有关的原文：毛重一格、外廓三边一格，各自可整格缺席；锚是提供方答出的资料
@@ -99,24 +114,60 @@ type DeclaredDemandSpec struct {
 //   - 件数恒为 1 件：一件声明包裹就是一件，这一维的来源是对象本身。它只配件数维的池，不顶替重量或体积，那正是 UC-TF-003
 //     「不用对象数量……替代实际容量需求」要防的。
 //
-// 袋位、托盘位、舱位在申报里没有来源，快照不带它们，比到那一维的池时就是`待补充`。
+// 袋位、托盘位、舱位在申报里没有来源，快照不带它们，比到那一维的池时就是`待补充`。重量或外廓整格缺席，那一维就是`待补充`。
 func DeclaredDemand(spec DeclaredDemandSpec) (DemandSnapshot, error) {
-	var quantities []DemandQuantity
-	if spec.WeightValue != "" || spec.WeightUnit != "" {
-		unit, err := NewQuantityUnitReference(spec.WeightUnit)
-		if err != nil {
-			return DemandSnapshot{}, ErrInvalidDemandSnapshot
-		}
-		quantities = append(quantities, DemandQuantity{Dimension: CapacityWeight, Amount: spec.WeightValue, Unit: unit})
+	quantities, err := demandQuantities(spec.WeightValue, spec.WeightUnit, spec.Length, spec.Width, spec.Height, spec.DimensionUnit)
+	if err != nil {
+		return DemandSnapshot{}, err
 	}
-	if spec.Length != "" || spec.Width != "" || spec.Height != "" || spec.DimensionUnit != "" {
-		volume, err := boxVolume(spec.Length, spec.Width, spec.Height)
+	return RehydrateDemandSnapshot(DemandFromDeclaration, spec.Anchor, quantities)
+}
+
+// MeasuredDemandSpec 是一条实测里与需求量有关的原文。重量与外廓三边都必填，锚是那条实测的来源身份：缺任何一格就分不出
+// 按哪一条、用多少去比容量，快照立不成。数量与单位按提供方的拼写原样交来，不在这里换算。
+type MeasuredDemandSpec struct {
+	Anchor        string
+	WeightValue   string
+	WeightUnit    string
+	Length        string
+	Width         string
+	Height        string
+	DimensionUnit string
+}
+
+// MeasuredDemand 把一条当前有效实测译成需求量快照。三维的取法与 DeclaredDemand 同一套：重量照抄毛重，体积由三边乘出，
+// 件数恒为 1。与申报不同的是重量和三边都不能缺——实测本身两样都必填，缺了是译不过去，不是那一维`待补充`。
+func MeasuredDemand(spec MeasuredDemandSpec) (DemandSnapshot, error) {
+	if strings.TrimSpace(spec.Anchor) == "" || spec.WeightValue == "" || spec.WeightUnit == "" ||
+		spec.Length == "" || spec.Width == "" || spec.Height == "" || strings.TrimSpace(spec.DimensionUnit) == "" {
+		return DemandSnapshot{}, ErrInvalidDemandSnapshot
+	}
+	quantities, err := demandQuantities(spec.WeightValue, spec.WeightUnit, spec.Length, spec.Width, spec.Height, spec.DimensionUnit)
+	if err != nil {
+		return DemandSnapshot{}, err
+	}
+	return RehydrateDemandSnapshot(DemandFromActualMeasurement, spec.Anchor, quantities)
+}
+
+// demandQuantities 按申报与实测共用的取法拼出重量、体积与一件。某一维的原文整格缺席就不带那一维；带了却立不成（单位
+// 认不出、三边乘不出）是快照不成立。件数恒为 1，来源是对象本身。
+func demandQuantities(weightValue, weightUnit, length, width, height, dimensionUnit string) ([]DemandQuantity, error) {
+	var quantities []DemandQuantity
+	if weightValue != "" || weightUnit != "" {
+		unit, err := NewQuantityUnitReference(weightUnit)
 		if err != nil {
-			return DemandSnapshot{}, err
+			return nil, ErrInvalidDemandSnapshot
 		}
-		unit, err := NewQuantityUnitReference(spec.DimensionUnit + volumeUnitSuffix)
-		if err != nil || strings.TrimSpace(spec.DimensionUnit) == "" {
-			return DemandSnapshot{}, ErrInvalidDemandSnapshot
+		quantities = append(quantities, DemandQuantity{Dimension: CapacityWeight, Amount: weightValue, Unit: unit})
+	}
+	if length != "" || width != "" || height != "" || dimensionUnit != "" {
+		volume, err := boxVolume(length, width, height)
+		if err != nil {
+			return nil, err
+		}
+		unit, err := NewQuantityUnitReference(dimensionUnit + volumeUnitSuffix)
+		if err != nil || strings.TrimSpace(dimensionUnit) == "" {
+			return nil, ErrInvalidDemandSnapshot
 		}
 		quantities = append(quantities, DemandQuantity{Dimension: CapacityVolume, Amount: volume, Unit: unit})
 	}
@@ -125,7 +176,7 @@ func DeclaredDemand(spec DeclaredDemandSpec) (DemandSnapshot, error) {
 		Amount:    "1",
 		Unit:      QuantityUnitReference{requiredValue{value: piecesUnit}},
 	})
-	return RehydrateDemandSnapshot(DemandFromDeclaration, spec.Anchor, quantities)
+	return quantities, nil
 }
 
 func (snapshot DemandSnapshot) Source() DemandSource {
@@ -143,7 +194,15 @@ func (snapshot DemandSnapshot) Quantities() []DemandQuantity {
 }
 
 func (snapshot DemandSnapshot) valid() bool {
-	return snapshot.source == DemandFromDeclaration
+	switch snapshot.source {
+	case DemandFromDeclaration:
+		return true
+	case DemandFromActualMeasurement:
+		// 锚在读回时已裁过空白；空锚的实测快照分不出是按哪一条判的。
+		return snapshot.anchor != ""
+	default:
+		return false
+	}
 }
 
 func (snapshot DemandSnapshot) quantityFor(dimension CapacityDimension) (DemandQuantity, bool) {

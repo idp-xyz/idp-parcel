@@ -93,6 +93,106 @@ func prepare(t *testing.T, demand domain.DemandSnapshot, configured bool, candid
 	return preparation
 }
 
+// Covers: 实测译成需求量与申报同一套取法：重量照抄毛重，体积取三边乘积，件数恒为一件。锚是那条实测的来源身份，缺锚、
+// 缺重量、缺任意一边都立不成快照。
+func TestMeasuredDemandTakesWeightVolumeAndOnePiece(t *testing.T) {
+	snapshot, err := domain.MeasuredDemand(domain.MeasuredDemandSpec{
+		Anchor:      "SYN-DEVICE/WEIGH-1",
+		WeightValue: "1.50", WeightUnit: "KG",
+		Length: "20", Width: "15", Height: "10", DimensionUnit: "CM",
+	})
+	if err != nil {
+		t.Fatalf("实测需求量：%v", err)
+	}
+	if snapshot.Source() != domain.DemandFromActualMeasurement || snapshot.Source().String() != "actual-measurement" {
+		t.Fatalf("来源 = %s", snapshot.Source())
+	}
+	if anchor, present := snapshot.Anchor(); !present || anchor != "SYN-DEVICE/WEIGH-1" {
+		t.Fatalf("锚 = %q present=%v", anchor, present)
+	}
+	quantities := map[string]string{}
+	for _, quantity := range snapshot.Quantities() {
+		quantities[quantity.Dimension.String()] = quantity.Amount + " " + quantity.Unit.String()
+	}
+	want := map[string]string{"WEIGHT": "1.50 KG", "VOLUME": "3000 CM3", "PIECES": "1 PCS"}
+	if len(quantities) != len(want) {
+		t.Fatalf("各维 = %v, want %v", quantities, want)
+	}
+	for dimension, amount := range want {
+		if quantities[dimension] != amount {
+			t.Fatalf("%s = %q, want %q", dimension, quantities[dimension], amount)
+		}
+	}
+
+	fractional, err := domain.MeasuredDemand(domain.MeasuredDemandSpec{
+		Anchor: "SYN-DEVICE/WEIGH-2", WeightValue: "2", WeightUnit: "LB",
+		Length: "0.5", Width: "0.25", Height: "1.2", DimensionUnit: "M",
+	})
+	if err != nil {
+		t.Fatalf("小数外廓：%v", err)
+	}
+	if volume := fractional.Quantities()[1]; volume.Amount != "0.15" || volume.Unit.String() != "M3" {
+		t.Fatalf("体积 = %s %s, want 0.15 M3", volume.Amount, volume.Unit)
+	}
+
+	for name, spec := range map[string]domain.MeasuredDemandSpec{
+		"缺锚":    {WeightValue: "1.50", WeightUnit: "KG", Length: "20", Width: "15", Height: "10", DimensionUnit: "CM"},
+		"锚只有空白": {Anchor: "  ", WeightValue: "1.50", WeightUnit: "KG", Length: "20", Width: "15", Height: "10", DimensionUnit: "CM"},
+		"缺重量":   {Anchor: "SYN-DEVICE/WEIGH-1", WeightUnit: "KG", Length: "20", Width: "15", Height: "10", DimensionUnit: "CM"},
+		"缺重单位":  {Anchor: "SYN-DEVICE/WEIGH-1", WeightValue: "1.50", Length: "20", Width: "15", Height: "10", DimensionUnit: "CM"},
+		"缺长":    {Anchor: "SYN-DEVICE/WEIGH-1", WeightValue: "1.50", WeightUnit: "KG", Width: "15", Height: "10", DimensionUnit: "CM"},
+		"缺宽":    {Anchor: "SYN-DEVICE/WEIGH-1", WeightValue: "1.50", WeightUnit: "KG", Length: "20", Height: "10", DimensionUnit: "CM"},
+		"缺高":    {Anchor: "SYN-DEVICE/WEIGH-1", WeightValue: "1.50", WeightUnit: "KG", Length: "20", Width: "15", DimensionUnit: "CM"},
+		"缺尺寸单位": {Anchor: "SYN-DEVICE/WEIGH-1", WeightValue: "1.50", WeightUnit: "KG", Length: "20", Width: "15", Height: "10"},
+	} {
+		if _, err := domain.MeasuredDemand(spec); !errors.Is(err, domain.ErrInvalidDemandSnapshot) {
+			t.Fatalf("%s：err = %v, want ErrInvalidDemandSnapshot", name, err)
+		}
+	}
+}
+
+// Covers: 两种来源都能经读回的门回来；零值来源、实测不带锚立不成快照。
+func TestDemandSnapshotsReadBackBothSourcesAndRejectAZeroSource(t *testing.T) {
+	declared := declaredParcel(t)
+	anchor, _ := declared.Anchor()
+	readDeclared, err := domain.RehydrateDemandSnapshot(domain.DemandFromDeclaration, anchor, declared.Quantities())
+	if err != nil || readDeclared.Source() != domain.DemandFromDeclaration {
+		t.Fatalf("申报读回 = %s %v", readDeclared.Source(), err)
+	}
+	measured, err := domain.MeasuredDemand(domain.MeasuredDemandSpec{
+		Anchor: "SYN-DEVICE/WEIGH-1", WeightValue: "1.50", WeightUnit: "KG",
+		Length: "20", Width: "15", Height: "10", DimensionUnit: "CM",
+	})
+	if err != nil {
+		t.Fatalf("实测：%v", err)
+	}
+	readMeasured, err := domain.RehydrateDemandSnapshot(domain.DemandFromActualMeasurement, "SYN-DEVICE/WEIGH-1", measured.Quantities())
+	if err != nil || readMeasured.Source() != domain.DemandFromActualMeasurement {
+		t.Fatalf("实测读回 = %s %v", readMeasured.Source(), err)
+	}
+	if parsed, err := domain.ParseDemandSource("actual-measurement"); err != nil || parsed != domain.DemandFromActualMeasurement {
+		t.Fatalf("解析实测来源 = %s %v", parsed, err)
+	}
+	if parsed, err := domain.ParseDemandSource("declaration"); err != nil || parsed != domain.DemandFromDeclaration {
+		t.Fatalf("解析申报来源 = %s %v", parsed, err)
+	}
+	quantities := declared.Quantities()
+	for name, source := range map[string]domain.DemandSource{
+		"零值来源": domain.DemandSourceInvalid,
+		"集外来源": domain.DemandSource(9),
+	} {
+		if _, err := domain.RehydrateDemandSnapshot(source, "SYN-DEVICE/WEIGH-1", quantities); !errors.Is(err, domain.ErrInvalidDemandSnapshot) {
+			t.Fatalf("%s：err = %v", name, err)
+		}
+	}
+	if _, err := domain.RehydrateDemandSnapshot(domain.DemandFromActualMeasurement, "", quantities); !errors.Is(err, domain.ErrInvalidDemandSnapshot) {
+		t.Fatalf("实测缺锚：err = %v", err)
+	}
+	if _, err := domain.ParseDemandSource("guessed"); !errors.Is(err, domain.ErrInvalidDemandSnapshot) {
+		t.Fatalf("集外词：err = %v", err)
+	}
+}
+
 // Covers: AT-TF-132——申报译成需求量：重量照抄，体积取三边乘积（单位由长度单位派生），件数恒为一件；外廓缺席就没有体积一维，
 // 袋位一类维度从来没有。
 func TestDeclaredDemandHasWeightVolumeAndOnePiece(t *testing.T) {
@@ -373,5 +473,31 @@ func TestThePreparationInputDigestFollowsTheBasisOnly(t *testing.T) {
 	changed, _ := domain.CanonicalizePreparationInput(leg, corrected)
 	if first != again || first == changed {
 		t.Fatalf("摘要：首 %s 再 %s 改 %s", first, again, changed)
+	}
+	// 申报那一路的摘要在来源词扩出去之前就算死在这一串上：身份不进摘要，来源与锚进。同一段同一组数量，来源或锚一变就是另一串。
+	const declaredDigest = "TFC-1:5aa41c52b6a78e2c751848133dc48458cf175522aeffd987c438027c79479af0"
+	if first != declaredDigest {
+		t.Fatalf("申报摘要 = %s, want %s", first, declaredDigest)
+	}
+	sameNumbers := domain.MeasuredDemandSpec{
+		Anchor: "baseline", WeightValue: "1.50", WeightUnit: "KG",
+		Length: "20", Width: "15", Height: "10", DimensionUnit: "CM",
+	}
+	measured, err := domain.MeasuredDemand(sameNumbers)
+	if err != nil {
+		t.Fatalf("同数实测：%v", err)
+	}
+	bySource, err := domain.CanonicalizePreparationInput(leg, measured)
+	if err != nil || bySource == first {
+		t.Fatalf("来源不同的摘要 = %s err=%v，应与申报 %s 不同", bySource, err, first)
+	}
+	sameNumbers.Anchor = "SYN-DEVICE/WEIGH-2"
+	reanchored, err := domain.MeasuredDemand(sameNumbers)
+	if err != nil {
+		t.Fatalf("换锚：%v", err)
+	}
+	byAnchor, err := domain.CanonicalizePreparationInput(leg, reanchored)
+	if err != nil || byAnchor == bySource {
+		t.Fatalf("锚不同的摘要 = %s err=%v，应与 %s 不同", byAnchor, err, bySource)
 	}
 }
