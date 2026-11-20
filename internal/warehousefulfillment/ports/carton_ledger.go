@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 )
@@ -20,6 +21,10 @@ type CartonLedger interface {
 	// AppendRelocation 记一笔整箱移动：不新起入库批次，箱必须已经在库，同一箱的增减相抵。
 	// 没有环境事务时拒绝。
 	AppendRelocation(ctx context.Context, movement domain.CartonMovement) error
+	// AppendDeparture 记开箱：箱从所在库位减一，不新起入库批次。没有环境事务时拒绝。
+	AppendDeparture(ctx context.Context, movement domain.CartonMovement) error
+	// LoadInboundAt 交回整箱入库批次的入库时间。商品开箱沿用它，不取开箱入账的时刻。
+	LoadInboundAt(ctx context.Context, tenant domain.TenantID, id domain.CartonInboundBatchID) (time.Time, bool, error)
 }
 
 // CartonIdentities 签发整箱流水与整箱入库批次的标识。两类各一个签发器，不并进商品库存的签发器。

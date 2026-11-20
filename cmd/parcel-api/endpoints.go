@@ -513,3 +513,60 @@ func (channels endpointChannels) conditionRestore() warehousehttp.ConditionResto
 	}
 	return warehousehttp.UnconfiguredConditionRestoreIntake{}
 }
+
+func (channels endpointChannels) processingInstruction() *warehousehttp.OperatorInstructionIntake {
+	return channels.operatorDecisions.warehouseProcessingInstruction
+}
+
+func (channels endpointChannels) relabelInstruction() *warehousehttp.OperatorInstructionIntake {
+	return channels.operatorDecisions.warehouseRelabelInstruction
+}
+
+func (channels endpointChannels) approvalDuty() warehousehttp.ApprovalDutyIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
+func (channels endpointChannels) outboundOnBehalf() warehousehttp.OutboundOnBehalfIntake {
+	if channels.operatorDecisions.warehouseOutbound != nil {
+		return channels.operatorDecisions.warehouseOutbound
+	}
+	return warehousehttp.UnconfiguredOutboundIntake{}
+}
+
+func (channels endpointChannels) shortagePolicy() warehousehttp.ShortagePolicyIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
+func (channels endpointChannels) stockAdjustment() warehousehttp.StockAdjustmentIntake {
+	if channels.operatorDecisions.warehouseStockAdjustment != nil {
+		return channels.operatorDecisions.warehouseStockAdjustment
+	}
+	return warehousehttp.UnconfiguredStockAdjustmentIntake{}
+}
+
+func (channels endpointChannels) stockApproval() warehousehttp.StockApprovalIntake {
+	if channels.operatorDecisions.warehouseStockApproval != nil {
+		return channels.operatorDecisions.warehouseStockApproval
+	}
+	return warehousehttp.UnconfiguredStockApprovalIntake{}
+}
+
+func (channels endpointChannels) stockCount() warehousehttp.StockCountIntake {
+	if channels.operatorDecisions.warehouseStockCount != nil {
+		return channels.operatorDecisions.warehouseStockCount
+	}
+	return warehousehttp.UnconfiguredStockCountIntake{}
+}
+
+func (channels endpointChannels) stockFreeze() warehousehttp.StockFreezeIntake {
+	if channels.operatorDecisions.warehouseStockFreeze != nil {
+		return channels.operatorDecisions.warehouseStockFreeze
+	}
+	return warehousehttp.UnconfiguredStockFreezeIntake{}
+}

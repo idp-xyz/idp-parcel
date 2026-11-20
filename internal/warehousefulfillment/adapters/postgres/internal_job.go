@@ -29,6 +29,7 @@ func NewInternalJobs(db *bentopg.DB) (*InternalJobs, error) {
 
 var (
 	_ ports.InternalJobStore      = (*InternalJobs)(nil)
+	_ ports.JobDiscrepancyStore   = (*InternalJobs)(nil)
 	_ ports.ConditionRestoreStore = (*InternalJobs)(nil)
 )
 
@@ -681,4 +682,78 @@ func valueOrZero(value *int64) int64 {
 		return 0
 	}
 	return *value
+}
+
+func (store *InternalJobs) LoadDiscrepancy(ctx context.Context, tenant domain.TenantID, id domain.StockDiscrepancyID) (ports.StoredJobDiscrepancy, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.StoredJobDiscrepancy{}, false, err
+	}
+	var fact, kind, operator, owner, warehouse, status string
+	var location, goods, unit, state, alias, batch, expiry, inbound, source, carton *string
+	var quantity int64
+	var missing bool
+	err = querier.QueryRow(ctx,
+		`SELECT discrepancy.fact_id, job.kind, job.operator_id, discrepancy.owner_account_id, discrepancy.warehouse_code,
+		        discrepancy.location_code, discrepancy.goods_code, discrepancy.unit_name, discrepancy.stock_state,
+		        discrepancy.label_alias, discrepancy.batch_number, discrepancy.expiry_date::text, discrepancy.inbound_batch_id,
+		        discrepancy.source_location, discrepancy.carton_number, discrepancy.quantity, discrepancy.carton_missing, discrepancy.status
+		   FROM warehouse_fulfillment.stock_discrepancy discrepancy
+		   JOIN warehouse_fulfillment.internal_job job
+		     ON job.tenant_id = discrepancy.tenant_id AND job.fact_id = discrepancy.fact_id
+		  WHERE discrepancy.tenant_id = $1 AND discrepancy.discrepancy_id = $2`,
+		tenant.String(), id.String()).Scan(
+		&fact, &kind, &operator, &owner, &warehouse, &location, &goods, &unit, &state, &alias, &batch, &expiry,
+		&inbound, &source, &carton, &quantity, &missing, &status,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.StoredJobDiscrepancy{}, false, nil
+	}
+	if err != nil {
+		return ports.StoredJobDiscrepancy{}, false, fmt.Errorf("load job discrepancy: %w", err)
+	}
+	return ports.StoredJobDiscrepancy{
+		Tenant: tenant, ID: id, FactID: mustFact(fact), Kind: kind, Operator: operator, Owner: mustOwnerID(owner), Warehouse: mustWarehouse(warehouse),
+		Location: mustLocation(location), Source: mustLocation(source), Goods: mustGoods(goods), Unit: mustUnit(unit), State: mustState(state),
+		Alias: mustAlias(alias), Batch: mustBatch(batch), Expiry: mustExpiry(expiry), Inbound: mustInbound(inbound), Quantity: quantity,
+		Carton: mustCarton(carton), CartonMissing: missing, Status: status,
+	}, true, nil
+}
+
+func (store *InternalJobs) MarkDiscrepancyApproved(ctx context.Context, tenant domain.TenantID, id domain.StockDiscrepancyID, operator domain.Registrant, at time.Time, note string, dutyRevision int) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("approve job discrepancy: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.stock_discrepancy
+		    SET status = 'APPROVED', approved_by = $3, approved_at = $4, approval_note = $5, duty_revision = $6
+		  WHERE tenant_id = $1 AND discrepancy_id = $2 AND status = 'PENDING'`,
+		tenant.String(), id.String(), operator.String(), at, nullableText(note), dutyRevision)
+	if err != nil {
+		return fmt.Errorf("approve job discrepancy: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("approve job discrepancy: %s was not pending", id.String())
+	}
+	return nil
+}
+
+func (store *InternalJobs) MarkDiscrepancyRejected(ctx context.Context, tenant domain.TenantID, id domain.StockDiscrepancyID, operator domain.Registrant, at time.Time, reason string) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("reject job discrepancy: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.stock_discrepancy
+		    SET status = 'REJECTED', rejected_by = $3, rejected_at = $4, reject_reason = $5
+		  WHERE tenant_id = $1 AND discrepancy_id = $2 AND status = 'PENDING'`,
+		tenant.String(), id.String(), operator.String(), at, reason)
+	if err != nil {
+		return fmt.Errorf("reject job discrepancy: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("reject job discrepancy: %s was not pending", id.String())
+	}
+	return nil
 }

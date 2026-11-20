@@ -154,6 +154,18 @@ const (
 	CustomerCapabilityReceiptDiscrepancyConclusion CustomerCapability = "RECEIPT_DISCREPANCY_CONCLUSION"
 	// CustomerCapabilityWarehouseRead 是仓配查阅，涵盖已落地的商品、仓测与入库预报读口；能力词不按对象拆。
 	CustomerCapabilityWarehouseRead CustomerCapability = "WAREHOUSE_READ"
+	// CustomerCapabilityProcessingInstructionSubmission 是加工指令提交（`/v1/warehouse/processing-instructions`，UC-WF-008）。
+	// 拆分与加工共用这一词。不进 customerCapabilitiesAdmittedAtMint：准入两格都是这个字面量。
+	CustomerCapabilityProcessingInstructionSubmission CustomerCapability = "PROCESSING_INSTRUCTION_SUBMISSION"
+	// CustomerCapabilityProcessingInstructionWithdrawal 是加工指令撤回（`/v1/warehouse/processing-instructions/withdrawals`）。
+	CustomerCapabilityProcessingInstructionWithdrawal CustomerCapability = "PROCESSING_INSTRUCTION_WITHDRAWAL"
+	// CustomerCapabilityRelabelInstructionSubmission 是商品换标指令提交（`/v1/warehouse/relabel-instructions`）。
+	CustomerCapabilityRelabelInstructionSubmission CustomerCapability = "RELABEL_INSTRUCTION_SUBMISSION"
+	// CustomerCapabilityRelabelInstructionWithdrawal 是商品换标指令撤回（`/v1/warehouse/relabel-instructions/withdrawals`）。
+	CustomerCapabilityRelabelInstructionWithdrawal CustomerCapability = "RELABEL_INSTRUCTION_WITHDRAWAL"
+	// CustomerCapabilityOutboundRequestSubmission 是出库请求提交（`/v1/warehouse/outbound-requests`，UC-WF-012）。
+	// 不进 customerCapabilitiesAdmittedAtMint：准入两格都是这个字面量。
+	CustomerCapabilityOutboundRequestSubmission CustomerCapability = "OUTBOUND_REQUEST_SUBMISSION"
 )
 
 var customerCapabilities = []CustomerCapability{
@@ -174,6 +186,11 @@ var customerCapabilities = []CustomerCapability{
 	CustomerCapabilityInboundPreAdviceWithdrawal,
 	CustomerCapabilityReceiptDiscrepancyConclusion,
 	CustomerCapabilityWarehouseRead,
+	CustomerCapabilityProcessingInstructionSubmission,
+	CustomerCapabilityProcessingInstructionWithdrawal,
+	CustomerCapabilityRelabelInstructionSubmission,
+	CustomerCapabilityRelabelInstructionWithdrawal,
+	CustomerCapabilityOutboundRequestSubmission,
 }
 
 // ParseCustomerCapability 按字面取值认能力，大小写不折叠：册里存的就是这些字面量。

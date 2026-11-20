@@ -294,6 +294,34 @@ const DecisionUnclaimedArrivalDisposition DecisionKind = "UNCLAIMED_ARRIVAL_DISP
 // 与库内作业事实分开授予：能登记移库的不因此能把次品转回良品。谁持有是租户取值。
 const DecisionConditionRestore DecisionKind = "CONDITION_RESTORE"
 
+// DecisionProcessingInstruction 是加工指令的运营发起与作废（UC-WF-008；ADR-0384 决定二）。
+// 发起与作废共用这一种授予。拆分与加工同一词。谁持有是租户取值。
+const DecisionProcessingInstruction DecisionKind = "PROCESSING_INSTRUCTION"
+
+// DecisionRelabelInstruction 是商品换标指令的运营发起与作废（UC-WF-008；ADR-0384 决定二）。
+// 与加工分开授予。谁持有是租户取值。
+const DecisionRelabelInstruction DecisionKind = "RELABEL_INSTRUCTION"
+
+// DecisionStockFreeze 是库存冻结与解冻（UC-WF-009；ADR-0384 决定二）。
+// 冻结与解冻共用这一种授予。谁持有是租户取值。
+const DecisionStockFreeze DecisionKind = "STOCK_FREEZE"
+
+// DecisionStockCount 是盘点的创建、开始、完成与作废（UC-WF-010；ADR-0384 决定二）。
+// 四步共用这一种授予。谁持有是租户取值。
+const DecisionStockCount DecisionKind = "STOCK_COUNT"
+
+// DecisionStockAdjustmentApproval 是库存差异、库存调整与建账导入的批准和驳回（UC-WF-011；ADR-0384 决定二）。
+// 这一支先接到盘点差额。谁持有是租户取值。
+const DecisionStockAdjustmentApproval DecisionKind = "STOCK_ADJUSTMENT_APPROVAL"
+
+// DecisionStockAdjustmentSubmission 是库存调整的提交（UC-WF-011；ADR-0384 决定二）。
+// 提交不改账。谁持有是租户取值。
+const DecisionStockAdjustmentSubmission DecisionKind = "STOCK_ADJUSTMENT_SUBMISSION"
+
+// DecisionOutboundRequestRecordOnBehalf 是出库请求代录（UC-WF-012；ADR-0384 决定二）。
+// 谁持有是租户取值。
+const DecisionOutboundRequestRecordOnBehalf DecisionKind = "OUTBOUND_REQUEST_RECORD_ON_BEHALF"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -347,6 +375,13 @@ var decisionKinds = []DecisionKind{
 	DecisionUnclaimedArrivalClaim,
 	DecisionUnclaimedArrivalDisposition,
 	DecisionConditionRestore,
+	DecisionProcessingInstruction,
+	DecisionRelabelInstruction,
+	DecisionStockFreeze,
+	DecisionStockCount,
+	DecisionStockAdjustmentApproval,
+	DecisionStockAdjustmentSubmission,
+	DecisionOutboundRequestRecordOnBehalf,
 }
 
 // DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。

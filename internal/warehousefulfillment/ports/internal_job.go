@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
@@ -32,6 +33,37 @@ type InternalJobStore interface {
 	List(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[domain.RecordedInternalJob], error)
 }
 
+// StoredJobDiscrepancy 是一份库内作业留下的待处理差异，带形成它的作业种类和操作者。
+type StoredJobDiscrepancy struct {
+	Tenant        domain.TenantID
+	ID            domain.StockDiscrepancyID
+	FactID        domain.InternalJobFactID
+	Kind          string
+	Operator      string
+	Owner         domain.OwnerAccountID
+	Warehouse     domain.WarehouseCode
+	Location      domain.LocationCode
+	Source        domain.LocationCode
+	Goods         domain.GoodsCode
+	Unit          domain.GoodsUnitName
+	State         domain.StockState
+	Alias         domain.GoodsAliasCode
+	Batch         domain.BatchNumber
+	Expiry        domain.ExpiryDate
+	Inbound       domain.InboundBatchID
+	Quantity      int64
+	Carton        domain.CartonNumber
+	CartonMissing bool
+	Status        string
+}
+
+// JobDiscrepancyStore 读写库内作业形成的库存差异。
+type JobDiscrepancyStore interface {
+	LoadDiscrepancy(ctx context.Context, tenant domain.TenantID, id domain.StockDiscrepancyID) (StoredJobDiscrepancy, bool, error)
+	MarkDiscrepancyApproved(ctx context.Context, tenant domain.TenantID, id domain.StockDiscrepancyID, operator domain.Registrant, at time.Time, note string, dutyRevision int) error
+	MarkDiscrepancyRejected(ctx context.Context, tenant domain.TenantID, id domain.StockDiscrepancyID, operator domain.Registrant, at time.Time, reason string) error
+}
+
 // ConditionRestoreStore 是次品转良品的册。不成立的决定不落册，不占决定标识。
 type ConditionRestoreStore interface {
 	HoldDecision(ctx context.Context, tenant domain.TenantID, id domain.ConditionRestoreID) error
@@ -51,8 +83,8 @@ type CartonPlace struct {
 	Found    bool
 }
 
-// StockHolds 回答库内入账取不走的数量。冻结、分配、作业锁定与未分配的预占都还没有账，
-// 生产实现先答零；取不走的减法已经写在入账里，后来的占用账接上这一口即可。
+// StockHolds 回答库内入账取不走的数量。冻结与盘点锁定按格，未分配的预占按出库请求的条件。
+// 分配还没有账。取不走的减法已经写在入账里。
 type StockHolds interface {
 	CellHold(
 		ctx context.Context,

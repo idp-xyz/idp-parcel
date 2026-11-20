@@ -380,6 +380,9 @@ func TestCartonLedgerRefusesToRunOutsideATransaction(t *testing.T) {
 		t.Fatalf("无事务 Append：%v", err)
 	}
 	if err := world.cartons.AppendRelocation(ctx, domain.CartonMovement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("AppendRelocation：%v", err)
+	}
+	if err := world.cartons.AppendDeparture(ctx, domain.CartonMovement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("Append：%v", err)
 	}
 }

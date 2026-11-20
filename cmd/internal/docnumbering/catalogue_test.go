@@ -29,6 +29,7 @@ func TestCatalogueHoldsTheDeclaredDocumentTypes(t *testing.T) {
 		"BOOKING":                {"BK-{yyyy}{mm}-{seq:5}", numbering.Monthly, docnumber.DateTimeZoneFromTenant},
 		"TRANSPORT_COMMISSION":   {"TC-{yyyy}{mm}-{seq:5}", numbering.Monthly, docnumber.DateTimeZoneFromTenant},
 		"INBOUND_PRE_ADVICE":     {"IB-{yyyy}{mm}{dd}-{seq:5}", numbering.Daily, docnumber.DateTimeZoneFromIssuer},
+		"OUTBOUND_REQUEST":       {"OB-{yyyy}{mm}{dd}-{seq:5}", numbering.Daily, docnumber.DateTimeZoneFromIssuer},
 	}
 
 	catalogue, err := Catalogue()

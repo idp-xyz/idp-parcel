@@ -181,9 +181,19 @@
 ## 已实现：库内作业
 
 - 四个登记口挂作业事实登记，范围种类 `WAREHOUSE`，引用等于载荷仓，先认证再读载荷：`POST /warehouse-fulfillment-internal-moves`（`INTERNAL_MOVE`，上架、移库与拣选位补货）、`form-conversions`（`FORM_CONVERSION`）、`condition-conversions`（`CONDITION_CONVERSION`）、`shortage-registrations`（`SHORTAGE`）。答复 `REGISTERED` 或 `SHORTAGE_REGISTERED`（201）、`EXISTING_RESULT`、`CONTENT_CONFLICT`、`CONTENT_INVALID`、`WAREHOUSE_NOT_FOUND`、`WAREHOUSE_NOT_ACCEPTING`。停用的仓、库区与库位照记；代理仓不受理。
-- 取得走的部分入账，其余各成一份待处理库存差异，写口不拒。没点名入库批次的从早到晚取。移入次品库区的同一笔转为次品。形态转换与带转入单位的补货只入账两头都折成整数个单位的部分，入库批次不另起。短少只记观察，不改账。
+- 取得走的部分入账，其余各成一份待处理库存差异，写口不拒。没点名入库批次的从早到晚取。移入次品库区的同一笔转为次品。形态转换与带转入单位的补货只入账两头都折成整数个单位的部分，入库批次不另起。短少只记观察，不改账。上架没入账的数量可经 `POST /warehouse-fulfillment-job-discrepancy-approvals` 从源头补进目标位，短少经同一口在所在格调减；决定词与库存调整批准相同，驳回是 `job-discrepancy-rejections`。没登记批准职责时答未配置。形态转换、状态转换和整箱缺箱还没批。
 - 次品转良品 `POST /warehouse-fulfillment-condition-restores`，运营决定 `CONDITION_RESTORE`，整份成立或整份不成立，库位须在收货暂存或退货暂存。答复 `RESTORED`、`EXISTING_RESULT`、`SOURCE_CONFLICT`、`NOT_VALID`。
-- 运营查阅：`GET /warehouse-fulfillment-internal-jobs`、`internal-job`、`condition-restore`。冻结、分配、作业锁定与未分配预占还没有账，这几项先按零读，减法留在入账里。整箱移动写 `-1` 与 `+1`，不新起入库批次。
+- 运营查阅：`GET /warehouse-fulfillment-internal-jobs`、`internal-job`、`condition-restore`。冻结和未分配预占已经入占用；分配与作业锁定还没有账，这两项先按零读。整箱移动写 `-1` 与 `+1`，不新起入库批次。
+
+## 已实现：加工、换标与开箱
+
+- 货主提交 `POST /v1/warehouse/processing-instructions`、`relabel-instructions`，撤回在各自的 `/withdrawals`。加工与拆分共用加工这一词。货主与来源请求键取自信封。
+- 运营发起 `POST /warehouse-fulfillment-processing-instructions`、`relabel-instructions`，作废是 `processing-instruction-voids`、`relabel-instruction-voids`。发起与作废共用 `PROCESSING_INSTRUCTION` 或 `RELABEL_INSTRUCTION`。作废须带原因。种类对不上这一口的答查无此指令。
+- 执行与开箱挂作业事实：`processing-executions`、`relabel-executions`、`unboxings`。执行整笔入账，账上不够留在待加工。开箱按实点入商品账，入库时间沿用那一箱。
+
+## 已实现：冻结
+
+- 冻结与解冻挂运营决定 `STOCK_FREEZE`：`POST /warehouse-fulfillment-stock-freezes`、`stock-unfreezes`。只占可用量，不记流水。暂存、待检、余额不够或会挤占已有占用的整份不成立。解冻整份解除。库内入账取走时减掉还冻着的数量。库存读口 `GET /warehouse-fulfillment-stock` 与货主 `GET /v1/warehouse/reads/stock`：`view` 取 `cells`、`cartons`、`summary`、`holds`、`movements`。货主不带库位，也不带冻结的原因与操作者。仓的业务时区没登记时库龄答 `NOT_CONFIGURED`，数量照答。库内入账会减掉未分配的预占。货主 `POST /v1/warehouse/outbound-requests`，代录 `POST /warehouse-fulfillment-outbound-requests`，缺货处置 `POST /warehouse-fulfillment-shortage-policies`。不够又没登记缺货处置时请求停在待预占。库存读口的可用量还没减预占，作业锁定仍按零。
 
 ## 要做它时先看
 

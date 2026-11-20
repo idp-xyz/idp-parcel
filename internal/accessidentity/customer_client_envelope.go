@@ -213,16 +213,21 @@ func accessRequestIdentifierOf(request ChannelRequest) (string, error) {
 // 首方族来源请求键的命令前缀。ADR-0310 的原有前缀在前；仓配货主写口随各口落地并入（ADR-0384 决定六）。
 // 提交与送站预报两口不带前缀，已登的来源请求键不改，所以裸标识与带前缀串在判重空间里是两把不同的键。
 const (
-	requestKeyPrefixWithdrawal           = "withdrawal:"
-	requestKeyPrefixParcelCancellation   = "parcel-cancellation:"
-	requestKeyPrefixSourceDataAmend      = "source-data-amendment:"
-	requestKeyPrefixSupplement           = "supplement:"
-	requestKeyPrefixClaim                = "claim:"
-	requestKeyPrefixGoods                = "goods:"
-	requestKeyPrefixInboundPreAdvice     = "inbound-pre-advice:"
-	requestKeyPrefixInboundArrivalNotice = "inbound-arrival-notice:"
-	requestKeyPrefixInboundWithdrawal    = "inbound-withdrawal:"
-	requestKeyPrefixReceiptDiscrepancy   = "receipt-discrepancy:"
+	requestKeyPrefixWithdrawal            = "withdrawal:"
+	requestKeyPrefixParcelCancellation    = "parcel-cancellation:"
+	requestKeyPrefixSourceDataAmend       = "source-data-amendment:"
+	requestKeyPrefixSupplement            = "supplement:"
+	requestKeyPrefixClaim                 = "claim:"
+	requestKeyPrefixGoods                 = "goods:"
+	requestKeyPrefixInboundPreAdvice      = "inbound-pre-advice:"
+	requestKeyPrefixInboundArrivalNotice  = "inbound-arrival-notice:"
+	requestKeyPrefixInboundWithdrawal     = "inbound-withdrawal:"
+	requestKeyPrefixReceiptDiscrepancy    = "receipt-discrepancy:"
+	requestKeyPrefixProcessingInstruction = "processing-instruction:"
+	requestKeyPrefixProcessingWithdrawal  = "processing-withdrawal:"
+	requestKeyPrefixRelabelInstruction    = "relabel-instruction:"
+	requestKeyPrefixRelabelWithdrawal     = "relabel-withdrawal:"
+	requestKeyPrefixOutboundRequest       = "outbound-request:"
 )
 
 // reservedRequestKeyPrefixes 是首方族保留前缀表，只在这里列一次。委托提交与送站预报两口的推导拒以其中任一前缀开头的标识；
@@ -233,6 +238,9 @@ var reservedRequestKeyPrefixes = []string{
 	requestKeyPrefixGoods,
 	requestKeyPrefixInboundPreAdvice, requestKeyPrefixInboundArrivalNotice, requestKeyPrefixInboundWithdrawal,
 	requestKeyPrefixReceiptDiscrepancy,
+	requestKeyPrefixProcessingInstruction, requestKeyPrefixProcessingWithdrawal,
+	requestKeyPrefixRelabelInstruction, requestKeyPrefixRelabelWithdrawal,
+	requestKeyPrefixOutboundRequest,
 }
 
 func rejectReservedRequestKeyPrefix(identifier string) error {

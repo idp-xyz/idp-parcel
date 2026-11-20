@@ -233,6 +233,17 @@ type GoodsCurrentRead interface {
 	) (GoodsRow, bool, error)
 }
 
+// GoodsRevisionNumberRead 按修订号取一笔商品修订。加工指令点名组成版本时用它；没点名的用 StockGoodsLookup.LoadLatestGoods。
+type GoodsRevisionNumberRead interface {
+	LoadGoodsRevision(
+		ctx context.Context,
+		tenant domain.TenantID,
+		owner domain.OwnerAccountID,
+		code domain.GoodsCode,
+		revision int,
+	) (domain.GoodsRevision, bool, error)
+}
+
 // OwnerAccountLookup 问一个货主客户账户在本租户有没有登记。只有代录问这一口：客户面的货主取自信封，不问。
 // 停用了的账户仍然算登记过——查不到指的是本租户没有这个账户。读不动交 error，调用方不得把它答成查不到。
 type OwnerAccountLookup interface {

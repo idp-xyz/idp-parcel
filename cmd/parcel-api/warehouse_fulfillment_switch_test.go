@@ -236,7 +236,8 @@ func TestTheWarehouseFulfillmentSwitchTravelsFromStartupChannelsIntoTheWarehouse
 			}
 			request := httptest.NewRequest(probe.method, probe.target, strings.NewReader(body))
 			if pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine || pattern == unclaimedArrivalRegLine ||
-				pattern == internalMovesLine || pattern == formConversionsLine || pattern == conditionConversionsLine || pattern == shortageRegistrationsLine {
+				pattern == internalMovesLine || pattern == formConversionsLine || pattern == conditionConversionsLine || pattern == shortageRegistrationsLine ||
+				pattern == processingExecutionsLine || pattern == relabelExecutionsLine || pattern == unboxingsLine || pattern == countEntriesLine {
 				request.Header.Set("Parcel-Work-Scope-Kind", "WAREHOUSE")
 				request.Header.Set("Parcel-Work-Scope-Reference", "SYN-WH-01")
 				request.Header.Set("Parcel-Device-Id", "SYN-DEVICE-NODE")
