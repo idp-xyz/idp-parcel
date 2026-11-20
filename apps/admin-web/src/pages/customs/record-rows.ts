@@ -188,16 +188,26 @@ export function measuredWeightText(weights: MemberMeasuredWeightBody[] | undefin
 /** 当前版此刻的对照。非当前版没有这一组，不显示。 */
 export function measurementNowText(version: SubmissionVersionBody): string {
   if (!version.isCurrent || !version.measurementsNow || version.measurementsNow.length === 0) return '';
-  return version.measurementsNow.map(measurementNowLine).join('\n');
+  const fixed = new Set((version.memberWeights ?? []).map((weight) => weight.parcel));
+  // 整版都没称过时，上一行已经写了「申报时没有实测毛重」，这一行再起「申报时没有实测」就是同一句。
+  const noneFixed = fixed.size === 0;
+  return version.measurementsNow.map((row) => measurementNowLine(row, fixed.has(row.parcel), noneFixed)).join('\n');
 }
 
-function measurementNowLine(row: MemberMeasurementNowBody): string {
+function measurementNowLine(row: MemberMeasurementNowBody, fixedOnVersion: boolean, noneFixed: boolean): string {
   const parcel = row.parcel;
   switch (row.state) {
     case 'SAME':
       return `${parcel} 实测毛重 ${row.grossWeight} ${row.grossWeightUnit}（称重量方 ${row.measurementSource}），与申报时相同`;
-    case 'CHANGED':
-      return `${parcel} 现已复测为 ${row.grossWeight} ${row.grossWeightUnit}（称重量方 ${row.measurementSource}），与申报时不同`;
+    case 'CHANGED': {
+      // 成版时这件已经有一条、此刻换了来源，才是复测。成版时没称过、此刻才称出来，说成复测会让人以为申报时那一条被换掉了。
+      const reading = `${row.grossWeight} ${row.grossWeightUnit}（称重量方 ${row.measurementSource}）`;
+      if (!fixedOnVersion) {
+        if (noneFixed) return `${parcel} 现已称出 ${reading}`;
+        return `${parcel} 申报时没有实测，现已称出 ${reading}`;
+      }
+      return `${parcel} 现已复测为 ${reading}，与申报时不同`;
+    }
     case 'NONE_NOW':
       return `${parcel} 申报时的实测已作废`;
     case 'UNDETERMINED':

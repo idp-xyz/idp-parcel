@@ -246,3 +246,20 @@ test('实测毛重与此刻的对照按状态写成关务人员能读的话', ()
   equal(measurementNowText(now('UNAVAILABLE')), 'PCL-1 此刻的实测读不到');
   equal(measurementNowText(version({ isCurrent: false, measurementsNow: [{ parcel: 'PCL-1', state: 'CHANGED' }] })), '');
 });
+
+test('申报时没称过、此刻称出来，不说成复测，也不把没有实测说两遍', () => {
+  const fresh = version({
+    measurementsNow: [{ parcel: 'PCL-1', state: 'CHANGED', grossWeight: '3', grossWeightUnit: 'KG', measurementSource: 'SYN-WEIGH-M2' }],
+  });
+  equal(measurementNowText(fresh), 'PCL-1 现已称出 3 KG（称重量方 SYN-WEIGH-M2）');
+  equal(
+    submissionRows([fresh], [])[0].values.measured,
+    '申报时没有实测毛重\nPCL-1 现已称出 3 KG（称重量方 SYN-WEIGH-M2）',
+  );
+  const sibling = version({
+    members: ['PCL-1', 'PCL-2'],
+    memberWeights: [{ parcel: 'PCL-1', grossWeight: '2.1', grossWeightUnit: 'KG', measurementSource: 'SYN-WEIGH-M1', measuredAt: at }],
+    measurementsNow: [{ parcel: 'PCL-2', state: 'CHANGED', grossWeight: '3', grossWeightUnit: 'KG', measurementSource: 'SYN-WEIGH-M2' }],
+  });
+  equal(measurementNowText(sibling), 'PCL-2 申报时没有实测，现已称出 3 KG（称重量方 SYN-WEIGH-M2）');
+});
