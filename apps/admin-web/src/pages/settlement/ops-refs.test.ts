@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
+import { labelFor } from '../../vocabulary/status';
 import {
   accountCounterparties,
+  adjustmentText,
   feeItemLabel,
   parcelFromRef,
   pricedWeightText,
@@ -90,4 +92,86 @@ test('来源一格写明出自实测还是申报、实重与尺寸；申报没�
   );
   // 评价没有测量事实：来源整格不出，哪怕计价重量在。
   equal(weightBasisText({ pricedWeight: '5', pricedWeightUnit: 'KG' }, label), undefined);
+});
+
+// Covers: 费用行的来源文字在出自实测且带来源身份时点出这条称重量方；词取词典。申报不带这一格，也不因夹具里误放了来源身份就写出来。
+test('出自实测时来源文字带上称重量方的来源身份', () => {
+  equal(
+    weightBasisText(
+      {
+        weightSource: 'actual-measurement',
+        actualWeight: '2.1',
+        actualWeightUnit: 'KG',
+        dimensionSides: ['22', '16', '11'],
+        dimensionUnit: 'CM',
+        measurementSource: 'SYN-WEIGH-M1',
+      },
+      labelFor,
+    ),
+    '实测：实重 2.1 KG，尺寸 22×16×11 CM，称重量方 SYN-WEIGH-M1',
+  );
+  equal(
+    weightBasisText(
+      {
+        weightSource: 'declared-measurement',
+        actualWeight: '1.5',
+        actualWeightUnit: 'KG',
+        dimensionSides: ['20', '15', '10'],
+        dimensionUnit: 'CM',
+        measurementSource: 'SYN-WEIGH-SHOULD-NOT-SHOW',
+      },
+      labelFor,
+    ),
+    '申报：实重 1.5 KG，尺寸 20×15×10 CM',
+  );
+});
+
+// Covers: 调整在「种类 方向 金额」之后带上与费用行同一口径的计价重量与来源。出自实测时点出称重量方的来源身份；出自申报时没有这一格。
+// 评价读不出、以及商业让利，文字与原来逐字相同，不出现空括号或 undefined。
+test('调整文字在种类方向金额之后带上计价重量与来源', () => {
+  equal(
+    adjustmentText(
+      {
+        kind: 'PRICING_CORRECTION',
+        direction: 'DEBIT',
+        settlementAmount: '1500',
+        pricedWeight: '3',
+        pricedWeightUnit: 'KG',
+        weightSource: 'actual-measurement',
+        actualWeight: '2.1',
+        actualWeightUnit: 'KG',
+        dimensionSides: ['30', '25', '20'],
+        dimensionUnit: 'CM',
+        measurementSource: 'SYN-WEIGH-M2',
+      },
+      labelFor,
+    ),
+    '计价纠错 借项 1500 3 KG，实测：实重 2.1 KG，尺寸 30×25×20 CM，称重量方 SYN-WEIGH-M2',
+  );
+  equal(
+    adjustmentText(
+      {
+        kind: 'PRICING_CORRECTION',
+        direction: 'CREDIT',
+        settlementAmount: '800',
+        pricedWeight: '1.5',
+        pricedWeightUnit: 'KG',
+        weightSource: 'declared-measurement',
+        actualWeight: '1.5',
+        actualWeightUnit: 'KG',
+        dimensionSides: ['20', '15', '10'],
+        dimensionUnit: 'CM',
+      },
+      labelFor,
+    ),
+    '计价纠错 贷项 800 1.5 KG，申报：实重 1.5 KG，尺寸 20×15×10 CM',
+  );
+  equal(
+    adjustmentText({ kind: 'PRICING_CORRECTION', direction: 'DEBIT', settlementAmount: '1500' }, labelFor),
+    '计价纠错 借项 1500',
+  );
+  equal(
+    adjustmentText({ kind: 'COMMERCIAL_CONCESSION', direction: 'CREDIT', settlementAmount: '400' }, labelFor),
+    '商业让利 贷项 400',
+  );
 });

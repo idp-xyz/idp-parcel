@@ -104,6 +104,8 @@ export interface CustomerChargeRecord {
   /** 尺寸三边，由长到短。申报没报尺寸时缺席。 */
   dimensionSides?: string[];
   dimensionUnit?: string;
+  /** 出自实测且评价恰好采用一条称重量方时，那条的来源身份。 */
+  measurementSource?: string;
   confirmationBases: ChargeConfirmationBasisRecord[];
 }
 
@@ -112,6 +114,17 @@ export interface CustomerChargeAdjustment {
   kind: string;
   direction: string;
   settlementAmount: string;
+  /** 造成这笔调整的销售评价。商业让利没有。 */
+  evaluation?: string;
+  /** 与费用行同一组计价重量与来源；评价读不出时整组缺席。 */
+  pricedWeight?: string;
+  pricedWeightUnit?: string;
+  weightSource?: string;
+  actualWeight?: string;
+  actualWeightUnit?: string;
+  dimensionSides?: string[];
+  dimensionUnit?: string;
+  measurementSource?: string;
 }
 
 /**

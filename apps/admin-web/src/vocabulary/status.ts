@@ -469,9 +469,10 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   // 复磅是再登一条完整的实测。包裹的计价重量因此变了、而费用已经确认时，只记差额：评价用的重量出自哪里、差额记成哪一种调整与哪个方向、
   // 自动调整为什么停下，界面都读这一段。称重量方册行上的两格也收在这里：「对象种类」取总表，「是否作废」因键是 true / false、
   // 离了册没有意思，另开 measurement-voided 一册（见 scopedStatusVocabulary）。
-  // 评价用的实重与尺寸出自实测还是申报。
+  // 评价用的实重与尺寸出自实测还是申报。MEASUREMENT_SOURCE 不是作业状态：费用册的来源文字在出自实测时用它点出那条称重量方的来源身份。
   'actual-measurement': muted('实测'),
   'declared-measurement': muted('申报'),
+  MEASUREMENT_SOURCE: muted('称重量方'),
   // 一次实测指向的作业对象种类（nodeoperations domain MeasurementObjectKind 的封闭两格）：作业实物与集运单元是两种身份。
   // 这两个码在总表里没有别的意思，不开册。
   HANDLING_UNIT: muted('作业实物'),

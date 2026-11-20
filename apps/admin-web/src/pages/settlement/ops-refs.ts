@@ -68,6 +68,8 @@ export type PricedWeightFields = {
   actualWeightUnit?: string;
   dimensionSides?: string[];
   dimensionUnit?: string;
+  /** 出自实测且评价恰好采用一条称重量方时，那条的来源身份。 */
+  measurementSource?: string;
 };
 
 /**
@@ -111,7 +113,31 @@ export function weightBasisText(
   } else {
     parts.push('未报尺寸');
   }
+  // 只在出自实测且带来源身份时点出那条称重量方。申报没有这一格；没有来源身份时也不补空词，否则会写出「称重量方 undefined」。
+  if (row.weightSource === 'actual-measurement' && row.measurementSource) {
+    parts.push(`${sourceLabel('MEASUREMENT_SOURCE')} ${row.measurementSource}`);
+  }
   return `${sourceLabel(row.weightSource)}：${parts.join('，')}`;
+}
+
+/** 一笔调整上用来拼技术详情的几格：既有「种类 方向 金额」，再加上与费用行同一组的计价重量与来源。 */
+export type AdjustmentFields = PricedWeightFields & {
+  kind: string;
+  direction: string;
+  settlementAmount: string;
+};
+
+/**
+ * 技术详情里的一笔调整。重量与来源读不出时只留「种类 方向 金额」——补空括号或 undefined 会让手工计价纠错看起来像坏数据。
+ * 商业让利没有评价，同样只留这三格。
+ */
+export function adjustmentText(adjustment: AdjustmentFields, label: (code: string) => string): string {
+  const head = `${label(adjustment.kind)} ${label(adjustment.direction)} ${adjustment.settlementAmount}`;
+  const extra = [pricedWeightText(adjustment), weightBasisText(adjustment, label)].filter(
+    (part): part is string => part !== undefined,
+  );
+  if (extra.length === 0) return head;
+  return `${head} ${extra.join('，')}`;
 }
 
 /**

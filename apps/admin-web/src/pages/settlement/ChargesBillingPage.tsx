@@ -24,7 +24,7 @@ import { MultiRegistrationPanel } from '../../components/registration';
 import { chargeDecisionTargets } from './decisions';
 import { problemNote } from './presentation';
 import { AmountCell, TwoLine, technicalRows } from './ops-ui';
-import { feeItemLabel, parcelFromRef, pricedWeightText, sourceFactLabel, supersededByText, weightBasisText } from './ops-refs';
+import { adjustmentText, feeItemLabel, parcelFromRef, pricedWeightText, sourceFactLabel, supersededByText, weightBasisText } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
 
 // 费用与计费页（主责上下文 settlement-accounting：费用项目、费用明细与费用调整的版本与依据）。
@@ -101,9 +101,7 @@ function customerChargeTechnicalRows(row: CustomerChargeRecord) {
     { label: '被替代为', value: supersededByText(row) },
     {
       label: '调整',
-      value: row.adjustments
-        .map((adjustment) => `${labelFor(adjustment.kind)} ${labelFor(adjustment.direction)} ${adjustment.settlementAmount}`)
-        .join('；'),
+      value: row.adjustments.map((adjustment) => adjustmentText(adjustment, labelFor)).join('；'),
     },
   ]);
 }
