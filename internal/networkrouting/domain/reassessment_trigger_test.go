@@ -135,6 +135,7 @@ func TestATriggerPrecedesTheAcceptanceOnlyWhenItsBusinessTimeIsStrictlyEarlier(t
 
 // Covers: 实测变化重判抄锚点立得起来，线索级控制依据照旧立不成；缺位置、缺时间、缺来源版本也拒。
 // 关联前缀是 measurement-change/，带包裹与来源身份，过得了改路触发引用的门，来源身份能从关联还原（含斜杠）。
+// 四段的关联不是这种形状，还原来源身份时拒绝。
 func TestAMeasurementChangeRejudgeCopiesTheAnchorAndRefusesASourceHint(t *testing.T) {
 	spec := triggerSpec(t, domain.NodeIntakeControl)
 	rejudge, err := domain.NewMeasurementChangeRejudge(spec)
@@ -195,5 +196,12 @@ func TestAMeasurementChangeRejudgeCopiesTheAnchorAndRefusesASourceHint(t *testin
 	}
 	if _, err := domain.NewMeasurementChangeCorrelation(tenant, parcel, " "); !errors.Is(err, domain.ErrInvalidReassessmentTrigger) {
 		t.Fatalf("空白来源：err = %v", err)
+	}
+	four, err := domain.NewRequestCorrelationID("measurement-change/1:t/1:p/3:src/4:more")
+	if err != nil {
+		t.Fatalf("四段关联：%v", err)
+	}
+	if _, err := domain.MeasurementChangeSourceVersion(four); !errors.Is(err, domain.ErrInvalidReassessmentTrigger) {
+		t.Fatalf("四段关联：err = %v, want ErrInvalidReassessmentTrigger", err)
 	}
 }

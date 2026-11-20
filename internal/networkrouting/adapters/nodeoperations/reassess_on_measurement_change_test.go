@@ -99,6 +99,56 @@ func (store *stallingStore) AwaitingMeasurementChanges(context.Context, nrdomain
 	return nil, nil
 }
 
+type clockDouble struct{ at time.Time }
+
+func (clock clockDouble) Now() time.Time { return clock.at }
+
+// capturingStore 没有可抄的控制位置，并把入账未判的那一行留下。
+type capturingStore struct {
+	notJudged []nrports.NotJudgedTrigger
+}
+
+func (store *capturingStore) FindByCorrelation(
+	context.Context, nrdomain.TenantID, nrdomain.RequestCorrelationID,
+) (nrports.ReassessmentRecord, bool, error) {
+	return nrports.ReassessmentRecord{}, false, nil
+}
+
+func (store *capturingStore) Save(
+	context.Context, nrdomain.RequestCorrelationID, nrports.ReassessmentRecord,
+) (nrports.ReassessmentSaveOutcome, error) {
+	return 0, errors.New("save")
+}
+
+func (store *capturingStore) RecordNotJudged(_ context.Context, record nrports.NotJudgedTrigger) error {
+	store.notJudged = append(store.notJudged, record)
+	return nil
+}
+
+func (store *capturingStore) LatestTriggerAt(context.Context, nrdomain.InitialRouteJudgmentKey) (time.Time, bool, error) {
+	return time.Time{}, false, nil
+}
+
+func (store *capturingStore) FormedPlans(context.Context, nrdomain.InitialRouteJudgmentKey) ([]nrdomain.InitialRoutePlan, error) {
+	return nil, nil
+}
+
+func (store *capturingStore) LatestControlPosition(context.Context, nrdomain.InitialRouteJudgmentKey) (nrports.ControlPosition, error) {
+	return nrports.ControlPosition{Status: nrports.ControlPositionAbsent}, nil
+}
+
+func (store *capturingStore) AwaitingMeasurementChanges(context.Context, nrdomain.InitialRouteJudgmentKey) ([]nrdomain.RequestCorrelationID, error) {
+	return nil, nil
+}
+
+func handlerOver(store nrports.ReassessmentStore) *nrapplication.ReassessRouteHandler {
+	return nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
+		Store: store,
+		Log:   logDouble{},
+		Clock: clockDouble{at: time.Date(2026, 8, 21, 18, 0, 0, 0, time.UTC)},
+	})
+}
+
 func mustAdapter(
 	t *testing.T,
 	associations noports.CurrentParcelAssociation,
@@ -219,5 +269,49 @@ func TestAnUndecidedMeasurementReassessmentUsesItsOwnSentinel(t *testing.T) {
 	}
 	if errors.Is(err, nrparcelshipment.ErrReassessmentUndecided) || errors.Is(err, tfadapter.ErrHandoverReassessmentUndecided) {
 		t.Fatal("未决哨兵与收寄或交接那一路合用了")
+	}
+}
+
+// Covers: 没有控制位置时，未判册上的业务时间是信封带来的变化时刻。委托接受时刻是另一格，抄过来会把变化记成接受那一刻。
+func TestAMeasurementChangeWithoutAPositionRecordsTheChangeTime(t *testing.T) {
+	store := &capturingStore{}
+	associations := &associationDouble{parcels: []nodomain.ParcelAssociationReference{parcelRef(t, "parcel-1")}}
+	accepted := acceptedOne(t)
+	subject := mustAdapter(t, associations, accepted, handlerOver(store))
+	event := changed(nodomain.HandlingUnitObject.String(), "unit-1")
+	if event.OccurredAt.Equal(accepted.accepted.AcceptedAt) {
+		t.Fatal("夹具里变化时刻与委托接受时刻相同")
+	}
+	if err := subject.HandleChangedActualMeasurement(context.Background(), event); err != nil {
+		t.Fatalf("入账：%v", err)
+	}
+	if len(store.notJudged) != 1 || !store.notJudged[0].TriggerOccurredAt.Equal(event.OccurredAt) {
+		t.Fatalf("未判业务时间 = %v，want 变化时刻 %s", store.notJudged, event.OccurredAt)
+	}
+}
+
+// Covers: 同一作业实物上的两次变化各有来源身份，关联因此不同；从关联还原出的来源身份分别是各自的来源，不是作业实物。
+func TestTwoChangesOfOneHandlingUnitKeepDistinctSourceIdentities(t *testing.T) {
+	store := &capturingStore{}
+	associations := &associationDouble{parcels: []nodomain.ParcelAssociationReference{parcelRef(t, "parcel-1")}}
+	subject := mustAdapter(t, associations, acceptedOne(t), handlerOver(store))
+	first := changed(nodomain.HandlingUnitObject.String(), "unit-1")
+	first.SourceID = "src-registered"
+	second := first
+	second.SourceID = "src-voided"
+	for _, event := range []nrinbox.ChangedActualMeasurement{first, second} {
+		if err := subject.HandleChangedActualMeasurement(context.Background(), event); err != nil {
+			t.Fatalf("入账 %s：%v", event.SourceID, err)
+		}
+	}
+	if len(store.notJudged) != 2 || store.notJudged[0].Correlation == store.notJudged[1].Correlation {
+		t.Fatalf("未判 = %+v，want 两条且关联不同", store.notJudged)
+	}
+	for i, event := range []nrinbox.ChangedActualMeasurement{first, second} {
+		source, err := nrdomain.MeasurementChangeSourceVersion(store.notJudged[i].Correlation)
+		if err != nil || source.String() != event.SourceID {
+			t.Fatalf("关联 %s 还原来源 = %q（err %v），want %s",
+				store.notJudged[i].Correlation, source, err, event.SourceID)
+		}
 	}
 }

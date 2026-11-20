@@ -1306,16 +1306,26 @@ func (handler *ReassessRouteHandler) HandleMeasurementChange(
 	return handler.judgeFromHistory(ctx, trigger, command.Carried)
 }
 
-// catchUpAwaitingMeasurements 在控制触发刚刚落成一条已判复核之后，把等位置的实测变化按这一次的锚点各判一次。
-// 收寄采用要经两跳才到路由，称重只一跳：收寄后马上称重时，实测变化可能先到、当时还没有控制位置，入账未判；
-// 收寄复核只认截到收寄业务时间的物理事实，读不到这条稍晚的实测。不在这里补，这条实测对路由的影响要等到下一次交接。
-// 补判再入账未判时不改写旧行：未判登记同（租户，关联）是先到保留，下一次控制触发还会再试；改写旧原因会把「当时为什么没判」抹掉。
+// catchUpAwaitingMeasurements 在控制触发刚刚落成一条已判复核之后，把等位置的实测变化再判一次。
+// 称重可能先于任何已判控制触发到达，当时没有位置可抄，入账未判；补判挂在控制触发落成之后。
+// 补之前先读最近控制位置。读失败答登记册未决，与本函数读等位置名单失败同一格。不是已知就原样交回刚判成的结论，
+// 等位置的继续等：更晚的控制触发可以先到并入账未判，更早的后到仍判得成，因为当前位置门只比已判复核。
+// 这时刚判成的位置已经旧了，按它算已执行前缀会自动改掉已经走完的段。
+// 已知才补判。重判一律抄最近控制位置：控制依据、位置与业务时间取这份位置，委托接受时刻仍取这次触发的。
+// 补判再入账未判不改写旧行：同（租户，关联）先到保留，下一次控制触发还会再试。
 func (handler *ReassessRouteHandler) catchUpAwaitingMeasurements(
 	ctx context.Context,
 	command ReassessRouteCommand,
 	anchor domain.ReassessmentTrigger,
 	judged ReassessRouteResult,
 ) (ReassessRouteResult, error) {
+	position, err := handler.deps.Store.LatestControlPosition(ctx, anchor.Key())
+	if err != nil {
+		return handler.undecided(anchor.Key(), ReassessStoreUnavailable), nil
+	}
+	if position.Status != ports.ControlPositionKnown {
+		return judged, nil
+	}
 	waiting, err := handler.deps.Store.AwaitingMeasurementChanges(ctx, anchor.Key())
 	if err != nil {
 		return handler.undecided(anchor.Key(), ReassessStoreUnavailable), nil
@@ -1328,10 +1338,10 @@ func (handler *ReassessRouteHandler) catchUpAwaitingMeasurements(
 		trigger, err := domain.NewMeasurementChangeRejudge(domain.ReassessmentTriggerSpec{
 			Correlation:   correlation,
 			Key:           anchor.Key(),
-			Control:       anchor.Control(),
-			Location:      anchor.Location(),
+			Control:       position.Control,
+			Location:      position.Location,
 			SourceVersion: source,
-			OccurredAt:    anchor.OccurredAt(),
+			OccurredAt:    position.OccurredAt,
 			AcceptedAt:    anchor.AcceptedAt(),
 		})
 		if err != nil {

@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -416,5 +417,138 @@ func TestAMeasurementChangeWaitsWhenALaterControlTriggerWasNotJudged(t *testing.
 		caught.TriggerLocation.String() != "node-destination" || !caught.TriggerOccurredAt.Equal(t3) {
 		t.Fatalf("补判 = present %v、%s %s %s，want 权威交接 node-destination %s",
 			present, caught.TriggerControl, caught.TriggerLocation, caught.TriggerOccurredAt, t3)
+	}
+}
+
+// Covers: 更晚的控制触发先到、入账未判，更早的后到并判成时，不把等位置的实测变化锚在这次上。
+// 当前位置门只比已判复核，拦不住这次；最近控制位置却定不下，因为包裹已经走到更后面。
+// 再来一次业务时间更晚、判得成的控制触发，才补判，锚点是这次的控制依据与位置。
+func TestAnEarlierJudgmentDoesNotCatchUpWhileALaterControlTriggerStaysUnjudged(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+
+	t3 := reassessedAt
+	t4 := t3.Add(time.Hour)
+	t5 := t4.Add(time.Hour)
+	command := measurementCommand(t, "measure-out-of-order", t4)
+	measured := handleMeasurement(t, fixture, command)
+	if measured.Outcome() != application.ReassessTriggerNotJudged ||
+		measured.NotJudgedReason() != ports.NotJudgedControlPositionUnavailable {
+		t.Fatalf("实测变化 = %q/%s，want 未判/控制位置未定", measured.Outcome(), measured.NotJudgedReason())
+	}
+
+	later := reassessCommandAt(t, "handover-t4", "node-destination", t4)
+	later.Trigger.Control = domain.TransportHandoverControl
+	unjudged := handleOK(t, fixture, later)
+	if unjudged.Outcome() != application.ReassessTriggerNotJudged ||
+		unjudged.NotJudgedReason() != ports.NotJudgedFreezeFormUnconfigured {
+		t.Fatalf("较晚的交接 = %q/%s，want 未判/冻结形态未配置", unjudged.Outcome(), unjudged.NotJudgedReason())
+	}
+
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	earlier := reassessCommandAt(t, "handover-t3", "node-origin", t3)
+	earlier.Trigger.Control = domain.TransportHandoverControl
+	judged := handleOK(t, fixture, earlier)
+	if judged.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("更早的交接 = %q/%s，want STILL_APPLICABLE", judged.Outcome(), judged.NotJudgedReason())
+	}
+	if _, present := fixture.store.byCorrelation[command.Correlation]; present {
+		t.Fatal("更晚的交接还悬在未判册上，更早的这次判成却把实测变化补判了")
+	}
+
+	next := reassessCommandAt(t, "handover-t5", "node-destination", t5)
+	next.Trigger.Control = domain.TransportHandoverControl
+	caughtUp := handleOK(t, fixture, next)
+	if caughtUp.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("再晚的交接 = %q/%s，want STILL_APPLICABLE", caughtUp.Outcome(), caughtUp.NotJudgedReason())
+	}
+	caught, present := fixture.store.byCorrelation[command.Correlation]
+	if !present || caught.TriggerControl != domain.TransportHandoverControl ||
+		caught.TriggerLocation.String() != "node-destination" || !caught.TriggerOccurredAt.Equal(t5) {
+		t.Fatalf("补判 = present %v、%s %s %s，want 权威交接 node-destination %s",
+			present, caught.TriggerControl, caught.TriggerLocation, caught.TriggerOccurredAt, t5)
+	}
+}
+
+// Covers: 控制触发在判断途中撞上已落成的同一关联、答已有结果时不补判。最近控制位置是已知的，
+// 挡住补判的是「这一笔不是新判」：重放在读回已有复核时就返回，到不了这道门。
+func TestAnExistingControlResultDoesNotCatchUpWhileThePositionIsKnown(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	waiting := awaitMeasurement(t, fixture, "measure-after-race", reassessedAt.Add(time.Hour))
+	command := reassessCommand(t, "node-origin")
+	winner := ports.ReassessmentRecord{
+		Correlation:       command.Trigger.Correlation,
+		Key:               command.Trigger.Key,
+		Conclusion:        ports.ReassessmentStillApplicable,
+		ReviewedPlan:      value(t, domain.NewRoutePlanVersionID, "plan-1/v1"),
+		TriggerControl:    command.Trigger.Control,
+		TriggerLocation:   command.Trigger.Location,
+		TriggerOccurredAt: command.Trigger.OccurredAt,
+		ReassessedAt:      reassessedAt,
+	}
+	// 插在取形成过的计划时：已有结果分界已经读过，提交才会撞上这一行。
+	fixture.store.decided = func(domain.InitialRouteJudgmentKey) []domain.InitialRoutePlan {
+		fixture.store.byCorrelation[winner.Correlation] = winner
+		fixture.store.decided = nil
+		return nil
+	}
+
+	result := handleOK(t, fixture, command)
+	if result.Outcome() != application.ReassessExistingResult {
+		t.Fatalf("outcome = %q, want 已有结果", result.Outcome())
+	}
+	if _, present := fixture.store.byCorrelation[waiting]; present {
+		t.Fatal("答已有结果、不是新判，仍把等位置的实测变化补判了")
+	}
+	if noted := fixture.store.notJudged[waiting]; noted.Reason != ports.NotJudgedControlPositionUnavailable {
+		t.Fatalf("未判原因 = %s，want 控制位置未定", noted.Reason)
+	}
+}
+
+// Covers: 同一关联、同一来源版本，地理投影换了就不是重放，答触发冲突。投影不进指纹的话，第二次会被当成同一变化。
+func TestAMeasurementChangeWithADifferentGeoProjectionConflicts(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	seedAnchor(t, fixture, "anchor", domain.NodeIntakeControl, "node-origin", reassessedAt)
+	command := measurementCommand(t, "measure-geo", reassessedAt.Add(time.Hour))
+
+	first := handleMeasurement(t, fixture, command)
+	if first.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("首次 = %q, want STILL_APPLICABLE", first.Outcome())
+	}
+	moved := command
+	moved.Carried = ports.RequestCarriedContent{Geo: domain.NewGeoResolutionProjection(
+		domain.NewGeoResolutionSide("CN", true, "200000", true),
+		domain.NewGeoResolutionSide("MY", true, "50000", true),
+	)}
+	conflict := handleMeasurement(t, fixture, moved)
+	if conflict.Outcome() != application.ReassessTriggerConflict {
+		t.Fatalf("同关联异地理投影 = %q, want TRIGGER_CONFLICT", conflict.Outcome())
+	}
+}
+
+// Covers: 补判撞上路由历史里重建不出来的形成计划时，整次控制触发交回这个错误，不吞成成功。
+func TestACatchUpThatCannotRebuildAFormedPlanReturnsTheError(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+	awaitMeasurement(t, fixture, "measure-loud", reassessedAt.Add(time.Hour))
+	fixture.store.decided = func(domain.InitialRouteJudgmentKey) []domain.InitialRoutePlan {
+		fixture.store.newPlanErr = fmt.Errorf("stored row: %w", ports.ErrStoredRouteRecordUnreadable)
+		fixture.store.decided = nil
+		return nil
+	}
+
+	_, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if !errors.Is(err, ports.ErrStoredRouteRecordUnreadable) {
+		t.Fatalf("err = %v, want ErrStoredRouteRecordUnreadable", err)
 	}
 }
