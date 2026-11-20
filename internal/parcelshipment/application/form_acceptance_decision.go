@@ -115,6 +115,8 @@ type FormAcceptanceDecisionDeps struct {
 	// 是重入；不依赖上游取过，单驱形成决定这一步时先 S 后 R 照样成立。
 	ScopeLock  ports.PreAcceptanceControlScopeLock
 	Downstream ports.AcceptanceDecisionHandoff
+	// Supplement 在停进等待受控补充并落库之后、同一事务交出信封。没接时暂停仍成立，信封不发。
+	Supplement ports.CustomerSupplementHandoff
 	Identities ports.AcceptanceDecisionIdentity
 	Clock      ports.Clock
 }
@@ -355,6 +357,11 @@ func (handler *FormAcceptanceDecisionHandler) pauseForExternalResume(
 			return FormAcceptanceDecisionResult{}, stallErr
 		}
 		return handler.undecided(ctx, command, reason, request.State()), nil
+	}
+	if waiting == CustomerSupplementPending {
+		if err := handOffCustomerSupplement(ctx, handler.deps.Supplement, command.Identity, decided, command.SubmissionVersion); err != nil {
+			return FormAcceptanceDecisionResult{}, err
+		}
 	}
 	paused := handler.undecided(ctx, command, waiting, decided.State())
 	if waiting == CustomerSupplementPending {

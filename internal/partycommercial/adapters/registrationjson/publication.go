@@ -975,6 +975,7 @@ func authorizedActionFrom(name string) (pcdomain.AuthorizedAction, error) {
 		pcdomain.SourceDataAmendmentAction,
 		pcdomain.ControlledClosureAction,
 		pcdomain.ReopeningAction,
+		pcdomain.WarehouseFulfillmentAgencyAction,
 	} {
 		if action.String() == name {
 			return action, nil

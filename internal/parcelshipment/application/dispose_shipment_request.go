@@ -141,6 +141,8 @@ type DisposeShipmentRequestDeps struct {
 	ScopeLock  ports.PreAcceptanceControlScopeLock
 	Identities ports.AcceptanceDecisionIdentity
 	Clock      ports.Clock
+	// Supplement 在去向为交客户补充并落库之后、同一事务交出信封。没接时处置仍成立，信封不发。
+	Supplement ports.CustomerSupplementHandoff
 }
 
 type DisposeShipmentRequestHandler struct {
@@ -274,6 +276,11 @@ func (handler *DisposeShipmentRequestHandler) Handle(
 		}, nil
 	}
 
+	if command.Choice == domain.DisposeByCustomerSupplement {
+		if err := handOffCustomerSupplement(ctx, handler.deps.Supplement, command.Identity, disposed, current); err != nil {
+			return DisposeShipmentRequestResult{}, err
+		}
+	}
 	decision, formed := disposed.AcceptanceDecision()
 	compensation, refused := handler.releaseOccupation(ctx, command, disposed)
 	return DisposeShipmentRequestResult{

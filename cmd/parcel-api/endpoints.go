@@ -529,6 +529,20 @@ func (channels endpointChannels) approvalDuty() warehousehttp.ApprovalDutyIntake
 	return warehousehttp.UnconfiguredIntake{}
 }
 
+func (channels endpointChannels) waveRelease() warehousehttp.WaveReleaseIntake {
+	if channels.operatorDecisions.warehouseWave != nil {
+		return channels.operatorDecisions.warehouseWave
+	}
+	return warehousehttp.UnconfiguredWaveIntake{}
+}
+
+func (channels endpointChannels) allocationStrategy() warehousehttp.AllocationStrategyIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
 func (channels endpointChannels) outboundOnBehalf() warehousehttp.OutboundOnBehalfIntake {
 	if channels.operatorDecisions.warehouseOutbound != nil {
 		return channels.operatorDecisions.warehouseOutbound

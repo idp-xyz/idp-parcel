@@ -52,6 +52,8 @@ func incompleteFixture(t *testing.T) *financialControlFixture {
 func TestACustomerSupplementRequiredOutcomeParksTheRequestWithItsGaps(t *testing.T) {
 	fixture := incompleteFixture(t)
 	fixture.repository.product = "SYN-PROD-01"
+	handoff := &supplementHandoffDouble{}
+	fixture.handler.WithCustomerSupplementHandoff(handoff)
 
 	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 	if err != nil {
@@ -74,6 +76,9 @@ func TestACustomerSupplementRequiredOutcomeParksTheRequestWithItsGaps(t *testing
 	want := supplementStallGaps(t)
 	if len(gaps) != len(want) || gaps[0] != want[0] || gaps[1] != want[1] {
 		t.Fatalf("saved gaps = %+v, want 适配器译好的那两条原样落库", gaps)
+	}
+	if len(handoff.intents) != 1 || len(handoff.intents[0].Gaps) != 2 {
+		t.Fatalf("信封 %d 封、缺口 %d，want 一封两缺口", len(handoff.intents), len(handoff.intents[0].Gaps))
 	}
 	if saved.State() != domain.ShipmentRequestSubmitted {
 		t.Fatalf("saved state = %q, want SUBMITTED——停等不是决定", saved.State())
@@ -172,4 +177,13 @@ func TestARegistrationFirstIncompleteStallCarriesTheGapCodesToo(t *testing.T) {
 	if !slices.Equal(attempt.EstimateGapCodes(), []string{"MEASUREMENT", "ZONE"}) {
 		t.Fatalf("estimate gap codes = %v, want 缺项码在登记那一路同样留痕", attempt.EstimateGapCodes())
 	}
+}
+
+type supplementHandoffDouble struct {
+	intents []ports.CustomerSupplementHandoffIntent
+}
+
+func (double *supplementHandoffDouble) HandOffCustomerSupplement(_ context.Context, intent ports.CustomerSupplementHandoffIntent) error {
+	double.intents = append(double.intents, intent)
+	return nil
 }

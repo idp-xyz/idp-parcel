@@ -23,6 +23,11 @@ import (
 // registeredLegsOn 以生产装配同一份件展开登记处，交回登在 event 上的各路，按名次排好。
 func registeredLegsOn(t *testing.T, event eventing.EventType) []routeLeg {
 	t.Helper()
+	return registeredLegs(t, event, false)
+}
+
+func registeredLegs(t *testing.T, event eventing.EventType, warehouseFulfillment bool) []routeLeg {
+	t.Helper()
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -52,7 +57,7 @@ func registeredLegsOn(t *testing.T, event eventing.EventType) []routeLeg {
 	sources := dispatchSources{
 		db: db, outbox: outboxStore, inbox: inboxStore, clock: clock, projectionDerive: projectionDerive, documentNumbers: documentNumbers,
 		settings: dispatchSettings{
-			purpose: purpose, deliveryTimeout: 5 * time.Second,
+			purpose: purpose, deliveryTimeout: 5 * time.Second, warehouseFulfillment: warehouseFulfillment,
 			config: dispatch.Config{Limit: 10, LeaseFor: time.Minute, MaxAttempts: 5, RetryAfter: 30 * time.Second},
 		},
 	}

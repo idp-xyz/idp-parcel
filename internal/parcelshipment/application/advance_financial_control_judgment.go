@@ -83,6 +83,7 @@ type AdvanceFinancialControlJudgmentHandler struct {
 	recorder     ports.AcceptanceJudgmentRecorder
 	requests     ports.ShipmentRequestRepository
 	clock        ports.Clock
+	supplement   ports.CustomerSupplementHandoff
 }
 
 // 时钟只用于处理尝试的发生时间。它与判断时点分开：后者由规则包声明的策略形成，本地时钟
@@ -111,6 +112,12 @@ func NewAdvanceFinancialControlJudgmentHandler(
 		requests:     requests,
 		clock:        clock,
 	}
+}
+
+// WithCustomerSupplementHandoff 在等待态落库的同一事务里交出「委托待受控补充」。没接时这一停仍落库，信封不发。
+func (handler *AdvanceFinancialControlJudgmentHandler) WithCustomerSupplementHandoff(handoff ports.CustomerSupplementHandoff) *AdvanceFinancialControlJudgmentHandler {
+	handler.supplement = handoff
+	return handler
 }
 
 // Handle 把接受判断任务的财务控制那条腿推进一步：采用唯一商业依据，按该依据为本类判断
@@ -186,7 +193,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		var err error
 		if stall.resumePath() == domain.ResumeByCustomerSupplement {
 			reason, product, err = awaitCustomerSupplement(
-				ctx, handler.requests, command.Identity, command.SubmissionVersion, stall, assessment.SupplementGaps)
+				ctx, handler.requests, handler.supplement, command.Identity, command.SubmissionVersion, stall, assessment.SupplementGaps)
 		} else {
 			reason, product, err = awaitOperatorRegistration(
 				ctx, handler.requests, command.Identity, command.SubmissionVersion, stall)

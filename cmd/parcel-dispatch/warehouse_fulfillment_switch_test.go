@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-bento-go/eventing"
+
 	"go.idp.xyz/idp-parcel/cmd/internal/warehouseswitch"
 )
 
@@ -239,4 +241,49 @@ func TestTheWarehouseFulfillmentRegistrationRegistersTheSwitchGatedBuild(t *test
 	if legs, err := entry(warehouseSources(true)); err != nil || len(legs) != 1 || probe.calls != 1 {
 		t.Fatalf("开着时登出的那一项没有交回构造函数的路：legs=%d err=%v calls=%d", len(legs), err, probe.calls)
 	}
+}
+
+// Covers: ADR-0375 决定四——接受决定这一路只在开关打开时出现在扇出里。
+func TestTheWarehouseAcceptanceRouteFollowsTheSwitch(t *testing.T) {
+	event := eventing.EventType("parcel-shipment.acceptance-decision.formed")
+	for _, label := range labelsOf(registeredLegs(t, event, false)) {
+		if label == "warehouse acceptance" {
+			t.Fatal("开关关着仍登记了仓配接受决定")
+		}
+	}
+	found := false
+	for _, label := range labelsOf(registeredLegs(t, event, true)) {
+		if label == "warehouse acceptance" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("开关开着没有仓配接受决定这一路")
+	}
+	supplement := eventing.EventType("parcel-shipment.customer-supplement.required")
+	off := labelsOf(registeredLegs(t, supplement, false))
+	on := labelsOf(registeredLegs(t, supplement, true))
+	if !containsLabel(off, "customer supplement close-out") || containsLabel(off, "warehouse supplement") {
+		t.Fatalf("关着时待补充各路 = %v", off)
+	}
+	if !containsLabel(on, "warehouse supplement") || containsLabel(on, "customer supplement close-out") {
+		t.Fatalf("开着时待补充各路 = %v", on)
+	}
+}
+
+func containsLabel(labels []string, want string) bool {
+	for _, label := range labels {
+		if label == want {
+			return true
+		}
+	}
+	return false
+}
+
+func labelsOf(legs []routeLeg) []string {
+	labels := make([]string, 0, len(legs))
+	for _, leg := range legs {
+		labels = append(labels, leg.label)
+	}
+	return labels
 }

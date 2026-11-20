@@ -41,6 +41,9 @@ func NewCustomerAccountID(value string) (CustomerAccountID, error) {
 	return CustomerAccountID{required}, err
 }
 
+// SourceWarehouseOutbound 是仓配履约以货主名义提交委托的来源字面（ADR-0371）。
+const SourceWarehouseOutbound = "WAREHOUSE_OUTBOUND"
+
 type Source struct{ requiredValue }
 
 func NewSource(value string) (Source, error) {

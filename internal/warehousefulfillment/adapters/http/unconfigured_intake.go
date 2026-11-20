@@ -24,6 +24,7 @@ var (
 	_ CatalogueIntake                     = UnconfiguredIntake{}
 	_ ApprovalDutyIntake                  = UnconfiguredIntake{}
 	_ ShortagePolicyIntake                = UnconfiguredIntake{}
+	_ AllocationStrategyIntake            = UnconfiguredIntake{}
 	_ GoodsOnBehalfIntake                 = UnconfiguredIntake{}
 	_ PreAdviceOnBehalfIntake             = UnconfiguredIntake{}
 	_ ClosePreAdviceIntake                = UnconfiguredIntake{}

@@ -2,6 +2,9 @@ package domain
 
 import "time"
 
+// WarehouseOutboundSource 是以货主名义提交委托的来源字面。与小包托运那一侧同词，两边各写各的。
+const WarehouseOutboundSource = "WAREHOUSE_OUTBOUND"
+
 // DispatchMethod 是出库请求的发运方式，产品内置封闭三种。
 type DispatchMethod uint8
 
@@ -79,6 +82,10 @@ const (
 	OutboundPendingPolicy
 	OutboundHandedOff
 	OutboundSplit
+	OutboundAllocated
+	OutboundPicked
+	OutboundChecked
+	OutboundPacked
 )
 
 func (status OutboundStatus) String() string {
@@ -95,13 +102,21 @@ func (status OutboundStatus) String() string {
 		return "HANDED_OFF"
 	case OutboundSplit:
 		return "SPLIT"
+	case OutboundAllocated:
+		return "ALLOCATED"
+	case OutboundPicked:
+		return "PICKED"
+	case OutboundChecked:
+		return "CHECKED"
+	case OutboundPacked:
+		return "PACKED"
 	default:
 		return ""
 	}
 }
 
 func NewOutboundStatus(word string) (OutboundStatus, error) {
-	for _, status := range []OutboundStatus{OutboundReserved, OutboundPartiallyReserved, OutboundRejected, OutboundPendingPolicy, OutboundHandedOff, OutboundSplit} {
+	for _, status := range []OutboundStatus{OutboundReserved, OutboundPartiallyReserved, OutboundRejected, OutboundPendingPolicy, OutboundHandedOff, OutboundSplit, OutboundAllocated, OutboundPicked, OutboundChecked, OutboundPacked} {
 		if status.String() == word {
 			return status, nil
 		}

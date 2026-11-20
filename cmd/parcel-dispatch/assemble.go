@@ -919,6 +919,10 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: acceptance decision handoff: %w", err)
 	}
+	supplementHandoff, err := pspostgres.NewOutboxCustomerSupplementHandoff(db, outboxStore, clock)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: customer supplement handoff: %w", err)
+	}
 	// 释放未受理册：自动拒绝与停进`等待受控补充`之后随附释放被提供方确定不受理时记在这里交人处理（ADR-0282 决定二）。
 	// 链开头放被取代各版那一步不用它，遇到拒收响亮停下（决定三）。
 	refusals, err := pspostgres.NewControlReleaseRefusals(db)
@@ -943,7 +947,7 @@ func acceptanceChainConsumers(
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
 			commercial, reachability, judgments, requests, clock),
 		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(
-			commercial, control, dispositions, judgments, requests, clock),
+			commercial, control, dispositions, judgments, requests, clock).WithCustomerSupplementHandoff(supplementHandoff),
 		Decision: psapplication.NewFormAcceptanceDecisionHandler(psapplication.FormAcceptanceDecisionDeps{
 			Requests:     requests,
 			Commercial:   commercial,
@@ -954,6 +958,7 @@ func acceptanceChainConsumers(
 			Refusals:     refusals,
 			ScopeLock:    pssettlement.NewControlScopeLocks(scopeLocks),
 			Downstream:   downstream,
+			Supplement:   supplementHandoff,
 			Identities:   identities,
 			Clock:        clock,
 			// 链开头放被取代各版那一步读：凭留痕认出已处理的拒收并放行。
