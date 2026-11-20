@@ -77,12 +77,12 @@
 | `ADMITTED` 放行 | 没有有效限制约束本动作，门禁满足，且动作时点前已有全部放行 |
 | `BLOCKED` 阻断 | 监管限制或内部合规限制有效且约束本动作；或门禁未满足、部分满足、冲突；或未收到放行 |
 | `NOT_GUARDED` 不受门禁 | 对象不在任何案件与单元里（跨关务区域移动除外），或该道门禁不适用 |
-| `UNDECIDED` 未决 | 在案而未成单元；只有部分或附条件放行；门禁与放行对不上；内部限制适用性待确认或冲突；税费付款核对缺或待确认 |
-| `NOT_CONFIGURED` 未配置 | 门禁目录、税费付款门禁规则未登记，或跨区所需的节点关务区域未登记 |
+| `UNDECIDED` 未决 | 在案而未成单元；只有部分或附条件放行；门禁与放行对不上；内部限制适用性待确认或冲突；税费付款核对缺或待确认；毛重差异规则要读而提交版本未形成、成员无实测或实测定不下 |
+| `NOT_CONFIGURED` 未配置 | 门禁目录、税费付款门禁规则、毛重差异门禁规则未登记，或跨区所需的节点关务区域未登记 |
 
 五格不得互相替代。任一来源读不动时判断不形成，不折进任何一格。
 
-成因码：`GATE_NOT_APPLICABLE` `OUTSIDE_CUSTOMS_BOOKS` `RELEASED_IN_FULL` `CUSTOMS_SCOPE_UNRESOLVED` `DECLARATION_UNIT_NOT_FORMED` `DUTY_VERIFICATION_ABSENT` `DUTY_VERIFICATION_PENDING` `RELEASE_PARTIAL_ONLY` `RELEASE_CONDITIONAL_ONLY` `GATE_RELEASE_DISCREPANCY` `INTERNAL_RESTRICTION_UNCONFIRMED` `INTERNAL_RESTRICTION_CONFLICTING` `NODE_ZONE_NOT_REGISTERED` `GATE_CATALOG_NOT_REGISTERED` `DUTY_PAYMENT_RULE_NOT_REGISTERED` `DUTY_PAYMENT_FINDING_BESIDE_RULE` `RESTRICTION_IN_FORCE` `INTERNAL_RESTRICTION_IN_FORCE` `GATE_UNMET` `GATE_PARTIALLY_MET` `GATE_CONFLICTING` `RELEASE_NOT_RECEIVED`。
+成因码：`GATE_NOT_APPLICABLE` `OUTSIDE_CUSTOMS_BOOKS` `RELEASED_IN_FULL` `CUSTOMS_SCOPE_UNRESOLVED` `DECLARATION_UNIT_NOT_FORMED` `DUTY_VERIFICATION_ABSENT` `DUTY_VERIFICATION_PENDING` `DECLARATION_SUBMISSION_ABSENT` `MEMBER_MEASUREMENT_ABSENT` `MEMBER_MEASUREMENT_UNDETERMINED` `RELEASE_PARTIAL_ONLY` `RELEASE_CONDITIONAL_ONLY` `GATE_RELEASE_DISCREPANCY` `INTERNAL_RESTRICTION_UNCONFIRMED` `INTERNAL_RESTRICTION_CONFLICTING` `NODE_ZONE_NOT_REGISTERED` `GATE_CATALOG_NOT_REGISTERED` `DUTY_PAYMENT_RULE_NOT_REGISTERED` `DUTY_PAYMENT_FINDING_BESIDE_RULE` `WEIGHT_DISCREPANCY_RULE_NOT_REGISTERED` `WEIGHT_DISCREPANCY_FINDING_BESIDE_RULE` `RESTRICTION_IN_FORCE` `INTERNAL_RESTRICTION_IN_FORCE` `GATE_UNMET` `GATE_PARTIALLY_MET` `GATE_CONFLICTING` `RELEASE_NOT_RECEIVED`。
 
 ## 规则
 
@@ -96,7 +96,7 @@
 **就绪、授权与提交**
 
 - 申报就绪判断与提交授权是两本独立的册，各自登记、各自撤销；撤销不删原判断。
-- 两者在固定提交版本时都有效，才形成不可覆盖的提交版本和`已登记待发送`的首次尝试；之后任何变化不回写已提交快照。成版时按成员读节点作业的当前有效实测：有，就把毛重连同称重量方的来源身份与发生时间固定进提交版本、带进申报包；没有的那件不带，不退回客户声明；定不下或读不到，提交答未决，不落单元、不取版本号。毛重不进内容指纹，复测之后重放仍答原版本。放行门禁不比实测与申报重量的差异；当前版的提交记录在读时标出各成员此刻的实测与成版时是否还是同一条。
+- 两者在固定提交版本时都有效，才形成不可覆盖的提交版本和`已登记待发送`的首次尝试；之后任何变化不回写已提交快照。成版时按成员读节点作业的当前有效实测：有，就把毛重连同称重量方的来源身份与发生时间固定进提交版本、带进申报包；没有的那件不带，不退回客户声明；定不下或读不到，提交答未决，不落单元、不取版本号。毛重不进内容指纹，复测之后重放仍答原版本。当前版的提交记录在读时标出各成员此刻的实测与成版时是否还是同一条。
 - 越过发送边界另记一笔发送事实，一次尝试至多一笔；技术回执逐份追加，按尝试归属。
 - 目标没登申报发送通道就不发送；登记之后就绪或授权失效了也不发。尝试保持`已登记待发送`。
 - 超时或结果缺失保持待确认，不读作失败。只有安全再次发送判断成立，同一提交版本才可以有新的受控尝试。
@@ -129,7 +129,7 @@
 - 核定税费、付款事实、税费付款核对、放行各自保存，不互相推导。缺少税费结果不解释为无需付款。
 - 税费付款核对分别给出覆盖、差额、有效性三个状态，不压成一个状态。迟到事实按新版本追加；结算采纳外部资金事实后重新派生。金额相等不证明覆盖，没有关联依据就是待关联。
 - 程序没登记是否要求付款人维度时，核对不进行，保持未决。
-- 「税费付款」这道门禁怎么读核对，是按监管程序登记的规则：对三个状态各自的接受集合，或声明不构成前置条件。待确认与冲突不可登记为接受；未登记答规则未配置。
+- 「税费付款」这道门禁怎么读核对，是按监管程序登记的规则：对三个状态各自的接受集合，或声明不构成前置条件。待确认与冲突不可登记为接受；未登记答规则未配置。「毛重差异」这道门禁同挂门禁目录：声明不构成前置条件，或登记非负十进制容差加重量单位（容差是租户取值，未登记答规则未配置，不取零容差也不放过）；要判时逐成员拿此刻有效实测与当前提交版本固定毛重换算到规则单位比绝对差，等于容差算满足，成版时无固定毛重算不满足，提交版本未形成、成员无实测或实测定不下答未决。
 - 放行门禁核对绑定明确范围和拟执行动作，不能复用于其他动作。门禁满足不生成放行结果。
 
 **动作准入判断**
@@ -181,7 +181,7 @@
 
 后台（`cmd/parcel-dispatch`）：申报发送消费者经登记的通道发出`已登记待发送`的尝试；结算采纳资金事实后重新派生税费付款核对；出发前门禁重问；为 `network-routing` 提供关务适用性判断。
 
-离线口：`cmd/parcel-customs-register`，运营在数据库网络内手跑，不监听端口，输入是 JSON 文件。登记就绪判断与提交授权（含撤销）、解释规则、关闭义务目录与明细、门禁目录与明细、税费付款门禁规则、建案要求规则、口岸、申报路径、监管凭证、税费付款协作事项与核对、节点关务区域、申报发送通道。
+离线口：`cmd/parcel-customs-register`，运营在数据库网络内手跑，不监听端口，输入是 JSON 文件。登记就绪判断与提交授权（含撤销）、解释规则、关闭义务目录与明细、门禁目录与明细、税费付款门禁规则、毛重差异门禁规则、建案要求规则、口岸、申报路径、监管凭证、税费付款协作事项与核对、节点关务区域、申报发送通道。
 
 **有用例代码、但没有接进任何进程的**（`cmd/` 下非测试代码里找不到构造点）：后续申报动作与替代（`ManageFollowUpHandler`）、原案内更正（`CorrectDeclarationHandler`）、处置执行核对（`VerifyDispositionHandler`）、凭证门禁判断（`RecordCredentialGateHandler`、`JudgeCredentialApplicabilityHandler`）。合规判断只有领域类型 `ComplianceJudgment`，没有用例。上面「规则」里属于这几块的句子，眼下没有生产入口能触发。
 
