@@ -11,6 +11,7 @@ import (
 // CustomerOutboundMinter 是出库请求货主口要的铸造。
 type CustomerOutboundMinter interface {
 	MintOutboundRequestSubmission(ctx context.Context, credential identity.IntegrationClientCredential, readRequest func() (identity.ChannelRequest, error)) (identity.OutboundRequestSubmissionEnvelope, error)
+	MintOutboundRequestSplit(ctx context.Context, credential identity.IntegrationClientCredential, readRequest func() (identity.ChannelRequest, error)) (identity.OutboundRequestSubmissionEnvelope, error)
 }
 
 // CustomerOutboundAuthenticator 把首方铸造译成仓配的客户身份。
@@ -28,7 +29,20 @@ func NewCustomerOutboundAuthenticator(minter CustomerOutboundMinter) (*CustomerO
 }
 
 func (authenticator *CustomerOutboundAuthenticator) AuthenticateOutboundRequestSubmission(ctx context.Context, credential warehousehttp.PresentedCustomerCredential, accessRequestID func() (string, error)) (warehousehttp.CustomerCommandIdentity, error) {
-	envelope, err := authenticator.minter.MintOutboundRequestSubmission(ctx, customerCredential(credential), channelRequestOf(accessRequestID))
+	return authenticator.authenticate(ctx, credential, accessRequestID, authenticator.minter.MintOutboundRequestSubmission)
+}
+
+func (authenticator *CustomerOutboundAuthenticator) AuthenticateOutboundRequestSplit(ctx context.Context, credential warehousehttp.PresentedCustomerCredential, accessRequestID func() (string, error)) (warehousehttp.CustomerCommandIdentity, error) {
+	return authenticator.authenticate(ctx, credential, accessRequestID, authenticator.minter.MintOutboundRequestSplit)
+}
+
+func (authenticator *CustomerOutboundAuthenticator) authenticate(
+	ctx context.Context,
+	credential warehousehttp.PresentedCustomerCredential,
+	accessRequestID func() (string, error),
+	mint func(context.Context, identity.IntegrationClientCredential, func() (identity.ChannelRequest, error)) (identity.OutboundRequestSubmissionEnvelope, error),
+) (warehousehttp.CustomerCommandIdentity, error) {
+	envelope, err := mint(ctx, customerCredential(credential), channelRequestOf(accessRequestID))
 	if err != nil {
 		return warehousehttp.CustomerCommandIdentity{}, answerCustomer(err)
 	}

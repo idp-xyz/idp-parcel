@@ -230,6 +230,9 @@ func (unwiredOutbound) Accept(context.Context, warehouseapp.AcceptOutboundComman
 func (unwiredOutbound) RegisterPolicy(context.Context, warehouseapp.RegisterShortagePolicyCommand) (warehouseapp.OutboundResult, error) {
 	return warehouseapp.OutboundResult{}, errOrchestrationNotWired
 }
+func (unwiredOutbound) Split(context.Context, warehouseapp.SplitOutboundCommand) (warehouseapp.SplitResult, error) {
+	return warehouseapp.SplitResult{}, errOrchestrationNotWired
+}
 
 type unwiredJobDiscrepancy struct{}
 
@@ -757,6 +760,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/relabel-instructions":                {http.MethodPost, faceCustomerClient},
 		"/v1/warehouse/relabel-instructions/withdrawals":    {http.MethodPost, faceCustomerClient},
 		"/v1/warehouse/outbound-requests":                   {http.MethodPost, faceCustomerClient},
+		"/v1/warehouse/outbound-requests/splits":            {http.MethodPost, faceCustomerClient},
 
 		receiptConfirmationsLine:  {http.MethodPost, faceWorkFact},
 		warehouseMeasurementsLine: {http.MethodPost, faceWorkFact},
@@ -800,6 +804,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/warehouse-fulfillment-job-discrepancy-approvals":    {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-job-discrepancy-rejections":   {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-outbound-requests":            {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-outbound-request-splits":      {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-shortage-policies":            {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-stock":                        {http.MethodGet, faceOperationsRead},
 		"/v1/warehouse/reads/stock":                           {http.MethodGet, faceCustomerClient},
@@ -832,6 +837,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/relabel-instructions":                accessidentity.CustomerCapabilityRelabelInstructionSubmission,
 		"/v1/warehouse/relabel-instructions/withdrawals":    accessidentity.CustomerCapabilityRelabelInstructionWithdrawal,
 		"/v1/warehouse/outbound-requests":                   accessidentity.CustomerCapabilityOutboundRequestSubmission,
+		"/v1/warehouse/outbound-requests/splits":            accessidentity.CustomerCapabilityOutboundRequestSubmission,
 		"/v1/warehouse/reads/stock":                         accessidentity.CustomerCapabilityWarehouseRead,
 		customerGoodsWriteLine:                              accessidentity.CustomerCapabilityGoodsMaintenance,
 		customerGoodsListLine:                               accessidentity.CustomerCapabilityWarehouseRead,
@@ -887,6 +893,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 			"/warehouse-fulfillment-job-discrepancy-approvals":    accessidentity.DecisionStockAdjustmentApproval,
 			"/warehouse-fulfillment-job-discrepancy-rejections":   accessidentity.DecisionStockAdjustmentApproval,
 			"/warehouse-fulfillment-outbound-requests":            accessidentity.DecisionOutboundRequestRecordOnBehalf,
+			"/warehouse-fulfillment-outbound-request-splits":      accessidentity.DecisionOutboundRequestRecordOnBehalf,
 		}
 		if kind, writesOnBehalf := decisionLines[pattern]; writesOnBehalf && line.face.decision != kind {
 			t.Fatalf("%s 的决定种类 = %s，want %s", pattern, line.face.decision, kind)
@@ -1002,6 +1009,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-job-discrepancy-approvals":    {status, code},
 			"/warehouse-fulfillment-job-discrepancy-rejections":   {status, code},
 			"/warehouse-fulfillment-outbound-requests":            {status, code},
+			"/warehouse-fulfillment-outbound-request-splits":      {status, code},
 			"/warehouse-fulfillment-shortage-policies":            {status, code},
 			"/warehouse-fulfillment-stock":                        {status, code},
 			internalJobsLine:                                      {status, code},
@@ -1092,6 +1100,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-job-discrepancy-approvals":    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-job-discrepancy-rejections":   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-requests":            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-outbound-request-splits":      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-stock":                        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			internalJobsLine:                                      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			internalJobLine:                                       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1173,6 +1182,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-job-discrepancy-approvals":    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-job-discrepancy-rejections":   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-requests":            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-outbound-request-splits":      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-shortage-policies":            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-stock":                        {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			internalJobsLine:                                      {http.StatusInternalServerError, "NO_ANSWER_FORMED"},

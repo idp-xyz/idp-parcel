@@ -78,6 +78,7 @@ const (
 	OutboundRejected
 	OutboundPendingPolicy
 	OutboundHandedOff
+	OutboundSplit
 )
 
 func (status OutboundStatus) String() string {
@@ -92,13 +93,15 @@ func (status OutboundStatus) String() string {
 		return "PENDING_POLICY"
 	case OutboundHandedOff:
 		return "HANDED_OFF"
+	case OutboundSplit:
+		return "SPLIT"
 	default:
 		return ""
 	}
 }
 
 func NewOutboundStatus(word string) (OutboundStatus, error) {
-	for _, status := range []OutboundStatus{OutboundReserved, OutboundPartiallyReserved, OutboundRejected, OutboundPendingPolicy, OutboundHandedOff} {
+	for _, status := range []OutboundStatus{OutboundReserved, OutboundPartiallyReserved, OutboundRejected, OutboundPendingPolicy, OutboundHandedOff, OutboundSplit} {
 		if status.String() == word {
 			return status, nil
 		}
@@ -215,6 +218,7 @@ type OutboundRequest struct {
 	basis        string
 	operator     string
 	status       OutboundStatus
+	parent       OutboundRequestID
 	number       DocumentNumber
 	absence      NumberingAbsence
 	lines        []OutboundLine
@@ -236,6 +240,7 @@ type OutboundRequestSpec struct {
 	Basis        string
 	Operator     string
 	Status       OutboundStatus
+	Parent       OutboundRequestID
 	Number       DocumentNumber
 	Absence      NumberingAbsence
 	Lines        []OutboundLine
@@ -255,24 +260,25 @@ func NewOutboundRequest(spec OutboundRequestSpec) (OutboundRequest, error) {
 	return OutboundRequest{
 		tenant: spec.Tenant, id: spec.ID, owner: spec.Owner, warehouse: spec.Warehouse, origin: spec.Origin, key: spec.Key,
 		dispatch: spec.Dispatch, service: spec.Service, recipient: spec.Recipient, address: spec.Address, basis: spec.Basis,
-		operator: spec.Operator, status: spec.Status, number: spec.Number, absence: spec.Absence, lines: lines,
+		operator: spec.Operator, status: spec.Status, parent: spec.Parent, number: spec.Number, absence: spec.Absence, lines: lines,
 		reservations: reservations, receivedAt: spec.ReceivedAt,
 	}, nil
 }
 
-func (request OutboundRequest) Tenant() TenantID         { return request.tenant }
-func (request OutboundRequest) ID() OutboundRequestID    { return request.id }
-func (request OutboundRequest) Owner() OwnerAccountID    { return request.owner }
-func (request OutboundRequest) Warehouse() WarehouseCode { return request.warehouse }
-func (request OutboundRequest) Origin() OutboundOrigin   { return request.origin }
-func (request OutboundRequest) Key() RequestKey          { return request.key }
-func (request OutboundRequest) Dispatch() DispatchMethod { return request.dispatch }
-func (request OutboundRequest) Service() string          { return request.service }
-func (request OutboundRequest) Recipient() string        { return request.recipient }
-func (request OutboundRequest) Address() string          { return request.address }
-func (request OutboundRequest) Basis() string            { return request.basis }
-func (request OutboundRequest) Operator() string         { return request.operator }
-func (request OutboundRequest) Status() OutboundStatus   { return request.status }
+func (request OutboundRequest) Tenant() TenantID          { return request.tenant }
+func (request OutboundRequest) ID() OutboundRequestID     { return request.id }
+func (request OutboundRequest) Owner() OwnerAccountID     { return request.owner }
+func (request OutboundRequest) Warehouse() WarehouseCode  { return request.warehouse }
+func (request OutboundRequest) Origin() OutboundOrigin    { return request.origin }
+func (request OutboundRequest) Key() RequestKey           { return request.key }
+func (request OutboundRequest) Dispatch() DispatchMethod  { return request.dispatch }
+func (request OutboundRequest) Service() string           { return request.service }
+func (request OutboundRequest) Recipient() string         { return request.recipient }
+func (request OutboundRequest) Address() string           { return request.address }
+func (request OutboundRequest) Basis() string             { return request.basis }
+func (request OutboundRequest) Operator() string          { return request.operator }
+func (request OutboundRequest) Status() OutboundStatus    { return request.status }
+func (request OutboundRequest) Parent() OutboundRequestID { return request.parent }
 func (request OutboundRequest) Lines() []OutboundLine {
 	return append([]OutboundLine(nil), request.lines...)
 }

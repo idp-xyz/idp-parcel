@@ -39,6 +39,80 @@ func (store *OutboundRequests) LoadByKey(ctx context.Context, tenant domain.Tena
 	return request, found, err
 }
 
+func (store *OutboundRequests) LoadByID(ctx context.Context, tenant domain.TenantID, id domain.OutboundRequestID) (domain.OutboundRequest, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.OutboundRequest{}, false, err
+	}
+	return scanOutbound(ctx, querier, tenant, `request_id = $2`, tenant.String(), id.String())
+}
+
+func (store *OutboundRequests) ListChildren(ctx context.Context, tenant domain.TenantID, parent domain.OutboundRequestID) ([]domain.OutboundRequest, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT request_id FROM warehouse_fulfillment.outbound_request
+		  WHERE tenant_id = $1 AND parent_request_id = $2
+		  ORDER BY request_id`,
+		tenant.String(), parent.String())
+	if err != nil {
+		return nil, fmt.Errorf("list outbound children: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	children := make([]domain.OutboundRequest, 0, len(ids))
+	for _, id := range ids {
+		parsed, err := domain.NewOutboundRequestID(id)
+		if err != nil {
+			return nil, err
+		}
+		child, found, err := store.LoadByID(ctx, tenant, parsed)
+		if err != nil || !found {
+			return nil, err
+		}
+		children = append(children, child)
+	}
+	return children, nil
+}
+
+func (store *OutboundRequests) ReleaseForSplit(ctx context.Context, tenant domain.TenantID, id domain.OutboundRequestID) (bool, error) {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("split outbound request: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_request
+		    SET status = 'SPLIT'
+		  WHERE tenant_id = $1 AND request_id = $2
+		    AND status IN ('RESERVED', 'PARTIALLY_RESERVED', 'PENDING_POLICY')`,
+		tenant.String(), id.String())
+	if err != nil {
+		return false, fmt.Errorf("split outbound request: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return false, nil
+	}
+	if _, err := executor.Exec(ctx,
+		`DELETE FROM warehouse_fulfillment.outbound_reservation
+		  WHERE tenant_id = $1 AND request_id = $2`,
+		tenant.String(), id.String()); err != nil {
+		return false, fmt.Errorf("split outbound request: %w", err)
+	}
+	return true, nil
+}
+
 func (store *OutboundRequests) Save(ctx context.Context, request domain.OutboundRequest) error {
 	executor, err := store.db.RequireExecutor(ctx)
 	if err != nil {
@@ -56,12 +130,13 @@ func (store *OutboundRequests) Save(ctx context.Context, request domain.Outbound
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO warehouse_fulfillment.outbound_request (
 		    tenant_id, request_id, owner_account_id, warehouse_code, origin, request_key, dispatch,
-		    service_product, recipient, address, basis, operator_id, status, document_number, numbering_absence, received_at
-		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+		    service_product, recipient, address, basis, operator_id, status, document_number, numbering_absence, received_at,
+		    parent_request_id
+		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
 		request.Tenant().String(), request.ID().String(), request.Owner().String(), request.Warehouse().String(),
 		request.Origin().String(), request.Key().String(), request.Dispatch().String(), nullableText(request.Service()),
 		request.Recipient(), request.Address(), nullableText(request.Basis()), nullableText(request.Operator()),
-		request.Status().String(), number, absence, request.ReceivedAt(),
+		request.Status().String(), number, absence, request.ReceivedAt(), nullableText(request.Parent().String()),
 	); err != nil {
 		return fmt.Errorf("save outbound request: %w", err)
 	}
@@ -98,12 +173,13 @@ func (store *OutboundRequests) ListReservations(ctx context.Context, tenant doma
 		return nil, err
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT reservation.goods_code, reservation.stock_state, reservation.label_alias, reservation.batch_number,
+		`SELECT request.warehouse_code, reservation.goods_code, reservation.stock_state, reservation.label_alias, reservation.batch_number,
 		        reservation.expiry_date::text, reservation.quantity, reservation.from_unlabeled
 		   FROM warehouse_fulfillment.outbound_reservation reservation
 		   JOIN warehouse_fulfillment.outbound_request request
 		     ON request.tenant_id = reservation.tenant_id AND request.request_id = reservation.request_id
-		  WHERE request.tenant_id = $1 AND request.owner_account_id = $2 AND request.warehouse_code = $3
+		  WHERE request.tenant_id = $1 AND request.owner_account_id = $2
+		    AND ($3 = '' OR request.warehouse_code = $3)
 		    AND request.status IN ('RESERVED', 'PARTIALLY_RESERVED')
 		  ORDER BY reservation.request_id, reservation.line_index`,
 		tenant.String(), owner.String(), warehouse.String())
@@ -199,14 +275,14 @@ func (store *OutboundRequests) SavePolicy(ctx context.Context, tenant domain.Ten
 
 func scanOutbound(ctx context.Context, querier bentopg.Querier, tenant domain.TenantID, where string, args ...any) (domain.OutboundRequest, bool, error) {
 	var id, owner, warehouse, origin, key, dispatch, recipient, address, status string
-	var service, basis, operator, number, absence *string
+	var service, basis, operator, number, absence, parent *string
 	var received time.Time
 	err := querier.QueryRow(ctx,
 		`SELECT request_id, owner_account_id, warehouse_code, origin, request_key, dispatch, service_product,
-		        recipient, address, basis, operator_id, status, document_number, numbering_absence, received_at
+		        recipient, address, basis, operator_id, status, document_number, numbering_absence, received_at, parent_request_id
 		   FROM warehouse_fulfillment.outbound_request
 		  WHERE tenant_id = $1 AND `+where,
-		args...).Scan(&id, &owner, &warehouse, &origin, &key, &dispatch, &service, &recipient, &address, &basis, &operator, &status, &number, &absence, &received)
+		args...).Scan(&id, &owner, &warehouse, &origin, &key, &dispatch, &service, &recipient, &address, &basis, &operator, &status, &number, &absence, &received, &parent)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.OutboundRequest{}, false, nil
 	}
@@ -263,11 +339,18 @@ func scanOutbound(ctx context.Context, querier bentopg.Querier, tenant domain.Te
 		}
 		numbering = domain.NumberingTimeZoneNotConfigured
 	}
+	var parsedParent domain.OutboundRequestID
+	if parent != nil {
+		parsedParent, err = domain.NewOutboundRequestID(*parent)
+		if err != nil {
+			return domain.OutboundRequest{}, false, err
+		}
+	}
 	request, err := domain.NewOutboundRequest(domain.OutboundRequestSpec{
 		Tenant: tenant, ID: parsedID, Owner: parsedOwner, Warehouse: parsedWarehouse, Origin: parsedOrigin, Key: parsedKey,
 		Dispatch: parsedDispatch, Service: valueOrEmpty(service), Recipient: recipient, Address: address,
-		Basis: valueOrEmpty(basis), Operator: valueOrEmpty(operator), Status: parsedStatus, Number: document, Absence: numbering,
-		Lines: lines, Reservations: reservations, ReceivedAt: received,
+		Basis: valueOrEmpty(basis), Operator: valueOrEmpty(operator), Status: parsedStatus, Parent: parsedParent,
+		Number: document, Absence: numbering, Lines: lines, Reservations: reservations, ReceivedAt: received,
 	})
 	if err != nil {
 		return domain.OutboundRequest{}, false, err
@@ -358,10 +441,14 @@ type reservationScanner interface {
 }
 
 func scanReservation(row reservationScanner) (ports.StoredReservation, error) {
-	var goods, state string
+	var warehouse, goods, state string
 	var alias, batch, expiry *string
 	var quantity, fromUnlabeled int64
-	if err := row.Scan(&goods, &state, &alias, &batch, &expiry, &quantity, &fromUnlabeled); err != nil {
+	if err := row.Scan(&warehouse, &goods, &state, &alias, &batch, &expiry, &quantity, &fromUnlabeled); err != nil {
+		return ports.StoredReservation{}, err
+	}
+	parsedWarehouse, err := domain.NewWarehouseCode(warehouse)
+	if err != nil {
 		return ports.StoredReservation{}, err
 	}
 	parsedGoods, err := domain.NewGoodsCode(goods)
@@ -373,7 +460,7 @@ func scanReservation(row reservationScanner) (ports.StoredReservation, error) {
 		return ports.StoredReservation{}, err
 	}
 	return ports.StoredReservation{
-		Goods: parsedGoods, State: parsedState, Alias: mustAlias(alias), Batch: mustBatch(batch), Expiry: mustExpiry(expiry),
+		Warehouse: parsedWarehouse, Goods: parsedGoods, State: parsedState, Alias: mustAlias(alias), Batch: mustBatch(batch), Expiry: mustExpiry(expiry),
 		Quantity: quantity, FromUnlabeled: fromUnlabeled,
 	}, nil
 }

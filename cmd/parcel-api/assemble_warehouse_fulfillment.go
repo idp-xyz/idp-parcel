@@ -558,7 +558,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: stock reads: %w", err)
 	}
-	stockQueries := warehouseapp.NewQueryStockHandler(stockReads, warehouses, warehouses, locations, zones)
+	stockQueries := warehouseapp.NewQueryStockHandler(stockReads, warehouses, warehouses, locations, zones, outboundStore, goods)
 	countIDs, err := whidentity.NewCountIdentities()
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: count identities: %w", err)
@@ -764,6 +764,12 @@ func (registration transactionalOutbound) Accept(ctx context.Context, command wa
 func (registration transactionalOutbound) RegisterPolicy(ctx context.Context, command warehouseapp.RegisterShortagePolicyCommand) (warehouseapp.OutboundResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.OutboundResult, error) {
 		return registration.inner.RegisterPolicy(txCtx, command)
+	})
+}
+
+func (registration transactionalOutbound) Split(ctx context.Context, command warehouseapp.SplitOutboundCommand) (warehouseapp.SplitResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.SplitResult, error) {
+		return registration.inner.Split(txCtx, command)
 	})
 }
 
