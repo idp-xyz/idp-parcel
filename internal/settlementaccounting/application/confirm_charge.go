@@ -159,7 +159,8 @@ type ConfirmChargeDeps struct {
 }
 
 type ConfirmChargeHandler struct {
-	deps ConfirmChargeDeps
+	deps   ConfirmChargeDeps
+	direct DirectOperatingNotifier
 }
 
 // NewConfirmChargeHandler 在装配时核齐依赖：缺件在这里报，不等到确认那一刻才撞空指针。
@@ -217,7 +218,7 @@ func (handler *ConfirmChargeHandler) Handle(
 		if err := handler.deps.Occupation.ConvertOnConfirmation(ctx, command.TenantID, charge); err != nil {
 			return ConfirmChargeResult{}, fmt.Errorf("convert occupation on replayed confirmation: %w", err)
 		}
-		return handler.alreadyConfirmed(ctx, command.TenantID, charge), nil
+		return handler.finishConfirm(ctx, command.TenantID, handler.alreadyConfirmed(ctx, command.TenantID, charge))
 	}
 
 	condition, configured, err := handler.deps.Conditions.LoadConfirmationCondition(
@@ -282,7 +283,7 @@ func (handler *ConfirmChargeHandler) Handle(
 		}
 		result := ConfirmChargeResult{outcome: ChargeConfirmedOutcome, charge: confirmed, hasCharge: true}
 		result.handoff = handler.handOff(ctx, command.TenantID, confirmed)
-		return result, nil
+		return handler.finishConfirm(ctx, command.TenantID, result)
 	case ports.ChargeAlreadyConfirmed:
 		// 并发二确落败：读回赢家的确认作答，不覆盖。
 		winner, found, err := handler.deps.Charges.FindByID(ctx, command.TenantID, chargeID)
@@ -292,7 +293,7 @@ func (handler *ConfirmChargeHandler) Handle(
 		if err := handler.deps.Occupation.ConvertOnConfirmation(ctx, command.TenantID, winner); err != nil {
 			return ConfirmChargeResult{}, fmt.Errorf("convert occupation on replayed confirmation: %w", err)
 		}
-		return handler.alreadyConfirmed(ctx, command.TenantID, winner), nil
+		return handler.finishConfirm(ctx, command.TenantID, handler.alreadyConfirmed(ctx, command.TenantID, winner))
 	default:
 		return ConfirmChargeResult{}, fmt.Errorf("%w: %d", ErrUnexpectedChargeSave, saved)
 	}
@@ -304,6 +305,24 @@ func chargeStoreUndecided(chargeID string) ConfirmChargeResult {
 		reason:       ChargeStoreUnavailable,
 		continuation: confirmContinuation("CHARGE_STORE_UNAVAILABLE", chargeID),
 	}
+}
+
+func (handler *ConfirmChargeHandler) finishConfirm(
+	ctx context.Context,
+	tenant domain.TenantID,
+	result ConfirmChargeResult,
+) (ConfirmChargeResult, error) {
+	if handler.direct == nil || (result.outcome != ChargeConfirmedOutcome && result.outcome != ChargeAlreadyConfirmedOutcome) {
+		return result, nil
+	}
+	charge, ok := result.Charge()
+	if !ok {
+		return result, nil
+	}
+	if err := handler.direct.AfterCharge(ctx, tenant, charge.ID()); err != nil {
+		return ConfirmChargeResult{}, err
+	}
+	return result, nil
 }
 
 // alreadyConfirmed 按已有确认作答并重发同一份意图。

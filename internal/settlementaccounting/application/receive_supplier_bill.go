@@ -221,7 +221,8 @@ type ReceiveSupplierBillDeps struct {
 }
 
 type ReceiveSupplierBillHandler struct {
-	deps ReceiveSupplierBillDeps
+	direct DirectOperatingNotifier
+	deps   ReceiveSupplierBillDeps
 }
 
 func NewReceiveSupplierBillHandler(deps ReceiveSupplierBillDeps) *ReceiveSupplierBillHandler {

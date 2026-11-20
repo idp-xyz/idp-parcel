@@ -84,7 +84,8 @@ type WithdrawSupplierExpectedCostDeps struct {
 }
 
 type WithdrawSupplierExpectedCostHandler struct {
-	deps WithdrawSupplierExpectedCostDeps
+	deps   WithdrawSupplierExpectedCostDeps
+	direct DirectOperatingNotifier
 }
 
 func NewWithdrawSupplierExpectedCostHandler(deps WithdrawSupplierExpectedCostDeps) (*WithdrawSupplierExpectedCostHandler, error) {
@@ -152,12 +153,29 @@ func (handler *WithdrawSupplierExpectedCostHandler) Withdraw(
 			return SupplierCostWithdrawalResult{}, fmt.Errorf("%w: %d", ErrUnexpectedExpectedCostSave, saved)
 		}
 	}
+	var result SupplierCostWithdrawalResult
 	switch {
 	case len(withdrawn) > 0:
-		return SupplierCostWithdrawalResult{outcome: SupplierCostWithdrawn, withdrawn: append(withdrawn, replayed...)}, nil
+		result = SupplierCostWithdrawalResult{outcome: SupplierCostWithdrawn, withdrawn: append(withdrawn, replayed...)}
 	case len(replayed) > 0:
-		return SupplierCostWithdrawalResult{outcome: SupplierCostWithdrawalExisting, withdrawn: replayed}, nil
+		result = SupplierCostWithdrawalResult{outcome: SupplierCostWithdrawalExisting, withdrawn: replayed}
 	default:
-		return SupplierCostWithdrawalResult{outcome: SupplierCostWithdrawalNothingFormed}, nil
+		result = SupplierCostWithdrawalResult{outcome: SupplierCostWithdrawalNothingFormed}
 	}
+	if handler.direct == nil || (result.outcome != SupplierCostWithdrawn && result.outcome != SupplierCostWithdrawalExisting) {
+		return result, nil
+	}
+	seen := map[string]bool{}
+	for _, cost := range result.Withdrawn() {
+		occurrence := cost.Occurrence()
+		key := occurrence.ID().String() + "\x00" + occurrence.Version().String()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if err := handler.direct.AfterOccurrence(ctx, command.TenantID, occurrence.ID(), occurrence.Version()); err != nil {
+			return SupplierCostWithdrawalResult{}, err
+		}
+	}
+	return result, nil
 }

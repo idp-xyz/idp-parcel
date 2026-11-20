@@ -203,7 +203,8 @@ type FormSupplierExpectedCostDeps struct {
 }
 
 type FormSupplierExpectedCostHandler struct {
-	deps FormSupplierExpectedCostDeps
+	deps   FormSupplierExpectedCostDeps
+	direct DirectOperatingNotifier
 }
 
 func NewFormSupplierExpectedCostHandler(deps FormSupplierExpectedCostDeps) *FormSupplierExpectedCostHandler {
@@ -382,7 +383,7 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 		if expectedCostDigest(existing) != expectedCostDigest(cost) {
 			return ExpectedCostResult{outcome: ExpectedCostConflict}, nil
 		}
-		return ExpectedCostResult{outcome: ExpectedCostExistingResult, cost: existing, hasCost: true}, nil
+		return handler.noticeCost(ctx, command.TenantID, ExpectedCostResult{outcome: ExpectedCostExistingResult, cost: existing, hasCost: true})
 	}
 
 	saved, err := handler.deps.Registry.Save(ctx, command.TenantID, cost, handler.deps.Clock.Now())
@@ -391,7 +392,7 @@ func (handler *FormSupplierExpectedCostHandler) Handle(
 	}
 	switch saved {
 	case ports.ExpectedCostSaved:
-		return ExpectedCostResult{outcome: ExpectedCostFormed, cost: cost, hasCost: true}, nil
+		return handler.noticeCost(ctx, command.TenantID, ExpectedCostResult{outcome: ExpectedCostFormed, cost: cost, hasCost: true})
 	case ports.ExpectedCostAlreadyRecorded:
 		return handler.existingCost(ctx, command, cost)
 	default:
@@ -415,7 +416,7 @@ func (handler *FormSupplierExpectedCostHandler) existingCost(
 			// 同一版本身份携带不同内容：请求冲突，原结果不被覆盖（AT-SA-051）。
 			return ExpectedCostResult{outcome: ExpectedCostConflict}, nil
 		}
-		return ExpectedCostResult{outcome: ExpectedCostExistingResult, cost: byVersion, hasCost: true}, nil
+		return handler.noticeCost(ctx, command.TenantID, ExpectedCostResult{outcome: ExpectedCostExistingResult, cost: byVersion, hasCost: true})
 	}
 	if prior, corrects := formed.PriorVersion(); corrects {
 		return ExpectedCostResult{}, fmt.Errorf("%w: correcting %s as %s", ErrCostChainAdvancedUnderLock, prior, command.Version)
@@ -432,6 +433,24 @@ func (handler *FormSupplierExpectedCostHandler) existingCost(
 	}
 	return ExpectedCostResult{outcome: ExpectedCostAlreadyFormed, cost: first, hasCost: true,
 		continuation: costContinuation("EXPECTED_COST_ALREADY_FORMED", first.Version().String())}, nil
+}
+
+func (handler *FormSupplierExpectedCostHandler) noticeCost(
+	ctx context.Context,
+	tenant domain.TenantID,
+	result ExpectedCostResult,
+) (ExpectedCostResult, error) {
+	if handler.direct == nil || !result.hasCost {
+		return result, nil
+	}
+	if result.outcome != ExpectedCostFormed && result.outcome != ExpectedCostExistingResult {
+		return result, nil
+	}
+	occurrence := result.cost.Occurrence()
+	if err := handler.direct.AfterOccurrence(ctx, tenant, occurrence.ID(), occurrence.Version()); err != nil {
+		return ExpectedCostResult{}, err
+	}
+	return result, nil
 }
 
 func supplierCostTotalsMatch(head domain.SupplierExpectedCost, adoption ports.BuyEvaluationAdoption) bool {

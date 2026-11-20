@@ -163,7 +163,8 @@ type FormEstimatedCustomerChargeDeps struct {
 // SELL 请求，经费用项目映射册把全部费用行映到同一个费用项目，以请求派生的费用标识调形成编排，再在请求册上记结论。
 // 费用行与请求改记在调用方的同一事务里：外键要求费用先落，任一步失败整笔回滚。
 type FormEstimatedCustomerChargeHandler struct {
-	deps FormEstimatedCustomerChargeDeps
+	deps   FormEstimatedCustomerChargeDeps
+	direct DirectOperatingNotifier
 }
 
 func NewFormEstimatedCustomerChargeHandler(deps FormEstimatedCustomerChargeDeps) (*FormEstimatedCustomerChargeHandler, error) {
@@ -293,7 +294,7 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 		if err != nil {
 			return EstimatedCustomerChargeResult{}, err
 		}
-		return handler.conclude(ctx, key, conclusion)
+		return handler.concludeAndNotice(ctx, command.TenantID, record.Request.Parcel(), key, conclusion)
 	case SellChargeZeroTotal:
 		// 复核结果整体取代预估，复核为零就按零收：链上前一笔仍未确认的费用同样被替代、不再确认，只是没有新预估可指为后继。
 		// 不记的话那笔旧预估仍能按旧金额确认。前一笔的行锁在 reweighPreviousCharge 里已取到，同一事务内。
@@ -303,7 +304,7 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 				return EstimatedCustomerChargeResult{}, err
 			}
 		}
-		return handler.conclude(ctx, key, domain.NewZeroTotalSellEvaluationRequestConclusion())
+		return handler.concludeAndNotice(ctx, command.TenantID, record.Request.Parcel(), key, domain.NewZeroTotalSellEvaluationRequestConclusion())
 	case SellChargeUndecided:
 		return undecidedEstimatedCharge(SellChargeFormationUndecided, fmt.Errorf("sell charge formation: %s", formed.UndecidedReason())), nil
 	default:
@@ -379,6 +380,24 @@ func usedSellPriceScope(value string) (domain.EstimatePricingScope, error) {
 		return domain.EstimatePricingScope{}, fmt.Errorf("sell evaluation pricing scope: %w", err)
 	}
 	return scope, nil
+}
+
+// concludeAndNotice 先记结论，结论落定后再按这件包裹选料。结论还没记成已形成时，费用对不上包裹，选料会看成没有客户侧。
+func (handler *FormEstimatedCustomerChargeHandler) concludeAndNotice(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.ParcelReference,
+	key ports.SellEvaluationRequestKey,
+	conclusion domain.SellEvaluationRequestConclusion,
+) (EstimatedCustomerChargeResult, error) {
+	result, err := handler.conclude(ctx, key, conclusion)
+	if err != nil || result.Outcome() != EstimatedCustomerChargeConcluded || handler.direct == nil {
+		return result, err
+	}
+	if err := handler.direct.AfterParcel(ctx, tenant, parcel); err != nil {
+		return EstimatedCustomerChargeResult{}, err
+	}
+	return result, nil
 }
 
 // conclude 在请求册上记结论。另有结论不覆盖，作错误整笔回滚——见 ErrSellEvaluationRequestConcludedOtherwise。

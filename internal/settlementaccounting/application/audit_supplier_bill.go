@@ -265,7 +265,7 @@ func (handler *ReceiveSupplierBillHandler) Audit(
 		case domain.UnknownPayloadShape:
 			return auditUndecided(AuditDecisionStoreUnavailable, key.Decision.String()), nil
 		}
-		return handler.existingDecision(ctx, existing), nil
+		return handler.existingDecision(ctx, existing)
 	}
 
 	reception, found, err := handler.deps.Receptions.FindByKey(ctx, ports.BillReceptionKey{
@@ -298,7 +298,7 @@ func (handler *ReceiveSupplierBillHandler) Audit(
 	for _, record := range priorRecords {
 		if sameRequest(record.Decision, command, span) {
 			// 同一段同一结果换个身份再提交，交回先到的那份——同一业务变化只形成一次（原先「换个应付身份再审同一行」那一条）。
-			return handler.existingDecision(ctx, record), nil
+			return handler.existingDecision(ctx, record)
 		}
 		prior = append(prior, record.Decision)
 	}
@@ -366,7 +366,7 @@ func (handler *ReceiveSupplierBillHandler) recordDecision(ctx context.Context, r
 		if !found {
 			return AuditResult{outcome: AuditRangeAlreadyDecided}, nil
 		}
-		return handler.existingDecision(ctx, winner), nil
+		return handler.existingDecision(ctx, winner)
 	default:
 		return AuditResult{}, fmt.Errorf("%w: %d", ErrUnexpectedAuditDecisionSave, saved)
 	}
@@ -436,6 +436,11 @@ func (handler *ReceiveSupplierBillHandler) formPayable(
 	}
 	result := AuditResult{outcome: PayableFormed, record: record, hasRecord: true, decision: decisionRecord, hasDecision: true}
 	result.handoff = handler.handOffPayable(ctx, record)
+	if handler.direct != nil {
+		if err := handler.direct.AfterPayable(ctx, command.TenantID, payable.Payable()); err != nil {
+			return AuditResult{}, err
+		}
+	}
 	return result, nil
 }
 
@@ -526,18 +531,23 @@ func auditUndecided(reason AuditUndecidedReason, subject string) AuditResult {
 func (handler *ReceiveSupplierBillHandler) existingDecision(
 	ctx context.Context,
 	record ports.AuditDecisionRecord,
-) AuditResult {
+) (AuditResult, error) {
 	if record.Decision.Verdict() != domain.AuditPassed {
-		return AuditResult{outcome: AuditDecisionExistingResult, decision: record, hasDecision: true}
+		return AuditResult{outcome: AuditDecisionExistingResult, decision: record, hasDecision: true}, nil
 	}
 	payableID, err := domain.NewPayableID(record.Key.Decision.String())
 	if err != nil {
-		return auditUndecided(PayableStoreUnavailable, record.Key.Decision.String())
+		return auditUndecided(PayableStoreUnavailable, record.Key.Decision.String()), nil
 	}
 	payable, found, err := handler.deps.Payables.FindByKey(ctx, ports.AuditedPayableKey{TenantID: record.Key.TenantID, Payable: payableID})
 	if err != nil || !found {
 		// 通过的决定在而应付不在，是册上矛盾——两者同笔落库；不当成没形成过，也不补形成。
-		return auditUndecided(PayableStoreUnavailable, record.Key.Decision.String())
+		return auditUndecided(PayableStoreUnavailable, record.Key.Decision.String()), nil
+	}
+	if handler.direct != nil {
+		if err := handler.direct.AfterPayable(ctx, record.Key.TenantID, payable.Payable.Payable()); err != nil {
+			return AuditResult{}, err
+		}
 	}
 	return AuditResult{
 		outcome:     PayableExistingResult,
@@ -546,7 +556,7 @@ func (handler *ReceiveSupplierBillHandler) existingDecision(
 		decision:    record,
 		hasDecision: true,
 		handoff:     handler.handOffPayable(ctx, payable),
-	}
+	}, nil
 }
 
 // handOffPayable 发布应付引用（UC-SA-004 步 7）。投递失败不翻结果，只恢复应付自己的同一
