@@ -186,7 +186,7 @@ test('发布按 outcome 原词分派前进与停留', () => {
   for (const name of ['DRAFT_PUBLISHED', 'DRAFT_ALREADY_PUBLISHED']) {
     equal(reachedStep(withPublication(approved, key, published(name)), key), 'publish', name);
   }
-  for (const name of ['DRAFT_AWAITS_EFFECTIVE_START', 'PUBLICATION_NOT_LANDED', 'DRAFT_NOT_APPROVED', 'DRAFT_NOT_FOUND']) {
+  for (const name of ['DRAFT_AWAITS_EFFECTIVE_START', 'PUBLICATION_NOT_LANDED', 'SIGNING_EVIDENCE_REQUIRED', 'DRAFT_NOT_APPROVED', 'DRAFT_NOT_FOUND']) {
     equal(reachedStep(withPublication(approved, key, published(name)), key), 'approve', name);
   }
 });

@@ -38,6 +38,7 @@ import { agreementKnownVersions } from './known-versions';
 import { closableKeys, closureKeyOf, closureTargetOf, type ClosureTarget } from './version-closure';
 import { VersionClosureDialog } from './VersionClosureDialog';
 import { VersionDetailPanel } from './VersionDetailPanel';
+import { SigningEvidenceSection } from './SigningEvidenceSection';
 import { RegisterView } from './RegisterView';
 import { supplierAgreementsViewHash, supplierAgreementsViewOf, type SupplierAgreementsView } from './supplier-agreements-address';
 import { versionHistoryOf } from './version-history';
@@ -236,6 +237,17 @@ function SupplierAgreementObjectPage({ objectId, version }: VersionObjectAddress
         status={(candidate) => candidate.source.status}
         technical={supplierAgreementTechnicalRows}
         history={record ? versionHistoryOf(historyPool, record) : []}
+        extraSections={
+          record
+            ? [
+                {
+                  id: 'signing-evidence',
+                  title: '签署证据',
+                  content: <SigningEvidenceSection kind="SUPPLIER_AGREEMENT" objectId={objectId} version={version} mayWrite={mayWrite} />,
+                },
+              ]
+            : undefined
+        }
         onSelectVersion={(next) => {
           window.location.hash = versionObjectHash('supplier-agreements', objectId, next);
         }}

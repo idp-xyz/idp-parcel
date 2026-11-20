@@ -60,6 +60,8 @@ import {
   type CustomerContractRecord,
 } from './api';
 import { labelOf, partyNameUnknownNote, registrationTitles } from './presentation';
+import { SigningEvidenceSection } from './SigningEvidenceSection';
+import { signingEvidenceColumnText } from './signing-evidence';
 
 // 抽屉副题里给状态补一句「所以呢」：运营看到「已退役」要知道的是它不再用于新单。
 const contractStatusNotes: Record<string, string> = {
@@ -103,6 +105,11 @@ const columns: WorkbenchColumn<CustomerContractRecord>[] = [
     key: 'status',
     header: '状态',
     render: (row) => <StatusPill code={row.status} />,
+  },
+  {
+    key: 'signing-evidence',
+    header: '签署证据',
+    render: (row) => signingEvidenceColumnText(row.signingEvidenceRegistered),
   },
   {
     key: 'rule-package',
@@ -261,6 +268,17 @@ function CustomerContractObjectPage({ objectId, version }: VersionObjectAddress)
           { label: '正文登记时间', value: record.declaredAt ?? '' },
         ]}
         history={row ? versionHistoryOf(historyPool, row) : []}
+        extraSections={
+          row
+            ? [
+                {
+                  id: 'signing-evidence',
+                  title: '签署证据',
+                  content: <SigningEvidenceSection kind="CUSTOMER_CONTRACT" objectId={objectId} version={version} mayWrite={mayWrite} />,
+                },
+              ]
+            : undefined
+        }
         onSelectVersion={(next) => {
           window.location.hash = versionObjectHash('party-contracts', objectId, next);
         }}

@@ -6,6 +6,7 @@ import type { ListColumn } from '../../templates';
 import { formatInstant, formatRange } from '../catalogue-view';
 import type { SupplierAgreementListResponseBody, SupplierAgreementRecord } from './api';
 import { commercialStatusLabels, labelOf } from './presentation';
+import { signingEvidenceColumnText } from './signing-evidence';
 import type { RowRefs } from './ref-links';
 import type { VersionFacts } from './version-groups';
 
@@ -37,6 +38,7 @@ export const supplierAgreementColumns: ListColumn<SupplierAgreementRow>[] = [
   col('supplier', '供应商', true),
   col('legalEntity', '公司主体', true),
   col('status', '状态'),
+  col('signingEvidence', '签署证据'),
   col('purchasePlan', '采购价格表', true),
   col('agreementEffective', '协议有效期', true),
   col('contentRegistered', '正文'),
@@ -114,6 +116,7 @@ export function supplierAgreementRowsOf(body: Pick<SupplierAgreementListResponse
       effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
       publishedAt: formatInstant(record.publishedAt),
       contentRegistered: contentRegisteredCell(record),
+      signingEvidence: signingEvidenceColumnText(record.signingEvidenceRegistered),
       ...bodyValues(record),
     },
     refs: {

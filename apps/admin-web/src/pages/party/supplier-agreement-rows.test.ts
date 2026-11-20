@@ -25,6 +25,7 @@ const agreements: SupplierAgreementListResponseBody = {
       agreementEffectiveStartsAt: '2026-01-01T00:00:00Z',
       agreementEffectiveEndsAt: '2026-01-02T00:00:00Z',
       registeredAt: '2026-01-01T01:00:00Z',
+      signingEvidenceRegistered: true,
     },
     {
       objectId: 'agreement-2',
@@ -48,6 +49,7 @@ test('目录列集：壳的列之后是正文各列，壳与正文的范围、�
       '供应商',
       '公司主体',
       '状态',
+      '签署证据',
       '采购价格表',
       '协议有效期',
       '正文',
@@ -65,6 +67,7 @@ test('带正文的行逐键上列：正文「已登记」，协议区间带结�
   equal(full.values.effective, '2026-01-01 00:00:00 UTC → 持续有效');
   equal(full.values.publishedAt, '2026-01-01 00:00:00 UTC');
   equal(full.values.contentRegistered, '已登记');
+  equal(full.values.signingEvidence, '已登记');
   equal(full.values.supplier, 'supplier-1');
   equal(full.values.legalEntity, 'legal-1');
   equal(full.values.purchasePlan, 'plan-buy-1');
@@ -82,6 +85,7 @@ test('只有壳的行照列为「未登记」，正文各格不上值，不从�
   equal(bare.values.identity, 'agreement-2@v1');
   equal(bare.values.status, '已生效');
   equal(bare.values.contentRegistered, '未登记');
+  equal(bare.values.signingEvidence, '未登记');
   for (const id of ['supplier', 'legalEntity', 'purchasePlan', 'agreementScope', 'agreementEffective', 'registeredAt']) {
     ok(!(id in bare.values), `只有壳时 ${id} 不该有值`);
   }

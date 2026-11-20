@@ -627,6 +627,7 @@ export const publishOutcomeLabels: Record<string, string> = {
   DRAFT_ALREADY_PUBLISHED: '这一版已经发布了。',
   DRAFT_AWAITS_EFFECTIVE_START: '还没到生效起点：到生效起点之后再来发布。这不是失败，发布稿保持已批准。',
   PUBLICATION_NOT_LANDED: '发布没有完成，原因见下。发布稿保持已批准。',
+  SIGNING_EVIDENCE_REQUIRED: '还不能发布：这一版要先登记签署证据。发布稿保持已批准，版本没有入册。',
   DRAFT_CHANGED: '这份改动的内容已经不是你看到的那份（有同事改过），这次没有发布。请核对现在的内容后再发。',
   DRAFT_NOT_READABLE: draftNotReadableWords,
 };

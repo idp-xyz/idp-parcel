@@ -26,6 +26,7 @@ export function VersionObjectPage<Row>({
   history,
   onSelectVersion,
   actions,
+  extraSections,
   viewState,
   onBack,
 }: {
@@ -40,6 +41,8 @@ export function VersionObjectPage<Row>({
   history: HistoryEntry[];
   onSelectVersion: (version: string) => void;
   actions?: ReactNode;
+  /** 这一版特有的区，插在版本历史前面。合同与协议用它放签署证据。 */
+  extraSections?: { id: string; title: string; content: ReactNode }[];
   viewState: TemplateViewState;
   onBack: () => void;
 }) {
@@ -65,7 +68,8 @@ export function VersionObjectPage<Row>({
       basicFields={fields}
       sections={
         row
-          ? [
+            ? [
+              ...(extraSections ?? []),
               {
                 id: 'history',
                 title: '版本历史',

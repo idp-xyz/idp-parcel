@@ -295,6 +295,8 @@ export interface CustomerContractRecord extends VersionClosureEcho {
   effectiveEndsAt?: string;
   publishedAt: string;
   contentRegistered: boolean;
+  /** 这一版旁边有没有至少一条签署证据。缺键与 false 都是还没有。 */
+  signingEvidenceRegistered?: boolean;
   rulePackageId?: string;
   /** 合同指名的货主客户账户（正文一格）；正文未登记或 0037 之前写下的旧行缺席。 */
   customerAccountId?: string;
@@ -335,6 +337,8 @@ export interface SupplierAgreementRecord {
   effectiveEndsAt?: string;
   publishedAt: string;
   contentRegistered: boolean;
+  /** 这一版旁边有没有至少一条签署证据。缺键与 false 都是还没有。 */
+  signingEvidenceRegistered?: boolean;
   supplier?: string;
   legalEntity?: string;
   purchasePlan?: string;
@@ -1044,6 +1048,7 @@ export const publicationOutcomeLabels: Record<string, string> = {
   REPLAYED: '已发布过同样的内容：原版本不变，这次没有新建版本。',
   CONTENT_CONFLICT: '内容冲突：这个版本号已发布过不同的内容，原版本不变。要改内容，请用新的版本号发布。',
   PENDING: '发布暂未完成：批准角色还没确认，或正文引用的对象还没发布。没有写入任何内容。',
+  SIGNING_EVIDENCE_REQUIRED: '还不能发布：这一版要先登记签署证据。版本没有入册。',
 };
 
 /**
