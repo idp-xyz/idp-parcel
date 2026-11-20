@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
@@ -52,6 +53,7 @@ func (tokenSubjectVerifier) VerifyOperatorCredential(_ context.Context, credenti
 
 type customsDecisionFixture struct {
 	db        *bentopg.DB
+	pool      *pgxpool.Pool
 	operators *aipg.OperatorRegistry
 	endpoints map[string]http.Handler
 	// numbers 是装进建案编排的那一套编号组件，用例经它的登记口为租户登单据编号时区或规则。
@@ -116,7 +118,8 @@ func registerOperatorIn(t *testing.T, db *bentopg.DB, operators *aipg.OperatorRe
 
 func newCustomsDecisionFixture(t *testing.T) *customsDecisionFixture {
 	t.Helper()
-	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
@@ -168,7 +171,7 @@ func newCustomsDecisionFixture(t *testing.T) *customsDecisionFixture {
 	if len(endpoints) != 3 {
 		t.Fatalf("关务三口没按登记处挂上：%v", endpoints)
 	}
-	return &customsDecisionFixture{db: db, operators: operators, endpoints: endpoints, numbers: numbers}
+	return &customsDecisionFixture{db: db, pool: pool, operators: operators, endpoints: endpoints, numbers: numbers}
 }
 
 func (fixture *customsDecisionFixture) post(t *testing.T, pattern, operator, body string) (int, map[string]any) {

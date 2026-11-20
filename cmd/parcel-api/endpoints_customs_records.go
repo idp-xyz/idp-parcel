@@ -4,7 +4,9 @@ import (
 	"net/http"
 
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
+	ccnodeops "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/nodeoperations"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
+	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
@@ -14,12 +16,13 @@ import (
 // 事实记录，所以另立一个特性，不往目录特性里塞。
 
 type customsRecordsWiring struct {
-	cases       customshttp.CustomsCaseRecordReader
-	submissions customshttp.SubmissionRecordReader
-	results     customshttp.ExternalResultViewReader
-	judgements  customshttp.ActionAdmissionJudgementReader
-	unadmitted  customshttp.UnadmittedObjectReader
-	manifests   customshttp.ExternalManifestReferenceReader
+	cases        customshttp.CustomsCaseRecordReader
+	submissions  customshttp.SubmissionRecordReader
+	results      customshttp.ExternalResultViewReader
+	judgements   customshttp.ActionAdmissionJudgementReader
+	unadmitted   customshttp.UnadmittedObjectReader
+	manifests    customshttp.ExternalManifestReferenceReader
+	measurements ccports.MemberMeasuredWeightView
 }
 
 func init() {
@@ -37,14 +40,26 @@ func init() {
 			if err != nil {
 				return customsRecordsWiring{}, err
 			}
+			query, err := currentParcelMeasurementQuery(sources.db)
+			if err != nil {
+				return customsRecordsWiring{}, err
+			}
+			measurements, err := ccnodeops.NewMemberMeasuredWeights(query)
+			if err != nil {
+				return customsRecordsWiring{}, err
+			}
 			// 各口共用一个读适配器（同一上下文的几张事实表），各按自己的接口消费；卡关对象读的是判断册那张表。
-			return customsRecordsWiring{cases: views, submissions: views, results: views, judgements: views, unadmitted: views, manifests: views}, nil
+			// 此刻的实测与提交走同一只读口，不另起一只。
+			return customsRecordsWiring{
+				cases: views, submissions: views, results: views, judgements: views, unadmitted: views, manifests: views,
+				measurements: measurements,
+			}, nil
 		},
 		mount: func(channels endpointChannels, wiring customsRecordsWiring) []httpapi.BusinessEndpoint {
 			intake := channels.complianceRules()
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/customs-case-records", Handler: customshttp.NewQueryCustomsCasesEndpoint(intake, wiring.cases)},
-				{Pattern: "/customs-submission-records", Handler: customshttp.NewQuerySubmissionVersionsEndpoint(intake, wiring.submissions)},
+				{Pattern: "/customs-submission-records", Handler: customshttp.NewQuerySubmissionVersionsEndpoint(intake, wiring.submissions, wiring.measurements)},
 				{Pattern: "/customs-external-result-records", Handler: customshttp.NewQueryExternalResultsEndpoint(intake, wiring.results)},
 				{Pattern: "/customs-action-admission-judgements", Handler: customshttp.NewQueryActionAdmissionJudgementsEndpoint(intake, wiring.judgements)},
 				{Pattern: "/customs-unadmitted-objects", Handler: customshttp.NewQueryUnadmittedObjectsEndpoint(intake, wiring.unadmitted)},

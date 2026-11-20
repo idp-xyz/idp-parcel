@@ -131,6 +131,30 @@ type SubmissionVersionRecord struct {
 	IsCurrent      bool
 	CorrectedFrom  string
 	Attempts       []SubmissionAttemptRecord
+	// MemberWeights 是成版时记下的实测毛重。空表示这一版没有称到。
+	MemberWeights []MemberMeasuredWeightRecord
+	// MeasurementsNow 只在当前版由查阅口填上，比较的是此刻与成版时是否还是同一条。非当前版保持 nil。
+	MeasurementsNow []MemberMeasurementNowRecord
+}
+
+// MemberMeasuredWeightRecord 是提交版本上一条成员实测毛重的查阅形状。
+type MemberMeasuredWeightRecord struct {
+	Parcel            string
+	GrossWeight       string
+	GrossWeightUnit   string
+	MeasurementSource string
+	MeasuredAt        time.Time
+}
+
+// MemberMeasurementNowRecord 是一件成员此刻的对照。HasReading 为真时重量四格才是此刻那一条。
+type MemberMeasurementNowRecord struct {
+	Parcel            string
+	State             string
+	GrossWeight       string
+	GrossWeightUnit   string
+	MeasurementSource string
+	MeasuredAt        time.Time
+	HasReading        bool
 }
 
 // SubmissionRecordRead 按租户上列提交版本。单份读回是按 version 筛选维收窄（SubmissionVersionPages）。

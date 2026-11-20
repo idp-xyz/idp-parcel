@@ -84,6 +84,10 @@ const (
 	CaseAuthorityUnavailable
 	UnitStoreUnavailable
 	FollowUpStoreUnavailable
+	// MemberMeasurementUndetermined：复测后多条而租户没采用形态、发生时间并列，或包裹关联多件作业实物。不挑一条，也不当成没有。
+	MemberMeasurementUndetermined
+	// MemberMeasurementUnavailable：实测读口报错。与定不下分开，恢复动作是稍后重试，不是去改采用形态。
+	MemberMeasurementUnavailable
 )
 
 func (reason DeclarationUndecidedReason) String() string {
@@ -106,6 +110,10 @@ func (reason DeclarationUndecidedReason) String() string {
 		return "UNIT_STORE_UNAVAILABLE"
 	case FollowUpStoreUnavailable:
 		return "FOLLOW_UP_STORE_UNAVAILABLE"
+	case MemberMeasurementUndetermined:
+		return "MEMBER_MEASUREMENT_UNDETERMINED"
+	case MemberMeasurementUnavailable:
+		return "MEMBER_MEASUREMENT_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -161,22 +169,44 @@ func (result SubmitDeclarationResult) SubmissionHandoffReference() string {
 }
 
 type SubmitDeclarationDeps struct {
-	Submissions ports.DeclarationSubmissionStore
-	Cases       ports.CustomsCaseStore
-	Units       ports.DeclarationUnitStore
-	Readiness   ports.ReadinessView
-	Authority   ports.SubmissionAuthorityView
-	Versions    ports.DeclarationVersionFactory
-	Downstream  ports.DeclarationSubmissionHandoff
-	Clock       ports.Clock
+	Submissions  ports.DeclarationSubmissionStore
+	Cases        ports.CustomsCaseStore
+	Units        ports.DeclarationUnitStore
+	Readiness    ports.ReadinessView
+	Authority    ports.SubmissionAuthorityView
+	Versions     ports.DeclarationVersionFactory
+	Downstream   ports.DeclarationSubmissionHandoff
+	Clock        ports.Clock
+	Measurements ports.MemberMeasuredWeightView
 }
 
 type SubmitDeclarationHandler struct {
 	deps SubmitDeclarationDeps
 }
 
-func NewSubmitDeclarationHandler(deps SubmitDeclarationDeps) *SubmitDeclarationHandler {
-	return &SubmitDeclarationHandler{deps: deps}
+func NewSubmitDeclarationHandler(deps SubmitDeclarationDeps) (*SubmitDeclarationHandler, error) {
+	switch {
+	case deps.Submissions == nil:
+		return nil, fmt.Errorf("%w: declaration submission store", ErrNilDependency)
+	case deps.Cases == nil:
+		return nil, fmt.Errorf("%w: declaration submission cases", ErrNilDependency)
+	case deps.Units == nil:
+		return nil, fmt.Errorf("%w: declaration submission units", ErrNilDependency)
+	case deps.Readiness == nil:
+		return nil, fmt.Errorf("%w: declaration submission readiness", ErrNilDependency)
+	case deps.Authority == nil:
+		return nil, fmt.Errorf("%w: declaration submission authority", ErrNilDependency)
+	case deps.Versions == nil:
+		return nil, fmt.Errorf("%w: declaration submission versions", ErrNilDependency)
+	case deps.Downstream == nil:
+		return nil, fmt.Errorf("%w: declaration submission handoff", ErrNilDependency)
+	case deps.Clock == nil:
+		return nil, fmt.Errorf("%w: declaration submission clock", ErrNilDependency)
+	case deps.Measurements == nil:
+		// 缺了读口不能当成「都没称过」：没称过与读不动是两种答复。
+		return nil, fmt.Errorf("%w: declaration submission member measurements", ErrNilDependency)
+	}
+	return &SubmitDeclarationHandler{deps: deps}, nil
 }
 
 // Handle 把一个申报单元推进到不可覆盖的提交版本：受理（单元+案件+资料/角色快照）→
@@ -288,6 +318,13 @@ func (handler *SubmitDeclarationHandler) Handle(
 		return SubmitDeclarationResult{outcome: DeclarationNotAuthorized}, nil
 	}
 
+	// 就绪与授权都过了才读实测。答未决时还没有单元行，也还没有消耗版本号。
+	// 已有版本的重放在内容指纹那一步就返回了，不会因为后来复测把已固定的毛重改掉。
+	weights, undecided, stop := loadMemberMeasuredWeights(ctx, handler.deps.Measurements, command.TenantID, unit)
+	if stop {
+		return undecided, nil
+	}
+
 	// 单元本体先于版本落册（ADR-0073 决定一/二）：同键已在册就读回比对——同一单元
 	// 换案件、换程序或换组成都是身份冲突，绝不顶替；输给身份竞争的请求不再消耗版本
 	// 标识。单元行落了而后续步骤失败只留下一个已形成的单元（CONTEXT：进行中可以形成
@@ -319,6 +356,7 @@ func (handler *SubmitDeclarationHandler) Handle(
 		Readiness:     readiness,
 		Authorization: authorization,
 		FixedAt:       handler.deps.Clock.Now(),
+		MemberWeights: weights,
 	})
 	if err != nil {
 		return SubmitDeclarationResult{outcome: DeclarationNotAccepted}, nil

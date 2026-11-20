@@ -60,6 +60,15 @@ func (recorder *pageRecorder) ListCustomsCases(
 	return recorded[ports.CustomsCaseRecord](recorder, tenant, limit, query)
 }
 
+// catalogueMemberWeights 让目录用例在当前版上问得到「没有实测」，而不是把缺读口说成读不到。这些用例不交行，读口不会被问到。
+type catalogueMemberWeights struct{}
+
+func (catalogueMemberWeights) LoadMemberMeasuredWeight(
+	context.Context, domain.TenantID, domain.DeclaredParcelReference,
+) (ports.MeasuredWeightReading, error) {
+	return ports.MeasuredWeightReading{Answer: ports.MeasuredWeightNone}, nil
+}
+
 func (recorder *pageRecorder) ListSubmissionVersions(
 	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
 ) (cataloguepage.Result[ports.SubmissionVersionRecord], error) {
@@ -205,8 +214,10 @@ func pagedCatalogues() []pagedCatalogue {
 		},
 		{
 			name: "提交版本", target: "/customs-submission-records", catalogue: ports.SubmissionVersionPages,
-			endpoint: serving(customshttp.NewQuerySubmissionVersionsEndpoint),
-			sort:     "-fixedAt", at: at(pageInstant, "SYN-UNIT-01", "SYN-PROCEDURE-01", pageInstant, "SYN-SUBV-01"),
+			endpoint: func(intake customshttp.CatalogueQueryIntake, recorder *pageRecorder) http.Handler {
+				return customshttp.NewQuerySubmissionVersionsEndpoint(intake, recorder, catalogueMemberWeights{})
+			},
+			sort: "-fixedAt", at: at(pageInstant, "SYN-UNIT-01", "SYN-PROCEDURE-01", pageInstant, "SYN-SUBV-01"),
 			filters: url.Values{"version": {"SYN-SUBV-01"}, "isCurrent": {"true"}}, narrow: "version",
 			outOfVocabulary: outside("isCurrent"), list: "submissions",
 		},

@@ -255,6 +255,7 @@ type declarationFixture struct {
 	authority *authorityViewDouble
 	versions  *versionFactoryDouble
 	handoff   *declarationHandoffDouble
+	weights   *memberWeightDouble
 	handler   *application.SubmitDeclarationHandler
 }
 
@@ -268,17 +269,23 @@ func newDeclarationFixture(t *testing.T) *declarationFixture {
 		authority: &authorityViewDouble{granted: true},
 		versions:  &versionFactoryDouble{},
 		handoff:   &declarationHandoffDouble{},
+		weights:   &memberWeightDouble{},
 	}
-	fixture.handler = application.NewSubmitDeclarationHandler(application.SubmitDeclarationDeps{
-		Submissions: fixture.store,
-		Cases:       fixture.cases,
-		Units:       fixture.units,
-		Readiness:   fixture.readiness,
-		Authority:   fixture.authority,
-		Versions:    fixture.versions,
-		Downstream:  fixture.handoff,
-		Clock:       declarationClock{at: declarationFixedAt},
+	handler, err := application.NewSubmitDeclarationHandler(application.SubmitDeclarationDeps{
+		Submissions:  fixture.store,
+		Cases:        fixture.cases,
+		Units:        fixture.units,
+		Readiness:    fixture.readiness,
+		Authority:    fixture.authority,
+		Versions:     fixture.versions,
+		Downstream:   fixture.handoff,
+		Clock:        declarationClock{at: declarationFixedAt},
+		Measurements: fixture.weights,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.handler = handler
 	return fixture
 }
 
@@ -466,25 +473,27 @@ func TestReadinessAndAuthorityAreTwoSeparateTracks(t *testing.T) {
 	})
 
 	t.Run("the undecided reason set is closed", func(t *testing.T) {
-		labels := map[string]struct{}{}
-		for _, reason := range []application.DeclarationUndecidedReason{
+		reasons := []application.DeclarationUndecidedReason{
 			application.SubmissionStoreUnavailable, application.ReadinessUnavailable,
 			application.ReadinessUnconfigured, application.AuthorityUnavailable,
 			application.AuthorityUnconfigured, application.VersionIdentityUnavailable,
 			application.CaseAuthorityUnavailable, application.UnitStoreUnavailable,
-			application.FollowUpStoreUnavailable,
-		} {
+			application.FollowUpStoreUnavailable, application.MemberMeasurementUndetermined,
+			application.MemberMeasurementUnavailable,
+		}
+		labels := map[string]struct{}{}
+		for _, reason := range reasons {
 			label := reason.String()
 			if label == "" {
 				t.Fatalf("reason %d has no label", reason)
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 9 {
+		if len(labels) != len(reasons) {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.DeclarationUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第十个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("名单之后的取值带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

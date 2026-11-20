@@ -268,6 +268,8 @@ type CustomsSubmissionVersionSpec struct {
 	Readiness     ReadinessJudgment
 	Authorization SubmissionAuthorization
 	FixedAt       time.Time
+	// MemberWeights 是成版时读到的成员实测毛重。资料快照带不了节点称出来的事实，所以另记在版本上；没有称到的成员不出现。
+	MemberWeights []MemberMeasuredWeight
 }
 
 // CustomsSubmissionVersion 是逻辑申报目标首次实际对外发送前固定的不可覆盖快照
@@ -284,6 +286,7 @@ type CustomsSubmissionVersion struct {
 	basis     ReadinessBasisReference
 	authority SubmissionAuthorityReference
 	fixedAt   time.Time
+	weights   []MemberMeasuredWeight
 }
 
 func FixSubmissionVersion(spec CustomsSubmissionVersionSpec) (CustomsSubmissionVersion, error) {
@@ -304,6 +307,11 @@ func FixSubmissionVersion(spec CustomsSubmissionVersionSpec) (CustomsSubmissionV
 		// （CONTEXT 生命周期「申报单元、就绪与提交」一节「只有两者在固定提交版本时均有效，才形成新的提交版本」）。
 		return CustomsSubmissionVersion{}, ErrInvalidSubmissionVersion
 	}
+	// 毛重与组成是同一版快照：非成员、重复、空白或零时刻在这里拒，不留到读回才发现。
+	weights, err := orderedMemberWeights(spec.Unit.Members(), spec.MemberWeights)
+	if err != nil {
+		return CustomsSubmissionVersion{}, err
+	}
 	return CustomsSubmissionVersion{
 		id:        spec.ID,
 		unit:      spec.Unit.id,
@@ -313,6 +321,7 @@ func FixSubmissionVersion(spec CustomsSubmissionVersionSpec) (CustomsSubmissionV
 		basis:     spec.Readiness.basis,
 		authority: spec.Authorization.authority,
 		fixedAt:   spec.FixedAt.UTC(),
+		weights:   weights,
 	}, nil
 }
 
@@ -349,6 +358,11 @@ func (version CustomsSubmissionVersion) FixedAt() time.Time {
 	return version.fixedAt
 }
 
+// MemberWeights 交回成版时记下的实测毛重副本。调用方改这份切片改不到版本上——版本没有回写入口。
+func (version CustomsSubmissionVersion) MemberWeights() []MemberMeasuredWeight {
+	return append([]MemberMeasuredWeight(nil), version.weights...)
+}
+
 // CustomsSubmissionVersionSnapshot 是持久化层重建提交版本所需的全量状态。就绪判断
 // 与授权在成版那一刻已把过门，快照只带核对结果的引用——重建不重演 FixSubmissionVersion
 // （重演需要判断对象在手，而库里只有版本固定时留下的依据引用）。
@@ -361,19 +375,22 @@ type CustomsSubmissionVersionSnapshot struct {
 	Basis     ReadinessBasisReference
 	Authority SubmissionAuthorityReference
 	FixedAt   time.Time
+	// MemberWeights 与成版时的那一组同形；空表示这一版没有称到任何成员。
+	MemberWeights []MemberMeasuredWeight
 }
 
 // Snapshot 折出提交版本的全量状态供持久化。
 func (version CustomsSubmissionVersion) Snapshot() CustomsSubmissionVersionSnapshot {
 	return CustomsSubmissionVersionSnapshot{
-		ID:        version.id,
-		Unit:      version.unit,
-		Members:   version.Members(),
-		Dossier:   version.dossier,
-		Roles:     version.roles,
-		Basis:     version.basis,
-		Authority: version.authority,
-		FixedAt:   version.fixedAt,
+		ID:            version.id,
+		Unit:          version.unit,
+		Members:       version.Members(),
+		Dossier:       version.dossier,
+		Roles:         version.roles,
+		Basis:         version.basis,
+		Authority:     version.authority,
+		FixedAt:       version.fixedAt,
+		MemberWeights: version.MemberWeights(),
 	}
 }
 
@@ -398,6 +415,11 @@ func RehydrateSubmissionVersion(snapshot CustomsSubmissionVersionSnapshot) (Cust
 		}
 		seen[member] = true
 	}
+	// 读回与成版同一组不变量：坏写入不得变成一个看起来合法的提交版本。
+	weights, err := orderedMemberWeights(snapshot.Members, snapshot.MemberWeights)
+	if err != nil {
+		return CustomsSubmissionVersion{}, err
+	}
 	return CustomsSubmissionVersion{
 		id:        snapshot.ID,
 		unit:      snapshot.Unit,
@@ -407,6 +429,7 @@ func RehydrateSubmissionVersion(snapshot CustomsSubmissionVersionSnapshot) (Cust
 		basis:     snapshot.Basis,
 		authority: snapshot.Authority,
 		fixedAt:   snapshot.FixedAt.UTC(),
+		weights:   weights,
 	}, nil
 }
 

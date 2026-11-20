@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"sort"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
@@ -254,6 +255,27 @@ type submissionVersionBody struct {
 	IsCurrent      bool                `json:"isCurrent"`
 	CorrectedFrom  string              `json:"correctedFrom,omitempty"`
 	Attempts       []submissionAttempt `json:"attempts"`
+	// MemberWeights 空数组是这一版没有称到。省略会被接收方当成「这一版的格式还不带这一格」。
+	MemberWeights []memberWeightBody `json:"memberWeights"`
+	// MeasurementsNow 只在当前版在场。非当前版保持 nil，编码时省略。
+	MeasurementsNow *[]measurementNowBody `json:"measurementsNow,omitempty"`
+}
+
+type memberWeightBody struct {
+	Parcel            string `json:"parcel"`
+	GrossWeight       string `json:"grossWeight"`
+	GrossWeightUnit   string `json:"grossWeightUnit"`
+	MeasurementSource string `json:"measurementSource"`
+	MeasuredAt        string `json:"measuredAt"`
+}
+
+type measurementNowBody struct {
+	Parcel            string `json:"parcel"`
+	State             string `json:"state"`
+	GrossWeight       string `json:"grossWeight,omitempty"`
+	GrossWeightUnit   string `json:"grossWeightUnit,omitempty"`
+	MeasurementSource string `json:"measurementSource,omitempty"`
+	MeasuredAt        string `json:"measuredAt,omitempty"`
 }
 
 // submissionAttempt 的 sendFact 与 receipts 各是各的一层：尝试登记、发送事实、技术回执三件事
@@ -299,12 +321,20 @@ type receiptBody struct {
 
 // NewQuerySubmissionVersionsEndpoint 交回提交版本、提交尝试、发送事实与技术回执查阅的 HTTP 入口
 // （GET /customs-submission-records；?version= 单份读回（ADR-0342）是 version 筛选维，见 ports.SubmissionVersionPages）。
-func NewQuerySubmissionVersionsEndpoint(intake CatalogueQueryIntake, reader SubmissionRecordReader) http.Handler {
+func NewQuerySubmissionVersionsEndpoint(
+	intake CatalogueQueryIntake, reader SubmissionRecordReader, weights ports.MemberMeasuredWeightView,
+) http.Handler {
 	return serveRecordList(intake, ports.SubmissionVersionPages, outcomeSubmissionVersionsListed, "submissions",
 		func(
 			request *http.Request, _ url.Values, tenant domain.TenantID, limit int, query cataloguepage.Query,
 		) (cataloguepage.Result[ports.SubmissionVersionRecord], error) {
-			return reader.ListSubmissionVersions(request.Context(), tenant, limit, query)
+			page, err := reader.ListSubmissionVersions(request.Context(), tenant, limit, query)
+			if err != nil {
+				return page, err
+			}
+			// 对照失败留在行里答 UNAVAILABLE，不把整页变成答案未形成。非当前版不问。
+			attachMeasurementsNow(request.Context(), weights, tenant, page.Rows)
+			return page, nil
 		},
 		func(record ports.SubmissionVersionRecord) submissionVersionBody {
 			members := record.Members
@@ -316,7 +346,12 @@ func NewQuerySubmissionVersionsEndpoint(intake CatalogueQueryIntake, reader Subm
 				ContentDigest: record.ContentDigest, Members: members, Dossier: record.Dossier, Roles: record.Roles,
 				ReadinessBasis: record.ReadinessBasis, Authority: record.Authority, FixedAt: instant(record.FixedAt),
 				IsCurrent: record.IsCurrent, CorrectedFrom: record.CorrectedFrom,
-				Attempts: make([]submissionAttempt, 0, len(record.Attempts)),
+				MemberWeights: memberWeightBodies(record.MemberWeights),
+				Attempts:      make([]submissionAttempt, 0, len(record.Attempts)),
+			}
+			if record.IsCurrent {
+				now := measurementNowBodies(record.MeasurementsNow)
+				body.MeasurementsNow = &now
 			}
 			for _, attempt := range record.Attempts {
 				entry := submissionAttempt{
@@ -346,6 +381,99 @@ func NewQuerySubmissionVersionsEndpoint(intake CatalogueQueryIntake, reader Subm
 			}
 			return body
 		})
+}
+
+func memberWeightBodies(weights []ports.MemberMeasuredWeightRecord) []memberWeightBody {
+	bodies := make([]memberWeightBody, 0, len(weights))
+	for _, weight := range weights {
+		bodies = append(bodies, memberWeightBody{
+			Parcel: weight.Parcel, GrossWeight: weight.GrossWeight, GrossWeightUnit: weight.GrossWeightUnit,
+			MeasurementSource: weight.MeasurementSource, MeasuredAt: instant(weight.MeasuredAt),
+		})
+	}
+	return bodies
+}
+
+func measurementNowBodies(rows []ports.MemberMeasurementNowRecord) []measurementNowBody {
+	bodies := make([]measurementNowBody, 0, len(rows))
+	for _, row := range rows {
+		body := measurementNowBody{Parcel: row.Parcel, State: row.State}
+		if row.HasReading {
+			body.GrossWeight = row.GrossWeight
+			body.GrossWeightUnit = row.GrossWeightUnit
+			body.MeasurementSource = row.MeasurementSource
+			body.MeasuredAt = instant(row.MeasuredAt)
+		}
+		bodies = append(bodies, body)
+	}
+	return bodies
+}
+
+// attachMeasurementsNow 只问当前版。读口缺失与读口报错都答 UNAVAILABLE：缺了不能当成「此刻没有」。
+func attachMeasurementsNow(
+	ctx context.Context,
+	view ports.MemberMeasuredWeightView,
+	tenant domain.TenantID,
+	rows []ports.SubmissionVersionRecord,
+) {
+	for i := range rows {
+		if !rows[i].IsCurrent {
+			continue
+		}
+		rows[i].MeasurementsNow = compareMemberMeasurementsNow(ctx, view, tenant, rows[i])
+	}
+}
+
+func compareMemberMeasurementsNow(
+	ctx context.Context,
+	view ports.MemberMeasuredWeightView,
+	tenant domain.TenantID,
+	record ports.SubmissionVersionRecord,
+) []ports.MemberMeasurementNowRecord {
+	fixed := make(map[string]ports.MemberMeasuredWeightRecord, len(record.MemberWeights))
+	for _, weight := range record.MemberWeights {
+		fixed[weight.Parcel] = weight
+	}
+	parcels := append([]string(nil), record.Members...)
+	sort.Strings(parcels)
+	compared := make([]ports.MemberMeasurementNowRecord, 0)
+	for _, parcel := range parcels {
+		recorded, hasFixed := fixed[parcel]
+		facts := domain.MemberMeasurementNowFacts{Fixed: hasFixed, FixedSource: recorded.MeasurementSource}
+		var reading ports.MeasuredWeightReading
+		if view == nil {
+			facts.Failed = true
+		} else if reference, err := domain.NewDeclaredParcelReference(parcel); err != nil {
+			facts.Failed = true
+		} else if reading, err = view.LoadMemberMeasuredWeight(ctx, tenant, reference); err != nil {
+			facts.Failed = true
+		} else {
+			switch reading.Answer {
+			case ports.MeasuredWeightUndetermined:
+				facts.Undetermined = true
+			case ports.MeasuredWeightOne:
+				facts.Found = true
+				facts.Source = reading.MeasurementSource
+			case ports.MeasuredWeightNone:
+			default:
+				facts.Failed = true
+			}
+		}
+		state, listed := domain.CompareMemberMeasurementNow(facts)
+		if !listed {
+			continue
+		}
+		row := ports.MemberMeasurementNowRecord{Parcel: parcel, State: state.String()}
+		if facts.Found && !facts.Failed && !facts.Undetermined {
+			row.HasReading = true
+			row.GrossWeight = reading.GrossWeight
+			row.GrossWeightUnit = reading.GrossWeightUnit
+			row.MeasurementSource = reading.MeasurementSource
+			row.MeasuredAt = reading.MeasuredAt
+		}
+		compared = append(compared, row)
+	}
+	return compared
 }
 
 // —— 外部监管结果与放行 ——

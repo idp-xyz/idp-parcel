@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/adapters/declarationchannel"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
@@ -69,8 +70,9 @@ func TestTheHTTPSenderSpeaksTheProductWireFormat(t *testing.T) {
 	if err != nil || !answer.Answered || !answer.Accepted || answer.Message != "MSG-A" {
 		t.Fatalf("已收 = %+v err = %v", answer, err)
 	}
+	emptyWeights, weightsAreArray := body["memberWeights"].([]any)
 	if seen.Header.Get("Idempotency-Key") != "SYN-TENANT-01/DECLV-1/1" || seen.Header.Get("Authorization") != "Bearer syn-token" ||
-		seen.URL.Path != "/declarations" || body["version"] != "DECLV-1" {
+		seen.URL.Path != "/declarations" || body["version"] != "DECLV-1" || !weightsAreArray || len(emptyWeights) != 0 {
 		t.Fatalf("请求 = %v %v %v", seen.Header, seen.URL, body)
 	}
 	for unit, want := range map[string]application.ChannelAnswer{
@@ -96,5 +98,33 @@ func TestTheHTTPSenderSpeaksTheProductWireFormat(t *testing.T) {
 	closed.Close()
 	if _, err := sender.SendDeclaration(t.Context(), channelTo(t, url, ""), pkg()); !errors.Is(err, application.ErrDeclarationNotSent) {
 		t.Fatalf("连不上 err = %v", err)
+	}
+}
+
+func TestTheHTTPSenderCarriesMemberWeightsWhenTheVersionHasThem(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"outcome":"ACCEPTED","messageId":"MSG-A"}`))
+	}))
+	defer server.Close()
+	measuredAt := time.Date(2026, 11, 18, 8, 9, 10, 0, time.UTC)
+	request := pkg()
+	request.MemberWeights = []application.DeclarationMemberWeight{{
+		Parcel: "DPCL-1", GrossWeight: "2.1", GrossWeightUnit: "KG", MeasurementSource: "SYN-WEIGH-A", MeasuredAt: measuredAt,
+	}}
+	if _, err := declarationchannel.NewHTTPSender(server.Client(), nil).SendDeclaration(
+		t.Context(), channelTo(t, server.URL, ""), request,
+	); err != nil {
+		t.Fatal(err)
+	}
+	weights, _ := body["memberWeights"].([]any)
+	if len(weights) != 1 {
+		t.Fatalf("memberWeights = %#v", body["memberWeights"])
+	}
+	item, _ := weights[0].(map[string]any)
+	if item["parcel"] != "DPCL-1" || item["grossWeight"] != "2.1" || item["grossWeightUnit"] != "KG" ||
+		item["measurementSource"] != "SYN-WEIGH-A" || item["measuredAt"] != measuredAt.Format(time.RFC3339Nano) {
+		t.Fatalf("一项 = %#v", item)
 	}
 }

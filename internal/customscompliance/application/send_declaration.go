@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
@@ -33,6 +34,17 @@ type DeclarationPackage struct {
 	Roles          string
 	Target         string
 	IdempotencyKey string
+	// MemberWeights 是成版时记下的实测毛重。没有称到时是空切片，发送时仍要带上空数组，好让接收方分得清「没称过」。
+	MemberWeights []DeclarationMemberWeight
+}
+
+// DeclarationMemberWeight 是申报包里一件成员的实测毛重。数值与单位保持成版时记下的原词。
+type DeclarationMemberWeight struct {
+	Parcel            string
+	GrossWeight       string
+	GrossWeightUnit   string
+	MeasurementSource string
+	MeasuredAt        time.Time
 }
 
 // ChannelAnswer 是通道对一次发送的同步答复。Answered 为假即发出去了却没拿到可读的答复。
@@ -242,6 +254,16 @@ func packageOf(tenant domain.TenantID, record ports.DeclarationSubmissionRecord)
 	for _, member := range version.Members() {
 		members = append(members, member.String())
 	}
+	weights := make([]DeclarationMemberWeight, 0, len(version.MemberWeights()))
+	for _, weight := range version.MemberWeights() {
+		weights = append(weights, DeclarationMemberWeight{
+			Parcel:            weight.Parcel().String(),
+			GrossWeight:       weight.GrossWeight(),
+			GrossWeightUnit:   weight.GrossWeightUnit(),
+			MeasurementSource: weight.MeasurementSource(),
+			MeasuredAt:        weight.MeasuredAt(),
+		})
+	}
 	return DeclarationPackage{
 		Tenant:         tenant.String(),
 		Version:        version.ID().String(),
@@ -253,6 +275,7 @@ func packageOf(tenant domain.TenantID, record ports.DeclarationSubmissionRecord)
 		Roles:          version.Roles().String(),
 		Target:         record.Attempt.Target(),
 		IdempotencyKey: fmt.Sprintf("%s/%s/%d", tenant, version.ID(), record.Attempt.Sequence()),
+		MemberWeights:  weights,
 	}
 }
 

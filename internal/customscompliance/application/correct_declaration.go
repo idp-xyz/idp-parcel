@@ -40,22 +40,43 @@ type CorrectDeclarationCommand struct {
 }
 
 type CorrectDeclarationDeps struct {
-	Submissions ports.DeclarationSubmissionStore
-	Units       ports.DeclarationUnitStore
-	FollowUps   ports.FollowUpStore
-	Readiness   ports.ReadinessView
-	Authority   ports.SubmissionAuthorityView
-	Versions    ports.DeclarationVersionFactory
-	Downstream  ports.DeclarationSubmissionHandoff
-	Clock       ports.Clock
+	Submissions  ports.DeclarationSubmissionStore
+	Units        ports.DeclarationUnitStore
+	FollowUps    ports.FollowUpStore
+	Readiness    ports.ReadinessView
+	Authority    ports.SubmissionAuthorityView
+	Versions     ports.DeclarationVersionFactory
+	Downstream   ports.DeclarationSubmissionHandoff
+	Clock        ports.Clock
+	Measurements ports.MemberMeasuredWeightView
 }
 
 type CorrectDeclarationHandler struct {
 	deps CorrectDeclarationDeps
 }
 
-func NewCorrectDeclarationHandler(deps CorrectDeclarationDeps) *CorrectDeclarationHandler {
-	return &CorrectDeclarationHandler{deps: deps}
+func NewCorrectDeclarationHandler(deps CorrectDeclarationDeps) (*CorrectDeclarationHandler, error) {
+	switch {
+	case deps.Submissions == nil:
+		return nil, fmt.Errorf("%w: declaration correction store", ErrNilDependency)
+	case deps.Units == nil:
+		return nil, fmt.Errorf("%w: declaration correction units", ErrNilDependency)
+	case deps.FollowUps == nil:
+		return nil, fmt.Errorf("%w: declaration correction follow-ups", ErrNilDependency)
+	case deps.Readiness == nil:
+		return nil, fmt.Errorf("%w: declaration correction readiness", ErrNilDependency)
+	case deps.Authority == nil:
+		return nil, fmt.Errorf("%w: declaration correction authority", ErrNilDependency)
+	case deps.Versions == nil:
+		return nil, fmt.Errorf("%w: declaration correction versions", ErrNilDependency)
+	case deps.Downstream == nil:
+		return nil, fmt.Errorf("%w: declaration correction handoff", ErrNilDependency)
+	case deps.Clock == nil:
+		return nil, fmt.Errorf("%w: declaration correction clock", ErrNilDependency)
+	case deps.Measurements == nil:
+		return nil, fmt.Errorf("%w: declaration correction member measurements", ErrNilDependency)
+	}
+	return &CorrectDeclarationHandler{deps: deps}, nil
 }
 
 // Handle 在原案件内形成新的提交版本（CONTEXT「原提交及其结果永久保留」、生命周期「原案内补充或更正目标已形成 → 形成新的正式申报资料准备版本，并针对新的拟提交动作重新经过就绪、授权、提交」）：受理（单元四件+新资料快照+目标指名）→ 当前版在册（无版无可更正）→
@@ -173,6 +194,12 @@ func (handler *CorrectDeclarationHandler) Handle(
 		return SubmitDeclarationResult{outcome: DeclarationNotAuthorized}, nil
 	}
 
+	// 与首次提交同一条规则、同一个函数。更正不新建单元，但版本号要等毛重定下来才取：定不下就还没消耗。
+	weights, undecided, stop := loadMemberMeasuredWeights(ctx, handler.deps.Measurements, command.TenantID, unit)
+	if stop {
+		return undecided, nil
+	}
+
 	versionID, err := handler.deps.Versions.NextSubmissionVersion(ctx)
 	if err != nil {
 		return SubmitDeclarationResult{outcome: DeclarationUndecided, reason: VersionIdentityUnavailable,
@@ -186,6 +213,7 @@ func (handler *CorrectDeclarationHandler) Handle(
 		Readiness:     readiness,
 		Authorization: authorization,
 		FixedAt:       handler.deps.Clock.Now(),
+		MemberWeights: weights,
 	})
 	if err != nil {
 		return SubmitDeclarationResult{outcome: DeclarationNotAccepted}, nil

@@ -73,16 +73,21 @@ func newCorrectionFixture(t *testing.T) *correctionFixture {
 		t.Fatalf("预置首版：outcome=%v err=%v", result.Outcome(), err)
 	}
 	fixture := &correctionFixture{declaration: declaration, followUps: newFollowUpStore()}
-	fixture.handler = application.NewCorrectDeclarationHandler(application.CorrectDeclarationDeps{
-		Submissions: declaration.store,
-		Units:       declaration.units,
-		FollowUps:   fixture.followUps,
-		Readiness:   declaration.readiness,
-		Authority:   declaration.authority,
-		Versions:    declaration.versions,
-		Downstream:  declaration.handoff,
-		Clock:       declarationClock{at: declarationFixedAt.Add(time.Hour)},
+	handler, err := application.NewCorrectDeclarationHandler(application.CorrectDeclarationDeps{
+		Submissions:  declaration.store,
+		Units:        declaration.units,
+		FollowUps:    fixture.followUps,
+		Readiness:    declaration.readiness,
+		Authority:    declaration.authority,
+		Versions:     declaration.versions,
+		Downstream:   declaration.handoff,
+		Clock:        declarationClock{at: declarationFixedAt.Add(time.Hour)},
+		Measurements: declaration.weights,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.handler = handler
 	return fixture
 }
 

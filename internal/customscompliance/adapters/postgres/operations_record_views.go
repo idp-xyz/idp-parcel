@@ -256,7 +256,7 @@ func (views *OperationsRecordViews) ListSubmissionVersions(
 		return fail(err)
 	}
 	rows, err := page.rows(ctx,
-		`s.version_id, s.unit_id, s.procedure_ref, s.content_digest, s.members, s.dossier_ref, s.roles_ref,
+		`s.version_id, s.unit_id, s.procedure_ref, s.content_digest, s.members, s.member_weights, s.dossier_ref, s.roles_ref,
 		        s.readiness_basis, s.authority_ref, s.fixed_at, s.is_current, s.corrected_from,
 		        (SELECT COALESCE(json_agg(json_build_object(
 		                    'sequence', a.sequence, 'target', a.target, 'result', a.result,
@@ -294,10 +294,11 @@ func (views *OperationsRecordViews) ListSubmissionVersions(
 		var (
 			record        ports.SubmissionVersionRecord
 			membersRaw    []byte
+			weightsRaw    []byte
 			attemptsRaw   []byte
 			correctedFrom *string
 		)
-		if err := rows.Scan(&record.Version, &record.Unit, &record.Procedure, &record.ContentDigest, &membersRaw,
+		if err := rows.Scan(&record.Version, &record.Unit, &record.Procedure, &record.ContentDigest, &membersRaw, &weightsRaw,
 			&record.Dossier, &record.Roles, &record.ReadinessBasis, &record.Authority, &record.FixedAt,
 			&record.IsCurrent, &correctedFrom, &attemptsRaw); err != nil {
 			return fail(err)
@@ -307,6 +308,11 @@ func (views *OperationsRecordViews) ListSubmissionVersions(
 		if err := json.Unmarshal(membersRaw, &record.Members); err != nil {
 			return fail(fmt.Errorf("members: %w", err))
 		}
+		weights, err := memberWeightRecords(weightsRaw)
+		if err != nil {
+			return fail(err)
+		}
+		record.MemberWeights = weights
 		var attempts []attemptDocument
 		if err := json.Unmarshal(attemptsRaw, &attempts); err != nil {
 			return fail(fmt.Errorf("attempts: %w", err))

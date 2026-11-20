@@ -12,6 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/cmd/internal/docnumbering"
 	ccdocnumbering "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/docnumbering"
 	ccidentity "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/identity"
+	ccnodeops "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/nodeoperations"
 	ccparcelshipment "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/parcelshipment"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
@@ -161,16 +162,28 @@ func buildCustomsDecisionFaces(db *bentopg.DB, numbers docnumbering.Components) 
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: declaration submission handoff: %w", err)
 	}
-	submission := customsapp.NewSubmitDeclarationHandler(customsapp.SubmitDeclarationDeps{
-		Submissions: submissions,
-		Cases:       cases,
-		Units:       units,
-		Readiness:   readiness,
-		Authority:   authorityView,
-		Versions:    versions,
-		Downstream:  submissionHandoff,
-		Clock:       clock,
+	measurements, err := currentParcelMeasurementQuery(db)
+	if err != nil {
+		return none, err
+	}
+	memberWeights, err := ccnodeops.NewMemberMeasuredWeights(measurements)
+	if err != nil {
+		return none, err
+	}
+	submission, err := customsapp.NewSubmitDeclarationHandler(customsapp.SubmitDeclarationDeps{
+		Submissions:  submissions,
+		Cases:        cases,
+		Units:        units,
+		Readiness:    readiness,
+		Authority:    authorityView,
+		Versions:     versions,
+		Downstream:   submissionHandoff,
+		Clock:        clock,
+		Measurements: memberWeights,
 	})
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: declaration submission: %w", err)
+	}
 
 	transactor := db.Transactor()
 	return customsDecisionFaces{

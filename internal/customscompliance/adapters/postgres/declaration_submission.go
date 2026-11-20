@@ -44,16 +44,16 @@ func (repository *DeclarationSubmissions) FindByKey(
 	var (
 		versionID, digest, dossier, roles, basis, authority string
 		correctedFrom                                       *string
-		membersRaw                                          []byte
+		membersRaw, weightsRaw                              []byte
 		fixedAt, recordedAt                                 time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT version_id, content_digest, members, dossier_ref, roles_ref,
+		`SELECT version_id, content_digest, members, member_weights, dossier_ref, roles_ref,
 		        readiness_basis, authority_ref, corrected_from, fixed_at, recorded_at
 		   FROM customs_compliance.declaration_submission
 		  WHERE tenant_id = $1 AND unit_id = $2 AND procedure_ref = $3 AND is_current`,
 		key.TenantID.String(), key.Unit.String(), key.Procedure.String(),
-	).Scan(&versionID, &digest, &membersRaw, &dossier, &roles, &basis, &authority,
+	).Scan(&versionID, &digest, &membersRaw, &weightsRaw, &dossier, &roles, &basis, &authority,
 		&correctedFrom, &fixedAt, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.DeclarationSubmissionRecord{}, false, nil
@@ -62,7 +62,7 @@ func (repository *DeclarationSubmissions) FindByKey(
 		return ports.DeclarationSubmissionRecord{}, false, fmt.Errorf("find declaration submission: %w", err)
 	}
 
-	return repository.rebuildRecord(ctx, key, versionID, digest, membersRaw,
+	return repository.rebuildRecord(ctx, key, versionID, digest, membersRaw, weightsRaw,
 		dossier, roles, basis, authority, correctedFrom, fixedAt, recordedAt)
 }
 
@@ -82,16 +82,16 @@ func (repository *DeclarationSubmissions) FindByVersion(
 	var (
 		unitID, procedure, digest, dossier, roles, basis, authority string
 		correctedFrom                                               *string
-		membersRaw                                                  []byte
+		membersRaw, weightsRaw                                      []byte
 		fixedAt, recordedAt                                         time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT unit_id, procedure_ref, content_digest, members, dossier_ref, roles_ref,
+		`SELECT unit_id, procedure_ref, content_digest, members, member_weights, dossier_ref, roles_ref,
 		        readiness_basis, authority_ref, corrected_from, fixed_at, recorded_at
 		   FROM customs_compliance.declaration_submission
 		  WHERE tenant_id = $1 AND version_id = $2`,
 		tenant.String(), version.String(),
-	).Scan(&unitID, &procedure, &digest, &membersRaw, &dossier, &roles, &basis, &authority,
+	).Scan(&unitID, &procedure, &digest, &membersRaw, &weightsRaw, &dossier, &roles, &basis, &authority,
 		&correctedFrom, &fixedAt, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.DeclarationSubmissionRecord{}, false, nil
@@ -107,7 +107,7 @@ func (repository *DeclarationSubmissions) FindByVersion(
 	if key.Procedure, err = domain.NewCustomsProcedureReference(procedure); err != nil {
 		return ports.DeclarationSubmissionRecord{}, false, fmt.Errorf("rebuild submission key: %w", err)
 	}
-	return repository.rebuildRecord(ctx, key, version.String(), digest, membersRaw,
+	return repository.rebuildRecord(ctx, key, version.String(), digest, membersRaw, weightsRaw,
 		dossier, roles, basis, authority, correctedFrom, fixedAt, recordedAt)
 }
 
@@ -116,12 +116,12 @@ func (repository *DeclarationSubmissions) rebuildRecord(
 	ctx context.Context,
 	key ports.DeclarationSubmissionKey,
 	versionID, digest string,
-	membersRaw []byte,
+	membersRaw, weightsRaw []byte,
 	dossier, roles, basis, authority string,
 	correctedFrom *string,
 	fixedAt, recordedAt time.Time,
 ) (ports.DeclarationSubmissionRecord, bool, error) {
-	version, err := rebuildSubmissionVersion(key.Unit, versionID, membersRaw, dossier, roles, basis, authority, fixedAt)
+	version, err := rebuildSubmissionVersion(key.Unit, versionID, membersRaw, weightsRaw, dossier, roles, basis, authority, fixedAt)
 	if err != nil {
 		return ports.DeclarationSubmissionRecord{}, false, err
 	}
@@ -178,13 +178,17 @@ func (repository *DeclarationSubmissions) Save(
 	if err != nil {
 		return ports.DeclarationSubmissionSaveOutcomeInvalid, fmt.Errorf("save declaration submission: %w", err)
 	}
+	weightsRaw, err := memberWeightsJSON(version)
+	if err != nil {
+		return ports.DeclarationSubmissionSaveOutcomeInvalid, fmt.Errorf("save declaration submission: %w", err)
+	}
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.declaration_submission
-			(tenant_id, unit_id, procedure_ref, version_id, content_digest, members,
+			(tenant_id, unit_id, procedure_ref, version_id, content_digest, members, member_weights,
 			 dossier_ref, roles_ref, readiness_basis, authority_ref, corrected_from,
 			 is_current, fixed_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, true, $11, $12)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL, true, $12, $13)
 		 ON CONFLICT (tenant_id, unit_id, procedure_ref) WHERE is_current DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Unit.String(),
@@ -192,6 +196,7 @@ func (repository *DeclarationSubmissions) Save(
 		version.ID.String(),
 		record.ContentDigest,
 		membersRaw,
+		weightsRaw,
 		version.Dossier.String(),
 		version.Roles.String(),
 		version.Basis.String(),
@@ -248,6 +253,10 @@ func (repository *DeclarationSubmissions) SaveCorrection(
 	if err != nil {
 		return ports.DeclarationCorrectionSaveOutcomeInvalid, fmt.Errorf("save declaration correction: %w", err)
 	}
+	weightsRaw, err := memberWeightsJSON(version)
+	if err != nil {
+		return ports.DeclarationCorrectionSaveOutcomeInvalid, fmt.Errorf("save declaration correction: %w", err)
+	}
 
 	flipped, err := executor.Exec(ctx,
 		`UPDATE customs_compliance.declaration_submission
@@ -268,16 +277,17 @@ func (repository *DeclarationSubmissions) SaveCorrection(
 
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.declaration_submission
-			(tenant_id, unit_id, procedure_ref, version_id, content_digest, members,
+			(tenant_id, unit_id, procedure_ref, version_id, content_digest, members, member_weights,
 			 dossier_ref, roles_ref, readiness_basis, authority_ref, corrected_from,
 			 is_current, fixed_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, $13, $14)`,
 		record.Key.TenantID.String(),
 		record.Key.Unit.String(),
 		record.Key.Procedure.String(),
 		version.ID.String(),
 		record.ContentDigest,
 		membersRaw,
+		weightsRaw,
 		version.Dossier.String(),
 		version.Roles.String(),
 		version.Basis.String(),
@@ -302,6 +312,47 @@ func submissionMembersJSON(version domain.CustomsSubmissionVersionSnapshot) ([]b
 		members = append(members, member.String())
 	}
 	return json.Marshal(members)
+}
+
+// memberWeightDocument 是成员实测毛重在 jsonb 里的形状。空数组与缺席不是一回事：空数组是这一版没有称到。
+type memberWeightDocument struct {
+	Parcel            string    `json:"parcel"`
+	GrossWeight       string    `json:"grossWeight"`
+	GrossWeightUnit   string    `json:"grossWeightUnit"`
+	MeasurementSource string    `json:"measurementSource"`
+	MeasuredAt        time.Time `json:"measuredAt"`
+}
+
+func memberWeightRecords(raw []byte) ([]ports.MemberMeasuredWeightRecord, error) {
+	var documents []memberWeightDocument
+	if err := json.Unmarshal(raw, &documents); err != nil {
+		return nil, fmt.Errorf("member weights: %w", err)
+	}
+	records := make([]ports.MemberMeasuredWeightRecord, 0, len(documents))
+	for _, document := range documents {
+		records = append(records, ports.MemberMeasuredWeightRecord{
+			Parcel:            document.Parcel,
+			GrossWeight:       document.GrossWeight,
+			GrossWeightUnit:   document.GrossWeightUnit,
+			MeasurementSource: document.MeasurementSource,
+			MeasuredAt:        document.MeasuredAt.UTC(),
+		})
+	}
+	return records, nil
+}
+
+func memberWeightsJSON(version domain.CustomsSubmissionVersionSnapshot) ([]byte, error) {
+	documents := make([]memberWeightDocument, 0, len(version.MemberWeights))
+	for _, weight := range version.MemberWeights {
+		documents = append(documents, memberWeightDocument{
+			Parcel:            weight.Parcel().String(),
+			GrossWeight:       weight.GrossWeight(),
+			GrossWeightUnit:   weight.GrossWeightUnit(),
+			MeasurementSource: weight.MeasurementSource(),
+			MeasuredAt:        weight.MeasuredAt(),
+		})
+	}
+	return json.Marshal(documents)
 }
 
 // insertAttempt 落首次尝试行。版本是新行，首次尝试不可能已存在——这里不译
@@ -386,7 +437,7 @@ func (repository *DeclarationSubmissions) latestAttempt(
 func rebuildSubmissionVersion(
 	unit domain.DeclarationUnitID,
 	versionID string,
-	membersRaw []byte,
+	membersRaw, weightsRaw []byte,
 	dossier, roles, basis, authority string,
 	fixedAt time.Time,
 ) (domain.CustomsSubmissionVersion, error) {
@@ -418,6 +469,23 @@ func rebuildSubmissionVersion(
 			return domain.CustomsSubmissionVersion{}, fmt.Errorf("rebuild submission version: %w", err)
 		}
 		snapshot.Members = append(snapshot.Members, reference)
+	}
+	var documents []memberWeightDocument
+	if err := json.Unmarshal(weightsRaw, &documents); err != nil {
+		return domain.CustomsSubmissionVersion{}, fmt.Errorf("rebuild submission version: member weights: %w", err)
+	}
+	for _, document := range documents {
+		parcel, err := domain.NewDeclaredParcelReference(document.Parcel)
+		if err != nil {
+			return domain.CustomsSubmissionVersion{}, fmt.Errorf("rebuild submission version: member weight: %w", err)
+		}
+		weight, err := domain.NewMemberMeasuredWeight(
+			parcel, document.GrossWeight, document.GrossWeightUnit, document.MeasurementSource, document.MeasuredAt,
+		)
+		if err != nil {
+			return domain.CustomsSubmissionVersion{}, fmt.Errorf("rebuild submission version: member weight: %w", err)
+		}
+		snapshot.MemberWeights = append(snapshot.MemberWeights, weight)
 	}
 
 	version, err := domain.RehydrateSubmissionVersion(snapshot)

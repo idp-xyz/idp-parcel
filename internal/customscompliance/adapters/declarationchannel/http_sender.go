@@ -27,7 +27,7 @@ const maxAnswerBytes = 64 << 10
 
 // HTTPSender 实现 application.DeclarationSender。线格式：
 //   - 请求：`POST <端点>`，`Content-Type: application/json`，`Idempotency-Key: <租户>/<版本>/<尝试序号>`，登了凭据时另带
-//     `Authorization: Bearer <凭据变量的值>`；正文是申报包（declarationBody）。
+//     `Authorization: Bearer <凭据变量的值>`；正文是申报包（declarationBody）。memberWeights 没有称到时仍是空数组，不省略。
 //   - 答复：2xx 或 4xx，正文 `{"outcome":"ACCEPTED"|"REJECTED","messageId":"…"}`。ACCEPTED 记已回执，REJECTED 记失败；
 //     messageId 是通道给这次发送的消息号，异步技术回执凭它关联回来。别的状态码或读不懂的正文，记没拿到答复。
 type HTTPSender struct {
@@ -54,15 +54,24 @@ func NewHTTPSender(client *http.Client, getenv func(string) string) *HTTPSender 
 }
 
 type declarationBody struct {
-	Tenant    string   `json:"tenant"`
-	Version   string   `json:"version"`
-	Sequence  int      `json:"sequence"`
-	Unit      string   `json:"unit"`
-	Procedure string   `json:"procedure"`
-	Members   []string `json:"members"`
-	Dossier   string   `json:"dossier"`
-	Roles     string   `json:"roles"`
-	Target    string   `json:"target"`
+	Tenant        string             `json:"tenant"`
+	Version       string             `json:"version"`
+	Sequence      int                `json:"sequence"`
+	Unit          string             `json:"unit"`
+	Procedure     string             `json:"procedure"`
+	Members       []string           `json:"members"`
+	Dossier       string             `json:"dossier"`
+	Roles         string             `json:"roles"`
+	Target        string             `json:"target"`
+	MemberWeights []memberWeightBody `json:"memberWeights"`
+}
+
+type memberWeightBody struct {
+	Parcel            string `json:"parcel"`
+	GrossWeight       string `json:"grossWeight"`
+	GrossWeightUnit   string `json:"grossWeightUnit"`
+	MeasurementSource string `json:"measurementSource"`
+	MeasuredAt        string `json:"measuredAt"`
 }
 
 type answerBody struct {
@@ -81,9 +90,20 @@ func (sender *HTTPSender) SendDeclaration(
 			return application.ChannelAnswer{}, fmt.Errorf("%w: %s", application.ErrDeclarationCredentialMissing, name)
 		}
 	}
+	weights := pkg.MemberWeights
+	if weights == nil {
+		weights = []application.DeclarationMemberWeight{}
+	}
+	memberWeights := make([]memberWeightBody, 0, len(weights))
+	for _, weight := range weights {
+		memberWeights = append(memberWeights, memberWeightBody{
+			Parcel: weight.Parcel, GrossWeight: weight.GrossWeight, GrossWeightUnit: weight.GrossWeightUnit,
+			MeasurementSource: weight.MeasurementSource, MeasuredAt: weight.MeasuredAt.UTC().Format(time.RFC3339Nano),
+		})
+	}
 	body, err := json.Marshal(declarationBody{
 		Tenant: pkg.Tenant, Version: pkg.Version, Sequence: pkg.Sequence, Unit: pkg.Unit, Procedure: pkg.Procedure,
-		Members: pkg.Members, Dossier: pkg.Dossier, Roles: pkg.Roles, Target: pkg.Target,
+		Members: pkg.Members, Dossier: pkg.Dossier, Roles: pkg.Roles, Target: pkg.Target, MemberWeights: memberWeights,
 	})
 	if err != nil {
 		return application.ChannelAnswer{}, err
