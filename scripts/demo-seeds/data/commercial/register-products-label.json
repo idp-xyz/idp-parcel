@@ -1,0 +1,22 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "scope": "SYN-SCOPE-01",
+  "forms": [
+    {
+      "productId": "SYN-PROD-CN-SG-LABEL",
+      "version": "v1",
+      "form": "LABEL_CHANNEL_SERVICE"
+    }
+  ],
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-CN-SG-LABEL-01",
+      "revision": 1,
+      "productId": "SYN-PROD-CN-SG-LABEL",
+      "productVersion": "v1",
+      "channels": [],
+      "basis": "SYN-DEC-CHANNEL-2026-012",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z"
+    }
+  ]
+}
