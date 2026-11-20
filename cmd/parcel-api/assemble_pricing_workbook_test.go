@@ -165,7 +165,7 @@ func TestFormWorkbookTravelsTheWiredImportFacesAgainstARealDatabase(t *testing.T
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 	intakes := registriesFor(t, registryWriterRegister{})
-	preview, err := buildPriceCardImportPreview()
+	preview, err := buildPriceCardImportPreview(db)
 	if err != nil {
 		t.Fatal(err)
 	}

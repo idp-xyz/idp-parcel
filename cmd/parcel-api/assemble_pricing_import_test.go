@@ -26,7 +26,12 @@ import (
 // 装配点接的是真读口：空白模板读得出模板版本、读不出方案身份，答未受理并带那一条问题——替身
 // 读口不会知道模板长什么样。
 func TestAssembledPriceCardPreviewReadsTheRealTemplate(t *testing.T) {
-	preview, err := buildPriceCardImportPreview()
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	preview, err := buildPriceCardImportPreview(db)
 	if err != nil {
 		t.Fatal(err)
 	}
