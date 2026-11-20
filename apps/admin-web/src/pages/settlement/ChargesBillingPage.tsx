@@ -24,7 +24,7 @@ import { MultiRegistrationPanel } from '../../components/registration';
 import { chargeDecisionTargets } from './decisions';
 import { problemNote } from './presentation';
 import { AmountCell, TwoLine, technicalRows } from './ops-ui';
-import { adjustmentText, feeItemLabel, parcelFromRef, pricedWeightText, sourceFactLabel, supersededByText, weightBasisText } from './ops-refs';
+import { adjustmentText, feeItemLabel, parcelFromRef, pricedWeightLabel, pricedWeightText, sourceFactLabel, supersededByText, weightBasisText } from './ops-refs';
 import { namedRef, usePartyNames, type PartyNames } from './party-names';
 
 // 费用与计费页（主责上下文 settlement-accounting：费用项目、费用明细与费用调整的版本与依据）。
@@ -96,7 +96,7 @@ function customerChargeTechnicalRows(row: CustomerChargeRecord) {
     { label: '形成时间', value: formatInstant(row.formedAt) },
     // 两格分开：计价重量是评价进位之后的那一个，来源是它用的实重与尺寸。合成一格只印实重，复测只改了尺寸的那一笔
     // 前后看着一样，金额却变了。
-    { label: '计价重量', value: pricedWeightText(row) },
+    { label: pricedWeightLabel, value: pricedWeightText(row) },
     { label: '重量与尺寸来源', value: weightBasisText(row, labelFor) },
     { label: '被替代为', value: supersededByText(row) },
     {

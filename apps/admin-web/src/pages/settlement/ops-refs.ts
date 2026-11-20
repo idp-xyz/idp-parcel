@@ -73,6 +73,11 @@ export type PricedWeightFields = {
 };
 
 /**
+ * 费用行技术详情与调整括号里共用的标签。金额后面紧跟另一个数时，不点这个名就分不清哪个是结算金额、哪个是评价进位后的重量。
+ */
+export const pricedWeightLabel = '计价重量';
+
+/**
  * 计价重量：评价进位之后、据以查表的那一个。读口没给就答 undefined，不拿实重顶上——取较大者的价卡上，复测只把尺寸量大
  * 时实重不变而计价重量变了，顶上去的那个数是错的。
  */
@@ -128,16 +133,18 @@ export type AdjustmentFields = PricedWeightFields & {
 };
 
 /**
- * 技术详情里的一笔调整。重量与来源读不出时只留「种类 方向 金额」——补空括号或 undefined 会让手工计价纠错看起来像坏数据。
- * 商业让利没有评价，同样只留这三格。
+ * 技术详情里的一笔调整。计价重量与来源放进括号并点名，金额后面才不会紧跟一个没有名字的数。两格用分号隔开，来源内部仍用逗号。
+ * 两格都读不出时只留「种类 方向 金额」——补空括号或 undefined 会让手工计价纠错看起来像坏数据。商业让利没有评价，同样只留这三格。
  */
 export function adjustmentText(adjustment: AdjustmentFields, label: (code: string) => string): string {
   const head = `${label(adjustment.kind)} ${label(adjustment.direction)} ${adjustment.settlementAmount}`;
-  const extra = [pricedWeightText(adjustment), weightBasisText(adjustment, label)].filter(
-    (part): part is string => part !== undefined,
-  );
-  if (extra.length === 0) return head;
-  return `${head} ${extra.join('，')}`;
+  const parts: string[] = [];
+  const priced = pricedWeightText(adjustment);
+  if (priced) parts.push(`${pricedWeightLabel} ${priced}`);
+  const basis = weightBasisText(adjustment, label);
+  if (basis) parts.push(basis);
+  if (parts.length === 0) return head;
+  return `${head}（${parts.join('；')}）`;
 }
 
 /**

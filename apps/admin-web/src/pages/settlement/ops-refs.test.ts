@@ -126,7 +126,8 @@ test('出自实测时来源文字带上称重量方的来源身份', () => {
   );
 });
 
-// Covers: 调整在「种类 方向 金额」之后带上与费用行同一口径的计价重量与来源。出自实测时点出称重量方的来源身份；出自申报时没有这一格。
+// Covers: 调整在「种类 方向 金额」之后用括号带上计价重量与来源，计价重量点名，与费用行技术详情同一词。
+// 只有计价重量、或只有来源时括号里只留有的那一格。出自实测时点出称重量方的来源身份；出自申报时没有这一格。
 // 评价读不出、以及商业让利，文字与原来逐字相同，不出现空括号或 undefined。
 test('调整文字在种类方向金额之后带上计价重量与来源', () => {
   equal(
@@ -146,7 +147,7 @@ test('调整文字在种类方向金额之后带上计价重量与来源', () =>
       },
       labelFor,
     ),
-    '计价纠错 借项 1500 3 KG，实测：实重 2.1 KG，尺寸 30×25×20 CM，称重量方 SYN-WEIGH-M2',
+    '计价纠错 借项 1500（计价重量 3 KG；实测：实重 2.1 KG，尺寸 30×25×20 CM，称重量方 SYN-WEIGH-M2）',
   );
   equal(
     adjustmentText(
@@ -164,7 +165,37 @@ test('调整文字在种类方向金额之后带上计价重量与来源', () =>
       },
       labelFor,
     ),
-    '计价纠错 贷项 800 1.5 KG，申报：实重 1.5 KG，尺寸 20×15×10 CM',
+    '计价纠错 贷项 800（计价重量 1.5 KG；申报：实重 1.5 KG，尺寸 20×15×10 CM）',
+  );
+  equal(
+    adjustmentText(
+      {
+        kind: 'PRICING_CORRECTION',
+        direction: 'DEBIT',
+        settlementAmount: '1500',
+        pricedWeight: '3',
+        pricedWeightUnit: 'KG',
+      },
+      labelFor,
+    ),
+    '计价纠错 借项 1500（计价重量 3 KG）',
+  );
+  equal(
+    adjustmentText(
+      {
+        kind: 'PRICING_CORRECTION',
+        direction: 'DEBIT',
+        settlementAmount: '1500',
+        weightSource: 'actual-measurement',
+        actualWeight: '2.1',
+        actualWeightUnit: 'KG',
+        dimensionSides: ['30', '25', '20'],
+        dimensionUnit: 'CM',
+        measurementSource: 'SYN-WEIGH-M2',
+      },
+      labelFor,
+    ),
+    '计价纠错 借项 1500（实测：实重 2.1 KG，尺寸 30×25×20 CM，称重量方 SYN-WEIGH-M2）',
   );
   equal(
     adjustmentText({ kind: 'PRICING_CORRECTION', direction: 'DEBIT', settlementAmount: '1500' }, labelFor),
