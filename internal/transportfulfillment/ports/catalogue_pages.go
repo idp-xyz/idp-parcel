@@ -122,7 +122,8 @@ var CarrierMasterDocumentPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 
 // TransportPreparationPages 是运输准备结果册（registry=transport-preparation）的声明。
 //
-// 行标识是（段，对象，规则版本）。缺省序是判断时刻倒序，与迁移前同一口径。准备结果按载运对象逐个判，是按包裹计量的大册。
+// 行标识是段、对象、规则版本、需求来源、实测引用。同一段按申报与按不同实测各有一行，游标若只有段、对象与规则版本就分不开它们。
+// 缺省序是判断时刻倒序。准备结果按载运对象逐个判，是按包裹计量的大册。
 // outcome 放出作筛选维，词表取自领域 PreparationOutcome。
 var TransportPreparationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "transport-fulfillment-records/transport-preparation",
@@ -131,7 +132,9 @@ var TransportPreparationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "object", Kind: cataloguepage.Text},
 	},
 	DefaultSort: cataloguepage.Sort{Field: "judgedAt", Descending: true},
-	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text, cataloguepage.Text},
+	Identity: []cataloguepage.ValueKind{
+		cataloguepage.Text, cataloguepage.Text, cataloguepage.Text, cataloguepage.Text, cataloguepage.Text,
+	},
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "outcome", Vocabulary: cataloguepage.Words[domain.PreparationOutcome]()},
 	},

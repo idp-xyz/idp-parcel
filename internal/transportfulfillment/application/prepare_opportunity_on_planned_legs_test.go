@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -54,6 +55,25 @@ func (double *preparationStoreDouble) Save(_ context.Context, record ports.Trans
 	}
 	double.records[record.Key] = record
 	return ports.TransportPreparationSaved, nil
+}
+
+func (double *preparationStoreDouble) ListDeclaredPreparationLegs(
+	_ context.Context,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+	rule domain.PreparationRuleVersion,
+) ([]domain.PreparationLeg, error) {
+	var legs []domain.PreparationLeg
+	for key, record := range double.records {
+		if key.TenantID != tenant || key.Object != object || key.Rule != rule || key.Source != domain.DemandFromDeclaration {
+			continue
+		}
+		legs = append(legs, record.Preparation.Leg())
+	}
+	sort.Slice(legs, func(left, right int) bool {
+		return legs[left].Reference().String() < legs[right].Reference().String()
+	})
+	return legs, nil
 }
 
 type clockDouble struct{}
@@ -164,6 +184,7 @@ func TestDeterministicFailuresAreRaisedNotUndecided(t *testing.T) {
 	key := ports.TransportPreparationKey{
 		TenantID: opportunityTenant(t), Leg: leg.Reference(),
 		Object: mustCarriedObject(t, "SYN-PARCEL-01"), Rule: domain.BuiltInPreparationRuleVersion(),
+		Source: domain.DemandFromDeclaration,
 	}
 	unknownShape := ports.TransportPreparationRecord{Key: key, InputDigest: "TFC-99:syn"}
 	for name, test := range map[string]struct {

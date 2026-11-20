@@ -554,13 +554,14 @@ func carrierMasterDocumentPosition(row ports.CarrierMasterDocumentCatalogueRow, 
 // transportPreparationPages 把 ports.TransportPreparationPages 落到列上。q 在段、对象、连接与起讫节点、选中的班次上做字面包含。
 var transportPreparationPages = ports.TransportPreparationPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"judgedAt": "judged_at", "object": "object_ref"},
-	Identity: []string{"planned_leg_ref", "object_ref", "rule_version"},
+	Identity: []string{"planned_leg_ref", "object_ref", "rule_version", "demand_source", "measurement_ref"},
 	Filters:  map[string]string{"outcome": "outcome"},
 	Keyword:  []string{"planned_leg_ref", "object_ref", "connection_code", "from_node", "to_node", "selected_schedule"},
 })
 
-// ListTransportPreparations 上列运输准备结果册（ADR-0201 决定七）：缺省新判的在前，同刻按（段，对象，规则）倒序。需求量
-// 与候选两列快照照写下的样子转写，不经领域重建门——那是写路与按键读回的纪律。
+// ListTransportPreparations 上列运输准备结果册（ADR-0201 决定七）：缺省新判的在前，同刻按 planned_leg_ref、object_ref、
+// rule_version、demand_source、measurement_ref 倒序，与行标识同序，翻页才是全序。需求量与候选两列快照照写下的样子转写，
+// 不经领域重建门——那是写路与按键读回的纪律。
 func (catalogue *ReviewCatalogue) ListTransportPreparations(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -585,7 +586,7 @@ func (catalogue *ReviewCatalogue) ListTransportPreparations(
 	const source = "transport_fulfillment.transport_preparation"
 	page, err := readCataloguePage(ctx, querier, query, plan, limit, plan.CountSQL(source), plan.PageSQL(
 		`planned_leg_ref, object_ref, rule_version, outcome, connection_code, from_node, to_node,
-		 window_start, window_end, demand_source, COALESCE(demand_anchor, ''), demand,
+		 window_start, window_end, demand_source, COALESCE(demand_anchor, ''), measurement_ref, demand,
 		 COALESCE(selected_schedule, ''), candidates, judged_at, recorded_at`, source),
 		scanTransportPreparationRow, transportPreparationPosition)
 	if err != nil {
@@ -599,7 +600,7 @@ func scanTransportPreparationRow(scanned pgx.Row) (ports.TransportPreparationCat
 	var demand, candidates []byte
 	if err := scanned.Scan(
 		&row.PlannedLeg, &row.Object, &row.Rule, &row.Outcome, &row.Connection, &row.FromNode, &row.ToNode,
-		&row.WindowStart, &row.WindowEnd, &row.DemandSource, &row.DemandAnchor, &demand,
+		&row.WindowStart, &row.WindowEnd, &row.DemandSource, &row.DemandAnchor, &row.MeasurementRef, &demand,
 		&row.Selected, &candidates, &row.JudgedAt, &row.RecordedAt,
 	); err != nil {
 		return ports.TransportPreparationCatalogueRow{}, err
@@ -623,7 +624,9 @@ func transportPreparationPosition(row ports.TransportPreparationCatalogueRow, so
 	if sortField == "object" {
 		value = row.Object
 	}
-	return cataloguepage.Position{Value: value, Identity: []string{row.PlannedLeg, row.Object, row.Rule}}
+	return cataloguepage.Position{Value: value, Identity: []string{
+		row.PlannedLeg, row.Object, row.Rule, row.DemandSource, row.MeasurementRef,
+	}}
 }
 
 // deliveryDispatchPendingPages 把 ports.DeliveryDispatchPendingPages 落到列上。q 在段、对象与入场依据上做字面包含。

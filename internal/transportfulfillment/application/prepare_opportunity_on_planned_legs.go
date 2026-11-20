@@ -232,7 +232,10 @@ func (handler *PrepareOnPlannedLegsHandler) prepareLeg(
 	demand domain.DemandSnapshot,
 	leg domain.PreparationLeg,
 ) (LegPreparation, *PrepareOnPlannedLegsResult, error) {
-	key := ports.TransportPreparationKey{TenantID: tenant, Leg: leg.Reference(), Object: object, Rule: rule}
+	key := ports.TransportPreparationKey{
+		TenantID: tenant, Leg: leg.Reference(), Object: object, Rule: rule,
+		Source: domain.DemandFromDeclaration,
+	}
 	subject := []string{tenant.String(), leg.Reference().String(), object.String()}
 	undecided := func(reason PreparationUndecidedReason) (LegPreparation, *PrepareOnPlannedLegsResult, error) {
 		result := preparationUndecided(reason, subject...)

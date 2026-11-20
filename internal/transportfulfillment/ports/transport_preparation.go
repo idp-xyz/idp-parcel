@@ -21,7 +21,54 @@ var (
 	// 坏行不随重投变好；编排原样上抛等人看，不答未决，也不在坏行上分`已有结果`与`结果冲突`。
 	ErrTransportPreparationRecordUnreadable = errors.New(
 		"transport fulfillment: the stored transport preparation cannot be read back")
+	// ErrMeasuredDemandUntranslatable：提供方答了恰一条实测，却译不成本上下文的需求量快照。与读不动分开：重问不会让
+	// 缺了的重量或三边长出来。编排把它原样上抛、不答未决。
+	ErrMeasuredDemandUntranslatable = errors.New(
+		"transport fulfillment: the measured demand cannot be translated into a demand snapshot")
 )
+
+// MeasuredDemandAnswer 是按（租户、对象）问当前有效实测需求量的三种答案。
+type MeasuredDemandAnswer uint8
+
+const (
+	MeasuredDemandAnswerInvalid MeasuredDemandAnswer = iota
+	MeasuredDemandNone
+	MeasuredDemandOne
+	MeasuredDemandUndetermined
+)
+
+func (answer MeasuredDemandAnswer) String() string {
+	switch answer {
+	case MeasuredDemandNone:
+		return "NONE"
+	case MeasuredDemandOne:
+		return "ONE"
+	case MeasuredDemandUndetermined:
+		return "UNDETERMINED"
+	case MeasuredDemandAnswerInvalid:
+		return ""
+	default:
+		return ""
+	}
+}
+
+// MeasuredDemandReading 是一次实测需求量的答复。恰一条时带上快照和那条实测自己的发生时刻；没有与定不下不带。
+// 发生时刻用来和段窗口比，不取处理时钟：重投不该因为处理得晚了而改答案。
+type MeasuredDemandReading struct {
+	Answer     MeasuredDemandAnswer
+	Snapshot   domain.DemandSnapshot
+	OccurredAt time.Time
+}
+
+// MeasuredDemandSource 答一个载运对象此刻的实测需求量。没有、恰一条、定不下都不是 error。error 有两类：包住
+// ErrMeasuredDemandUntranslatable 的是译不过去，其余是读不动——提供方此刻答不出任何一格。
+type MeasuredDemandSource interface {
+	LoadMeasuredDemand(
+		ctx context.Context,
+		tenant domain.TenantID,
+		object domain.CarriedObjectReference,
+	) (MeasuredDemandReading, error)
+}
 
 // DeclaredDemandSource 答一个载运对象收寄前的申报需求量（ADR-0201 决定八）。按（租户、对象）问：准备由计划段触发，
 // 手上只有对象身份，没有委托或接受基线。客户没报、提供方此刻说不准按哪一版，都是快照里缺了那一维，不是 error。
@@ -60,13 +107,16 @@ type UnlockedCapacityPoolsOnSchedules interface {
 	) ([]CapacityPoolRecord, error)
 }
 
-// TransportPreparationKey 是准备结果的身份：（租户、计划段引用、对象、规则版本）——同一段同一对象按同一规则只有一份
-// 当前有效结果（ADR-0201 决定七）。计划段引用是 NR 的「版本#序位」，改路出新版本就是新引用、新结果。
+// TransportPreparationKey 是准备结果的身份：（租户、计划段引用、对象、规则版本、需求来源、实测引用）。同一段同一对象
+// 按同一规则，申报一份、每条实测再各一份，互不覆盖（ADR-0201 决定七）。计划段引用是 NR 的「版本#序位」，改路出新版本
+// 就是新引用、新结果。申报的实测引用是空串；实测的引用是那条实测的来源身份。零值来源不是申报，库面不得把它当成申报收下。
 type TransportPreparationKey struct {
-	TenantID domain.TenantID
-	Leg      domain.PlannedSegmentReference
-	Object   domain.CarriedObjectReference
-	Rule     domain.PreparationRuleVersion
+	TenantID       domain.TenantID
+	Leg            domain.PlannedSegmentReference
+	Object         domain.CarriedObjectReference
+	Rule           domain.PreparationRuleVersion
+	Source         domain.DemandSource
+	MeasurementRef string
 }
 
 // TransportPreparationRecord 是一份准备结果越过提交边界留下的东西。InputDigest 是依据的摘要，重放与冲突按它分。
@@ -103,4 +153,12 @@ func (outcome TransportPreparationSaveOutcome) String() string {
 type TransportPreparationStore interface {
 	FindByKey(ctx context.Context, key TransportPreparationKey) (TransportPreparationRecord, bool, error)
 	Save(ctx context.Context, record TransportPreparationRecord) (TransportPreparationSaveOutcome, error)
+	// ListDeclaredPreparationLegs 列出这个对象在这个规则版本下、申报来源那些行的计划段，按段引用升序。实测来源的行不在
+	// 里面：再准备是在申报那一份旁边补，段的名单以申报那一份为准。
+	ListDeclaredPreparationLegs(
+		ctx context.Context,
+		tenant domain.TenantID,
+		object domain.CarriedObjectReference,
+		rule domain.PreparationRuleVersion,
+	) ([]domain.PreparationLeg, error)
 }

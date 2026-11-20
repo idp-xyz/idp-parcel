@@ -179,22 +179,23 @@ type CarrierMasterDocumentCatalogueRow struct {
 // 规则版本的那一份结果，照行转写——段的方向与窗口、需求量快照、结论、选中的班次与逐候选依据都是判断当时写下的，
 // 本行不按此刻的班次与池重算。只插不改，所以没有版本链要展开。
 type TransportPreparationCatalogueRow struct {
-	PlannedLeg   string
-	Object       string
-	Rule         string
-	Outcome      string
-	Connection   string
-	FromNode     string
-	ToNode       string
-	WindowStart  time.Time
-	WindowEnd    time.Time
-	DemandSource string
-	DemandAnchor string
-	Demand       []PreparationDemandRow
-	Selected     string
-	Candidates   []PreparationCandidateRow
-	JudgedAt     time.Time
-	RecordedAt   time.Time
+	PlannedLeg     string
+	Object         string
+	Rule           string
+	Outcome        string
+	Connection     string
+	FromNode       string
+	ToNode         string
+	WindowStart    time.Time
+	WindowEnd      time.Time
+	DemandSource   string
+	DemandAnchor   string
+	MeasurementRef string
+	Demand         []PreparationDemandRow
+	Selected       string
+	Candidates     []PreparationCandidateRow
+	JudgedAt       time.Time
+	RecordedAt     time.Time
 }
 
 // PreparationDemandRow 是需求量快照的一维。

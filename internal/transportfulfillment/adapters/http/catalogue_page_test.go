@@ -225,7 +225,7 @@ func TestEveryRecordsRegistryIsItsOwnCatalogue(t *testing.T) {
 		{"transport-handover", ports.TransportHandoverPages, cataloguepage.Position{Value: at, Identity: []string{"SYN-PARCEL-1", "SYN-SCOPE-1", "SYN-HV-1"}}},
 		{"effective-delivery", ports.EffectiveDeliveryPages, cataloguepage.Position{Value: at, Identity: []string{"SYN-PARCEL-1", "SYN-ATTEMPT-1", "SYN-DV-1"}}},
 		{"carrier-master-document", ports.CarrierMasterDocumentPages, cataloguepage.Position{Value: at, Identity: []string{"SYN-MAWB-1", "SYN-MDV-1"}}},
-		{"transport-preparation", ports.TransportPreparationPages, cataloguepage.Position{Value: at, Identity: []string{"SYN-RPV-1#2", "SYN-PARCEL-1", "SYN-PREPARE/1"}}},
+		{"transport-preparation", ports.TransportPreparationPages, cataloguepage.Position{Value: at, Identity: []string{"SYN-RPV-1#2", "SYN-PARCEL-1", "SYN-PREPARE/1", "declaration", ""}}},
 		{"delivery-dispatch-pending", ports.DeliveryDispatchPendingPages, cataloguepage.Position{Value: at, Identity: []string{"SYN-SEGMENT-1", "SYN-PARCEL-1"}}},
 		{"delivery-dispatch-reask-cadence", ports.DeliveryDispatchReaskCadencePages, cataloguepage.Position{Value: at, Identity: []string{"SYN-CADENCE-1"}}},
 		{"actual-fulfillment-unformed", ports.ActualFulfillmentUnformedPages, cataloguepage.Position{Value: at, Identity: []string{"SYN-SEGMENT-1", "SYN-PARCEL-1"}}},

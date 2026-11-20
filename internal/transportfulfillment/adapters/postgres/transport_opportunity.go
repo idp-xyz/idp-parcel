@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -174,14 +175,29 @@ func (repository *TransportPreparations) Save(
 		value := schedule.String()
 		selected = &value
 	}
+	source, measurement, err := preparationIdentity(record.Key)
+	if err != nil {
+		return ports.TransportPreparationSaveOutcomeInvalid, fmt.Errorf("save transport preparation: %w", err)
+	}
+	if preparation.Demand().Source() != record.Key.Source {
+		return ports.TransportPreparationSaveOutcomeInvalid, fmt.Errorf(
+			"save transport preparation: demand source %s disagrees with the key", preparation.Demand().Source())
+	}
+	if record.Key.Source == domain.DemandFromActualMeasurement {
+		anchored, present := preparation.Demand().Anchor()
+		if !present || anchored != measurement {
+			return ports.TransportPreparationSaveOutcomeInvalid, fmt.Errorf(
+				"save transport preparation: measured demand anchor disagrees with the measurement reference")
+		}
+	}
 	leg := preparation.Leg()
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.transport_preparation
 			(tenant_id, planned_leg_ref, object_ref, rule_version,
 			 connection_code, from_node, to_node, window_start, window_end,
-			 demand_source, demand_anchor, demand, outcome, selected_schedule, candidates,
+			 demand_source, demand_anchor, measurement_ref, demand, outcome, selected_schedule, candidates,
 			 input_digest, judged_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Leg.String(),
@@ -192,8 +208,9 @@ func (repository *TransportPreparations) Save(
 		leg.Direction().To().String(),
 		leg.WindowStart().UTC(),
 		leg.WindowEnd().UTC(),
-		preparation.Demand().Source().String(),
+		source,
 		anchor,
+		measurement,
 		demand,
 		preparation.Outcome().String(),
 		selected,
@@ -211,13 +228,18 @@ func (repository *TransportPreparations) Save(
 	return ports.TransportPreparationSaved, nil
 }
 
-// FindByKey 按四维身份取回一份结果，经重建门读回：结论与候选依据推不到一处就答读不懂（包住
-// ports.ErrTransportPreparationRecordUnreadable），不以坏行作答，也不冒充读不动。
+// FindByKey 按身份取回一份结果，经重建门读回：结论与候选依据推不到一处就答读不懂（包住
+// ports.ErrTransportPreparationRecordUnreadable），不以坏行作答，也不冒充读不动。来源不在封闭词里时直接拒，
+// 不把零值来源当成申报去读。
 func (repository *TransportPreparations) FindByKey(
 	ctx context.Context,
 	key ports.TransportPreparationKey,
 ) (ports.TransportPreparationRecord, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.TransportPreparationRecord{}, false, fmt.Errorf("find transport preparation: %w", err)
+	}
+	sourceName, measurement, err := preparationIdentity(key)
 	if err != nil {
 		return ports.TransportPreparationRecord{}, false, fmt.Errorf("find transport preparation: %w", err)
 	}
@@ -235,11 +257,15 @@ func (repository *TransportPreparations) FindByKey(
 		  WHERE tenant_id = $1
 		    AND planned_leg_ref = $2
 		    AND object_ref = $3
-		    AND rule_version = $4`,
+		    AND rule_version = $4
+		    AND demand_source = $5
+		    AND measurement_ref = $6`,
 		key.TenantID.String(),
 		key.Leg.String(),
 		key.Object.String(),
 		key.Rule.String(),
+		sourceName,
+		measurement,
 	).Scan(&connection, &from, &to, &windowStart, &windowEnd,
 		&source, &anchor, &demand, &outcome, &selected, &candidates,
 		&digest, &judgedAt, &recordedAt)
@@ -389,6 +415,89 @@ func (stored storedCandidate) candidate() (domain.PreparationCandidate, error) {
 		})
 	}
 	return candidate, nil
+}
+
+// ListDeclaredPreparationLegs 只列申报来源的段。重建不过门的行包住读不懂：坏行重读不会变好，编排不拿它当读不动去重投。
+func (repository *TransportPreparations) ListDeclaredPreparationLegs(
+	ctx context.Context,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+	rule domain.PreparationRuleVersion,
+) ([]domain.PreparationLeg, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list declared preparation legs: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT planned_leg_ref, connection_code, from_node, to_node, window_start, window_end
+		   FROM transport_fulfillment.transport_preparation
+		  WHERE tenant_id = $1
+		    AND object_ref = $2
+		    AND rule_version = $3
+		    AND demand_source = $4
+		  ORDER BY planned_leg_ref`,
+		tenant.String(),
+		object.String(),
+		rule.String(),
+		domain.DemandFromDeclaration.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list declared preparation legs: %w", err)
+	}
+	defer rows.Close()
+	var legs []domain.PreparationLeg
+	for rows.Next() {
+		var reference, connection, from, to string
+		var windowStart, windowEnd time.Time
+		if err := rows.Scan(&reference, &connection, &from, &to, &windowStart, &windowEnd); err != nil {
+			return nil, fmt.Errorf("list declared preparation legs: %w", err)
+		}
+		leg, err := declaredPreparationLeg(reference, connection, from, to, windowStart, windowEnd)
+		if err != nil {
+			return nil, fmt.Errorf("list declared preparation legs: %w: %w",
+				ports.ErrTransportPreparationRecordUnreadable, err)
+		}
+		legs = append(legs, leg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list declared preparation legs: %w", err)
+	}
+	return legs, nil
+}
+
+func declaredPreparationLeg(
+	reference, connection, from, to string,
+	windowStart, windowEnd time.Time,
+) (domain.PreparationLeg, error) {
+	legRef, err := domain.NewPlannedSegmentReference(reference)
+	if err != nil {
+		return domain.PreparationLeg{}, err
+	}
+	direction, err := domain.NewScheduleDirection(connection, from, to)
+	if err != nil {
+		return domain.PreparationLeg{}, err
+	}
+	return domain.NewPreparationLeg(legRef, direction, windowStart, windowEnd)
+}
+
+// preparationIdentity 把键上的来源与实测引用收成库里那两列。零值来源的 String 是空串，ParseDemandSource 认不回，
+// 于是不会被当成申报去读写。申报必须不带引用；实测引用去空白后仍须与原串相同，空白串过不了库上的 btrim 检查。
+func preparationIdentity(key ports.TransportPreparationKey) (source, measurement string, err error) {
+	parsed, err := domain.ParseDemandSource(key.Source.String())
+	if err != nil || parsed != key.Source {
+		return "", "", fmt.Errorf("demand source is not admitted")
+	}
+	switch key.Source {
+	case domain.DemandFromDeclaration:
+		if key.MeasurementRef != "" {
+			return "", "", fmt.Errorf("declaration preparation carries a measurement reference")
+		}
+	case domain.DemandFromActualMeasurement:
+		if strings.TrimSpace(key.MeasurementRef) == "" || strings.TrimSpace(key.MeasurementRef) != key.MeasurementRef {
+			return "", "", fmt.Errorf("measured preparation needs the measurement reference")
+		}
+	}
+	return key.Source.String(), key.MeasurementRef, nil
 }
 
 func demandRows(demand domain.DemandSnapshot) []storedDemandQuantity {

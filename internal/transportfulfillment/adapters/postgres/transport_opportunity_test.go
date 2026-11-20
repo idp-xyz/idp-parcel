@@ -203,6 +203,7 @@ func TestPreparationAnswersEveryOutcomeOnTheRegisters(t *testing.T) {
 			Leg:      deliveryValue(t, domain.NewPlannedSegmentReference, leg),
 			Object:   deliveryValue(t, domain.NewCarriedObjectReference, "SYN-PARCEL-01"),
 			Rule:     domain.BuiltInPreparationRuleVersion(),
+			Source:   domain.DemandFromDeclaration,
 		}
 	}
 	prepared, found, err := stores.preparations.FindByKey(t.Context(), key("SYN-RPV-1#5"))
@@ -362,7 +363,10 @@ func TestTransportPreparationsRefuseToRunOutsideATransaction(t *testing.T) {
 		t.Fatalf("准备：%v", err)
 	}
 	record := ports.TransportPreparationRecord{
-		Key:         ports.TransportPreparationKey{TenantID: tenant, Leg: leg.Reference(), Object: object, Rule: domain.BuiltInPreparationRuleVersion()},
+		Key: ports.TransportPreparationKey{
+			TenantID: tenant, Leg: leg.Reference(), Object: object, Rule: domain.BuiltInPreparationRuleVersion(),
+			Source: domain.DemandFromDeclaration,
+		},
 		InputDigest: "TFC-1:d",
 		Preparation: preparation,
 		RecordedAt:  departure,
