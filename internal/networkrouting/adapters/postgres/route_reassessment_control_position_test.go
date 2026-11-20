@@ -2,11 +2,13 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
@@ -258,4 +260,17 @@ func waitingAt(t *testing.T, key domain.InitialRouteJudgmentKey, correlation str
 	record := notJudged(t, key, correlation, ports.NotJudgedControlPositionUnavailable)
 	record.TriggerOccurredAt = at
 	return record
+}
+
+// 两口都取判断键锁。锁随事务释放；没有事务时锁在语句结束就放掉，静默放过会让并发的两笔各自读不到对方尚未提交的复核。
+func TestControlPositionReadsRefuseToRunOutsideATransaction(t *testing.T) {
+	_, reassessments, _, _ := newRouteStores(t)
+	ctx := t.Context()
+	key := routeKey(t, "tenant-1", "parcel-1")
+	if _, err := reassessments.LatestControlPosition(ctx, key); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务取最近控制位置应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := reassessments.AwaitingMeasurementChanges(ctx, key); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务读等位置的实测变化应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }
