@@ -109,13 +109,14 @@ func productsMatch(column []string, plan domain.PricingPlanVersion) bool {
 	return true
 }
 
-// plan 从一行重建方案：快照经领域整图重验（含按规范化版本重算内容摘要自校），再与比对列交叉核
+// registration 从一行重建登记：快照经领域整图重验（含按规范化版本重算内容摘要自校），再与比对列交叉核
 // ——列与快照分岔说明行被改过。规范化版本不被本构建支持时把领域那枚哨兵原样包出去，调用方
-// 据以分格（ADR-0014）。
-func (row priceCardRow) plan(tenant domain.TenantID) (domain.PricingPlanVersion, error) {
+// 据以分格（ADR-0014）。方向授权在快照里、不在比对列上，读回工作簿要它，所以整份登记留在这里，
+// plan 只取其中的方案。
+func (row priceCardRow) registration(tenant domain.TenantID) (domain.PriceCardRegistration, error) {
 	registration, err := domain.RehydratePriceCardRegistration(row.snapshot)
 	if err != nil {
-		return domain.PricingPlanVersion{}, fmt.Errorf("%s/%s：%w", row.planID, row.planVersion, err)
+		return domain.PriceCardRegistration{}, fmt.Errorf("%s/%s：%w", row.planID, row.planVersion, err)
 	}
 	plan := registration.Plan()
 	if registration.Tenant() != tenant ||
@@ -132,10 +133,19 @@ func (row priceCardRow) plan(tenant domain.TenantID) (domain.PricingPlanVersion,
 		registration.SourceFile().SHA256() != row.sourceSHA ||
 		!plan.EffectivePeriod().StartsAt().Equal(row.effectiveFrom) ||
 		!periodEndMatches(plan.EffectivePeriod(), row.effectiveTo) {
-		return domain.PricingPlanVersion{}, fmt.Errorf(
+		return domain.PriceCardRegistration{}, fmt.Errorf(
 			"comparison columns disagree with the snapshot for %s/%s", row.planID, row.planVersion)
 	}
-	return plan, nil
+	return registration, nil
+}
+
+// plan 从一行重建方案。交叉核与 registration 是同一道。
+func (row priceCardRow) plan(tenant domain.TenantID) (domain.PricingPlanVersion, error) {
+	registration, err := row.registration(tenant)
+	if err != nil {
+		return domain.PricingPlanVersion{}, err
+	}
+	return registration.Plan(), nil
 }
 
 func NewPriceCards(db *bentopg.DB) (*PriceCards, error) {
@@ -401,6 +411,48 @@ func (catalog *PriceCards) ReadPriceCardContent(
 		PublicationApprover: approver,
 		RegisteredAt:        registeredAt,
 		Document:            snapshot.Plan,
+	}, true, nil
+}
+
+var _ ports.RegisteredPriceCardRead = (*PriceCards)(nil)
+
+// ReadRegisteredPriceCard 按（租户 + 方案版本引用）读回已登记的方案与方向授权，供反推成工作簿
+// （ports.RegisteredPriceCardRead）。读法与 ReadPriceCardContent 同一行、同一道整图重验；差别只是交出重建后的
+// 领域值，而不是 plan 块的原文——投影要走领域访问器，授权又不在 plan 块里。
+func (catalog *PriceCards) ReadRegisteredPriceCard(
+	ctx context.Context,
+	tenant domain.TenantID,
+	reference domain.VersionReference,
+) (ports.PriceCardWorkbookSubject, bool, error) {
+	if tenant.String() == "" || reference.ID() == "" || reference.Version() == "" {
+		return ports.PriceCardWorkbookSubject{}, false, fmt.Errorf("read registered price card: tenant and plan reference are required")
+	}
+	if reference.Kind() != domain.ArtifactPricingPlan {
+		return ports.PriceCardWorkbookSubject{}, false, fmt.Errorf("read registered price card: reference kind %q is not %q", reference.Kind(), domain.ArtifactPricingPlan)
+	}
+	querier, err := catalog.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.PriceCardWorkbookSubject{}, false, fmt.Errorf("read registered price card: %w", err)
+	}
+	var row priceCardRow
+	err = querier.QueryRow(ctx,
+		`SELECT `+priceCardRowColumns+`
+		   FROM parcel_pricing.price_card_version
+		  WHERE tenant_id = $1 AND plan_id = $2 AND plan_version = $3`,
+		tenant.String(), reference.ID(), reference.Version(),
+	).Scan(row.scanTargets()...)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.PriceCardWorkbookSubject{}, false, nil
+	}
+	if err != nil {
+		return ports.PriceCardWorkbookSubject{}, false, fmt.Errorf("read registered price card: %w", err)
+	}
+	registration, err := row.registration(tenant)
+	if err != nil {
+		return ports.PriceCardWorkbookSubject{}, false, fmt.Errorf("read registered price card: %w", err)
+	}
+	return ports.PriceCardWorkbookSubject{
+		Plan: registration.Plan(), DirectionAuthorization: registration.DirectionAuthorization(),
 	}, true, nil
 }
 
