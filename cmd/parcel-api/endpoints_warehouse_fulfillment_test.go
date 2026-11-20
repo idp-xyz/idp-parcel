@@ -195,14 +195,97 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		goodsRevisions:    unwiredGoodsCatalogue{},
 		goodsFinder:       unwiredGoodsCatalogue{},
 
-		preAdviceOnBehalf:     unwiredPreAdvice{},
-		preAdviceQueries:      unwiredPreAdviceQueries{},
-		preAdviceClose:        unwiredPreAdviceClose{},
-		discrepancyConclusion: unwiredDiscrepancyConclusion{},
-		receiptConfirm:        unwiredReceiptConfirmation{},
-		measurementRecord:     unwiredWarehouseMeasurement{},
-		measurementQueries:    unwiredWarehouseMeasurement{},
+		preAdviceOnBehalf:        unwiredPreAdvice{},
+		preAdviceQueries:         unwiredPreAdviceQueries{},
+		preAdviceClose:           unwiredPreAdviceClose{},
+		discrepancyConclusion:    unwiredDiscrepancyConclusion{},
+		receiptConfirm:           unwiredReceiptConfirmation{},
+		measurementRecord:        unwiredWarehouseMeasurement{},
+		measurementQueries:       unwiredWarehouseMeasurement{},
+		disposalRuleRegistration: unwiredDisposalRuleRegistration{},
+		disposalRuleCatalogue:    unwiredDisposalRuleCatalogue{},
+		disposalRuleRevisions:    unwiredDisposalRuleCatalogue{},
+		unclaimedArrivalRegister: unwiredUnclaimedArrival{},
+		unclaimedArrivalManage:   unwiredUnclaimedArrival{},
+		unclaimedArrivalQueries:  unwiredUnclaimedArrival{},
 	}
+}
+
+type unwiredDisposalRuleRegistration struct{}
+
+func (unwiredDisposalRuleRegistration) Register(
+	context.Context,
+	warehouseapp.RegisterDisposalRuleCommand,
+) (warehouseapp.RegisterDisposalRuleResult, error) {
+	return warehouseapp.RegisterDisposalRuleResult{}, errOrchestrationNotWired
+}
+
+type unwiredDisposalRuleCatalogue struct{}
+
+func (unwiredDisposalRuleCatalogue) ListDisposalRules(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.DisposalRuleRow], error) {
+	return cataloguepage.Result[warehouseports.DisposalRuleRow]{}, errOrchestrationNotWired
+}
+
+func (unwiredDisposalRuleCatalogue) DisposalRuleRevisions(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.WarehouseCode,
+) ([]warehouseports.DisposalRuleRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+type unwiredUnclaimedArrival struct{}
+
+func (unwiredUnclaimedArrival) Register(
+	context.Context,
+	warehouseapp.RegisterUnclaimedArrivalCommand,
+) (warehouseapp.RegisterUnclaimedArrivalResult, error) {
+	return warehouseapp.RegisterUnclaimedArrivalResult{}, errOrchestrationNotWired
+}
+
+func (unwiredUnclaimedArrival) Claim(
+	context.Context,
+	warehouseapp.ClaimUnclaimedArrivalCommand,
+) (warehouseapp.ClaimUnclaimedArrivalResult, error) {
+	return warehouseapp.ClaimUnclaimedArrivalResult{}, errOrchestrationNotWired
+}
+
+func (unwiredUnclaimedArrival) RevokeClaim(
+	context.Context,
+	warehouseapp.RevokeUnclaimedClaimCommand,
+) (warehouseapp.RevokeUnclaimedClaimResult, error) {
+	return warehouseapp.RevokeUnclaimedClaimResult{}, errOrchestrationNotWired
+}
+
+func (unwiredUnclaimedArrival) Dispose(
+	context.Context,
+	warehouseapp.DisposeUnclaimedArrivalCommand,
+) (warehouseapp.DisposeUnclaimedArrivalResult, error) {
+	return warehouseapp.DisposeUnclaimedArrivalResult{}, errOrchestrationNotWired
+}
+
+func (unwiredUnclaimedArrival) ListUnclaimedArrivals(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+	time.Time,
+	time.Time,
+) (cataloguepage.Result[warehousedomain.UnclaimedArrivalDetail], error) {
+	return cataloguepage.Result[warehousedomain.UnclaimedArrivalDetail]{}, errOrchestrationNotWired
+}
+
+func (unwiredUnclaimedArrival) GetUnclaimedArrival(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.UnclaimedArrivalID,
+) (warehousedomain.UnclaimedArrivalDetail, bool, error) {
+	return warehousedomain.UnclaimedArrivalDetail{}, false, errOrchestrationNotWired
 }
 
 type unwiredWarehouseMeasurement struct{}
@@ -396,6 +479,16 @@ const (
 	goodsMeasurementsLine     = "/warehouse-fulfillment-goods-measurements"
 	cartonMeasurementsLine    = "/warehouse-fulfillment-carton-measurements"
 
+	disposalRuleRegistrationsLine = "/warehouse-fulfillment-unclaimed-disposal-rule-registrations"
+	disposalRuleListLine          = "/warehouse-fulfillment-unclaimed-disposal-rules"
+	disposalRuleRevisionsLine     = "/warehouse-fulfillment-unclaimed-disposal-rule-revisions"
+	unclaimedArrivalRegLine       = "/warehouse-fulfillment-unclaimed-arrival-registrations"
+	unclaimedArrivalClaimLine     = "/warehouse-fulfillment-unclaimed-arrival-claims"
+	unclaimedArrivalRevokeLine    = "/warehouse-fulfillment-unclaimed-arrival-claim-revocations"
+	unclaimedArrivalDisposeLine   = "/warehouse-fulfillment-unclaimed-arrival-dispositions"
+	unclaimedArrivalListLine      = "/warehouse-fulfillment-unclaimed-arrivals"
+	unclaimedArrivalOneLine       = "/warehouse-fulfillment-unclaimed-arrival"
+
 	customerGoodsWriteLine         = "/v1/warehouse/goods"
 	customerGoodsListLine          = "/v1/warehouse/reads/goods"
 	customerGoodsCurrentLine       = "/v1/warehouse/reads/goods-current"
@@ -521,6 +614,16 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		goodsMeasurementsLine:     {http.MethodGet, faceOperationsRead},
 		cartonMeasurementsLine:    {http.MethodGet, faceOperationsRead},
 
+		disposalRuleRegistrationsLine: {http.MethodPost, faceRegistryWrite},
+		disposalRuleListLine:          {http.MethodGet, faceOperationsRead},
+		disposalRuleRevisionsLine:     {http.MethodGet, faceOperationsRead},
+		unclaimedArrivalRegLine:       {http.MethodPost, faceWorkFact},
+		unclaimedArrivalClaimLine:     {http.MethodPost, faceOperationDecision},
+		unclaimedArrivalRevokeLine:    {http.MethodPost, faceOperationDecision},
+		unclaimedArrivalDisposeLine:   {http.MethodPost, faceOperationDecision},
+		unclaimedArrivalListLine:      {http.MethodGet, faceOperationsRead},
+		unclaimedArrivalOneLine:       {http.MethodGet, faceOperationsRead},
+
 		customerGoodsWriteLine:         {http.MethodPost, faceCustomerClient},
 		customerGoodsListLine:          {http.MethodGet, faceCustomerClient},
 		customerGoodsCurrentLine:       {http.MethodGet, faceCustomerClient},
@@ -552,23 +655,26 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 	for pattern, expected := range want {
 		line, declared := lines[pattern]
 		capability, customer := customerCapabilities[pattern]
-		ownIntake := customer || pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine
+		ownIntake := customer || pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine || pattern == unclaimedArrivalRegLine
 		if !declared || !line.warehouseFulfillment || line.method != expected.method || line.face.family != expected.face || line.ownIntake != ownIntake {
 			t.Fatalf("%s 的声明 = %+v，want %s %s、声明仓配开关、自建 Intake=%t", pattern, line, expected.method, expected.face, ownIntake)
 		}
-		if (pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine) && line.face.workScope != accessidentity.WorkScopeWarehouse {
+		if (pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine || pattern == unclaimedArrivalRegLine) && line.face.workScope != accessidentity.WorkScopeWarehouse {
 			t.Fatalf("%s 的作业范围 = %s，want WAREHOUSE", pattern, line.face.workScope)
 		}
 		if customer && line.face.capability != capability {
 			t.Fatalf("%s 的能力词 = %s，want %s", pattern, line.face.capability, capability)
 		}
 		decisionLines := map[string]accessidentity.DecisionKind{
-			goodsOnBehalfLine:         accessidentity.DecisionGoodsRecordOnBehalf,
-			preAdviceOnBehalfLine:     accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
-			preAdviceNoticeLine:       accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
-			preAdviceWithdrawalLine:   accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
-			preAdviceCloseLine:        accessidentity.DecisionInboundPreAdviceClose,
-			discrepancyConclusionLine: accessidentity.DecisionReceiptDiscrepancyRecordOnBehalf,
+			goodsOnBehalfLine:           accessidentity.DecisionGoodsRecordOnBehalf,
+			preAdviceOnBehalfLine:       accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
+			preAdviceNoticeLine:         accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
+			preAdviceWithdrawalLine:     accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
+			preAdviceCloseLine:          accessidentity.DecisionInboundPreAdviceClose,
+			discrepancyConclusionLine:   accessidentity.DecisionReceiptDiscrepancyRecordOnBehalf,
+			unclaimedArrivalClaimLine:   accessidentity.DecisionUnclaimedArrivalClaim,
+			unclaimedArrivalRevokeLine:  accessidentity.DecisionUnclaimedArrivalClaim,
+			unclaimedArrivalDisposeLine: accessidentity.DecisionUnclaimedArrivalDisposition,
 		}
 		if kind, writesOnBehalf := decisionLines[pattern]; writesOnBehalf && line.face.decision != kind {
 			t.Fatalf("%s 的决定种类 = %s，want %s", pattern, line.face.decision, kind)
@@ -643,10 +749,19 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			preAdviceCloseLine:        {status, code},
 			discrepancyConclusionLine: {status, code},
 			preAdviceListLine:         {status, code}, preAdviceOneLine: {status, code}, preAdviceByNumberLine: {status, code},
-			receiptConfirmationsLine:  {status, code},
-			warehouseMeasurementsLine: {status, code},
-			goodsMeasurementsLine:     {status, code},
-			cartonMeasurementsLine:    {status, code},
+			receiptConfirmationsLine:      {status, code},
+			warehouseMeasurementsLine:     {status, code},
+			goodsMeasurementsLine:         {status, code},
+			cartonMeasurementsLine:        {status, code},
+			disposalRuleRegistrationsLine: {status, code},
+			disposalRuleListLine:          {status, code},
+			disposalRuleRevisionsLine:     {status, code},
+			unclaimedArrivalRegLine:       {status, code},
+			unclaimedArrivalClaimLine:     {status, code},
+			unclaimedArrivalRevokeLine:    {status, code},
+			unclaimedArrivalDisposeLine:   {status, code},
+			unclaimedArrivalListLine:      {status, code},
+			unclaimedArrivalOneLine:       {status, code},
 		}
 	}
 	cases := []struct {
@@ -690,10 +805,19 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			preAdviceOneLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			preAdviceByNumberLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 
-			receiptConfirmationsLine:  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
-			warehouseMeasurementsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
-			goodsMeasurementsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
-			cartonMeasurementsLine:    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			receiptConfirmationsLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			warehouseMeasurementsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			goodsMeasurementsLine:         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			cartonMeasurementsLine:        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			disposalRuleRegistrationsLine: {http.StatusBadRequest, "MALFORMED_REQUEST"},
+			disposalRuleListLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			disposalRuleRevisionsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			unclaimedArrivalRegLine:       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			unclaimedArrivalClaimLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			unclaimedArrivalRevokeLine:    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			unclaimedArrivalDisposeLine:   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			unclaimedArrivalListLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			unclaimedArrivalOneLine:       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		}},
 		{"read grant only", operationsReaderRegister{}, presentedOperatorToken, map[string]answer{
 			warehouseRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -730,10 +854,19 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			preAdviceOneLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			preAdviceByNumberLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 
-			receiptConfirmationsLine:  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
-			warehouseMeasurementsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
-			goodsMeasurementsLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
-			cartonMeasurementsLine:    {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			receiptConfirmationsLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			warehouseMeasurementsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			goodsMeasurementsLine:         {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			cartonMeasurementsLine:        {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			disposalRuleRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			disposalRuleListLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			disposalRuleRevisionsLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			unclaimedArrivalRegLine:       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			unclaimedArrivalClaimLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			unclaimedArrivalRevokeLine:    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			unclaimedArrivalDisposeLine:   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			unclaimedArrivalListLine:      {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			unclaimedArrivalOneLine:       {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 		}},
 		{"no bearer token", everyOperatorGrant{}, "", same(http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED")},
 		{"register is down", failingRegister{}, presentedOperatorToken, same(http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE")},
@@ -751,6 +884,11 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			t.Fatal(err)
 		}
 		wiring.measurementIntake = measurementIntake
+		unclaimedIntake, err := buildUnclaimedArrivalIntake(acceptingVerifier{}, testCase.register, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		wiring.unclaimedArrivalIntake = unclaimedIntake
 		router := warehouseFulfillmentRouter(t, channels, wiring)
 		for pattern, want := range testCase.want {
 			var response *httptest.ResponseRecorder
@@ -759,6 +897,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 				response = probeWorkFactPost(router, receiptConfirmationsLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", receiptConfirmationBody())
 			case warehouseMeasurementsLine:
 				response = probeWorkFactPost(router, warehouseMeasurementsLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", warehouseMeasurementBody())
+			case unclaimedArrivalRegLine:
+				response = probeWorkFactPost(router, unclaimedArrivalRegLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", unclaimedArrivalBody())
 			default:
 				response = probeWarehouseFulfillment(router, pattern, testCase.token, `{}`)
 			}
@@ -769,7 +909,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 		}
 	}
 
-	// 登在节点上的设备，拿仓的作业范围去收货或仓测：授予在仓上，设备册上的范围仍是节点，答设备未登记或已停用。
+	// 登在节点上的设备，拿仓的作业范围去收货、仓测或待认领登记：授予在仓上，设备册上的范围仍是节点，答设备未登记或已停用。
 	nodeDevice := unwiredWarehouseFulfillment(true)
 	nodeIntake, err := buildReceiptConfirmationIntake(acceptingVerifier{}, warehouseWorkFactRegister{}, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
 	if err != nil {
@@ -781,6 +921,11 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodeDevice.measurementIntake = nodeMeasurementIntake
+	nodeUnclaimedIntake, err := buildUnclaimedArrivalIntake(acceptingVerifier{}, warehouseWorkFactRegister{}, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeDevice.unclaimedArrivalIntake = nodeUnclaimedIntake
 	nodeRouter := warehouseFulfillmentRouter(t, channelsFor(t, warehouseWorkFactRegister{}), nodeDevice)
 	nodeResponse := probeWorkFactPost(nodeRouter, receiptConfirmationsLine, presentedOperatorToken, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", receiptConfirmationBody())
 	if nodeResponse.Code != http.StatusForbidden || problemCode(t, nodeResponse) != "DEVICE_NOT_IN_USE" {
@@ -792,6 +937,11 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 		t.Fatalf("节点上的设备去仓测：答 %d %s，want 403 DEVICE_NOT_IN_USE", nodeMeasureResp.Code, nodeMeasureResp.Body.String())
 	}
 	assertNoOutcome(t, nodeMeasureResp, warehouseMeasurementsLine)
+	nodeUnclaimedResp := probeWorkFactPost(nodeRouter, unclaimedArrivalRegLine, presentedOperatorToken, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", unclaimedArrivalBody())
+	if nodeUnclaimedResp.Code != http.StatusForbidden || problemCode(t, nodeUnclaimedResp) != "DEVICE_NOT_IN_USE" {
+		t.Fatalf("节点上的设备去登待认领：答 %d %s，want 403 DEVICE_NOT_IN_USE", nodeUnclaimedResp.Code, nodeUnclaimedResp.Body.String())
+	}
+	assertNoOutcome(t, nodeUnclaimedResp, unclaimedArrivalRegLine)
 }
 
 // warehouseWorkFactRegister 只持 SYN-WH-01 上的作业事实登记授予，没有登记册配置写。
@@ -824,6 +974,10 @@ func receiptConfirmationBody() string {
 
 func warehouseMeasurementBody() string {
 	return `{"factId":"SYN-MEAS-01","occurredAt":"2026-11-20T01:00:00Z","deviceSequence":1,"warehouse":"SYN-WH-01","targetKind":"GOODS_LEVEL","ownerAccount":"SYN-OWNER-01","goodsCode":"SYN-GOODS-01","packagingLevel":"EA","dimensions":{"length":"30","width":"20","height":"10","unit":"CM"},"weight":{"value":"1.5","unit":"KG"}}`
+}
+
+func unclaimedArrivalBody() string {
+	return `{"factId":"SYN-UCA-FACT-01","occurredAt":"2026-11-20T01:00:00Z","deviceSequence":1,"warehouse":"SYN-WH-01","kind":"INBOUND","observation":"外箱无货主标签，约三箱"}`
 }
 
 func probeWorkFactPost(router http.Handler, pattern, token, device, kind, reference, body string) *httptest.ResponseRecorder {

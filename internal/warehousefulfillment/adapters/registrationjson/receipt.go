@@ -14,14 +14,15 @@ import (
 // 收货数量是正整数，整数没有那一格要躲的舍入，用 JSON 数字。不为正留给核心判收货内容不合，译装不提前拒。
 type receiptConfirmationDocument struct {
 	carriedIdentity
-	DeviceID    json.RawMessage        `json:"deviceId"`
-	Operator    json.RawMessage        `json:"operator"`
-	FactID      *string                `json:"factId"`
-	OccurredAt  *string                `json:"occurredAt"`
-	Warehouse   *string                `json:"warehouse"`
-	PreAdviceID *string                `json:"preAdviceId"`
-	Shape       *string                `json:"shape"`
-	Lines       *[]receiptLineDocument `json:"lines"`
+	DeviceID           json.RawMessage        `json:"deviceId"`
+	Operator           json.RawMessage        `json:"operator"`
+	FactID             *string                `json:"factId"`
+	OccurredAt         *string                `json:"occurredAt"`
+	Warehouse          *string                `json:"warehouse"`
+	PreAdviceID        *string                `json:"preAdviceId"`
+	UnclaimedArrivalID *string                `json:"unclaimedArrivalId"`
+	Shape              *string                `json:"shape"`
+	Lines              *[]receiptLineDocument `json:"lines"`
 }
 
 type receiptLineDocument struct {
@@ -77,6 +78,13 @@ func ReceiptConfirmationCommand(reader io.Reader) (application.ConfirmReceiptCom
 	if err != nil {
 		return none, err
 	}
+	var unclaimedArrival domain.UnclaimedArrivalID
+	if document.UnclaimedArrivalID != nil {
+		unclaimedArrival, err = textCell("unclaimedArrivalId", *document.UnclaimedArrivalID, domain.NewUnclaimedArrivalID)
+		if err != nil {
+			return none, err
+		}
+	}
 	shape, err := requiredClosedWord("shape", "inbound mode", document.Shape, domain.NewInboundMode)
 	if err != nil {
 		return none, err
@@ -87,7 +95,8 @@ func ReceiptConfirmationCommand(reader io.Reader) (application.ConfirmReceiptCom
 			return none, err
 		}
 		return application.ConfirmReceiptCommand{
-			FactID: factID, OccurredAt: occurredAt, Warehouse: warehouse, PreAdvice: preAdvice, Shape: shape, CartonLines: cartonLines,
+			FactID: factID, OccurredAt: occurredAt, Warehouse: warehouse, PreAdvice: preAdvice,
+			UnclaimedArrival: unclaimedArrival, Shape: shape, CartonLines: cartonLines,
 		}, nil
 	}
 	lines, err := receiptLines(document.Lines)
@@ -95,7 +104,8 @@ func ReceiptConfirmationCommand(reader io.Reader) (application.ConfirmReceiptCom
 		return none, err
 	}
 	return application.ConfirmReceiptCommand{
-		FactID: factID, OccurredAt: occurredAt, Warehouse: warehouse, PreAdvice: preAdvice, Shape: shape, Lines: lines,
+		FactID: factID, OccurredAt: occurredAt, Warehouse: warehouse, PreAdvice: preAdvice,
+		UnclaimedArrival: unclaimedArrival, Shape: shape, Lines: lines,
 	}, nil
 }
 

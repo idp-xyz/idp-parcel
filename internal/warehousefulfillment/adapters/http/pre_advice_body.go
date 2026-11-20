@@ -199,6 +199,7 @@ type receiptBody struct {
 	OccurredAt                string                      `json:"occurredAt"`
 	Device                    string                      `json:"device,omitempty"`
 	Operator                  string                      `json:"operator,omitempty"`
+	UnclaimedArrivalID        string                      `json:"unclaimedArrivalId,omitempty"`
 	Lines                     []receiptLineBody           `json:"lines"`
 	DiscrepancyID             string                      `json:"discrepancyId,omitempty"`
 	Discrepancies             []receiptDiscrepancyBody    `json:"discrepancies,omitempty"`
@@ -267,6 +268,9 @@ func receiptBodies(
 		if withActors {
 			body.Device = receipt.Device().String()
 			body.Operator = receipt.Operator().String()
+			if arrivalID, has := receipt.UnclaimedArrival(); has {
+				body.UnclaimedArrivalID = arrivalID.String()
+			}
 		}
 		if id, has := receipt.Discrepancy(); has {
 			body.DiscrepancyID = id.String()

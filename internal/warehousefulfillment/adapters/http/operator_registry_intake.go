@@ -38,6 +38,7 @@ var (
 	_ LocationTypeRegistrationIntake      = (*OperatorRegistryIntake)(nil)
 	_ LocationRegistrationIntake          = (*OperatorRegistryIntake)(nil)
 	_ PackagingMaterialRegistrationIntake = (*OperatorRegistryIntake)(nil)
+	_ DisposalRuleRegistrationIntake      = (*OperatorRegistryIntake)(nil)
 )
 
 func NewOperatorRegistryIntake(authenticator OperatorRegistryAuthenticator) (*OperatorRegistryIntake, error) {
@@ -80,6 +81,13 @@ func (intake *OperatorRegistryIntake) IntakePackagingMaterialRegistration(
 	request *http.Request,
 ) (application.RegisterPackagingMaterialCommand, error) {
 	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.PackagingMaterialCommand)
+}
+
+func (intake *OperatorRegistryIntake) IntakeDisposalRuleRegistration(
+	ctx context.Context,
+	request *http.Request,
+) (application.RegisterDisposalRuleCommand, error) {
+	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.UnclaimedDisposalRuleCommand)
 }
 
 // intakeRegistration 是各册登记 Intake 共用的一步：令牌不过的请求，请求体一个字节都不读；过了才把请求体按这一册的译法译成命令，

@@ -55,6 +55,9 @@ type operatorDecisionIntakes struct {
 	warehousePreAdviceClose *warehousehttp.OperatorPreAdviceCloseIntake
 	// warehouseDiscrepancyConclusion 是收货差异结论代录（ADR-0384 决定二）。开关关着时照样建出来，没有任何端点问到它。
 	warehouseDiscrepancyConclusion *warehousehttp.OperatorDiscrepancyConclusionIntake
+	// warehouseUnclaimedClaim 是待认领到货认领与撤销（ADR-0384 决定二）；warehouseUnclaimedDisposition 是处置。
+	warehouseUnclaimedClaim       *warehousehttp.OperatorUnclaimedClaimIntake
+	warehouseUnclaimedDisposition *warehousehttp.OperatorUnclaimedDispositionIntake
 }
 
 // buildOperatorMinter 建本进程唯一一只操作者铸造器：运营决定与登记写面各口共用它。
@@ -229,10 +232,28 @@ func buildOperatorDecisionIntakes(
 	if err != nil {
 		return operatorDecisionIntakes{}, err
 	}
+	unclaimedClaimAuthenticator, err := whaccess.NewOperatorUnclaimedClaimAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseUnclaimedClaim, err := warehousehttp.NewOperatorUnclaimedClaimIntake(unclaimedClaimAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	unclaimedDispositionAuthenticator, err := whaccess.NewOperatorUnclaimedDispositionAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseUnclaimedDisposition, err := warehousehttp.NewOperatorUnclaimedDispositionIntake(unclaimedDispositionAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
 	return operatorDecisionIntakes{shipment: shipment, transport: transport, nodeOperations: nodeOperations, customs: customs,
 		settlement: settlement, networkRouting: networkRouting, visibility: visibility, warehouseGoods: warehouseGoods,
 		warehousePreAdvice: warehousePreAdvice, warehousePreAdviceClose: warehousePreAdviceClose,
-		warehouseDiscrepancyConclusion: warehouseDiscrepancyConclusion}, nil
+		warehouseDiscrepancyConclusion: warehouseDiscrepancyConclusion,
+		warehouseUnclaimedClaim:        warehouseUnclaimedClaim,
+		warehouseUnclaimedDisposition:  warehouseUnclaimedDisposition}, nil
 }
 
 // operatorRegistryIntakes 是操作者渠道登记册配置写能力面在各上下文的 Intake（ADR-0100 决定四；票 operator-channel/04）。

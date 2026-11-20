@@ -13,30 +13,32 @@ import (
 )
 
 type storedReceiptHeader struct {
-	tenant     string
-	factID     string
-	device     string
-	operator   string
-	occurredAt time.Time
-	receivedAt time.Time
-	warehouse  string
-	preAdvice  string
-	shape      string
-	outcome    string
+	tenant           string
+	factID           string
+	device           string
+	operator         string
+	occurredAt       time.Time
+	receivedAt       time.Time
+	warehouse        string
+	preAdvice        string
+	unclaimedArrival *string
+	shape            string
+	outcome          string
 }
 
 func insertReceipt(ctx context.Context, executor bentopg.Executor, receipt domain.RecordedReceipt) (bool, error) {
 	var id string
+	arrivalRef, _ := receipt.UnclaimedArrival()
 	err := executor.QueryRow(ctx,
 		`INSERT INTO warehouse_fulfillment.receipt_confirmation (
 		    tenant_id, fact_id, device_id, operator_id, occurred_at, received_at,
-		    warehouse_code, pre_advice_id, inbound_mode, outcome
-		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		    warehouse_code, pre_advice_id, unclaimed_arrival_id, inbound_mode, outcome
+		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		 ON CONFLICT ON CONSTRAINT receipt_confirmation_pkey DO NOTHING
 		 RETURNING fact_id`,
 		receipt.Tenant().String(), receipt.FactID().String(), receipt.Device().String(), receipt.Operator().String(),
 		receipt.OccurredAt(), receipt.ReceivedAt(), receipt.Warehouse().String(), receipt.PreAdvice().String(),
-		receipt.Shape().String(), receipt.Outcome().String(),
+		nullableText(arrivalRef.String()), receipt.Shape().String(), receipt.Outcome().String(),
 	).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
@@ -104,7 +106,7 @@ func nullableText(value string) any {
 func loadReceipts(ctx context.Context, querier bentopg.Querier, where string, args ...any) ([]domain.RecordedReceipt, error) {
 	rows, err := querier.Query(ctx,
 		`SELECT tenant_id, fact_id, device_id, operator_id, occurred_at, received_at,
-		        warehouse_code, pre_advice_id, inbound_mode, outcome
+		        warehouse_code, pre_advice_id, unclaimed_arrival_id, inbound_mode, outcome
 		   FROM warehouse_fulfillment.receipt_confirmation
 		  WHERE `+where+`
 		  ORDER BY pre_advice_id, received_seq`, args...)
@@ -117,7 +119,7 @@ func loadReceipts(ctx context.Context, querier bentopg.Querier, where string, ar
 		var header storedReceiptHeader
 		if err := rows.Scan(
 			&header.tenant, &header.factID, &header.device, &header.operator, &header.occurredAt, &header.receivedAt,
-			&header.warehouse, &header.preAdvice, &header.shape, &header.outcome,
+			&header.warehouse, &header.preAdvice, &header.unclaimedArrival, &header.shape, &header.outcome,
 		); err != nil {
 			return nil, err
 		}
@@ -311,6 +313,13 @@ func (header storedReceiptHeader) receipt(
 	if err != nil {
 		return domain.RecordedReceipt{}, err
 	}
+	var arrivalID domain.UnclaimedArrivalID
+	if header.unclaimedArrival != nil {
+		arrivalID, err = domain.NewUnclaimedArrivalID(*header.unclaimedArrival)
+		if err != nil {
+			return domain.RecordedReceipt{}, err
+		}
+	}
 	shape, err := domain.NewInboundMode(header.shape)
 	if err != nil {
 		return domain.RecordedReceipt{}, err
@@ -322,7 +331,7 @@ func (header storedReceiptHeader) receipt(
 	return domain.NewRecordedReceipt(domain.RecordedReceiptSpec{
 		Tenant: tenant, FactID: factID, Device: device, Operator: operator,
 		OccurredAt: header.occurredAt, ReceivedAt: header.receivedAt,
-		Warehouse: warehouse, PreAdvice: preAdvice, Shape: shape, Outcome: outcome,
+		Warehouse: warehouse, PreAdvice: preAdvice, UnclaimedArrival: arrivalID, Shape: shape, Outcome: outcome,
 		Lines: lines, CartonLines: cartonLines, Discrepancy: discrepancy, Differences: differences,
 	})
 }

@@ -481,3 +481,27 @@ func (channels endpointChannels) discrepancyConclusion() warehousehttp.Discrepan
 	}
 	return warehousehttp.UnconfiguredIntake{}
 }
+
+// unclaimedDisposalRuleRegistration 是待认领处置规则的登记册配置写 Intake，复用仓登记的同一只。
+func (channels endpointChannels) unclaimedDisposalRuleRegistration() warehousehttp.DisposalRuleRegistrationIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
+// unclaimedArrivalClaim 是待认领到货认领与撤销两口共用的运营决定 Intake。
+func (channels endpointChannels) unclaimedArrivalClaim() warehousehttp.UnclaimedArrivalClaimIntake {
+	if channels.operatorDecisions.warehouseUnclaimedClaim != nil {
+		return channels.operatorDecisions.warehouseUnclaimedClaim
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
+// unclaimedArrivalDisposition 是待认领到货处置口的运营决定 Intake。
+func (channels endpointChannels) unclaimedArrivalDisposition() warehousehttp.UnclaimedArrivalDispositionIntake {
+	if channels.operatorDecisions.warehouseUnclaimedDisposition != nil {
+		return channels.operatorDecisions.warehouseUnclaimedDisposition
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}

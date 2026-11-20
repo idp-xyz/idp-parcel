@@ -82,16 +82,17 @@ func ContentInvalidReceipt(issues []domain.ReceiptContentIssue) ConfirmReceiptRe
 // ConfirmReceiptCommand 是一次商品入库的收货。事实身份由设备签发。租户不取自载荷。
 // 货主不在命令上：收的是预报上的那个货主，识别码不跨货主。
 type ConfirmReceiptCommand struct {
-	Tenant      domain.TenantID
-	FactID      domain.ReceiptFactID
-	Device      domain.ReceiptDeviceID
-	Operator    domain.ReceiptOperatorID
-	OccurredAt  time.Time
-	Warehouse   domain.WarehouseCode
-	PreAdvice   domain.PreAdviceID
-	Shape       domain.InboundMode
-	Lines       []domain.ReceiptLine
-	CartonLines []domain.CartonReceiptLine
+	Tenant           domain.TenantID
+	FactID           domain.ReceiptFactID
+	Device           domain.ReceiptDeviceID
+	Operator         domain.ReceiptOperatorID
+	OccurredAt       time.Time
+	Warehouse        domain.WarehouseCode
+	PreAdvice        domain.PreAdviceID
+	UnclaimedArrival domain.UnclaimedArrivalID
+	Shape            domain.InboundMode
+	Lines            []domain.ReceiptLine
+	CartonLines      []domain.CartonReceiptLine
 }
 
 func (command ConfirmReceiptCommand) assemblyError() error {
@@ -120,8 +121,8 @@ func (command ConfirmReceiptCommand) assemblyError() error {
 func (command ConfirmReceiptCommand) submission() domain.ReceiptSubmission {
 	return domain.ReceiptSubmission{
 		Device: command.Device, Operator: command.Operator, OccurredAt: command.OccurredAt,
-		Warehouse: command.Warehouse, PreAdvice: command.PreAdvice, Shape: command.Shape,
-		Lines: command.Lines, CartonLines: command.CartonLines,
+		Warehouse: command.Warehouse, PreAdvice: command.PreAdvice, UnclaimedArrival: command.UnclaimedArrival,
+		Shape: command.Shape, Lines: command.Lines, CartonLines: command.CartonLines,
 	}
 }
 
@@ -235,11 +236,28 @@ func (handler *ConfirmReceiptHandler) Confirm(ctx context.Context, command Confi
 		return ContentInvalidReceipt([]domain.ReceiptContentIssue{domain.WholeReceiptIssue(domain.ReceiptIssueShapeMismatch)}), nil
 	}
 	// 先锁再看状态。撤回若已经落定，这里读到的是已取消，行上的库位与别名不再拿来挡转待认领。
+	// 若本条事实本来就引用着一件待认领到货：预报不能收货时不另建新到货，答 CONTENT_INVALID（AT-WF-059）；
+	// 预报可收货时再拿该到货的锁（锁序：预报 → 到货，与认领/撤销/处置无环）核对已认领且指向本预报。
 	advice, err = handler.adviceUnderLock(ctx, command.Tenant, advice.ID())
 	if err != nil {
 		return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: %w", err)
 	}
-	if !preAdviceReceivable(advice) {
+	if command.UnclaimedArrival.String() != "" {
+		if !preAdviceReceivable(advice) {
+			return ContentInvalidReceipt([]domain.ReceiptContentIssue{
+				domain.WholeReceiptIssue(domain.ReceiptIssueUnclaimedArrivalInvalid),
+			}), nil
+		}
+		valid, err := handler.verifyClaimedArrival(ctx, advice, command)
+		if err != nil {
+			return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: %w", err)
+		}
+		if !valid {
+			return ContentInvalidReceipt([]domain.ReceiptContentIssue{
+				domain.WholeReceiptIssue(domain.ReceiptIssueUnclaimedArrivalInvalid),
+			}), nil
+		}
+	} else if !preAdviceReceivable(advice) {
 		return handler.divertUnscreened(ctx, warehouse, advice, command)
 	}
 	if advice.Inbound() == domain.InboundByCarton {
@@ -581,7 +599,7 @@ func (handler *ConfirmReceiptHandler) record(
 	receipt, err := domain.NewRecordedReceipt(domain.RecordedReceiptSpec{
 		Tenant: command.Tenant, FactID: command.FactID, Device: command.Device, Operator: command.Operator,
 		OccurredAt: command.OccurredAt, ReceivedAt: receivedAt, Warehouse: command.Warehouse, PreAdvice: command.PreAdvice,
-		Shape: command.Shape, Outcome: outcome, Lines: lines, CartonLines: cartonLines,
+		UnclaimedArrival: command.UnclaimedArrival, Shape: command.Shape, Outcome: outcome, Lines: lines, CartonLines: cartonLines,
 		Discrepancy: discrepancy, Differences: differences,
 	})
 	if err != nil {
@@ -870,6 +888,34 @@ func (handler *ConfirmReceiptHandler) adviceUnderLock(
 	return advice, nil
 }
 
+// verifyClaimedArrival 在已持预报锁之后再拿这件待认领到货的锁，核对它此刻处于已认领且认给了这份预报（UC-WF-004、AT-WF-059）。
+// 锁序固定为预报 → 到货；认领撤销只拿决定锁 → 到货，两者串行且无环。
+func (handler *ConfirmReceiptHandler) verifyClaimedArrival(
+	ctx context.Context,
+	advice domain.PreAdvice,
+	command ConfirmReceiptCommand,
+) (bool, error) {
+	if handler.arrivals == nil {
+		return false, errors.New("待认领到货没有接上")
+	}
+	if err := handler.arrivals.HoldArrival(ctx, command.Tenant, command.UnclaimedArrival); err != nil {
+		return false, err
+	}
+	detail, found, err := handler.arrivals.LoadDetail(ctx, command.Tenant, command.UnclaimedArrival)
+	if err != nil {
+		return false, err
+	}
+	if !found || detail.Arrival.Kind() != domain.UnclaimedArrivalKindInbound || detail.Arrival.Warehouse() != command.Warehouse {
+		return false, nil
+	}
+	active, ok := detail.ActiveClaim()
+	if !ok {
+		return false, nil
+	}
+	claimedAdvice, hasAdvice := active.PreAdvice()
+	return hasAdvice && claimedAdvice == advice.ID() && active.Owner() == advice.Owner(), nil
+}
+
 // divertUnscreened 在预报已不能收货时，把原事实原样保全为待认领到货，不核行上的库位、计量单位、批号、效期与贴标别名。
 // 没有行，或数量不为正，落不了册，仍答 CONTENT_INVALID。
 func (handler *ConfirmReceiptHandler) divertUnscreened(
@@ -879,6 +925,11 @@ func (handler *ConfirmReceiptHandler) divertUnscreened(
 	command ConfirmReceiptCommand,
 ) (ConfirmReceiptResult, error) {
 	_ = warehouse
+	if command.UnclaimedArrival.String() != "" {
+		return ContentInvalidReceipt([]domain.ReceiptContentIssue{
+			domain.WholeReceiptIssue(domain.ReceiptIssueUnclaimedArrivalInvalid),
+		}), nil
+	}
 	receivedAt := handler.clock.Now()
 	switch command.Shape {
 	case domain.InboundByGoods:

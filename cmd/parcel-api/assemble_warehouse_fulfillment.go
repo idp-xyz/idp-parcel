@@ -146,6 +146,12 @@ type warehouseFulfillmentOrchestration struct {
 
 	measurementRecord  transactionalWarehouseMeasurement
 	measurementQueries *warehouseapp.QueryWarehouseMeasurementsHandler
+
+	disposalRuleRegistration transactionalDisposalRuleRegistration
+	disposalRuleQueries      *warehouseapp.QueryDisposalRulesHandler
+	unclaimedArrivalRegister transactionalUnclaimedArrivalRegistration
+	unclaimedArrivalManage   transactionalUnclaimedArrivalManagement
+	unclaimedArrivalQueries  *warehouseapp.QueryUnclaimedArrivalsHandler
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -254,6 +260,66 @@ func (measurement transactionalWarehouseMeasurement) Record(
 ) (warehouseapp.RecordWarehouseMeasurementResult, error) {
 	return inTransaction(ctx, measurement.transactor, func(txCtx context.Context) (warehouseapp.RecordWarehouseMeasurementResult, error) {
 		return measurement.inner.Record(txCtx, command)
+	})
+}
+
+type transactionalDisposalRuleRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.RegisterDisposalRuleHandler
+}
+
+func (registration transactionalDisposalRuleRegistration) Register(
+	ctx context.Context,
+	command warehouseapp.RegisterDisposalRuleCommand,
+) (warehouseapp.RegisterDisposalRuleResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.RegisterDisposalRuleResult, error) {
+		return registration.inner.Register(txCtx, command)
+	})
+}
+
+type transactionalUnclaimedArrivalRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.RegisterUnclaimedArrivalHandler
+}
+
+func (registration transactionalUnclaimedArrivalRegistration) Register(
+	ctx context.Context,
+	command warehouseapp.RegisterUnclaimedArrivalCommand,
+) (warehouseapp.RegisterUnclaimedArrivalResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.RegisterUnclaimedArrivalResult, error) {
+		return registration.inner.Register(txCtx, command)
+	})
+}
+
+type transactionalUnclaimedArrivalManagement struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.ManageUnclaimedArrivalHandler
+}
+
+func (management transactionalUnclaimedArrivalManagement) Claim(
+	ctx context.Context,
+	command warehouseapp.ClaimUnclaimedArrivalCommand,
+) (warehouseapp.ClaimUnclaimedArrivalResult, error) {
+	return inTransaction(ctx, management.transactor, func(txCtx context.Context) (warehouseapp.ClaimUnclaimedArrivalResult, error) {
+		return management.inner.Claim(txCtx, command)
+	})
+}
+
+func (management transactionalUnclaimedArrivalManagement) RevokeClaim(
+	ctx context.Context,
+	command warehouseapp.RevokeUnclaimedClaimCommand,
+) (warehouseapp.RevokeUnclaimedClaimResult, error) {
+	return inTransaction(ctx, management.transactor, func(txCtx context.Context) (warehouseapp.RevokeUnclaimedClaimResult, error) {
+		return management.inner.RevokeClaim(txCtx, command)
+	})
+}
+
+func (management transactionalUnclaimedArrivalManagement) Dispose(
+	ctx context.Context,
+	command warehouseapp.DisposeUnclaimedArrivalCommand,
+) (warehouseapp.DisposeUnclaimedArrivalResult, error) {
+	return inTransaction(ctx, management.transactor, func(txCtx context.Context) (warehouseapp.DisposeUnclaimedArrivalResult, error) {
+		return management.inner.Dispose(txCtx, command)
 	})
 }
 
@@ -417,6 +483,24 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 			measurementStore, warehouses, goods, cartons, systemClock{},
 		),
 	}
+	disposalRules, err := whpostgres.NewUnclaimedDisposalRules(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: unclaimed disposal rules: %w", err)
+	}
+	disposalRuleRegistration := transactionalDisposalRuleRegistration{
+		transactor: db.Transactor(),
+		inner:      warehouseapp.NewRegisterDisposalRuleHandler(disposalRules, warehouses, systemClock{}),
+	}
+	unclaimedArrivalRegister := transactionalUnclaimedArrivalRegistration{
+		transactor: db.Transactor(),
+		inner:      warehouseapp.NewRegisterUnclaimedArrivalHandler(arrivals, arrivalIDs, warehouses, systemClock{}),
+	}
+	unclaimedArrivalManage := transactionalUnclaimedArrivalManagement{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewManageUnclaimedArrivalHandler(
+			arrivals, disposalRules, preAdviceStore, warehouses, owners, systemClock{},
+		),
+	}
 	return warehouseFulfillmentOrchestration{
 		registration: transactionalWarehouseRegistration{
 			transactor: db.Transactor(),
@@ -457,5 +541,10 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		discrepancyConclusion:    discrepancyConclusion,
 		measurementRecord:        measurementRecord,
 		measurementQueries:       warehouseapp.NewQueryWarehouseMeasurementsHandler(goodsCatalogue, measurementStore),
+		disposalRuleRegistration: disposalRuleRegistration,
+		disposalRuleQueries:      warehouseapp.NewQueryDisposalRulesHandler(disposalRules, disposalRules),
+		unclaimedArrivalRegister: unclaimedArrivalRegister,
+		unclaimedArrivalManage:   unclaimedArrivalManage,
+		unclaimedArrivalQueries:  warehouseapp.NewQueryUnclaimedArrivalsHandler(arrivals),
 	}, nil
 }

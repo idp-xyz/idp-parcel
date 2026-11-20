@@ -377,57 +377,61 @@ func (line ReceiptDiscrepancyLine) Carton() CartonNumber         { return line.c
 // ReceiptSubmission 是拿来比重放的提交内容。接收时刻、行结果与差异标识都不在里面：
 // 那些是落册时才有的，同一份内容再投一次不该因为它们被判成内容冲突。
 type ReceiptSubmission struct {
-	Device      ReceiptDeviceID
-	Operator    ReceiptOperatorID
-	OccurredAt  time.Time
-	Warehouse   WarehouseCode
-	PreAdvice   PreAdviceID
-	Shape       InboundMode
-	Lines       []ReceiptLine
-	CartonLines []CartonReceiptLine
+	Device           ReceiptDeviceID
+	Operator         ReceiptOperatorID
+	OccurredAt       time.Time
+	Warehouse        WarehouseCode
+	PreAdvice        PreAdviceID
+	UnclaimedArrival UnclaimedArrivalID
+	Shape            InboundMode
+	Lines            []ReceiptLine
+	CartonLines      []CartonReceiptLine
 }
 
 // RecordedReceipt 是已经落册的一条收货事实。
 type RecordedReceipt struct {
-	tenant      TenantID
-	factID      ReceiptFactID
-	device      ReceiptDeviceID
-	operator    ReceiptOperatorID
-	occurredAt  time.Time
-	receivedAt  time.Time
-	warehouse   WarehouseCode
-	preAdvice   PreAdviceID
-	shape       InboundMode
-	outcome     RecordedReceiptOutcome
-	lines       []ReceiptLine
-	cartonLines []CartonReceiptLine
-	discrepancy ReceiptDiscrepancyID
-	differences []ReceiptDiscrepancyLine
+	tenant           TenantID
+	factID           ReceiptFactID
+	device           ReceiptDeviceID
+	operator         ReceiptOperatorID
+	occurredAt       time.Time
+	receivedAt       time.Time
+	warehouse        WarehouseCode
+	preAdvice        PreAdviceID
+	unclaimedArrival UnclaimedArrivalID
+	shape            InboundMode
+	outcome          RecordedReceiptOutcome
+	lines            []ReceiptLine
+	cartonLines      []CartonReceiptLine
+	discrepancy      ReceiptDiscrepancyID
+	differences      []ReceiptDiscrepancyLine
 }
 
 // RecordedReceiptSpec 组装一条已落册的收货事实。差异标识的零值表示这一次没有形成差异；有标识就必须有行。
 type RecordedReceiptSpec struct {
-	Tenant      TenantID
-	FactID      ReceiptFactID
-	Device      ReceiptDeviceID
-	Operator    ReceiptOperatorID
-	OccurredAt  time.Time
-	ReceivedAt  time.Time
-	Warehouse   WarehouseCode
-	PreAdvice   PreAdviceID
-	Shape       InboundMode
-	Outcome     RecordedReceiptOutcome
-	Lines       []ReceiptLine
-	CartonLines []CartonReceiptLine
-	Discrepancy ReceiptDiscrepancyID
-	Differences []ReceiptDiscrepancyLine
+	Tenant           TenantID
+	FactID           ReceiptFactID
+	Device           ReceiptDeviceID
+	Operator         ReceiptOperatorID
+	OccurredAt       time.Time
+	ReceivedAt       time.Time
+	Warehouse        WarehouseCode
+	PreAdvice        PreAdviceID
+	UnclaimedArrival UnclaimedArrivalID
+	Shape            InboundMode
+	Outcome          RecordedReceiptOutcome
+	Lines            []ReceiptLine
+	CartonLines      []CartonReceiptLine
+	Discrepancy      ReceiptDiscrepancyID
+	Differences      []ReceiptDiscrepancyLine
 }
 
 func NewRecordedReceipt(spec RecordedReceiptSpec) (RecordedReceipt, error) {
 	receipt := RecordedReceipt{
 		tenant: spec.Tenant, factID: spec.FactID, device: spec.Device, operator: spec.Operator,
 		occurredAt: normalizedInstant(spec.OccurredAt), receivedAt: normalizedInstant(spec.ReceivedAt),
-		warehouse: spec.Warehouse, preAdvice: spec.PreAdvice, shape: spec.Shape, outcome: spec.Outcome,
+		warehouse: spec.Warehouse, preAdvice: spec.PreAdvice, unclaimedArrival: spec.UnclaimedArrival,
+		shape: spec.Shape, outcome: spec.Outcome,
 		lines: slices.Clone(spec.Lines), cartonLines: slices.Clone(spec.CartonLines),
 		discrepancy: spec.Discrepancy, differences: slices.Clone(spec.Differences),
 	}
@@ -441,6 +445,9 @@ func (receipt RecordedReceipt) validate() error {
 	if !receipt.tenant.valid() || !receipt.factID.valid() || !receipt.device.valid() || !receipt.operator.valid() ||
 		receipt.occurredAt.IsZero() || receipt.receivedAt.IsZero() || !receipt.warehouse.valid() || !receipt.preAdvice.valid() ||
 		receipt.shape.String() == "" || receipt.outcome.String() == "" {
+		return ErrInvalidReceipt
+	}
+	if receipt.outcome == RecordedReceiptDivertedToUnclaimed && receipt.unclaimedArrival.valid() {
 		return ErrInvalidReceipt
 	}
 	hasDifference := receipt.discrepancy.valid()
@@ -528,14 +535,17 @@ func (receipt RecordedReceipt) validateCarton(hasDifference bool) error {
 	return nil
 }
 
-func (receipt RecordedReceipt) Tenant() TenantID                { return receipt.tenant }
-func (receipt RecordedReceipt) FactID() ReceiptFactID           { return receipt.factID }
-func (receipt RecordedReceipt) Device() ReceiptDeviceID         { return receipt.device }
-func (receipt RecordedReceipt) Operator() ReceiptOperatorID     { return receipt.operator }
-func (receipt RecordedReceipt) OccurredAt() time.Time           { return receipt.occurredAt }
-func (receipt RecordedReceipt) ReceivedAt() time.Time           { return receipt.receivedAt }
-func (receipt RecordedReceipt) Warehouse() WarehouseCode        { return receipt.warehouse }
-func (receipt RecordedReceipt) PreAdvice() PreAdviceID          { return receipt.preAdvice }
+func (receipt RecordedReceipt) Tenant() TenantID            { return receipt.tenant }
+func (receipt RecordedReceipt) FactID() ReceiptFactID       { return receipt.factID }
+func (receipt RecordedReceipt) Device() ReceiptDeviceID     { return receipt.device }
+func (receipt RecordedReceipt) Operator() ReceiptOperatorID { return receipt.operator }
+func (receipt RecordedReceipt) OccurredAt() time.Time       { return receipt.occurredAt }
+func (receipt RecordedReceipt) ReceivedAt() time.Time       { return receipt.receivedAt }
+func (receipt RecordedReceipt) Warehouse() WarehouseCode    { return receipt.warehouse }
+func (receipt RecordedReceipt) PreAdvice() PreAdviceID      { return receipt.preAdvice }
+func (receipt RecordedReceipt) UnclaimedArrival() (UnclaimedArrivalID, bool) {
+	return receipt.unclaimedArrival, receipt.unclaimedArrival.valid()
+}
 func (receipt RecordedReceipt) Shape() InboundMode              { return receipt.shape }
 func (receipt RecordedReceipt) Outcome() RecordedReceiptOutcome { return receipt.outcome }
 func (receipt RecordedReceipt) Lines() []ReceiptLine            { return slices.Clone(receipt.lines) }
@@ -552,7 +562,8 @@ func (receipt RecordedReceipt) Differences() []ReceiptDiscrepancyLine {
 // SameContent 按提交内容比，不比接收时刻、行结果和差异标识。时刻收到同一精度：同一微秒里的纳秒差存不下来。
 func (receipt RecordedReceipt) SameContent(submission ReceiptSubmission) bool {
 	if receipt.device != submission.Device || receipt.operator != submission.Operator ||
-		receipt.warehouse != submission.Warehouse || receipt.preAdvice != submission.PreAdvice || receipt.shape != submission.Shape {
+		receipt.warehouse != submission.Warehouse || receipt.preAdvice != submission.PreAdvice ||
+		receipt.unclaimedArrival != submission.UnclaimedArrival || receipt.shape != submission.Shape {
 		return false
 	}
 	if !receipt.occurredAt.Equal(normalizedInstant(submission.OccurredAt)) {

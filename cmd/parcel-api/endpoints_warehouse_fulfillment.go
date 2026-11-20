@@ -64,6 +64,14 @@ type warehouseFulfillmentWiring struct {
 	measurementIntake  *warehousehttp.WarehouseMeasurementWorkFactIntake
 	measurementRecord  warehousehttp.WarehouseMeasurementRecorder
 	measurementQueries warehousehttp.WarehouseMeasurementReader
+
+	disposalRuleRegistration warehousehttp.DisposalRuleRegistrar
+	disposalRuleCatalogue    warehousehttp.DisposalRuleCatalogueReader
+	disposalRuleRevisions    warehousehttp.DisposalRuleRevisionsReader
+	unclaimedArrivalIntake   *warehousehttp.UnclaimedArrivalWorkFactIntake
+	unclaimedArrivalRegister warehousehttp.UnclaimedArrivalRegistrar
+	unclaimedArrivalManage   warehousehttp.UnclaimedArrivalManager
+	unclaimedArrivalQueries  warehousehttp.UnclaimedArrivalQueries
 }
 
 func init() {
@@ -241,6 +249,39 @@ func init() {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-carton-measurements?ownerAccount=SYN-OWNER-01&warehouseCode=SYN-WH-01&cartonNumber=SYN-CARTON-01",
 			},
+			// 待认领到货处置规则挂登记册配置写，不判准入（ADR-0384 决定五）；查阅挂主数据与运营查阅读。
+			"/warehouse-fulfillment-unclaimed-disposal-rule-registrations": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-unclaimed-disposal-rules": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-unclaimed-disposal-rule-revisions": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-unclaimed-disposal-rule-revisions?warehouseCode=SYN-WH-01",
+			},
+			// 待认领到货直接登记挂作业事实登记（范围种类 WAREHOUSE，事实类型 UNCLAIMED_ARRIVAL）；认领、撤销与处置挂运营决定；
+			// 查阅只在操作者面，不上客户面（UC-WF-005、BD-WF-012）。
+			"/warehouse-fulfillment-unclaimed-arrival-registrations": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-unclaimed-arrival-claims": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionUnclaimedArrivalClaim), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-unclaimed-arrival-claim-revocations": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionUnclaimedArrivalClaim), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-unclaimed-arrival-dispositions": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionUnclaimedArrivalDisposition), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-unclaimed-arrivals": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-unclaimed-arrival": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-unclaimed-arrival?arrivalId=SYN-UCA-01",
+			},
 		},
 		build: func(sources endpointSources) (warehouseFulfillmentWiring, error) {
 			if !sources.warehouseFulfillment {
@@ -269,6 +310,7 @@ func init() {
 			}
 			var receiptIntake *warehousehttp.ReceiptWorkFactIntake
 			var measurementIntake *warehousehttp.WarehouseMeasurementWorkFactIntake
+			var unclaimedArrivalIntake *warehousehttp.UnclaimedArrivalWorkFactIntake
 			if sources.operatorVerifier != nil && sources.operatorRegistry != nil && sources.deviceRegistry != nil && sources.admission != nil {
 				receiptIntake, err = buildReceiptConfirmationIntake(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
@@ -277,6 +319,12 @@ func init() {
 					return warehouseFulfillmentWiring{}, err
 				}
 				measurementIntake, err = buildWarehouseMeasurementIntake(
+					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
+				)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+				unclaimedArrivalIntake, err = buildUnclaimedArrivalIntake(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
 				)
 				if err != nil {
@@ -310,18 +358,25 @@ func init() {
 				goodsRevisions:    orchestration.goodsQueries,
 				goodsFinder:       orchestration.goodsQueries,
 
-				preAdviceOnBehalf:     orchestration.preAdvices,
-				preAdviceQueries:      orchestration.preAdviceQueries,
-				preAdviceClose:        orchestration.preAdviceClose,
-				customerPreAdvice:     customerPreAdvice,
-				customerGoods:         customerGoods,
-				customerConclusion:    customerConclusion,
-				discrepancyConclusion: orchestration.discrepancyConclusion,
-				receiptIntake:         receiptIntake,
-				receiptConfirm:        orchestration.receiptConfirm,
-				measurementIntake:     measurementIntake,
-				measurementRecord:     orchestration.measurementRecord,
-				measurementQueries:    orchestration.measurementQueries,
+				preAdviceOnBehalf:        orchestration.preAdvices,
+				preAdviceQueries:         orchestration.preAdviceQueries,
+				preAdviceClose:           orchestration.preAdviceClose,
+				customerPreAdvice:        customerPreAdvice,
+				customerGoods:            customerGoods,
+				customerConclusion:       customerConclusion,
+				discrepancyConclusion:    orchestration.discrepancyConclusion,
+				receiptIntake:            receiptIntake,
+				receiptConfirm:           orchestration.receiptConfirm,
+				measurementIntake:        measurementIntake,
+				measurementRecord:        orchestration.measurementRecord,
+				measurementQueries:       orchestration.measurementQueries,
+				disposalRuleRegistration: orchestration.disposalRuleRegistration,
+				disposalRuleCatalogue:    orchestration.disposalRuleQueries,
+				disposalRuleRevisions:    orchestration.disposalRuleQueries,
+				unclaimedArrivalIntake:   unclaimedArrivalIntake,
+				unclaimedArrivalRegister: orchestration.unclaimedArrivalRegister,
+				unclaimedArrivalManage:   orchestration.unclaimedArrivalManage,
+				unclaimedArrivalQueries:  orchestration.unclaimedArrivalQueries,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring warehouseFulfillmentWiring) []httpapi.BusinessEndpoint {
@@ -374,6 +429,15 @@ func init() {
 			warehouseMeasurement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			goodsMeasurements := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			cartonMeasurements := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			disposalRuleRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			disposalRules := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			disposalRuleRevisions := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			unclaimedArrivalRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			unclaimedArrivalClaim := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			unclaimedArrivalRevoke := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			unclaimedArrivalDispose := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			unclaimedArrivalList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			unclaimedArrivalOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			// 开着：与别的登记写行、查阅行行为一致——渠道没配答「接入渠道未配置」，配了走真编排。各读口共用一个 Intake，各册的
 			// 登记口共用同一个认证器。
 			if wiring.enabled {
@@ -436,6 +500,19 @@ func init() {
 				warehouseMeasurement = warehousehttp.NewRecordWarehouseMeasurementEndpoint(measurementIntake, wiring.measurementRecord)
 				goodsMeasurements = warehousehttp.NewQueryGoodsMeasurementsEndpoint(catalogueIntake, wiring.measurementQueries)
 				cartonMeasurements = warehousehttp.NewQueryCartonMeasurementsEndpoint(catalogueIntake, wiring.measurementQueries)
+				disposalRuleRegistration = warehousehttp.NewRegisterDisposalRuleEndpoint(channels.unclaimedDisposalRuleRegistration(), wiring.disposalRuleRegistration)
+				disposalRules = warehousehttp.NewQueryDisposalRulesEndpoint(catalogueIntake, wiring.disposalRuleCatalogue)
+				disposalRuleRevisions = warehousehttp.NewQueryDisposalRuleRevisionsEndpoint(catalogueIntake, wiring.disposalRuleRevisions)
+				unclaimedIntake := warehousehttp.UnclaimedArrivalWorkFactIntakeFace(warehousehttp.UnconfiguredUnclaimedArrivalWorkFactIntake{})
+				if wiring.unclaimedArrivalIntake != nil {
+					unclaimedIntake = wiring.unclaimedArrivalIntake
+				}
+				unclaimedArrivalRegistration = warehousehttp.NewRegisterUnclaimedArrivalEndpoint(unclaimedIntake, wiring.unclaimedArrivalRegister)
+				unclaimedArrivalClaim = warehousehttp.NewClaimUnclaimedArrivalEndpoint(channels.unclaimedArrivalClaim(), wiring.unclaimedArrivalManage)
+				unclaimedArrivalRevoke = warehousehttp.NewRevokeUnclaimedClaimEndpoint(channels.unclaimedArrivalClaim(), wiring.unclaimedArrivalManage)
+				unclaimedArrivalDispose = warehousehttp.NewDisposeUnclaimedArrivalEndpoint(channels.unclaimedArrivalDisposition(), wiring.unclaimedArrivalManage)
+				unclaimedArrivalList = warehousehttp.NewQueryUnclaimedArrivalsEndpoint(catalogueIntake, wiring.unclaimedArrivalQueries)
+				unclaimedArrivalOne = warehousehttp.NewQueryUnclaimedArrivalEndpoint(catalogueIntake, wiring.unclaimedArrivalQueries)
 			}
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/warehouse-fulfillment-warehouse-registrations", Handler: registration},
@@ -484,6 +561,15 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-warehouse-measurements", Handler: warehouseMeasurement},
 				{Pattern: "/warehouse-fulfillment-goods-measurements", Handler: goodsMeasurements},
 				{Pattern: "/warehouse-fulfillment-carton-measurements", Handler: cartonMeasurements},
+				{Pattern: "/warehouse-fulfillment-unclaimed-disposal-rule-registrations", Handler: disposalRuleRegistration},
+				{Pattern: "/warehouse-fulfillment-unclaimed-disposal-rules", Handler: disposalRules},
+				{Pattern: "/warehouse-fulfillment-unclaimed-disposal-rule-revisions", Handler: disposalRuleRevisions},
+				{Pattern: "/warehouse-fulfillment-unclaimed-arrival-registrations", Handler: unclaimedArrivalRegistration},
+				{Pattern: "/warehouse-fulfillment-unclaimed-arrival-claims", Handler: unclaimedArrivalClaim},
+				{Pattern: "/warehouse-fulfillment-unclaimed-arrival-claim-revocations", Handler: unclaimedArrivalRevoke},
+				{Pattern: "/warehouse-fulfillment-unclaimed-arrival-dispositions", Handler: unclaimedArrivalDispose},
+				{Pattern: "/warehouse-fulfillment-unclaimed-arrivals", Handler: unclaimedArrivalList},
+				{Pattern: "/warehouse-fulfillment-unclaimed-arrival", Handler: unclaimedArrivalOne},
 			}
 		},
 	})
@@ -550,4 +636,22 @@ func buildWarehouseMeasurementIntake(
 		return nil, err
 	}
 	return warehousehttp.NewWarehouseMeasurementWorkFactIntake(authenticator)
+}
+
+// buildUnclaimedArrivalIntake 装配待认领到货登记的作业事实 Intake。
+func buildUnclaimedArrivalIntake(
+	verifier accessidentity.OperatorCredentialVerifier,
+	operators accessidentity.OperatorRegistry,
+	devices accessidentity.DeviceRegistry,
+	admission accessidentity.AdmissionScope,
+) (*warehousehttp.UnclaimedArrivalWorkFactIntake, error) {
+	minter, err := accessidentity.NewWorkFactMinter(verifier, operators, devices, admission, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: unclaimed arrival work fact minter: %w", err)
+	}
+	authenticator, err := whaccess.NewUnclaimedArrivalWorkFactAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewUnclaimedArrivalWorkFactIntake(authenticator)
 }

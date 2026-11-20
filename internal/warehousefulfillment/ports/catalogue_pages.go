@@ -83,3 +83,34 @@ var LocationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
 	},
 })
+
+// UnclaimedDisposalRulePages 是各仓待认领处置规则当前修订列表的查询声明（UC-WF-005；ADR-0144）。
+var UnclaimedDisposalRulePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-unclaimed-disposal-rules",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "warehouseCode", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "warehouseCode"},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "warehouseCode"},
+	},
+})
+
+// UnclaimedArrivalPages 是运营查阅待认领到货列表的查询声明（UC-WF-005；ADR-0144）。
+// 筛选维覆盖仓、到货种类与状态；登记时间上下界（receivedFrom/receivedTo）作册子选择器参与游标摘要。
+var UnclaimedArrivalPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-unclaimed-arrivals",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "receivedAt", Kind: cataloguepage.Instant},
+		{Name: "arrivalId", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "receivedAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "warehouseCode"},
+		{Name: "kind", Vocabulary: []string{"INBOUND", "RETURN"}},
+		{Name: "status", Vocabulary: []string{"UNCLAIMED", "CLAIMED", "DISPOSED"}},
+	},
+	Selectors: []string{"receivedFrom", "receivedTo"},
+})

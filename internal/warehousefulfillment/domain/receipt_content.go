@@ -18,6 +18,7 @@ const (
 	ReceiptIssueLabelAliasNotValid
 	ReceiptIssueShapeMismatch
 	ReceiptIssueWarehouseMismatch
+	ReceiptIssueUnclaimedArrivalInvalid
 )
 
 func (kind ReceiptContentIssueKind) String() string {
@@ -44,6 +45,8 @@ func (kind ReceiptContentIssueKind) String() string {
 		return "SHAPE_MISMATCH"
 	case ReceiptIssueWarehouseMismatch:
 		return "WAREHOUSE_MISMATCH"
+	case ReceiptIssueUnclaimedArrivalInvalid:
+		return "UNCLAIMED_ARRIVAL_INVALID"
 	default:
 		return ""
 	}

@@ -20,11 +20,14 @@ var (
 	_ LocationTypeRegistrationIntake      = UnconfiguredIntake{}
 	_ LocationRegistrationIntake          = UnconfiguredIntake{}
 	_ PackagingMaterialRegistrationIntake = UnconfiguredIntake{}
+	_ DisposalRuleRegistrationIntake      = UnconfiguredIntake{}
 	_ CatalogueIntake                     = UnconfiguredIntake{}
 	_ GoodsOnBehalfIntake                 = UnconfiguredIntake{}
 	_ PreAdviceOnBehalfIntake             = UnconfiguredIntake{}
 	_ ClosePreAdviceIntake                = UnconfiguredIntake{}
 	_ DiscrepancyConclusionIntake         = UnconfiguredIntake{}
+	_ UnclaimedArrivalClaimIntake         = UnconfiguredIntake{}
+	_ UnclaimedArrivalDispositionIntake   = UnconfiguredIntake{}
 )
 
 // IntakeWarehouseRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
@@ -84,4 +87,28 @@ func (UnconfiguredIntake) IntakeClosePreAdvice(
 	context.Context, *http.Request,
 ) (application.ClosePreAdviceCommand, error) {
 	return application.ClosePreAdviceCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeDisposalRuleRegistration(
+	context.Context, *http.Request,
+) (application.RegisterDisposalRuleCommand, error) {
+	return application.RegisterDisposalRuleCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeClaimUnclaimedArrival(
+	context.Context, *http.Request,
+) (application.ClaimUnclaimedArrivalCommand, error) {
+	return application.ClaimUnclaimedArrivalCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeRevokeUnclaimedClaim(
+	context.Context, *http.Request,
+) (application.RevokeUnclaimedClaimCommand, error) {
+	return application.RevokeUnclaimedClaimCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeDisposeUnclaimedArrival(
+	context.Context, *http.Request,
+) (application.DisposeUnclaimedArrivalCommand, error) {
+	return application.DisposeUnclaimedArrivalCommand{}, ErrAccessChannelNotConfigured
 }

@@ -104,6 +104,18 @@ func TestAnAdmissionScopeMappingTakesOnlyRequirementsAFaceAsksFor(t *testing.T) 
 			Capability: accessidentity.CapabilityWorkFactRegistration.String(),
 			FactKind:   accessidentity.WorkFactWarehouseMeasurement.String(),
 		},
+		"unclaimed arrival work fact": {
+			Capability: accessidentity.CapabilityWorkFactRegistration.String(),
+			FactKind:   accessidentity.WorkFactUnclaimedArrival.String(),
+		},
+		"unclaimed arrival claim": {
+			Capability: accessidentity.DecisionUnclaimedArrivalClaim.String(),
+			FactKind:   accessidentity.DecisionUnclaimedArrivalClaim.String(),
+		},
+		"unclaimed arrival disposition": {
+			Capability: accessidentity.DecisionUnclaimedArrivalDisposition.String(),
+			FactKind:   accessidentity.DecisionUnclaimedArrivalDisposition.String(),
+		},
 	} {
 		if _, err := accessidentity.NewAdmissionScopeMapping("SYN-TENANT-01", "SYN-MAP-1", requirement, "SYN-PILOT-SCOPE/x@v1", interval, "SYN-BASIS"); err != nil {
 			t.Fatalf("%s: %v", name, err)
@@ -118,6 +130,8 @@ func TestAnAdmissionScopeMappingTakesOnlyRequirementsAFaceAsksFor(t *testing.T) 
 		"goods capability, other kind":      {Capability: accessidentity.DecisionGoodsRecordOnBehalf.String(), FactKind: accessidentity.DecisionManualMeasurementEntry.String()},
 		"pre-advice capability, other kind": {Capability: accessidentity.DecisionInboundPreAdviceRecordOnBehalf.String(), FactKind: accessidentity.DecisionGoodsRecordOnBehalf.String()},
 		"close capability, other kind":      {Capability: accessidentity.DecisionInboundPreAdviceClose.String(), FactKind: accessidentity.DecisionGoodsRecordOnBehalf.String()},
+		"claim capability, other kind":      {Capability: accessidentity.DecisionUnclaimedArrivalClaim.String(), FactKind: accessidentity.DecisionUnclaimedArrivalDisposition.String()},
+		"dispose capability, other kind":    {Capability: accessidentity.DecisionUnclaimedArrivalDisposition.String(), FactKind: accessidentity.DecisionUnclaimedArrivalClaim.String()},
 		"customer write, other fact":        {Capability: accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String(), FactKind: accessidentity.CustomerCapabilityInboundPreAdviceWithdrawal.String()},
 		"customer write under command word": {Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String()},
 		"goods write under command word":    {Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: accessidentity.CustomerCapabilityGoodsMaintenance.String()},
