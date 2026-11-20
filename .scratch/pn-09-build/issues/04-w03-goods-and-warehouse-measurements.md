@@ -1,7 +1,7 @@
 # 04 `PN09-W03`：货主商品与仓测尺寸重量
 
 Category: enhancement
-Status: in-progress（第 1、2 段已于 2026-11-20 进 main；第 3、4 段货主口与仓测已通过非作者双轴评审并修完唯一 Standards 阻断，待进 main）
+Status: resolved（2026-11-20 全部四段进 main，见「进 main 记录」）
 Blocked by: 03
 
 依据：[UC-WF-002](../../../docs/application/warehouse-fulfillment/UC-WF-002-MAINTAIN-OWNER-GOODS-AND-RECORD-WAREHOUSE-MEASUREMENTS.md)；[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md)「商品」「商品别名」「组合商品」「包装层级」「仓测尺寸重量」「商品申报资料」词条与「主数据登记」「身份与边界」；[ADR-0384](../../../docs/adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md)；现行做法见 [dox 仓配履约](../../../dox/contexts/warehouse-fulfillment.md)「已实现」。
@@ -114,3 +114,11 @@ Blocked by: 03
 ## 第 3、4 段评审记录
 
 钉 `525a5235c`（相对 review base `f21b03e01`）。Spec：0 阻断。Standards：1 处阻断——`WarehouseMeasurementWorkFactIntake.IntakeWarehouseMeasurement` 在认证之前解 JSON 载荷，导致未配置渠道或未授权方在读载荷阶段先拿到 400。修订轮已将认证挪至解析载荷之前（并把仓范围设备夹具补进 `unstorable_request_bodies_test.go` / `node_operations_reception_line_test.go`、把 `/v1/warehouse/goods` 的 `ownerAccount` 拒绝文案改为客户渠道口径），重跑 `gofmt`、`go vet`、`internal/warehousefulfillment/...` 与 `cmd/parcel-api/` 全量带 `-race` 全绿，阻断清零。
+
+## 进 main 记录（第 3、4 段）
+
+- 出处：分支 `cursor/wf-w03-owner-and-measurement` 的 `063229908`（两笔 `525a5235c` / `063229908`）。两笔 cherry-pick 重放到 `16d5bab1d` 之上，无冲突，main 上内容在 `623bfa946`（对应两笔 `e05b823b2` / `623bfa946`）。收口是随后这一笔。至此本票全部四段进 `main`，状态转 `resolved`。
+- 评审：非作者 `/code-review` 双轴钉 `525a5235c`（相对 `f21b03e01`）：Spec 0；Standards 1 处阻断（仓测写口先认证再读载荷），修订轮 `063229908` 阻断清零。
+- 全量真库测试：`scripts/test-full.sh` 对 `623bfa946` 跑，`TEST_FULL_EXIT=0`；受影响包（`internal/warehousefulfillment/...`、`internal/accessidentity/...`、`internal/architecture/...`、`cmd/internal/docnumbering`、`cmd/parcel-api/`）另带 `-race` 跑，`RACE_EXIT=0`。
+- 种子灌一次性库：`scripts/demo-seeds/seed.sh` 对一次性 PG 16.14 容器跑，`SEED_EXIT=0`，用后删容器（本票不带仓配种子，开关默认关）。
+- 生成物不重算。
