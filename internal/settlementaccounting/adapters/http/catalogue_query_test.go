@@ -148,6 +148,16 @@ func (stub unreachableCatalogues) ListCostAllocations(
 	return cataloguepage.Result[ports.CostAllocationCatalogueRow]{}, nil
 }
 
+func (stub unreachableCatalogues) OperatingBasisAdoption(context.Context, domain.TenantID) (ports.OperatingBasisAdoptionAnswer, error) {
+	stub.refuse("operating basis adoption")
+	return ports.OperatingBasisAdoptionAnswer{}, nil
+}
+
+func (stub unreachableCatalogues) ListDirectOperatingDispositions(context.Context, domain.TenantID) ([]ports.DirectOperatingDispositionRecord, error) {
+	stub.refuse("direct operating disposition")
+	return nil, nil
+}
+
 // endpointCase 是一个目录查阅端点：端点入口加一个能取到该册的合法目标。
 type endpointCase struct {
 	name    string

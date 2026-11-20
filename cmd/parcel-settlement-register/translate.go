@@ -48,6 +48,7 @@ const (
 	commandEvaluationResume            = "evaluation-resume"
 	commandExpectedCostSupplier        = "expected-cost-supplier-backfill"
 	commandReweighAdjustmentAdoption   = "reweigh-adjustment-adoption"
+	commandOperatingBasisAdoption      = "operating-basis-adoption"
 )
 
 var allCommands = []string{
@@ -79,6 +80,7 @@ var allCommands = []string{
 	commandEvaluationResume,
 	commandExpectedCostSupplier,
 	commandReweighAdjustmentAdoption,
+	commandOperatingBasisAdoption,
 }
 
 // dispatchFunc 是一条命令在事务内的一次调用，交回已经归好退出码的答复。资金事实与结算账户是两族答案，
@@ -455,9 +457,26 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 		}, nil
 	case commandReweighAdjustmentAdoption:
 		return reweighAdjustmentAdoptionCommand(raw)
+	case commandOperatingBasisAdoption:
+		return operatingBasisAdoptionCommand(raw)
 	default:
 		return nil, fmt.Errorf("未知登记命令 %q（支持 %s）", command, strings.Join(allCommands, " / "))
 	}
+}
+
+func operatingBasisAdoptionCommand(raw []byte) (dispatchFunc, error) {
+	tenant, adoption, err := registrationjson.OperatingBasisAdoptionFromJSON(raw)
+	if err != nil {
+		return nil, err
+	}
+	return func(ctx context.Context, registrar registrar) (string, int, error) {
+		effect, err := registrar.basisAdoptions.Register(ctx, tenant, adoption)
+		if err != nil {
+			return "", 0, err
+		}
+		message, code := catalogueAnswer(commandOperatingBasisAdoption, effect, tenant.String())
+		return message, code, nil
+	}, nil
 }
 
 func reweighAdjustmentAdoptionCommand(raw []byte) (dispatchFunc, error) {

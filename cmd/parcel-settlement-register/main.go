@@ -94,6 +94,7 @@ type registrar struct {
 	sellMoments      *application.RegisterSellBillingMomentAdoptionHandler
 	feeMappings      *application.RegisterFeeItemMappingHandler
 	reweighAdoptions *application.RegisterReweighAdjustmentAdoptionHandler
+	basisAdoptions   *application.RegisterOperatingBasisAdoptionHandler
 	resumes          *application.OperatorResumeEvaluationHandler
 	backfills        *application.BackfillExpectedCostSupplierHandler
 	transactor       bentoapp.Transactor
@@ -393,6 +394,14 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造实测差异自动调整采用登记：%w", err)
 	}
+	basisAdoptionStore, err := sapostgres.NewOperatingBasisAdoptions(db)
+	if err != nil {
+		return none, fmt.Errorf("构造经营口径采用册：%w", err)
+	}
+	basisAdoptionHandler, err := application.NewRegisterOperatingBasisAdoptionHandler(basisAdoptionStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造经营口径采用登记：%w", err)
+	}
 	resumes, err := buildEvaluationResume(db, outboxStore)
 	if err != nil {
 		return none, err
@@ -423,6 +432,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		sellMoments:      sellMomentHandler,
 		feeMappings:      feeItemMappingHandler,
 		reweighAdoptions: reweighAdoptionHandler,
+		basisAdoptions:   basisAdoptionHandler,
 		transactor:       db.Transactor(),
 	}, nil
 }

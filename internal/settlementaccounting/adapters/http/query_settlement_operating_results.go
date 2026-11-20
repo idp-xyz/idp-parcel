@@ -25,14 +25,17 @@ type OperatingCatalogueReader interface {
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[ports.CostAllocationCatalogueRow], error)
+	OperatingBasisAdoption(ctx context.Context, tenant domain.TenantID) (ports.OperatingBasisAdoptionAnswer, error)
+	ListDirectOperatingDispositions(ctx context.Context, tenant domain.TenantID) ([]ports.DirectOperatingDispositionRecord, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
 var _ OperatingCatalogueReader = ports.OperatingCatalogueRead(nil)
 
 const (
-	outcomeOperatingResultsListed = "OPERATING_RESULTS_LISTED"
-	outcomeCostAllocationsListed  = "COST_ALLOCATIONS_LISTED"
+	outcomeOperatingResultsListed     = "OPERATING_RESULTS_LISTED"
+	outcomeOperatingBasisUnconfigured = "OPERATING_BASIS_UNCONFIGURED"
+	outcomeCostAllocationsListed      = "COST_ALLOCATIONS_LISTED"
 )
 
 const (
@@ -96,7 +99,27 @@ func serveOperatingResults(
 		writePageQueryProblem(response, err)
 		return
 	}
+	adoption, err := reader.OperatingBasisAdoption(request.Context(), tenant)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	if !adoption.Configured {
+		// 没登记采用不是空册。空的 results 只在已经采用、还没有快照时才是那句话。
+		writeJSON(response, http.StatusOK, operatingResultListResponse{
+			Outcome:      outcomeOperatingBasisUnconfigured,
+			Results:      []operatingResultBody{},
+			Dispositions: []directOperatingDispositionBody{},
+			Page:         cataloguepage.Page{},
+		})
+		return
+	}
 	page, err := reader.ListOperatingResults(request.Context(), tenant, limit, pageQuery)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	dispositions, err := reader.ListDirectOperatingDispositions(request.Context(), tenant)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
@@ -125,10 +148,20 @@ func serveOperatingResults(
 			Components: components,
 		})
 	}
+	dispositionBodies := make([]directOperatingDispositionBody, 0, len(dispositions))
+	for _, row := range dispositions {
+		dispositionBodies = append(dispositionBodies, directOperatingDispositionBody{
+			Scope:       row.Scope,
+			Basis:       row.Basis,
+			Disposition: row.Disposition,
+			RecordedAt:  rfc3339(row.RecordedAt),
+		})
+	}
 	writeJSON(response, http.StatusOK, operatingResultListResponse{
-		Outcome: outcomeOperatingResultsListed,
-		Results: bodies,
-		Page:    page.Page(limit),
+		Outcome:      outcomeOperatingResultsListed,
+		Results:      bodies,
+		Dispositions: dispositionBodies,
+		Page:         page.Page(limit),
 	})
 }
 
@@ -181,9 +214,19 @@ func serveCostAllocations(
 }
 
 type operatingResultListResponse struct {
-	Outcome string                `json:"outcome"`
-	Results []operatingResultBody `json:"results"`
-	Page    cataloguepage.Page    `json:"page"`
+	Outcome      string                           `json:"outcome"`
+	Results      []operatingResultBody            `json:"results"`
+	Dispositions []directOperatingDispositionBody `json:"dispositions"`
+	Page         cataloguepage.Page               `json:"page"`
+}
+
+// directOperatingDispositionBody 是答不出毛利的当前答案。它不带 margin：缺一侧、成本不全或待判断
+// 都不是把缺的那侧当零之后算出的数。
+type directOperatingDispositionBody struct {
+	Scope       string `json:"scope"`
+	Basis       string `json:"basis"`
+	Disposition string `json:"disposition"`
+	RecordedAt  string `json:"recordedAt"`
 }
 
 // operatingResultBody 逐字段透出一份经营结果快照：口径三件（分析范围、账期、基准）、

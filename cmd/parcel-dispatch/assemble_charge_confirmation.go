@@ -73,6 +73,11 @@ func chargeConfirmationOnBasis(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: confirm charge: %w", err)
 	}
+	direct, err := directOperatingNotifier(db, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: direct operating results: %w", err)
+	}
+	confirm.NoticeDirectOperating(direct)
 	momentStore, err := sapostgres.NewSettlementMoments(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: settlement moments: %w", err)

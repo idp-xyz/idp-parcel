@@ -16,9 +16,11 @@ import (
 
 // stubOperatingCatalogue 是经营核算页两本册子的读口替身。
 type stubOperatingCatalogue struct {
-	results     []ports.OperatingResultCatalogueRow
-	allocations []ports.CostAllocationCatalogueRow
-	err         error
+	results      []ports.OperatingResultCatalogueRow
+	allocations  []ports.CostAllocationCatalogueRow
+	dispositions []ports.DirectOperatingDispositionRecord
+	err          error
+	unconfigured bool
 
 	gotTenant string
 	gotLimit  int
@@ -36,6 +38,21 @@ func (stub *stubOperatingCatalogue) ListCostAllocations(
 ) (cataloguepage.Result[ports.CostAllocationCatalogueRow], error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
 	return cataloguepage.Result[ports.CostAllocationCatalogueRow]{Rows: stub.allocations, Total: int64(len(stub.allocations))}, stub.err
+}
+
+func (stub *stubOperatingCatalogue) OperatingBasisAdoption(
+	context.Context, domain.TenantID,
+) (ports.OperatingBasisAdoptionAnswer, error) {
+	if stub.unconfigured {
+		return ports.OperatingBasisAdoptionAnswer{}, stub.err
+	}
+	return ports.OperatingBasisAdoptionAnswer{Configured: true, Estimated: true, Confirmed: true}, stub.err
+}
+
+func (stub *stubOperatingCatalogue) ListDirectOperatingDispositions(
+	context.Context, domain.TenantID,
+) ([]ports.DirectOperatingDispositionRecord, error) {
+	return stub.dispositions, stub.err
 }
 
 func operatingEndpoint(register *stubOperatingCatalogue) http.Handler {
@@ -232,6 +249,25 @@ func TestCostAllocationQueryTranscribesPortionsAndUnallocated(t *testing.T) {
 		string(none["sourceAmount"]) != `"50000"` ||
 		string(none["portions"]) != "[]" {
 		t.Fatalf("全额未分摊走样：%s", response.Body.String())
+	}
+}
+
+// Covers: 没登记采用不是空的结果列表。已经采用但还没有快照仍是 LISTED 加空数组。
+func TestMissingOperatingBasisAdoptionIsNotAnEmptyResultList(t *testing.T) {
+	response := serveGet(operatingEndpoint(&stubOperatingCatalogue{unconfigured: true}), "/settlement-operating-results?registry=operating-result")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Outcome      string            `json:"outcome"`
+		Results      []json.RawMessage `json:"results"`
+		Dispositions []json.RawMessage `json:"dispositions"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Outcome != "OPERATING_BASIS_UNCONFIGURED" || len(body.Results) != 0 || len(body.Dispositions) != 0 {
+		t.Fatalf("未配置走样：%s", response.Body.String())
 	}
 }
 

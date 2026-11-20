@@ -2554,15 +2554,21 @@ func formSupplierExpectedCostOnBuyEvaluationConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: supplier agreement supplier: %w", err)
 	}
+	costFormation := saapplication.NewFormSupplierExpectedCostHandler(saapplication.FormSupplierExpectedCostDeps{
+		Evaluations: view,
+		Costs:       costs,
+		Registry:    costs,
+		Suppliers:   suppliers,
+		Clock:       clock,
+	})
+	direct, err := directOperatingNotifier(db, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: direct operating results: %w", err)
+	}
+	costFormation.NoticeDirectOperating(direct)
 	formation, err := saapplication.NewFormRequestedSupplierExpectedCostHandler(saapplication.FormRequestedSupplierExpectedCostDeps{
-		Requests: requests,
-		Costs: saapplication.NewFormSupplierExpectedCostHandler(saapplication.FormSupplierExpectedCostDeps{
-			Evaluations: view,
-			Costs:       costs,
-			Registry:    costs,
-			Suppliers:   suppliers,
-			Clock:       clock,
-		}),
+		Requests:   requests,
+		Costs:      costFormation,
 		Stops:      requests,
 		ZeroTotals: requests,
 		Clock:      clock,
@@ -2664,6 +2670,11 @@ func formEstimatedCustomerChargeOnSellEvaluationConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form estimated customer charge: %w", err)
 	}
+	direct, err := directOperatingNotifier(db, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: direct operating results: %w", err)
+	}
+	formation.NoticeDirectOperating(direct)
 	processing, err := sapricing.NewFormOnSellEvaluationRecordedAdapter(view, formation)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form on sell evaluation recorded: %w", err)

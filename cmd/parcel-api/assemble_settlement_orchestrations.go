@@ -208,6 +208,17 @@ func buildSettlementOrchestrations(db *bentopg.DB, issuer *docnumber.Assigner) (
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: customer receipt postings for adjustments: %w", err)
 	}
+	supplier := saapplication.NewReceiveSupplierBillHandler(saapplication.ReceiveSupplierBillDeps{
+		Receptions: receptions, Costs: costs, Successions: costs, Authority: catalogues, Accounts: catalogues, Escalation: ceilings,
+		Payables: payables, Decisions: decisions, CreditNotes: creditNotes, Numbers: numbers, Arrangements: arrangements,
+		Downstream: billHandoff, Clock: clock,
+	})
+	direct, err := directOperatingNotifier(db, clock)
+	if err != nil {
+		return none, err
+	}
+	confirm.NoticeDirectOperating(direct)
+	supplier.NoticeDirectOperating(direct)
 	return settlementOrchestrations{
 		transactor: db.Transactor(),
 		moments:    moments,
@@ -219,11 +230,7 @@ func buildSettlementOrchestrations(db *bentopg.DB, issuer *docnumber.Assigner) (
 		allocate: saapplication.NewAllocateCostsHandler(saapplication.AllocateCostsDeps{
 			Allocations: allocations, Results: results, Rules: rules, Downstream: operatingHandoff, Clock: clock,
 		}),
-		supplier: saapplication.NewReceiveSupplierBillHandler(saapplication.ReceiveSupplierBillDeps{
-			Receptions: receptions, Costs: costs, Successions: costs, Authority: catalogues, Accounts: catalogues, Escalation: ceilings,
-			Payables: payables, Decisions: decisions, CreditNotes: creditNotes, Numbers: numbers, Arrangements: arrangements,
-			Downstream: billHandoff, Clock: clock,
-		}),
+		supplier: supplier,
 		claims: saapplication.NewSettleClaimAmountsHandler(saapplication.SettleClaimAmountsDeps{
 			Amounts: claimAmounts, Receivables: receivables, Acknowledgements: acknowledgements,
 			Adjustments: claimAdjustments, Rules: catalogues, Grammar: grammars, Downstream: claimHandoff, Clock: clock,

@@ -140,6 +140,14 @@ func (stub *pagingCatalogues) ListCostAllocations(
 	return pagingResult[ports.CostAllocationCatalogueRow](), nil
 }
 
+func (stub *pagingCatalogues) OperatingBasisAdoption(context.Context, domain.TenantID) (ports.OperatingBasisAdoptionAnswer, error) {
+	return ports.OperatingBasisAdoptionAnswer{Configured: true, Estimated: true, Confirmed: true}, nil
+}
+
+func (stub *pagingCatalogues) ListDirectOperatingDispositions(context.Context, domain.TenantID) ([]ports.DirectOperatingDispositionRecord, error) {
+	return []ports.DirectOperatingDispositionRecord{}, nil
+}
+
 // settlementCatalogueReaders 是各册端点读口的并集：unreachableCatalogues 与 pagingCatalogues 都实现它，同一张册表接哪只替身
 // 由用例定。
 type settlementCatalogueReaders interface {

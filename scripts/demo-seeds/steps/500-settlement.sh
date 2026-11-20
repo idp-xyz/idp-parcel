@@ -31,3 +31,7 @@ echo "== 结算账户与受理前估价采用登记（settlement-accounting：�
 # 原因——演示先走的是实际履约；失败尝试、订舱、取消不登，形成了也答未配置。主要范围不在这一行，取干线协议的商业范围。
 "$BIN/parcel-settlement-register" buy-evaluation-trigger \
   -input "$SEEDS/settlement/08-buy-evaluation-trigger-actual-fulfillment.json"
+# 经营口径采用（票 05）：演示租户显式采用预估与已确认两种内置口径。这是这一户的取值，不是产品默认；
+# 迁移不插这一行，没跑到这里的租户读口仍答未配置。
+"$BIN/parcel-settlement-register" operating-basis-adoption \
+  -input "$SEEDS/settlement/09-operating-basis-adoption.json"

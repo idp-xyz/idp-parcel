@@ -35,6 +35,11 @@ func withdrawSupplierCostOnChargeOccurrenceInvalidatedConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: withdraw supplier expected cost: %w", err)
 	}
+	direct, err := directOperatingNotifier(db, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: direct operating results: %w", err)
+	}
+	withdrawal.NoticeDirectOperating(direct)
 	occurrences, err := tfpostgres.NewChargeOccurrences(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: charge occurrences for supplier cost withdrawal: %w", err)

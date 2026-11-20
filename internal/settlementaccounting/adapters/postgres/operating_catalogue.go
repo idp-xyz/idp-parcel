@@ -3,9 +3,11 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
@@ -222,4 +224,62 @@ func (catalogue *OperatingCatalogue) ListCostAllocations(
 		return fail(err)
 	}
 	return page, nil
+}
+
+func (catalogue *OperatingCatalogue) OperatingBasisAdoption(
+	ctx context.Context,
+	tenant domain.TenantID,
+) (ports.OperatingBasisAdoptionAnswer, error) {
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.OperatingBasisAdoptionAnswer{}, fmt.Errorf("operating basis adoption: %w", err)
+	}
+	var estimated, confirmed bool
+	err = querier.QueryRow(ctx,
+		`SELECT adopt_estimated, adopt_confirmed
+		   FROM settlement_accounting.operating_basis_adoption
+		  WHERE tenant_id = $1`,
+		tenant.String(),
+	).Scan(&estimated, &confirmed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.OperatingBasisAdoptionAnswer{}, nil
+	}
+	if err != nil {
+		return ports.OperatingBasisAdoptionAnswer{}, fmt.Errorf("operating basis adoption: %w", err)
+	}
+	return ports.OperatingBasisAdoptionAnswer{Configured: true, Estimated: estimated, Confirmed: confirmed}, nil
+}
+
+func (catalogue *OperatingCatalogue) ListDirectOperatingDispositions(
+	ctx context.Context,
+	tenant domain.TenantID,
+) ([]ports.DirectOperatingDispositionRecord, error) {
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list direct operating dispositions: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT scope_ref, basis, disposition, recorded_at
+		   FROM settlement_accounting.direct_operating_disposition
+		  WHERE tenant_id = $1
+		  ORDER BY scope_ref, basis`,
+		tenant.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list direct operating dispositions: %w", err)
+	}
+	defer rows.Close()
+	records := []ports.DirectOperatingDispositionRecord{}
+	for rows.Next() {
+		var record ports.DirectOperatingDispositionRecord
+		if err := rows.Scan(&record.Scope, &record.Basis, &record.Disposition, &record.RecordedAt); err != nil {
+			return nil, fmt.Errorf("list direct operating dispositions: %w", err)
+		}
+		record.RecordedAt = record.RecordedAt.UTC()
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list direct operating dispositions: %w", err)
+	}
+	return records, nil
 }

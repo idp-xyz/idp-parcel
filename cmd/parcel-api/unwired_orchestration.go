@@ -2284,6 +2284,20 @@ func (unwiredSettlementOperatingResults) ListCostAllocations(
 	return cataloguepage.Result[settlementports.CostAllocationCatalogueRow]{}, errOrchestrationNotWired
 }
 
+func (unwiredSettlementOperatingResults) OperatingBasisAdoption(
+	context.Context,
+	settlementdomain.TenantID,
+) (settlementports.OperatingBasisAdoptionAnswer, error) {
+	return settlementports.OperatingBasisAdoptionAnswer{}, errOrchestrationNotWired
+}
+
+func (unwiredSettlementOperatingResults) ListDirectOperatingDispositions(
+	context.Context,
+	settlementdomain.TenantID,
+) ([]settlementports.DirectOperatingDispositionRecord, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // 外部资金事实采用 / 更正两口的命令占位（票 sa-cc/31）。两个类型而不是一个：生产上两口是同一只编排的两个方法，
 // 端点表仍各收一参，占位并成一个会让装配测试盖不住「采用口接了更正编排」这一格。
 type unwiredExternalFundsFactRegistration struct{}
