@@ -25,6 +25,9 @@ const (
 	OutboundContentInvalid
 	OutboundNumberingCollision
 	OutboundPolicyRegistered
+	OutboundSplitResult
+	OutboundStatusMismatch
+	OutboundNotFound
 )
 
 func (outcome OutboundOutcome) String() string {
@@ -51,6 +54,12 @@ func (outcome OutboundOutcome) String() string {
 		return "NUMBERING_RULE_COLLISION"
 	case OutboundPolicyRegistered:
 		return "REGISTERED"
+	case OutboundSplitResult:
+		return "SPLIT"
+	case OutboundStatusMismatch:
+		return "STATUS_MISMATCH"
+	case OutboundNotFound:
+		return "OUTBOUND_NOT_FOUND"
 	default:
 		return ""
 	}
@@ -82,6 +91,7 @@ type AcceptOutboundCommand struct {
 	Basis     string
 	Operator  domain.Registrant
 	Lines     []domain.OutboundLine
+	Parent    domain.OutboundRequestID
 }
 
 // RegisterShortagePolicyCommand 登记某个货主的缺货处置。修订只追加。
@@ -280,7 +290,8 @@ func (handler *OutboundHandler) save(
 		Tenant: command.Tenant, ID: id, Owner: command.Owner, Warehouse: command.Warehouse, Origin: command.Origin,
 		Key: command.Key, Dispatch: command.Dispatch, Service: command.Service, Recipient: command.Recipient,
 		Address: command.Address, Basis: command.Basis, Operator: command.Operator.String(), Status: status,
-		Number: number, Absence: absence, Lines: command.Lines, Reservations: planned, ReceivedAt: handler.clock.Now(),
+		Parent: command.Parent, Number: number, Absence: absence, Lines: command.Lines, Reservations: planned,
+		ReceivedAt: handler.clock.Now(),
 	})
 	if err != nil {
 		return OutboundResult{}, fmt.Errorf("accept outbound: %w", err)

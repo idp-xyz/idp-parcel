@@ -168,6 +168,109 @@ type shortagePolicyDocument struct {
 	Kind         *string `json:"kind"`
 }
 
+type outboundSplitDocument struct {
+	carriedIdentity
+	refusedOwner
+	AccessRequestID *string              `json:"accessRequestId"`
+	RequestID       *string              `json:"requestId"`
+	Parts           *[]outboundSplitPart `json:"parts"`
+}
+
+type outboundSplitPart struct {
+	RequestKey *string                 `json:"requestKey"`
+	Lines      *[]outboundLineDocument `json:"lines"`
+}
+
+// ReadOwnerOutboundSplit 把货主拆单译成命令。货主由信封填。
+func ReadOwnerOutboundSplit(reader io.Reader) (string, application.SplitOutboundCommand, error) {
+	var none application.SplitOutboundCommand
+	document, err := decodeDocument[outboundSplitDocument](reader, "outbound split")
+	if err != nil {
+		return "", none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return "", none, err
+	}
+	if len(document.OwnerAccount) > 0 {
+		return "", none, malformed("ownerAccount must not be carried in the payload")
+	}
+	command, err := splitCommand(document.RequestID, document.Parts, false)
+	if err != nil {
+		return "", none, err
+	}
+	return rawAccessRequestID(document.AccessRequestID), command, nil
+}
+
+type operatorSplitDocument struct {
+	carriedIdentity
+	refusedOwner
+	RequestID *string              `json:"requestId"`
+	Basis     *string              `json:"basis"`
+	Parts     *[]outboundSplitPart `json:"parts"`
+}
+
+// OperatorOutboundSplit 把代录拆单译成命令。货主取自被拆的请求，载荷里再带货主即坏载荷。
+func OperatorOutboundSplit(reader io.Reader) (application.SplitOutboundCommand, error) {
+	document, err := decodeDocument[operatorSplitDocument](reader, "outbound split")
+	if err != nil {
+		return application.SplitOutboundCommand{}, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return application.SplitOutboundCommand{}, err
+	}
+	if len(document.OwnerAccount) > 0 {
+		return application.SplitOutboundCommand{}, malformed("ownerAccount must not be carried in the payload")
+	}
+	if document.Basis == nil || *document.Basis == "" {
+		return application.SplitOutboundCommand{}, malformed("basis is required")
+	}
+	command, err := splitCommand(document.RequestID, document.Parts, true)
+	if err != nil {
+		return application.SplitOutboundCommand{}, err
+	}
+	command.Basis = *document.Basis
+	command.Origin = domain.OutboundOriginOperator
+	return command, nil
+}
+
+func splitCommand(requestID *string, parts *[]outboundSplitPart, operator bool) (application.SplitOutboundCommand, error) {
+	var none application.SplitOutboundCommand
+	parent, err := requiredText("requestId", requestID, domain.NewOutboundRequestID)
+	if err != nil {
+		return none, err
+	}
+	if parts == nil || len(*parts) < 2 {
+		return none, malformed("parts is required")
+	}
+	parsed := make([]application.SplitOutboundPart, 0, len(*parts))
+	for _, part := range *parts {
+		key, err := requiredText("requestKey", part.RequestKey, domain.NewRequestKey)
+		if err != nil {
+			return none, err
+		}
+		lines, err := splitLines(part.Lines)
+		if err != nil {
+			return none, err
+		}
+		parsed = append(parsed, application.SplitOutboundPart{Key: key, Lines: lines})
+	}
+	origin := domain.OutboundOriginCustomer
+	if operator {
+		origin = domain.OutboundOriginOperator
+	}
+	return application.SplitOutboundCommand{Origin: origin, Parent: parent, Parts: parsed}, nil
+}
+
+func splitLines(lines *[]outboundLineDocument) ([]domain.OutboundLine, error) {
+	fields, err := outboundFields(stringPtr("SYN-WH-01"), stringPtr("PRODUCT_NETWORK"), stringPtr("SYN-SERVICE"), stringPtr("收件人"), stringPtr("地址"), lines)
+	if err != nil {
+		return nil, err
+	}
+	return fields.Lines, nil
+}
+
+func stringPtr(value string) *string { return &value }
+
 // ShortagePolicyCommand 把缺货处置译成命令。租户与登记人由 Intake 填。
 func ShortagePolicyCommand(reader io.Reader, tenant domain.TenantID, operator domain.Registrant) (application.RegisterShortagePolicyCommand, error) {
 	var none application.RegisterShortagePolicyCommand

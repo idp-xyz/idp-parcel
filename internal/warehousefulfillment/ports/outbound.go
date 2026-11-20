@@ -27,6 +27,7 @@ type StoredShortagePolicy struct {
 
 // StoredReservation 是一份还没分配的预占，数量按基本单位。
 type StoredReservation struct {
+	Warehouse     domain.WarehouseCode
 	Goods         domain.GoodsCode
 	State         domain.StockState
 	Alias         domain.GoodsAliasCode
@@ -39,7 +40,10 @@ type StoredReservation struct {
 // OutboundStore 读写出库请求、预占与缺货处置。写入在没有环境事务时拒绝。
 type OutboundStore interface {
 	LoadByKey(ctx context.Context, tenant domain.TenantID, origin domain.OutboundOrigin, key domain.RequestKey) (domain.OutboundRequest, bool, error)
+	LoadByID(ctx context.Context, tenant domain.TenantID, id domain.OutboundRequestID) (domain.OutboundRequest, bool, error)
+	ListChildren(ctx context.Context, tenant domain.TenantID, parent domain.OutboundRequestID) ([]domain.OutboundRequest, error)
 	Save(ctx context.Context, request domain.OutboundRequest) error
+	ReleaseForSplit(ctx context.Context, tenant domain.TenantID, id domain.OutboundRequestID) (bool, error)
 	ListReservations(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) ([]StoredReservation, error)
 	UnassignedReservation(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, goods domain.GoodsCode, state domain.StockState, alias domain.GoodsAliasCode, batch domain.BatchNumber, expiry domain.ExpiryDate) (int64, error)
 	LoadPolicy(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID) (StoredShortagePolicy, bool, error)

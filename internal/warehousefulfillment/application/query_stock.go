@@ -124,11 +124,15 @@ type StockQuery struct {
 
 // QueryStockHandler 如实答读那一刻的账。一个仓都没登记时答空。
 type QueryStockHandler struct {
-	reads      ports.StockReadStore
-	warehouses ports.WarehouseLookup
-	any        ports.TenantWarehouseLookup
-	locations  ports.StockLocationLookup
-	zones      ports.ZoneLookup
+	reads        ports.StockReadStore
+	warehouses   ports.WarehouseLookup
+	any          ports.TenantWarehouseLookup
+	locations    ports.StockLocationLookup
+	zones        ports.ZoneLookup
+	reservations interface {
+		ListReservations(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode) ([]ports.StoredReservation, error)
+	}
+	goods ports.StockGoodsLookup
 }
 
 func NewQueryStockHandler(
@@ -137,8 +141,15 @@ func NewQueryStockHandler(
 	any ports.TenantWarehouseLookup,
 	locations ports.StockLocationLookup,
 	zones ports.ZoneLookup,
+	reservations interface {
+		ListReservations(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode) ([]ports.StoredReservation, error)
+	},
+	goods ports.StockGoodsLookup,
 ) *QueryStockHandler {
-	return &QueryStockHandler{reads: reads, warehouses: warehouses, any: any, locations: locations, zones: zones}
+	return &QueryStockHandler{
+		reads: reads, warehouses: warehouses, any: any, locations: locations, zones: zones,
+		reservations: reservations, goods: goods,
+	}
 }
 
 func (handler *QueryStockHandler) Query(ctx context.Context, query StockQuery) (StockSnapshot, error) {
@@ -210,7 +221,11 @@ func (handler *QueryStockHandler) cells(ctx context.Context, query StockQuery) (
 	if query.View == StockViewCells {
 		return StockSnapshot{Cells: cells}, nil
 	}
-	return StockSnapshot{Summary: summarize(cells, freezes)}, nil
+	summary := summarize(cells, freezes)
+	if err := handler.applyReservations(ctx, query, summary); err != nil {
+		return StockSnapshot{}, err
+	}
+	return StockSnapshot{Summary: summary}, nil
 }
 
 func (handler *QueryStockHandler) cartons(ctx context.Context, query StockQuery) (StockSnapshot, error) {
@@ -279,6 +294,11 @@ func (handler *QueryStockHandler) holds(ctx context.Context, query StockQuery) (
 		}
 		holds = append(holds, hold)
 	}
+	reserved, err := handler.reservationHolds(ctx, query)
+	if err != nil {
+		return StockSnapshot{}, err
+	}
+	holds = append(holds, reserved...)
 	return StockSnapshot{Holds: holds}, nil
 }
 
@@ -363,6 +383,93 @@ func StockAgeDays(inbound, now time.Time, zone domain.BusinessTimeZone) (int, bo
 func dateOf(instant time.Time) time.Time {
 	year, month, day := instant.Date()
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+}
+
+func (handler *QueryStockHandler) applyReservations(ctx context.Context, query StockQuery, summary []StockSummaryView) error {
+	reserved, err := handler.reservationTotals(ctx, query)
+	if err != nil || len(reserved) == 0 {
+		return err
+	}
+	for index := range summary {
+		item := &summary[index]
+		base, ok, err := handler.baseUnit(ctx, query.Tenant, query.Owner, item.Goods)
+		if err != nil {
+			return err
+		}
+		if !ok || item.Unit != base {
+			continue
+		}
+		item.Reserved = reserved[item.Warehouse+"\x1f"+item.Goods+"\x1f"+item.State]
+		item.Available = item.Allocatable - item.Frozen - item.Reserved - item.Locked
+		if item.Available < 0 {
+			item.Available = 0
+		}
+	}
+	return nil
+}
+
+func (handler *QueryStockHandler) reservationHolds(ctx context.Context, query StockQuery) ([]StockHoldView, error) {
+	rows, err := handler.listedReservations(ctx, query)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	holds := make([]StockHoldView, 0, len(rows))
+	for _, row := range rows {
+		if row.Quantity == 0 {
+			continue
+		}
+		unit := ""
+		base, ok, err := handler.baseUnit(ctx, query.Tenant, query.Owner, row.Goods.String())
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			unit = base
+		}
+		holds = append(holds, StockHoldView{
+			Kind: "RESERVATION", Warehouse: row.Warehouse.String(), Goods: row.Goods.String(), Unit: unit, State: row.State.String(),
+			Quantity: row.Quantity,
+		})
+	}
+	return holds, nil
+}
+
+func (handler *QueryStockHandler) reservationTotals(ctx context.Context, query StockQuery) (map[string]int64, error) {
+	rows, err := handler.listedReservations(ctx, query)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	totals := map[string]int64{}
+	for _, row := range rows {
+		totals[row.Warehouse.String()+"\x1f"+row.Goods.String()+"\x1f"+row.State.String()] += row.Quantity
+	}
+	return totals, nil
+}
+
+func (handler *QueryStockHandler) listedReservations(ctx context.Context, query StockQuery) ([]ports.StoredReservation, error) {
+	if handler.reservations == nil {
+		return nil, nil
+	}
+	rows, err := handler.reservations.ListReservations(ctx, query.Tenant, query.Owner, query.Warehouse)
+	if err != nil {
+		return nil, fmt.Errorf("query stock: %w", err)
+	}
+	return rows, nil
+}
+
+func (handler *QueryStockHandler) baseUnit(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, goods string) (string, bool, error) {
+	if handler.goods == nil || goods == "" {
+		return "", false, nil
+	}
+	code, err := domain.NewGoodsCode(goods)
+	if err != nil {
+		return "", false, err
+	}
+	revision, found, err := handler.goods.LoadLatestGoods(ctx, tenant, owner, code)
+	if err != nil || !found {
+		return "", false, err
+	}
+	return revision.Content().BaseUnit().String(), true, nil
 }
 
 func summarize(cells []StockCellView, freezes []ports.StockFreezeRow) []StockSummaryView {

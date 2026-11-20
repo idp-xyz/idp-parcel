@@ -15,16 +15,19 @@ import (
 type OutboundService interface {
 	Accept(ctx context.Context, command application.AcceptOutboundCommand) (application.OutboundResult, error)
 	RegisterPolicy(ctx context.Context, command application.RegisterShortagePolicyCommand) (application.OutboundResult, error)
+	Split(ctx context.Context, command application.SplitOutboundCommand) (application.SplitResult, error)
 }
 
 // CustomerOutboundAuthenticator 认证货主提交出库请求。
 type CustomerOutboundAuthenticator interface {
 	AuthenticateOutboundRequestSubmission(ctx context.Context, credential PresentedCustomerCredential, accessRequestID func() (string, error)) (CustomerCommandIdentity, error)
+	AuthenticateOutboundRequestSplit(ctx context.Context, credential PresentedCustomerCredential, accessRequestID func() (string, error)) (CustomerCommandIdentity, error)
 }
 
 // CustomerOutboundPorts 是货主出库口在渠道没配时也能挂上的那一面。
 type CustomerOutboundPorts interface {
 	IntakeOutboundRequest(ctx context.Context, request *http.Request) (application.AcceptOutboundCommand, error)
+	IntakeOutboundSplit(ctx context.Context, request *http.Request) (application.SplitOutboundCommand, error)
 }
 
 type CustomerOutboundIntake struct {
@@ -51,6 +54,10 @@ func (unconfiguredCustomerOutbound) IntakeOutboundRequest(context.Context, *http
 	return application.AcceptOutboundCommand{}, ErrAccessChannelNotConfigured
 }
 
+func (unconfiguredCustomerOutbound) IntakeOutboundSplit(context.Context, *http.Request) (application.SplitOutboundCommand, error) {
+	return application.SplitOutboundCommand{}, ErrAccessChannelNotConfigured
+}
+
 func (intake *CustomerOutboundIntake) IntakeOutboundRequest(ctx context.Context, request *http.Request) (application.AcceptOutboundCommand, error) {
 	var fields registrationjson.OwnerOutboundFields
 	identity, err := intake.authenticator.AuthenticateOutboundRequestSubmission(ctx, presentedCustomerCredential(request), func() (string, error) {
@@ -71,6 +78,25 @@ func (intake *CustomerOutboundIntake) IntakeOutboundRequest(ctx context.Context,
 	}, nil
 }
 
+func (intake *CustomerOutboundIntake) IntakeOutboundSplit(ctx context.Context, request *http.Request) (application.SplitOutboundCommand, error) {
+	var command application.SplitOutboundCommand
+	identity, err := intake.authenticator.AuthenticateOutboundRequestSplit(ctx, presentedCustomerCredential(request), func() (string, error) {
+		accessID, read, readErr := registrationjson.ReadOwnerOutboundSplit(bodyOrEmpty(request))
+		if readErr != nil {
+			return "", asMalformed(readErr)
+		}
+		command = read
+		return accessID, nil
+	})
+	if err != nil {
+		return application.SplitOutboundCommand{}, err
+	}
+	command.Tenant = identity.Tenant
+	command.Owner = identity.Owner
+	command.Origin = domain.OutboundOriginCustomer
+	return command, nil
+}
+
 // OutboundOnBehalfAuthenticator 认证出库请求代录。
 type OutboundOnBehalfAuthenticator interface {
 	AuthenticateOutboundOnBehalf(ctx context.Context, bearerToken string) (OperatorIdentity, error)
@@ -78,6 +104,7 @@ type OutboundOnBehalfAuthenticator interface {
 
 type OutboundOnBehalfIntake interface {
 	IntakeOutboundOnBehalf(ctx context.Context, request *http.Request) (application.AcceptOutboundCommand, error)
+	IntakeOutboundSplit(ctx context.Context, request *http.Request) (application.SplitOutboundCommand, error)
 }
 
 type OperatorOutboundIntake struct {
@@ -105,10 +132,29 @@ func (intake *OperatorOutboundIntake) IntakeOutboundOnBehalf(ctx context.Context
 	return command, nil
 }
 
+func (intake *OperatorOutboundIntake) IntakeOutboundSplit(ctx context.Context, request *http.Request) (application.SplitOutboundCommand, error) {
+	identity, err := intake.authenticator.AuthenticateOutboundOnBehalf(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.SplitOutboundCommand{}, err
+	}
+	command, err := registrationjson.OperatorOutboundSplit(requestBody(request))
+	if err != nil {
+		return application.SplitOutboundCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	command.Operator = identity.Registrant
+	command.Origin = domain.OutboundOriginOperator
+	return command, nil
+}
+
 type UnconfiguredOutboundIntake struct{}
 
 func (UnconfiguredOutboundIntake) IntakeOutboundOnBehalf(context.Context, *http.Request) (application.AcceptOutboundCommand, error) {
 	return application.AcceptOutboundCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredOutboundIntake) IntakeOutboundSplit(context.Context, *http.Request) (application.SplitOutboundCommand, error) {
+	return application.SplitOutboundCommand{}, ErrAccessChannelNotConfigured
 }
 
 // ShortagePolicyIntake 是缺货处置登记口的 Intake。
@@ -141,6 +187,48 @@ func NewRecordOutboundEndpoint(intake OutboundOnBehalfIntake, service OutboundSe
 			return application.OutboundResult{}, err
 		}
 		return service.Accept(request.Context(), command)
+	})
+}
+
+func NewSplitCustomerOutboundEndpoint(intake CustomerOutboundPorts, service OutboundService) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		command, err := intake.IntakeOutboundSplit(request.Context(), request)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		result, err := service.Split(request.Context(), command)
+		if err != nil {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeSplitAnswer(response, request, result)
+	})
+}
+
+func NewSplitOutboundEndpoint(intake OutboundOnBehalfIntake, service OutboundService) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		command, err := intake.IntakeOutboundSplit(request.Context(), request)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		result, err := service.Split(request.Context(), command)
+		if err != nil {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeSplitAnswer(response, request, result)
 	})
 }
 
@@ -183,7 +271,8 @@ func writeOutboundAnswer(response http.ResponseWriter, request *http.Request, re
 	status := http.StatusOK
 	switch result.Outcome() {
 	case application.OutboundReserved, application.OutboundPartiallyReserved, application.OutboundRejected,
-		application.OutboundPendingPolicy, application.OutboundHandedOff, application.OutboundPolicyRegistered:
+		application.OutboundPendingPolicy, application.OutboundHandedOff, application.OutboundPolicyRegistered,
+		application.OutboundSplitResult:
 		status = http.StatusCreated
 	}
 	body := outboundAnswer{Outcome: name}
@@ -192,6 +281,23 @@ func writeOutboundAnswer(response http.ResponseWriter, request *http.Request, re
 		if number, numbered := requestSaved.DocumentNumber(); numbered {
 			body.DocumentNumber = number.String()
 		}
+	}
+	writeJSON(response, status, body)
+}
+
+func writeSplitAnswer(response http.ResponseWriter, request *http.Request, result application.SplitResult) {
+	name := result.Outcome().String()
+	if name == "" {
+		httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeUnnamedOutcome)
+		return
+	}
+	status := http.StatusOK
+	if result.Outcome() == application.OutboundSplitResult {
+		status = http.StatusCreated
+	}
+	body := outboundAnswer{Outcome: name}
+	if parent, ok := result.Parent(); ok {
+		body.Status = parent.Status().String()
 	}
 	writeJSON(response, status, body)
 }

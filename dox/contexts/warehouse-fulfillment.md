@@ -193,7 +193,7 @@
 
 ## 已实现：冻结
 
-- 冻结与解冻挂运营决定 `STOCK_FREEZE`：`POST /warehouse-fulfillment-stock-freezes`、`stock-unfreezes`。只占可用量，不记流水。暂存、待检、余额不够或会挤占已有占用的整份不成立。解冻整份解除。库内入账取走时减掉还冻着的数量。库存读口 `GET /warehouse-fulfillment-stock` 与货主 `GET /v1/warehouse/reads/stock`：`view` 取 `cells`、`cartons`、`summary`、`holds`、`movements`。货主不带库位，也不带冻结的原因与操作者。仓的业务时区没登记时库龄答 `NOT_CONFIGURED`，数量照答。库内入账会减掉未分配的预占。货主 `POST /v1/warehouse/outbound-requests`，代录 `POST /warehouse-fulfillment-outbound-requests`，缺货处置 `POST /warehouse-fulfillment-shortage-policies`。不够又没登记缺货处置时请求停在待预占。库存读口的可用量还没减预占，作业锁定仍按零。
+- 冻结与解冻挂运营决定 `STOCK_FREEZE`：`POST /warehouse-fulfillment-stock-freezes`、`stock-unfreezes`。只占可用量，不记流水。暂存、待检、余额不够或会挤占已有占用的整份不成立。解冻整份解除。库内入账取走时减掉还冻着的数量。库存读口 `GET /warehouse-fulfillment-stock` 与货主 `GET /v1/warehouse/reads/stock`：`view` 取 `cells`、`cartons`、`summary`、`holds`、`movements`。货主不带库位，也不带冻结的原因与操作者。仓的业务时区没登记时库龄答 `NOT_CONFIGURED`，数量照答。库内入账会减掉未分配的预占。货主 `POST /v1/warehouse/outbound-requests`，代录 `POST /warehouse-fulfillment-outbound-requests`，缺货处置 `POST /warehouse-fulfillment-shortage-policies`。不够又没登记缺货处置时请求停在待预占。尚未分配的可以拆，原预占放开。汇总可用量减掉预占，占用读口看得到；格上不减，预占不落库位。作业锁定仍按零。
 
 ## 要做它时先看
 

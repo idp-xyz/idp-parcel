@@ -412,7 +412,14 @@ func init() {
 				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityOutboundRequestSubmission),
 				ownIntake: true, warehouseFulfillment: true,
 			},
+			"/v1/warehouse/outbound-requests/splits": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityOutboundRequestSubmission),
+				ownIntake: true, warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-outbound-requests": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-outbound-request-splits": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
 			},
 			"/warehouse-fulfillment-shortage-policies": {
@@ -688,7 +695,9 @@ func init() {
 			jobDiscrepancyApproval := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			jobDiscrepancyRejection := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			customerOutboundRequest := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerOutboundSplit := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			outboundOnBehalf := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			outboundSplit := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			shortagePolicy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			internalJobList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			internalJobOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
@@ -843,7 +852,9 @@ func init() {
 				jobDiscrepancyApproval = warehousehttp.NewApproveJobDiscrepancyEndpoint(channels.stockApproval(), wiring.jobDiscrepancies)
 				jobDiscrepancyRejection = warehousehttp.NewRejectJobDiscrepancyEndpoint(channels.stockApproval(), wiring.jobDiscrepancies)
 				customerOutboundRequest = warehousehttp.NewSubmitOutboundEndpoint(warehousehttp.OpenCustomerOutboundIntake(wiring.customerOutbound), wiring.outbounds)
+				customerOutboundSplit = warehousehttp.NewSplitCustomerOutboundEndpoint(warehousehttp.OpenCustomerOutboundIntake(wiring.customerOutbound), wiring.outbounds)
 				outboundOnBehalf = warehousehttp.NewRecordOutboundEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
+				outboundSplit = warehousehttp.NewSplitOutboundEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
 				shortagePolicy = warehousehttp.NewRegisterShortagePolicyEndpoint(channels.shortagePolicy(), wiring.outbounds)
 				stockCount = warehousehttp.NewCreateCountEndpoint(channels.stockCount(), wiring.counts)
 				stockCountStart = warehousehttp.NewStartCountEndpoint(channels.stockCount(), wiring.counts)
@@ -951,7 +962,9 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-job-discrepancy-approvals", Handler: jobDiscrepancyApproval},
 				{Pattern: "/warehouse-fulfillment-job-discrepancy-rejections", Handler: jobDiscrepancyRejection},
 				{Pattern: "/v1/warehouse/outbound-requests", Handler: customerOutboundRequest},
+				{Pattern: "/v1/warehouse/outbound-requests/splits", Handler: customerOutboundSplit},
 				{Pattern: "/warehouse-fulfillment-outbound-requests", Handler: outboundOnBehalf},
+				{Pattern: "/warehouse-fulfillment-outbound-request-splits", Handler: outboundSplit},
 				{Pattern: "/warehouse-fulfillment-shortage-policies", Handler: shortagePolicy},
 				{Pattern: "/warehouse-fulfillment-internal-jobs", Handler: internalJobList},
 				{Pattern: "/warehouse-fulfillment-internal-job", Handler: internalJobOne},

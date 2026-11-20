@@ -130,6 +130,76 @@ func TestAnAgentWarehouseIsHandedOffAndAMissingWarehouseIsNotSaved(t *testing.T)
 	}
 }
 
+// Covers: 尚未分配的请求拆成两份，数量合起来才成立。原请求已拆单并放开预占，两份各自再占。合起来不等、已经拒绝的都不改原请求。
+func TestSplittingAnOutboundRequestReleasesTheOriginalReservation(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedStorageStock(t, 10)
+	handler := world.outbound(t)
+	accepted := world.acceptOutbound(t, handler, outboundCommand(t, "REQ-OB-WHOLE", 10))
+	parent, ok := accepted.Request()
+	if accepted.Outcome() != application.OutboundReserved || !ok {
+		t.Fatalf("受理 %s", accepted.Outcome())
+	}
+	unequal := world.splitOutbound(t, handler, parent.ID(), 6, 3)
+	if unequal.Outcome() != application.OutboundContentInvalid || parentStatus(t, world, parent.ID()) != "RESERVED" || reservedQuantity(t, world) != 10 {
+		t.Fatalf("不合 %s 状态 %s 占用 %d", unequal.Outcome(), parentStatus(t, world, parent.ID()), reservedQuantity(t, world))
+	}
+	split := world.splitOutbound(t, handler, parent.ID(), 6, 4)
+	children := split.Children()
+	if split.Outcome() != application.OutboundSplitResult || len(children) != 2 || parentStatus(t, world, parent.ID()) != "SPLIT" || reservedQuantity(t, world) != 10 {
+		t.Fatalf("拆单 %s 孩子 %d 状态 %s 占用 %d", split.Outcome(), len(children), parentStatus(t, world, parent.ID()), reservedQuantity(t, world))
+	}
+	if children[0].Reservations()[0].Quantity+children[1].Reservations()[0].Quantity != 10 {
+		t.Fatalf("两份预占 %+v %+v", children[0].Reservations(), children[1].Reservations())
+	}
+	again := world.splitOutbound(t, handler, parent.ID(), 6, 4)
+	if again.Outcome() != application.OutboundExisting {
+		t.Fatalf("重放 %s", again.Outcome())
+	}
+	other := world.splitOutbound(t, handler, parent.ID(), 5, 5)
+	if other.Outcome() != application.OutboundStatusMismatch || reservedQuantity(t, world) != 10 {
+		t.Fatalf("再拆 %s 占用 %d", other.Outcome(), reservedQuantity(t, world))
+	}
+	if world.registerShortage(t, handler, 1, domain.ShortagePolicyReject).Outcome() != application.OutboundPolicyRegistered {
+		t.Fatal("拒绝没有登记")
+	}
+	rejected := world.acceptOutbound(t, handler, outboundCommand(t, "REQ-OB-NO", 1))
+	rejectedRequest, _ := rejected.Request()
+	if rejected.Outcome() != application.OutboundRejected {
+		t.Fatalf("拒绝 %s", rejected.Outcome())
+	}
+	blocked := world.splitOutbound(t, handler, rejectedRequest.ID(), 1, 0)
+	if blocked.Outcome() != application.OutboundContentInvalid && blocked.Outcome() != application.OutboundStatusMismatch {
+		t.Fatalf("拒绝的请求 %s", blocked.Outcome())
+	}
+	if parentStatus(t, world, rejectedRequest.ID()) != "REJECTED" {
+		t.Fatal("被拒的请求被改了")
+	}
+}
+
+// Covers: 汇总的可用量减掉未分配预占。预占不落库位，格上的可用量不减。占用读口看得见这份预占。
+func TestStockReadSubtractsTheUnassignedReservation(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedStorageStock(t, 10)
+	if world.acceptOutbound(t, world.outbound(t), outboundCommand(t, "REQ-OB-READ", 6)).Outcome() != application.OutboundReserved {
+		t.Fatal("没有预占")
+	}
+	reader := world.stockReaderWithReservations(t)
+	summary := world.readStock(t, reader, application.StockViewSummary, false)
+	if len(summary.Summary) != 1 || summary.Summary[0].Reserved != 6 || summary.Summary[0].Available != 4 || summary.Summary[0].OnHand != 10 {
+		t.Fatalf("汇总 %+v", summary.Summary)
+	}
+	cells := world.readStock(t, reader, application.StockViewCells, false)
+	store := cellNamed(t, cells.Cells, "SYN-LOC-STORE")
+	if store.Available != 10 || store.Quantity != 10 {
+		t.Fatalf("格 %+v", store)
+	}
+	holds := world.readStock(t, reader, application.StockViewHolds, true)
+	if len(holds.Holds) != 1 || holds.Holds[0].Kind != "RESERVATION" || holds.Holds[0].Quantity != 6 || holds.Holds[0].Location != "" {
+		t.Fatalf("占用 %+v", holds.Holds)
+	}
+}
+
 func TestOutboundWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	world := newReceiptWorld(t)
 	requests, err := adapter.NewOutboundRequests(world.db)
@@ -141,6 +211,9 @@ func TestOutboundWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
 	if err := requests.Save(ctx, domain.OutboundRequest{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("Save：%v", err)
+	}
+	if _, err := requests.ReleaseForSplit(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1")); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("ReleaseForSplit：%v", err)
 	}
 	if err := requests.SavePolicy(ctx, tenant, valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"), ports.StoredShortagePolicy{Revision: 1, Kind: domain.ShortagePolicyPartial}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SavePolicy：%v", err)
@@ -241,6 +314,56 @@ func (world receiptWorld) registerShortage(t *testing.T, handler *application.Ou
 		t.Fatalf("缺货处置：%v", err)
 	}
 	return result
+}
+
+func (world receiptWorld) splitOutbound(t *testing.T, handler *application.OutboundHandler, parent domain.OutboundRequestID, left, right int64) application.SplitResult {
+	t.Helper()
+	parts := []application.SplitOutboundPart{{
+		Key: valueOf(t, domain.NewRequestKey, parent.String()+"-A"), Lines: []domain.OutboundLine{mustOutboundLine(t, "SYN-GOODS-01", left)},
+	}}
+	if right > 0 {
+		parts = append(parts, application.SplitOutboundPart{
+			Key: valueOf(t, domain.NewRequestKey, parent.String()+"-B"), Lines: []domain.OutboundLine{mustOutboundLine(t, "SYN-GOODS-01", right)},
+		})
+	}
+	var result application.SplitResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var splitErr error
+		result, splitErr = handler.Split(ctx, application.SplitOutboundCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Owner: valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"),
+			Origin: domain.OutboundOriginCustomer, Parent: parent, Parts: parts,
+		})
+		return splitErr
+	})
+	if err != nil {
+		t.Fatalf("拆单：%v", err)
+	}
+	return result
+}
+
+func (world receiptWorld) stockReaderWithReservations(t *testing.T) *application.QueryStockHandler {
+	t.Helper()
+	reads, err := adapter.NewStockReads(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requests, err := adapter.NewOutboundRequests(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return application.NewQueryStockHandler(reads, world.warehouses, world.warehouses, world.locations, world.zones, requests, world.goods)
+}
+
+func parentStatus(t *testing.T, world receiptWorld, id domain.OutboundRequestID) string {
+	t.Helper()
+	var status string
+	err := world.pool.QueryRow(t.Context(),
+		`SELECT status FROM warehouse_fulfillment.outbound_request WHERE tenant_id = $1 AND request_id = $2`,
+		"SYN-TENANT-01", id.String()).Scan(&status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return status
 }
 
 func outboundCommand(t *testing.T, key string, quantity int64) application.AcceptOutboundCommand {

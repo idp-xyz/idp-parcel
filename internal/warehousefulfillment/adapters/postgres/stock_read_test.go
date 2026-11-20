@@ -82,7 +82,7 @@ func (world receiptWorld) stockReader(t *testing.T) *application.QueryStockHandl
 	if err != nil {
 		t.Fatal(err)
 	}
-	return application.NewQueryStockHandler(reads, world.warehouses, world.warehouses, world.locations, world.zones)
+	return application.NewQueryStockHandler(reads, world.warehouses, world.warehouses, world.locations, world.zones, nil, nil)
 }
 
 func (world receiptWorld) readStock(t *testing.T, reader *application.QueryStockHandler, view application.StockView, customer bool) application.StockSnapshot {
