@@ -53,7 +53,7 @@ func main() {
 
 func run(ctx context.Context, args []string, getenv func(string) string, out, errOut io.Writer) int {
 	if len(args) < 1 {
-		fmt.Fprintln(errOut, "用法：parcel-commercial <publish|register-resolution-key|register-parties|deactivate-party-identity|end-party-relationships|register-products|register-registration-number-types|register-legal-entity-profiles|register-version-closures|register-approval-duty-rule> -input <file>")
+		fmt.Fprintln(errOut, "用法：parcel-commercial <publish|register-resolution-key|register-parties|deactivate-party-identity|end-party-relationships|register-products|register-registration-number-types|register-legal-entity-profiles|register-version-closures|register-approval-duty-rule|register-signing-evidence-requirement> -input <file>")
 		return exitTechnical
 	}
 	switch args[0] {
@@ -77,8 +77,10 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 		return runRegisterVersionClosures(ctx, args[1:], getenv, out, errOut)
 	case "register-approval-duty-rule":
 		return runRegisterApprovalDutyRule(ctx, args[1:], getenv, out, errOut)
+	case "register-signing-evidence-requirement":
+		return runRegisterSigningEvidenceRequirement(ctx, args[1:], getenv, out, errOut)
 	default:
-		fmt.Fprintf(errOut, "未知子命令 %q；可用：publish、register-resolution-key、register-parties、deactivate-party-identity、end-party-relationships、register-products、register-registration-number-types、register-legal-entity-profiles、register-version-closures、register-approval-duty-rule\n", args[0])
+		fmt.Fprintf(errOut, "未知子命令 %q；可用：publish、register-resolution-key、register-parties、deactivate-party-identity、end-party-relationships、register-products、register-registration-number-types、register-legal-entity-profiles、register-version-closures、register-approval-duty-rule、register-signing-evidence-requirement\n", args[0])
 		return exitTechnical
 	}
 }
@@ -129,7 +131,13 @@ func runPublish(ctx context.Context, args []string, getenv func(string) string, 
 		fmt.Fprintf(errOut, "构造参数已登记交接：%v\n", err)
 		return exitTechnical
 	}
-	handler := pcapplication.NewPublishCommercialAuthorityHandler(registry, systemClock{}, registrationHandoff)
+	evidences, err := pcpostgres.NewSigningEvidences(db)
+	if err != nil {
+		fmt.Fprintf(errOut, "构造签署证据册：%v\n", err)
+		return exitTechnical
+	}
+	handler := pcapplication.NewPublishCommercialAuthorityHandler(registry, systemClock{}, registrationHandoff).
+		WithSigningEvidence(evidences)
 
 	// 批不是聚合（AT-PC-011）：逐项各起事务，前项已落库的不因后项失败被撤出；
 	// 后项装载的整册天然看得见前项，指名引用因此可以在一批内前后相依。
@@ -153,7 +161,8 @@ func runPublish(ctx context.Context, args []string, getenv func(string) string, 
 		switch result.Outcome() {
 		case pcapplication.CommercialPublicationPending,
 			pcapplication.CommercialPublicationConflicted,
-			pcapplication.CommercialPublicationNotAccepted:
+			pcapplication.CommercialPublicationNotAccepted,
+			pcapplication.CommercialPublicationSigningEvidenceRequired:
 			// `未受理`（ADR-0126 Decision 二）：这一项一个字节没写，批文里声明的摘要与算出的对不上——
 			// 要人改批文，与未决、冲突同抬 attention；退 0 会让一批里没进去的那一项静静消失。
 			attention = true

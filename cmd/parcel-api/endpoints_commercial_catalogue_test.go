@@ -14,5 +14,6 @@ func init() {
 		legalEntityProfileResolver: unwiredLegalEntityProfileResolver{},
 		businessPartyProfiles:      unwiredBusinessPartyProfileRevisions{},
 		referenceEnablements:       unwiredReferenceEnablements{},
+		signingEvidences:           unwiredSigningEvidenceRead{},
 	})
 }

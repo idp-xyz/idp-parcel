@@ -12,5 +12,7 @@ func init() {
 		businessPartyProfileRegistration:   unwiredBusinessPartyProfileRegistration{},
 		channelAccountUseRegistration:      unwiredChannelAccountUseRegistration{},
 		referenceEnablementRegistration:    unwiredReferenceEnablementRegistration{},
+		signingEvidenceRegistration:        unwiredSigningEvidenceRegistration{},
+		signingEvidenceRequirement:         unwiredSigningEvidenceRequirementRegistration{},
 	})
 }

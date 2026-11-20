@@ -200,6 +200,40 @@ func (registration transactionalReferenceEnablementRegistration) Register(
 		})
 }
 
+type transactionalSigningEvidenceRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *commercialapp.RegisterSigningEvidenceHandler
+}
+
+var _ commercialhttp.SigningEvidenceRegistrar = transactionalSigningEvidenceRegistration{}
+
+func (registration transactionalSigningEvidenceRegistration) Handle(
+	ctx context.Context,
+	command commercialapp.RegisterSigningEvidenceCommand,
+) (commercialapp.SigningEvidenceRegistrationResult, error) {
+	return commercialInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (commercialapp.SigningEvidenceRegistrationResult, error) {
+			return registration.inner.Handle(txCtx, command)
+		})
+}
+
+type transactionalSigningEvidenceRequirementRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *commercialapp.RegisterSigningEvidenceRequirementHandler
+}
+
+var _ commercialhttp.SigningEvidenceRequirementRegistrar = transactionalSigningEvidenceRequirementRegistration{}
+
+func (registration transactionalSigningEvidenceRequirementRegistration) Handle(
+	ctx context.Context,
+	command commercialapp.RegisterSigningEvidenceRequirementCommand,
+) (commercialapp.SigningEvidenceRequirementResult, error) {
+	return commercialInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (commercialapp.SigningEvidenceRequirementResult, error) {
+			return registration.inner.Handle(txCtx, command)
+		})
+}
+
 // transactionalLegalEntityProfileRegistration 是法人资料登记（票 legal-entity-profile/03）的事务壳：一笔登记一笔
 // 事务，修订连续性读回、资料门读的法人身份与注册号类型目录，和落库看同一份快照。
 type transactionalLegalEntityProfileRegistration struct {
@@ -324,6 +358,9 @@ type commercialRegistrationOrchestration struct {
 	businessPartyProfile transactionalBusinessPartyProfileRegistration
 	// 启用范围（ADR-0345）：启用与停用同是追加一笔修订，只有一个登记口。
 	referenceEnablement transactionalReferenceEnablementRegistration
+	// 签署证据与它的发布前提。两口都只追加，事务壳分开是因为方法都叫 Handle、命令类型不同。
+	signingEvidence            transactionalSigningEvidenceRegistration
+	signingEvidenceRequirement transactionalSigningEvidenceRequirementRegistration
 	// publicationPreview 没有事务壳：预览不读也不写（ADR-0126 Decision 四）。
 	publicationPreview *commercialapp.PreviewCommercialPublicationHandler
 	publicationDrafts  transactionalPublicationDrafts
@@ -391,7 +428,12 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 	}
 
 	transactor := db.Transactor()
-	publisher := commercialapp.NewPublishCommercialAuthorityHandler(publications, systemClock{}, registrationHandoff)
+	evidences, err := pcpostgres.NewSigningEvidences(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: signing evidence registry: %w", err)
+	}
+	publisher := commercialapp.NewPublishCommercialAuthorityHandler(publications, systemClock{}, registrationHandoff).
+		WithSigningEvidence(evidences)
 	return commercialRegistrationOrchestration{
 		publication: transactionalCommercialPublication{
 			transactor: transactor,
@@ -431,6 +473,14 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 		referenceEnablement: transactionalReferenceEnablementRegistration{
 			transactor: transactor,
 			inner:      commercialapp.NewRegisterReferenceEnablementHandler(referenceEnablements, systemClock{}),
+		},
+		signingEvidence: transactionalSigningEvidenceRegistration{
+			transactor: transactor,
+			inner:      commercialapp.NewRegisterSigningEvidenceHandler(evidences),
+		},
+		signingEvidenceRequirement: transactionalSigningEvidenceRequirementRegistration{
+			transactor: transactor,
+			inner:      commercialapp.NewRegisterSigningEvidenceRequirementHandler(evidences),
 		},
 	}, nil
 }

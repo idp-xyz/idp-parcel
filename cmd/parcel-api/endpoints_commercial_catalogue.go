@@ -22,6 +22,7 @@ type commercialCatalogueWiring struct {
 	legalEntityProfileResolver commercialhttp.LegalEntityProfileResolver
 	businessPartyProfiles      commercialhttp.BusinessPartyProfileHistoryReader
 	referenceEnablements       commercialhttp.ReferenceEnablementReader
+	signingEvidences           commercialhttp.SigningEvidenceReader
 }
 
 func init() {
@@ -64,6 +65,10 @@ func init() {
 			},
 			"/commercial-registration-number-types": {method: http.MethodGet, face: operationsReadFace()},
 			"/reference-data/enablement":            {method: http.MethodGet, face: operationsReadFace(), probe: "/reference-data/enablement?kind=COUNTRY"},
+			"/commercial-signing-evidences/{kind}/{objectId}/{version}": {
+				method: http.MethodGet, face: operationsReadFace(),
+				probe: "/commercial-signing-evidences/CUSTOMER_CONTRACT/SYN-CONTRACT-01/v1",
+			},
 		},
 		build: func(sources endpointSources) (commercialCatalogueWiring, error) {
 			none := commercialCatalogueWiring{}
@@ -96,6 +101,10 @@ func init() {
 			if err != nil {
 				return none, err
 			}
+			signingEvidenceStore, err := pcpostgres.NewSigningEvidences(sources.db)
+			if err != nil {
+				return none, err
+			}
 			return commercialCatalogueWiring{
 				publicationDrafts:          publicationDrafts,
 				serviceProducts:            commercialCatalog,
@@ -109,6 +118,7 @@ func init() {
 				legalEntityProfileResolver: commercialapp.NewResolveLegalEntityProfileHandler(legalEntityProfiles, partyIdentityRegistrations),
 				businessPartyProfiles:      businessPartyProfiles,
 				referenceEnablements:       commercialapp.NewQueryReferenceEnablementsHandler(referenceEnablements, systemClock{}),
+				signingEvidences:           commercialapp.NewQuerySigningEvidenceHandler(signingEvidenceStore),
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring commercialCatalogueWiring) []httpapi.BusinessEndpoint {
@@ -173,6 +183,7 @@ func init() {
 				// 启用范围读回（ADR-0345）：按种类读出本租户册上登过的每个码此刻的状态与全部修订；册上没有行的码不在结果里
 				// （未配置由缺席表达）。同 Intake 变量，挂操作者查阅读；此刻的状态由读侧编排对读的这一刻导出，不在装配点预先挑。
 				{Pattern: "/reference-data/enablement", Handler: commercialhttp.NewQueryReferenceEnablementsEndpoint(commercialCatalogueIntake, wiring.referenceEnablements)},
+				{Pattern: "/commercial-signing-evidences/{kind}/{objectId}/{version}", Handler: commercialhttp.NewQuerySigningEvidencesEndpoint(commercialCatalogueIntake, wiring.signingEvidences)},
 			}
 		},
 	})

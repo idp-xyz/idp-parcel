@@ -181,6 +181,8 @@ type customerContractBody struct {
 	// SellPriceArrangement 是销售价格约定那一节（0049；ADR-0380 决定一）：缺键即这一版合同没有销售价格约定，不由
 	// contentRegistered 推，也不拿空列表顶。键名镜像受控批文与录入载荷。
 	SellPriceArrangement *sellPriceArrangementBody `json:"sellPriceArrangement,omitempty"`
+	// SigningEvidenceRegistered 是这一版旁边有没有至少一条签署证据。布尔总在场：缺键会被读成「没问过」。
+	SigningEvidenceRegistered bool `json:"signingEvidenceRegistered"`
 
 	versionClosureBody
 }
@@ -222,15 +224,16 @@ type controlBindingBody struct {
 
 func customerContractBodyOf(row ports.CustomerContractCatalogueRow) customerContractBody {
 	body := customerContractBody{
-		ObjectID:           row.ObjectID,
-		Version:            row.VersionLabel,
-		Scope:              row.Scope,
-		Status:             row.Status,
-		EffectiveStartsAt:  rfc3339(row.EffectiveStartsAt),
-		PublishedAt:        rfc3339(row.PublishedAt),
-		ContentRegistered:  row.HasContent,
-		Bindings:           make([]controlBindingBody, 0, len(row.Bindings)),
-		DeliveryConditions: deliveryConditionBodyOf(row.DeliveryConditions),
+		ObjectID:                  row.ObjectID,
+		Version:                   row.VersionLabel,
+		Scope:                     row.Scope,
+		Status:                    row.Status,
+		EffectiveStartsAt:         rfc3339(row.EffectiveStartsAt),
+		PublishedAt:               rfc3339(row.PublishedAt),
+		ContentRegistered:         row.HasContent,
+		Bindings:                  make([]controlBindingBody, 0, len(row.Bindings)),
+		DeliveryConditions:        deliveryConditionBodyOf(row.DeliveryConditions),
+		SigningEvidenceRegistered: row.SigningEvidenceRegistered,
 	}
 	body.SellPriceArrangement = sellPriceArrangementBodyOf(row.SellPriceArrangement)
 	body.versionClosureBody = closureBodyOf(row.HasSelectionCut, row.SelectionEndsAt, row.Successor, row.RetiredAt)
@@ -273,6 +276,7 @@ type supplierAgreementBody struct {
 	PublishedAt       string `json:"publishedAt"`
 
 	ContentRegistered          bool   `json:"contentRegistered"`
+	SigningEvidenceRegistered  bool   `json:"signingEvidenceRegistered"`
 	Supplier                   string `json:"supplier,omitempty"`
 	LegalEntity                string `json:"legalEntity,omitempty"`
 	PurchasePlan               string `json:"purchasePlan,omitempty"`
@@ -309,13 +313,14 @@ func closureBodyOf(hasCut bool, cutAt time.Time, successor string, retiredAt tim
 
 func supplierAgreementBodyOf(row ports.SupplierAgreementCatalogueRow) supplierAgreementBody {
 	body := supplierAgreementBody{
-		ObjectID:          row.ObjectID,
-		Version:           row.VersionLabel,
-		Scope:             row.Scope,
-		Status:            row.Status,
-		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
-		PublishedAt:       rfc3339(row.PublishedAt),
-		ContentRegistered: row.HasContent,
+		ObjectID:                  row.ObjectID,
+		Version:                   row.VersionLabel,
+		Scope:                     row.Scope,
+		Status:                    row.Status,
+		EffectiveStartsAt:         rfc3339(row.EffectiveStartsAt),
+		PublishedAt:               rfc3339(row.PublishedAt),
+		ContentRegistered:         row.HasContent,
+		SigningEvidenceRegistered: row.SigningEvidenceRegistered,
 	}
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)

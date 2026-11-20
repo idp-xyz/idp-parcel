@@ -18,6 +18,8 @@ type commercialRegistrationWiring struct {
 	businessPartyProfileRegistration   commercialhttp.BusinessPartyProfileRegistrar
 	channelAccountUseRegistration      commercialhttp.ChannelAccountUseRegistrar
 	referenceEnablementRegistration    commercialhttp.ReferenceEnablementRegistrar
+	signingEvidenceRegistration        commercialhttp.SigningEvidenceRegistrar
+	signingEvidenceRequirement         commercialhttp.SigningEvidenceRequirementRegistrar
 }
 
 func init() {
@@ -31,20 +33,22 @@ func init() {
 			"/commercial-publication-vocabularies": {
 				method: http.MethodGet, face: registryWriteFace(), probe: "/commercial-publication-vocabularies?kind=ACCEPTANCE_RULE_PACKAGE",
 			},
-			"/commercial-business-party-registrations":           {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-legal-entity-registrations":             {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-customer-account-registrations":         {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-party-relationship-registrations":       {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-party-identity-deactivations":           {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-service-product-form-registrations":     {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-product-channel-mapping-registrations":  {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-registration-number-type-registrations": {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-registration-number-type-deactivations": {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-legal-entity-profile-registrations":     {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-business-party-profile-registrations":   {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-channel-account-use-registrations":      {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-channel-account-use-revocations":        {method: http.MethodPost, face: registryWriteFace()},
-			"/reference-data/enablement-registrations":           {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-business-party-registrations":               {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-legal-entity-registrations":                 {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-customer-account-registrations":             {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-party-relationship-registrations":           {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-party-identity-deactivations":               {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-service-product-form-registrations":         {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-product-channel-mapping-registrations":      {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-registration-number-type-registrations":     {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-registration-number-type-deactivations":     {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-legal-entity-profile-registrations":         {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-business-party-profile-registrations":       {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-channel-account-use-registrations":          {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-channel-account-use-revocations":            {method: http.MethodPost, face: registryWriteFace()},
+			"/reference-data/enablement-registrations":               {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-signing-evidence-registrations":             {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-signing-evidence-requirement-registrations": {method: http.MethodPost, face: registryWriteFace()},
 		},
 		build: func(sources endpointSources) (commercialRegistrationWiring, error) {
 			commercialRegistration, err := buildCommercialRegistrationOrchestration(sources.db)
@@ -59,6 +63,8 @@ func init() {
 				businessPartyProfileRegistration:   commercialRegistration.businessPartyProfile,
 				channelAccountUseRegistration:      commercialRegistration.channelAccountUse,
 				referenceEnablementRegistration:    commercialRegistration.referenceEnablement,
+				signingEvidenceRegistration:        commercialRegistration.signingEvidence,
+				signingEvidenceRequirement:         commercialRegistration.signingEvidenceRequirement,
 			}, err
 		},
 		mount: func(channels endpointChannels, wiring commercialRegistrationWiring) []httpapi.BusinessEndpoint {
@@ -122,6 +128,8 @@ func init() {
 				// 只有一个口。路径落在 `/reference-data/` 下是因为它的使用者是“基础数据”页，登记册的所有权在本上下文。授予面是
 				// 登记册配置写（ADR-0085 决定一），不新增授予种类；租户与登记责任方取认证信封。
 				{Pattern: "/reference-data/enablement-registrations", Handler: commercialhttp.NewRegisterReferenceEnablementEndpoint(channels.operatorRegistries.commercial, wiring.referenceEnablementRegistration)},
+				{Pattern: "/commercial-signing-evidence-registrations", Handler: commercialhttp.NewRegisterSigningEvidenceEndpoint(channels.operatorRegistries.commercial, wiring.signingEvidenceRegistration)},
+				{Pattern: "/commercial-signing-evidence-requirement-registrations", Handler: commercialhttp.NewRegisterSigningEvidenceRequirementEndpoint(channels.operatorRegistries.commercial, wiring.signingEvidenceRequirement)},
 			}
 		},
 	})

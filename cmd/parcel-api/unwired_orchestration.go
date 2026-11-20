@@ -1384,6 +1384,36 @@ func (unwiredReferenceEnablements) ListReferenceEnablements(
 	return time.Time{}, nil, errOrchestrationNotWired
 }
 
+type unwiredSigningEvidenceRegistration struct{}
+
+func (unwiredSigningEvidenceRegistration) Handle(
+	context.Context,
+	commercialapp.RegisterSigningEvidenceCommand,
+) (commercialapp.SigningEvidenceRegistrationResult, error) {
+	return commercialapp.SigningEvidenceRegistrationResult{}, errOrchestrationNotWired
+}
+
+type unwiredSigningEvidenceRequirementRegistration struct{}
+
+func (unwiredSigningEvidenceRequirementRegistration) Handle(
+	context.Context,
+	commercialapp.RegisterSigningEvidenceRequirementCommand,
+) (commercialapp.SigningEvidenceRequirementResult, error) {
+	return commercialapp.SigningEvidenceRequirementResult{}, errOrchestrationNotWired
+}
+
+type unwiredSigningEvidenceRead struct{}
+
+func (unwiredSigningEvidenceRead) Handle(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.CommercialObjectKind,
+	commercialdomain.CommercialObjectID,
+	commercialdomain.CommercialVersionLabel,
+) (commercialapp.SigningEvidenceRead, error) {
+	return commercialapp.SigningEvidenceRead{}, errOrchestrationNotWired
+}
+
 type unwiredLegalEntityProfileRegistration struct{}
 
 func (unwiredLegalEntityProfileRegistration) Register(
