@@ -1,7 +1,7 @@
 # 12 `PN09-W06`：待认领到货（登记、认领与撤销、处置规则、处置、收货引用与查阅）
 
 Category: enhancement
-Status: in-progress（代码与测试写完；待非作者评审后进 main）
+Status: in-progress（Standards 两处阻断已修；Spec 轴当轮没有交卷，尚未进 main）
 Blocked by: 02、09、11
 
 依据：[UC-WF-005](../../../docs/application/warehouse-fulfillment/UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md)；[UC-WF-004](../../../docs/application/warehouse-fulfillment/UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md)（引用待认领到货的收货确认）；[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md)「入库与加工」「待认领到货」；[ADR-0384](../../../docs/adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md) 决定二、三、四、五、八。
@@ -24,4 +24,13 @@ Blocked by: 02、09、11
 
 ## 验证
 
-证据层级 `S`，含真库 PostgreSQL 16：`gofmt -l .`、`go vet ./...`、`internal/architecture`、`internal/accessidentity/...`（`-race`）、`internal/warehousefulfillment/...`（`-race`）、`cmd/parcel-api/` 整包（`-race`）全部通过。待非作者评审。
+证据层级 `S`，含真库 PostgreSQL 16。主体 `de2ce983d`：`gofmt -l .`、`go vet ./...`、`internal/architecture`、`internal/accessidentity/...`（`-race`）、`internal/warehousefulfillment/...`（`-race`）、`cmd/parcel-api/` 整包（`-race`）全部通过。修订 `02cdeba41` 重跑：`gofmt` 洁净，`go vet` 通过，`internal/architecture` 通过；领域两则与 `TestUnclaimedArrivalShapeAndClaimWindowRejectDirectInserts`、`TestUnclaimedDisposalRuleAndDispositionLifecycle` 连真库通过。
+
+## 评审记录
+
+钉 `de2ce983d`（相对 `b4914f9c2`）。Standards 阻断 2，修订在 `02cdeba41`：
+
+- `unclaimed_arrival_origin_shape`：转出来源的事实标识为空时，`NULL = fact_id` 是 UNKNOWN，CHECK 放行，外键在 `MATCH SIMPLE` 下也不拦。转出来源补上 `diverted_receipt_fact_id IS NOT NULL`。直插缺这一格现被 `23514` 拒。
+- 认领期限秒数乘 `time.Second` 在超过 `9223372036` 时回绕为负，期限未到会被判成已到。登记门与库上 CHECK 拒掉超出的值，处置改为按整秒比较。
+
+交付模式只评一轮、只修挡上线的；探针由作者在 `02cdeba41` 重跑，结果见上。Spec 轴当轮没有交卷。
