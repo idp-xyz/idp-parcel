@@ -1,6 +1,6 @@
 # 参与方与商业（`party-commercial`）
 
-代码在 `internal/partycommercial`。对照 main `99fc0037d`（2026-11-12）写成。
+代码在 `internal/partycommercial`。签署证据那一句对照 `7f45dd2ef`；其余对照 main `99fc0037d`（2026-11-12）。
 
 **这份文件核到什么程度**：取值表、解析结果、发布与登记结果、入口四节是从代码里读出来的。「规则」与「生命周期」两节的句子是从旧 `docs/domain/party-commercial/CONTEXT.md` 提炼的，每条只用 grep 确认了代码里有对应的机制（类型、函数、错误或结果码），没有逐条跑测试验证行为；旧文档写了而代码里没有的，单列在最后一节。
 
@@ -128,6 +128,7 @@
 - 批准是与录入分立的操作者动作，两者身份都来自操作者信封。须否为不同主体、须持哪一等级，由租户的审批职责规则定；规则未登记则批准不放行。
 - 批准与发布都绑定调用方看到的那份载体：内容摘要或版本壳摘要变了就答已变更，不批不发。
 - 新版发布不自动收尾旧版，两版重叠也不阻发布；重叠处解析答适用冲突，直到显式收尾。
+- 签署证据只挂在客户合同与供应商协议的版本旁，不进正文。没登记要求时发布不设这道门，读口答未配置。登记了这一类要有证据而这一版还没有，发布不入册，载体留在已批准。更正只追加，不改原条。
 - 收尾两种：后继晚于旧版起点，旧版截止在后继起点；同起点重发，旧版退役。都要指名后继，且后继接得住旧版此后的那一段。收尾不改写既有快照，不改指既有委托。
 
 **解析**
@@ -181,6 +182,7 @@
 | 产品与渠道 | `/commercial-service-products` `/commercial-service-product-form-registrations` `/commercial-product-channel-mappings`（及 `/{mappingId}/revisions`） `/commercial-product-channel-mapping-registrations` `/commercial-channel-account-use-registrations` `/commercial-channel-account-use-revocations` |
 | 待批准发布 | `/commercial-publication-vocabularies` `/commercial-publication-previews` `/commercial-publication-drafts` `/commercial-open-publication-drafts` `/commercial-publication-draft-readbacks/{kind}/{objectId}/{version}` `/commercial-publication-draft-approvals` `/commercial-publication-draft-publications` |
 | 受控发布与收尾 | `/commercial-publications` `/commercial-version-successor-cuts` `/commercial-version-retirements` |
+| 签署证据 | `/commercial-signing-evidence-registrations` `/commercial-signing-evidence-requirement-registrations` `/commercial-signing-evidences/{kind}/{objectId}/{version}` |
 | 商业版本读口 | `/commercial-version-readbacks/{kind}/{objectId}/{version}` `/commercial-customer-contracts` `/commercial-supplier-agreements` `/commercial-policies` |
 
 离线口：`cmd/parcel-commercial`，运营在数据库网络内手跑，不监听端口，内容全部来自 `-input` 文件。子命令：`publish` `register-resolution-key` `register-parties` `deactivate-party-identity` `end-party-relationships` `register-products` `register-registration-number-types` `register-legal-entity-profiles` `register-version-closures` `register-approval-duty-rule`。退出码 0 全部落定，1 技术失败，2 有未决或冲突要商业责任方看。 商业依据解析、授权裁定、交付条件读取没有 HTTP 口，由其他上下文在进程内调用。
