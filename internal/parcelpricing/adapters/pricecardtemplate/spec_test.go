@@ -12,7 +12,7 @@ import (
 // 必填性、说明都取自 sheets 与 cardFields，没有手写的副本；增删一列规格自动跟着变。
 func TestSpecMirrorsTheSheetAndColumnDefinitions(t *testing.T) {
 	spec := Reader{}.PriceCardTemplateSpec()
-	if spec.TemplateVersion != TemplateVersion || strings.Join(spec.AcceptedTemplateVersions, ",") != "PPT-1,PPT-2,PPT-3" {
+	if spec.TemplateVersion != TemplateVersion || strings.Join(spec.AcceptedTemplateVersions, ",") != "PPT-1,PPT-2,PPT-3,PPT-4" {
 		t.Fatalf("version = %s accepted = %v", spec.TemplateVersion, spec.AcceptedTemplateVersions)
 	}
 	if len(spec.Sheets) != len(sheets) {
@@ -54,13 +54,19 @@ func TestSpecMirrorsTheSheetAndColumnDefinitions(t *testing.T) {
 	if card.Repeatable || card.Layout != "FIELDS" || len(card.Columns) != len(cardFields) {
 		t.Errorf("card = %+v", card)
 	}
-	// 适用服务产品自 PPT-3 起才有：规格口列出它、标出版本，是可缺的列表格；其余 card 字段不带版本。
+	// 适用服务产品自 PPT-3 起才有；票级计价重量的两格自 PPT-4 起才有。其余 card 字段不带版本。
 	for _, column := range card.Columns {
 		wantSince := ""
-		if column.Key == "serviceProducts" {
+		switch column.Key {
+		case "serviceProducts":
 			wantSince = "PPT-3"
 			if column.Requirement != "optional" || column.Title != "适用服务产品" {
 				t.Errorf("serviceProducts = %+v", column)
+			}
+		case cardFieldShipmentWeightAggregation, cardFieldShipmentWeightRoundingPoint:
+			wantSince = "PPT-4"
+			if column.Requirement != "conditional" || len(column.AllowedValues) != 2 {
+				t.Errorf("%s = %+v", column.Key, column)
 			}
 		}
 		if column.Since != wantSince {
@@ -140,6 +146,7 @@ func TestDecoderReadsClosedColumnsThroughTheRegistry(t *testing.T) {
 		{sheetCard, "direction", costCard, 0}, {sheetCard, "purpose", costCard, 0}, {sheetCard, "aggregation", costCard, 0},
 		{sheetCard, "weightMethod", costCard, 0}, {sheetCard, "volumetricLengthUnit", sellCard, 0},
 		{sheetCard, "amountRoundingMode", costCard, 0}, {sheetCard, "amountRoundingPoints", costCard, 0},
+		{sheetCard, cardFieldShipmentWeightAggregation, costCard, 0}, {sheetCard, cardFieldShipmentWeightRoundingPoint, costCard, 0},
 		{sheetTables, "family", costCard, 0}, {sheetTables, "weightUnit", costCard, 0},
 		{sheetWeightRounding, "policy", costCard, 0}, {sheetWeightRounding, "mode", costCard, 0}, {sheetWeightRounding, "unit", costCard, 0},
 		{sheetFixedCharges, "effect", sellCard, 0}, {sheetFixedCharges, "unit", sellCard, 0},

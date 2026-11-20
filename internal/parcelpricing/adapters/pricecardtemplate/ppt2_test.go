@@ -273,7 +273,7 @@ func TestBlankTemplateCarriesThePPT2Sheet(t *testing.T) {
 	if err := WriteTemplate(&buffer); err != nil {
 		t.Fatal(err)
 	}
-	if TemplateFileName != "price-card-import-template-PPT-3.xlsx" {
+	if TemplateFileName != "price-card-import-template-PPT-4.xlsx" {
 		t.Fatalf("file name %s", TemplateFileName)
 	}
 	book := mustReadBook(t, buffer.Bytes())

@@ -293,12 +293,15 @@ type translation struct {
 	manifest       []domain.VersionReference
 	manifestOK     bool
 
-	amountRounding    *domain.AmountRoundingPolicy
-	amountRoundingOK  bool
-	serviceProducts   []domain.ServiceProductReference
-	serviceProductsOK bool
-	authorization     domain.VersionReference
-	authorizationOK   bool
+	amountRounding              *domain.AmountRoundingPolicy
+	amountRoundingOK            bool
+	serviceProducts             []domain.ServiceProductReference
+	serviceProductsOK           bool
+	shipmentWeightAggregation   domain.ShipmentWeightAggregation
+	shipmentWeightRoundingPoint domain.ShipmentWeightRoundingPoint
+	shipmentWeightOK            bool
+	authorization               domain.VersionReference
+	authorizationOK             bool
 
 	plan *domain.PricingPlanVersion
 }
@@ -334,6 +337,7 @@ func (t *translation) run(present map[string]spreadsheet.Sheet) {
 	t.reportUnused()
 	t.readAmountRounding()
 	t.readServiceProducts()
+	t.readShipmentWeightAggregation()
 	t.readAuthorization()
 	t.buildPlan()
 }
@@ -1670,6 +1674,82 @@ func (t *translation) readServiceProducts() {
 	t.serviceProductsOK = true
 }
 
+// readShipmentWeightAggregation 读票级计价重量的两格。更早的模板没有这两行，票级卡按合计后派生读。
+// 本版里计价对象是 PER_SHIPMENT 时聚合方式必填、不预选；逐件求和时进位点同样必填。主单级与逐包裹填了就说不适用。
+func (t *translation) readShipmentWeightAggregation() {
+	if !availableIn(templateVersionV4, t.d.version) {
+		t.shipmentWeightOK = true
+		return
+	}
+	methodField := t.card[cardFieldShipmentWeightAggregation]
+	pointField := t.card[cardFieldShipmentWeightRoundingPoint]
+	if methodField.state == fieldBad || pointField.state == fieldBad {
+		return
+	}
+	method, methodOK := t.optionalClosed(methodField)
+	point, pointOK := t.optionalClosed(pointField)
+	if !methodOK || !pointOK {
+		return
+	}
+	if t.aggregation != "PER_SHIPMENT" {
+		if method != "" {
+			t.d.at(methodField, ports.TemplateCellNotApplicable, "票级计价重量的聚合方式只在计价对象为 PER_SHIPMENT 的卡上声明，主单级与逐包裹留空")
+			return
+		}
+		if point != "" {
+			t.d.at(locatedCardField(pointField, cardFieldShipmentWeightRoundingPoint), ports.TemplateCellNotApplicable, "逐件求和的进位点只在票级卡上、并且只在逐件求和时声明，这里留空")
+			return
+		}
+		t.shipmentWeightOK = true
+		return
+	}
+	if method == "" {
+		t.d.at(locatedCardField(methodField, cardFieldShipmentWeightAggregation), ports.TemplateFieldMissing,
+			"票级卡必须声明计价重量的聚合方式：TOTALS_THEN_DERIVE 或 PER_PIECE_THEN_SUM，不预选")
+		return
+	}
+	if method == string(domain.ShipmentWeightPerPieceThenSum) {
+		if point == "" {
+			t.d.at(locatedCardField(pointField, cardFieldShipmentWeightRoundingPoint), ports.TemplateFieldMissing,
+				"逐件求和必须声明进位点：ROUND_EACH_THEN_SUM 或 SUM_THEN_ROUND_ONCE，不预选，两种不叠")
+			return
+		}
+	} else if point != "" {
+		t.d.at(pointField, ports.TemplateCellNotApplicable, "合计后派生不声明进位点，这一格留空")
+		return
+	}
+	t.shipmentWeightAggregation = domain.ShipmentWeightAggregation(method)
+	t.shipmentWeightRoundingPoint = domain.ShipmentWeightRoundingPoint(point)
+	t.shipmentWeightOK = true
+}
+
+// locatedCardField 在整行缺席（零值坐标）时仍把问题落在字段名上，页面才标得回那一格。
+func locatedCardField(f field, key string) field {
+	if f.column == "" {
+		f.sheet = sheetCard
+		f.column = key
+	}
+	return f
+}
+
+// optionalClosed 读一格可空的封闭取值。空是合法的，由调用方决定这一格在当前卡上是不是必填。
+func (t *translation) optionalClosed(f field) (string, bool) {
+	if f.state == fieldBad {
+		return "", false
+	}
+	if f.state != fieldPresent {
+		return "", true
+	}
+	allowed := vocabularyOf(f.sheet, f.column).valuesFor(t.d.version)
+	for _, candidate := range allowed {
+		if f.text == candidate {
+			return f.text, true
+		}
+	}
+	t.d.at(f, ports.TemplateCellInvalid, "「%s」不是可取值；可取：%s", f.text, strings.Join(allowed, "、"))
+	return "", false
+}
+
 func (t *translation) readAuthorization() {
 	id, version := t.card["directionAuthorizationId"], t.card["directionAuthorizationVersion"]
 	if !t.d.required(id) || !t.d.required(version) {
@@ -1772,7 +1852,7 @@ func (t *translation) buildPlan() {
 	if t.main == nil || !t.main.built {
 		return
 	}
-	if !all(t.headerOK, t.weightOK, t.dependencyOK, t.rulesOK, t.surchargesOK, t.seriesOK, t.exclusionsOK, t.cataloguesOK, t.manifestOK, t.amountRoundingOK, t.authorizationOK, t.totalBoundsOK, t.serviceProductsOK) {
+	if !all(t.headerOK, t.weightOK, t.dependencyOK, t.rulesOK, t.surchargesOK, t.seriesOK, t.exclusionsOK, t.cataloguesOK, t.manifestOK, t.amountRoundingOK, t.authorizationOK, t.totalBoundsOK, t.serviceProductsOK, t.shipmentWeightOK) {
 		return
 	}
 	planLevel := field{sheet: sheetCard}
@@ -1815,6 +1895,13 @@ func (t *translation) buildPlan() {
 		plan, err = plan.WithServiceProducts(t.serviceProducts...)
 		if err != nil {
 			t.d.rejected(t.card[cardFieldServiceProducts], "适用服务产品", err)
+			return
+		}
+	}
+	if t.shipmentWeightAggregation != "" {
+		plan, err = plan.WithShipmentWeightAggregation(t.shipmentWeightAggregation, t.shipmentWeightRoundingPoint)
+		if err != nil {
+			t.d.rejected(t.card[cardFieldShipmentWeightAggregation], "票级计价重量聚合方式", err)
 			return
 		}
 	}

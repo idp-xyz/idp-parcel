@@ -67,7 +67,7 @@ type workbookGap struct {
 }
 
 // projectPriceCard 把一版已过构造门的价卡写成当前模板能表达的工作簿。
-// 模板版本取能写下这张卡的最早一版：没声明总额上下限、按档位查表与适用服务产品的卡仍是 PPT-1，
+// 模板版本取能写下这张卡的最早一版：没声明总额上下限、按档位查表、适用服务产品与票级计价重量聚合方式的卡仍是 PPT-1，
 // 进位只增不改，留空的新增格读出来与没写是同一张卡。
 // 领域不保留模板节点标识，内容摘要也不含它；条件树与计算树按先序重新编号，再导入得到的是同一棵树。
 func projectPriceCard(plan domain.PricingPlanVersion, authorization domain.VersionReference) (projectedWorkbook, workbookGap) {
@@ -197,6 +197,9 @@ func (p *projector) screen() bool {
 	if len(p.plan.ServiceProducts()) > 0 {
 		p.version = templateVersionV3
 	}
+	if _, declared := p.plan.ShipmentWeightAggregation(); declared {
+		p.version = templateVersionV4
+	}
 	return true
 }
 
@@ -271,29 +274,38 @@ func (p *projector) emitCard() bool {
 		points = joinPoints(rounding.Points())
 	}
 	products := joinProducts(p.plan.ServiceProducts())
+	shipmentAggregation, shipmentRoundingPoint := "", ""
+	if method, declared := p.plan.ShipmentWeightAggregation(); declared {
+		shipmentAggregation = method.String()
+		if point, hasPoint := p.plan.ShipmentWeightRoundingPoint(); hasPoint {
+			shipmentRoundingPoint = point.String()
+		}
+	}
 	values := map[string]string{
-		"templateVersion":               p.version,
-		"planId":                        p.plan.Reference().ID(),
-		"planVersion":                   p.plan.Reference().Version(),
-		"scope":                         p.plan.Scope().String(),
-		"direction":                     p.plan.Direction().String(),
-		"purpose":                       p.plan.Purpose().String(),
-		"aggregation":                   p.plan.Aggregation().String(),
-		"baseChargeCode":                p.plan.BaseChargeCode().String(),
-		"periodStartsAt":                clock(p.plan.EffectivePeriod().StartsAt()),
-		"periodEndsAt":                  clock(p.plan.EffectivePeriod().EndsAt()),
-		"rateTableId":                   p.plan.RateTable().Reference().ID(),
-		"weightPolicyId":                weight.Reference().ID(),
-		"weightPolicyVersion":           weight.Reference().Version(),
-		"weightMethod":                  string(weight.Method()),
-		"volumetricDivisor":             divisor,
-		"volumetricLengthUnit":          lengthUnit,
-		"amountRoundingMode":            mode,
-		"amountRoundingIncrement":       increment,
-		"amountRoundingPoints":          points,
-		"directionAuthorizationId":      p.authorization.ID(),
-		"directionAuthorizationVersion": p.authorization.Version(),
-		cardFieldServiceProducts:        products,
+		"templateVersion":                    p.version,
+		"planId":                             p.plan.Reference().ID(),
+		"planVersion":                        p.plan.Reference().Version(),
+		"scope":                              p.plan.Scope().String(),
+		"direction":                          p.plan.Direction().String(),
+		"purpose":                            p.plan.Purpose().String(),
+		"aggregation":                        p.plan.Aggregation().String(),
+		"baseChargeCode":                     p.plan.BaseChargeCode().String(),
+		"periodStartsAt":                     clock(p.plan.EffectivePeriod().StartsAt()),
+		"periodEndsAt":                       clock(p.plan.EffectivePeriod().EndsAt()),
+		"rateTableId":                        p.plan.RateTable().Reference().ID(),
+		"weightPolicyId":                     weight.Reference().ID(),
+		"weightPolicyVersion":                weight.Reference().Version(),
+		"weightMethod":                       string(weight.Method()),
+		"volumetricDivisor":                  divisor,
+		"volumetricLengthUnit":               lengthUnit,
+		"amountRoundingMode":                 mode,
+		"amountRoundingIncrement":            increment,
+		"amountRoundingPoints":               points,
+		"directionAuthorizationId":           p.authorization.ID(),
+		"directionAuthorizationVersion":      p.authorization.Version(),
+		cardFieldServiceProducts:             products,
+		cardFieldShipmentWeightAggregation:   shipmentAggregation,
+		cardFieldShipmentWeightRoundingPoint: shipmentRoundingPoint,
 	}
 	for _, field := range cardFields {
 		if !availableIn(cardFieldSince[field.key], p.version) {
@@ -304,7 +316,7 @@ func (p *projector) emitCard() bool {
 		}
 		where := "card." + field.key
 		switch field.key {
-		case "direction", "purpose", "aggregation", "weightMethod", "volumetricLengthUnit", "amountRoundingMode":
+		case "direction", "purpose", "aggregation", "weightMethod", "volumetricLengthUnit", "amountRoundingMode", cardFieldShipmentWeightAggregation, cardFieldShipmentWeightRoundingPoint:
 			if !p.closed(sheetCard, field.key, values[field.key], where) {
 				return false
 			}

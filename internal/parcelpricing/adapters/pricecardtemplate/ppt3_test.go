@@ -143,7 +143,7 @@ func TestTheBlankPPT3TemplateListsTheServiceProductsField(t *testing.T) {
 	if !strings.Contains(strings.Join(cardKeys, ","), cardFieldServiceProducts) {
 		t.Fatalf("空白模板的 card 表没有 %s：%v", cardFieldServiceProducts, cardKeys)
 	}
-	if text := strings.Join(readme, "\n"); !strings.Contains(text, "（PPT-3 起）") || !strings.Contains(text, "价卡导入模板 PPT-3") {
+	if text := strings.Join(readme, "\n"); !strings.Contains(text, "（PPT-3 起）") || !strings.Contains(text, cardFieldServiceProducts) {
 		t.Fatal("说明表没点出 serviceProducts 自 PPT-3 起")
 	}
 }

@@ -47,7 +47,7 @@ func readme() spreadsheet.WriteSheet {
 		{"", "", "", "所有格按文本填写，不要用公式。金额、小数、重量写十进制数，不用科学计数法；单位与币种由列或表头给出。"},
 		{"", "", "", "时刻写成带时区的形式，如 2026-01-01T00:00:00Z 或 2026-01-01T08:00:00+08:00。"},
 		{"", "", "", "列表格以英文分号 ; 分隔。封闭代码照下面列出的原样书写。"},
-		{"", "", "", "旧版 " + templateVersionV1 + " 与 " + templateVersionV2 + " 的文件仍然接受；" + templateVersionV2 + " 在 " + templateVersionV1 + " 之上新增 " + sheetTotalBounds + " 表（最低 / 最高收费）与 " + methodTableLookupByRemoteTier + " 计算类型（附加费价表按偏远档位查档），" + templateVersionV3 + " 再新增 card 表的 " + cardFieldServiceProducts + " 字段（售价卡的适用服务产品），其余不变。"},
+		{"", "", "", "旧版 " + templateVersionV1 + " 与 " + templateVersionV2 + " 的文件仍然接受；" + templateVersionV2 + " 在 " + templateVersionV1 + " 之上新增 " + sheetTotalBounds + " 表（最低 / 最高收费）与 " + methodTableLookupByRemoteTier + " 计算类型（附加费价表按偏远档位查档），" + templateVersionV3 + " 再新增 card 表的 " + cardFieldServiceProducts + " 字段（售价卡的适用服务产品），" + templateVersionV4 + " 再新增 card 表的 " + cardFieldShipmentWeightAggregation + " 与 " + cardFieldShipmentWeightRoundingPoint + "（票级计价重量的聚合方式与进位点），其余不变。"},
 	}
 	for _, spec := range sheets {
 		note := spec.note

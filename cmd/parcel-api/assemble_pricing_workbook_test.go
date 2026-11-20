@@ -113,7 +113,7 @@ func TestPriceCardTemplateSpecEndpointAnswersTheRealSpecThroughTheOperatorChanne
 	if body.TemplateVersion != spec.TemplateVersion || len(body.Sheets) != len(spec.Sheets) {
 		t.Fatalf("答复与规格源不一致：%s", response.Body)
 	}
-	var sawBounds, sawRemoteTierMethod, sawServiceProducts bool
+	var sawBounds, sawRemoteTierMethod, sawServiceProducts, sawShipmentWeight bool
 	for _, sheet := range body.Sheets {
 		if sheet.Name == "total_bounds" && sheet.Since == "PPT-2" {
 			sawBounds = true
@@ -125,13 +125,19 @@ func TestPriceCardTemplateSpecEndpointAnswersTheRealSpecThroughTheOperatorChanne
 			if sheet.Name == "card" && column.Key == "serviceProducts" && column.Since == "PPT-3" {
 				sawServiceProducts = true
 			}
+			if sheet.Name == "card" && column.Key == "shipmentWeightAggregation" && column.Since == "PPT-4" {
+				sawShipmentWeight = true
+			}
 		}
 	}
-	if !sawBounds || !sawRemoteTierMethod || body.TemplateVersion != "PPT-3" || strings.Join(body.AcceptedTemplateVersions, ",") != "PPT-1,PPT-2,PPT-3" {
+	if !sawBounds || !sawRemoteTierMethod || body.TemplateVersion != "PPT-4" || strings.Join(body.AcceptedTemplateVersions, ",") != "PPT-1,PPT-2,PPT-3,PPT-4" {
 		t.Fatalf("规格里缺 PPT-2 的新东西：%s", response.Body)
 	}
 	if !sawServiceProducts {
 		t.Fatalf("规格里缺 PPT-3 的 card.serviceProducts：%s", response.Body)
+	}
+	if !sawShipmentWeight {
+		t.Fatalf("规格里缺 PPT-4 的 card.shipmentWeightAggregation：%s", response.Body)
 	}
 
 	// 租户无关：别的租户的操作者读到逐字节相同的答复。

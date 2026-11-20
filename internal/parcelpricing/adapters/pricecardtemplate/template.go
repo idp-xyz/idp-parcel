@@ -19,7 +19,7 @@ import (
 // TemplateVersion 是本构建写出的模板版本，也是最新的一版（规范「版本」一节）。表集合、列集合或列语义变化时进位，
 // 可取值的增减也算列语义变化。进位不等于旧版作废：旧版文件仍按旧版的表集合与取值读，读出的内容与进位之前
 // 逐位相同（acceptedTemplateVersions）。
-const TemplateVersion = templateVersionV3
+const TemplateVersion = templateVersionV4
 
 // templateVersionV1 是第一版。PPT-2 只增不改：新增 total_bounds 表与 TABLE_LOOKUP_BY_REMOTE_TIER 计算类型，
 // 既有的表、列与取值一个不动，所以 PPT-1 文件照旧读通，且不会因新增的东西而多出任何问题。
@@ -32,8 +32,12 @@ const templateVersionV2 = "PPT-2"
 // （ADR-0382 决定一）。PPT-1、PPT-2 文件照旧读通，读出的方案与问题清单逐位相同。
 const templateVersionV3 = "PPT-3"
 
+// templateVersionV4 是第四版，同样只增不改：card 表新增票级计价重量的聚合方式与逐件求和的进位点（ADR-0364 决定三）。
+// 更早的文件没有这两行，票级卡按合计后派生读。
+const templateVersionV4 = "PPT-4"
+
 // acceptedTemplateVersions 按先后排列，最后一格是 TemplateVersion。
-var acceptedTemplateVersions = []string{templateVersionV1, templateVersionV2, templateVersionV3}
+var acceptedTemplateVersions = []string{templateVersionV1, templateVersionV2, templateVersionV3, templateVersionV4}
 
 // versionRank 报出一版在先后序里的位置；空串与不认的串取最新一格（给不带版本的调用方：规格口）。
 func versionRank(version string) int {
@@ -152,21 +156,23 @@ func (spec sheetSpec) column(key string) (column, int, bool) {
 
 // 各封闭代码的可取值，与领域代码逐字相同。
 var (
-	directionCodes      = []string{"BUY", "SELL", "INTERNAL"}
-	purposeCodes        = []string{"CUSTOMER_CHARGE", "SUPPLIER_COST", "INTERNAL_PRICE"}
-	aggregationCodes    = []string{"PER_PACKAGE", "PER_SHIPMENT", "PER_MASTER_DOCUMENT"}
-	weightMethodCodes   = []string{"ACTUAL_ONLY", "MAX"}
-	lengthUnitCodes     = []string{"CM", "IN"}
-	weightUnitCodes     = []string{"G", "KG", "OZ", "LB"}
-	roundingModeCodes   = []string{"NONE", "CEILING", "HALF_UP"}
-	roundingPointCodes  = []string{"PER_LINE", "AFTER_CONVERSION", "TOTAL"}
-	familyCodes         = []string{"WEIGHT_ZONE", "FIRST_CONTINUE", "UNIT_PRICE"}
-	roundingPolicyCodes = []string{"CHARGEABLE", "VOLUMETRIC"}
-	effectCodes         = []string{"ADD", "DEDUCT"}
-	chargeUnitCodes     = []string{"PER_PIECE"}
-	exclusivityCodes    = []string{"STANDALONE", "GROUPED"}
-	triggerKindCodes    = []string{"PREDICATE", "ALL_OF", "ANY_OF"}
-	featureSourceCodes  = []string{
+	directionCodes                   = []string{"BUY", "SELL", "INTERNAL"}
+	purposeCodes                     = []string{"CUSTOMER_CHARGE", "SUPPLIER_COST", "INTERNAL_PRICE"}
+	aggregationCodes                 = []string{"PER_PACKAGE", "PER_SHIPMENT", "PER_MASTER_DOCUMENT"}
+	shipmentWeightAggregationCodes   = []string{"TOTALS_THEN_DERIVE", "PER_PIECE_THEN_SUM"}
+	shipmentWeightRoundingPointCodes = []string{"ROUND_EACH_THEN_SUM", "SUM_THEN_ROUND_ONCE"}
+	weightMethodCodes                = []string{"ACTUAL_ONLY", "MAX"}
+	lengthUnitCodes                  = []string{"CM", "IN"}
+	weightUnitCodes                  = []string{"G", "KG", "OZ", "LB"}
+	roundingModeCodes                = []string{"NONE", "CEILING", "HALF_UP"}
+	roundingPointCodes               = []string{"PER_LINE", "AFTER_CONVERSION", "TOTAL"}
+	familyCodes                      = []string{"WEIGHT_ZONE", "FIRST_CONTINUE", "UNIT_PRICE"}
+	roundingPolicyCodes              = []string{"CHARGEABLE", "VOLUMETRIC"}
+	effectCodes                      = []string{"ADD", "DEDUCT"}
+	chargeUnitCodes                  = []string{"PER_PIECE"}
+	exclusivityCodes                 = []string{"STANDALONE", "GROUPED"}
+	triggerKindCodes                 = []string{"PREDICATE", "ALL_OF", "ANY_OF"}
+	featureSourceCodes               = []string{
 		"LONGEST_SIDE", "SECOND_LONGEST_SIDE", "LENGTH_AND_GIRTH", "VOLUME",
 		"ACTUAL_WEIGHT", "VOLUMETRIC_WEIGHT", "CHARGEABLE_WEIGHT",
 		"ZONE", "ADDRESS_TYPE", "ADDRESS_NATURE", "SERVICE_OPTION",
@@ -243,13 +249,15 @@ var conditionalClosedVocabulary = map[string]map[string][]conditionalVocabulary{
 // 一列的可取值只有这一处定义，规格口答的与读取实际收的不会是两份。
 var closedVocabulary = map[string]map[string]vocabulary{
 	sheetCard: {
-		"direction":            {values: directionCodes},
-		"purpose":              {values: purposeCodes},
-		"aggregation":          {values: aggregationCodes},
-		"weightMethod":         {values: weightMethodCodes},
-		"volumetricLengthUnit": {values: lengthUnitCodes},
-		"amountRoundingMode":   {values: roundingModeCodes},
-		"amountRoundingPoints": {values: roundingPointCodes, multi: true},
+		"direction":                          {values: directionCodes},
+		"purpose":                            {values: purposeCodes},
+		"aggregation":                        {values: aggregationCodes},
+		cardFieldShipmentWeightAggregation:   {values: shipmentWeightAggregationCodes},
+		cardFieldShipmentWeightRoundingPoint: {values: shipmentWeightRoundingPointCodes},
+		"weightMethod":                       {values: weightMethodCodes},
+		"volumetricLengthUnit":               {values: lengthUnitCodes},
+		"amountRoundingMode":                 {values: roundingModeCodes},
+		"amountRoundingPoints":               {values: roundingPointCodes, multi: true},
 	},
 	sheetTables: {
 		"family":     {values: familyCodes},
@@ -329,17 +337,36 @@ var cardFields = []column{
 	{"directionAuthorizationVersion", "价格方向授权版本号", requiredAlways, "价格方向授权版本号"},
 	{cardFieldServiceProducts, "适用服务产品", requiredOptional, "这张卡计价的服务产品，写参与方与商业的服务产品对象标识（不带版本），以英文分号分隔；" +
 		"只有价格方向为 SELL 的卡能写。空或不写这一行即不声明：接其余产品，即同一计价范围里没有别的卡指名的那些产品"},
+	{cardFieldShipmentWeightAggregation, "票级计价重量聚合方式", requiredConditional,
+		"票级卡必填、不预选：TOTALS_THEN_DERIVE（合计实重与合计体积重之后按重量策略派生）或 PER_PIECE_THEN_SUM（逐件按重量策略派生之后求和）。逐包裹与主单级留空"},
+	{cardFieldShipmentWeightRoundingPoint, "逐件求和进位点", requiredConditional,
+		"聚合方式为 PER_PIECE_THEN_SUM 时必填、不预选：ROUND_EACH_THEN_SUM（逐件进位后求和）或 SUM_THEN_ROUND_ONCE（求和之后进位一次）。两种不叠。其余情况留空"},
 }
 
 // cardFieldServiceProducts 是 card 表上的适用服务产品字段（ADR-0382 决定一）。
 const cardFieldServiceProducts = "serviceProducts"
 
-// cardFieldSince 登记自某一版才有的 card 字段：更早版本的文件里写了它，要说清是版本问题。
-var cardFieldSince = map[string]string{cardFieldServiceProducts: templateVersionV3}
+// cardFieldShipmentWeightAggregation 与 cardFieldShipmentWeightRoundingPoint 是票级计价重量的两格（ADR-0364 决定三）。
+const (
+	cardFieldShipmentWeightAggregation   = "shipmentWeightAggregation"
+	cardFieldShipmentWeightRoundingPoint = "shipmentWeightRoundingPoint"
+)
 
-// omittableCardFields 是 card 表里整行可以不写的字段。其余字段一行都不能少（用不到的留空），这一格例外：没写即不声明，
-// 与写了空值同一个意思，而 PPT-1、PPT-2 的文件本来就没有这一行，要它们补一行空的就是无故改旧文件。
-var omittableCardFields = map[string]bool{cardFieldServiceProducts: true}
+// cardFieldSince 登记自某一版才有的 card 字段：更早版本的文件里写了它，要说清是版本问题。
+var cardFieldSince = map[string]string{
+	cardFieldServiceProducts:             templateVersionV3,
+	cardFieldShipmentWeightAggregation:   templateVersionV4,
+	cardFieldShipmentWeightRoundingPoint: templateVersionV4,
+}
+
+// omittableCardFields 是 card 表里整行可以不写的字段。其余字段一行都不能少（用不到的留空），这几格例外：没写即不声明，
+// 与写了空值同一个意思，而更早版本的文件本来就没有这些行，要它们补一行空的就是无故改旧文件。
+// 票级两格在本版里对 PER_SHIPMENT 仍是必填，那一道在读取时按计价对象判，不在这里把旧文件判缺行。
+var omittableCardFields = map[string]bool{
+	cardFieldServiceProducts:             true,
+	cardFieldShipmentWeightAggregation:   true,
+	cardFieldShipmentWeightRoundingPoint: true,
+}
 
 // sheets 是表集合，顺序即模板里的表序，也是问题清单的排序依据。
 var sheets = []sheetSpec{
