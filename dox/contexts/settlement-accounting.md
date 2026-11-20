@@ -1,6 +1,6 @@
 # 结算与经营核算（`settlement-accounting`）
 
-代码在 `internal/settlementaccounting`。对照 main `99fc0037d`（2026-11-12）写成。
+代码在 `internal/settlementaccounting`。直接成本经营结果那几句对照 `7efd8b25a`；其余对照 main `99fc0037d`（2026-11-12）。
 
 **这份文件核到什么程度**：取值表、SELL 评价请求的结论、停因、入口四节是从代码里读出来的；哪些编排有生产入口，是在 `cmd/` 下逐个查构造与调用得出的。「规则」一节的句子是从旧 `docs/domain/settlement-accounting/CONTEXT.md` 提炼的，每条只确认了代码里有对应的机制（类型、函数或结果码），没有逐条跑测试验证行为；旧文档写了而代码里没有的，以及有编排却没有入口的，单列在最后一节。
 
@@ -148,11 +148,12 @@
 - 金额文法：主张减免赔，不足记 0；按万分比向下取整；以限额封顶。算出 0 不形成金额。数值没登记不形成金额，全零是一份登记。
 - 实际代垫按税费义务、资金事实和金额范围形成不可覆盖的判断版本；回收成立与否独立判断，变化追加调整。
 
-**调整、分摊与经营结果（分摊与经营结果无入口，见末节）**
+**调整、分摊与经营结果（共享成本分摊无入口，见末节）**
 
 - 普通客户费用的调整只有计价纠错与商业让利两类；纠错必须引用新评价，商业让利必须引用有效授权。调整只挂在已确认费用上，结算币种与费用相同，贷项不得把费用连同既有调整让成负数；落下即重算客户作用域的已确认未结。同一调整标识同内容重投交回原来那一笔，内容不同答冲突。调整登记、对账单作废、后到费用纳入、调整纳入是四种分开授予的运营决定，时刻一律由服务端给；作废必带依据、只成立一次；一笔后到费用、一笔调整各只纳入后续账期一次；撤回只对调整纳入成立（已撤回的不算，那笔调整可再纳），后到费用的纳入不撤；已在任一有效对账单上出过账的费用不是后到费用；纳回原账期、原账单已作废都不受理。
 - 分法按租户与分摊规则版本登记，没登记答未配置，不默认按重、不均摊。已分摊金额与未分摊余额之和等于来源金额；尾差按最大余数分配，余数相同按目标标识升序；没有正权重时整笔未分摊。
 - 经营结果按口径成对采用组成：预估口径用客户预估费用与供应商预期成本，已确认口径用客户运营应收、审核应付与贷项，已结算口径只用核销分配。审核应付与贷项各按方向计入一次。
+- 直接成本只对面单渠道服务的包裹派生预估与已确认两种口径，在预估费用、预期成本形成或纠错、费用确认、审核应付形成之后选料，再调既有的派生与重派生。采用哪一种口径是一户一行的租户取值，两个布尔都要给出且至少采用一种；没登记，读口答未配置、不派生。网络服务产品、还挂在集运单元或已接受订舱的班次上、或有一笔供应商金额不能唯一指到这一件，答成本不全，不出毛利。缺一侧答判不出，不把缺的当零。币种不同、客户侧账期对不齐、或已确认口径的应付或贷项多于一笔，答待判断，不换算、不加总、不挑一笔。答不出时撤下同一范围同一口径上已有的毛利行。已结算口径不由此触发。读口不重算。
 
 ## 生命周期
 
@@ -181,12 +182,12 @@
 - 资金：`external-funds-fact` `external-funds-fact-correction` `funds-mapping` `funds-application` `funds-application-reversal`。映射、核销与撤销只有这一路。
 - 账户与对账：`settlement-account` `statement-arrangement` `statement-cycle` `charge-attribution` `settlement-moment`。
 - 评价与费用：`sell-billing-moment-adoption` `pre-acceptance-estimate-adoption` `fee-item-mapping` `buy-evaluation-trigger` `sell-evaluation-trigger` `charge-confirmation-facts` `charge-confirmation-condition` `reweigh-adjustment-adoption`（结算账户采用「实测差异自动调整」）。
-- 审核与金额规则：`supplier-audit-authority` `supplier-payable-account` `audit-escalation-ceiling` `accounting-connector` `claim-amount-rule` `amount-grammar` `allocation-form` `periodic-fee`。
+- 审核与金额规则：`supplier-audit-authority` `supplier-payable-account` `audit-escalation-ceiling` `accounting-connector` `claim-amount-rule` `amount-grammar` `allocation-form` `periodic-fee` `operating-basis-adoption`（一户采用预估、已确认，或两者；不插默认行）。
 - 运维：`evaluation-resume`（运营续办）`expected-cost-supplier-backfill`（给还没记供应商的预期成本补上）。
 
 ## 旧文档写了、代码里还没有的
 
-- **有编排、没有生产入口**：下列用例方法在 `application/` 里有实现和测试，`cmd/` 下没有任何端点、消费者或子命令调用它们——成本分摊与经营结果的形成（`AllocateCostsHandler`，只读口 `/settlement-operating-results` 因此无数据来源）；赔付、应追偿、追偿认可及其调整（`SettleClaimAmountsHandler`）；实际代垫判断与客户代垫回收（`AssessAdvanceRecoveryHandler` 的 `Assess`、`FormRecovery`、`Adjust`）；供应商费用贷项（`Credit`）。
+- **有编排、没有生产入口**：下列用例方法在 `application/` 里有实现和测试，`cmd/` 下没有任何端点、消费者或子命令调用它们——共享成本分摊（`AllocateCostsHandler` 的 `Allocate` 与 `ApportionCostsHandler`）；赔付、应追偿、追偿认可及其调整（`SettleClaimAmountsHandler`）；实际代垫判断与客户代垫回收（`AssessAdvanceRecoveryHandler` 的 `Assess`、`FormRecovery`、`Adjust`）；供应商费用贷项（`Credit`）。面单渠道包裹的直接成本经营结果已由四个事实编排在成功之后调用 `Derive` 与 `Rederive`。
 - **仓储作业收费发生项那一路**（SELL 请求、仓储计费采用登记、`仓储作业已发生`确认依据、更正版本引起的计价纠错与全额贷记）：搜 `Warehouse`、`仓储` 无对应类型。属可选的仓配履约。
 - **低毛利提示**：搜 `Margin`、`毛利提示` 无对应。
 - **自动核销**（未指定范围时先精确匹配、再按到期日与账期顺序）：核销只按命令写全的分配形成。
