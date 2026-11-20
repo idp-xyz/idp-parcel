@@ -64,6 +64,8 @@ const (
 		   LEFT JOIN settlement_accounting.charge_confirmation_condition AS req
 		          ON req.tenant_id = c.tenant_id
 		         AND req.fee_item = c.fee_item`
+	// 调整子查询里，商业让利的 evaluation_ref 在库上是 NULL。读口对「这一格没有登记」的词是空串
+	// （CustomerChargeAdjustmentEntry.Evaluation），语句里用 COALESCE 折成空串写明，不靠解码器遇到 json null 时不动字符串。
 	customerChargeColumns = `c.charge_id, c.fee_item, c.evaluation_ref, c.stage,
 		        c.original_currency, c.original_minor,
 		        c.settlement_currency, c.settlement_minor,
@@ -106,8 +108,6 @@ const (
 		                    'kind', kind,
 		                    'direction', direction,
 		                    'settlementMinor', settlement_minor,
-		                    -- 商业让利的 evaluation_ref 在库上是 NULL。json 的 null 解不进字符串，而读口对
-		                    -- 「这一格没有登记」的词是空串，所以在语句里折成空串。
 		                    'evaluation', COALESCE(evaluation_ref, '')
 		                ) ORDER BY formed_at, adjustment_id), '[]'::json)
 		           FROM settlement_accounting.charge_adjustment
