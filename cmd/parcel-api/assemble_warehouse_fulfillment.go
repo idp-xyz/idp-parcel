@@ -143,6 +143,9 @@ type warehouseFulfillmentOrchestration struct {
 
 	receiptConfirm        transactionalReceiptConfirmation
 	discrepancyConclusion transactionalDiscrepancyConclusion
+
+	measurementRecord  transactionalWarehouseMeasurement
+	measurementQueries *warehouseapp.QueryWarehouseMeasurementsHandler
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -236,6 +239,21 @@ func (conclusion transactionalDiscrepancyConclusion) Conclude(
 ) (warehouseapp.ConcludeDiscrepancyResult, error) {
 	return inTransaction(ctx, conclusion.transactor, func(txCtx context.Context) (warehouseapp.ConcludeDiscrepancyResult, error) {
 		return conclusion.inner.Conclude(txCtx, command)
+	})
+}
+
+// transactionalWarehouseMeasurement 是仓测登记的事务壳。锁事实身份、核仓与对象、追加落册在同一笔里。
+type transactionalWarehouseMeasurement struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.RecordWarehouseMeasurementHandler
+}
+
+func (measurement transactionalWarehouseMeasurement) Record(
+	ctx context.Context,
+	command warehouseapp.RecordWarehouseMeasurementCommand,
+) (warehouseapp.RecordWarehouseMeasurementResult, error) {
+	return inTransaction(ctx, measurement.transactor, func(txCtx context.Context) (warehouseapp.RecordWarehouseMeasurementResult, error) {
+		return measurement.inner.Record(txCtx, command)
 	})
 }
 
@@ -389,6 +407,16 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 			discrepancies, arrivals, arrivalIDs, systemClock{},
 		),
 	}
+	measurementStore, err := whpostgres.NewWarehouseMeasurements(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: warehouse measurements: %w", err)
+	}
+	measurementRecord := transactionalWarehouseMeasurement{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewRecordWarehouseMeasurementHandler(
+			measurementStore, warehouses, goods, cartons, systemClock{},
+		),
+	}
 	return warehouseFulfillmentOrchestration{
 		registration: transactionalWarehouseRegistration{
 			transactor: db.Transactor(),
@@ -421,11 +449,13 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		},
 		packagingMaterialQueries: warehouseapp.NewQueryPackagingMaterialsHandler(packagingMaterialCatalogue, packagingMaterialCatalogue),
 		goodsRegistration:        goodsRegistration,
-		goodsQueries:             warehouseapp.NewQueryGoodsHandler(goodsCatalogue, goodsCatalogue, goodsCatalogue, systemClock{}),
+		goodsQueries:             warehouseapp.NewQueryGoodsHandler(goodsCatalogue, goodsCatalogue, goodsCatalogue, measurementStore, systemClock{}),
 		preAdvices:               preAdvices,
 		preAdviceQueries:         warehouseapp.NewQueryPreAdviceHandler(preAdviceCatalogue, receipts, goods, closures, conclusionStore, arrivals),
 		preAdviceClose:           preAdviceClose,
 		receiptConfirm:           receiptConfirm,
 		discrepancyConclusion:    discrepancyConclusion,
+		measurementRecord:        measurementRecord,
+		measurementQueries:       warehouseapp.NewQueryWarehouseMeasurementsHandler(goodsCatalogue, measurementStore),
 	}, nil
 }

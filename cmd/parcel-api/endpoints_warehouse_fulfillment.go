@@ -50,6 +50,8 @@ type warehouseFulfillmentWiring struct {
 
 	// customerPreAdvice 缺席时货主六口是字面量未配置。开关关着时这一格不被问到。
 	customerPreAdvice *warehousehttp.CustomerInboundPreAdviceIntake
+	// customerGoods 缺席时商品货主维护口与商品、仓测货主读口是字面量未配置。开关关着时这一格不被问到。
+	customerGoods *warehousehttp.CustomerGoodsIntake
 	// customerConclusion 缺席时货主结论口是字面量未配置。开关关着时这一格不被问到。
 	customerConclusion    *warehousehttp.CustomerDiscrepancyConclusionIntake
 	discrepancyConclusion warehousehttp.DiscrepancyConcluder
@@ -57,6 +59,11 @@ type warehouseFulfillmentWiring struct {
 	// receiptIntake 缺席时收货确认是字面量未配置。receiptConfirm 是开关开着时的编排；关着时不被问到。
 	receiptIntake  *warehousehttp.ReceiptWorkFactIntake
 	receiptConfirm warehousehttp.ReceiptConfirmer
+
+	// measurementIntake 缺席时仓测登记是字面量未配置。measurementRecord / measurementQueries 是开关开着时的编排。
+	measurementIntake  *warehousehttp.WarehouseMeasurementWorkFactIntake
+	measurementRecord  warehousehttp.WarehouseMeasurementRecorder
+	measurementQueries warehousehttp.WarehouseMeasurementReader
 }
 
 func init() {
@@ -187,6 +194,53 @@ func init() {
 				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
 				ownIntake: true, warehouseFulfillment: true,
 			},
+			// 商品货主维护口与货主商品、仓测读口挂首方客户渠道，Intake 由本特性自建。
+			"/v1/warehouse/goods": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityGoodsMaintenance),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/reads/goods": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/reads/goods-current": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+				probe: "/v1/warehouse/reads/goods-current?goodsCode=SYN-GOODS-01",
+			},
+			"/v1/warehouse/reads/goods-revisions": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+				probe: "/v1/warehouse/reads/goods-revisions?goodsCode=SYN-GOODS-01",
+			},
+			"/v1/warehouse/reads/goods-by-code": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+				probe: "/v1/warehouse/reads/goods-by-code?code=SYN-GOODS-01",
+			},
+			"/v1/warehouse/reads/goods-measurements": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+				probe: "/v1/warehouse/reads/goods-measurements?goodsCode=SYN-GOODS-01&packagingLevel=EA",
+			},
+			"/v1/warehouse/reads/carton-measurements": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+				probe: "/v1/warehouse/reads/carton-measurements?warehouseCode=SYN-WH-01&cartonNumber=SYN-CARTON-01",
+			},
+			// 仓测登记挂作业事实登记（范围种类 WAREHOUSE，事实类型 WAREHOUSE_MEASUREMENT）；运营查阅挂主数据与运营查阅读。
+			"/warehouse-fulfillment-warehouse-measurements": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-goods-measurements": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-goods-measurements?ownerAccount=SYN-OWNER-01&goodsCode=SYN-GOODS-01&packagingLevel=EA",
+			},
+			"/warehouse-fulfillment-carton-measurements": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-carton-measurements?ownerAccount=SYN-OWNER-01&warehouseCode=SYN-WH-01&cartonNumber=SYN-CARTON-01",
+			},
 		},
 		build: func(sources endpointSources) (warehouseFulfillmentWiring, error) {
 			if !sources.warehouseFulfillment {
@@ -197,9 +251,14 @@ func init() {
 				return warehouseFulfillmentWiring{}, err
 			}
 			var customerPreAdvice *warehousehttp.CustomerInboundPreAdviceIntake
+			var customerGoods *warehousehttp.CustomerGoodsIntake
 			var customerConclusion *warehousehttp.CustomerDiscrepancyConclusionIntake
 			if sources.customerClientMinter != nil {
 				customerPreAdvice, err = buildCustomerInboundPreAdviceIntake(sources.customerClientMinter)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+				customerGoods, err = buildCustomerGoodsIntake(sources.customerClientMinter)
 				if err != nil {
 					return warehouseFulfillmentWiring{}, err
 				}
@@ -209,8 +268,15 @@ func init() {
 				}
 			}
 			var receiptIntake *warehousehttp.ReceiptWorkFactIntake
+			var measurementIntake *warehousehttp.WarehouseMeasurementWorkFactIntake
 			if sources.operatorVerifier != nil && sources.operatorRegistry != nil && sources.deviceRegistry != nil && sources.admission != nil {
 				receiptIntake, err = buildReceiptConfirmationIntake(
+					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
+				)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+				measurementIntake, err = buildWarehouseMeasurementIntake(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
 				)
 				if err != nil {
@@ -248,10 +314,14 @@ func init() {
 				preAdviceQueries:      orchestration.preAdviceQueries,
 				preAdviceClose:        orchestration.preAdviceClose,
 				customerPreAdvice:     customerPreAdvice,
+				customerGoods:         customerGoods,
 				customerConclusion:    customerConclusion,
 				discrepancyConclusion: orchestration.discrepancyConclusion,
 				receiptIntake:         receiptIntake,
 				receiptConfirm:        orchestration.receiptConfirm,
+				measurementIntake:     measurementIntake,
+				measurementRecord:     orchestration.measurementRecord,
+				measurementQueries:    orchestration.measurementQueries,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring warehouseFulfillmentWiring) []httpapi.BusinessEndpoint {
@@ -294,6 +364,16 @@ func init() {
 			customerConclusion := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			discrepancyConclusion := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			receiptConfirmation := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			customerGoodsWrite := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerGoodsList := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			customerGoodsCurrent := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			customerGoodsRevisions := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			customerGoodsByCode := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			customerGoodsMeasurements := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			customerCartonMeasurements := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			warehouseMeasurement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			goodsMeasurements := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			cartonMeasurements := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			// 开着：与别的登记写行、查阅行行为一致——渠道没配答「接入渠道未配置」，配了走真编排。各读口共用一个 Intake，各册的
 			// 登记口共用同一个认证器。
 			if wiring.enabled {
@@ -341,6 +421,21 @@ func init() {
 					receiptIntake = wiring.receiptIntake
 				}
 				receiptConfirmation = warehousehttp.NewConfirmReceiptEndpoint(receiptIntake, wiring.receiptConfirm)
+				goodsPorts := warehousehttp.OpenCustomerGoodsIntake(wiring.customerGoods)
+				customerGoodsWrite = warehousehttp.NewMaintainCustomerGoodsEndpoint(goodsPorts, wiring.goodsRegistration)
+				customerGoodsList = warehousehttp.NewListCustomerGoodsEndpoint(goodsPorts, wiring.goodsCatalogue)
+				customerGoodsCurrent = warehousehttp.NewGetCustomerCurrentGoodsEndpoint(goodsPorts, wiring.goodsCurrent)
+				customerGoodsRevisions = warehousehttp.NewListCustomerGoodsRevisionsEndpoint(goodsPorts, wiring.goodsRevisions)
+				customerGoodsByCode = warehousehttp.NewFindCustomerGoodsEndpoint(goodsPorts, wiring.goodsFinder)
+				customerGoodsMeasurements = warehousehttp.NewGetCustomerGoodsMeasurementsEndpoint(goodsPorts, wiring.measurementQueries)
+				customerCartonMeasurements = warehousehttp.NewGetCustomerCartonMeasurementsEndpoint(goodsPorts, wiring.measurementQueries)
+				measurementIntake := warehousehttp.WarehouseMeasurementIntake(warehousehttp.UnconfiguredWarehouseMeasurementIntake{})
+				if wiring.measurementIntake != nil {
+					measurementIntake = wiring.measurementIntake
+				}
+				warehouseMeasurement = warehousehttp.NewRecordWarehouseMeasurementEndpoint(measurementIntake, wiring.measurementRecord)
+				goodsMeasurements = warehousehttp.NewQueryGoodsMeasurementsEndpoint(catalogueIntake, wiring.measurementQueries)
+				cartonMeasurements = warehousehttp.NewQueryCartonMeasurementsEndpoint(catalogueIntake, wiring.measurementQueries)
 			}
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/warehouse-fulfillment-warehouse-registrations", Handler: registration},
@@ -379,6 +474,16 @@ func init() {
 				{Pattern: "/v1/warehouse/receipt-discrepancy-conclusions", Handler: customerConclusion},
 				{Pattern: "/warehouse-fulfillment-receipt-discrepancy-conclusion-on-behalf", Handler: discrepancyConclusion},
 				{Pattern: "/warehouse-fulfillment-receipt-confirmations", Handler: receiptConfirmation},
+				{Pattern: "/v1/warehouse/goods", Handler: customerGoodsWrite},
+				{Pattern: "/v1/warehouse/reads/goods", Handler: customerGoodsList},
+				{Pattern: "/v1/warehouse/reads/goods-current", Handler: customerGoodsCurrent},
+				{Pattern: "/v1/warehouse/reads/goods-revisions", Handler: customerGoodsRevisions},
+				{Pattern: "/v1/warehouse/reads/goods-by-code", Handler: customerGoodsByCode},
+				{Pattern: "/v1/warehouse/reads/goods-measurements", Handler: customerGoodsMeasurements},
+				{Pattern: "/v1/warehouse/reads/carton-measurements", Handler: customerCartonMeasurements},
+				{Pattern: "/warehouse-fulfillment-warehouse-measurements", Handler: warehouseMeasurement},
+				{Pattern: "/warehouse-fulfillment-goods-measurements", Handler: goodsMeasurements},
+				{Pattern: "/warehouse-fulfillment-carton-measurements", Handler: cartonMeasurements},
 			}
 		},
 	})
@@ -402,6 +507,14 @@ func buildCustomerInboundPreAdviceIntake(minter *accessidentity.CustomerClientMi
 	return warehousehttp.NewCustomerInboundPreAdviceIntake(authenticator)
 }
 
+func buildCustomerGoodsIntake(minter *accessidentity.CustomerClientMinter) (*warehousehttp.CustomerGoodsIntake, error) {
+	authenticator, err := whaccess.NewCustomerGoodsAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewCustomerGoodsIntake(authenticator)
+}
+
 // buildReceiptConfirmationIntake 装配收货确认的作业事实 Intake。铸造器与收寄口同一组核验方、操作者册、设备册与准入范围，分开建。
 // 四件缺一就不调用本函数，这一口保持字面量未配置。
 func buildReceiptConfirmationIntake(
@@ -419,4 +532,22 @@ func buildReceiptConfirmationIntake(
 		return nil, err
 	}
 	return warehousehttp.NewReceiptWorkFactIntake(authenticator)
+}
+
+// buildWarehouseMeasurementIntake 装配仓测登记的作业事实 Intake。
+func buildWarehouseMeasurementIntake(
+	verifier accessidentity.OperatorCredentialVerifier,
+	operators accessidentity.OperatorRegistry,
+	devices accessidentity.DeviceRegistry,
+	admission accessidentity.AdmissionScope,
+) (*warehousehttp.WarehouseMeasurementWorkFactIntake, error) {
+	minter, err := accessidentity.NewWorkFactMinter(verifier, operators, devices, admission, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: warehouse measurement work fact minter: %w", err)
+	}
+	authenticator, err := whaccess.NewWarehouseMeasurementAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewWarehouseMeasurementWorkFactIntake(authenticator)
 }

@@ -24,7 +24,10 @@ func NewCartonLedger(db *bentopg.DB) (*CartonLedger, error) {
 	return &CartonLedger{db: db}, nil
 }
 
-var _ ports.CartonLedger = (*CartonLedger)(nil)
+var (
+	_ ports.CartonLedger       = (*CartonLedger)(nil)
+	_ ports.CartonOnHandLookup = (*CartonLedger)(nil)
+)
 
 // errCartonAlreadyOnHand 是写入时发现要入账的箱号余额已经为正。
 // 调用方应当在同一把锁里先判过。走到这里是锁内的判断和写入不一致，整笔回滚。
@@ -66,6 +69,32 @@ func (ledger *CartonLedger) OnHandCartons(
 		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return numbers, nil
+}
+
+// CartonOnHand 问这一箱此刻在这个货主这个仓的余额是不是正数。读不动走 error，不折成不在库。
+func (ledger *CartonLedger) CartonOnHand(
+	ctx context.Context,
+	tenant domain.TenantID,
+	owner domain.OwnerAccountID,
+	warehouse domain.WarehouseCode,
+	carton domain.CartonNumber,
+) (bool, error) {
+	const operation = "check carton on hand"
+	querier, err := ledger.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", operation, err)
+	}
+	var onHand bool
+	err = querier.QueryRow(ctx,
+		`SELECT COALESCE(SUM(quantity_delta), 0) > 0
+		   FROM warehouse_fulfillment.carton_movement_line
+		  WHERE tenant_id = $1 AND owner_account_id = $2 AND warehouse_code = $3 AND carton_number = $4`,
+		tenant.String(), owner.String(), warehouse.String(), carton.String(),
+	).Scan(&onHand)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", operation, err)
+	}
+	return onHand, nil
 }
 
 // Append 在锁里再判箱号是否已在库，然后按外键方向写入：流水头、入库批次、行。

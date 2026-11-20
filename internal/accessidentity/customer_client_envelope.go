@@ -218,6 +218,7 @@ const (
 	requestKeyPrefixSourceDataAmend      = "source-data-amendment:"
 	requestKeyPrefixSupplement           = "supplement:"
 	requestKeyPrefixClaim                = "claim:"
+	requestKeyPrefixGoods                = "goods:"
 	requestKeyPrefixInboundPreAdvice     = "inbound-pre-advice:"
 	requestKeyPrefixInboundArrivalNotice = "inbound-arrival-notice:"
 	requestKeyPrefixInboundWithdrawal    = "inbound-withdrawal:"
@@ -225,10 +226,11 @@ const (
 )
 
 // reservedRequestKeyPrefixes 是首方族保留前缀表，只在这里列一次。委托提交与送站预报两口的推导拒以其中任一前缀开头的标识；
-// 仓配入库预报三口在加上自己的前缀之前同样拒。
+// 仓配货主写口在加上自己的前缀之前同样拒。
 var reservedRequestKeyPrefixes = []string{
 	requestKeyPrefixWithdrawal, requestKeyPrefixParcelCancellation, requestKeyPrefixSourceDataAmend,
 	requestKeyPrefixSupplement, requestKeyPrefixClaim,
+	requestKeyPrefixGoods,
 	requestKeyPrefixInboundPreAdvice, requestKeyPrefixInboundArrivalNotice, requestKeyPrefixInboundWithdrawal,
 	requestKeyPrefixReceiptDiscrepancy,
 }

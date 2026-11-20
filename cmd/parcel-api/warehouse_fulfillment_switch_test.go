@@ -226,11 +226,14 @@ func TestTheWarehouseFulfillmentSwitchTravelsFromStartupChannelsIntoTheWarehouse
 		for _, pattern := range warehouseFulfillmentLines() {
 			probe := businessEndpointProbes()[pattern]
 			body := `{}`
-			if pattern == receiptConfirmationsLine {
+			switch pattern {
+			case receiptConfirmationsLine:
 				body = receiptConfirmationBody()
+			case warehouseMeasurementsLine:
+				body = warehouseMeasurementBody()
 			}
 			request := httptest.NewRequest(probe.method, probe.target, strings.NewReader(body))
-			if pattern == receiptConfirmationsLine {
+			if pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine {
 				request.Header.Set("Parcel-Work-Scope-Kind", "WAREHOUSE")
 				request.Header.Set("Parcel-Work-Scope-Reference", "SYN-WH-01")
 				request.Header.Set("Parcel-Device-Id", "SYN-DEVICE-NODE")

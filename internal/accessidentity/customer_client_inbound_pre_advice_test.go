@@ -65,6 +65,18 @@ var inboundPreAdviceLines = map[string]inboundPreAdviceLine{
 			return envelope.Envelope(), nil
 		},
 	},
+	"goods maintenance": {
+		capability: accessidentity.CustomerCapabilityGoodsMaintenance,
+		prefix:     "goods:",
+		mint: func(minter *accessidentity.CustomerClientMinter, reader *requestReader) (accessidentity.SourceEnvelope, error) {
+			envelope, err := minter.MintGoodsMaintenance(context.Background(),
+				accessidentity.NewIntegrationClientCredential("presented", nil), reader.channelRequest)
+			if err != nil {
+				return accessidentity.SourceEnvelope{}, err
+			}
+			return envelope.Envelope(), nil
+		},
+	},
 }
 
 // Covers: ADR-0384 决定八——货主写口问的准入词两格都是该口字面量，不是 CUSTOMER_COMMAND；来源请求键是前缀加去两端空白的标识。
@@ -141,7 +153,7 @@ func TestInboundPreAdviceRequestKeyRejectsReservedPrefixes(t *testing.T) {
 	minter := newPreAdviceMinter(t, customerVerifierFake{verified: verifiedCustomerToken(t, false)},
 		customerRegistryFake{standing: customerStandingHolding(t, accessidentity.CustomerCapabilityInboundPreAdviceSubmission), found: true},
 		admissionProbe{admitted: true})
-	for _, identifier := range []string{"withdrawal:abc", "inbound-pre-advice:abc"} {
+	for _, identifier := range []string{"withdrawal:abc", "inbound-pre-advice:abc", "goods:abc"} {
 		reader := &requestReader{values: map[string]string{accessidentity.AccessRequestIdentifier: identifier}}
 		_, err := minter.MintInboundPreAdviceSubmission(context.Background(),
 			accessidentity.NewIntegrationClientCredential("presented", nil), reader.channelRequest)

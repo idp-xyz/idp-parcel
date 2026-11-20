@@ -140,6 +140,9 @@ const (
 	// 以下是仓配货主口（ADR-0384 决定一）。写口不进 customerCapabilitiesAdmittedAtMint：准入的能力词与事实类型词
 	// 都是该口自己的字面量，不用 CUSTOMER_COMMAND（ADR-0384 决定八）。查阅不判准入。词在此一处定义；迁移里的 CHECK 引同一批。
 	//
+	// CustomerCapabilityGoodsMaintenance 是商品维护（`/v1/warehouse/goods`，UC-WF-002）。
+	// 不进 customerCapabilitiesAdmittedAtMint：准入两格都是这个字面量。
+	CustomerCapabilityGoodsMaintenance CustomerCapability = "GOODS_MAINTENANCE"
 	// CustomerCapabilityInboundPreAdviceSubmission 是入库预报提交（`/v1/warehouse/inbound-pre-advices`）。
 	CustomerCapabilityInboundPreAdviceSubmission CustomerCapability = "INBOUND_PRE_ADVICE_SUBMISSION"
 	// CustomerCapabilityInboundPreAdviceArrivalNotice 是入库预报告知更新（`/v1/warehouse/inbound-pre-advices/arrival-notices`）。
@@ -149,7 +152,7 @@ const (
 	// CustomerCapabilityReceiptDiscrepancyConclusion 是收货差异确认（`/v1/warehouse/receipt-discrepancy-conclusions`，UC-WF-004）。
 	// 不进 customerCapabilitiesAdmittedAtMint：准入两格都是这个字面量。
 	CustomerCapabilityReceiptDiscrepancyConclusion CustomerCapability = "RECEIPT_DISCREPANCY_CONCLUSION"
-	// CustomerCapabilityWarehouseRead 是仓配查阅。本段只挂入库预报的读；能力词不按对象拆。
+	// CustomerCapabilityWarehouseRead 是仓配查阅，涵盖已落地的商品、仓测与入库预报读口；能力词不按对象拆。
 	CustomerCapabilityWarehouseRead CustomerCapability = "WAREHOUSE_READ"
 )
 
@@ -165,6 +168,7 @@ var customerCapabilities = []CustomerCapability{
 	CustomerCapabilitySourceDataAmendment,
 	CustomerCapabilityShipmentRequestSupplement,
 	CustomerCapabilityClaimSubmission,
+	CustomerCapabilityGoodsMaintenance,
 	CustomerCapabilityInboundPreAdviceSubmission,
 	CustomerCapabilityInboundPreAdviceArrivalNotice,
 	CustomerCapabilityInboundPreAdviceWithdrawal,

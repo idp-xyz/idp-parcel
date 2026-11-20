@@ -6,25 +6,89 @@ import (
 )
 
 // goodsBody 是一笔商品修订的答复形状，代录回显与运营查阅共用。运营查阅带出提交途径；代录另带依据引用。
-// 登记责任方在这一面带出：货主自己的读口不带那一格，那一口还没接。
+// 登记责任方与仓测的设备、操作者只在这一面带出；货主读口用 customerGoodsBody，不带这三格（UC-WF-002）。
 type goodsBody struct {
-	OwnerAccount         string                 `json:"ownerAccount"`
-	GoodsCode            string                 `json:"goodsCode"`
-	Revision             int                    `json:"revision"`
-	Name                 string                 `json:"name"`
-	BaseUnit             string                 `json:"baseUnit"`
-	PackagingLevels      []goodsLevelBody       `json:"packagingLevels"`
-	TrackBatch           bool                   `json:"trackBatch"`
-	TrackExpiry          bool                   `json:"trackExpiry"`
-	Aliases              []goodsAliasBody       `json:"aliases"`
-	Composite            bool                   `json:"composite"`
-	Composition          *goodsCompositionBody  `json:"composition,omitempty"`
-	Declaration          *goodsDeclarationBody  `json:"declaration,omitempty"`
-	DeclaredMeasurements []goodsMeasurementBody `json:"declaredMeasurements"`
-	SubmissionPath       string                 `json:"submissionPath"`
-	EvidenceReference    string                 `json:"evidenceReference,omitempty"`
-	Registrant           string                 `json:"registrant"`
-	RegisteredAt         string                 `json:"registeredAt"`
+	OwnerAccount          string                      `json:"ownerAccount"`
+	GoodsCode             string                      `json:"goodsCode"`
+	Revision              int                         `json:"revision"`
+	Name                  string                      `json:"name"`
+	BaseUnit              string                      `json:"baseUnit"`
+	PackagingLevels       []goodsLevelBody            `json:"packagingLevels"`
+	TrackBatch            bool                        `json:"trackBatch"`
+	TrackExpiry           bool                        `json:"trackExpiry"`
+	Aliases               []goodsAliasBody            `json:"aliases"`
+	Composite             bool                        `json:"composite"`
+	Composition           *goodsCompositionBody       `json:"composition,omitempty"`
+	Declaration           *goodsDeclarationBody       `json:"declaration,omitempty"`
+	DeclaredMeasurements  []goodsMeasurementBody      `json:"declaredMeasurements"`
+	WarehouseMeasurements []goodsLevelMeasurementBody `json:"warehouseMeasurements,omitempty"`
+	SubmissionPath        string                      `json:"submissionPath"`
+	EvidenceReference     string                      `json:"evidenceReference,omitempty"`
+	Registrant            string                      `json:"registrant"`
+	RegisteredAt          string                      `json:"registeredAt"`
+}
+
+// customerGoodsBody 是货主读到或维护回显的商品修订。不带登记责任方，也不带仓测上的设备与操作者。
+type customerGoodsBody struct {
+	OwnerAccount          string                              `json:"ownerAccount"`
+	GoodsCode             string                              `json:"goodsCode"`
+	Revision              int                                 `json:"revision"`
+	Name                  string                              `json:"name"`
+	BaseUnit              string                              `json:"baseUnit"`
+	PackagingLevels       []goodsLevelBody                    `json:"packagingLevels"`
+	TrackBatch            bool                                `json:"trackBatch"`
+	TrackExpiry           bool                                `json:"trackExpiry"`
+	Aliases               []goodsAliasBody                    `json:"aliases"`
+	Composite             bool                                `json:"composite"`
+	Composition           *goodsCompositionBody               `json:"composition,omitempty"`
+	Declaration           *goodsDeclarationBody               `json:"declaration,omitempty"`
+	DeclaredMeasurements  []goodsMeasurementBody              `json:"declaredMeasurements"`
+	WarehouseMeasurements []customerGoodsLevelMeasurementBody `json:"warehouseMeasurements,omitempty"`
+	SubmissionPath        string                              `json:"submissionPath"`
+	EvidenceReference     string                              `json:"evidenceReference,omitempty"`
+	RegisteredAt          string                              `json:"registeredAt"`
+}
+
+type goodsLevelMeasurementBody struct {
+	Level    string                    `json:"level"`
+	Measured bool                      `json:"measured"`
+	Current  *warehouseMeasurementBody `json:"current,omitempty"`
+	Declared *declaredReferenceBody    `json:"declared,omitempty"`
+}
+
+type customerGoodsLevelMeasurementBody struct {
+	Level    string                            `json:"level"`
+	Measured bool                              `json:"measured"`
+	Current  *customerWarehouseMeasurementBody `json:"current,omitempty"`
+	Declared *declaredReferenceBody            `json:"declared,omitempty"`
+}
+
+type declaredReferenceBody struct {
+	Source     string               `json:"source"`
+	Dimensions *goodsDimensionsBody `json:"dimensions,omitempty"`
+	Weight     *goodsWeightBody     `json:"weight,omitempty"`
+}
+
+type warehouseMeasurementBody struct {
+	FactID         string              `json:"factId"`
+	WarehouseCode  string              `json:"warehouseCode"`
+	Device         string              `json:"device"`
+	Operator       string              `json:"operator"`
+	OccurredAt     string              `json:"occurredAt"`
+	DeviceSequence int64               `json:"deviceSequence"`
+	ReceivedAt     string              `json:"receivedAt"`
+	Dimensions     goodsDimensionsBody `json:"dimensions"`
+	Weight         goodsWeightBody     `json:"weight"`
+}
+
+type customerWarehouseMeasurementBody struct {
+	FactID         string              `json:"factId"`
+	WarehouseCode  string              `json:"warehouseCode"`
+	OccurredAt     string              `json:"occurredAt"`
+	DeviceSequence int64               `json:"deviceSequence"`
+	ReceivedAt     string              `json:"receivedAt"`
+	Dimensions     goodsDimensionsBody `json:"dimensions"`
+	Weight         goodsWeightBody     `json:"weight"`
 }
 
 type goodsLevelBody struct {
@@ -95,7 +159,8 @@ func goodsBodyOfRow(row ports.GoodsRow) goodsBody {
 		Composite: row.Composite, SubmissionPath: row.SubmissionPath, EvidenceReference: row.EvidenceReference,
 		Registrant: row.Registrant, RegisteredAt: rfc3339(row.RegisteredAt),
 		PackagingLevels: goodsLevelBodies(row.PackagingLevels), Aliases: goodsAliasBodies(row.Aliases),
-		DeclaredMeasurements: goodsMeasurementBodies(row.DeclaredMeasurements),
+		DeclaredMeasurements:  goodsMeasurementBodies(row.DeclaredMeasurements),
+		WarehouseMeasurements: goodsLevelMeasurementBodies(row.WarehouseMeasurements),
 	}
 	if row.Composite {
 		components := make([]goodsComponentBody, 0, len(row.Components))
@@ -108,6 +173,161 @@ func goodsBodyOfRow(row ports.GoodsRow) goodsBody {
 		body.Declaration = declaration
 	}
 	return body
+}
+
+func customerGoodsBodiesOfRows(rows []ports.GoodsRow) []customerGoodsBody {
+	bodies := make([]customerGoodsBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, customerGoodsBodyOfRow(row))
+	}
+	return bodies
+}
+
+func customerGoodsBodyOfRow(row ports.GoodsRow) customerGoodsBody {
+	full := goodsBodyOfRow(row)
+	return customerGoodsBody{
+		OwnerAccount:          full.OwnerAccount,
+		GoodsCode:             full.GoodsCode,
+		Revision:              full.Revision,
+		Name:                  full.Name,
+		BaseUnit:              full.BaseUnit,
+		PackagingLevels:       full.PackagingLevels,
+		TrackBatch:            full.TrackBatch,
+		TrackExpiry:           full.TrackExpiry,
+		Aliases:               full.Aliases,
+		Composite:             full.Composite,
+		Composition:           full.Composition,
+		Declaration:           full.Declaration,
+		DeclaredMeasurements:  full.DeclaredMeasurements,
+		WarehouseMeasurements: customerGoodsLevelMeasurementBodies(row.WarehouseMeasurements),
+		SubmissionPath:        full.SubmissionPath,
+		EvidenceReference:     full.EvidenceReference,
+		RegisteredAt:          full.RegisteredAt,
+	}
+}
+
+func customerGoodsBodyOfRevision(revision domain.GoodsRevision) customerGoodsBody {
+	full := goodsBodyOfRevision(revision)
+	return customerGoodsBody{
+		OwnerAccount:         full.OwnerAccount,
+		GoodsCode:            full.GoodsCode,
+		Revision:             full.Revision,
+		Name:                 full.Name,
+		BaseUnit:             full.BaseUnit,
+		PackagingLevels:      full.PackagingLevels,
+		TrackBatch:           full.TrackBatch,
+		TrackExpiry:          full.TrackExpiry,
+		Aliases:              full.Aliases,
+		Composite:            full.Composite,
+		Composition:          full.Composition,
+		Declaration:          full.Declaration,
+		DeclaredMeasurements: full.DeclaredMeasurements,
+		SubmissionPath:       full.SubmissionPath,
+		EvidenceReference:    full.EvidenceReference,
+		RegisteredAt:         full.RegisteredAt,
+	}
+}
+
+func goodsLevelMeasurementBodies(rows []ports.GoodsLevelMeasurementRow) []goodsLevelMeasurementBody {
+	if len(rows) == 0 {
+		return nil
+	}
+	bodies := make([]goodsLevelMeasurementBody, 0, len(rows))
+	for _, row := range rows {
+		entry := goodsLevelMeasurementBody{
+			Level:    row.Level,
+			Measured: row.Measured,
+			Declared: declaredReferenceBodyOf(row.Declared),
+		}
+		if row.Current != nil {
+			cur := warehouseMeasurementBodyOfRow(*row.Current)
+			entry.Current = &cur
+		}
+		bodies = append(bodies, entry)
+	}
+	return bodies
+}
+
+func customerGoodsLevelMeasurementBodies(rows []ports.GoodsLevelMeasurementRow) []customerGoodsLevelMeasurementBody {
+	if len(rows) == 0 {
+		return nil
+	}
+	bodies := make([]customerGoodsLevelMeasurementBody, 0, len(rows))
+	for _, row := range rows {
+		entry := customerGoodsLevelMeasurementBody{
+			Level:    row.Level,
+			Measured: row.Measured,
+			Declared: declaredReferenceBodyOf(row.Declared),
+		}
+		if row.Current != nil {
+			cur := customerWarehouseMeasurementBodyOfRow(*row.Current)
+			entry.Current = &cur
+		}
+		bodies = append(bodies, entry)
+	}
+	return bodies
+}
+
+func declaredReferenceBodyOf(row *ports.GoodsDeclaredReferenceRow) *declaredReferenceBody {
+	if row == nil {
+		return nil
+	}
+	body := &declaredReferenceBody{Source: row.Source}
+	if row.Dimensions != nil {
+		body.Dimensions = &goodsDimensionsBody{
+			Length: row.Dimensions.Length, Width: row.Dimensions.Width, Height: row.Dimensions.Height, Unit: row.Dimensions.Unit,
+		}
+	}
+	if row.Weight != nil {
+		body.Weight = &goodsWeightBody{Value: row.Weight.Value, Unit: row.Weight.Unit}
+	}
+	return body
+}
+
+func warehouseMeasurementBodyOfRow(row ports.WarehouseMeasurementRow) warehouseMeasurementBody {
+	return warehouseMeasurementBody{
+		FactID:         row.FactID,
+		WarehouseCode:  row.WarehouseCode,
+		Device:         row.Device,
+		Operator:       row.Operator,
+		OccurredAt:     rfc3339(row.OccurredAt),
+		DeviceSequence: row.DeviceSequence,
+		ReceivedAt:     rfc3339(row.ReceivedAt),
+		Dimensions: goodsDimensionsBody{
+			Length: row.Dimensions.Length, Width: row.Dimensions.Width, Height: row.Dimensions.Height, Unit: row.Dimensions.Unit,
+		},
+		Weight: goodsWeightBody{Value: row.Weight.Value, Unit: row.Weight.Unit},
+	}
+}
+
+func customerWarehouseMeasurementBodyOfRow(row ports.WarehouseMeasurementRow) customerWarehouseMeasurementBody {
+	return customerWarehouseMeasurementBody{
+		FactID:         row.FactID,
+		WarehouseCode:  row.WarehouseCode,
+		OccurredAt:     rfc3339(row.OccurredAt),
+		DeviceSequence: row.DeviceSequence,
+		ReceivedAt:     rfc3339(row.ReceivedAt),
+		Dimensions: goodsDimensionsBody{
+			Length: row.Dimensions.Length, Width: row.Dimensions.Width, Height: row.Dimensions.Height, Unit: row.Dimensions.Unit,
+		},
+		Weight: goodsWeightBody{Value: row.Weight.Value, Unit: row.Weight.Unit},
+	}
+}
+
+func warehouseMeasurementBodiesOfRows(rows []ports.WarehouseMeasurementRow) []warehouseMeasurementBody {
+	bodies := make([]warehouseMeasurementBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, warehouseMeasurementBodyOfRow(row))
+	}
+	return bodies
+}
+
+func customerWarehouseMeasurementBodiesOfRows(rows []ports.WarehouseMeasurementRow) []customerWarehouseMeasurementBody {
+	bodies := make([]customerWarehouseMeasurementBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, customerWarehouseMeasurementBodyOfRow(row))
+	}
+	return bodies
 }
 
 func goodsLevelBodies(rows []ports.GoodsLevelRow) []goodsLevelBody {

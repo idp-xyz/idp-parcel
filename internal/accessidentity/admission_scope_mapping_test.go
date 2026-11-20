@@ -80,6 +80,10 @@ func TestAnAdmissionScopeMappingTakesOnlyRequirementsAFaceAsksFor(t *testing.T) 
 			FactKind:   accessidentity.DecisionReceiptDiscrepancyRecordOnBehalf.String(),
 		},
 		// 货主写口两格都是该口字面量，不用 CUSTOMER_COMMAND（ADR-0384 决定八）。
+		"goods maintenance": {
+			Capability: accessidentity.CustomerCapabilityGoodsMaintenance.String(),
+			FactKind:   accessidentity.CustomerCapabilityGoodsMaintenance.String(),
+		},
 		"inbound pre-advice submission": {
 			Capability: accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String(),
 			FactKind:   accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String(),
@@ -95,6 +99,10 @@ func TestAnAdmissionScopeMappingTakesOnlyRequirementsAFaceAsksFor(t *testing.T) 
 		"receipt discrepancy conclusion": {
 			Capability: accessidentity.CustomerCapabilityReceiptDiscrepancyConclusion.String(),
 			FactKind:   accessidentity.CustomerCapabilityReceiptDiscrepancyConclusion.String(),
+		},
+		"warehouse measurement work fact": {
+			Capability: accessidentity.CapabilityWorkFactRegistration.String(),
+			FactKind:   accessidentity.WorkFactWarehouseMeasurement.String(),
 		},
 	} {
 		if _, err := accessidentity.NewAdmissionScopeMapping("SYN-TENANT-01", "SYN-MAP-1", requirement, "SYN-PILOT-SCOPE/x@v1", interval, "SYN-BASIS"); err != nil {
@@ -112,6 +120,8 @@ func TestAnAdmissionScopeMappingTakesOnlyRequirementsAFaceAsksFor(t *testing.T) 
 		"close capability, other kind":      {Capability: accessidentity.DecisionInboundPreAdviceClose.String(), FactKind: accessidentity.DecisionGoodsRecordOnBehalf.String()},
 		"customer write, other fact":        {Capability: accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String(), FactKind: accessidentity.CustomerCapabilityInboundPreAdviceWithdrawal.String()},
 		"customer write under command word": {Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String()},
+		"goods write under command word":    {Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: accessidentity.CustomerCapabilityGoodsMaintenance.String()},
+		"goods write, other fact":           {Capability: accessidentity.CustomerCapabilityGoodsMaintenance.String(), FactKind: accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String()},
 		"warehouse read is not admission":   {Capability: accessidentity.CustomerCapabilityWarehouseRead.String(), FactKind: accessidentity.CustomerCapabilityWarehouseRead.String()},
 	} {
 		if _, err := accessidentity.NewAdmissionScopeMapping("SYN-TENANT-01", "SYN-MAP-1", requirement, "SYN-PILOT-SCOPE/x@v1", interval, "SYN-BASIS"); !errors.Is(err, accessidentity.ErrAdmissionRequirementUnknown) {

@@ -90,7 +90,7 @@ func TestQueryGoodsPassesTheClockWhenFindingByCodeAndWrapsReadFailures(t *testin
 	catalogue := &stubGoodsCatalogue{page: cataloguepage.Result[ports.GoodsRow]{Total: 1}}
 	current := &stubGoodsCurrent{found: true, row: ports.GoodsRow{GoodsCode: "SYN-GOODS-01"}}
 	history := &stubGoodsHistory{rows: []ports.GoodsRow{{Revision: 1}, {Revision: 2}}}
-	handler := application.NewQueryGoodsHandler(catalogue, current, history, &fixedClock{at: registrationInstant})
+	handler := application.NewQueryGoodsHandler(catalogue, current, history, nil, &fixedClock{at: registrationInstant})
 	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
 	owner := valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01")
 	code := valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01")

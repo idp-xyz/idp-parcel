@@ -68,7 +68,8 @@ func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 		if requirement.FactKind == DecisionReceiptDiscrepancyRecordOnBehalf.String() {
 			return nil
 		}
-	case CustomerCapabilityInboundPreAdviceSubmission.String(),
+	case CustomerCapabilityGoodsMaintenance.String(),
+		CustomerCapabilityInboundPreAdviceSubmission.String(),
 		CustomerCapabilityInboundPreAdviceArrivalNotice.String(),
 		CustomerCapabilityInboundPreAdviceWithdrawal.String(),
 		CustomerCapabilityReceiptDiscrepancyConclusion.String():
