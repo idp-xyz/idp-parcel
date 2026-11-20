@@ -69,12 +69,13 @@ type SubmitPriceCardDraftResult struct {
 	HasDraft bool
 }
 
-// SubmitPriceCardDraftHandler 依赖模板读口（与预览同一个）、草稿册与时钟。
+// SubmitPriceCardDraftHandler 依赖模板读口（与预览同一个）、草稿册与时钟。重叠查找口与预览共用，装上之后读法里多一格。
 type SubmitPriceCardDraftHandler struct {
 	reader   ports.PriceCardTemplateReader
 	workbook ports.PriceCardWorkbookReader
 	drafts   ports.PriceCardDraftRegister
 	clock    ports.Clock
+	overlaps ports.PriceCardOverlapFinder
 }
 
 func NewSubmitPriceCardDraftHandler(
@@ -86,7 +87,10 @@ func NewSubmitPriceCardDraftHandler(
 	if reader == nil || drafts == nil || clock == nil {
 		return nil, errors.New("parcel pricing: price card draft submission needs a template reader, a draft register and a clock")
 	}
-	return &SubmitPriceCardDraftHandler{reader: reader, workbook: importOptionsOf(options).workbook, drafts: drafts, clock: clock}, nil
+	resolved := importOptionsOf(options)
+	return &SubmitPriceCardDraftHandler{
+		reader: reader, workbook: resolved.workbook, drafts: drafts, clock: clock, overlaps: resolved.overlaps,
+	}, nil
 }
 
 // Handle 读文件、立草稿、落册。缺录入者与缺租户同属命令立不住，不读文件。草稿立不起来、或草稿册读写失败，都不是
@@ -106,6 +110,9 @@ func (handler *SubmitPriceCardDraftHandler) Handle(ctx context.Context, command 
 		reading = readPriceCardWorkbookImport(handler.workbook, command.Tenant, command.Raw)
 	} else {
 		reading = readPriceCardImport(handler.reader, command.Tenant, command.FileName, command.Raw)
+	}
+	if err := attachOverlaps(ctx, handler.overlaps, command.Tenant, &reading); err != nil {
+		return SubmitPriceCardDraftResult{}, fmt.Errorf("submit price card draft: %w", err)
 	}
 	if reading.Outcome == PriceCardImportNotAccepted {
 		return SubmitPriceCardDraftResult{Outcome: PriceCardDraftNotAccepted, Reading: reading}, nil

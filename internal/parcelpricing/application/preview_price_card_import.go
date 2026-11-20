@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
@@ -50,7 +51,8 @@ type PreviewPriceCardImportCommand struct {
 }
 
 // PriceCardImportPreview 是预览的结果。SourceFile 在命令立得住时才有；Plan 在方案身份读得出来时
-// 才有；Content 只在已校验时有。
+// 才有；Content 只在已校验时有。Overlaps 只在已校验、并且装了查找口时去问：与这张卡同时适用的在册版本。
+// 没有这样的版本是空切片；查找口没装是 nil。两种空都不改 Outcome——重叠只提示，新版仍要先入册（ADR-0234）。
 type PriceCardImportPreview struct {
 	Outcome         PreviewPriceCardImportOutcome
 	TemplateVersion string
@@ -58,6 +60,7 @@ type PriceCardImportPreview struct {
 	Plan            domain.VersionReference
 	Content         *ports.PriceCardTemplateContent
 	Problems        []ports.PriceCardTemplateProblem
+	Overlaps        []domain.PriceCardOverlap
 }
 
 // ErrWorkbookCarrierNotWired：收到页面表单提交的工作簿，而本编排没有装配工作簿读口。是装配错误，不是业务答案。
@@ -68,11 +71,18 @@ type PriceCardImportOption func(*priceCardImportOptions)
 
 type priceCardImportOptions struct {
 	workbook ports.PriceCardWorkbookReader
+	overlaps ports.PriceCardOverlapFinder
 }
 
 // WithWorkbookReader 装上页面表单提交的工作簿读口。预览与录入要装同一个，同一份内容过两口才得同一个来源标识与同一份读法。
 func WithWorkbookReader(reader ports.PriceCardWorkbookReader) PriceCardImportOption {
 	return func(options *priceCardImportOptions) { options.workbook = reader }
+}
+
+// WithPriceCardOverlapFinder 装上在册版本重叠查找。预览、录入、批准、发布共用这一只：生产装配把价卡册装上。
+// 没装时答复里的重叠是空的，结果代数仍按原来的那一格交回。
+func WithPriceCardOverlapFinder(finder ports.PriceCardOverlapFinder) PriceCardImportOption {
+	return func(options *priceCardImportOptions) { options.overlaps = finder }
 }
 
 func importOptionsOf(options []PriceCardImportOption) priceCardImportOptions {
@@ -83,27 +93,35 @@ func importOptionsOf(options []PriceCardImportOption) priceCardImportOptions {
 	return resolved
 }
 
-// PreviewPriceCardImportHandler 只依赖模板读口：预览不写库，依赖结构上就没有仓储。
+// PreviewPriceCardImportHandler 预览不写库。模板读口必装；重叠查找口可选，装上之后已校验的答复多一格在册版本。
 type PreviewPriceCardImportHandler struct {
 	reader   ports.PriceCardTemplateReader
 	workbook ports.PriceCardWorkbookReader
+	overlaps ports.PriceCardOverlapFinder
 }
 
 func NewPreviewPriceCardImportHandler(reader ports.PriceCardTemplateReader, options ...PriceCardImportOption) (*PreviewPriceCardImportHandler, error) {
 	if reader == nil {
 		return nil, errors.New("parcel pricing: price card import preview needs a template reader")
 	}
-	return &PreviewPriceCardImportHandler{reader: reader, workbook: importOptionsOf(options).workbook}, nil
+	resolved := importOptionsOf(options)
+	return &PreviewPriceCardImportHandler{reader: reader, workbook: resolved.workbook, overlaps: resolved.overlaps}, nil
 }
 
-func (handler *PreviewPriceCardImportHandler) Handle(_ context.Context, command PreviewPriceCardImportCommand) (PriceCardImportPreview, error) {
+func (handler *PreviewPriceCardImportHandler) Handle(ctx context.Context, command PreviewPriceCardImportCommand) (PriceCardImportPreview, error) {
+	var preview PriceCardImportPreview
 	if command.FromForm {
 		if handler.workbook == nil {
 			return PriceCardImportPreview{}, ErrWorkbookCarrierNotWired
 		}
-		return readPriceCardWorkbookImport(handler.workbook, command.Tenant, command.Raw), nil
+		preview = readPriceCardWorkbookImport(handler.workbook, command.Tenant, command.Raw)
+	} else {
+		preview = readPriceCardImport(handler.reader, command.Tenant, command.FileName, command.Raw)
 	}
-	return readPriceCardImport(handler.reader, command.Tenant, command.FileName, command.Raw), nil
+	if err := attachOverlaps(ctx, handler.overlaps, command.Tenant, &preview); err != nil {
+		return PriceCardImportPreview{}, fmt.Errorf("preview price card import: %w", err)
+	}
+	return preview, nil
 }
 
 // readPriceCardImport 是预览与录入共用的那一段：命令立不住（缺租户、文件名不合格）答未受理、不读文件；否则按上传

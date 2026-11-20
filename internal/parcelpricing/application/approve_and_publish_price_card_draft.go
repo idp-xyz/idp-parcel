@@ -64,27 +64,33 @@ type ApprovePriceCardDraftCommand struct {
 }
 
 // ApprovePriceCardDraftResult 是批准的结果。Draft 是推进后的草稿，只在`已批准`时在场。
+// Overlaps 也只在`已批准`时在场：与这张卡同时适用的在册版本。有重叠仍是`已批准`。
 type ApprovePriceCardDraftResult struct {
 	Outcome  ApprovePriceCardDraftOutcome
 	Draft    domain.PriceCardDraft
 	HasDraft bool
+	Overlaps []domain.PriceCardOverlap
 }
 
 type ApprovePriceCardDraftHandler struct {
-	drafts ports.PriceCardDraftProgress
-	rules  ports.PriceCardApprovalDutyRuleView
-	clock  ports.Clock
+	drafts   ports.PriceCardDraftProgress
+	rules    ports.PriceCardApprovalDutyRuleView
+	clock    ports.Clock
+	overlaps ports.PriceCardOverlapFinder
 }
 
 func NewApprovePriceCardDraftHandler(
 	drafts ports.PriceCardDraftProgress,
 	rules ports.PriceCardApprovalDutyRuleView,
 	clock ports.Clock,
+	options ...PriceCardImportOption,
 ) (*ApprovePriceCardDraftHandler, error) {
 	if drafts == nil || rules == nil || clock == nil {
 		return nil, errors.New("parcel pricing: price card draft approval needs a draft register, an approval duty rule view and a clock")
 	}
-	return &ApprovePriceCardDraftHandler{drafts: drafts, rules: rules, clock: clock}, nil
+	return &ApprovePriceCardDraftHandler{
+		drafts: drafts, rules: rules, clock: clock, overlaps: importOptionsOf(options).overlaps,
+	}, nil
 }
 
 // Handle 读草稿、按它在哪一格先答，只有`已校验`才读审批职责规则、交领域批准门裁、写回。规则未登记即`未配置`、不放行
@@ -125,13 +131,18 @@ func (handler *ApprovePriceCardDraftHandler) Handle(ctx context.Context, command
 		return ApprovePriceCardDraftResult{}, fmt.Errorf("approve price card draft: %w", err)
 	}
 
+	overlaps, err := overlapsOfDraft(ctx, handler.overlaps, command.Tenant, approved)
+	if err != nil {
+		return ApprovePriceCardDraftResult{}, fmt.Errorf("approve price card draft: %w", err)
+	}
+
 	outcome, err := handler.drafts.AdvancePriceCardDraft(ctx, approved)
 	if err != nil {
 		return ApprovePriceCardDraftResult{}, fmt.Errorf("approve price card draft: %w", err)
 	}
 	switch outcome {
 	case ports.PriceCardDraftAdvanced:
-		return ApprovePriceCardDraftResult{Outcome: PriceCardDraftApproved, Draft: approved, HasDraft: true}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardDraftApproved, Draft: approved, HasDraft: true, Overlaps: overlaps}, nil
 	case ports.PriceCardDraftAdvanceNotFound:
 		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalDraftNotFound}, nil
 	case ports.PriceCardDraftAdvanceSuperseded:
@@ -178,13 +189,14 @@ type PublishPriceCardDraftCommand struct {
 }
 
 // PublishPriceCardDraftResult 是发布的结果。Registration 是登记用例的答复，只在真交给了它时在场（`已发布`与`发布
-// 未落定`两格）；Draft 是推进后的草稿，只在`已发布`时在场。
+// 未落定`两格）；Draft 是推进后的草稿，只在`已发布`时在场。Overlaps 也只在`已发布`时在场，不改登记那一格。
 type PublishPriceCardDraftResult struct {
 	Outcome         PublishPriceCardDraftOutcome
 	Registration    RegisterPriceCardOutcome
 	HasRegistration bool
 	Draft           domain.PriceCardDraft
 	HasDraft        bool
+	Overlaps        []domain.PriceCardOverlap
 }
 
 // PublishPriceCardDraftHandler 收的是具体的 *RegisterPriceCardHandler 而不是接口：发布 = 交既有登记用例是 ADR-0101
@@ -193,17 +205,21 @@ type PublishPriceCardDraftHandler struct {
 	drafts    ports.PriceCardDraftProgress
 	registrar *RegisterPriceCardHandler
 	clock     ports.Clock
+	overlaps  ports.PriceCardOverlapFinder
 }
 
 func NewPublishPriceCardDraftHandler(
 	drafts ports.PriceCardDraftProgress,
 	registrar *RegisterPriceCardHandler,
 	clock ports.Clock,
+	options ...PriceCardImportOption,
 ) (*PublishPriceCardDraftHandler, error) {
 	if drafts == nil || registrar == nil || clock == nil {
 		return nil, errors.New("parcel pricing: price card draft publication needs a draft register, the price card registration and a clock")
 	}
-	return &PublishPriceCardDraftHandler{drafts: drafts, registrar: registrar, clock: clock}, nil
+	return &PublishPriceCardDraftHandler{
+		drafts: drafts, registrar: registrar, clock: clock, overlaps: importOptionsOf(options).overlaps,
+	}, nil
 }
 
 // Handle 只接`已批准`草稿：草稿交出的登记交给登记用例，落定（含重放）即推进草稿为`已发布`，没落定草稿原样留着。调用方
@@ -240,6 +256,12 @@ func (handler *PublishPriceCardDraftHandler) Handle(ctx context.Context, command
 		return result, nil
 	}
 
+	overlaps, err := overlapsOfDraft(ctx, handler.overlaps, command.Tenant, draft)
+	if err != nil {
+		// 登记已经写进这一笔调用；调用方把本方法包在事务里，这里上抛让整笔回滚。重叠没问成就没有「已发布」可交。
+		return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: %w", err)
+	}
+
 	published, err := draft.MarkPublished(handler.clock.Now())
 	if err != nil {
 		return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: %w", err)
@@ -252,6 +274,15 @@ func (handler *PublishPriceCardDraftHandler) Handle(ctx context.Context, command
 		// 读时在、写时不在或已被别人动过：登记已写、草稿没跟上，上抛让整笔回滚、两边一起重来。
 		return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: the draft could not follow the landed registration (%s)", outcome)
 	}
-	result.Outcome, result.Draft, result.HasDraft = PriceCardDraftPublished, published, true
+	result.Outcome, result.Draft, result.HasDraft, result.Overlaps = PriceCardDraftPublished, published, true, overlaps
 	return result, nil
+}
+
+// overlapsOfDraft 用草稿上那张已通过构造门的卡去问。没有内容就没有可比较的适用期，交回空，不当成故障。
+func overlapsOfDraft(ctx context.Context, finder ports.PriceCardOverlapFinder, tenant domain.TenantID, draft domain.PriceCardDraft) ([]domain.PriceCardOverlap, error) {
+	content, ok := draft.Content()
+	if !ok {
+		return nil, nil
+	}
+	return overlapsOnPlan(ctx, finder, tenant, content.Plan)
 }
