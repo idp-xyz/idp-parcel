@@ -59,6 +59,7 @@ type priceCardPreviewResponse struct {
 	Plan            *planReferenceBody     `json:"plan,omitempty"`
 	Content         *priceCardContentBody  `json:"content,omitempty"`
 	Problems        []priceCardProblemBody `json:"problems"`
+	Overlaps        []priceCardOverlapBody `json:"overlaps,omitempty"`
 }
 
 type sourceFileBody struct {
@@ -135,7 +136,44 @@ func priceCardPreviewResponseOf(preview application.PriceCardImportPreview) pric
 		content.DirectionAuthorization = planReferenceBodyOf(preview.Content.DirectionAuthorization)
 		body.Content = &content
 	}
+	body.Overlaps = priceCardOverlapBodies(preview.Overlaps)
 	return body
+}
+
+// priceCardOverlapBody 是一条仍可选的在册版本与本卡适用期的交。无上界的终点缺席，与内容概要的 endsAt 同一写法：
+// 半开区间没有终点就没有那一格，不把零时刻写成一个截止。
+type priceCardOverlapBody struct {
+	Plan           planReferenceBody `json:"plan"`
+	SelectionStart string            `json:"selectionStart"`
+	SelectionEnd   string            `json:"selectionEnd,omitempty"`
+	OverlapStart   string            `json:"overlapStart"`
+	OverlapEnd     string            `json:"overlapEnd,omitempty"`
+	SamePlan       bool              `json:"samePlan"`
+	Resolution     string            `json:"resolution"`
+}
+
+func priceCardOverlapBodies(items []domain.PriceCardOverlap) []priceCardOverlapBody {
+	if len(items) == 0 {
+		return nil
+	}
+	bodies := make([]priceCardOverlapBody, 0, len(items))
+	for _, item := range items {
+		body := priceCardOverlapBody{
+			Plan:           planReferenceBodyOf(item.Plan()),
+			SelectionStart: rfc3339(item.Selection().StartsAt()),
+			OverlapStart:   rfc3339(item.Overlap().StartsAt()),
+			SamePlan:       item.SamePlan(),
+			Resolution:     item.Resolution().String(),
+		}
+		if end := item.Selection().EndsAt(); !end.IsZero() {
+			body.SelectionEnd = rfc3339(end)
+		}
+		if end := item.Overlap().EndsAt(); !end.IsZero() {
+			body.OverlapEnd = rfc3339(end)
+		}
+		bodies = append(bodies, body)
+	}
+	return bodies
 }
 
 func priceCardContentBodyOf(plan domain.PricingPlanVersion) priceCardContentBody {

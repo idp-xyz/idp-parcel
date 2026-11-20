@@ -57,7 +57,7 @@ func NewApprovePriceCardDraftEndpoint(intake PriceCardDraftApprovalIntake, appro
 			writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
 			return
 		}
-		answer := priceCardDraftProgressResponse{Outcome: result.Outcome.String()}
+		answer := priceCardDraftProgressResponse{Outcome: result.Outcome.String(), Overlaps: priceCardOverlapBodies(result.Overlaps)}
 		if draft, has := result.Draft, result.HasDraft; has {
 			row := priceCardDraftBodyOf(draft)
 			answer.Draft = &row
@@ -90,7 +90,7 @@ func NewPublishPriceCardDraftEndpoint(intake PriceCardDraftPublicationIntake, pu
 			writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
 			return
 		}
-		answer := priceCardDraftProgressResponse{Outcome: result.Outcome.String()}
+		answer := priceCardDraftProgressResponse{Outcome: result.Outcome.String(), Overlaps: priceCardOverlapBodies(result.Overlaps)}
 		status := http.StatusOK
 		if registration, handed := result.Registration, result.HasRegistration; handed {
 			if registration.String() == "" {
@@ -111,11 +111,13 @@ func NewPublishPriceCardDraftEndpoint(intake PriceCardDraftPublicationIntake, pu
 }
 
 // priceCardDraftProgressResponse 是批准口与发布口的答复：`outcome` 是本口的那一格，`registration` 只在发布真交给了登记
-// 用例时在场，`draft` 只在推进成功时在场，行形与录入口、查阅读口同。
+// 用例时在场，`draft` 只在推进成功时在场，行形与录入口、查阅读口同。`overlaps` 只在这一格带回了同时适用的在册版本时在场，
+// 不改 outcome，也不改状态码。
 type priceCardDraftProgressResponse struct {
-	Outcome      string              `json:"outcome"`
-	Registration string              `json:"registration,omitempty"`
-	Draft        *priceCardDraftBody `json:"draft,omitempty"`
+	Outcome      string                 `json:"outcome"`
+	Registration string                 `json:"registration,omitempty"`
+	Draft        *priceCardDraftBody    `json:"draft,omitempty"`
+	Overlaps     []priceCardOverlapBody `json:"overlaps,omitempty"`
 }
 
 // PriceCardDraftReferencePayload 是两口的在线载荷：只有草稿引用。封闭解码，未知键（含任何身份格）与尾随内容都答坏报文。
