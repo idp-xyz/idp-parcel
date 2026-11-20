@@ -200,7 +200,38 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		preAdviceClose:        unwiredPreAdviceClose{},
 		discrepancyConclusion: unwiredDiscrepancyConclusion{},
 		receiptConfirm:        unwiredReceiptConfirmation{},
+		measurementRecord:     unwiredWarehouseMeasurement{},
+		measurementQueries:    unwiredWarehouseMeasurement{},
 	}
+}
+
+type unwiredWarehouseMeasurement struct{}
+
+func (unwiredWarehouseMeasurement) Record(
+	context.Context,
+	warehouseapp.RecordWarehouseMeasurementCommand,
+) (warehouseapp.RecordWarehouseMeasurementResult, error) {
+	return warehouseapp.RecordWarehouseMeasurementResult{}, errOrchestrationNotWired
+}
+
+func (unwiredWarehouseMeasurement) GoodsLevelMeasurements(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.OwnerAccountID,
+	warehousedomain.GoodsCode,
+	warehousedomain.GoodsUnitName,
+) (warehouseapp.GoodsLevelMeasurementReading, error) {
+	return warehouseapp.GoodsLevelMeasurementReading{}, errOrchestrationNotWired
+}
+
+func (unwiredWarehouseMeasurement) CartonMeasurements(
+	context.Context,
+	warehousedomain.TenantID,
+	warehousedomain.OwnerAccountID,
+	warehousedomain.WarehouseCode,
+	warehousedomain.CartonNumber,
+) (warehouseapp.CartonMeasurementReading, error) {
+	return warehouseapp.CartonMeasurementReading{}, errOrchestrationNotWired
 }
 
 type unwiredDiscrepancyConclusion struct{}
@@ -361,6 +392,18 @@ const (
 
 	receiptConfirmationsLine = "/warehouse-fulfillment-receipt-confirmations"
 
+	warehouseMeasurementsLine = "/warehouse-fulfillment-warehouse-measurements"
+	goodsMeasurementsLine     = "/warehouse-fulfillment-goods-measurements"
+	cartonMeasurementsLine    = "/warehouse-fulfillment-carton-measurements"
+
+	customerGoodsWriteLine         = "/v1/warehouse/goods"
+	customerGoodsListLine          = "/v1/warehouse/reads/goods"
+	customerGoodsCurrentLine       = "/v1/warehouse/reads/goods-current"
+	customerGoodsRevisionsLine     = "/v1/warehouse/reads/goods-revisions"
+	customerGoodsByCodeLine        = "/v1/warehouse/reads/goods-by-code"
+	customerGoodsMeasurementsLine  = "/v1/warehouse/reads/goods-measurements"
+	customerCartonMeasurementsLine = "/v1/warehouse/reads/carton-measurements"
+
 	discrepancyConclusionLine         = "/warehouse-fulfillment-receipt-discrepancy-conclusion-on-behalf"
 	customerDiscrepancyConclusionLine = "/v1/warehouse/receipt-discrepancy-conclusions"
 )
@@ -473,7 +516,18 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		discrepancyConclusionLine:         {http.MethodPost, faceOperationDecision},
 		customerDiscrepancyConclusionLine: {http.MethodPost, faceCustomerClient},
 
-		receiptConfirmationsLine: {http.MethodPost, faceWorkFact},
+		receiptConfirmationsLine:  {http.MethodPost, faceWorkFact},
+		warehouseMeasurementsLine: {http.MethodPost, faceWorkFact},
+		goodsMeasurementsLine:     {http.MethodGet, faceOperationsRead},
+		cartonMeasurementsLine:    {http.MethodGet, faceOperationsRead},
+
+		customerGoodsWriteLine:         {http.MethodPost, faceCustomerClient},
+		customerGoodsListLine:          {http.MethodGet, faceCustomerClient},
+		customerGoodsCurrentLine:       {http.MethodGet, faceCustomerClient},
+		customerGoodsRevisionsLine:     {http.MethodGet, faceCustomerClient},
+		customerGoodsByCodeLine:        {http.MethodGet, faceCustomerClient},
+		customerGoodsMeasurementsLine:  {http.MethodGet, faceCustomerClient},
+		customerCartonMeasurementsLine: {http.MethodGet, faceCustomerClient},
 	}
 	lines := declaredEndpointLines()
 	if got := warehouseFulfillmentLines(); len(got) != len(want) {
@@ -487,15 +541,22 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/reads/inbound-pre-advice":            accessidentity.CustomerCapabilityWarehouseRead,
 		"/v1/warehouse/reads/inbound-pre-advice-by-number":  accessidentity.CustomerCapabilityWarehouseRead,
 		customerDiscrepancyConclusionLine:                   accessidentity.CustomerCapabilityReceiptDiscrepancyConclusion,
+		customerGoodsWriteLine:                              accessidentity.CustomerCapabilityGoodsMaintenance,
+		customerGoodsListLine:                               accessidentity.CustomerCapabilityWarehouseRead,
+		customerGoodsCurrentLine:                            accessidentity.CustomerCapabilityWarehouseRead,
+		customerGoodsRevisionsLine:                          accessidentity.CustomerCapabilityWarehouseRead,
+		customerGoodsByCodeLine:                             accessidentity.CustomerCapabilityWarehouseRead,
+		customerGoodsMeasurementsLine:                       accessidentity.CustomerCapabilityWarehouseRead,
+		customerCartonMeasurementsLine:                      accessidentity.CustomerCapabilityWarehouseRead,
 	}
 	for pattern, expected := range want {
 		line, declared := lines[pattern]
 		capability, customer := customerCapabilities[pattern]
-		ownIntake := customer || pattern == receiptConfirmationsLine
+		ownIntake := customer || pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine
 		if !declared || !line.warehouseFulfillment || line.method != expected.method || line.face.family != expected.face || line.ownIntake != ownIntake {
 			t.Fatalf("%s 的声明 = %+v，want %s %s、声明仓配开关、自建 Intake=%t", pattern, line, expected.method, expected.face, ownIntake)
 		}
-		if pattern == receiptConfirmationsLine && line.face.workScope != accessidentity.WorkScopeWarehouse {
+		if (pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine) && line.face.workScope != accessidentity.WorkScopeWarehouse {
 			t.Fatalf("%s 的作业范围 = %s，want WAREHOUSE", pattern, line.face.workScope)
 		}
 		if customer && line.face.capability != capability {
@@ -582,7 +643,10 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			preAdviceCloseLine:        {status, code},
 			discrepancyConclusionLine: {status, code},
 			preAdviceListLine:         {status, code}, preAdviceOneLine: {status, code}, preAdviceByNumberLine: {status, code},
-			receiptConfirmationsLine: {status, code},
+			receiptConfirmationsLine:  {status, code},
+			warehouseMeasurementsLine: {status, code},
+			goodsMeasurementsLine:     {status, code},
+			cartonMeasurementsLine:    {status, code},
 		}
 	}
 	cases := []struct {
@@ -626,7 +690,10 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			preAdviceOneLine:          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			preAdviceByNumberLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 
-			receiptConfirmationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			receiptConfirmationsLine:  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			warehouseMeasurementsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			goodsMeasurementsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			cartonMeasurementsLine:    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		}},
 		{"read grant only", operationsReaderRegister{}, presentedOperatorToken, map[string]answer{
 			warehouseRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -663,7 +730,10 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			preAdviceOneLine:          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			preAdviceByNumberLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 
-			receiptConfirmationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			receiptConfirmationsLine:  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			warehouseMeasurementsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			goodsMeasurementsLine:     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			cartonMeasurementsLine:    {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 		}},
 		{"no bearer token", everyOperatorGrant{}, "", same(http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED")},
 		{"register is down", failingRegister{}, presentedOperatorToken, same(http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE")},
@@ -676,12 +746,20 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			t.Fatal(err)
 		}
 		wiring.receiptIntake = intake
+		measurementIntake, err := buildWarehouseMeasurementIntake(acceptingVerifier{}, testCase.register, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		wiring.measurementIntake = measurementIntake
 		router := warehouseFulfillmentRouter(t, channels, wiring)
 		for pattern, want := range testCase.want {
 			var response *httptest.ResponseRecorder
-			if pattern == receiptConfirmationsLine {
-				response = probeReceiptConfirmation(router, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", receiptConfirmationBody())
-			} else {
+			switch pattern {
+			case receiptConfirmationsLine:
+				response = probeWorkFactPost(router, receiptConfirmationsLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", receiptConfirmationBody())
+			case warehouseMeasurementsLine:
+				response = probeWorkFactPost(router, warehouseMeasurementsLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", warehouseMeasurementBody())
+			default:
 				response = probeWarehouseFulfillment(router, pattern, testCase.token, `{}`)
 			}
 			if response.Code != want.status || problemCode(t, response) != want.code {
@@ -691,19 +769,29 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 		}
 	}
 
-	// 登在节点上的设备，拿仓的作业范围去收货：授予在仓上，设备册上的范围仍是节点，答设备未登记或已停用。
+	// 登在节点上的设备，拿仓的作业范围去收货或仓测：授予在仓上，设备册上的范围仍是节点，答设备未登记或已停用。
 	nodeDevice := unwiredWarehouseFulfillment(true)
 	nodeIntake, err := buildReceiptConfirmationIntake(acceptingVerifier{}, warehouseWorkFactRegister{}, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	nodeDevice.receiptIntake = nodeIntake
+	nodeMeasurementIntake, err := buildWarehouseMeasurementIntake(acceptingVerifier{}, warehouseWorkFactRegister{}, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeDevice.measurementIntake = nodeMeasurementIntake
 	nodeRouter := warehouseFulfillmentRouter(t, channelsFor(t, warehouseWorkFactRegister{}), nodeDevice)
-	nodeResponse := probeReceiptConfirmation(nodeRouter, presentedOperatorToken, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", receiptConfirmationBody())
+	nodeResponse := probeWorkFactPost(nodeRouter, receiptConfirmationsLine, presentedOperatorToken, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", receiptConfirmationBody())
 	if nodeResponse.Code != http.StatusForbidden || problemCode(t, nodeResponse) != "DEVICE_NOT_IN_USE" {
 		t.Fatalf("节点上的设备去收货：答 %d %s，want 403 DEVICE_NOT_IN_USE", nodeResponse.Code, nodeResponse.Body.String())
 	}
 	assertNoOutcome(t, nodeResponse, receiptConfirmationsLine)
+	nodeMeasureResp := probeWorkFactPost(nodeRouter, warehouseMeasurementsLine, presentedOperatorToken, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", warehouseMeasurementBody())
+	if nodeMeasureResp.Code != http.StatusForbidden || problemCode(t, nodeMeasureResp) != "DEVICE_NOT_IN_USE" {
+		t.Fatalf("节点上的设备去仓测：答 %d %s，want 403 DEVICE_NOT_IN_USE", nodeMeasureResp.Code, nodeMeasureResp.Body.String())
+	}
+	assertNoOutcome(t, nodeMeasureResp, warehouseMeasurementsLine)
 }
 
 // warehouseWorkFactRegister 只持 SYN-WH-01 上的作业事实登记授予，没有登记册配置写。
@@ -734,8 +822,12 @@ func receiptConfirmationBody() string {
 	return `{"factId":"SYN-FACT-01","occurredAt":"2026-11-20T01:00:00Z","warehouse":"SYN-WH-01","preAdviceId":"SYN-IPA-01","shape":"BY_GOODS","lines":[{"observed":"SYN-GOODS-01","unit":"EA","stockState":"GOOD","quantity":1,"locationCode":"SYN-LOC-01"}]}`
 }
 
-func probeReceiptConfirmation(router http.Handler, token, device, kind, reference, body string) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(http.MethodPost, receiptConfirmationsLine, strings.NewReader(body))
+func warehouseMeasurementBody() string {
+	return `{"factId":"SYN-MEAS-01","occurredAt":"2026-11-20T01:00:00Z","deviceSequence":1,"warehouse":"SYN-WH-01","targetKind":"GOODS_LEVEL","ownerAccount":"SYN-OWNER-01","goodsCode":"SYN-GOODS-01","packagingLevel":"EA","dimensions":{"length":"30","width":"20","height":"10","unit":"CM"},"weight":{"value":"1.5","unit":"KG"}}`
+}
+
+func probeWorkFactPost(router http.Handler, pattern, token, device, kind, reference, body string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(body))
 	request.Header.Set("Parcel-Work-Scope-Kind", kind)
 	request.Header.Set("Parcel-Work-Scope-Reference", reference)
 	request.Header.Set("Parcel-Device-Id", device)

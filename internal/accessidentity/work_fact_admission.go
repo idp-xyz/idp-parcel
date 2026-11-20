@@ -26,6 +26,9 @@ const (
 	// WorkFactReceiptConfirmation 是仓内确认一次收货（ADR-0384 决定三）。这一口在铸造侧判准入：能力词取
 	// CapabilityWorkFactRegistration 的字面量，事实类型词取本常量；两格不都写成事实类型（决定八）。
 	WorkFactReceiptConfirmation WorkFactKind = "RECEIPT_CONFIRMATION"
+	// WorkFactWarehouseMeasurement 是仓内登记一次仓测尺寸重量（UC-WF-002；ADR-0384 决定三）。
+	// 铸造侧准入能力词取 CapabilityWorkFactRegistration 的字面量，事实类型词取本常量。
+	WorkFactWarehouseMeasurement WorkFactKind = "WAREHOUSE_MEASUREMENT"
 )
 
 // workFactKindsAdmittedAtMint 是准入范围对照收哪几个词、认证方问哪一对准入要求的唯一来源：两处各抄一份，改了一份，登在旧词下的
@@ -36,6 +39,7 @@ var workFactKindsAdmittedAtMint = []WorkFactKind{
 	WorkFactDeliveryHandoverNoteClosure,
 	WorkFactNodeCollaborationExecution,
 	WorkFactReceiptConfirmation,
+	WorkFactWarehouseMeasurement,
 }
 
 // ParseWorkFactKind 按字面取值认作业事实类型，大小写不折叠：对照册里存的就是这些字面量。

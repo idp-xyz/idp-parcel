@@ -9,7 +9,8 @@ import (
 // 自己的字面量，不用 CUSTOMER_COMMAND。不在这些口里的能力交回 nil，调用方不得把它当成「这一口不判准入」。
 func warehouseCustomerWriteAdmission(capability CustomerCapability) *AdmissionRequirement {
 	switch capability {
-	case CustomerCapabilityInboundPreAdviceSubmission,
+	case CustomerCapabilityGoodsMaintenance,
+		CustomerCapabilityInboundPreAdviceSubmission,
 		CustomerCapabilityInboundPreAdviceArrivalNotice,
 		CustomerCapabilityInboundPreAdviceWithdrawal,
 		CustomerCapabilityReceiptDiscrepancyConclusion:
@@ -186,4 +187,31 @@ func (minter *CustomerClientMinter) MintReceiptDiscrepancyConclusion(
 // DeriveReceiptDiscrepancyConclusionRequestKey 是收货差异结论口的推导：来源请求键 = `receipt-discrepancy:` + 去两端空白的接入请求标识。
 func (customerAPIRequestKeys) DeriveReceiptDiscrepancyConclusionRequestKey(_ context.Context, request ChannelRequest) (string, error) {
 	return prefixedRequestKeyRejectingReserved(requestKeyPrefixReceiptDiscrepancy, request)
+}
+
+// GoodsMaintenanceEnvelope 是货主商品维护口（`/v1/warehouse/goods`）的来源信封。
+// 来源请求键是 `goods:` 加去两端空白的接入请求标识。
+type GoodsMaintenanceEnvelope struct{ envelope SourceEnvelope }
+
+func (goods GoodsMaintenanceEnvelope) Envelope() SourceEnvelope {
+	return goods.envelope
+}
+
+// MintGoodsMaintenance 铸一次商品维护的来源信封。准入两格都是 GOODS_MAINTENANCE，不走 CUSTOMER_COMMAND。
+func (minter *CustomerClientMinter) MintGoodsMaintenance(
+	ctx context.Context,
+	credential IntegrationClientCredential,
+	readRequest func() (ChannelRequest, error),
+) (GoodsMaintenanceEnvelope, error) {
+	envelope, err := minter.mintWarehouseCustomerWrite(ctx, credential, readRequest, CustomerCapabilityGoodsMaintenance,
+		customerAPIRequestKeys{}.DeriveGoodsMaintenanceRequestKey)
+	if err != nil {
+		return GoodsMaintenanceEnvelope{}, err
+	}
+	return GoodsMaintenanceEnvelope{envelope: envelope}, nil
+}
+
+// DeriveGoodsMaintenanceRequestKey 是货主商品维护口的推导：来源请求键 = `goods:` + 去两端空白的接入请求标识。
+func (customerAPIRequestKeys) DeriveGoodsMaintenanceRequestKey(_ context.Context, request ChannelRequest) (string, error) {
+	return prefixedRequestKeyRejectingReserved(requestKeyPrefixGoods, request)
 }

@@ -144,29 +144,61 @@ type GoodsMeasurementRow struct {
 	Weight     *GoodsWeightRow
 }
 
+// WarehouseMeasurementRow 是一版仓测尺寸重量的读出形状。设备与操作者由运营查阅带出，货主读口不带出。
+type WarehouseMeasurementRow struct {
+	FactID         string
+	WarehouseCode  string
+	Device         string
+	Operator       string
+	OccurredAt     time.Time
+	DeviceSequence int64
+	ReceivedAt     time.Time
+	Dimensions     GoodsDimensionsRow
+	Weight         GoodsWeightRow
+}
+
+// GoodsDeclaredReferenceRow 是未仓测时附带的货主声明尺寸重量参照，标明来源（OWNER_DECLARED）。
+type GoodsDeclaredReferenceRow struct {
+	Source     string
+	Dimensions *GoodsDimensionsRow
+	Weight     *GoodsWeightRow
+}
+
+// GoodsLevelMeasurementRow 是一个商品的某一包装层级在查阅里的仓测视图（AT-WF-023）：
+// 已仓测时 Measured 为真、Current 是按发生次序的当前那一版；
+// 未仓测时 Measured 为假、Current 为 nil，货主声明过的另附 Declared 并标明来源，都没声明则两者都为 nil、不给零或默认值。
+type GoodsLevelMeasurementRow struct {
+	Level    string
+	Measured bool
+	Current  *WarehouseMeasurementRow
+	Declared *GoodsDeclaredReferenceRow
+}
+
 // GoodsRow 是商品册读面上的一笔修订，供当前修订、列表、修订史与按码找商品共用。各列表保持登记时交来的先后。
+// 当前修订、列表与按码找商品另按包装层级附带仓测视图。
 //
 // 每笔都带提交途径；代录的另带依据引用（货主口的依据引用是空串）。登记责任方也在这一行上，是否对货主出示由接入侧定：货主的读口不带出那一格
 // （UC-WF-002「权限、隔离与审计」）。
 type GoodsRow struct {
-	OwnerAccount         string
-	GoodsCode            string
-	Revision             int
-	Name                 string
-	BaseUnit             string
-	PackagingLevels      []GoodsLevelRow
-	TrackBatch           bool
-	TrackExpiry          bool
-	Aliases              []GoodsAliasRow
-	Composite            bool
-	OutboundMode         string
-	Components           []GoodsComponentRow
-	Declaration          GoodsDeclarationRow
-	DeclaredMeasurements []GoodsMeasurementRow
-	SubmissionPath       string
-	EvidenceReference    string
-	Registrant           string
-	RegisteredAt         time.Time
+	OwnerAccount          string
+	GoodsCode             string
+	Revision              int
+	Name                  string
+	BaseUnit              string
+	PackagingLevels       []GoodsLevelRow
+	TrackBatch            bool
+	TrackExpiry           bool
+	Aliases               []GoodsAliasRow
+	Composite             bool
+	OutboundMode          string
+	Components            []GoodsComponentRow
+	Declaration           GoodsDeclarationRow
+	DeclaredMeasurements  []GoodsMeasurementRow
+	WarehouseMeasurements []GoodsLevelMeasurementRow
+	SubmissionPath        string
+	EvidenceReference     string
+	Registrant            string
+	RegisteredAt          time.Time
 }
 
 // GoodsCatalogueRead 是商品册的列表读口（ADR-0077）：一个货主名下各商品的当前修订，按 GoodsPages 分页（ADR-0144）。租户与货主在签名上、不取自查询；

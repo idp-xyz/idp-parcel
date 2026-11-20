@@ -2,13 +2,13 @@
 
 主数据登记册、商品、库存账、入库预报、收货确认、整箱库存、完结与少收、收货差异结论、待认领转记均按已进 main 的代码写（2026-11-20 入库一段经一轮非作者评审并修完三处 Spec 阻断后进 main）。
 
-**只有「现状」「已实现：主数据登记册」「已实现：商品」「已实现：库存账」「已实现：入库预报」「已实现：收货确认」「已实现：整箱库存」「已实现：完结与少收」「已实现：收货差异结论」「已实现：待认领到货」是现行规则。** 其余写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
+**只有「现状」「已实现：主数据登记册」「已实现：商品与仓测」「已实现：库存账」「已实现：入库预报」「已实现：收货确认」「已实现：整箱库存」「已实现：完结与少收」「已实现：收货差异结论」「已实现：待认领到货」是现行规则。** 其余写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
 
 ## 现状
 
 - 可选能力，首发不含。用户 2026-11-18 点名继续，按 PN-09 开发交接逐包做。部署默认关。
-- 已有代码：部署开关与依赖方向门禁；仓、库区、库位类型、库位、包材的登记和查阅；商品的运营代录与运营查阅；库存账；入库预报的受理、告知版本、撤回、单据号、运营代录、运营查阅与货主口；收货确认（商品入库与整箱入库）；整箱库存；完结与少收（整箱按箱）；收货差异结论（货主与代录）；取消或完结之后到达的收货转成待认领到货，预报读口只标有无。路径、词与判定在下面各节。
-- 还没有：商品的货主口与仓测；货主查阅仓；待认领到货的认领与处置；开箱；建账导入；上架与库内作业；占用；库存读口的端点；出库、退货、代理仓执行与收费发生项。派发里没有仓配的路。没有受控批量口、登记 CLI、演示种子与管理台页面。
+- 已有代码：部署开关与依赖方向门禁；仓、库区、库位类型、库位、包材的登记和查阅；商品的货主口、运营代录、货主与运营查阅；仓测尺寸重量（按商品包装层级与按在库一箱，作业事实登记与货主/运营查阅）；库存账；入库预报的受理、告知版本、撤回、单据号、运营代录、运营查阅与货主口；收货确认（商品入库与整箱入库）；整箱库存；完结与少收（整箱按箱）；收货差异结论（货主与代录）；取消或完结之后到达的收货转成待认领到货，预报读口只标有无。路径、词与判定在下面各节。
+- 还没有：货主查阅仓；待认领到货的认领与处置；开箱；建账导入；上架与库内作业；占用；库存读口的端点；出库、退货、代理仓执行与收费发生项。派发里没有仓配的路。没有受控批量口、登记 CLI、演示种子与管理台页面。
 - 部署开关是环境变量 `IDP_PARCEL_WAREHOUSE_FULFILLMENT_ENABLED`，去首尾空白后恰为 `true` 才开，默认关。读法在 `cmd/internal/warehouseswitch`。`parcel-api` 与 `parcel-dispatch` 启动时各读一次并写启动日志。
 - 开关关着时，仓配的端点（含 `/v1/warehouse/`）答 `403 WAREHOUSE_FULFILLMENT_NOT_ENABLED`：在认证之前答，不读令牌、报文与册，不带 `outcome`。它与「接入渠道未配置」是两格，因为恢复动作是部署方打开开关。方法不对仍答 `405`。下面各口都受这一条管，不逐口再写。
 - 库表在 schema `warehouse_fulfillment`，进同一份迁移计划。开关关着的部署也建表，表是空的。
@@ -54,16 +54,15 @@
 - **库位**。内容：所属库区、库位类型（可缺）、优先级（可缺的 32 位整数，数字越大越优先）、是否停用。没有与有是不同的内容，优先级 0 与没有优先级是两份内容。所属库区登记后不改。仓、同一个仓下的库区、库位类型须已登记，否则 `REFERENCE_NOT_FOUND`。新指名的库位类型已停用答 `REFERENCE_DEACTIVATED`；沿用上一笔修订里的同一个类型、它后来被停用了，照常受理。不核仓与库区是否停用。
 - 停用的库区与库位「不再作移入目标」还没有做，那要等上架与库内作业。收货确认里，库位已停用仍可入账。
 
-## 已实现：商品
+## 已实现：商品与仓测
 
-身份是（租户，货主客户账户，商品编码）。每笔修订是一份完整资料，从 1 起只追加。代码在 `internal/warehousefulfillment`。
+身份是（租户，货主客户账户，商品编码）。每笔修订是一份完整资料，从 1 起只追加；货主口与代录口写同一条修订序列。代码在 `internal/warehousefulfillment`。
 
-- 运营代录：`POST /warehouse-fulfillment-goods-on-behalf`，挂运营决定「商品代录」（`GOODS_RECORD_ON_BEHALF`）。准入的能力词与事实类型词都是这个字面量。货主客户账户在本租户查不到答 `404 OWNER_ACCOUNT_NOT_VISIBLE`，不带 `outcome`。
-- 答复：`REGISTERED`（201），其余 200：`EXISTING_RESULT`、`SOURCE_CONFLICT`、`BASIS_STALE`、`IMMUTABLE_FIELD`、`IDENTIFIER_CONFLICT`、`CONTENT_INVALID`、`NOT_CONFIGURED`。
-- 判定：代录先核货主账户。然后本租户一个仓都没登记答 `NOT_CONFIGURED`；再按（租户，提交途径，来源，键）认重放与冲突；再核基准、不可改的格、识别码、资料内容。重放排在基准之前。
-- 运营查阅挂主数据与运营查阅读，不判准入：`GET /warehouse-fulfillment-goods`、`GET /warehouse-fulfillment-goods-current`、`GET /warehouse-fulfillment-goods-revisions`、`GET /warehouse-fulfillment-goods-by-code`。找不到不答 404。
-- 并发：同一货主上的事务级锁。登记与问在库库存取独占；两个商品抢同一个码至多一个落册。记数取同一把锁的共享一侧，见库存账。
-- 没有：货主口、仓测、商品的停用。
+- 运营代录：`POST /warehouse-fulfillment-goods-on-behalf`，挂运营决定「商品代录」（`GOODS_RECORD_ON_BEHALF`），准入两格都是这个字面量；货主客户账户在本租户查不到答 `404 OWNER_ACCOUNT_NOT_VISIBLE`，不带 `outcome`。货主写口：`POST /v1/warehouse/goods`，挂首方客户能力 `GOODS_MAINTENANCE`，准入两格都是这个字面量，来源请求键前缀 `goods:`；租户与货主取自信封，自带即坏载荷。
+- 商品答复：`REGISTERED`（201），其余 200：`EXISTING_RESULT`、`SOURCE_CONFLICT`、`BASIS_STALE`、`IMMUTABLE_FIELD`、`IDENTIFIER_CONFLICT`、`CONTENT_INVALID`、`NOT_CONFIGURED`。判定次序：代录先核货主账户；然后本租户无仓答 `NOT_CONFIGURED`；按判重位置认重放与冲突；核基准、不可改的格、识别码、资料内容。
+- 商品查阅：运营口挂主数据与运营查阅读（`GET /warehouse-fulfillment-goods`、`goods-current`、`goods-revisions`、`goods-by-code`）；货主口挂 `WAREHOUSE_READ`（`GET /v1/warehouse/reads/goods`、`goods-current`、`goods-revisions`、`goods-by-code`），不带登记责任方，也不带仓测的设备与操作者。找不到不答 404，别的货主商品同查无此商品。商品当前修订与列表逐包装层级附 `warehouseMeasurements`：已仓测给当前版，未仓测答 `measured: false` 并附货主声明来源 `OWNER_DECLARED`（没声明则为空，不给零或默认）。
+- 仓测登记：`POST /warehouse-fulfillment-warehouse-measurements`，挂作业事实登记（范围种类 `WAREHOUSE`，引用须等于载荷仓；准入能力词 `WORK_FACT_REGISTRATION`，事实类型 `WAREHOUSE_MEASUREMENT`）。对象二选一：`GOODS_LEVEL`（商品 + 包装层级，按落册时当前修订核）或 `CARTON`（在库一箱，按到达服务端那一刻整箱账是否在库核）。答复：`RECORDED`（201），其余 200：`EXISTING_RESULT`、`CONTENT_CONFLICT`、`WAREHOUSE_NOT_FOUND`、`WAREHOUSE_NOT_ACCEPTING`（原因 `AGENT`；停用自营仓照记）、`NOT_ACCEPTED`（逐格指出不合）。只追加版本；当前版按发生时刻与设备序号定序，迟到的旧仓测照记不顶掉更新的一版。
+- 仓测查阅：运营口 `GET /warehouse-fulfillment-goods-measurements`、`carton-measurements`；货主口 `GET /v1/warehouse/reads/goods-measurements`、`carton-measurements`（`WAREHOUSE_READ`，不带设备与操作者）。并发：商品修订对同一货主取事务级独占锁，记数取共享一侧；仓测按（租户，事实身份）取锁。没有：商品停用、审核、多级组合。
 
 ## 已实现：库存账
 
