@@ -265,6 +265,8 @@ Status: Accepted——2026-10-27 用户同意（会话 tops-20 提议：「定�
 - 2026-11-12｜本节 2026-11-11 讲四个模块要求清单的那一行里，票 15 出了 [ADR-0380](../docs/adr/0380-the-customer-contract-version-declares-ordered-sell-price-sources-and-settlement-hands-them-to-pricing-from-the-fixed-resolution.md)（客户合同版本声明有序的销售价格来源），同日进 `main`；它的实现拆成子票 16 至 21，用户同日在问题卡上点名激活，都转 `ready-for-agent`。其中一张接本清单已有的行：19 接本节 2026-10-27 讲两本采用册登同一个范围的那一条，那一条的范围随之收窄。其余各张是本清单之外的事。票 17、21 提到的 product-strategy-boundary/06（解析键的锚点语义）照旧冻结。本行不改「上线线」与「一」「一之二」两节的范围｜[commercial-four-module-requirements/spec](./commercial-four-module-requirements/spec.md)｜用户点名，不挡上线；先后照 spec 子票表里的阻塞边
 - 2026-11-12｜用户点名：[commercial-four-module-requirements](./commercial-four-module-requirements/spec.md) 开着的子票全部保留、照做（会话建议只留 ADR-0380 那条链与毛利、其余搁置，用户答「都留」）。属 [AGENTS.md「交付模式」](../AGENTS.md#交付模式)第三种，不必再问；同日核对：本文件「一」「一之二」与「六」必须解决的各票均已在 main。其余 feature 下开着的散票未被点名，照旧不开工。
 
+- 2026-11-20｜ADR-0384 决定二的表把待认领到货的撤销认领写成重放取被指名对象、把处置写成带决定标识。UC-WF-005 与实现是撤销按决定标识重放、处置不带决定标识，已处置的到货以同一方式再处置答已有结果。代码跟用例，不改。｜[pn-09-build/12](./pn-09-build/issues/12-w06-unclaimed-arrivals.md)｜不挡上线
+
 ## 六、docs-consistency/code 队列的复核（2026-10-27，tops-26）
 
 `.scratch/docs-consistency/code/` 的 24 张未开工票没有出现在上面的 111 张里；用户 2026-10-27 答「你看看哪些是问题必须解决，哪些是复核冻结条件的」，由协调方（tops-26）对照 `PILOT-SCOPE.md` 与本文件「上线线」口径分开：

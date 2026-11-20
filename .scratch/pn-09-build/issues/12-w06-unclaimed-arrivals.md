@@ -1,7 +1,7 @@
 # 12 `PN09-W06`：待认领到货（登记、认领与撤销、处置规则、处置、收货引用与查阅）
 
 Category: enhancement
-Status: in-progress（两轴无未清阻断；待重放到 main）
+Status: resolved
 Blocked by: 02、09、11
 
 依据：[UC-WF-005](../../../docs/application/warehouse-fulfillment/UC-WF-005-REGISTER-CLAIM-AND-DISPOSE-OF-UNCLAIMED-ARRIVALS.md)；[UC-WF-004](../../../docs/application/warehouse-fulfillment/UC-WF-004-CONFIRM-RECEIPT-AND-CLOSE-OUT-AN-INBOUND-PRE-ADVICE.md)（引用待认领到货的收货确认）；[仓配履约 CONTEXT](../../../docs/domain/warehouse-fulfillment/CONTEXT.md)「入库与加工」「待认领到货」；[ADR-0384](../../../docs/adr/0384-warehouse-access-words-customer-faces-and-the-switched-off-answer.md) 决定二、三、四、五、八。
@@ -36,3 +36,10 @@ Blocked by: 02、09、11
 交付模式只评一轮、只修挡上线的；探针由作者在 `02cdeba41` 重跑，结果见上。
 
 Spec 钉 `66bd57b31`（含修订 `02cdeba41`）。阻断：无。非阻断一条，不挡合入、不改代码：ADR-0384 决定二的表把撤销认领写成重放取被指名对象、把处置写成带决定标识；UC-WF-005 的输入契约与「认领与撤销按决定标识认重放、到货本身不作重放身份；已处置的到货以同一方式再处置答已有结果」以及票面与代码一致。记在冻结清单，不另立票。
+
+## 进 main 记录
+
+- 出处：分支 `cursor/wf-w06-unclaimed-arrivals`。`origin/main` 从 `b4914f9c2` 快进到 `72784df34`，提交没有改写。主体 `de2ce983d`，Standards 修订 `02cdeba41`，票面两笔 `66bd57b31`、`72784df34`。收口是随后这一笔。
+- 全量真库测试：`scripts/test-full.sh` 对 `72784df34` 跑，`FULL-EXIT=0`。
+- 种子灌一次性库：`scripts/demo-seeds/seed.sh` 对一次性 PostgreSQL 16.14 跑，`SEED_EXIT=0`，用后删容器。
+- 生成物不重算。`-race` 没有在这个 SHA 上重跑全包；修订的受影响用例在 `02cdeba41` 连真库跑过。
