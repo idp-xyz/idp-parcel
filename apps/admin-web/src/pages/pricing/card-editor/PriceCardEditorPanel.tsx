@@ -32,9 +32,9 @@ import { useEditorEnv } from './use-editor-env';
 
 /**
  * 本页按这几版模板设计。规格口报出别的版本说明模板进位了，页面不照旧提交（ADR-0349 决定七）。PPT-3 起 card 表收适用服务
- * 产品，页面照规格口写它（card-form/workbook.ts）。
+ * 产品，PPT-4 起收票级计价重量的聚合方式与进位点，页面都照规格口写（card-form/workbook.ts）。
  */
-const knownTemplateVersions: readonly string[] = ['PPT-2', 'PPT-3'];
+const knownTemplateVersions: readonly string[] = ['PPT-2', 'PPT-3', 'PPT-4'];
 
 /** 从一张已登记价卡读回的开场：表单状态里的方案版本已经清空，等操作者填新版本号。 */
 export interface PriceCardRevision {

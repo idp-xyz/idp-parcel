@@ -9,7 +9,8 @@ import { field } from './fields';
 import { feePath } from './workbook';
 import { chargeCodePattern, feeHasConditionBuilder, feeHasGroup, stepOrder, type CardFormState, type FeeItemState, type StepId } from './model';
 import { conditionCategoryChoices } from './options';
-import { allowedValues, isTextColumn, rateColumns, sheetNames } from './spec';
+import { allowedValues, cardFieldKeys, isTextColumn, rateColumns, sheetNames } from './spec';
+import { shipmentWeightAggregationField, shipmentWeightRoundingPointField } from './workbook';
 
 export interface Issue {
   field: string;
@@ -81,6 +82,23 @@ function basicsIssues(state: CardFormState, spec: PriceCardTemplateSpec): Issue[
   check.choice(field.basics('direction'), '价格方向', basics.direction, allowedValues(spec, sheetNames.card, 'direction'));
   check.choice(field.basics('purpose'), '用途', basics.purpose, allowedValues(spec, sheetNames.card, 'purpose'));
   check.choice(field.basics('aggregation'), '计价对象', basics.aggregation, allowedValues(spec, sheetNames.card, 'aggregation'));
+  // 规格口列了票级两格时，按票必选、不预选；逐件求和再必选进位点。逐包裹与主单级不开这一选项。
+  if (basics.aggregation === 'PER_SHIPMENT' && cardFieldKeys(spec).includes(shipmentWeightAggregationField)) {
+    check.choice(
+      field.basics(shipmentWeightAggregationField),
+      '票级计价重量聚合方式',
+      basics.shipmentWeightAggregation,
+      allowedValues(spec, sheetNames.card, shipmentWeightAggregationField),
+    );
+    if (basics.shipmentWeightAggregation === 'PER_PIECE_THEN_SUM') {
+      check.choice(
+        field.basics(shipmentWeightRoundingPointField),
+        '逐件求和进位点',
+        basics.shipmentWeightRoundingPoint,
+        allowedValues(spec, sheetNames.card, shipmentWeightRoundingPointField),
+      );
+    }
+  }
   if (!chargeCodePattern.test(basics.baseChargeCode.trim())) {
     issues.push({ field: field.basics('baseChargeCode'), where: '基本信息', text: '基础运费代码只能是大写字母、数字和下划线，且以字母开头' });
   }

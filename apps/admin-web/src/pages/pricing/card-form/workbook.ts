@@ -18,6 +18,15 @@ import { canonicalServiceProducts, declaresServiceProducts } from '../service-pr
 /** card 表里适用服务产品那一格的字段名，与方案文档的键同名（ADR-0382）；多个产品以英文分号分隔，同 amountRoundingPoints。 */
 export const serviceProductsCardField = 'serviceProducts';
 
+/** 票级计价重量的两格，与方案快照的键同名（ADR-0364 决定三）。 */
+export const shipmentWeightAggregationField = 'shipmentWeightAggregation';
+export const shipmentWeightRoundingPointField = 'shipmentWeightRoundingPoint';
+
+/** 规格口的 card 表收不收票级计价重量的聚合方式。 */
+export function specTakesShipmentWeightAggregation(spec: PriceCardTemplateSpec): boolean {
+  return cardFieldKeys(spec).includes(shipmentWeightAggregationField);
+}
+
 /** 规格口的 card 表收不收适用服务产品：收的那几版模板这一行总在，不收的版本写了就是未知字段。 */
 export function specTakesServiceProducts(spec: PriceCardTemplateSpec): boolean {
   return cardFieldKeys(spec).includes(serviceProductsCardField);
@@ -461,6 +470,8 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
     purpose: trim(basics.purpose),
     [serviceProductsCardField]: serviceProductsText(state),
     aggregation: trim(basics.aggregation),
+    [shipmentWeightAggregationField]: shipmentWeightValue(state, shipmentWeightAggregationField),
+    [shipmentWeightRoundingPointField]: shipmentWeightValue(state, shipmentWeightRoundingPointField),
     baseChargeCode: trim(basics.baseChargeCode),
     periodStartsAt: startsAt,
     periodEndsAt: endsAt,
@@ -484,6 +495,8 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
     purpose: basicsTarget('purpose', '用途'),
     [serviceProductsCardField]: basicsTarget('serviceProducts', '适用服务产品'),
     aggregation: basicsTarget('aggregation', '计价对象'),
+    [shipmentWeightAggregationField]: basicsTarget(shipmentWeightAggregationField, '票级计价重量聚合方式'),
+    [shipmentWeightRoundingPointField]: basicsTarget(shipmentWeightRoundingPointField, '逐件求和进位点'),
     baseChargeCode: basicsTarget('baseChargeCode', '基础运费代码'),
     periodStartsAt: basicsTarget('periodStartsAt', '生效起点'),
     periodEndsAt: basicsTarget('periodEndsAt', '生效止点'),
@@ -507,6 +520,14 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
   sheets[sheetNames.card] = cardRows;
 
   return { workbook: { templateVersion: spec.templateVersion, sheets }, origins };
+}
+
+/** 只有按票的卡写这两格；没选答空，那一行写 null。逐包裹与主单级即使状态里残留了值也不写。 */
+function shipmentWeightValue(state: CardFormState, key: typeof shipmentWeightAggregationField | typeof shipmentWeightRoundingPointField): string | undefined {
+  if (state.basics.aggregation !== 'PER_SHIPMENT') return undefined;
+  if (key === shipmentWeightRoundingPointField && state.basics.shipmentWeightAggregation !== 'PER_PIECE_THEN_SUM') return undefined;
+  const value = trim(state.basics[key]);
+  return value === '' ? undefined : value;
 }
 
 /** 只有售价卡有适用服务产品；没选或不是售价卡答空，那一行写 null，卡即接其余产品（ADR-0382 决定一）。 */

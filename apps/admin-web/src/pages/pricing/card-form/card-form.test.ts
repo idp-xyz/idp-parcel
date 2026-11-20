@@ -8,6 +8,7 @@ import { closedValuesWhen } from './spec';
 import { stepOfField } from './fields';
 import {
   alwaysCondition,
+  basicsWithAggregation,
   basicsWithDirection,
   emptyState,
   newCondition,
@@ -21,7 +22,7 @@ import { conditionCategoryChoices, currencyChoices } from './options';
 import { mapProblems, problemCountsByStep, problemWords, unlocatedWords } from './problems';
 import { sampleState } from './sample';
 import { validateAll, validateStep } from './validate';
-import { formToWorkbook, specTakesServiceProducts } from './workbook';
+import { formToWorkbook, specTakesServiceProducts, specTakesShipmentWeightAggregation } from './workbook';
 import { workbookAsNewVersion, workbookToForm } from './workbook-to-form';
 
 // 价卡编辑器的纯函数验收。参照物有两个，各自独立：
@@ -794,4 +795,67 @@ test('card 表 serviceProducts 的问题落在适用服务产品上，模板版�
     equal(entry.where, '基本信息 · 适用服务产品');
   }
   deepEqual(unlocated.map((problem) => problem.code), ['TEMPLATE_VERSION_UNSUPPORTED']);
+});
+
+// ---- 票级计价重量的聚合方式（ADR-0364 决定三）----
+
+function specWithShipmentWeight(): PriceCardTemplateSpec {
+  const upgraded = specWithServiceProducts();
+  upgraded.templateVersion = 'PPT-4';
+  upgraded.acceptedTemplateVersions = [...upgraded.acceptedTemplateVersions, 'PPT-4'];
+  const card = upgraded.sheets.find((sheet) => sheet.name === 'card');
+  ok(card);
+  card.columns.push(
+    {
+      key: 'shipmentWeightAggregation',
+      title: '票级计价重量聚合方式',
+      requirement: 'conditional',
+      description: '',
+      allowedValues: ['TOTALS_THEN_DERIVE', 'PER_PIECE_THEN_SUM'],
+    },
+    {
+      key: 'shipmentWeightRoundingPoint',
+      title: '逐件求和进位点',
+      requirement: 'conditional',
+      description: '',
+      allowedValues: ['ROUND_EACH_THEN_SUM', 'SUM_THEN_ROUND_ONCE'],
+    },
+  );
+  return upgraded;
+}
+
+// Covers: 规格口列了票级两格就写进工作簿；按票必填的值能读回去，逐包裹与主单级不写，旧规格口一行都不写。
+test('工作簿：票级聚合方式与进位点随规格口往返，不预选', () => {
+  const upgraded = specWithShipmentWeight();
+  ok(specTakesShipmentWeightAggregation(upgraded));
+  ok(!specTakesShipmentWeightAggregation(spec));
+  const state = costCardState();
+  state.basics = basicsWithAggregation(state.basics, 'PER_SHIPMENT');
+  state.basics.shipmentWeightAggregation = 'PER_PIECE_THEN_SUM';
+  state.basics.shipmentWeightRoundingPoint = 'ROUND_EACH_THEN_SUM';
+  const rows = cardRowsOf(formToWorkbook(state, upgraded).workbook);
+  equal(rows.shipmentWeightAggregation, 'PER_PIECE_THEN_SUM');
+  equal(rows.shipmentWeightRoundingPoint, 'ROUND_EACH_THEN_SUM');
+  const restored = workbookToForm(formToWorkbook(state, upgraded).workbook);
+  equal(restored.basics.shipmentWeightAggregation, 'PER_PIECE_THEN_SUM');
+  equal(restored.basics.shipmentWeightRoundingPoint, 'ROUND_EACH_THEN_SUM');
+
+  const totals = costCardState();
+  totals.basics = basicsWithAggregation(totals.basics, 'PER_SHIPMENT');
+  totals.basics.shipmentWeightAggregation = 'TOTALS_THEN_DERIVE';
+  totals.basics.shipmentWeightRoundingPoint = 'SUM_THEN_ROUND_ONCE';
+  equal(cardRowsOf(formToWorkbook(totals, upgraded).workbook).shipmentWeightRoundingPoint, null);
+
+  const perPackage = costCardState();
+  perPackage.basics.shipmentWeightAggregation = 'TOTALS_THEN_DERIVE';
+  equal(cardRowsOf(formToWorkbook(perPackage, upgraded).workbook).shipmentWeightAggregation, null);
+  equal(basicsWithAggregation(state.basics, 'PER_PACKAGE').shipmentWeightAggregation, '');
+
+  const issues = validateAll(state, upgraded).filter((issue) => issue.field === 'basics.shipmentWeightAggregation');
+  equal(issues.length, 0);
+  const blank = costCardState();
+  blank.basics = basicsWithAggregation(blank.basics, 'PER_SHIPMENT');
+  const missing = validateAll(blank, upgraded).map((issue) => issue.field);
+  ok(missing.includes('basics.shipmentWeightAggregation'));
+  ok(!('shipmentWeightAggregation' in cardRowsOf(formToWorkbook(state, spec).workbook)));
 });

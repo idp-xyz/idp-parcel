@@ -71,6 +71,18 @@ export const aggregationSubjectLabels: Readonly<Record<string, string>> = {
   PER_MASTER_DOCUMENT: '每主单',
 };
 
+/** 票级计价重量的聚合方式（ADR-0364 决定三）。 */
+export const shipmentWeightAggregationLabels: Readonly<Record<string, string>> = {
+  TOTALS_THEN_DERIVE: '合计实重与合计体积重之后派生',
+  PER_PIECE_THEN_SUM: '逐件派生之后求和',
+};
+
+/** 逐件求和的进位点。两种不叠。 */
+export const shipmentWeightRoundingPointLabels: Readonly<Record<string, string>> = {
+  ROUND_EACH_THEN_SUM: '逐件进位后求和',
+  SUM_THEN_ROUND_ONCE: '求和之后进位一次',
+};
+
 export const weightUnitLabels: Readonly<Record<string, string>> = {
   G: '克',
   KG: '千克',

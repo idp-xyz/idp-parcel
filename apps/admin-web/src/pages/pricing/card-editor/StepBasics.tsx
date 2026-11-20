@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { accessRefusalTitle, isOperatorRefusal } from '../../../auth/access-refusal';
-import { aggregationLabels, priceCardPurposeLabels, priceDirectionLabels } from '../../../vocabulary/price-card';
+import { aggregationLabels, priceCardPurposeLabels, priceDirectionLabels, shipmentWeightAggregationLabels, shipmentWeightRoundingPointLabels } from '../../../vocabulary/price-card';
 import { listServiceProducts } from '../../party/api';
 import { serviceProductObjectOptions } from '../../party/picker-options';
 import { useLoaded } from '../../party/PublicationFormFields';
 import { field } from '../card-form/fields';
-import { basicsWithDirection, defaultBaseChargeCode, type BasicsState } from '../card-form/model';
+import { basicsWithAggregation, basicsWithDirection, defaultBaseChargeCode, type BasicsState } from '../card-form/model';
 import { currencyChoices } from '../card-form/options';
 import { allowedValues, sheetNames } from '../card-form/spec';
-import { specTakesServiceProducts } from '../card-form/workbook';
+import { shipmentWeightAggregationField, shipmentWeightRoundingPointField, specTakesServiceProducts, specTakesShipmentWeightAggregation } from '../card-form/workbook';
 import {
   addTypedServiceProducts,
   declaresServiceProducts,
@@ -128,9 +128,38 @@ export function StepBasics() {
             required
             value={basics.aggregation}
             options={labelled(allowedValues(spec, sheetNames.card, 'aggregation'), aggregationLabels)}
-            onChange={(aggregation) => patch({ aggregation })}
+            onChange={(aggregation) => update((draft) => ({ ...draft, basics: basicsWithAggregation(draft.basics, aggregation) }))}
             hint="选「每件计价」就是按每个包裹算钱，必须明确选，不替你默认"
           />
+          {basics.aggregation === 'PER_SHIPMENT' && specTakesShipmentWeightAggregation(spec) ? (
+            <>
+              <SelectField
+                id={field.basics(shipmentWeightAggregationField)}
+                label="票级计价重量"
+                required
+                value={basics.shipmentWeightAggregation}
+                options={labelled(allowedValues(spec, sheetNames.card, shipmentWeightAggregationField), shipmentWeightAggregationLabels)}
+                onChange={(shipmentWeightAggregation) =>
+                  patch({
+                    shipmentWeightAggregation,
+                    ...(shipmentWeightAggregation === 'PER_PIECE_THEN_SUM' ? {} : { shipmentWeightRoundingPoint: '' }),
+                  })
+                }
+                hint="合计之后再按重量规则算，或者每件先按重量规则算再相加。必须明确选，不替你默认"
+              />
+              {basics.shipmentWeightAggregation === 'PER_PIECE_THEN_SUM' ? (
+                <SelectField
+                  id={field.basics(shipmentWeightRoundingPointField)}
+                  label="进位发生在"
+                  required
+                  value={basics.shipmentWeightRoundingPoint}
+                  options={labelled(allowedValues(spec, sheetNames.card, shipmentWeightRoundingPointField), shipmentWeightRoundingPointLabels)}
+                  onChange={(shipmentWeightRoundingPoint) => patch({ shipmentWeightRoundingPoint })}
+                  hint="每件先进位再相加，或者先相加再进位一次。两种不一起用"
+                />
+              ) : null}
+            </>
+          ) : null}
           {/* 只有售价卡能声明适用产品（ADR-0382 决定一）；换成别的方向时已选的随之清掉，见 basicsWithDirection。
               规格口的模板版本收不收这一格由规格口说，不收就只说一句，不摆一个提交不上去的选择。 */}
           {declaresServiceProducts(basics.direction) ? (

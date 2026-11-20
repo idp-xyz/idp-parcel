@@ -15,6 +15,8 @@ import { chargeCodeLabel } from '../../vocabulary/status';
 import {
   addressNatureValueLabels,
   aggregationLabels,
+  shipmentWeightAggregationLabels,
+  shipmentWeightRoundingPointLabels,
   aggregationSubjectLabels,
   amountRoundingPointLabels,
   comparisonLabels,
@@ -67,6 +69,10 @@ export interface CardHeader {
   weightUnit: string;
   /** 每件计价 / 按票聚合计价 / 按主单聚合计价。 */
   aggregation: string;
+  /** 票级卡声明了聚合方式时的中文词；没声明缺席。 */
+  shipmentWeightAggregation?: string;
+  /** 逐件求和时进位点的中文词；没声明缺席。 */
+  shipmentWeightRoundingPoint?: string;
   /** 适用期原始时刻；endsAt 缺即持续有效（文档里用零值时刻表达）。 */
   period: { startsAt: string; endsAt: string | null };
 }
@@ -700,6 +706,8 @@ const knownPlanKeys = new Set([
   'serviceProducts',
   'baseChargeCode',
   'aggregation',
+  'shipmentWeightAggregation',
+  'shipmentWeightRoundingPoint',
   'period',
   'rateTable',
   'weightPolicy',
@@ -745,6 +753,8 @@ function headerOf(plan: Record<string, unknown>): CardHeader {
   const aggregation = str(plan.aggregation);
   const unit = str(table.unit);
   const endsAt = str(period.endsAt);
+  const shipmentWeightAggregation = shipmentWeightAggregationLabels[str(plan.shipmentWeightAggregation)] ?? '';
+  const shipmentWeightRoundingPoint = shipmentWeightRoundingPointLabels[str(plan.shipmentWeightRoundingPoint)] ?? '';
   return {
     planId: str(reference.id),
     version: str(reference.version),
@@ -754,6 +764,9 @@ function headerOf(plan: Record<string, unknown>): CardHeader {
     currency: str(table.currency),
     weightUnit: unit === '' ? '' : weightUnitWord(unit),
     aggregation: aggregationLabels[aggregation] ?? aggregation,
+    // 没声明就不放键：旧卡的页头与引入这一格之前逐字段相同。
+    ...(shipmentWeightAggregation === '' ? {} : { shipmentWeightAggregation }),
+    ...(shipmentWeightRoundingPoint === '' ? {} : { shipmentWeightRoundingPoint }),
     period: { startsAt: str(period.startsAt), endsAt: openEnded(endsAt) ? null : endsAt },
   };
 }

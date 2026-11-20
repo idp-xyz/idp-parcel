@@ -8,7 +8,7 @@
 import type { PriceCardWorkbook } from '../api';
 import { featureMeasure } from '../price-card-content';
 import { sheetNames } from './spec';
-import { serviceProductsCardField, serviceProductsOfCell } from './workbook';
+import { serviceProductsCardField, serviceProductsOfCell, shipmentWeightAggregationField, shipmentWeightRoundingPointField } from './workbook';
 
 export class DocumentUnreadable extends Error {}
 
@@ -186,6 +186,9 @@ export function workbookToDocument(workbook: PriceCardWorkbook): Doc {
     ...(serviceProducts.length === 0 ? {} : { serviceProducts }),
     baseChargeCode: card('baseChargeCode'),
     aggregation: card('aggregation'),
+    // 方案快照里这两键可缺。没选就不写，空串不是「合计后派生」。
+    ...(card(shipmentWeightAggregationField) === '' ? {} : { shipmentWeightAggregation: card(shipmentWeightAggregationField) }),
+    ...(card(shipmentWeightRoundingPointField) === '' ? {} : { shipmentWeightRoundingPoint: card(shipmentWeightRoundingPointField) }),
     period: { startsAt: card('periodStartsAt'), endsAt: card('periodEndsAt') || openEnd },
     rateTable: rateTable(mainTableId),
     weightPolicy,

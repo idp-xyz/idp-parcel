@@ -41,6 +41,13 @@ export interface BasicsState {
    */
   serviceProducts: string[];
   aggregation: string;
+  /**
+   * 票级计价重量的聚合方式（ADR-0364 决定三）。只有计价对象是按票时有这一格，不预选；离开按票就清空。
+   * 空串即还没选。
+   */
+  shipmentWeightAggregation: string;
+  /** 逐件求和的进位点。只有聚合方式是逐件求和时有值，不预选。 */
+  shipmentWeightRoundingPoint: string;
   baseChargeCode: string;
   currency: string;
   weightUnit: string;
@@ -169,6 +176,12 @@ export function basicsWithDirection(basics: BasicsState, direction: string, purp
   };
 }
 
+/** 换计价对象。离开按票时丢掉已选的聚合方式与进位点：逐包裹与主单级不开这一选项，留着会在切回来时冒出没再确认过的选择。 */
+export function basicsWithAggregation(basics: BasicsState, aggregation: string): BasicsState {
+  if (aggregation === 'PER_SHIPMENT') return { ...basics, aggregation };
+  return { ...basics, aggregation, shipmentWeightAggregation: '', shipmentWeightRoundingPoint: '' };
+}
+
 /** 基础运费代码是产品固定的计价代码（基础运费行的名字），页面上不让运营改。 */
 export const defaultBaseChargeCode = 'BASE_FREIGHT';
 
@@ -194,6 +207,8 @@ export function emptyState(): CardFormState {
       purpose: '',
       serviceProducts: [],
       aggregation: '',
+      shipmentWeightAggregation: '',
+      shipmentWeightRoundingPoint: '',
       baseChargeCode: defaultBaseChargeCode,
       currency: '',
       weightUnit: '',

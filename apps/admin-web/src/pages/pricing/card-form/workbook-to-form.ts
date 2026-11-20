@@ -21,7 +21,7 @@ import {
   type RoundingSegment,
 } from './model';
 import { familySheet, sheetNames } from './spec';
-import { serviceProductsCardField, serviceProductsOfCell } from './workbook';
+import { serviceProductsCardField, serviceProductsOfCell, shipmentWeightAggregationField, shipmentWeightRoundingPointField } from './workbook';
 
 export class NotRepresentable extends Error {}
 
@@ -62,6 +62,8 @@ export function workbookToForm(workbook: PriceCardWorkbook): CardFormState {
     purpose: card('purpose'),
     serviceProducts: serviceProductsOfCell(card(serviceProductsCardField)),
     aggregation: card('aggregation'),
+    shipmentWeightAggregation: card(shipmentWeightAggregationField),
+    shipmentWeightRoundingPoint: card(shipmentWeightRoundingPointField),
     baseChargeCode: card('baseChargeCode'),
     currency: text(header, 'currency'),
     weightUnit: text(header, 'weightUnit'),

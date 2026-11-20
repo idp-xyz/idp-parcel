@@ -14,6 +14,8 @@ test('词册里的每个词都是中文，无英文泄漏', () => {
     priceCardPurposeLabels: vocabulary.priceCardPurposeLabels,
     aggregationLabels: vocabulary.aggregationLabels,
     aggregationSubjectLabels: vocabulary.aggregationSubjectLabels,
+    shipmentWeightAggregationLabels: vocabulary.shipmentWeightAggregationLabels,
+    shipmentWeightRoundingPointLabels: vocabulary.shipmentWeightRoundingPointLabels,
     weightUnitLabels: vocabulary.weightUnitLabels,
     lengthUnitLabels: vocabulary.lengthUnitLabels,
     volumeUnitLabels: vocabulary.volumeUnitLabels,

@@ -379,6 +379,8 @@ export function PriceCardDetailPanel({
         <Fact label="币种">{view ? <CurrencyLabel code={view.header.currency} /> : '—'}</Fact>
         <Fact label="重量单位">{view ? view.header.weightUnit : '—'}</Fact>
         <Fact label="计价口径">{view ? view.header.aggregation : '—'}</Fact>
+        {view?.header.shipmentWeightAggregation ? <Fact label="票级计价重量">{view.header.shipmentWeightAggregation}</Fact> : null}
+        {view?.header.shipmentWeightRoundingPoint ? <Fact label="进位发生在">{view.header.shipmentWeightRoundingPoint}</Fact> : null}
         <Fact label="适用期">
           <InstantRange from={row.effectiveFrom} to={row.effectiveTo} />
         </Fact>
