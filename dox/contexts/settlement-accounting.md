@@ -1,6 +1,6 @@
 # 结算与经营核算（`settlement-accounting`）
 
-代码在 `internal/settlementaccounting`。直接成本经营结果那几句对照 `7efd8b25a`；其余对照 main `99fc0037d`（2026-11-12）。
+代码在 `internal/settlementaccounting`。直接成本经营结果那几句对照 `4c804b290`；其余对照 main `99fc0037d`（2026-11-12）。
 
 **这份文件核到什么程度**：取值表、SELL 评价请求的结论、停因、入口四节是从代码里读出来的；哪些编排有生产入口，是在 `cmd/` 下逐个查构造与调用得出的。「规则」一节的句子是从旧 `docs/domain/settlement-accounting/CONTEXT.md` 提炼的，每条只确认了代码里有对应的机制（类型、函数或结果码），没有逐条跑测试验证行为；旧文档写了而代码里没有的，以及有编排却没有入口的，单列在最后一节。
 
