@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	noapplication "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	adapter "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/nodeoperations"
@@ -250,7 +251,12 @@ func (fixture measurementFixture) FindAdoption(context.Context, nodomain.TenantI
 
 func measurementView(t *testing.T, units []string, measurements []nodomain.ActualMeasurement, adopted bool) *adapter.ParcelMeasurementView {
 	t.Helper()
-	view, err := adapter.NewParcelMeasurementView(measurementFixture{units: units, measurements: measurements, adopted: adopted}, measurementFixture{units: units, measurements: measurements, adopted: adopted}, measurementFixture{units: units, measurements: measurements, adopted: adopted})
+	fixture := measurementFixture{units: units, measurements: measurements, adopted: adopted}
+	query, err := noapplication.NewCurrentParcelMeasurementQuery(fixture, fixture, fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := adapter.NewParcelMeasurementView(query)
 	if err != nil {
 		t.Fatal(err)
 	}

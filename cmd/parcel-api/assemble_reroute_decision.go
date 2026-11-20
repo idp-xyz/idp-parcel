@@ -20,6 +20,7 @@ import (
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
+	noapplication "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	ppnodeops "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/nodeoperations"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
@@ -211,9 +212,9 @@ func rerouteCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostS
 	})
 }
 
-// actualMeasurements 与 parcel-dispatch 的 actualMeasurements 同一种装法：路由的物理事实来源要这只视图上
-// 带时点的读法，取哪一条、单位怎么译不在路由里再写一份。
-func actualMeasurements(db *bentopg.DB) (*ppnodeops.ParcelMeasurementView, error) {
+// currentParcelMeasurementQuery 与 parcel-dispatch 的 currentParcelMeasurementQuery 同一种装法。
+// 别的上下文要毛重、三边与来源原词时接这一只，不在计价视图上再装一遍三只口。
+func currentParcelMeasurementQuery(db *bentopg.DB) (*noapplication.CurrentParcelMeasurementQuery, error) {
 	associations, err := nopostgres.NewParcelAssociations(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: parcel associations: %w", err)
@@ -226,7 +227,21 @@ func actualMeasurements(db *bentopg.DB) (*ppnodeops.ParcelMeasurementView, error
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: measurement selection adoptions: %w", err)
 	}
-	view, err := ppnodeops.NewParcelMeasurementView(associations, measurements, adoptions)
+	query, err := noapplication.NewCurrentParcelMeasurementQuery(associations, measurements, adoptions)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: current parcel measurement query: %w", err)
+	}
+	return query, nil
+}
+
+// actualMeasurements 把 currentParcelMeasurementQuery 译成计价视图。路由的物理事实来源要这只视图上
+// 带时点的读法，取哪一条、单位怎么译不在路由里再写一份。
+func actualMeasurements(db *bentopg.DB) (*ppnodeops.ParcelMeasurementView, error) {
+	query, err := currentParcelMeasurementQuery(db)
+	if err != nil {
+		return nil, err
+	}
+	view, err := ppnodeops.NewParcelMeasurementView(query)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: actual measurement view: %w", err)
 	}

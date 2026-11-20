@@ -8,6 +8,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelpricing"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	noapplication "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	ppnodeops "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/nodeoperations"
@@ -162,7 +163,11 @@ func pointedAt(t *testing.T, declared *declaredDouble, physical *adapter.Measure
 func measurementFacts(t *testing.T, units []string, measurements []nodomain.ActualMeasurement, adopted bool) *adapter.MeasurementPhysicalFacts {
 	t.Helper()
 	fixture := routingMeasurementFixture{units: units, measurements: measurements, adopted: adopted}
-	view, err := ppnodeops.NewParcelMeasurementView(fixture, fixture, fixture)
+	query, err := noapplication.NewCurrentParcelMeasurementQuery(fixture, fixture, fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := ppnodeops.NewParcelMeasurementView(query)
 	if err != nil {
 		t.Fatal(err)
 	}

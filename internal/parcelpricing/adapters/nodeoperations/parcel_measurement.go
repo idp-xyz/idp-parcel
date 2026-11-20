@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	noapplication "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
-	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	pptransport "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/transportfulfillment"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
@@ -25,39 +25,17 @@ const (
 	dimensionValueUnreadable  = "输入不可得：实测尺寸的数值不成立，计价读不成一个外廓"
 )
 
-// ParcelMeasurementView 按包裹读当前有效实测，译成计价输入用的重量与尺寸。
-// 包裹先对上此刻关联的作业实物；没有实物就没有实测。一条测量同时带重量与尺寸，取到当前有效的那一条就两样都交回。
+// ParcelMeasurementView 把节点作业按包裹答的当前有效实测译成计价的重量与外廓。
+// 取哪一条在 CurrentParcelMeasurementQuery；这里只译单位与数值，并把定不下的三种来由映成计价已经在用的那三句。
 type ParcelMeasurementView struct {
-	associations parcelUnits
-	measurements stillValidMeasurements
-	adoptions    selectionAdoptions
+	query *noapplication.CurrentParcelMeasurementQuery
 }
 
-type parcelUnits interface {
-	ListHandlingUnits(context.Context, nodomain.TenantID, nodomain.ParcelAssociationReference) ([]nodomain.HandlingUnitID, error)
-}
-
-type stillValidMeasurements interface {
-	ListStillValid(context.Context, nodomain.TenantID, nodomain.MeasurementObjectKind, string) ([]noports.ActualMeasurementRecord, error)
-}
-
-type selectionAdoptions interface {
-	FindAdoption(context.Context, nodomain.TenantID) (noports.MeasurementSelectionAdoption, bool, error)
-}
-
-func NewParcelMeasurementView(
-	associations parcelUnits,
-	measurements stillValidMeasurements,
-	adoptions selectionAdoptions,
-) (*ParcelMeasurementView, error) {
-	if associations == nil || measurements == nil || adoptions == nil {
-		return nil, fmt.Errorf("parcel pricing: actual measurement view is missing a provider port")
+func NewParcelMeasurementView(query *noapplication.CurrentParcelMeasurementQuery) (*ParcelMeasurementView, error) {
+	if query == nil {
+		return nil, fmt.Errorf("parcel pricing: actual measurement view is missing the current measurement query")
 	}
-	return &ParcelMeasurementView{
-		associations: associations,
-		measurements: measurements,
-		adoptions:    adoptions,
-	}, nil
+	return &ParcelMeasurementView{query: query}, nil
 }
 
 func (view *ParcelMeasurementView) LoadActualMeasurement(
@@ -65,30 +43,24 @@ func (view *ParcelMeasurementView) LoadActualMeasurement(
 	tenant ppdomain.TenantID,
 	object string,
 ) (pptransport.ActualMeasurementLoad, error) {
-	return view.loadActualMeasurement(ctx, tenant, object, measurementBound{})
+	return view.loadActualMeasurement(ctx, tenant, object, nil)
 }
 
-// LoadActualMeasurementAsOf 与 LoadActualMeasurement 走同一段实现，只声明发生时间上界。
+// LoadActualMeasurementAsOf 与 LoadActualMeasurement 走同一段翻译。发生时间上界交给 CurrentParcelMeasurementQuery。
 func (view *ParcelMeasurementView) LoadActualMeasurementAsOf(
 	ctx context.Context,
 	tenant ppdomain.TenantID,
 	object string,
 	asOf time.Time,
 ) (pptransport.ActualMeasurementLoad, error) {
-	return view.loadActualMeasurement(ctx, tenant, object, measurementBound{limited: true, at: asOf})
-}
-
-// measurementBound 是发生时间上界。limited 为假时与不带时点的读法同一条路径，一点不多滤。
-type measurementBound struct {
-	limited bool
-	at      time.Time
+	return view.loadActualMeasurement(ctx, tenant, object, &asOf)
 }
 
 func (view *ParcelMeasurementView) loadActualMeasurement(
 	ctx context.Context,
 	tenant ppdomain.TenantID,
 	object string,
-	bound measurementBound,
+	asOf *time.Time,
 ) (pptransport.ActualMeasurementLoad, error) {
 	none := pptransport.ActualMeasurementLoad{}
 	nodeTenant, err := nodomain.NewTenantID(tenant.String())
@@ -103,51 +75,29 @@ func (view *ParcelMeasurementView) loadActualMeasurement(
 	if err != nil {
 		return none, err
 	}
-	units, err := view.associations.ListHandlingUnits(ctx, nodeTenant, parcel)
+	var result noapplication.CurrentParcelMeasurement
+	if asOf == nil {
+		result, err = view.query.Current(ctx, nodeTenant, parcel)
+	} else {
+		result, err = view.query.CurrentAsOf(ctx, nodeTenant, parcel, *asOf)
+	}
 	if err != nil {
 		return none, err
 	}
-	switch len(units) {
-	case 0:
-		return none, nil
-	case 1:
-	default:
-		return pptransport.ActualMeasurementLoad{Undetermined: severalUnits}, nil
-	}
-	records, err := view.measurements.ListStillValid(ctx, nodeTenant, nodomain.HandlingUnitObject, units[0].String())
-	if err != nil {
-		return none, err
-	}
-	adoption, adopted, err := view.adoptions.FindAdoption(ctx, nodeTenant)
-	if err != nil {
-		return none, err
-	}
-	useForm := adopted && adoption.Form == nodomain.LatestStillValidByOccurredAt
-	measurements := make([]nodomain.ActualMeasurement, 0, len(records))
-	for _, record := range records {
-		measurements = append(measurements, record.Measurement)
-	}
-	// 时点只截发生时间，而且截在取当前有效实测之前。作废与采用形态仍按此刻读：后来作废的是登错的，
-	// 首次收寄复核也不该用；采用形态是租户此刻的取用规则，与不带时点的读法同一口径。
-	// 发生时间不晚于 asOf 才算截至那时已经取得，恰等于的算已取得。截在取用之后的话，多条无采用会先被定成不可得，
-	// 滤到只剩一条也救不回来。
-	if bound.limited {
-		still := make([]nodomain.ActualMeasurement, 0, len(measurements))
-		for _, measurement := range measurements {
-			if !measurement.Source().OccurredAt().After(bound.at) {
-				still = append(still, measurement)
-			}
+	switch result.Answer() {
+	case noapplication.UndeterminedCurrentParcelMeasurement:
+		text, err := causeText(result.Cause())
+		if err != nil {
+			return none, err
 		}
-		measurements = still
-	}
-	current, answer, cause := nodomain.SelectCurrentMeasurement(measurements, useForm)
-	switch answer {
-	case nodomain.CurrentMeasurementUndetermined:
-		return pptransport.ActualMeasurementLoad{Undetermined: causeText(cause)}, nil
-	case nodomain.CurrentMeasurementOne:
-	default:
+		return pptransport.ActualMeasurementLoad{Undetermined: text}, nil
+	case noapplication.OneCurrentParcelMeasurement:
+	case noapplication.NoCurrentParcelMeasurement:
 		return none, nil
+	default:
+		return none, fmt.Errorf("parcel pricing: current parcel measurement answer %s", result.Answer())
 	}
+	current := result.Measurement()
 	weight, undetermined := translateWeight(current)
 	if undetermined != "" {
 		return pptransport.ActualMeasurementLoad{Undetermined: undetermined}, nil
@@ -163,12 +113,16 @@ func (view *ParcelMeasurementView) loadActualMeasurement(
 	return pptransport.ActualMeasurementLoad{Found: true, Weight: weight, Dimensions: dimensions, Fact: fact}, nil
 }
 
-func causeText(cause nodomain.CurrentMeasurementCause) string {
+func causeText(cause noapplication.CurrentParcelMeasurementCause) (string, error) {
 	switch cause {
-	case nodomain.SameOccurredAt:
-		return sameOccurredAt
+	case noapplication.SeveralAssociatedHandlingUnits:
+		return severalUnits, nil
+	case noapplication.SeveralStillValidWithoutAdoption:
+		return severalMeasurements, nil
+	case noapplication.OccurredAtTied:
+		return sameOccurredAt, nil
 	default:
-		return severalMeasurements
+		return "", fmt.Errorf("parcel pricing: current parcel measurement cause %s", cause)
 	}
 }
 
