@@ -320,3 +320,51 @@ func TestTechnicalReceiptsAttachByChannelMessageAndFoldTheCurrentJudgment(t *tes
 		t.Fatalf("缺消息号 = %v", result.Outcome())
 	}
 }
+
+// 通道适配器的用例自己组申报包，碰不到 packageOf。毛重是成版时记下的，发送编排必须原样带出去，否则接收方分不清「没称过」和「这一版没带这一格」。
+func TestSendingCarriesTheMemberWeightFixedOnTheVersion(t *testing.T) {
+	declaration := newDeclarationFixture(t)
+	declaration.weights.one = map[string]ports.MeasuredWeightReading{
+		"parcel-1": {GrossWeight: "2.1", GrossWeightUnit: "KG", MeasurementSource: "SYN-WEIGH-A", MeasuredAt: weighedAt},
+	}
+	command := declarationCommand(t)
+	command.InitialResult, command.SentAt = domain.AttemptRegisteredPendingSend, time.Time{}
+	submitted, err := declaration.handler.Handle(context.Background(), command)
+	if err != nil || submitted.Outcome() != application.DeclarationSubmitted {
+		t.Fatalf("预置提交：outcome=%v err=%v", submitted.Outcome(), err)
+	}
+	record, _ := submitted.Record()
+	fixture := &sendFixture{declaration: declaration, books: newSendBooks(),
+		sender: &senderDouble{answer: application.ChannelAnswer{Answered: true, Accepted: true, Message: "MSG-1"}},
+		tenant: command.TenantID, version: record.Version.ID()}
+	send, err := application.NewSendDeclarationHandler(application.SendDeclarationDeps{Submissions: declaration.store,
+		Channels: fixture.books, SendFacts: fixture.books, Readiness: declaration.readiness, Authority: declaration.authority,
+		Sender: fixture.sender, Clock: fixedClock{at: sendAt}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.send = send
+	fixture.registerChannel(t)
+	result, err := fixture.send.Send(context.Background(), fixture.tenant, fixture.version)
+	if err != nil || result.Outcome() != application.DeclarationSent || len(fixture.sender.packages) != 1 {
+		t.Fatalf("发送 = %v err = %v 包 = %d", result.Outcome(), err, len(fixture.sender.packages))
+	}
+	got := fixture.sender.packages[0].MemberWeights
+	if len(got) != 1 || got[0].Parcel != "parcel-1" || got[0].GrossWeight != "2.1" || got[0].GrossWeightUnit != "KG" ||
+		got[0].MeasurementSource != "SYN-WEIGH-A" || !got[0].MeasuredAt.Equal(weighedAt) {
+		t.Fatalf("申报包毛重 = %+v", got)
+	}
+}
+
+func TestSendingAnUnweighedVersionCarriesAnEmptyWeightSlice(t *testing.T) {
+	fixture := newSendFixture(t)
+	fixture.registerChannel(t)
+	result, err := fixture.send.Send(context.Background(), fixture.tenant, fixture.version)
+	if err != nil || result.Outcome() != application.DeclarationSent || len(fixture.sender.packages) != 1 {
+		t.Fatalf("发送 = %v err = %v 包 = %d", result.Outcome(), err, len(fixture.sender.packages))
+	}
+	weights := fixture.sender.packages[0].MemberWeights
+	if weights == nil || len(weights) != 0 {
+		t.Fatalf("没有毛重时应是空切片，得到 %#v", weights)
+	}
+}
