@@ -224,6 +224,10 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   SETTLED_CUSTOMER_RECEIVABLE: muted('已核销客户应收'),
   SETTLED_AUDITED_PAYABLE: muted('已核销审核应付'),
   SETTLED_SUPPLIER_CREDIT_NOTE: muted('已核销供应商贷项'),
+  // 面单渠道直接成本答不出毛利时的当前答案。它们不是口径，也不带金额。
+  INDETERMINATE: warn('判不出'),
+  INCOMPLETE_COST: warn('成本不全'),
+  PENDING_JUDGMENT: warn('待判断'),
   // 资金可核到的目标。
   STATEMENT: muted('客户对账单'),
   CREDIT_NOTE: muted('供应商贷项'),

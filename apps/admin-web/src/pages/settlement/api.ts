@@ -522,9 +522,20 @@ export interface CostAllocationRecord {
   portions: AllocationPortionRecord[];
 }
 
+/** 答不出毛利的当前答案。不带 margin：缺一侧、成本不全、待判断都不是算出来的毛利。 */
+export interface DirectOperatingDispositionRecord {
+  scope: string;
+  basis: string;
+  /** INDETERMINATE 判不出 / INCOMPLETE_COST 成本不全 / PENDING_JUDGMENT 待判断。 */
+  disposition: string;
+  recordedAt: string;
+}
+
 export interface OperatingResultListResponseBody {
-  outcome: 'OPERATING_RESULTS_LISTED';
+  /** LISTED 是已经采用；UNCONFIGURED 是册上没有这一户，不是空的 results。 */
+  outcome: 'OPERATING_RESULTS_LISTED' | 'OPERATING_BASIS_UNCONFIGURED';
   results: OperatingResultRecord[];
+  dispositions: DirectOperatingDispositionRecord[];
   page: CataloguePage;
 }
 

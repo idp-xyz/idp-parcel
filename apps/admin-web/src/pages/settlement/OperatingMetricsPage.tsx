@@ -13,9 +13,9 @@ import {
   listSettlementOperatingResults,
   registryConditions,
   type CostAllocationRecord,
-  type OperatingResultRecord,
   type RegistryConditions,
 } from './api';
+import { classifyOperatingMetrics, operatingMetricsRowKey, type OperatingMetricsRow } from './operating-metrics';
 import { formatMoney, technicalRows } from './ops-ui';
 
 // 经营核算页（主责上下文 settlement-accounting，UC-SA-006 按口径、版本、币种与截至时点派生经营毛利）。两签都接
@@ -31,46 +31,66 @@ const info = moduleInfoById['operating-metrics'];
 
 // —— 经营结果签 ——
 
-function resultTechnicalRows(row: OperatingResultRecord) {
+function resultTechnicalRows(row: OperatingMetricsRow) {
+  if (row.kind === 'disposition') {
+    return technicalRows([
+      { label: '分析范围', value: row.record.scope },
+      { label: '答案', value: labelFor(row.record.disposition) },
+      { label: '登记时间', value: formatInstant(row.record.recordedAt) },
+    ]);
+  }
   return technicalRows([
-    { label: '分析范围', value: row.scope },
-    { label: '账期', value: row.period },
-    { label: '计算版本', value: row.version },
-    { label: '纠错自', value: row.corrects },
-    { label: '登记时间', value: formatInstant(row.recordedAt) },
+    { label: '分析范围', value: row.record.scope },
+    { label: '账期', value: row.record.period },
+    { label: '计算版本', value: row.record.version },
+    { label: '纠错自', value: row.record.corrects },
+    { label: '登记时间', value: formatInstant(row.record.recordedAt) },
   ]);
 }
 
-const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
-  { id: 'scope', header: '分析范围', className: 'font-mono type-body leading-4 text-idpxyz-textBright', render: (row) => row.scope },
-  { id: 'period', header: '账期', className: 'font-mono type-body leading-4', render: (row) => row.period },
+const operatingResultColumns: ListColumn<OperatingMetricsRow>[] = [
+  {
+    id: 'scope',
+    header: '分析范围',
+    className: 'font-mono type-body leading-4 text-idpxyz-textBright',
+    render: (row) => row.record.scope,
+  },
+  {
+    id: 'period',
+    header: '账期',
+    className: 'font-mono type-body leading-4',
+    render: (row) => (row.kind === 'result' ? row.record.period : '—'),
+  },
   {
     id: 'basis',
     header: '口径',
     align: 'center',
     // 封闭三格。索赔调整后口径必须声明所依附的基础口径，属编排层组合，不是第四格。
-    render: (row) => <StatusPill code={row.basis} />,
+    render: (row) => <StatusPill code={row.record.basis} />,
   },
   {
     id: 'margin',
     header: '毛利',
     align: 'right',
     className: 'font-mono type-body leading-4 tabular-nums',
-    // 带符号照实呈现，负值即经营损失。不重算：派生它的门在写口，读侧再算一遍就成了第二处定义。
-    render: (row) => (
-      <span className={row.margin.startsWith('-') ? 'text-[color:var(--ds-status-danger-fg)]' : 'text-idpxyz-textBright'}>
-        {formatMoney(row.margin, row.currency)}
-      </span>
-    ),
+    // 快照带符号照实呈现，负值即经营损失。答不出毛利的那一行不写数字：判不出、成本不全、待判断都不是把缺的一侧当零。
+    render: (row) =>
+      row.kind === 'result' ? (
+        <span className={row.record.margin.startsWith('-') ? 'text-[color:var(--ds-status-danger-fg)]' : 'text-idpxyz-textBright'}>
+          {formatMoney(row.record.margin, row.record.currency)}
+        </span>
+      ) : (
+        <StatusPill code={row.record.disposition} />
+      ),
   },
   {
     id: 'components',
     header: '组成',
-    // 角色照册转写，不是页面判出来的。空数组是「这份快照没有组成项」的如实一格，不留白。
+    // 角色照册转写，不是页面判出来的。答不出毛利的行没有组成项，也不留成空白。
     render: (row) =>
-      row.components.length > 0 ? (
+      row.kind === 'result' && row.record.components.length > 0 ? (
         <div className="min-w-64 type-body leading-4">
-          {row.components.map((component) => (
+          {row.record.components.map((component) => (
             <p key={`${component.role}:${component.source}:${component.effect}:${component.amount}`} className="whitespace-nowrap">
               {labelFor(component.role)}
               <span className="text-idpxyz-textMuted">（{labelFor(component.effect)}）</span> {formatMoney(component.amount, '')}
@@ -79,14 +99,14 @@ const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
           ))}
         </div>
       ) : (
-        <span className="text-idpxyz-textMuted">无组成项</span>
+        <span className="text-idpxyz-textMuted">{row.kind === 'result' ? '无组成项' : '不出毛利'}</span>
       ),
   },
   {
     id: 'as-of',
     header: '截至',
     className: 'whitespace-nowrap font-mono type-body leading-4',
-    render: (row) => formatInstant(row.asOf),
+    render: (row) => (row.kind === 'result' ? formatInstant(row.record.asOf) : formatInstant(row.record.recordedAt)),
   },
   {
     id: 'technical',
@@ -103,27 +123,38 @@ function OperatingResultsTable() {
   const [search, setSearch] = useState('');
   const conditions = registryConditions('operating-result', { q: useSettledKeyword(search) });
   const { answer, pagination, retry } = useCatalogueCursor(conditions, loadOperatingResults);
-  const results = answer?.kind === 'outcome' ? answer.body.results : [];
+  const classified = answer?.kind === 'outcome' ? classifyOperatingMetrics(answer.body) : null;
+  const rows = classified?.kind === 'listed' ? classified.rows : [];
+  const unconfigured = classified?.kind === 'unconfigured';
 
   return (
-    <ListPageTemplate<OperatingResultRecord>
+    <ListPageTemplate<OperatingMetricsRow>
       title="经营结果"
-      description="按范围和账期算出的毛利，分预估、已确认、已结算三种口径"
+      description="按包裹和账期派生的直接成本毛利；没采用、判不出、成本不全各自成格，不写成一条毛利"
       search={{ value: search, onChange: setSearch, placeholder: '搜分析范围、账期、计算版本' }}
-      filterSummary={answer?.kind === 'outcome' ? `本页 ${results.length} 份快照` : undefined}
+      filterSummary={classified?.kind === 'listed' ? `本页 ${rows.length} 行` : undefined}
       columns={operatingResultColumns}
-      rows={results}
-      // 行键循口径三件加计算版本：同一范围同一账期下各口径各版本分别成行。
-      rowKey={(row) => [row.scope, row.period, row.basis, row.version].join(':')}
+      rows={rows}
+      rowKey={operatingMetricsRowKey}
       emptyRowsNote="没有匹配的快照"
       pagination={pagination}
-      viewState={catalogueViewState(answer, results.length, retry, {
-        module: info,
-        endpoint: 'GET /settlement-operating-results?registry=operating-result',
-        emptyTitle: '还没有经营结果',
-        emptyDescription: '费用确认、账单审核之后系统按口径算出毛利，这里会随之出现；页面不会为好看造任何毛利或损失数字。',
-        narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
-      })}
+      viewState={
+        unconfigured
+          ? {
+              kind: 'unconfigured',
+              title: '经营口径还没有采用',
+              description:
+                '这一户还没有登记采用预估或已确认。这不是已经采用、只是还没有结果：没有这一行，系统不派生毛利。',
+            }
+          : catalogueViewState(answer, rows.length, retry, {
+              module: info,
+              endpoint: 'GET /settlement-operating-results?registry=operating-result',
+              emptyTitle: '还没有经营结果',
+              emptyDescription:
+                '已经采用的口径下，费用与成本成对之后这里会出现组成项。只有一侧是判不出，网络服务或共享成本是成本不全，都不会写成一条毛利。',
+              narrowed: catalogueConditionsNarrow(conditions) || pastFirstPage(pagination),
+            })
+      }
     />
   );
 }
