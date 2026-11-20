@@ -281,13 +281,25 @@ func TestEveryOwnIntakeWriteLineReadsItsBodyThroughTheCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	node := workScopeFixtures[accessidentity.WorkScopeNode]
+	warehouse := workScopeFixtures[accessidentity.WorkScopeWarehouse]
 	if err := db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
-		registration, err := accessidentity.NewDeviceRegistration("SYN-TENANT-01", node.device, mustScope("NODE", node.reference), "SYN-BASIS")
-		if err != nil {
-			return err
+		for _, fixture := range []struct {
+			kind   string
+			device string
+			ref    string
+		}{
+			{"NODE", node.device, node.reference},
+			{"WAREHOUSE", warehouse.device, warehouse.reference},
+		} {
+			registration, err := accessidentity.NewDeviceRegistration("SYN-TENANT-01", fixture.device, mustScope(fixture.kind, fixture.ref), "SYN-BASIS")
+			if err != nil {
+				return err
+			}
+			if _, err = devices.RegisterDevice(ctx, registration); err != nil {
+				return err
+			}
 		}
-		_, err = devices.RegisterDevice(ctx, registration)
-		return err
+		return nil
 	}); err != nil {
 		t.Fatalf("登设备：%v", err)
 	}

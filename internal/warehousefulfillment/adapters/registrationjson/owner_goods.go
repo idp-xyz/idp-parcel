@@ -45,8 +45,8 @@ func ReadOwnerGoods(reader io.Reader) (OwnerGoodsFields, error) {
 	if err := document.refuseCarriedIdentity(); err != nil {
 		return none, err
 	}
-	if err := document.refuseOwner(); err != nil {
-		return none, err
+	if len(document.OwnerAccount) > 0 {
+		return none, malformed("ownerAccount must not be carried in the payload; the owner comes from the customer access channel")
 	}
 	code, err := requiredText("goodsCode", document.GoodsCode, domain.NewGoodsCode)
 	if err != nil {
