@@ -151,6 +151,10 @@ func (UnconfiguredIntake) IntakeRevokeUnclaimedClaim(
 	return application.RevokeUnclaimedClaimCommand{}, ErrAccessChannelNotConfigured
 }
 
+func (UnconfiguredIntake) IntakeStockImport(context.Context, *http.Request) (application.SubmitStockImportCommand, error) {
+	return application.SubmitStockImportCommand{}, ErrAccessChannelNotConfigured
+}
+
 func (UnconfiguredIntake) IntakeDisposeUnclaimedArrival(
 	context.Context, *http.Request,
 ) (application.DisposeUnclaimedArrivalCommand, error) {

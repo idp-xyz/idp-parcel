@@ -331,6 +331,10 @@ const DecisionOutboundConfirmationCorrection DecisionKind = "OUTBOUND_CONFIRMATI
 // DecisionReturnRecordOnBehalf 是退货代录（UC-WF-017；ADR-0384 决定二）。预报与处置共用这一种授予。谁持有是租户取值。
 const DecisionReturnRecordOnBehalf DecisionKind = "RETURN_RECORD_ON_BEHALF"
 
+// DecisionStockImportSubmission 是建账导入提交（UC-WF-006；ADR-0384 决定二）。
+// 带决定标识的是提交，重放身份就是导入标识。批准与驳回是另一种授予。谁持有是租户取值。
+const DecisionStockImportSubmission DecisionKind = "STOCK_IMPORT_SUBMISSION"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -394,6 +398,7 @@ var decisionKinds = []DecisionKind{
 	DecisionWaveRelease,
 	DecisionOutboundConfirmationCorrection,
 	DecisionReturnRecordOnBehalf,
+	DecisionStockImportSubmission,
 }
 
 // DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。

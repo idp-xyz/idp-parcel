@@ -163,6 +163,8 @@ type warehouseFulfillmentOrchestration struct {
 	unclaimedArrivalRegister transactionalUnclaimedArrivalRegistration
 	unclaimedArrivalManage   transactionalUnclaimedArrivalManagement
 	unclaimedArrivalQueries  *warehouseapp.QueryUnclaimedArrivalsHandler
+	stockImportSubmit        transactionalStockImport
+	stockImportQueries       *whpostgres.StockImports
 
 	internalJobs       transactionalInternalJob
 	internalJobQueries *warehouseapp.QueryInternalJobsHandler
@@ -351,6 +353,20 @@ func (management transactionalUnclaimedArrivalManagement) Dispose(
 	})
 }
 
+type transactionalStockImport struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.StockImportHandler
+}
+
+func (submission transactionalStockImport) Submit(
+	ctx context.Context,
+	command warehouseapp.SubmitStockImportCommand,
+) (warehouseapp.StockImportResult, error) {
+	return inTransaction(ctx, submission.transactor, func(txCtx context.Context) (warehouseapp.StockImportResult, error) {
+		return submission.inner.Submit(txCtx, command)
+	})
+}
+
 func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.Assigner, isolated *isolatedWriteAdmission, selfAuthority string) (warehouseFulfillmentOrchestration, error) {
 	none := warehouseFulfillmentOrchestration{}
 	warehouses, err := whpostgres.NewWarehouses(db)
@@ -432,6 +448,10 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	arrivals, err := whpostgres.NewUnclaimedArrivals(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: unclaimed arrivals: %w", err)
+	}
+	stockImports, err := whpostgres.NewStockImports(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: stock imports: %w", err)
 	}
 	arrivalIDs, err := whidentity.NewUnclaimedArrivalIdentities()
 	if err != nil {
@@ -763,22 +783,29 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		unclaimedArrivalRegister: unclaimedArrivalRegister,
 		unclaimedArrivalManage:   unclaimedArrivalManage,
 		unclaimedArrivalQueries:  warehouseapp.NewQueryUnclaimedArrivalsHandler(arrivals),
-		internalJobs:             internalJobs,
-		internalJobQueries:       warehouseapp.NewQueryInternalJobsHandler(internalJobStore, internalJobStore),
-		instructions:             instructions,
-		freezes:                  freezes,
-		stockQueries:             stockQueries,
-		counts:                   counts,
-		approvals:                approvals,
-		adjustments:              adjustments,
-		jobDiscrepancies:         jobDiscrepancies,
-		outbounds:                outbounds,
-		waves:                    waves,
-		followUps:                followUps,
-		returns:                  returns,
-		agents:                   agents,
-		charges:                  charges,
-		warehouseAdoptions:       warehouseAdoptions,
+		stockImportSubmit: transactionalStockImport{
+			transactor: db.Transactor(),
+			inner: warehouseapp.NewStockImportHandler(
+				stockImports, owners, warehouses, locations, zones, goods, cartons, cartonIDs, poster, systemClock{},
+			),
+		},
+		stockImportQueries: stockImports,
+		internalJobs:       internalJobs,
+		internalJobQueries: warehouseapp.NewQueryInternalJobsHandler(internalJobStore, internalJobStore),
+		instructions:       instructions,
+		freezes:            freezes,
+		stockQueries:       stockQueries,
+		counts:             counts,
+		approvals:          approvals,
+		adjustments:        adjustments,
+		jobDiscrepancies:   jobDiscrepancies,
+		outbounds:          outbounds,
+		waves:              waves,
+		followUps:          followUps,
+		returns:            returns,
+		agents:             agents,
+		charges:            charges,
+		warehouseAdoptions: warehouseAdoptions,
 	}, nil
 }
 

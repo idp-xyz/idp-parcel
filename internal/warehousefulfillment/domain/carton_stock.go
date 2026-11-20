@@ -25,7 +25,7 @@ func NewCartonInboundBatchID(value string) (CartonInboundBatchID, error) {
 	return CartonInboundBatchID{required}, err
 }
 
-// CartonMovementReason 是整箱流水的原因。收货写 +1；库内移动同一箱写 -1 与 +1，不新起入库批次。
+// CartonMovementReason 是整箱流水的原因。收货写 +1；库内移动同一箱写 -1 与 +1，不新起入库批次。建账导入另记，不写成收货。
 type CartonMovementReason uint8
 
 const (
@@ -33,6 +33,7 @@ const (
 	CartonMovementReceipt
 	CartonMovementInternalMove
 	CartonMovementUnboxing
+	CartonMovementTakeOnImport
 )
 
 func (reason CartonMovementReason) String() string {
@@ -43,6 +44,8 @@ func (reason CartonMovementReason) String() string {
 		return "INTERNAL_MOVE"
 	case CartonMovementUnboxing:
 		return "UNBOXING"
+	case CartonMovementTakeOnImport:
+		return "TAKE_ON_IMPORT"
 	default:
 		return ""
 	}

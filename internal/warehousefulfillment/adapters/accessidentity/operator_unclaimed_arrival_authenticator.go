@@ -52,6 +52,27 @@ func (authenticator *OperatorUnclaimedDispositionAuthenticator) AuthenticateUncl
 	return mintWarehouseDecision(ctx, authenticator.minter, bearerToken, identity.DecisionUnclaimedArrivalDisposition)
 }
 
+// OperatorStockImportAuthenticator 认证建账导入提交（决定种类 STOCK_IMPORT_SUBMISSION，准入两格同取字面量）。
+type OperatorStockImportAuthenticator struct {
+	minter Minter
+}
+
+var _ warehousehttp.StockImportSubmissionAuthenticator = (*OperatorStockImportAuthenticator)(nil)
+
+func NewOperatorStockImportAuthenticator(minter Minter) (*OperatorStockImportAuthenticator, error) {
+	if minter == nil {
+		return nil, errors.New("warehouse fulfillment accessidentity: stock import authenticator needs a minter")
+	}
+	return &OperatorStockImportAuthenticator{minter: minter}, nil
+}
+
+func (authenticator *OperatorStockImportAuthenticator) AuthenticateStockImportSubmission(
+	ctx context.Context,
+	bearerToken string,
+) (warehousehttp.OperatorIdentity, error) {
+	return mintWarehouseDecision(ctx, authenticator.minter, bearerToken, identity.DecisionStockImportSubmission)
+}
+
 func mintWarehouseDecision(
 	ctx context.Context,
 	minter Minter,

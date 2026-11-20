@@ -114,3 +114,19 @@ var UnclaimedArrivalPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	},
 	Selectors: []string{"receivedFrom", "receivedTo"},
 })
+
+// StockImportPages 是运营查阅建账导入列表的查询声明（UC-WF-006）。筛选维覆盖货主、仓与状态。
+var StockImportPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-stock-imports",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "submittedAt", Kind: cataloguepage.Instant},
+		{Name: "importId", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "submittedAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "ownerAccount"},
+		{Name: "warehouseCode"},
+		{Name: "status", Vocabulary: []string{"PENDING", "POSTED", "REJECTED"}},
+	},
+})

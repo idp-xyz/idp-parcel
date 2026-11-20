@@ -498,6 +498,14 @@ func (channels endpointChannels) unclaimedArrivalClaim() warehousehttp.Unclaimed
 	return warehousehttp.UnconfiguredIntake{}
 }
 
+// stockImportSubmission 是建账导入提交口的运营决定 Intake。
+func (channels endpointChannels) stockImportSubmission() warehousehttp.StockImportSubmissionIntake {
+	if channels.operatorDecisions.warehouseStockImport != nil {
+		return channels.operatorDecisions.warehouseStockImport
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
 // unclaimedArrivalDisposition 是待认领到货处置口的运营决定 Intake。
 func (channels endpointChannels) unclaimedArrivalDisposition() warehousehttp.UnclaimedArrivalDispositionIntake {
 	if channels.operatorDecisions.warehouseUnclaimedDisposition != nil {

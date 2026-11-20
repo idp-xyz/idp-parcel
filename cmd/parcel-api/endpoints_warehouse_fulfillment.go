@@ -76,6 +76,8 @@ type warehouseFulfillmentWiring struct {
 	unclaimedArrivalRegister warehousehttp.UnclaimedArrivalRegistrar
 	unclaimedArrivalManage   warehousehttp.UnclaimedArrivalManager
 	unclaimedArrivalQueries  warehousehttp.UnclaimedArrivalQueries
+	stockImportSubmit        warehousehttp.StockImportSubmissions
+	stockImportQueries       warehousehttp.StockImportQueries
 
 	internalMoveIntake        *warehousehttp.InternalJobWorkFactIntake
 	formConversionIntake      *warehousehttp.InternalJobWorkFactIntake
@@ -335,6 +337,16 @@ func init() {
 			"/warehouse-fulfillment-unclaimed-arrival": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-unclaimed-arrival?arrivalId=SYN-UCA-01",
+			},
+			"/warehouse-fulfillment-stock-import-submissions": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockImportSubmission), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-imports": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-import": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-stock-import?importId=SYN-IMP-01",
 			},
 			// 库内作业四个登记口挂作业事实登记（范围种类 WAREHOUSE）。上架、移库与补货都是 INTERNAL_MOVE。
 			"/warehouse-fulfillment-internal-moves": {
@@ -719,6 +731,8 @@ func init() {
 				unclaimedArrivalRegister:  orchestration.unclaimedArrivalRegister,
 				unclaimedArrivalManage:    orchestration.unclaimedArrivalManage,
 				unclaimedArrivalQueries:   orchestration.unclaimedArrivalQueries,
+				stockImportSubmit:         orchestration.stockImportSubmit,
+				stockImportQueries:        orchestration.stockImportQueries,
 				internalMoveIntake:        internalMoveIntake,
 				formConversionIntake:      formConversionIntake,
 				conditionConversionIntake: conditionConversionIntake,
@@ -816,6 +830,9 @@ func init() {
 			unclaimedArrivalDispose := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			unclaimedArrivalList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			unclaimedArrivalOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			stockImportSubmission := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockImportList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			stockImportOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			internalMove := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			formConversion := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			conditionConversion := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -960,6 +977,9 @@ func init() {
 				unclaimedArrivalDispose = warehousehttp.NewDisposeUnclaimedArrivalEndpoint(channels.unclaimedArrivalDisposition(), wiring.unclaimedArrivalManage)
 				unclaimedArrivalList = warehousehttp.NewQueryUnclaimedArrivalsEndpoint(catalogueIntake, wiring.unclaimedArrivalQueries)
 				unclaimedArrivalOne = warehousehttp.NewQueryUnclaimedArrivalEndpoint(catalogueIntake, wiring.unclaimedArrivalQueries)
+				stockImportSubmission = warehousehttp.NewSubmitStockImportEndpoint(channels.stockImportSubmission(), wiring.stockImportSubmit)
+				stockImportList = warehousehttp.NewQueryStockImportsEndpoint(catalogueIntake, wiring.stockImportQueries)
+				stockImportOne = warehousehttp.NewQueryStockImportEndpoint(catalogueIntake, wiring.stockImportQueries)
 				internalMoveIntake := warehousehttp.UnconfiguredInternalJobIntake{}
 				if wiring.internalMoveIntake != nil {
 					internalMove = warehousehttp.NewRegisterInternalJobEndpoint(wiring.internalMoveIntake, wiring.internalJobs)
@@ -1171,6 +1191,9 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrival-dispositions", Handler: unclaimedArrivalDispose},
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrivals", Handler: unclaimedArrivalList},
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrival", Handler: unclaimedArrivalOne},
+				{Pattern: "/warehouse-fulfillment-stock-import-submissions", Handler: stockImportSubmission},
+				{Pattern: "/warehouse-fulfillment-stock-imports", Handler: stockImportList},
+				{Pattern: "/warehouse-fulfillment-stock-import", Handler: stockImportOne},
 				{Pattern: "/warehouse-fulfillment-internal-moves", Handler: internalMove},
 				{Pattern: "/warehouse-fulfillment-form-conversions", Handler: formConversion},
 				{Pattern: "/warehouse-fulfillment-condition-conversions", Handler: conditionConversion},
