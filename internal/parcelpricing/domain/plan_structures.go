@@ -195,6 +195,15 @@ func (calculation SurchargeCalculation) PercentOfBasis() (Decimal, string, bool)
 	return *calculation.percentage, calculation.basis, true
 }
 
+// SeriesRate 只在「按公布序列费率计的基数百分比」上给出：序列种类、乘在读数上的系数、基数依赖。
+// 卡上写死百分数的那一种由 PercentOfBasis 交回；两种费率来源不能同时在，这里与它对成一对。
+func (calculation SurchargeCalculation) SeriesRate() (ReferenceSeriesKind, Decimal, string, bool) {
+	if calculation.method != ChargeMethodPercentOfBasis || calculation.seriesKind == nil || calculation.seriesFactor == nil {
+		return "", Decimal{}, "", false
+	}
+	return *calculation.seriesKind, *calculation.seriesFactor, calculation.basis, true
+}
+
 func (calculation SurchargeCalculation) Operands() []SurchargeCalculation {
 	return append([]SurchargeCalculation(nil), calculation.operands...)
 }

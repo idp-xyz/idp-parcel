@@ -207,3 +207,25 @@ func seriesPlan(t *testing.T, factor string) domain.PricingPlanVersion {
 	}
 	return planWithStructures(t, structures)
 }
+
+// SeriesRate 与 PercentOfBasis 各交一种费率来源：序列费率不从百分数那一格漏出来，写死的百分数也不装成序列。
+func TestSeriesRateAndPercentOfBasisAreTheTwoSources(t *testing.T) {
+	series, err := domain.NewSeriesRateSurcharge(domain.ReferenceSeriesFuelRate, decimal(t, "0.8"), "freight")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kind, factor, basis, ok := series.SeriesRate()
+	if !ok || kind != domain.ReferenceSeriesFuelRate || factor.String() != "0.8" || basis != "freight" {
+		t.Fatalf("序列费率 %s %s %s ok=%v", kind, factor.String(), basis, ok)
+	}
+	if _, _, percentOK := series.PercentOfBasis(); percentOK {
+		t.Fatal("序列费率不该同时交回写死的百分数")
+	}
+	percent, err := domain.NewPercentOfBasisSurcharge(decimal(t, "12.5"), "freight")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, seriesOK := percent.SeriesRate(); seriesOK {
+		t.Fatal("写死的百分数不该装成序列费率")
+	}
+}
