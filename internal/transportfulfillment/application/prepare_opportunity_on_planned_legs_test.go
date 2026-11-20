@@ -38,11 +38,16 @@ type preparationStoreDouble struct {
 	records    map[ports.TransportPreparationKey]ports.TransportPreparationRecord
 	raceWinner *ports.TransportPreparationRecord
 	findErr    error
+	failFind   string
+	listErr    error
 }
 
 func (double *preparationStoreDouble) FindByKey(_ context.Context, key ports.TransportPreparationKey) (ports.TransportPreparationRecord, bool, error) {
 	if double.findErr != nil {
 		return ports.TransportPreparationRecord{}, false, double.findErr
+	}
+	if double.failFind != "" && key.Leg.String() == double.failFind {
+		return ports.TransportPreparationRecord{}, false, errors.New("preparation store down")
 	}
 	record, found := double.records[key]
 	return record, found, nil
@@ -63,6 +68,9 @@ func (double *preparationStoreDouble) ListDeclaredPreparationLegs(
 	object domain.CarriedObjectReference,
 	rule domain.PreparationRuleVersion,
 ) ([]domain.PreparationLeg, error) {
+	if double.listErr != nil {
+		return nil, double.listErr
+	}
 	var legs []domain.PreparationLeg
 	for key, record := range double.records {
 		if key.TenantID != tenant || key.Object != object || key.Rule != rule || key.Source != domain.DemandFromDeclaration {
@@ -83,6 +91,7 @@ func (clockDouble) Now() time.Time { return preparedAt }
 func preparationHandler(demand demandDouble, schedules candidateSourceDouble, pools poolsOnSchedulesDouble, store *preparationStoreDouble) *application.PrepareOnPlannedLegsHandler {
 	return application.NewPrepareOnPlannedLegsHandler(application.PrepareOnPlannedLegsDeps{
 		Demand: demand, Schedules: schedules, Pools: pools, Preparations: store, Clock: clockDouble{},
+		Measured: noneMeasured(),
 	})
 }
 

@@ -89,6 +89,7 @@ func newPreparationStores(t *testing.T) preparationStores {
 		Pools:        stores.pools,
 		Preparations: stores.preparations,
 		Clock:        clock,
+		Measured:     noneMeasuredDemand{},
 	})
 	stores.opportunity = application.NewPrepareTransportOpportunityHandler(application.PrepareTransportOpportunityDeps{
 		Pools:     stores.pools,
@@ -96,6 +97,21 @@ func newPreparationStores(t *testing.T) preparationStores {
 		Clock:     clock,
 	})
 	return stores
+}
+
+type noneMeasuredDemand struct{}
+
+func (noneMeasuredDemand) LoadMeasuredDemand(context.Context, domain.TenantID, domain.CarriedObjectReference) (ports.MeasuredDemandReading, error) {
+	return ports.MeasuredDemandReading{Answer: ports.MeasuredDemandNone}, nil
+}
+
+type failingMeasuredDemand struct{ err error }
+
+func (double failingMeasuredDemand) LoadMeasuredDemand(context.Context, domain.TenantID, domain.CarriedObjectReference) (ports.MeasuredDemandReading, error) {
+	if double.err == nil {
+		double.err = errors.New("measured demand down")
+	}
+	return ports.MeasuredDemandReading{}, double.err
 }
 
 func (stores preparationStores) run(t *testing.T, command application.PrepareOnPlannedLegsCommand) application.PrepareOnPlannedLegsResult {
@@ -373,5 +389,37 @@ func TestTransportPreparationsRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 	if _, err := stores.preparations.Save(t.Context(), record); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务落准备结果应返回 ErrTransactionRequired，实得：%v", err)
+	}
+}
+
+// Covers: 初始准备读实测读不动时整次未决，调用方回滚后申报那一份也不留。
+func TestAFailedMeasuredReadLeavesNoDeclarationRow(t *testing.T) {
+	stores := newPreparationStores(t)
+	clock := fixedScheduleClock{at: time.Date(2026, 10, 19, 1, 0, 0, 0, time.UTC)}
+	handler := application.NewPrepareOnPlannedLegsHandler(application.PrepareOnPlannedLegsDeps{
+		Demand: stores.demand, Schedules: stores.candidates, Pools: stores.pools,
+		Preparations: stores.preparations, Clock: clock, Measured: failingMeasuredDemand{},
+	})
+	tenant := deliveryValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	leg := preparationLeg(t, "SYN-RPV-1#1", "SYN-CONN-EMPTY", departure, departure.Add(time.Hour))
+	err := stores.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		result, err := handler.Prepare(txCtx, application.PrepareOnPlannedLegsCommand{
+			TenantID: tenant, Object: "SYN-PARCEL-01", Route: application.PlannedRouteFormed,
+			Legs: []domain.PreparationLeg{leg},
+		})
+		if err != nil {
+			return err
+		}
+		if result.Outcome() != application.PreparationRunUndecided || result.UndecidedReason() != application.MeasuredDemandUnavailable {
+			return errors.New(result.Outcome().String() + "/" + result.UndecidedReason().String())
+		}
+		return errors.New("roll back the undecided preparation")
+	})
+	if err == nil {
+		t.Fatal("未决被提交了")
+	}
+	var count int
+	if err := stores.pool.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.transport_preparation`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("申报行留了下来：%d err=%v", count, err)
 	}
 }

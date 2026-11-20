@@ -15,6 +15,11 @@ import (
 // ErrUnexpectedPreparationSave 说明准备结果库交回了封闭集合以外的写入结果。
 var ErrUnexpectedPreparationSave = errors.New("transport fulfillment: unexpected transport preparation save outcome")
 
+// ErrMeasuredDemandSourceUnwired 说明这一次准备要问实测需求量，装配却没把读口接上。静默当成「没有实测」会把晚于称重才跑到的
+// 初始准备做成只有申报那一份。
+var ErrMeasuredDemandSourceUnwired = errors.New(
+	"transport fulfillment: measured demand source is not wired")
+
 // PlannedRouteState 说触发这次准备的那份路由判断是什么结论。无路线判断也会到这里：它与计划已形成走同一封信，分支在
 // 判断本体上，不在信封上。
 type PlannedRouteState uint8
@@ -71,6 +76,8 @@ const (
 	ScheduleCandidatesUnavailable
 	CapacityPoolsUnavailable
 	TransportPreparationStoreUnavailable
+	// MeasuredDemandUnavailable：此刻问不到当前有效实测。没有与定不下是答案，这一格才是读口答不出、过一会儿可能就好。
+	MeasuredDemandUnavailable
 )
 
 func (reason PreparationUndecidedReason) String() string {
@@ -83,6 +90,8 @@ func (reason PreparationUndecidedReason) String() string {
 		return "CAPACITY_POOLS_UNAVAILABLE"
 	case TransportPreparationStoreUnavailable:
 		return "TRANSPORT_PREPARATION_STORE_UNAVAILABLE"
+	case MeasuredDemandUnavailable:
+		return "MEASURED_DEMAND_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -134,7 +143,8 @@ func (result PrepareOnPlannedLegsResult) UndecidedReason() PreparationUndecidedR
 	return result.reason
 }
 
-// Legs 按命令里段的次序交回各段答案；只在`已作答`时有内容。
+// Legs 先按命令里段的次序交回申报那一份，再按同一次序交回按当前有效实测补的那一份。没有实测或实测定不下时只有申报那一份。
+// 窗口结束时刻早于实测发生时刻的段不补。只在`已作答`时有内容。
 func (result PrepareOnPlannedLegsResult) Legs() []LegPreparation {
 	return append([]LegPreparation(nil), result.legs...)
 }
@@ -151,6 +161,8 @@ type PrepareOnPlannedLegsDeps struct {
 	Pools        ports.UnlockedCapacityPoolsOnSchedules
 	Preparations ports.TransportPreparationStore
 	Clock        ports.Clock
+	// Measured 是当前有效实测的需求量。nil 不是「没有实测」：要问的时候没接上，整次响亮失败。
+	Measured ports.MeasuredDemandSource
 }
 
 // PrepareOnPlannedLegsHandler 按一份路由判断上的全部计划段，逐段为一个载运对象形成运输准备结果（UC-TF-003 步 2–7）。
@@ -219,7 +231,14 @@ func (handler *PrepareOnPlannedLegsHandler) Prepare(
 		}
 		legs = append(legs, answered)
 	}
-	return PrepareOnPlannedLegsResult{outcome: PreparationRunAnswered, legs: legs}, nil
+	measured, undecided, err := handler.supplementMeasured(ctx, command.TenantID, object, rule, command.Legs)
+	if err != nil {
+		return PrepareOnPlannedLegsResult{}, err
+	}
+	if undecided != nil {
+		return *undecided, nil
+	}
+	return PrepareOnPlannedLegsResult{outcome: PreparationRunAnswered, legs: append(legs, measured...)}, nil
 }
 
 // prepareLeg 先按身份看有没有结果：有就按依据摘要分重放与冲突，不再判——判断依赖此刻的登记册，同一身份再来时再判
@@ -232,10 +251,7 @@ func (handler *PrepareOnPlannedLegsHandler) prepareLeg(
 	demand domain.DemandSnapshot,
 	leg domain.PreparationLeg,
 ) (LegPreparation, *PrepareOnPlannedLegsResult, error) {
-	key := ports.TransportPreparationKey{
-		TenantID: tenant, Leg: leg.Reference(), Object: object, Rule: rule,
-		Source: domain.DemandFromDeclaration,
-	}
+	key := preparationKey(tenant, object, rule, leg, demand)
 	subject := []string{tenant.String(), leg.Reference().String(), object.String()}
 	undecided := func(reason PreparationUndecidedReason) (LegPreparation, *PrepareOnPlannedLegsResult, error) {
 		result := preparationUndecided(reason, subject...)
