@@ -5,6 +5,7 @@ func init() {
 		priceCards:               unwiredPricingCatalogue{},
 		referenceSeries:          unwiredPricingCatalogue{},
 		priceCardContent:         unwiredPriceCardContent{},
+		priceCardWorkbook:        unwiredPriceCardWorkbook{},
 		sellPriceScopes:          unwiredSellPriceScope{},
 		priceCardTemplateSpec:    unwiredPriceCardTemplateSpec{},
 		referenceSeriesCoverage:  unwiredReferenceSeriesCoverage{},

@@ -835,6 +835,17 @@ func (unwiredPricingCatalogue) ListReferenceSeries(
 // （价卡仓储，带整图重验的门；目录适配器只读列面），并成一个会让装配测试盖不住「这本册接错了适配器」这一格。
 type unwiredPriceCardContent struct{}
 
+// unwiredPriceCardWorkbook 是价卡工作簿读口的占位。生产上它是登记册、草稿册与模板投影的编排，
+// 不并进内容读口：内容口交的是规范化文档，这一口交的是可再导入的工作簿。
+type unwiredPriceCardWorkbook struct{}
+
+func (unwiredPriceCardWorkbook) Handle(
+	context.Context,
+	pricingapp.ReadPriceCardWorkbookQuery,
+) (pricingapp.ReadPriceCardWorkbookResult, error) {
+	return pricingapp.ReadPriceCardWorkbookResult{}, errOrchestrationNotWired
+}
+
 func (unwiredPriceCardContent) ReadPriceCardContent(
 	context.Context,
 	pricingdomain.TenantID,

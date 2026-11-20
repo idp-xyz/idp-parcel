@@ -7,6 +7,7 @@ import (
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/pricecardtemplate"
+	pricingapp "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
@@ -14,6 +15,7 @@ import (
 type pricingCatalogueWiring struct {
 	priceCards               pricinghttp.PriceCardCatalogueReader
 	priceCardContent         pricinghttp.PriceCardContentReader
+	priceCardWorkbook        pricinghttp.PriceCardWorkbookReader
 	sellPriceScopes          pricinghttp.SellPriceScopeReader
 	priceCardTemplateSpec    pricinghttp.PriceCardTemplateSpecReader
 	referenceSeries          pricinghttp.ReferenceSeriesCatalogueReader
@@ -31,6 +33,11 @@ func init() {
 			"/pricing-price-cards/content": {
 				method: http.MethodGet, face: operationsReadFace(),
 				probe: "/pricing-price-cards/content?id=SYN-PLAN-CN-SG-01&version=v1",
+			},
+			// 已登记价卡（或带内容的草稿）读回成工作簿。carrier 缺省是结构化工作簿，spreadsheet 下载电子表格。
+			"/pricing-price-cards/workbook": {
+				method: http.MethodGet, face: operationsReadFace(),
+				probe: "/pricing-price-cards/workbook?id=SYN-PLAN-CN-SG-01&version=v1",
 			},
 			"/pricing-sell-price-scope": {
 				method: http.MethodGet, face: operationsReadFace(),
@@ -56,6 +63,14 @@ func init() {
 			if err != nil {
 				return none, err
 			}
+			priceCardDrafts, err := pppostgres.NewPriceCardDrafts(sources.db)
+			if err != nil {
+				return none, err
+			}
+			priceCardWorkbook, err := pricingapp.NewReadPriceCardWorkbookHandler(priceCardContent, priceCardDrafts, pricecardtemplate.Reader{})
+			if err != nil {
+				return none, err
+			}
 			// 价卡导入模板规格：进程内的静态规格，读口由模板适配器自己生成，不碰库。
 			priceCardTemplateSpec := staticPriceCardTemplateSpec{source: pricecardtemplate.Reader{}}
 			// 覆盖地平线读口（票 pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」）：
@@ -78,6 +93,7 @@ func init() {
 			return pricingCatalogueWiring{
 				priceCards:               pricingCatalog,
 				priceCardContent:         priceCardContent,
+				priceCardWorkbook:        priceCardWorkbook,
 				sellPriceScopes:          priceCardContent,
 				priceCardTemplateSpec:    priceCardTemplateSpec,
 				referenceSeries:          pricingCatalog,
@@ -91,6 +107,7 @@ func init() {
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricingCatalogueIntake, wiring.priceCards)},
 				{Pattern: "/pricing-price-cards/content", Handler: pricinghttp.NewQueryPriceCardContentEndpoint(pricingCatalogueIntake, wiring.priceCardContent)},
+				{Pattern: "/pricing-price-cards/workbook", Handler: pricinghttp.NewQueryPriceCardWorkbookEndpoint(pricingCatalogueIntake, wiring.priceCardWorkbook)},
 				{Pattern: "/pricing-sell-price-scope", Handler: pricinghttp.NewQuerySellPriceScopeEndpoint(pricingCatalogueIntake, wiring.sellPriceScopes, systemClock{})},
 				{Pattern: "/pricing-price-card-template/spec", Handler: pricinghttp.NewQueryPriceCardTemplateSpecEndpoint(pricingCatalogueIntake, wiring.priceCardTemplateSpec)},
 				{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, wiring.referenceSeries)},
