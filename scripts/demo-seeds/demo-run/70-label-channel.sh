@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # 面单渠道一件（票 commercial-four-module-requirements/05）：服务产品 SYN-PROD-CN-SG-LABEL，形态 LABEL_CHANNEL_SERVICE。
-# 走到费用确认和审核应付，但不进集运、也不上未取消且已接受的订舱——那种包裹按现行规则答成本不全。
-# 干线只提交委托并在交出后采用，不订舱、不收承运答复。主张账期用 SYN-PERIOD-DEMO- 前缀，不写成费用归属日。
-# 末尾读 GET /settlement-operating-results?registry=operating-result：这件要有 ESTIMATED 与 CONFIRMED 两行，
-# 账期都是 DIRECT，组成项都在；没有就失败退出。
+# 不等初始路由，也不登班次、不订舱、不集运。网络初始路由对这一形态答不适用，编一份计划也形不成。
 #
-# 不写 MAIN_*，不碰 30-settlement.sh 认的那一件主链。库要已经灌过步骤 117，否则这一件产品不在册，接受答无适用依据。
-# 用法：70-label-channel.sh    每跑一次是一件新包裹（约占 9600 余额）。证据只记 S。
+# 演示里这两笔金额各自只认一条事实：
+#   客户费用：这一户采用的计费时点是有效网络收寄已采用。收寄被采用后发起 SELL，与有没有路由无关。
+#   供应商预期成本：BUY 触发册只挂实际履约。一段已采用供应商委托，参与被有效交付结束时形成发生项，再形成预期成本。
+# 费用确认条件是有效交付已终局。所以这里在收寄之后只立一段末端交接、采用干线协议、做到有效交付，
+# 不走自营段、干线和班次。主张账期用 SYN-PERIOD-DEMO- 前缀，不写成费用归属日。
+# 末尾读经营结果：这件要有 ESTIMATED 与 CONFIRMED 两行，账期都是 DIRECT，组成项都在；没有就失败退出。
+#
+# 不写 MAIN_*，不碰 10 / 30。库要已经灌过步骤 117。每跑一次一件新包裹（约占 9600 余额）。证据只记 S。
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_env
@@ -14,33 +17,65 @@ export IDP_PARCEL_API_BASE
 export IDP_PARCEL_DEMO_SERVICE_PRODUCT=SYN-PROD-CN-SG-LABEL
 source "$DEMO_DIR/chain.sh"
 
-# 干线照主链走到段采用和交进新加坡枢纽，中间那两步订舱与承运答复不走。
-# 共享成本认的是未取消且已接受的订舱，不认「提交了委托」。不订舱，这件就不挂在那种班次上。
-ch_trunk_direct() {
-  local seg="SYN-SEG-SZX-SIN-${STAMP}" commission="SYN-COMMISSION-${STAMP}"
-  _sched_register "$SCHED2"
+# 收寄之后立一段末端交接并采用干线委托，再用有效交付结束这段参与。不挂计划段，不订舱。
+label_direct_facts() {
+  local seg="SYN-SEG-LABEL-${STAMP}" commission="SYN-COMMISSION-LABEL-${STAMP}" task from to at
   step "干线委托提交（协议 v3，不订舱）" "$OP" POST /transport-fulfillment-transport-commission-submissions \
     "$(pj commission="$commission" provider=SYN-PARTY-CARRIER-TRUNK-01 agreement=SYN-SUPPLIER-TRUNK-CN-SG-01 agreementVersion=v3 \
         conditions=SYN-CONDITIONS-DEMO role=SYN-ROLE-DEMO responsibility=SYN-RESPONSIBILITY-DEMO members:='["'"$PARCEL"'"]' submittedAt="$(now_utc)")" \
     201:COMMISSION_SUBMITTED commission.agreement
   sleep 1
-  _handover "深圳口岸交给干线承运商" "${CN_EAST[@]}" "SZX-OUT-${STAMP}" "SZX-OUT-v1-${STAMP}" SYN-PARTY-GATE-SZX SYN-PARTY-CARRIER-TRUNK-01 \
-    segment="$seg" plannedSegment="${PLAN}#2" segmentServiceAction=LINEHAUL releasingNode=SYN-NODE-SZX-GATE onwardNode=SYN-NODE-SIN-HUB
+  _handover "收寄节点交给末端（不挂计划段）" "${CN_EAST[@]}" "LM-${STAMP}" "LM-v1-${STAMP}" SYN-NODE-SHA-HUB SYN-OFFSITE-SG-LM \
+    segment="$seg" segmentServiceAction=FINAL_DELIVERY releasingNode=SYN-NODE-SHA-HUB
   step "段采用干线委托" "$OP" POST /transport-fulfillment-segment-commission-adoptions \
     "$(pj segment="$seg" commission="$commission" provider=SYN-PARTY-CARRIER-TRUNK-01)" 201:COMMISSION_ADOPTED
   sleep 1
-  _handover "干线承运商交进新加坡枢纽" "${SG_LM[@]}" "SIN-IN-${STAMP}" "SIN-IN-v1-${STAMP}" SYN-PARTY-CARRIER-TRUNK-01 SYN-NODE-SIN-HUB \
-    receivingNode=SYN-NODE-SIN-HUB
+  step "派送任务（派送重问口）" "$OP" POST /transport-fulfillment-delivery-dispatch-triggers \
+    "$(pj segment="$seg" object="$PARCEL" occurredAt="$(now_utc)")" "201:DISPATCH_TASK_FORMED,200:DISPATCH_TASK_ALREADY_FORMED" task windowFrom windowTo
+  task="$(jget "$LAST" task)"; from="$(jget "$LAST" windowFrom)"; to="$(jget "$LAST" windowTo)"
+  at="$(now_utc)"
+  device_headers "${SG_LM[@]}"
+  step "派送前问询（交付门禁）" "$OP" POST /transport-fulfillment/delivery-gate-previews \
+    "$(pj object="$PARCEL" deliversAt="$at")" 200:DELIVERY_GATE_PREVIEWED gateReading.answer
+  device_headers "${SG_LM[@]}"
+  step "派送尝试（妥投）" "$OP" POST /transport-fulfillment/delivery-attempts \
+    "$(pj task="$task" attempt="SYN-ATTEMPT-${STAMP}" executedBy=SYN-COURIER-DEMO-01 place=SYN-PLACE-DEMO-CONSIGNEE plannedFrom="$from" plannedTo="$to" \
+        arrivedAt="$at" evidence="SYN-EVIDENCE-ARRIVAL-${STAMP}" objects:='[{"object":"'"$PARCEL"'","outcome":"DELIVERED","occurredAt":"'"$at"'"}]')" \
+    201:ATTEMPT_RECORDED attempt
+  device_headers "${SG_LM[@]}"
+  step "有效交付" "$OP" POST /transport-fulfillment/deliveries \
+    "$(pj attempt="SYN-ATTEMPT-${STAMP}" object="$PARCEL" method=HANDED_TO_RECIPIENT recipient=SYN-RECIPIENT-DEMO-01 proof="SYN-POD-${STAMP}")" \
+    201:DELIVERY_REGISTERED gateReading.answer
 }
 
 STAMP="$(date -u +%H%M%S)"
-section "面单渠道·一件包裹（上海当地日 $(today_sha)，产品 ${IDP_PARCEL_DEMO_SERVICE_PRODUCT}）"
+section "面单渠道·一件包裹（不等初始路由，产品 ${IDP_PARCEL_DEMO_SERVICE_PRODUCT}）"
+CH_SUBMIT_STOP_AFTER_ACCEPTANCE=1
 ch_submit
 ch_intake
-ch_selfrun
-ch_trunk_direct
-ch_lastmile
-ch_final
+label_direct_facts
+
+_cost() {
+  curl -sS -H "Authorization: Bearer $OP" "$API_BASE/settlement-charges?registry=supplier-expected-cost" > "$LAST"
+  COST="$(python3 - "$LAST" "$COSTS_BEFORE" <<'PY'
+import json, sys
+before = set(sys.argv[2].split(","))
+for r in json.load(open(sys.argv[1])).get("costs", []):
+    if r["version"] not in before:
+        print(r["version"]); break
+PY
+)"
+  [[ -n "$COST" ]]
+}
+poll "BUY 供应商预期成本形成" 60 _cost
+COST_FEE="$(jsel "$LAST" costs version "$COST" feeItem)"
+COST_AMOUNT="$(jsel "$LAST" costs version "$COST" settlementAmount)"
+COST_SUPPLIER="$(jsel "$LAST" costs version "$COST" supplier)"
+if [[ -z "$COST_SUPPLIER" ]]; then
+  printf '[失败] 预期成本 %s 没记供应商\n' "$COST" >&2
+  exit 1
+fi
+printf '%-34s → cost=%s feeItem=%s %s CNY supplier=%s\n' "BUY 供应商预期成本" "$COST" "$COST_FEE" "$COST_AMOUNT" "$COST_SUPPLIER"
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 section "面单渠道·费用确认与审核应付 ${CHARGE}"
