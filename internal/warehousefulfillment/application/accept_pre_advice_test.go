@@ -621,6 +621,10 @@ func (fake *fakePreAdviceGoods) LoadLatestGoods(_ context.Context, tenant domain
 	return revision, true, nil
 }
 
+func (fake *fakePreAdviceGoods) LoadGoodsAt(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, code domain.GoodsCode, _ time.Time) (domain.GoodsRevision, bool, error) {
+	return fake.LoadLatestGoods(ctx, tenant, owner, code)
+}
+
 type fakePreAdviceNumbers struct {
 	outcome ports.PreAdviceNumberOutcome
 	number  string

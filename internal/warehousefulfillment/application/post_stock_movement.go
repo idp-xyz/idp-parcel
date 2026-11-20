@@ -362,6 +362,7 @@ func (handler *PostStockMovementHandler) screenLines(
 	postedAt time.Time,
 ) (lineScreen, error) {
 	goods := &revisionCache[domain.GoodsCode, domain.GoodsRevision]{}
+	goodsAt := &revisionCache[domain.GoodsCode, domain.GoodsRevision]{}
 	locations := &revisionCache[domain.LocationCode, domain.LocationRevision]{}
 	zones := &revisionCache[domain.ZoneCode, domain.ZoneRevision]{}
 	batches := &revisionCache[domain.InboundBatchID, domain.InboundBatch]{}
@@ -377,7 +378,7 @@ func (handler *PostStockMovementHandler) screenLines(
 			violations = append(violations, StockViolation{Line: index, Kind: StockViolationGoodsNotRegistered})
 		}
 		if line.Direction() == domain.StockIn {
-			more, err := handler.screenInbound(ctx, tenant, request, line, index, hit, locations, zones)
+			more, err := handler.screenInbound(ctx, tenant, request, line, index, hit, goodsAt, locations, zones)
 			if err != nil {
 				return lineScreen{}, err
 			}
@@ -404,6 +405,7 @@ func (handler *PostStockMovementHandler) screenInbound(
 	line domain.StockLineRequest,
 	index int,
 	goods goodsHitOf[domain.GoodsRevision],
+	goodsAt *revisionCache[domain.GoodsCode, domain.GoodsRevision],
 	locations *revisionCache[domain.LocationCode, domain.LocationRevision],
 	zones *revisionCache[domain.ZoneCode, domain.ZoneRevision],
 ) ([]StockViolation, error) {
@@ -443,8 +445,17 @@ func (handler *PostStockMovementHandler) screenInbound(
 	}
 	// 库内移动、状态转换与形态转换移的是已经在格上的货，别名过期之后仍要能移动。
 	// 有效区间只约束这一行新贴上的别名：增项、相抵，以及商品换标换上去的那一格。
-	if checksLabel(request.Reason()) && line.Cell().Alias().String() != "" && !labelValid(goods.value, line.Cell().Alias(), request.OccurredAt()) {
-		violations = append(violations, StockViolation{Line: index, Kind: StockViolationLabelAliasNotValid})
+	// 贴标别名按事实发生时刻生效的那一笔修订判，包装层级与跟踪属性仍按入账时的当前修订判。
+	if checksLabel(request.Reason()) && line.Cell().Alias().String() != "" {
+		atHit, err := goodsAt.load(line.Cell().Goods(), func() (domain.GoodsRevision, bool, error) {
+			return handler.goods.LoadGoodsAt(ctx, tenant, request.Owner(), line.Cell().Goods(), request.OccurredAt())
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !atHit.found || !labelValid(atHit.value, line.Cell().Alias(), request.OccurredAt()) {
+			violations = append(violations, StockViolation{Line: index, Kind: StockViolationLabelAliasNotValid})
+		}
 	}
 	return violations, nil
 }

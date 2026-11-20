@@ -344,6 +344,24 @@ func (lookup *postingGoods) LoadLatestGoods(
 	return revision, ok, nil
 }
 
+func (lookup *postingGoods) LoadGoodsAt(
+	_ context.Context,
+	tenant domain.TenantID,
+	owner domain.OwnerAccountID,
+	code domain.GoodsCode,
+	at time.Time,
+) (domain.GoodsRevision, bool, error) {
+	lookup.log.add("LoadGoodsAt")
+	if lookup.err != nil {
+		return domain.GoodsRevision{}, false, lookup.err
+	}
+	revision, ok := lookup.rows[tenant.String()+"/"+owner.String()+"/"+code.String()]
+	if !ok || revision.RegisteredAt().After(at) {
+		return domain.GoodsRevision{}, false, nil
+	}
+	return revision, true, nil
+}
+
 type postingIdentities struct {
 	log         *callLog
 	movementSeq int

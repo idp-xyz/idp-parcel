@@ -198,6 +198,62 @@ func TestUnclaimedArrivalClosedPreAdviceStaysOffTheBooks(t *testing.T) {
 	})
 }
 
+// Covers: UC-WF-004——已取消的预报直接把原事实保全为待认领到货，坏库位不挡转待认领；还能收货时同一坏库位才答 CONTENT_INVALID。
+func TestUnclaimedArrivalIgnoresContentDefectsThatWouldBlockALiveAdvice(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedReceiving(t)
+	live := world.adviseGoods(t, "REQ-LIVE-BAD-LOC", "SYN-GOODS-01", "件", 10)
+	cancelled := world.adviseGoods(t, "REQ-CANCEL-BAD-LOC", "SYN-GOODS-01", "件", 10)
+	world.withdrawAdvice(t, cancelled.ID(), "REQ-W-BAD-LOC")
+	badLine := mustReceiptLine(t, receiptLineSpec{observed: unclaimedScan, quantity: unclaimedQuantity, location: "SYN-LOC-MISSING"})
+
+	refused := world.confirm(t, receiptCommand(t, "SYN-FACT-LIVE-BAD-LOC", live.ID().String(), badLine))
+	if refused.Outcome() != application.ConfirmReceiptContentInvalid {
+		t.Fatalf("还能收货 %s", refused.Outcome())
+	}
+	issues := refused.Issues()
+	if len(issues) != 1 || issues[0].Kind() != domain.ReceiptIssueLocationNotReceiving || issues[0].Line() != 0 {
+		t.Fatalf("逐行指出 = %+v", issues)
+	}
+	if world.unclaimedCount(t) != 0 || world.receiptCount(t) != 0 {
+		t.Fatalf("坏库位不该落册：到货 %d 事实 %d", world.unclaimedCount(t), world.receiptCount(t))
+	}
+
+	before := world.ledgerNow(t)
+	command := lateGoodsCommand(t, "SYN-FACT-CANCEL-BAD-LOC", cancelled.ID().String(), unclaimedScan, unclaimedQuantity)
+	command.Lines = []domain.ReceiptLine{badLine}
+	late := world.confirm(t, command)
+	if late.Outcome() != application.ConfirmReceiptDivertedToUnclaimed || world.adviceStatus(t, cancelled.ID()) != "CANCELLED" {
+		t.Fatalf("已取消坏库位 %s 状态 %s", late.Outcome(), world.adviceStatus(t, cancelled.ID()))
+	}
+	before.sameAs(t, world.ledgerNow(t))
+	if world.unclaimedCount(t) != 1 {
+		t.Fatalf("到货 %d", world.unclaimedCount(t))
+	}
+
+	// 整箱入库：还能收货时多行坏库位逐行指出；已取消时坏库位同样直接转待认领。
+	liveCarton := world.adviseCartons(t, "REQ-LIVE-CARTON-BAD", "SYN-CARTON-B1", "SYN-CARTON-B2")
+	badCarton1, err := domain.NewCartonReceiptLine(valueOf(t, domain.NewCartonNumber, "SYN-CARTON-B1"), domain.CartonNumber{}, true, valueOf(t, domain.NewLocationCode, "SYN-LOC-MISSING-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	badCarton2, err := domain.NewCartonReceiptLine(valueOf(t, domain.NewCartonNumber, "SYN-CARTON-B2"), domain.CartonNumber{}, true, valueOf(t, domain.NewLocationCode, "SYN-LOC-MISSING-2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cartonRefused := world.confirm(t, cartonReceiptCommand(t, "SYN-FACT-LIVE-CARTON-BAD", liveCarton.ID().String(), badCarton1, badCarton2))
+	if cartonRefused.Outcome() != application.ConfirmReceiptContentInvalid || len(cartonRefused.Issues()) != 2 ||
+		cartonRefused.Issues()[0] != domain.ReceiptLineIssue(0, domain.ReceiptIssueLocationNotReceiving) ||
+		cartonRefused.Issues()[1] != domain.ReceiptLineIssue(1, domain.ReceiptIssueLocationNotReceiving) {
+		t.Fatalf("整箱多行坏库位：%s %+v", cartonRefused.Outcome(), cartonRefused.Issues())
+	}
+	world.withdrawAdvice(t, liveCarton.ID(), "REQ-W-CARTON-BAD")
+	cartonLate := world.confirm(t, cartonReceiptCommand(t, "SYN-FACT-CANCEL-CARTON-BAD", liveCarton.ID().String(), badCarton1))
+	if cartonLate.Outcome() != application.ConfirmReceiptDivertedToUnclaimed || world.unclaimedCount(t) != 2 {
+		t.Fatalf("整箱已取消坏库位：%s 到货 %d", cartonLate.Outcome(), world.unclaimedCount(t))
+	}
+}
+
 // Covers: AT-WF-047。撤回先成立，随后到达的收货走待认领；设备上更早的发生时刻不把预报重新打开。
 func TestUnclaimedArrivalAfterWithdrawalFollowsArrivalOrder(t *testing.T) {
 	world := newReceiptWorld(t)

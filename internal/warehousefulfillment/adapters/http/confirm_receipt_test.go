@@ -48,9 +48,11 @@ func (stub *receiptAuthenticatorStub) AuthenticateReceiptConfirmation(
 }
 
 type receiptConfirmerStub struct {
-	calls   int
-	command application.ConfirmReceiptCommand
-	err     error
+	calls     int
+	command   application.ConfirmReceiptCommand
+	result    application.ConfirmReceiptResult
+	hasResult bool
+	err       error
 }
 
 func (stub *receiptConfirmerStub) Confirm(_ context.Context, command application.ConfirmReceiptCommand) (application.ConfirmReceiptResult, error) {
@@ -58,6 +60,9 @@ func (stub *receiptConfirmerStub) Confirm(_ context.Context, command application
 	stub.command = command
 	if stub.err != nil {
 		return application.ConfirmReceiptResult{}, stub.err
+	}
+	if stub.hasResult {
+		return stub.result, nil
 	}
 	return application.ConfirmReceiptResult{}, errors.New("no answer")
 }
@@ -156,5 +161,40 @@ func TestReceiptConfirmationProblemsUseTheWorkFactCodes(t *testing.T) {
 	}
 	if _, wrapped := body["error"]; wrapped || body["code"] != "OPERATOR_NOT_GRANTED" {
 		t.Fatalf("问题体 = %s", response.Body.String())
+	}
+}
+
+func TestReceiptConfirmationContentInvalidReturnsPerLineIssues(t *testing.T) {
+	authenticator := &receiptAuthenticatorStub{}
+	confirmer := &receiptConfirmerStub{
+		hasResult: true,
+		result: application.ContentInvalidReceipt([]domain.ReceiptContentIssue{
+			domain.ReceiptLineIssue(0, domain.ReceiptIssueLocationNotReceiving),
+			domain.ReceiptLineIssue(1, domain.ReceiptIssueLabelAliasNotValid),
+		}),
+	}
+	intake, err := warehousehttp.NewReceiptWorkFactIntake(authenticator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := postReceipt(warehousehttp.NewConfirmReceiptEndpoint(intake, confirmer), "WAREHOUSE", "SYN-WH-01", receiptConfirmationDocument(""))
+	if response.Code != http.StatusOK {
+		t.Fatalf("答 %d %s，want 200", response.Code, response.Body.String())
+	}
+	var body struct {
+		Outcome string `json:"outcome"`
+		Issues  []struct {
+			Kind   string `json:"kind"`
+			Line   int    `json:"line"`
+			Carton int    `json:"carton"`
+		} `json:"issues"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Outcome != "CONTENT_INVALID" || len(body.Issues) != 2 ||
+		body.Issues[0].Kind != "LOCATION_NOT_RECEIVING_STAGING" || body.Issues[0].Line != 0 || body.Issues[0].Carton != -1 ||
+		body.Issues[1].Kind != "LABEL_ALIAS_NOT_VALID" || body.Issues[1].Line != 1 || body.Issues[1].Carton != -1 {
+		t.Fatalf("答复体 = %s", response.Body.String())
 	}
 }

@@ -32,12 +32,13 @@ func (handler *ConfirmReceiptHandler) confirmCarton(
 	if handler.cartons == nil || handler.cartonIDs == nil {
 		return ConfirmReceiptResult{}, errors.New("confirm receipt: 整箱账没有接上")
 	}
-	screened, invalid, err := handler.screenCarton(ctx, command)
+	// 预报锁已在 Confirm 里拿过；这里只核还能收货的箱行。已不能收货的走 divertUnscreened，不在这里核库位。
+	screened, issues, err := handler.screenCarton(ctx, command)
 	if err != nil {
 		return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: %w", err)
 	}
-	if invalid {
-		return confirmReceiptBare(ConfirmReceiptContentInvalid), nil
+	if len(issues) > 0 {
+		return ContentInvalidReceipt(issues), nil
 	}
 	if warehouse.Content().Kind() != domain.WarehouseKindSelfOperated {
 		return ConfirmReceiptResult{}, errors.New("confirm receipt: 仓不是自营仓，收货入账无由落")
@@ -49,11 +50,7 @@ func (handler *ConfirmReceiptHandler) confirmCarton(
 	receivedAt := handler.clock.Now()
 	switch noted.Outcome() {
 	case PreAdviceReceiptNotReceivable:
-		lines, err := markCartonsNotReceivable(screened)
-		if err != nil {
-			return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: %w", err)
-		}
-		return handler.divert(ctx, advice, command, receivedAt, nil, lines)
+		return handler.divertUnscreened(ctx, warehouse, advice, command)
 	case PreAdviceReceiptStarted, PreAdviceReceiptAlreadyReceiving:
 	default:
 		return ConfirmReceiptResult{}, fmt.Errorf("confirm receipt: unexpected pre-advice receipt %s", noted.Outcome())
@@ -93,25 +90,34 @@ func (handler *ConfirmReceiptHandler) confirmCarton(
 	return confirmReceiptEcho(ConfirmReceiptConfirmed, receipt), nil
 }
 
-func (handler *ConfirmReceiptHandler) screenCarton(ctx context.Context, command ConfirmReceiptCommand) ([]domain.CartonReceiptLine, bool, error) {
+func (handler *ConfirmReceiptHandler) screenCarton(
+	ctx context.Context,
+	command ConfirmReceiptCommand,
+) ([]domain.CartonReceiptLine, []domain.ReceiptContentIssue, error) {
 	if len(command.CartonLines) == 0 {
-		return nil, true, nil
+		return nil, []domain.ReceiptContentIssue{domain.WholeReceiptIssue(domain.ReceiptIssueNoLines)}, nil
 	}
-	seenLocation := map[string]struct{}{}
-	for _, line := range command.CartonLines {
-		if _, seen := seenLocation[line.Location().String()]; seen {
-			continue
-		}
-		rejected, err := handler.cartonLocationRejected(ctx, command.Tenant, command.Warehouse, line.Location())
-		if err != nil {
-			return nil, false, err
+	seenLocation := map[string]bool{}
+	var issues []domain.ReceiptContentIssue
+	for index, line := range command.CartonLines {
+		location := line.Location().String()
+		rejected, seen := seenLocation[location]
+		if !seen {
+			var err error
+			rejected, err = handler.cartonLocationRejected(ctx, command.Tenant, command.Warehouse, line.Location())
+			if err != nil {
+				return nil, nil, err
+			}
+			seenLocation[location] = rejected
 		}
 		if rejected {
-			return nil, true, nil
+			issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueLocationNotReceiving))
 		}
-		seenLocation[line.Location().String()] = struct{}{}
 	}
-	return command.CartonLines, false, nil
+	if len(issues) > 0 {
+		return nil, issues, nil
+	}
+	return command.CartonLines, nil, nil
 }
 
 // cartonLocationRejected 核收货库位。整箱只许停在收货暂存、存储与待出库，这一段的收货再收窄到收货暂存。

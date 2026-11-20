@@ -106,8 +106,9 @@ func (UnconfiguredReceiptIntake) IntakeReceiptConfirmation(context.Context, *htt
 var _ ReceiptConfirmationIntake = UnconfiguredReceiptIntake{}
 
 type confirmReceiptAnswer struct {
-	Outcome string       `json:"outcome"`
-	Receipt *receiptBody `json:"receipt,omitempty"`
+	Outcome string               `json:"outcome"`
+	Issues  []preAdviceIssueBody `json:"issues,omitempty"`
+	Receipt *receiptBody         `json:"receipt,omitempty"`
 }
 
 // NewConfirmReceiptEndpoint 交回收货确认的 HTTP 入口（POST /warehouse-fulfillment-receipt-confirmations）。
@@ -156,6 +157,14 @@ func writeReceiptAnswer(response http.ResponseWriter, request *http.Request, res
 		}
 		body := receiptBodies([]domain.RecordedReceipt{receipt}, nil, false, true)[0]
 		answer.Receipt = &body
+	case application.ConfirmReceiptContentInvalid:
+		issues := result.Issues()
+		answer.Issues = make([]preAdviceIssueBody, 0, len(issues))
+		for _, issue := range issues {
+			answer.Issues = append(answer.Issues, preAdviceIssueBody{
+				Kind: issue.Kind().String(), Line: issue.Line(), Carton: issue.Carton(),
+			})
+		}
 	}
 	writeJSON(response, status, answer)
 }

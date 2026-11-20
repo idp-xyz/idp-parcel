@@ -101,6 +101,31 @@ func (repository *Goods) LoadLatestGoods(
 	return loaded, found, nil
 }
 
+func (repository *Goods) LoadGoodsAt(
+	ctx context.Context,
+	tenant domain.TenantID,
+	owner domain.OwnerAccountID,
+	code domain.GoodsCode,
+	at time.Time,
+) (domain.GoodsRevision, bool, error) {
+	const operation = "load goods at instant"
+	if tenant.String() == "" || owner.String() == "" || code.String() == "" {
+		return domain.GoodsRevision{}, false, fmt.Errorf("%s: tenant, owner and goods code are required", operation)
+	}
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.GoodsRevision{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	loaded, found, err := loadGoodsRevisionAt(ctx, querier, tenant, owner, code, at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.GoodsRevision{}, false, nil
+	}
+	if err != nil {
+		return domain.GoodsRevision{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	return loaded, found, nil
+}
+
 func (repository *Goods) LoadGoodsRevisionBySubmission(
 	ctx context.Context,
 	tenant domain.TenantID,

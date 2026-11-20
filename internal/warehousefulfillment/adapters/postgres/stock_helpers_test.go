@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
@@ -71,7 +72,7 @@ func newStockStores(t *testing.T) stockStores {
 func (stores stockStores) poster() *application.PostStockMovementHandler {
 	return application.NewPostStockMovementHandler(
 		stores.ledger, stores.warehouses, stores.locations, stores.zones, stores.goods, stores.identities,
-		fixedClock{at: baseInstant},
+		fixedClock{at: baseInstant.Add(10 * time.Minute)},
 	)
 }
 
@@ -173,7 +174,7 @@ func stockRequest(t *testing.T, reason domain.StockMovementReason, source string
 		valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"),
 		reason,
 		valueOf(t, domain.NewSourceFactReference, source),
-		baseInstant,
+		baseInstant.Add(10*time.Minute),
 		lines,
 	)
 }
