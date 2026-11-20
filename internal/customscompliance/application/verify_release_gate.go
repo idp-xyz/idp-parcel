@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
@@ -54,6 +55,14 @@ const (
 	DutyVerificationAbsent
 	DutyVerificationViewUnavailable
 	DutyVerificationPending
+	WeightDiscrepancyGateRuleNotConfigured
+	WeightDiscrepancyGateRuleViewUnavailable
+	WeightDiscrepancyFindingRegisteredBesideRule
+	DeclarationSubmissionAbsent
+	DeclarationSubmissionViewUnavailable
+	GateMemberMeasurementAbsent
+	GateMemberMeasurementUndetermined
+	GateMemberMeasurementViewUnavailable
 	GateStoreUnavailable
 )
 
@@ -75,6 +84,22 @@ func (reason VerifyGateUndecidedReason) String() string {
 		return "DUTY_VERIFICATION_VIEW_UNAVAILABLE"
 	case DutyVerificationPending:
 		return "DUTY_VERIFICATION_PENDING"
+	case WeightDiscrepancyGateRuleNotConfigured:
+		return "WEIGHT_DISCREPANCY_GATE_RULE_NOT_CONFIGURED"
+	case WeightDiscrepancyGateRuleViewUnavailable:
+		return "WEIGHT_DISCREPANCY_GATE_RULE_VIEW_UNAVAILABLE"
+	case WeightDiscrepancyFindingRegisteredBesideRule:
+		return "WEIGHT_DISCREPANCY_FINDING_REGISTERED_BESIDE_RULE"
+	case DeclarationSubmissionAbsent:
+		return "DECLARATION_SUBMISSION_ABSENT"
+	case DeclarationSubmissionViewUnavailable:
+		return "DECLARATION_SUBMISSION_VIEW_UNAVAILABLE"
+	case GateMemberMeasurementAbsent:
+		return "MEMBER_MEASUREMENT_ABSENT"
+	case GateMemberMeasurementUndetermined:
+		return "MEMBER_MEASUREMENT_UNDETERMINED"
+	case GateMemberMeasurementViewUnavailable:
+		return "MEMBER_MEASUREMENT_VIEW_UNAVAILABLE"
 	case GateStoreUnavailable:
 		return "GATE_STORE_UNAVAILABLE"
 	default:
@@ -121,13 +146,15 @@ func gateUndecided(reason VerifyGateUndecidedReason) VerifyReleaseGateResult {
 	return VerifyReleaseGateResult{outcome: GateVerificationUndecided, reason: reason}
 }
 
-// VerifyReleaseGateDeps 是门禁核对的六口。DutyRules 与 DutyVerifications 是「税费付款」那一道的两半
-// （票 sa-cc/06）：规则从门禁目录读，核对从付款核对册读当前版；两口都必备——只走「不构成前置条件」
-// 那一形的装配点也得接真核对读口，构造门对每一口一视同仁。
+// VerifyReleaseGateDeps 是门禁核对要问的各口。税费付款与毛重差异各自的规则、以及毛重差异要读的提交版本和
+// 成员实测，都必备——只走「不构成前置条件」那一形的装配点也得接上，构造门对每一口一视同仁。
 type VerifyReleaseGateDeps struct {
 	Conditions        ports.GateConditionView
 	DutyRules         ports.DutyPaymentGateRuleView
 	DutyVerifications ports.CurrentDutyVerificationView
+	WeightRules       ports.WeightDiscrepancyGateRuleView
+	Submissions       ports.CurrentDeclarationSubmissionView
+	MemberWeights     ports.MemberMeasuredWeightView
 	Store             ports.GateVerificationStore
 	Downstream        ports.GateVerificationHandoff
 	Clock             ports.Clock
@@ -147,6 +174,9 @@ func NewVerifyReleaseGateHandler(deps VerifyReleaseGateDeps) (*VerifyReleaseGate
 		{"gate condition view", deps.Conditions == nil},
 		{"duty payment gate rule view", deps.DutyRules == nil},
 		{"current duty verification view", deps.DutyVerifications == nil},
+		{"weight discrepancy gate rule view", deps.WeightRules == nil},
+		{"current declaration submission view", deps.Submissions == nil},
+		{"member measured weight view", deps.MemberWeights == nil},
 		{"gate verification store", deps.Store == nil},
 		{"gate verification handoff", deps.Downstream == nil},
 		{"clock", deps.Clock == nil},
@@ -176,6 +206,9 @@ func (handler *VerifyReleaseGateHandler) Handle(
 		conditions:        handler.deps.Conditions,
 		dutyRules:         handler.deps.DutyRules,
 		dutyVerifications: handler.deps.DutyVerifications,
+		weightRules:       handler.deps.WeightRules,
+		submissions:       handler.deps.Submissions,
+		memberWeights:     handler.deps.MemberWeights,
 	}, command.TenantID, command.Scope, command.Action, command.Boundary)
 	if err != nil {
 		return VerifyReleaseGateResult{}, err
@@ -190,7 +223,9 @@ func (handler *VerifyReleaseGateHandler) Handle(
 		// 是运维去救登记（ADR-0029 按恢复动作分格）。
 		return gateUndecided(GateConditionViewUnavailable), nil
 	}
-	findings, reading, applied := assessment.findings, assessment.reading, assessment.applied
+	findings := assessment.findings
+	dutyReading, dutyApplied := assessment.dutyReading, assessment.dutyApplied
+	weightReading, weightApplied := assessment.weightReading, assessment.weightApplied
 
 	gate, err := domain.VerifyReleaseGate(
 		command.Scope, command.Action, command.Boundary,
@@ -198,8 +233,13 @@ func (handler *VerifyReleaseGateHandler) Handle(
 	if err != nil {
 		return VerifyReleaseGateResult{outcome: GateVerificationNotAccepted}, nil
 	}
-	if applied {
-		if gate, err = gate.WithDutyPayment(reading); err != nil {
+	if dutyApplied {
+		if gate, err = gate.WithDutyPayment(dutyReading); err != nil {
+			return VerifyReleaseGateResult{}, err
+		}
+	}
+	if weightApplied {
+		if gate, err = gate.WithWeightDiscrepancy(weightReading); err != nil {
 			return VerifyReleaseGateResult{}, err
 		}
 	}
@@ -209,7 +249,7 @@ func (handler *VerifyReleaseGateHandler) Handle(
 		Scope:    command.Scope,
 		Action:   command.Action,
 		Boundary: command.Boundary,
-		Digest:   ports.GateVersionDigest(findings, reading, applied),
+		Digest:   ports.GateVersionDigest(findings, dutyReading, dutyApplied, weightReading, weightApplied),
 	}
 	saved, err := handler.deps.Store.Save(ctx, key, gate)
 	if err != nil {
@@ -256,24 +296,29 @@ func (handler *VerifyReleaseGateHandler) handOffGate(
 	return "CONT-GATE/" + key.Scope.String() + "/" + key.Action.String()
 }
 
-// releaseGateSources 是一道门禁读数要问的三口。放行门禁核对与动作准入判断（ADR-0206）各自把自己那三口交进来，
+// releaseGateSources 是一道门禁读数要问的各口。放行门禁核对与动作准入判断（ADR-0206）各自把自己的口交进来，
 // 读法只在 assessReleaseGate 一处定义——两条编排各写一遍，就是同一道门两种判法。
 type releaseGateSources struct {
 	conditions        ports.GateConditionView
 	dutyRules         ports.DutyPaymentGateRuleView
 	dutyVerifications ports.CurrentDutyVerificationView
+	weightRules       ports.WeightDiscrepancyGateRuleView
+	submissions       ports.CurrentDeclarationSubmissionView
+	memberWeights     ports.MemberMeasuredWeightView
 }
 
 // releaseGateAssessment 是一道门禁读到哪一步、读出了什么。reason 非零即停在那个停点（含依赖读不动）；
 // foldRefused 说认定清单折不出结论（读回的认定不合法）。它不并进 reason：两条编排各按自己的答复格归它，
 // 门禁读法不替它们选格；两条编排都把它归到门禁目录读不动那一格（核对答未决、准入答读不动）。
 type releaseGateAssessment struct {
-	reason      VerifyGateUndecidedReason
-	foldRefused bool
-	findings    []domain.PreconditionFinding
-	conclusion  domain.GateConclusion
-	reading     domain.DutyPaymentGateReading
-	applied     bool
+	reason        VerifyGateUndecidedReason
+	foldRefused   bool
+	findings      []domain.PreconditionFinding
+	conclusion    domain.GateConclusion
+	dutyReading   domain.DutyPaymentGateReading
+	dutyApplied   bool
+	weightReading domain.WeightDiscrepancyGateReading
+	weightApplied bool
 }
 
 func (assessment releaseGateAssessment) preconditions() []domain.PreconditionReference {
@@ -322,6 +367,20 @@ func assessReleaseGate(
 		}
 	}
 
+	weightRule, found, err := sources.weightRules.LoadWeightDiscrepancyGateRule(ctx, tenant, scope, action, boundary)
+	if err != nil {
+		return stop(WeightDiscrepancyGateRuleViewUnavailable)
+	}
+	if !found {
+		// 没登规则不是「零容差」，也不是「这一道放过」。容差是租户取值，缺了就停。
+		return stop(WeightDiscrepancyGateRuleNotConfigured)
+	}
+	for _, finding := range findings {
+		if finding.Precondition == domain.WeightDiscrepancyPrecondition {
+			return stop(WeightDiscrepancyFindingRegisteredBesideRule)
+		}
+	}
+
 	var reading domain.DutyPaymentGateReading
 	applied := false
 	if !rule.NotAPrecondition() {
@@ -348,14 +407,95 @@ func assessReleaseGate(
 		applied = true
 	}
 
+	var weightReading domain.WeightDiscrepancyGateReading
+	weightApplied := false
+	if !weightRule.NotAPrecondition() {
+		judged, reason, err := judgeWeightDiscrepancy(ctx, sources, tenant, scope, boundary, weightRule)
+		if err != nil {
+			return releaseGateAssessment{}, err
+		}
+		if reason != VerifyGateUndecidedReasonNone {
+			return stop(reason)
+		}
+		weightReading = judged
+		findings = append(findings, domain.PreconditionFinding{
+			Precondition: domain.WeightDiscrepancyPrecondition,
+			State:        weightReading.State,
+		})
+		weightApplied = true
+	}
+
 	conclusion, err := domain.FoldGateConclusion(findings)
 	if err != nil {
 		return releaseGateAssessment{foldRefused: true}, nil
 	}
 	return releaseGateAssessment{
-		findings:   findings,
-		conclusion: conclusion,
-		reading:    reading,
-		applied:    applied,
+		findings:      findings,
+		conclusion:    conclusion,
+		dutyReading:   reading,
+		dutyApplied:   applied,
+		weightReading: weightReading,
+		weightApplied: weightApplied,
 	}, nil
+}
+
+// judgeWeightDiscrepancy 在规则要读这一道时，取当前提交版本与各成员此刻的实测，按容差折出读数。
+// 提交版本的范围引用与门禁同一个字符串：申报单元身份就是门禁说的明确申报范围。
+func judgeWeightDiscrepancy(
+	ctx context.Context,
+	sources releaseGateSources,
+	tenant domain.TenantID,
+	scope domain.DecisionScopeReference,
+	boundary domain.CustomsProcedureReference,
+	rule domain.WeightDiscrepancyGateRule,
+) (domain.WeightDiscrepancyGateReading, VerifyGateUndecidedReason, error) {
+	none := domain.WeightDiscrepancyGateReading{}
+	unitID, err := domain.NewDeclarationUnitID(scope.String())
+	if err != nil {
+		return none, DeclarationSubmissionAbsent, nil
+	}
+	submission, found, err := sources.submissions.FindByKey(ctx, ports.DeclarationSubmissionKey{
+		TenantID:  tenant,
+		Unit:      unitID,
+		Procedure: boundary,
+	})
+	if err != nil {
+		return none, DeclarationSubmissionViewUnavailable, nil
+	}
+	if !found {
+		return none, DeclarationSubmissionAbsent, nil
+	}
+	members := submission.Version.Members()
+	sort.Slice(members, func(i, j int) bool {
+		return members[i].String() < members[j].String()
+	})
+	actuals := make(map[domain.DeclaredParcelReference]domain.WeightDiscrepancyMemberActual, len(members))
+	for _, member := range members {
+		reading, err := sources.memberWeights.LoadMemberMeasuredWeight(ctx, tenant, member)
+		if err != nil {
+			return none, GateMemberMeasurementViewUnavailable, nil
+		}
+		switch reading.Answer {
+		case ports.MeasuredWeightUndetermined:
+			return none, GateMemberMeasurementUndetermined, nil
+		case ports.MeasuredWeightNone:
+			return none, GateMemberMeasurementAbsent, nil
+		case ports.MeasuredWeightOne:
+			actuals[member] = domain.WeightDiscrepancyMemberActual{
+				GrossWeight:       reading.GrossWeight,
+				GrossWeightUnit:   reading.GrossWeightUnit,
+				MeasurementSource: reading.MeasurementSource,
+			}
+		default:
+			return none, VerifyGateUndecidedReasonNone, fmt.Errorf("customs compliance: member measurement answer %s", reading.Answer)
+		}
+	}
+	judged, err := rule.Judge(submission.Version, actuals)
+	if errors.Is(err, domain.ErrWeightDiscrepancyUnitUnconvertible) {
+		return none, GateMemberMeasurementUndetermined, nil
+	}
+	if err != nil {
+		return none, VerifyGateUndecidedReasonNone, err
+	}
+	return judged, VerifyGateUndecidedReasonNone, nil
 }

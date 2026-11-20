@@ -13,11 +13,20 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
 type nodeZoneClock struct{}
+
+type registerMemberWeights struct{}
+
+func (registerMemberWeights) LoadMemberMeasuredWeight(
+	context.Context, domain.TenantID, domain.DeclaredParcelReference,
+) (ports.MeasuredWeightReading, error) {
+	return ports.MeasuredWeightReading{Answer: ports.MeasuredWeightNone}, nil
+}
 
 func (nodeZoneClock) Now() time.Time { return time.Date(2026, 8, 20, 10, 1, 0, 0, time.UTC) }
 
@@ -127,13 +136,16 @@ func admissionHandlerOn(t *testing.T, db *bentopg.DB) *application.JudgeActionAd
 	must(err)
 	duty, err := adapter.NewDutyPaymentReconciliation(db)
 	must(err)
+	submissions, err := adapter.NewDeclarationSubmissions(db)
+	must(err)
 	releases, err := adapter.NewReleaseOutcomeView(db)
 	must(err)
 	store, err := adapter.NewActionAdmissionJudgements(db)
 	must(err)
 	handler, err := application.NewJudgeActionAdmissionHandler(application.JudgeActionAdmissionDeps{
 		Zones: zones, Scopes: scopes, Restrictions: restrictions, InternalRestrictions: internalRestrictions, Conditions: gates, DutyRules: gates,
-		DutyVerifications: duty, Releases: releases, Store: store, Clock: nodeZoneClock{},
+		DutyVerifications: duty, WeightRules: gates, Submissions: submissions, MemberWeights: registerMemberWeights{},
+		Releases: releases, Store: store, Clock: nodeZoneClock{},
 	})
 	must(err)
 	return handler

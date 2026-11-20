@@ -62,6 +62,9 @@ const (
 	AdmissionGateConditionsUnavailable
 	AdmissionDutyPaymentRuleUnavailable
 	AdmissionDutyVerificationsUnavailable
+	AdmissionWeightDiscrepancyRuleUnavailable
+	AdmissionDeclarationSubmissionUnavailable
+	AdmissionMemberMeasurementUnavailable
 	ReleaseOutcomeViewUnavailable
 	ActionAdmissionStoreUnavailable
 )
@@ -82,6 +85,12 @@ func (reason ActionAdmissionUnreadableReason) String() string {
 		return "DUTY_PAYMENT_GATE_RULE_VIEW_UNAVAILABLE"
 	case AdmissionDutyVerificationsUnavailable:
 		return "DUTY_VERIFICATION_VIEW_UNAVAILABLE"
+	case AdmissionWeightDiscrepancyRuleUnavailable:
+		return "WEIGHT_DISCREPANCY_GATE_RULE_VIEW_UNAVAILABLE"
+	case AdmissionDeclarationSubmissionUnavailable:
+		return "DECLARATION_SUBMISSION_VIEW_UNAVAILABLE"
+	case AdmissionMemberMeasurementUnavailable:
+		return "MEMBER_MEASUREMENT_VIEW_UNAVAILABLE"
 	case ReleaseOutcomeViewUnavailable:
 		return "RELEASE_OUTCOME_VIEW_UNAVAILABLE"
 	case ActionAdmissionStoreUnavailable:
@@ -124,7 +133,7 @@ func admissionUnreadable(reason ActionAdmissionUnreadableReason) JudgeActionAdmi
 	return JudgeActionAdmissionResult{outcome: ActionAdmissionUnreadable, reason: reason}
 }
 
-// JudgeActionAdmissionDeps 是准入编排要问的各口。门禁那三口与放行门禁核对同型，生产上接同一批适配器。
+// JudgeActionAdmissionDeps 是准入编排要问的各口。门禁读口与放行门禁核对同型，生产上接同一批适配器。
 type JudgeActionAdmissionDeps struct {
 	Zones        ports.NodeCustomsZoneView
 	Scopes       ports.ObjectCustomsScopeView
@@ -134,6 +143,9 @@ type JudgeActionAdmissionDeps struct {
 	Conditions           ports.GateConditionView
 	DutyRules            ports.DutyPaymentGateRuleView
 	DutyVerifications    ports.CurrentDutyVerificationView
+	WeightRules          ports.WeightDiscrepancyGateRuleView
+	Submissions          ports.CurrentDeclarationSubmissionView
+	MemberWeights        ports.MemberMeasuredWeightView
 	Releases             ports.ReleaseOutcomeView
 	Store                ports.ActionAdmissionJudgementStore
 	Clock                ports.Clock
@@ -157,6 +169,9 @@ func NewJudgeActionAdmissionHandler(deps JudgeActionAdmissionDeps) (*JudgeAction
 		{"gate condition view", deps.Conditions == nil},
 		{"duty payment gate rule view", deps.DutyRules == nil},
 		{"current duty verification view", deps.DutyVerifications == nil},
+		{"weight discrepancy gate rule view", deps.WeightRules == nil},
+		{"current declaration submission view", deps.Submissions == nil},
+		{"member measured weight view", deps.MemberWeights == nil},
 		{"release outcome view", deps.Releases == nil},
 		{"action admission judgement store", deps.Store == nil},
 		{"clock", deps.Clock == nil},
@@ -253,6 +268,9 @@ func (handler *JudgeActionAdmissionHandler) Handle(
 		conditions:        handler.deps.Conditions,
 		dutyRules:         handler.deps.DutyRules,
 		dutyVerifications: handler.deps.DutyVerifications,
+		weightRules:       handler.deps.WeightRules,
+		submissions:       handler.deps.Submissions,
+		memberWeights:     handler.deps.MemberWeights,
 	}
 	var gates []domain.GateReading
 	for _, action := range gated {
@@ -357,12 +375,28 @@ func readGate(
 		reading.State = domain.GateReadingDutyVerificationAbsent
 	case DutyVerificationPending:
 		reading.State = domain.GateReadingDutyVerificationPending
+	case WeightDiscrepancyGateRuleNotConfigured:
+		reading.State = domain.GateReadingWeightRuleNotRegistered
+	case WeightDiscrepancyFindingRegisteredBesideRule:
+		reading.State = domain.GateReadingWeightFindingBesideRule
+	case DeclarationSubmissionAbsent:
+		reading.State = domain.GateReadingDeclarationSubmissionAbsent
+	case GateMemberMeasurementAbsent:
+		reading.State = domain.GateReadingMemberMeasurementAbsent
+	case GateMemberMeasurementUndetermined:
+		reading.State = domain.GateReadingMemberMeasurementUndetermined
 	case GateConditionViewUnavailable:
 		return domain.GateReading{}, AdmissionGateConditionsUnavailable, nil
 	case DutyPaymentGateRuleViewUnavailable:
 		return domain.GateReading{}, AdmissionDutyPaymentRuleUnavailable, nil
 	case DutyVerificationViewUnavailable:
 		return domain.GateReading{}, AdmissionDutyVerificationsUnavailable, nil
+	case WeightDiscrepancyGateRuleViewUnavailable:
+		return domain.GateReading{}, AdmissionWeightDiscrepancyRuleUnavailable, nil
+	case DeclarationSubmissionViewUnavailable:
+		return domain.GateReading{}, AdmissionDeclarationSubmissionUnavailable, nil
+	case GateMemberMeasurementViewUnavailable:
+		return domain.GateReading{}, AdmissionMemberMeasurementUnavailable, nil
 	default:
 		return domain.GateReading{}, ActionAdmissionUnreadableReasonNone,
 			fmt.Errorf("customs compliance: gate assessment stopped at %s, which the admission judgement does not read", assessment.reason)

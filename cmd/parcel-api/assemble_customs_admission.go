@@ -9,6 +9,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
+	ccnodeops "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/nodeoperations"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 )
@@ -112,8 +113,8 @@ func buildCustomsAdmissionOrchestration(db *bentopg.DB) (customsAdmissionOrchest
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: customs internal restrictions: %w", err)
 	}
-	// 门禁目录与「税费付款」规则行同一只读适配器，付款核对当前版另一只——与放行门禁核对接的是同一批（读法也是同一份，
-	// assessReleaseGate）。
+	// 门禁目录与两道规则行同一只读适配器；付款核对、当前提交版本与成员实测另接——与放行门禁核对接的是同一批
+	// （读法也是同一份，assessReleaseGate）。
 	gates, err := ccpostgres.NewGateConditionView(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: customs gate condition view: %w", err)
@@ -121,6 +122,18 @@ func buildCustomsAdmissionOrchestration(db *bentopg.DB) (customsAdmissionOrchest
 	dutyVerifications, err := ccpostgres.NewDutyPaymentReconciliation(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: customs duty payment reconciliation store: %w", err)
+	}
+	submissions, err := ccpostgres.NewDeclarationSubmissions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: declaration submissions: %w", err)
+	}
+	measurements, err := currentParcelMeasurementQuery(db)
+	if err != nil {
+		return none, err
+	}
+	memberWeights, err := ccnodeops.NewMemberMeasuredWeights(measurements)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: member measured weights: %w", err)
 	}
 	releases, err := ccpostgres.NewReleaseOutcomeView(db)
 	if err != nil {
@@ -138,6 +151,9 @@ func buildCustomsAdmissionOrchestration(db *bentopg.DB) (customsAdmissionOrchest
 		Conditions:           gates,
 		DutyRules:            gates,
 		DutyVerifications:    dutyVerifications,
+		WeightRules:          gates,
+		Submissions:          submissions,
+		MemberWeights:        memberWeights,
 		Releases:             releases,
 		Store:                judgements,
 		Clock:                systemClock{},

@@ -134,16 +134,19 @@ type mutableClock struct{ at time.Time }
 func (clock *mutableClock) Now() time.Time { return clock.at }
 
 type admissionFixture struct {
-	zones        *zoneViewDouble
-	scopes       *objectScopeViewDouble
-	restrictions *restrictionViewDouble
-	internal     *internalRestrictionViewDouble
-	conditions   *gateConditionViewDouble
-	dutyRules    *dutyRuleViewDouble
-	verification *currentDutyVerificationDouble
-	releases     *releaseViewDouble
-	store        *admissionStoreDouble
-	clock        *mutableClock
+	zones         *zoneViewDouble
+	scopes        *objectScopeViewDouble
+	restrictions  *restrictionViewDouble
+	internal      *internalRestrictionViewDouble
+	conditions    *gateConditionViewDouble
+	dutyRules     *dutyRuleViewDouble
+	weightRules   *weightRuleViewDouble
+	submissions   *submissionViewDouble
+	memberWeights *memberWeightViewDouble
+	verification  *currentDutyVerificationDouble
+	releases      *releaseViewDouble
+	store         *admissionStoreDouble
+	clock         *mutableClock
 }
 
 func newAdmissionFixture() *admissionFixture {
@@ -151,15 +154,18 @@ func newAdmissionFixture() *admissionFixture {
 		zones: &zoneViewDouble{zones: map[string]string{
 			"SYN-NODE-SHA-HUB": "SYN-ZONE-CN", "SYN-NODE-SZX-GATE": "SYN-ZONE-CN", "SYN-NODE-SIN-HUB": "SYN-ZONE-SG",
 		}},
-		scopes:       &objectScopeViewDouble{},
-		restrictions: &restrictionViewDouble{},
-		internal:     &internalRestrictionViewDouble{},
-		conditions:   &gateConditionViewDouble{configured: true},
-		dutyRules:    &dutyRuleViewDouble{rule: domain.DutyPaymentNotAPrecondition(), found: true},
-		verification: &currentDutyVerificationDouble{},
-		releases:     &releaseViewDouble{},
-		store:        &admissionStoreDouble{recorded: map[string]time.Time{}},
-		clock:        &mutableClock{at: admissionAppAt.Add(time.Minute)},
+		scopes:        &objectScopeViewDouble{},
+		restrictions:  &restrictionViewDouble{},
+		internal:      &internalRestrictionViewDouble{},
+		conditions:    &gateConditionViewDouble{configured: true},
+		dutyRules:     &dutyRuleViewDouble{rule: domain.DutyPaymentNotAPrecondition(), found: true},
+		weightRules:   &weightRuleViewDouble{rule: domain.WeightDiscrepancyNotAPrecondition(), found: true},
+		submissions:   &submissionViewDouble{},
+		memberWeights: &memberWeightViewDouble{},
+		verification:  &currentDutyVerificationDouble{},
+		releases:      &releaseViewDouble{},
+		store:         &admissionStoreDouble{recorded: map[string]time.Time{}},
+		clock:         &mutableClock{at: admissionAppAt.Add(time.Minute)},
 	}
 }
 
@@ -173,6 +179,9 @@ func (fixture *admissionFixture) handler(t *testing.T) *application.JudgeActionA
 		Conditions:           fixture.conditions,
 		DutyRules:            fixture.dutyRules,
 		DutyVerifications:    fixture.verification,
+		WeightRules:          fixture.weightRules,
+		Submissions:          fixture.submissions,
+		MemberWeights:        fixture.memberWeights,
 		Releases:             fixture.releases,
 		Store:                fixture.store,
 		Clock:                fixture.clock,

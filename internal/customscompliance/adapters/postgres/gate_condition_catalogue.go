@@ -107,13 +107,19 @@ func (catalogue *GateConditionCatalogue) ListGateConditions(
 		            AND finding.scope_ref    = catalog.scope_ref
 		            AND finding.action       = catalog.action
 		            AND finding.boundary_ref = catalog.boundary_ref),
-		        rule.not_a_precondition, rule.accept_coverage, rule.accept_delta, rule.accept_validity`,
+		        rule.not_a_precondition, rule.accept_coverage, rule.accept_delta, rule.accept_validity,
+		        weight_rule.not_a_precondition, weight_rule.max_delta, weight_rule.weight_unit`,
 		`customs_compliance.gate_condition_catalog AS catalog
 		   LEFT JOIN customs_compliance.gate_condition_duty_payment_rule AS rule
 		     ON rule.tenant_id    = catalog.tenant_id
 		    AND rule.scope_ref    = catalog.scope_ref
 		    AND rule.action       = catalog.action
-		    AND rule.boundary_ref = catalog.boundary_ref`)
+		    AND rule.boundary_ref = catalog.boundary_ref
+		   LEFT JOIN customs_compliance.gate_condition_weight_discrepancy_rule AS weight_rule
+		     ON weight_rule.tenant_id    = catalog.tenant_id
+		    AND weight_rule.scope_ref    = catalog.scope_ref
+		    AND weight_rule.action       = catalog.action
+		    AND weight_rule.boundary_ref = catalog.boundary_ref`)
 	if err != nil {
 		return fail(err)
 	}
@@ -124,12 +130,15 @@ func (catalogue *GateConditionCatalogue) ListGateConditions(
 		var (
 			row          scannedGateCondition
 			findingsJSON []byte
-			// 规则行是 LEFT JOIN 来的：这一道尚未登规则时四列皆 NULL，上列如实透出空位（票 sa-cc/06）。
+			// 规则行是 LEFT JOIN 来的：这一道尚未登规则时各列皆 NULL，上列如实透出空位。
 			notAPrecondition                      *bool
 			coverageJSON, deltaJSON, validityJSON []byte
+			weightNotAPrecondition                *bool
+			weightDelta, weightUnit               *string
 		)
 		if err := rows.Scan(&row.scope, &row.action, &row.boundary, &row.registeredAt, &findingsJSON,
-			&notAPrecondition, &coverageJSON, &deltaJSON, &validityJSON); err != nil {
+			&notAPrecondition, &coverageJSON, &deltaJSON, &validityJSON,
+			&weightNotAPrecondition, &weightDelta, &weightUnit); err != nil {
 			return fail(err)
 		}
 		var dutyRule *domain.DutyPaymentGateRule
@@ -139,6 +148,14 @@ func (catalogue *GateConditionCatalogue) ListGateConditions(
 				return fail(fmt.Errorf("rebuild gate condition catalogue: %w", err))
 			}
 			dutyRule = &rebuilt
+		}
+		var weightRule *domain.WeightDiscrepancyGateRule
+		if weightNotAPrecondition != nil {
+			rebuilt, err := rebuildWeightDiscrepancyGateRule(*weightNotAPrecondition, weightDelta, weightUnit)
+			if err != nil {
+				return fail(fmt.Errorf("rebuild gate condition catalogue: %w", err))
+			}
+			weightRule = &rebuilt
 		}
 		scope, err := domain.NewDecisionScopeReference(row.scope)
 		if err != nil {
@@ -165,12 +182,13 @@ func (catalogue *GateConditionCatalogue) ListGateConditions(
 			findings = append(findings, finding)
 		}
 		row.entry = ports.GateConditionCatalogueEntry{
-			Scope:           scope,
-			Action:          action,
-			Boundary:        boundary,
-			RegisteredAt:    row.registeredAt.UTC(),
-			Findings:        findings,
-			DutyPaymentRule: dutyRule,
+			Scope:                 scope,
+			Action:                action,
+			Boundary:              boundary,
+			RegisteredAt:          row.registeredAt.UTC(),
+			Findings:              findings,
+			DutyPaymentRule:       dutyRule,
+			WeightDiscrepancyRule: weightRule,
 		}
 		fetched = append(fetched, row)
 	}

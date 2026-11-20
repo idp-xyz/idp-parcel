@@ -138,9 +138,18 @@ func TestAReleaseGateVerificationIsRecordedOrLeftUndecidedThroughTheProductionFa
 		t.Fatalf("未决发了核对意图：%d → %d", intentsBefore, n)
 	}
 
-	// 规则登成「不构成前置条件」：认定全满足，结论 MET，核对与意图同笔落地。
+	// 税费规则登成「不构成前置条件」之后，毛重规则还没登：停在毛重规则未配置，不取零容差。
 	inTransaction(func(txCtx context.Context) error {
 		_, err := registrations.RegisterDutyPaymentGateRule(txCtx, tenant, scope, ccdomain.CrossCustomsMovement, boundary, ccdomain.DutyPaymentNotAPrecondition())
+		return err
+	})
+	status, answer = post(gateVerifier, body)
+	if status != http.StatusOK || answer["outcome"] != "UNDECIDED" || answer["undecidedReason"] != "WEIGHT_DISCREPANCY_GATE_RULE_NOT_CONFIGURED" {
+		t.Fatalf("毛重规则未登记 = %d %v", status, answer)
+	}
+
+	inTransaction(func(txCtx context.Context) error {
+		_, err := registrations.RegisterWeightDiscrepancyGateRule(txCtx, tenant, scope, ccdomain.CrossCustomsMovement, boundary, ccdomain.WeightDiscrepancyNotAPrecondition())
 		return err
 	})
 	status, answer = post(gateVerifier, body)

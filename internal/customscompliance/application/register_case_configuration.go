@@ -82,6 +82,10 @@ type RegisterCaseConfigurationDeps struct {
 	DutyRules    ports.DutyPaymentGateRuleRegistry
 	DutyRuleView ports.DutyPaymentGateRuleView
 
+	// 「毛重差异」那一道的规则行：与目录同键、写读两半都靠读回判重放还是冲突。容差取值属租户。
+	WeightRules    ports.WeightDiscrepancyGateRuleRegistry
+	WeightRuleView ports.WeightDiscrepancyGateRuleView
+
 	// 「真实程序核对税费付款时要不要求付款人」那一格规则（票 sa-cc/12 裁决 1，形照上一格）：键是（租户、
 	// 监管程序），不挂门禁目录——它是程序的属性，与哪份申报无关——所以写读两半落在税费付款核对那一对
 	// 适配器上；冲突判定同样靠读回。
@@ -549,6 +553,73 @@ func (handler *RegisterCaseConfigurationHandler) RegisterPayerRequirement(
 		return ConfigurationContentConflict, nil
 	}
 	return ConfigurationExisting, nil
+}
+
+// RegisterWeightDiscrepancyGateRuleCommand 携带门禁目录里「毛重差异」那一道的规则登记。
+// NotAPrecondition 为真即这一道不构成前置条件；否则 MaxDelta 与 Unit 是容差。两形互斥，命令不带默认。
+type RegisterWeightDiscrepancyGateRuleCommand struct {
+	TenantID         domain.TenantID
+	Scope            domain.DecisionScopeReference
+	Action           domain.GuardedAction
+	Boundary         domain.CustomsProcedureReference
+	NotAPrecondition bool
+	MaxDelta         string
+	Unit             string
+}
+
+// RegisterWeightDiscrepancyGateRule 登记「毛重差异」那一道的规则。同键同规则重放`已存在`，同键换规则`内容冲突`。
+func (handler *RegisterCaseConfigurationHandler) RegisterWeightDiscrepancyGateRule(
+	ctx context.Context,
+	command RegisterWeightDiscrepancyGateRuleCommand,
+) (CaseConfigurationOutcome, error) {
+	if blankTenant(command.TenantID) || command.Action.String() == "" ||
+		command.Scope.String() == "" || command.Boundary.String() == "" {
+		return ConfigurationNotAccepted, nil
+	}
+	var rule domain.WeightDiscrepancyGateRule
+	if command.NotAPrecondition {
+		if command.MaxDelta != "" || command.Unit != "" {
+			return ConfigurationNotAccepted, nil
+		}
+		rule = domain.WeightDiscrepancyNotAPrecondition()
+	} else {
+		built, err := domain.AllowWeightDeltaUpTo(command.MaxDelta, command.Unit)
+		if err != nil {
+			return ConfigurationNotAccepted, nil
+		}
+		rule = built
+	}
+
+	saved, err := handler.deps.WeightRules.RegisterWeightDiscrepancyGateRule(
+		ctx, command.TenantID, command.Scope, command.Action, command.Boundary, rule)
+	if err != nil {
+		return ConfigurationUndecided, nil
+	}
+	if saved == ports.CaseConfigurationRegistered {
+		return ConfigurationRegistered, nil
+	}
+
+	existing, found, err := handler.deps.WeightRuleView.LoadWeightDiscrepancyGateRule(
+		ctx, command.TenantID, command.Scope, command.Action, command.Boundary)
+	if err != nil || !found {
+		return ConfigurationUndecided, nil
+	}
+	if !sameWeightDiscrepancyGateRule(existing, rule) {
+		return ConfigurationContentConflict, nil
+	}
+	return ConfigurationExisting, nil
+}
+
+func sameWeightDiscrepancyGateRule(existing, requested domain.WeightDiscrepancyGateRule) bool {
+	if existing.NotAPrecondition() != requested.NotAPrecondition() {
+		return false
+	}
+	if existing.NotAPrecondition() {
+		return true
+	}
+	leftDelta, leftUnit, leftOK := existing.MaxDelta()
+	rightDelta, rightUnit, rightOK := requested.MaxDelta()
+	return leftOK && rightOK && leftDelta == rightDelta && leftUnit == rightUnit
 }
 
 // sameDutyPaymentGateRule 逐格比两条规则。接受集合在领域构造期已去重排序，按位比即按集合比。

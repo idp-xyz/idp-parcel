@@ -65,6 +65,8 @@ func newAdmissionDB(t *testing.T) *admissionDB {
 	construct(err)
 	duty, err := adapter.NewDutyPaymentReconciliation(fixture.db)
 	construct(err)
+	submissions, err := adapter.NewDeclarationSubmissions(fixture.db)
+	construct(err)
 	releases, err := adapter.NewReleaseOutcomeView(fixture.db)
 	construct(err)
 	store, err := adapter.NewActionAdmissionJudgements(fixture.db)
@@ -78,6 +80,9 @@ func newAdmissionDB(t *testing.T) *admissionDB {
 		Conditions:           gates,
 		DutyRules:            gates,
 		DutyVerifications:    duty,
+		WeightRules:          gates,
+		Submissions:          submissions,
+		MemberWeights:        idleMemberWeights{},
 		Releases:             releases,
 		Store:                store,
 		Clock:                clock,
@@ -146,7 +151,20 @@ func (db *admissionDB) gate(action string, dutyNotAPrecondition bool, findings m
 				 accept_coverage, accept_delta, accept_validity, registered_at)
 			 VALUES ($1, $2, $3, $4, true, '[]', '[]', '[]', $5)`,
 			admissionTenant, admissionUnitRef, action, admissionProcedure, admissionDBAt.Add(-46*time.Hour))
+		db.fixture.seed(db.t,
+			`INSERT INTO customs_compliance.gate_condition_weight_discrepancy_rule
+				(tenant_id, scope_ref, action, boundary_ref, not_a_precondition, max_delta, weight_unit, registered_at)
+			 VALUES ($1, $2, $3, $4, true, NULL, NULL, $5)`,
+			admissionTenant, admissionUnitRef, action, admissionProcedure, admissionDBAt.Add(-46*time.Hour))
 	}
+}
+
+type idleMemberWeights struct{}
+
+func (idleMemberWeights) LoadMemberMeasuredWeight(
+	context.Context, domain.TenantID, domain.DeclaredParcelReference,
+) (ports.MeasuredWeightReading, error) {
+	return ports.MeasuredWeightReading{Answer: ports.MeasuredWeightNone}, nil
 }
 
 // release 落一份放行层接收记录与它的放行事实（0001 + 0015），业务时间取 occurredAt。

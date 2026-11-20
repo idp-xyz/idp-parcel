@@ -1,0 +1,8 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "scopeRef": "SYN-UNIT-CN-EXPORT-DEMO-01",
+  "action": "CROSS_CUSTOMS_MOVEMENT",
+  "boundaryRef": "SYN-PROC-CN-EXPORT",
+  "maxDelta": "0.50",
+  "unit": "KG"
+}

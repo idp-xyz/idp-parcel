@@ -344,18 +344,58 @@ type GateVerificationHandoff interface {
 }
 
 // GateVersionDigest 是门禁核对内容的稳定指纹：逐项判断（FindingsDigest 的行）加「税费付款」那一道的
-// 读数——三态原值与核对版本引用各成一行（票 sa-cc/06）。读数进指纹的理由：同一版核对折出的判断不变
-// 而核对换了版（比如迟到事实追加新版仍算已覆盖），门禁记录带的引用就该指向新版——那是另一版门禁
-// 判断，不是重放。没挂读数时与 FindingsDigest 逐字节相同，本册加读数之前的旧行照旧能撞上。
-func GateVersionDigest(findings []domain.PreconditionFinding, reading domain.DutyPaymentGateReading, applied bool) string {
-	if !applied {
+// 读数——三态原值与核对版本引用各成一行（票 sa-cc/06）——再加「毛重差异」那一道的读数。读数进指纹的理由：
+// 复测换了实测、或提交版本换了，门禁记录带的引用就该指向新的一次比较——那是另一版门禁判断，不是重放。
+// 两道都没挂时与 FindingsDigest 逐字节相同；只挂税费付款时与加毛重读数之前的指纹逐字节相同，旧行照旧能撞上。
+func GateVersionDigest(
+	findings []domain.PreconditionFinding,
+	duty domain.DutyPaymentGateReading,
+	dutyApplied bool,
+	weight domain.WeightDiscrepancyGateReading,
+	weightApplied bool,
+) string {
+	if !dutyApplied && !weightApplied {
 		return FindingsDigest(findings)
 	}
-	lines := append(findingDigestLines(findings),
-		"duty-payment="+reading.Coverage.String()+"/"+reading.Delta.String()+"/"+reading.Validity.String()+
-			"@"+reading.Verification.Duty.String()+"/"+reading.Verification.Funds.String()+"/"+reading.Verification.Version)
+	lines := findingDigestLines(findings)
+	if dutyApplied {
+		lines = append(lines, "duty-payment="+duty.Coverage.String()+"/"+duty.Delta.String()+"/"+duty.Validity.String()+
+			"@"+duty.Verification.Duty.String()+"/"+duty.Verification.Funds.String()+"/"+duty.Verification.Version)
+	}
+	if weightApplied {
+		lines = append(lines, weightDiscrepancyDigestLines(weight)...)
+	}
 	digest := sha256.Sum256([]byte(strings.Join(lines, "\x00")))
 	return hex.EncodeToString(digest[:])
+}
+
+// weightDiscrepancyDigestLines 把毛重差异读数编成指纹行。成员按读数上的顺序入行——Judge 已按包裹引用排定。
+// 字段之间用单元分隔符，免得包裹引用或来源身份里的斜线把两格拼成同一行。
+func weightDiscrepancyDigestLines(reading domain.WeightDiscrepancyGateReading) []string {
+	const field = "\x1f"
+	lines := []string{"weight-discrepancy=" + strings.Join([]string{
+		reading.State.String(),
+		reading.SubmissionVersion.String(),
+		reading.MaxDelta,
+		reading.Unit,
+	}, field)}
+	for _, member := range reading.Members {
+		within := "false"
+		if member.WithinTolerance {
+			within = "true"
+		}
+		lines = append(lines, "weight-member="+strings.Join([]string{
+			member.Parcel.String(),
+			member.DeclaredWeight,
+			member.DeclaredUnit,
+			member.DeclaredSource,
+			member.MeasuredWeight,
+			member.MeasuredUnit,
+			member.MeasurementSource,
+			within,
+		}, field))
+	}
+	return lines
 }
 
 // DutyPaymentGateRuleView 按门禁三维键取回「税费付款」那一道的登记规则（ADR-0137 决定三）。found=false
@@ -370,6 +410,18 @@ type DutyPaymentGateRuleView interface {
 		action domain.GuardedAction,
 		boundary domain.CustomsProcedureReference,
 	) (domain.DutyPaymentGateRule, bool, error)
+}
+
+// WeightDiscrepancyGateRuleView 按门禁三维键取回「毛重差异」那一道的登记规则。found=false 即目录里没有
+// 这一道的规则行——门禁编排答「规则未配置」，不取零容差、也不把这一道当成已经满足。
+type WeightDiscrepancyGateRuleView interface {
+	LoadWeightDiscrepancyGateRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.DecisionScopeReference,
+		action domain.GuardedAction,
+		boundary domain.CustomsProcedureReference,
+	) (domain.WeightDiscrepancyGateRule, bool, error)
 }
 
 // FollowUpTargetKey 是后续申报动作目标的幂等键：同一触发依据对同一提交版本的同类
@@ -679,11 +731,18 @@ const (
 	DeclarationCorrectionCurrentMoved
 )
 
+// CurrentDeclarationSubmissionView 是放行门禁核对要的那一窄读口：按逻辑申报目标取当前提交版本。
+// DeclarationSubmissionStore 已有同名方法，持久化适配器直接满足，不再为门禁另写一份查询。
+type CurrentDeclarationSubmissionView interface {
+	FindByKey(ctx context.Context, key DeclarationSubmissionKey) (DeclarationSubmissionRecord, bool, error)
+}
+
 // DeclarationSubmissionStore 按幂等键找回并保存提交申报（写入代数同 ADR-0031）。
 // FindByKey 交回当前版；FindByVersion 按版本读回留存版本（原案内更正后原版本永久
 // 保留，CONTEXT「原提交及其结果永久保留」——下游按信封宣告的版本取数，不受当前版推进影响）。
 // SaveCorrection 在同一事务里把 CorrectedFrom 指名的当前版转为非当前并落新版本行，
 // 前版内容一列不改。
+
 type DeclarationSubmissionStore interface {
 	FindByKey(ctx context.Context, key DeclarationSubmissionKey) (DeclarationSubmissionRecord, bool, error)
 	FindByVersion(
@@ -855,6 +914,19 @@ type DutyPaymentGateRuleRegistry interface {
 	) (CaseConfigurationSaveOutcome, error)
 }
 
+// WeightDiscrepancyGateRuleRegistry 是门禁目录里「毛重差异」那一道规则行的写口。与税费付款规则同一把三维键、
+// 同一本目录；写入代数同样不 UPSERT。容差取值属租户，本口不写任何默认。
+type WeightDiscrepancyGateRuleRegistry interface {
+	RegisterWeightDiscrepancyGateRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.DecisionScopeReference,
+		action domain.GuardedAction,
+		boundary domain.CustomsProcedureReference,
+		rule domain.WeightDiscrepancyGateRule,
+	) (CaseConfigurationSaveOutcome, error)
+}
+
 // DeclarationVersionFactory 签发提交版本标识。
 type DeclarationVersionFactory interface {
 	NextSubmissionVersion(ctx context.Context) (domain.SubmissionVersionID, error)
@@ -984,6 +1056,8 @@ type GateConditionCatalogueEntry struct {
 	// 「认定或规则」，既有认定行一字不变）；nil 即这一道尚未登规则——门禁编排在那一格答「规则
 	// 未配置」，上列如实透出空位而不替它填。
 	DutyPaymentRule *domain.DutyPaymentGateRule
+	// WeightDiscrepancyRule 是「毛重差异」那一道登的规则；nil 即尚未登，上列不替它填容差。
+	WeightDiscrepancyRule *domain.WeightDiscrepancyGateRule
 }
 
 // GateConditionCatalogueRead 是门禁条件登记册的伴生列表读口（ADR-0077 Decision

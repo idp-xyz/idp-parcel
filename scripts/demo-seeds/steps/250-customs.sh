@@ -32,6 +32,13 @@ echo "== 关务案件配置登记（customs-compliance：就绪/授权/规则/�
 "$BIN/parcel-customs-register" duty-payment-gate-rule -input "$SEEDS/customs/40-duty-payment-gate-rule-unit-loading-departure.json"
 "$BIN/parcel-customs-register" duty-payment-gate-rule -input "$SEEDS/customs/41-duty-payment-gate-rule-unit-cross-customs-movement.json"
 "$BIN/parcel-customs-register" duty-payment-gate-rule -input "$SEEDS/customs/42-duty-payment-gate-rule-unit-final-delivery.json"
+# 「毛重差异」那一道（证据 S）：商业范围与单元上交出、出发、交付取「不构成前置条件」；
+# 跨关务区域移动在演示单元上取 0.50 KG 容差。真实租户的容差属上线实施，未登即答未配置，不取零容差。
+"$BIN/parcel-customs-register" weight-discrepancy-gate-rule -input "$SEEDS/customs/43-weight-discrepancy-gate-rule-not-a-precondition.json"
+"$BIN/parcel-customs-register" weight-discrepancy-gate-rule -input "$SEEDS/customs/44-weight-discrepancy-gate-rule-unit-outbound-release.json"
+"$BIN/parcel-customs-register" weight-discrepancy-gate-rule -input "$SEEDS/customs/45-weight-discrepancy-gate-rule-unit-loading-departure.json"
+"$BIN/parcel-customs-register" weight-discrepancy-gate-rule -input "$SEEDS/customs/46-weight-discrepancy-gate-rule-unit-cross-customs-movement.json"
+"$BIN/parcel-customs-register" weight-discrepancy-gate-rule -input "$SEEDS/customs/47-weight-discrepancy-gate-rule-unit-final-delivery.json"
 # 第二份门禁只登目录、不登任何前置条件——0008 自注点名必须与「目录未登记」分得开的
 # 那一格：登记了空清单是「此动作在此边界本就不受门禁」（领域折为不适用），未登记才是
 # 无从复核。合规限制页据它展示两态各说各话（票 admin-web-page-wiring-frontier/06）。

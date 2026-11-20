@@ -12,6 +12,7 @@ import (
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	tfcustoms "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/customscompliance"
@@ -89,13 +90,16 @@ func newDepartureGateDB(t *testing.T) *departureGateDB {
 	must(err)
 	duty, err := ccpostgres.NewDutyPaymentReconciliation(db)
 	must(err)
+	submissions, err := ccpostgres.NewDeclarationSubmissions(db)
+	must(err)
 	releases, err := ccpostgres.NewReleaseOutcomeView(db)
 	must(err)
 	store, err := ccpostgres.NewActionAdmissionJudgements(db)
 	must(err)
 	handler, err := ccapp.NewJudgeActionAdmissionHandler(ccapp.JudgeActionAdmissionDeps{
 		Zones: zones, Scopes: scopes, Restrictions: restrictions, InternalRestrictions: internalRestrictions, Conditions: gates, DutyRules: gates,
-		DutyVerifications: duty, Releases: releases, Store: store, Clock: fixedClock{at: departureGateAt.Add(time.Minute)},
+		DutyVerifications: duty, WeightRules: gates, Submissions: submissions, MemberWeights: departureMemberWeights{},
+		Releases: releases, Store: store, Clock: fixedClock{at: departureGateAt.Add(time.Minute)},
 	})
 	must(err)
 	view, err := tfcustoms.NewDepartureGateView(ownTransactionJudge{db: db, inner: handler})
@@ -121,6 +125,14 @@ func newDepartureGateDB(t *testing.T) *departureGateDB {
 		}
 	}
 	return fixture
+}
+
+type departureMemberWeights struct{}
+
+func (departureMemberWeights) LoadMemberMeasuredWeight(
+	context.Context, ccdomain.TenantID, ccdomain.DeclaredParcelReference,
+) (ccports.MeasuredWeightReading, error) {
+	return ccports.MeasuredWeightReading{Answer: ccports.MeasuredWeightNone}, nil
 }
 
 type fixedClock struct{ at time.Time }

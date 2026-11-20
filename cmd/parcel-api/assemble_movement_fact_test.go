@@ -444,6 +444,10 @@ func TestEveryGateReadingIsRecordedInTheSameRowAsItsDeparture(t *testing.T) {
 			(tenant_id, scope_ref, action, boundary_ref, not_a_precondition, accept_coverage, accept_delta, accept_validity, registered_at)
 		 VALUES ($1, $2, 'LOADING_DEPARTURE', $3, true, '[]', '[]', '[]', $4)`,
 		departureLineTenant, departureLineUnit, departureLineProc, departureLineDepartedAt.Add(-46*time.Hour))
+	line.seed(`INSERT INTO customs_compliance.gate_condition_weight_discrepancy_rule
+			(tenant_id, scope_ref, action, boundary_ref, not_a_precondition, max_delta, weight_unit, registered_at)
+		 VALUES ($1, $2, 'LOADING_DEPARTURE', $3, true, NULL, NULL, $4)`,
+		departureLineTenant, departureLineUnit, departureLineProc, departureLineDepartedAt.Add(-46*time.Hour))
 	releasedAt := departureLineDepartedAt.Add(-2 * time.Hour)
 	line.seed(`INSERT INTO customs_compliance.external_result
 			(tenant_id, source_id, content_digest, unattributable, layer_conflict, result, submission_version, recorded_at)

@@ -54,12 +54,17 @@ func TestDemoDutyPaymentGateRuleSeedLetsTheReleaseGateBeVerified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	submissions, err := adapter.NewDeclarationSubmissions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	verifications, err := adapter.NewGateVerifications(db)
 	if err != nil {
 		t.Fatal(err)
 	}
 	verifier, err := application.NewVerifyReleaseGateHandler(application.VerifyReleaseGateDeps{
 		Conditions: gates, DutyRules: gates, DutyVerifications: duty,
+		WeightRules: gates, Submissions: submissions, MemberWeights: registerMemberWeights{},
 		Store: verifications, Downstream: droppedHandoff{}, Clock: nodeZoneClock{},
 	})
 	if err != nil {
@@ -115,6 +120,15 @@ func TestDemoDutyPaymentGateRuleSeedLetsTheReleaseGateBeVerified(t *testing.T) {
 		"boundaryRef": "SYN-PROC-CN-EXPORT", "notAPrecondition": true, "acceptCoverage": ["COVERED"]}`)
 	if message, code := execute(ctx, commandDutyPaymentGateRule, mixed, registrar); code == exitRegistered {
 		t.Fatalf("两形混写不该登记：%s", message)
+	}
+
+	if result := verify(); result.Outcome() != application.GateVerificationUndecided ||
+		result.UndecidedReason() != application.WeightDiscrepancyGateRuleNotConfigured {
+		t.Fatalf("毛重规则未登 = %v / %v", result.Outcome(), result.UndecidedReason())
+	}
+	weight := seed("43-weight-discrepancy-gate-rule-not-a-precondition.json")
+	if message, code := execute(ctx, commandWeightDiscrepancyGateRule, weight, registrar); code != exitRegistered {
+		t.Fatalf("毛重规则种子：%s（%d）", message, code)
 	}
 
 	result := verify()

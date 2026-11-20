@@ -74,18 +74,38 @@ type releaseGateDutyPaymentResponse struct {
 	Validity string `json:"validity"`
 }
 
+type releaseGateWeightMemberResponse struct {
+	Parcel            string `json:"parcel"`
+	DeclaredWeight    string `json:"declaredWeight,omitempty"`
+	DeclaredUnit      string `json:"declaredUnit,omitempty"`
+	DeclaredSource    string `json:"declaredSource,omitempty"`
+	MeasuredWeight    string `json:"measuredWeight"`
+	MeasuredUnit      string `json:"measuredUnit"`
+	MeasurementSource string `json:"measurementSource"`
+	WithinTolerance   bool   `json:"withinTolerance"`
+}
+
+type releaseGateWeightDiscrepancyResponse struct {
+	State             string                            `json:"state"`
+	SubmissionVersion string                            `json:"submissionVersion"`
+	MaxDelta          string                            `json:"maxDelta"`
+	Unit              string                            `json:"unit"`
+	Members           []releaseGateWeightMemberResponse `json:"members"`
+}
+
 // releaseGateVerificationResponse 是核对口的封闭响应形状。类型上没有放行字段：门禁满足不生成放行（放行结果仍由外部事实接收）。
 type releaseGateVerificationResponse struct {
-	Outcome          string                          `json:"outcome"`
-	UndecidedReason  string                          `json:"undecidedReason,omitempty"`
-	Scope            string                          `json:"scope,omitempty"`
-	Action           string                          `json:"action,omitempty"`
-	Boundary         string                          `json:"boundary,omitempty"`
-	Conclusion       string                          `json:"conclusion,omitempty"`
-	Preconditions    []string                        `json:"preconditions,omitempty"`
-	DutyPayment      *releaseGateDutyPaymentResponse `json:"dutyPayment,omitempty"`
-	VerifiedAt       string                          `json:"verifiedAt,omitempty"`
-	HandoffReference string                          `json:"handoffReference,omitempty"`
+	Outcome           string                                `json:"outcome"`
+	UndecidedReason   string                                `json:"undecidedReason,omitempty"`
+	Scope             string                                `json:"scope,omitempty"`
+	Action            string                                `json:"action,omitempty"`
+	Boundary          string                                `json:"boundary,omitempty"`
+	Conclusion        string                                `json:"conclusion,omitempty"`
+	Preconditions     []string                              `json:"preconditions,omitempty"`
+	DutyPayment       *releaseGateDutyPaymentResponse       `json:"dutyPayment,omitempty"`
+	WeightDiscrepancy *releaseGateWeightDiscrepancyResponse `json:"weightDiscrepancy,omitempty"`
+	VerifiedAt        string                                `json:"verifiedAt,omitempty"`
+	HandoffReference  string                                `json:"handoffReference,omitempty"`
 }
 
 // writeReleaseGateVerification 逐名转写。真落了册才 201；重放、未受理与未决都是形成了的业务答案，200——未决的原因分格，
@@ -118,10 +138,36 @@ func writeReleaseGateVerification(response http.ResponseWriter, result applicati
 				Validity: reading.Validity.String(),
 			}
 		}
+		if reading, applied := gate.WeightDiscrepancy(); applied {
+			body.WeightDiscrepancy = weightDiscrepancyResponse(reading)
+		}
 	}
 	status := http.StatusOK
 	if result.Outcome() == application.GateVerificationRecorded {
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, body)
+}
+
+func weightDiscrepancyResponse(reading domain.WeightDiscrepancyGateReading) *releaseGateWeightDiscrepancyResponse {
+	members := make([]releaseGateWeightMemberResponse, 0, len(reading.Members))
+	for _, member := range reading.Members {
+		members = append(members, releaseGateWeightMemberResponse{
+			Parcel:            member.Parcel.String(),
+			DeclaredWeight:    member.DeclaredWeight,
+			DeclaredUnit:      member.DeclaredUnit,
+			DeclaredSource:    member.DeclaredSource,
+			MeasuredWeight:    member.MeasuredWeight,
+			MeasuredUnit:      member.MeasuredUnit,
+			MeasurementSource: member.MeasurementSource,
+			WithinTolerance:   member.WithinTolerance,
+		})
+	}
+	return &releaseGateWeightDiscrepancyResponse{
+		State:             reading.State.String(),
+		SubmissionVersion: reading.SubmissionVersion.String(),
+		MaxDelta:          reading.MaxDelta,
+		Unit:              reading.Unit,
+		Members:           members,
+	}
 }

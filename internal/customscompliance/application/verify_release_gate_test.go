@@ -60,6 +60,58 @@ type currentDutyVerificationDouble struct {
 	err    error
 }
 
+type weightRuleViewDouble struct {
+	rule  domain.WeightDiscrepancyGateRule
+	found bool
+	err   error
+}
+
+func (double *weightRuleViewDouble) LoadWeightDiscrepancyGateRule(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.DecisionScopeReference,
+	_ domain.GuardedAction,
+	_ domain.CustomsProcedureReference,
+) (domain.WeightDiscrepancyGateRule, bool, error) {
+	if double.err != nil {
+		return domain.WeightDiscrepancyGateRule{}, false, double.err
+	}
+	return double.rule, double.found, nil
+}
+
+type submissionViewDouble struct {
+	record ports.DeclarationSubmissionRecord
+	found  bool
+	err    error
+}
+
+func (double *submissionViewDouble) FindByKey(
+	_ context.Context, _ ports.DeclarationSubmissionKey,
+) (ports.DeclarationSubmissionRecord, bool, error) {
+	if double.err != nil {
+		return ports.DeclarationSubmissionRecord{}, false, double.err
+	}
+	return double.record, double.found, nil
+}
+
+type memberWeightViewDouble struct {
+	byParcel map[string]ports.MeasuredWeightReading
+	err      error
+}
+
+func (double *memberWeightViewDouble) LoadMemberMeasuredWeight(
+	_ context.Context, _ domain.TenantID, parcel domain.DeclaredParcelReference,
+) (ports.MeasuredWeightReading, error) {
+	if double.err != nil {
+		return ports.MeasuredWeightReading{}, double.err
+	}
+	reading, ok := double.byParcel[parcel.String()]
+	if !ok {
+		return ports.MeasuredWeightReading{Answer: ports.MeasuredWeightNone}, nil
+	}
+	return reading, nil
+}
+
 func (double *currentDutyVerificationDouble) LoadCurrentDutyVerification(
 	_ context.Context,
 	_ domain.TenantID,
@@ -117,6 +169,9 @@ type gateFixture struct {
 	handler       *application.VerifyReleaseGateHandler
 	conditions    *gateConditionViewDouble
 	dutyRules     *dutyRuleViewDouble
+	weightRules   *weightRuleViewDouble
+	submissions   *submissionViewDouble
+	memberWeights *memberWeightViewDouble
 	verifications *currentDutyVerificationDouble
 	store         *gateStoreDouble
 	downstream    *gateDownstreamDouble
@@ -127,6 +182,9 @@ func fullGateDeps(fixture *gateFixture) application.VerifyReleaseGateDeps {
 		Conditions:        fixture.conditions,
 		DutyRules:         fixture.dutyRules,
 		DutyVerifications: fixture.verifications,
+		WeightRules:       fixture.weightRules,
+		Submissions:       fixture.submissions,
+		MemberWeights:     fixture.memberWeights,
 		Store:             fixture.store,
 		Downstream:        fixture.downstream,
 		Clock:             fixedClock{at: gateAt},
@@ -140,6 +198,9 @@ func newGateFixture(t *testing.T) *gateFixture {
 	fixture := &gateFixture{
 		conditions:    &gateConditionViewDouble{configured: true},
 		dutyRules:     &dutyRuleViewDouble{rule: domain.DutyPaymentNotAPrecondition(), found: true},
+		weightRules:   &weightRuleViewDouble{rule: domain.WeightDiscrepancyNotAPrecondition(), found: true},
+		submissions:   &submissionViewDouble{},
+		memberWeights: &memberWeightViewDouble{},
 		verifications: &currentDutyVerificationDouble{},
 		store:         &gateStoreDouble{byKey: map[ports.GateVerificationKey]domain.ReleaseGateVerification{}},
 		downstream:    &gateDownstreamDouble{},
@@ -460,6 +521,9 @@ func TestTheGateHandlerNamesWhichDependencyIsMissing(t *testing.T) {
 		{"gate condition view", func(deps *application.VerifyReleaseGateDeps) { deps.Conditions = nil }},
 		{"duty payment gate rule view", func(deps *application.VerifyReleaseGateDeps) { deps.DutyRules = nil }},
 		{"current duty verification view", func(deps *application.VerifyReleaseGateDeps) { deps.DutyVerifications = nil }},
+		{"weight discrepancy gate rule view", func(deps *application.VerifyReleaseGateDeps) { deps.WeightRules = nil }},
+		{"current declaration submission view", func(deps *application.VerifyReleaseGateDeps) { deps.Submissions = nil }},
+		{"member measured weight view", func(deps *application.VerifyReleaseGateDeps) { deps.MemberWeights = nil }},
 		{"gate verification store", func(deps *application.VerifyReleaseGateDeps) { deps.Store = nil }},
 		{"gate verification handoff", func(deps *application.VerifyReleaseGateDeps) { deps.Downstream = nil }},
 		{"clock", func(deps *application.VerifyReleaseGateDeps) { deps.Clock = nil }},

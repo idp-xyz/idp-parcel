@@ -210,7 +210,7 @@ func synGateWithReading(t *testing.T, version string) (domain.ReleaseGateVerific
 	}
 	return gate, ports.GateVerificationKey{
 		TenantID: tenant, Scope: scope, Action: domain.OutboundRelease, Boundary: boundary,
-		Digest: ports.GateVersionDigest(findings, reading, true),
+		Digest: ports.GateVersionDigest(findings, reading, true, domain.WeightDiscrepancyGateReading{}, false),
 	}
 }
 
@@ -268,7 +268,7 @@ func TestAGateVerificationRoundTripsItsDutyPaymentReadingByReference(t *testing.
 	}
 	plainKey := ports.GateVerificationKey{
 		TenantID: tenant, Scope: scope, Action: domain.OutboundRelease, Boundary: boundary,
-		Digest: ports.GateVersionDigest(plainFindings, domain.DutyPaymentGateReading{}, false),
+		Digest: ports.GateVersionDigest(plainFindings, domain.DutyPaymentGateReading{}, false, domain.WeightDiscrepancyGateReading{}, false),
 	}
 	if plainKey.Digest != ports.FindingsDigest(plainFindings) {
 		t.Fatal("没挂读数时门禁指纹该与逐项判断指纹逐字节相同——旧行照旧能撞上")

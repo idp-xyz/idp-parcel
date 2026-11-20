@@ -250,8 +250,10 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		GateView:       gateView,
 		// 「税费付款」规则行的写读两半与目录 / 认定同一对适配器（票 sa-cc/06）；本 CLI 今天没有登这一格的
 		// 子命令，接上只为让组合根不留 nil、后继登记面来接时一处可核。
-		DutyRules:    gates,
-		DutyRuleView: gateView,
+		DutyRules:      gates,
+		DutyRuleView:   gateView,
+		WeightRules:    gates,
+		WeightRuleView: gateView,
 		// 「要不要求付款人」那一格规则的写读两半与核对同一对适配器（票 sa-cc/12）；同上一格，本 CLI 今天
 		// 没有登它的子命令。
 		PayerRules:    dutyReconciliation,

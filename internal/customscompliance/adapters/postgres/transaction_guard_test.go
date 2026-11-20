@@ -78,6 +78,9 @@ func TestCaseConfigRegistrationsRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := gates.RegisterGateFinding(ctx, domain.TenantID{}, domain.DecisionScopeReference{}, domain.OutboundRelease, domain.CustomsProcedureReference{}, domain.PreconditionFinding{State: domain.PreconditionMet}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记闸门核验应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if _, err := gates.RegisterWeightDiscrepancyGateRule(ctx, domain.TenantID{}, domain.DecisionScopeReference{}, domain.OutboundRelease, domain.CustomsProcedureReference{}, domain.WeightDiscrepancyNotAPrecondition()); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记毛重差异规则应返回 ErrTransactionRequired，实得：%v", err)
+	}
 
 	requirements, err := adapter.NewCaseRequirementRegistrations(db)
 	if err != nil {

@@ -518,10 +518,12 @@ func (repository *GateVerifications) FindByKey(
 		conclusionRaw    string
 		verifiedAt       time.Time
 		reading          dutyReadingColumns
+		weightRaw        []byte
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT preconditions, conclusion, verified_at,
-		        duty_state, duty_coverage, duty_delta, duty_validity, duty_ref, funds_ref, duty_version_digest
+		        duty_state, duty_coverage, duty_delta, duty_validity, duty_ref, funds_ref, duty_version_digest,
+		        weight_discrepancy
 		   FROM customs_compliance.gate_verification
 		  WHERE tenant_id = $1 AND scope_ref = $2 AND action = $3
 		    AND boundary_ref = $4 AND findings_digest = $5`,
@@ -529,7 +531,7 @@ func (repository *GateVerifications) FindByKey(
 		key.Boundary.String(), key.Digest,
 	).Scan(&preconditionsRaw, &conclusionRaw, &verifiedAt,
 		&reading.state, &reading.coverage, &reading.delta, &reading.validity,
-		&reading.duty, &reading.funds, &reading.version)
+		&reading.duty, &reading.funds, &reading.version, &weightRaw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ReleaseGateVerification{}, false, nil
 	}
@@ -561,6 +563,13 @@ func (repository *GateVerifications) FindByKey(
 	}
 	if reading.present() {
 		attached, err := reading.attachTo(gate)
+		if err != nil {
+			return domain.ReleaseGateVerification{}, false, fmt.Errorf("rebuild gate verification: %w", err)
+		}
+		gate = attached
+	}
+	if weightRaw != nil {
+		attached, err := attachWeightDiscrepancy(gate, weightRaw)
 		if err != nil {
 			return domain.ReleaseGateVerification{}, false, fmt.Errorf("rebuild gate verification: %w", err)
 		}
@@ -667,12 +676,18 @@ func (repository *GateVerifications) Save(
 		gate.VerifiedAt(),
 	}
 	args = append(args, dutyReadingArgs(gate)...)
+	weightArg, err := weightDiscrepancyArg(gate)
+	if err != nil {
+		return ports.GateVerificationSaveOutcomeInvalid, fmt.Errorf("save gate verification: %w", err)
+	}
+	args = append(args, weightArg)
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.gate_verification
 			(tenant_id, scope_ref, action, boundary_ref, findings_digest,
 			 preconditions, conclusion, verified_at,
-			 duty_state, duty_coverage, duty_delta, duty_validity, duty_ref, funds_ref, duty_version_digest)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			 duty_state, duty_coverage, duty_delta, duty_validity, duty_ref, funds_ref, duty_version_digest,
+			 weight_discrepancy)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		 ON CONFLICT DO NOTHING`,
 		args...,
 	)

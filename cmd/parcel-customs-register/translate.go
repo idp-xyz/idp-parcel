@@ -30,24 +30,25 @@ import (
 // 用法文本与未知命令的错误文本都从 allCommands 生成，不各抄一遍（parcel-network-register
 // supportedKinds 的教训）。
 const (
-	commandReadinessRegister       = "readiness-register"
-	commandReadinessRevoke         = "readiness-revoke"
-	commandAuthorityGrant          = "authority-grant"
-	commandAuthorityRevoke         = "authority-revoke"
-	commandInterpretationRule      = "interpretation-rule"
-	commandObligationCatalog       = "obligation-catalog"
-	commandObligationItem          = "obligation-item"
-	commandGateCatalog             = "gate-catalog"
-	commandGateFinding             = "gate-finding"
-	commandDutyPaymentGateRule     = "duty-payment-gate-rule"
-	commandCaseRequirement         = "case-requirement"
-	commandCandidatePort           = "candidate-port"
-	commandDeclarationPath         = "declaration-path"
-	commandRegulatoryCredential    = "regulatory-credential"
-	commandDutyCollaboration       = "duty-collaboration"
-	commandDutyPaymentVerification = "duty-payment-verification"
-	commandNodeZone                = "node-zone"
-	commandDeclarationChannel      = "declaration-channel"
+	commandReadinessRegister         = "readiness-register"
+	commandReadinessRevoke           = "readiness-revoke"
+	commandAuthorityGrant            = "authority-grant"
+	commandAuthorityRevoke           = "authority-revoke"
+	commandInterpretationRule        = "interpretation-rule"
+	commandObligationCatalog         = "obligation-catalog"
+	commandObligationItem            = "obligation-item"
+	commandGateCatalog               = "gate-catalog"
+	commandGateFinding               = "gate-finding"
+	commandDutyPaymentGateRule       = "duty-payment-gate-rule"
+	commandWeightDiscrepancyGateRule = "weight-discrepancy-gate-rule"
+	commandCaseRequirement           = "case-requirement"
+	commandCandidatePort             = "candidate-port"
+	commandDeclarationPath           = "declaration-path"
+	commandRegulatoryCredential      = "regulatory-credential"
+	commandDutyCollaboration         = "duty-collaboration"
+	commandDutyPaymentVerification   = "duty-payment-verification"
+	commandNodeZone                  = "node-zone"
+	commandDeclarationChannel        = "declaration-channel"
 )
 
 var allCommands = []string{
@@ -55,7 +56,7 @@ var allCommands = []string{
 	commandAuthorityGrant, commandAuthorityRevoke,
 	commandInterpretationRule,
 	commandObligationCatalog, commandObligationItem,
-	commandGateCatalog, commandGateFinding, commandDutyPaymentGateRule,
+	commandGateCatalog, commandGateFinding, commandDutyPaymentGateRule, commandWeightDiscrepancyGateRule,
 	commandCaseRequirement,
 	commandCandidatePort, commandDeclarationPath,
 	commandRegulatoryCredential, commandDutyCollaboration, commandDutyPaymentVerification,
@@ -181,6 +182,14 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 		}
 		return configured(func(ctx context.Context, registrar registrar) (application.CaseConfigurationOutcome, error) {
 			return registrar.configurations.RegisterDutyPaymentGateRule(ctx, translated)
+		}), nil
+	case commandWeightDiscrepancyGateRule:
+		translated, err := registrationjson.WeightDiscrepancyGateRuleFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return configured(func(ctx context.Context, registrar registrar) (application.CaseConfigurationOutcome, error) {
+			return registrar.configurations.RegisterWeightDiscrepancyGateRule(ctx, translated)
 		}), nil
 	case commandCaseRequirement:
 		translated, err := registrationjson.CaseRequirementFromJSON(raw)

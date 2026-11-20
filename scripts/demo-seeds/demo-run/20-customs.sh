@@ -39,6 +39,14 @@ trap 'stop_broker; rm -f "$LAST"' EXIT
 ch_submit
 ch_intake
 
+# 成版前先称一条 2.10 KG，提交版本把这条实测固定下来。写法同 65-reweigh.sh 的称重量方。
+step "称重量方 2.10 KG、22×16×11 CM" "$OP" POST /node-operations/manual-measurements \
+  "$(pj sourceId="SYN-WEIGH-${STAMP}-FIX" objectKind=HANDLING_UNIT objectId="$UNIT" node=SYN-NODE-SHA-HUB \
+      location=SYN-BENCH-01 basis="$PARCEL" performedBy=SYN-SCALE-01 evidenceRef="WEIGH/SYN-WEIGH-${STAMP}-FIX" \
+      occurredAt="$(now_utc)" weightValue=2.10 weightUnit=KG \
+      length=22 width=16 height=11 dimensionUnit=CM originalDocument="SYN-DOC-SYN-WEIGH-${STAMP}-FIX")" \
+  "201:MEASUREMENT_RECORDED,200:EXISTING_RESULT"
+
 out="$(bash "$SEEDS_DIR/declare-one-parcel.sh" "$PARCEL")" || { printf '[失败] declare-one-parcel.sh：%s\n' "$out" >&2; exit 1; }
 printf '%-34s → %s\n' "立案、授权确认、申报提交" "$out"
 CASE="$(sed -n 's/^案件 \([^；]*\)；.*/\1/p' <<<"$out")"
@@ -59,8 +67,32 @@ step "放行结果 FULL（报关服务商令牌）" "$btok" POST /customs/extern
   "$(pj sourceId="SYN-RELEASE-${STAMP}" layer=RELEASE_RESULT role=CUSTOMS_AUTHORITY rawSemantics="SYN 放行回执" claimedVersion="$VERSION" \
       attempt:=1 scope="$unit" occurredAt="$(date -u -d '-5 seconds' +%Y-%m-%dT%H:%M:%SZ)" \
       release:='{"kind":"FULL","authority":"SYN-AUTHORITY/customs-cn"}')" 201:RESULT_RECORDED
-step "放行门禁核对（申报单元范围）" "$OP" POST /customs-release-gate-verifications \
-  "$(pj scope="$unit" action=CROSS_CUSTOMS_MOVEMENT boundary=SYN-PROC-CN-EXPORT)" 201:RECORDED conclusion preconditions
+sleep 1
+step "复称 3.00 KG（超 0.50 KG 容差）" "$OP" POST /node-operations/manual-measurements \
+  "$(pj sourceId="SYN-WEIGH-${STAMP}-OVER" objectKind=HANDLING_UNIT objectId="$UNIT" node=SYN-NODE-SHA-HUB \
+      location=SYN-BENCH-01 basis="$PARCEL" performedBy=SYN-SCALE-01 evidenceRef="WEIGH/SYN-WEIGH-${STAMP}-OVER" \
+      occurredAt="$(now_utc)" weightValue=3.00 weightUnit=KG \
+      length=22 width=16 height=11 dimensionUnit=CM originalDocument="SYN-DOC-SYN-WEIGH-${STAMP}-OVER")" \
+  "201:MEASUREMENT_RECORDED,200:EXISTING_RESULT"
+step "放行门禁核对（超容差）" "$OP" POST /customs-release-gate-verifications \
+  "$(pj scope="$unit" action=CROSS_CUSTOMS_MOVEMENT boundary=SYN-PROC-CN-EXPORT)" 201:RECORDED conclusion
+[[ "$(jget "$LAST" conclusion)" == PARTIALLY_MET ]] || { printf '[失败] 超容差的门禁结论是 %s，要 PARTIALLY_MET\n' "$(jget "$LAST" conclusion)" >&2; exit 1; }
+sleep 1
+step "作废超容差的 3.00 KG" "$OP" POST /node-operations/manual-measurement-invalidations \
+  "$(pj sourceId="SYN-WEIGH-${STAMP}-VOID" targetSourceId="SYN-WEIGH-${STAMP}-OVER" reason=SYN-VOID-REWEIGH \
+      performedBy=SYN-SCALE-01 evidenceRef="WEIGH/SYN-WEIGH-${STAMP}-VOID" occurredAt="$(now_utc)" \
+      originalDocument="SYN-DOC-SYN-WEIGH-${STAMP}-VOID")" \
+  "201:INVALIDATION_RECORDED,200:EXISTING_RESULT"
+sleep 1
+step "复称 2.40 KG（在 0.50 KG 容差内）" "$OP" POST /node-operations/manual-measurements \
+  "$(pj sourceId="SYN-WEIGH-${STAMP}-IN" objectKind=HANDLING_UNIT objectId="$UNIT" node=SYN-NODE-SHA-HUB \
+      location=SYN-BENCH-01 basis="$PARCEL" performedBy=SYN-SCALE-01 evidenceRef="WEIGH/SYN-WEIGH-${STAMP}-IN" \
+      occurredAt="$(now_utc)" weightValue=2.40 weightUnit=KG \
+      length=22 width=16 height=11 dimensionUnit=CM originalDocument="SYN-DOC-SYN-WEIGH-${STAMP}-IN")" \
+  "201:MEASUREMENT_RECORDED,200:EXISTING_RESULT"
+step "放行门禁核对（容差内）" "$OP" POST /customs-release-gate-verifications \
+  "$(pj scope="$unit" action=CROSS_CUSTOMS_MOVEMENT boundary=SYN-PROC-CN-EXPORT)" 201:RECORDED conclusion
+[[ "$(jget "$LAST" conclusion)" == MET ]] || { printf '[失败] 容差内的门禁结论是 %s，要 MET\n' "$(jget "$LAST" conclusion)" >&2; exit 1; }
 
 ch_selfrun
 ch_trunk

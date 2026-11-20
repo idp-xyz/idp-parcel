@@ -10,6 +10,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	ccnodeops "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/nodeoperations"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccapplication "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
@@ -105,6 +106,18 @@ func departureGateCustomsView(db *bentopg.DB, clock systemClock) (*tfcustoms.Dep
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reask customs duty payment reconciliation: %w", err)
 	}
+	submissions, err := ccpostgres.NewDeclarationSubmissions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reask declaration submissions: %w", err)
+	}
+	measurements, err := currentParcelMeasurementQuery(db)
+	if err != nil {
+		return nil, err
+	}
+	memberWeights, err := ccnodeops.NewMemberMeasuredWeights(measurements)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reask member measured weights: %w", err)
+	}
 	releases, err := ccpostgres.NewReleaseOutcomeView(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reask customs release outcome view: %w", err)
@@ -121,6 +134,9 @@ func departureGateCustomsView(db *bentopg.DB, clock systemClock) (*tfcustoms.Dep
 		Conditions:           gates,
 		DutyRules:            gates,
 		DutyVerifications:    dutyVerifications,
+		WeightRules:          gates,
+		Submissions:          submissions,
+		MemberWeights:        memberWeights,
 		Releases:             releases,
 		Store:                judgements,
 		Clock:                clock,

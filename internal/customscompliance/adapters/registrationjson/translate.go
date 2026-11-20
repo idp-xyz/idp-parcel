@@ -441,6 +441,39 @@ func DutyPaymentGateRuleFromJSON(raw []byte) (application.RegisterDutyPaymentGat
 	return command, nil
 }
 
+type weightDiscrepancyGateRuleDocument struct {
+	TenantID         string `json:"tenantId"`
+	ScopeRef         string `json:"scopeRef"`
+	Action           string `json:"action"`
+	BoundaryRef      string `json:"boundaryRef"`
+	NotAPrecondition bool   `json:"notAPrecondition"`
+	MaxDelta         string `json:"maxDelta"`
+	Unit             string `json:"unit"`
+}
+
+// WeightDiscrepancyGateRuleFromJSON 译装门禁里「毛重差异」那一道的规则登记。两形二选一由编排和领域构造把门，这里只做字面翻译。
+func WeightDiscrepancyGateRuleFromJSON(raw []byte) (application.RegisterWeightDiscrepancyGateRuleCommand, error) {
+	none := application.RegisterWeightDiscrepancyGateRuleCommand{}
+	var document weightDiscrepancyGateRuleDocument
+	if err := decodeStrict(raw, &document); err != nil {
+		return none, fmt.Errorf("毛重差异门禁规则登记输入不是本入口的形状：%w", err)
+	}
+	tenant, scope, action, boundary, err := gateKeyFrom(
+		document.TenantID, document.ScopeRef, document.Action, document.BoundaryRef)
+	if err != nil {
+		return none, err
+	}
+	return application.RegisterWeightDiscrepancyGateRuleCommand{
+		TenantID:         tenant,
+		Scope:            scope,
+		Action:           action,
+		Boundary:         boundary,
+		NotAPrecondition: document.NotAPrecondition,
+		MaxDelta:         document.MaxDelta,
+		Unit:             document.Unit,
+	}, nil
+}
+
 type gateFindingDocument struct {
 	TenantID        string `json:"tenantId"`
 	ScopeRef        string `json:"scopeRef"`
