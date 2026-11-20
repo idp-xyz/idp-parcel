@@ -44,7 +44,7 @@ type WaveStore interface {
 	SavePack(ctx context.Context, tenant domain.TenantID, fact domain.PickFactID, request domain.OutboundRequestID, parcels []PackParcel, at time.Time) error
 	LoadPack(ctx context.Context, tenant domain.TenantID, fact domain.PickFactID) (bool, error)
 	ParcelsOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) ([]PackParcel, error)
-	MarkShipment(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, shipmentRequestID string) error
+	MarkShipment(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, shipmentRequestID, declaredParcelID string) error
 }
 
 // PackParcel 是一个包裹的装箱记录。重量和尺寸按货主交来的字面留下。
@@ -61,5 +61,7 @@ type PackParcel struct {
 	Unit              domain.GoodsUnitName
 	Quantity          int64
 	ShipmentRequestID string
+	DeclaredParcelID  string
 	CommissionState   string
+	CorrectionState   string
 }

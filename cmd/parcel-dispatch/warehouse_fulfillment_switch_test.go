@@ -269,6 +269,14 @@ func TestTheWarehouseAcceptanceRouteFollowsTheSwitch(t *testing.T) {
 	if !containsLabel(on, "warehouse supplement") || containsLabel(on, "customer supplement close-out") {
 		t.Fatalf("开着时待补充各路 = %v", on)
 	}
+	for _, event := range []string{"parcel-shipment.source-data-version.formed", "parcel-shipment.parcel-cancellation.recorded"} {
+		if len(labelsOf(registeredLegs(t, eventing.EventType(event), false))) != 0 {
+			t.Fatalf("开关关着仍登记了 %s", event)
+		}
+		if len(labelsOf(registeredLegs(t, eventing.EventType(event), true))) != 1 {
+			t.Fatalf("开关开着没有 %s", event)
+		}
+	}
 }
 
 func containsLabel(labels []string, want string) bool {

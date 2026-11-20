@@ -44,6 +44,16 @@ type CommissionSubmission struct {
 type CommissionAnswer struct {
 	Outcome           string
 	ShipmentRequestID string
+	DeclaredParcelID  string
+}
+
+// CommissionRevision 是待货主补正之后，以货主名义形成的同一委托新提交版本。
+type CommissionRevision struct {
+	CommissionSubmission
+	RequestKey       string
+	BasisVersion     string
+	ShipmentRequest  string
+	DeclaredParcelID string
 }
 
 // OutboundCommissioner 以货主名义提交来源为仓配出库的委托。

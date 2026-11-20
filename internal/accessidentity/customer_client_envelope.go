@@ -229,6 +229,7 @@ const (
 	requestKeyPrefixRelabelWithdrawal     = "relabel-withdrawal:"
 	requestKeyPrefixOutboundRequest       = "outbound-request:"
 	requestKeyPrefixOutboundSplit         = "outbound-split:"
+	requestKeyPrefixOutboundSupplement    = "outbound-supplement:"
 )
 
 // reservedRequestKeyPrefixes 是首方族保留前缀表，只在这里列一次。委托提交与送站预报两口的推导拒以其中任一前缀开头的标识；
@@ -241,7 +242,7 @@ var reservedRequestKeyPrefixes = []string{
 	requestKeyPrefixReceiptDiscrepancy,
 	requestKeyPrefixProcessingInstruction, requestKeyPrefixProcessingWithdrawal,
 	requestKeyPrefixRelabelInstruction, requestKeyPrefixRelabelWithdrawal,
-	requestKeyPrefixOutboundRequest, requestKeyPrefixOutboundSplit,
+	requestKeyPrefixOutboundRequest, requestKeyPrefixOutboundSplit, requestKeyPrefixOutboundSupplement,
 }
 
 func rejectReservedRequestKeyPrefix(identifier string) error {

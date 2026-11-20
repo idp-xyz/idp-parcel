@@ -12,6 +12,7 @@ import (
 type CustomerOutboundMinter interface {
 	MintOutboundRequestSubmission(ctx context.Context, credential identity.IntegrationClientCredential, readRequest func() (identity.ChannelRequest, error)) (identity.OutboundRequestSubmissionEnvelope, error)
 	MintOutboundRequestSplit(ctx context.Context, credential identity.IntegrationClientCredential, readRequest func() (identity.ChannelRequest, error)) (identity.OutboundRequestSubmissionEnvelope, error)
+	MintOutboundRequestSupplement(ctx context.Context, credential identity.IntegrationClientCredential, readRequest func() (identity.ChannelRequest, error)) (identity.OutboundRequestSubmissionEnvelope, error)
 }
 
 // CustomerOutboundAuthenticator 把首方铸造译成仓配的客户身份。
@@ -34,6 +35,10 @@ func (authenticator *CustomerOutboundAuthenticator) AuthenticateOutboundRequestS
 
 func (authenticator *CustomerOutboundAuthenticator) AuthenticateOutboundRequestSplit(ctx context.Context, credential warehousehttp.PresentedCustomerCredential, accessRequestID func() (string, error)) (warehousehttp.CustomerCommandIdentity, error) {
 	return authenticator.authenticate(ctx, credential, accessRequestID, authenticator.minter.MintOutboundRequestSplit)
+}
+
+func (authenticator *CustomerOutboundAuthenticator) AuthenticateOutboundRequestSupplement(ctx context.Context, credential warehousehttp.PresentedCustomerCredential, accessRequestID func() (string, error)) (warehousehttp.CustomerCommandIdentity, error) {
+	return authenticator.authenticate(ctx, credential, accessRequestID, authenticator.minter.MintOutboundRequestSupplement)
 }
 
 func (authenticator *CustomerOutboundAuthenticator) authenticate(

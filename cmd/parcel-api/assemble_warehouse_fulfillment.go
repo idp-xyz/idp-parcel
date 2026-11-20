@@ -7,8 +7,10 @@ import (
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psparty "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
@@ -169,6 +171,7 @@ type warehouseFulfillmentOrchestration struct {
 	jobDiscrepancies   transactionalJobDiscrepancy
 	outbounds          transactionalOutbound
 	waves              transactionalWave
+	followUps          transactionalFollowUp
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -614,6 +617,10 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		),
 		commissions: warehouseapp.NewCommissionHandler(outboundStore, waveStore, opener, warehouses),
 	}
+	followUps := transactionalFollowUp{
+		transactor: db.Transactor(),
+		inner:      warehouseapp.NewFollowUpHandler(outboundStore, waveStore, opener, systemClock{}),
+	}
 	jobDiscrepancies := transactionalJobDiscrepancy{
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewJobDiscrepancyHandler(
@@ -696,7 +703,19 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		jobDiscrepancies:         jobDiscrepancies,
 		outbounds:                outbounds,
 		waves:                    waves,
+		followUps:                followUps,
 	}, nil
+}
+
+type transactionalFollowUp struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.FollowUpHandler
+}
+
+func (registration transactionalFollowUp) Resubmit(ctx context.Context, command warehouseapp.ResubmitCommand) (warehouseapp.FollowUpResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.FollowUpResult, error) {
+		return registration.inner.Resubmit(txCtx, command)
+	})
 }
 
 // transactionalFreeze 是冻结与解冻的事务壳。判定与落册在同一笔里，并与记数串行。
@@ -819,7 +838,25 @@ func buildWarehouseOutboundOpener(db *bentopg.DB, isolated *isolatedWriteAdmissi
 	if err != nil {
 		return nil, err
 	}
-	return whparcel.NewOpener(authorizer, submission, ownership, systemClock{})
+	opener, err := whparcel.NewOpener(authorizer, submission, ownership, systemClock{})
+	if err != nil {
+		return nil, err
+	}
+	sourceSubmissions, err := pspostgres.NewSourceSubmissions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: warehouse supplement sources: %w", err)
+	}
+	shipmentRequests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: warehouse supplement requests: %w", err)
+	}
+	identities, err := psidentity.NewSubmissionIdentities()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: warehouse supplement identities: %w", err)
+	}
+	return opener.WithVersionFormer(psapplication.NewFormNewSubmissionVersionHandler(psapplication.FormNewSubmissionVersionDeps{
+		Sources: sourceSubmissions, Requests: shipmentRequests, Identities: identities, Clock: systemClock{},
+	})), nil
 }
 
 func (registration transactionalWave) Release(ctx context.Context, command warehouseapp.ReleaseWaveCommand) (warehouseapp.WaveResult, error) {

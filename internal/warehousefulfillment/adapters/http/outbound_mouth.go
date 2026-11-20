@@ -18,16 +18,23 @@ type OutboundService interface {
 	Split(ctx context.Context, command application.SplitOutboundCommand) (application.SplitResult, error)
 }
 
+// FollowUpService 是货主补正后代交新提交版本的编排。
+type FollowUpService interface {
+	Resubmit(ctx context.Context, command application.ResubmitCommand) (application.FollowUpResult, error)
+}
+
 // CustomerOutboundAuthenticator 认证货主提交出库请求。
 type CustomerOutboundAuthenticator interface {
 	AuthenticateOutboundRequestSubmission(ctx context.Context, credential PresentedCustomerCredential, accessRequestID func() (string, error)) (CustomerCommandIdentity, error)
 	AuthenticateOutboundRequestSplit(ctx context.Context, credential PresentedCustomerCredential, accessRequestID func() (string, error)) (CustomerCommandIdentity, error)
+	AuthenticateOutboundRequestSupplement(ctx context.Context, credential PresentedCustomerCredential, accessRequestID func() (string, error)) (CustomerCommandIdentity, error)
 }
 
 // CustomerOutboundPorts 是货主出库口在渠道没配时也能挂上的那一面。
 type CustomerOutboundPorts interface {
 	IntakeOutboundRequest(ctx context.Context, request *http.Request) (application.AcceptOutboundCommand, error)
 	IntakeOutboundSplit(ctx context.Context, request *http.Request) (application.SplitOutboundCommand, error)
+	IntakeOutboundSupplement(ctx context.Context, request *http.Request) (application.ResubmitCommand, error)
 }
 
 type CustomerOutboundIntake struct {
@@ -56,6 +63,10 @@ func (unconfiguredCustomerOutbound) IntakeOutboundRequest(context.Context, *http
 
 func (unconfiguredCustomerOutbound) IntakeOutboundSplit(context.Context, *http.Request) (application.SplitOutboundCommand, error) {
 	return application.SplitOutboundCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (unconfiguredCustomerOutbound) IntakeOutboundSupplement(context.Context, *http.Request) (application.ResubmitCommand, error) {
+	return application.ResubmitCommand{}, ErrAccessChannelNotConfigured
 }
 
 func (intake *CustomerOutboundIntake) IntakeOutboundRequest(ctx context.Context, request *http.Request) (application.AcceptOutboundCommand, error) {
@@ -94,6 +105,25 @@ func (intake *CustomerOutboundIntake) IntakeOutboundSplit(ctx context.Context, r
 	command.Tenant = identity.Tenant
 	command.Owner = identity.Owner
 	command.Origin = domain.OutboundOriginCustomer
+	return command, nil
+}
+
+func (intake *CustomerOutboundIntake) IntakeOutboundSupplement(ctx context.Context, request *http.Request) (application.ResubmitCommand, error) {
+	var command application.ResubmitCommand
+	identity, err := intake.authenticator.AuthenticateOutboundRequestSupplement(ctx, presentedCustomerCredential(request), func() (string, error) {
+		accessID, read, readErr := registrationjson.ReadOwnerOutboundSupplement(bodyOrEmpty(request))
+		if readErr != nil {
+			return "", asMalformed(readErr)
+		}
+		command = read
+		return accessID, nil
+	})
+	if err != nil {
+		return application.ResubmitCommand{}, err
+	}
+	command.Tenant = identity.Tenant
+	command.Owner = identity.Owner
+	command.RequestKey = identity.RequestKey.String()
 	return command, nil
 }
 
@@ -187,6 +217,36 @@ func NewRecordOutboundEndpoint(intake OutboundOnBehalfIntake, service OutboundSe
 			return application.OutboundResult{}, err
 		}
 		return service.Accept(request.Context(), command)
+	})
+}
+
+func NewSupplementCustomerOutboundEndpoint(intake CustomerOutboundPorts, follow FollowUpService) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		command, err := intake.IntakeOutboundSupplement(request.Context(), request)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		result, err := follow.Resubmit(request.Context(), command)
+		if err != nil {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		name := result.Outcome().String()
+		if name == "" {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeUnnamedOutcome)
+			return
+		}
+		status := http.StatusOK
+		if result.Outcome() == application.FollowUpRecorded {
+			status = http.StatusCreated
+		}
+		writeJSON(response, status, outboundAnswer{Outcome: name})
 	})
 }
 

@@ -32,6 +32,10 @@ type ownershipAuthority interface {
 	DecideProductionOwnership(ctx context.Context, scope psdomain.AdmissionScope) (psdomain.ProductionOwnershipDecision, error)
 }
 
+type versionFormer interface {
+	Handle(ctx context.Context, command psapplication.FormNewSubmissionVersionCommand) (psapplication.FormNewSubmissionVersionResult, error)
+}
+
 // Opener 把一份出库包裹交给小包托运。代办没获准时不调用提交编排。
 type Opener struct {
 	agency    agencyAllowance
@@ -41,6 +45,7 @@ type Opener struct {
 	requests  identity.Minter
 	batches   identity.Minter
 	parcels   identity.Minter
+	versions  versionFormer
 }
 
 func NewOpener(
@@ -67,6 +72,34 @@ func NewOpener(
 	return &Opener{agency: agency, shipments: shipments, ownership: ownership, clock: clock, requests: requests, batches: batches, parcels: parcels}, nil
 }
 
+// WithVersionFormer 接上同一委托的新提交版本。没接时补正答未配置。
+func (opener *Opener) WithVersionFormer(former versionFormer) *Opener {
+	opener.versions = former
+	return opener
+}
+
+func (opener *Opener) Revise(ctx context.Context, revision ports.CommissionRevision) (ports.CommissionAnswer, error) {
+	if opener.versions == nil {
+		return ports.CommissionAnswer{Outcome: ports.CommissionNotConfiguredWord}, nil
+	}
+	granted, err := opener.agency.Allow(ctx, revision.Tenant, revision.Owner)
+	if err != nil {
+		return ports.CommissionAnswer{}, err
+	}
+	if !granted {
+		return ports.CommissionAnswer{Outcome: ports.CommissionNotConfiguredWord}, nil
+	}
+	command, err := opener.revision(ctx, revision)
+	if err != nil {
+		return ports.CommissionAnswer{}, err
+	}
+	result, err := opener.versions.Handle(ctx, command)
+	if err != nil {
+		return ports.CommissionAnswer{}, err
+	}
+	return ports.CommissionAnswer{Outcome: result.Outcome().String()}, nil
+}
+
 func (opener *Opener) Submit(ctx context.Context, submission ports.CommissionSubmission) (ports.CommissionAnswer, error) {
 	granted, err := opener.agency.Allow(ctx, submission.Tenant, submission.Owner)
 	if err != nil {
@@ -86,6 +119,9 @@ func (opener *Opener) Submit(ctx context.Context, submission ports.CommissionSub
 	answer := ports.CommissionAnswer{Outcome: result.Outcome().String()}
 	if id, present := result.ShipmentRequestID(); present {
 		answer.ShipmentRequestID = id.String()
+	}
+	if len(command.DeclaredParcelIDs) == 1 {
+		answer.DeclaredParcelID = command.DeclaredParcelIDs[0].String()
 	}
 	return answer, nil
 }
@@ -187,6 +223,49 @@ func (opener *Opener) command(ctx context.Context, submission ports.CommissionSu
 		AdmissionScope: admission, ExpectedRevision: decision.Revision(),
 		DeclaredProfiles: []psdomain.DeclaredParcelProfile{profile}, DeclaredElements: canonical.DeclaredElements(),
 		RequestedServiceProduct: canonical.RequestedServiceProduct(), DeclaredGoods: goods,
+	}, nil
+}
+
+func (opener *Opener) revision(ctx context.Context, revision ports.CommissionRevision) (psapplication.FormNewSubmissionVersionCommand, error) {
+	var none psapplication.FormNewSubmissionVersionCommand
+	base, err := opener.command(ctx, revision.CommissionSubmission)
+	if err != nil {
+		return none, err
+	}
+	member, err := psdomain.NewDeclaredParcelID(revision.DeclaredParcelID)
+	if err != nil {
+		return none, err
+	}
+	requestID, err := psdomain.NewShipmentRequestID(revision.ShipmentRequest)
+	if err != nil {
+		return none, err
+	}
+	basis, err := psdomain.NewSubmissionVersionID(revision.BasisVersion)
+	if err != nil {
+		return none, err
+	}
+	supplementKey, err := psdomain.NewSourceRequestKey(revision.RequestKey)
+	if err != nil {
+		return none, err
+	}
+	profile, err := measurementProfile(member, revision.Parcel)
+	if err != nil {
+		return none, err
+	}
+	goods, err := psdomain.NewGoodsDetails(goodsSpec(revision.Parcel), []psdomain.DeclaredParcelID{member})
+	if err != nil {
+		return none, err
+	}
+	supplement, err := psdomain.NewSourceIdentity(base.Identity.TenantID(), base.Identity.CustomerAccountID(), base.Identity.Source(), supplementKey)
+	if err != nil {
+		return none, err
+	}
+	return psapplication.FormNewSubmissionVersionCommand{
+		Identity: base.Identity, SupplementIdentity: supplement,
+		PayloadDigest: base.PayloadDigest, OccurredAt: base.OccurredAt, ReceivedAt: base.ReceivedAt,
+		ShipmentRequestID: requestID, BasisVersion: basis, DeclaredParcelIDs: []psdomain.DeclaredParcelID{member},
+		DeclaredProfiles: []psdomain.DeclaredParcelProfile{profile}, DeclaredElements: base.DeclaredElements,
+		RequestedServiceProduct: base.RequestedServiceProduct, DeclaredGoods: goods,
 	}, nil
 }
 

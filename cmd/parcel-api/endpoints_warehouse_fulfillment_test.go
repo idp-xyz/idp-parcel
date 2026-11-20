@@ -787,6 +787,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/relabel-instructions/withdrawals":    {http.MethodPost, faceCustomerClient},
 		"/v1/warehouse/outbound-requests":                   {http.MethodPost, faceCustomerClient},
 		"/v1/warehouse/outbound-requests/splits":            {http.MethodPost, faceCustomerClient},
+		"/v1/warehouse/outbound-requests/supplements":       {http.MethodPost, faceCustomerClient},
 
 		receiptConfirmationsLine:  {http.MethodPost, faceWorkFact},
 		warehouseMeasurementsLine: {http.MethodPost, faceWorkFact},
@@ -869,6 +870,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/relabel-instructions/withdrawals":    accessidentity.CustomerCapabilityRelabelInstructionWithdrawal,
 		"/v1/warehouse/outbound-requests":                   accessidentity.CustomerCapabilityOutboundRequestSubmission,
 		"/v1/warehouse/outbound-requests/splits":            accessidentity.CustomerCapabilityOutboundRequestSubmission,
+		"/v1/warehouse/outbound-requests/supplements":       accessidentity.CustomerCapabilityOutboundRequestSubmission,
 		"/v1/warehouse/reads/stock":                         accessidentity.CustomerCapabilityWarehouseRead,
 		customerGoodsWriteLine:                              accessidentity.CustomerCapabilityGoodsMaintenance,
 		customerGoodsListLine:                               accessidentity.CustomerCapabilityWarehouseRead,

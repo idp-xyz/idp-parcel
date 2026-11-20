@@ -101,7 +101,7 @@ type commissionRequests interface {
 
 type commissionParcels interface {
 	ParcelsOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) ([]ports.PackParcel, error)
-	MarkShipment(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, shipmentRequestID string) error
+	MarkShipment(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, shipmentRequestID, declaredParcelID string) error
 }
 
 // CommissionHandler 在出库请求打包之后，为本产品网络的每个包裹提交一份委托。
@@ -186,7 +186,7 @@ func (handler *CommissionHandler) Submit(ctx context.Context, tenant domain.Tena
 		if answer.ShipmentRequestID == "" {
 			return CommissionResult{}, fmt.Errorf("submit outbound commission: %s named no shipment request", answer.Outcome)
 		}
-		if err := handler.parcels.MarkShipment(ctx, tenant, requestID, parcel.Sequence, answer.ShipmentRequestID); err != nil {
+		if err := handler.parcels.MarkShipment(ctx, tenant, requestID, parcel.Sequence, answer.ShipmentRequestID, answer.DeclaredParcelID); err != nil {
 			return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
 		}
 	}
