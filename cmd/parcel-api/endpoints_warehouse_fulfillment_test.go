@@ -208,7 +208,32 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		unclaimedArrivalRegister: unwiredUnclaimedArrival{},
 		unclaimedArrivalManage:   unwiredUnclaimedArrival{},
 		unclaimedArrivalQueries:  unwiredUnclaimedArrival{},
+		internalJobs:             unwiredInternalJob{},
+		conditionRestore:         unwiredInternalJob{},
+		internalJobQueries:       unwiredInternalJob{},
 	}
+}
+
+type unwiredInternalJob struct{}
+
+func (unwiredInternalJob) Register(context.Context, warehouseapp.RegisterInternalJobCommand) (warehouseapp.RegisterInternalJobResult, error) {
+	return warehouseapp.RegisterInternalJobResult{}, errOrchestrationNotWired
+}
+
+func (unwiredInternalJob) Restore(context.Context, warehouseapp.RestoreConditionCommand) (warehouseapp.RestoreConditionResult, error) {
+	return warehouseapp.RestoreConditionResult{}, errOrchestrationNotWired
+}
+
+func (unwiredInternalJob) ListInternalJobs(context.Context, warehousedomain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[warehousedomain.RecordedInternalJob], error) {
+	return cataloguepage.Result[warehousedomain.RecordedInternalJob]{}, errOrchestrationNotWired
+}
+
+func (unwiredInternalJob) GetInternalJob(context.Context, warehousedomain.TenantID, warehousedomain.InternalJobFactID) (warehousedomain.RecordedInternalJob, bool, error) {
+	return warehousedomain.RecordedInternalJob{}, false, errOrchestrationNotWired
+}
+
+func (unwiredInternalJob) GetConditionRestore(context.Context, warehousedomain.TenantID, warehousedomain.ConditionRestoreID) (warehousedomain.ConditionRestore, bool, error) {
+	return warehousedomain.ConditionRestore{}, false, errOrchestrationNotWired
 }
 
 type unwiredDisposalRuleRegistration struct{}
@@ -489,6 +514,15 @@ const (
 	unclaimedArrivalListLine      = "/warehouse-fulfillment-unclaimed-arrivals"
 	unclaimedArrivalOneLine       = "/warehouse-fulfillment-unclaimed-arrival"
 
+	internalMovesLine         = "/warehouse-fulfillment-internal-moves"
+	formConversionsLine       = "/warehouse-fulfillment-form-conversions"
+	conditionConversionsLine  = "/warehouse-fulfillment-condition-conversions"
+	shortageRegistrationsLine = "/warehouse-fulfillment-shortage-registrations"
+	conditionRestoresLine     = "/warehouse-fulfillment-condition-restores"
+	internalJobsLine          = "/warehouse-fulfillment-internal-jobs"
+	internalJobLine           = "/warehouse-fulfillment-internal-job"
+	conditionRestoreReadLine  = "/warehouse-fulfillment-condition-restore"
+
 	customerGoodsWriteLine         = "/v1/warehouse/goods"
 	customerGoodsListLine          = "/v1/warehouse/reads/goods"
 	customerGoodsCurrentLine       = "/v1/warehouse/reads/goods-current"
@@ -623,6 +657,14 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		unclaimedArrivalDisposeLine:   {http.MethodPost, faceOperationDecision},
 		unclaimedArrivalListLine:      {http.MethodGet, faceOperationsRead},
 		unclaimedArrivalOneLine:       {http.MethodGet, faceOperationsRead},
+		internalMovesLine:             {http.MethodPost, faceWorkFact},
+		formConversionsLine:           {http.MethodPost, faceWorkFact},
+		conditionConversionsLine:      {http.MethodPost, faceWorkFact},
+		shortageRegistrationsLine:     {http.MethodPost, faceWorkFact},
+		conditionRestoresLine:         {http.MethodPost, faceOperationDecision},
+		internalJobsLine:              {http.MethodGet, faceOperationsRead},
+		internalJobLine:               {http.MethodGet, faceOperationsRead},
+		conditionRestoreReadLine:      {http.MethodGet, faceOperationsRead},
 
 		customerGoodsWriteLine:         {http.MethodPost, faceCustomerClient},
 		customerGoodsListLine:          {http.MethodGet, faceCustomerClient},
@@ -655,11 +697,13 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 	for pattern, expected := range want {
 		line, declared := lines[pattern]
 		capability, customer := customerCapabilities[pattern]
-		ownIntake := customer || pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine || pattern == unclaimedArrivalRegLine
+		ownIntake := customer || pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine || pattern == unclaimedArrivalRegLine ||
+			pattern == internalMovesLine || pattern == formConversionsLine || pattern == conditionConversionsLine || pattern == shortageRegistrationsLine
 		if !declared || !line.warehouseFulfillment || line.method != expected.method || line.face.family != expected.face || line.ownIntake != ownIntake {
 			t.Fatalf("%s 的声明 = %+v，want %s %s、声明仓配开关、自建 Intake=%t", pattern, line, expected.method, expected.face, ownIntake)
 		}
-		if (pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine || pattern == unclaimedArrivalRegLine) && line.face.workScope != accessidentity.WorkScopeWarehouse {
+		if (pattern == receiptConfirmationsLine || pattern == warehouseMeasurementsLine || pattern == unclaimedArrivalRegLine ||
+			pattern == internalMovesLine || pattern == formConversionsLine || pattern == conditionConversionsLine || pattern == shortageRegistrationsLine) && line.face.workScope != accessidentity.WorkScopeWarehouse {
 			t.Fatalf("%s 的作业范围 = %s，want WAREHOUSE", pattern, line.face.workScope)
 		}
 		if customer && line.face.capability != capability {
@@ -675,6 +719,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 			unclaimedArrivalClaimLine:   accessidentity.DecisionUnclaimedArrivalClaim,
 			unclaimedArrivalRevokeLine:  accessidentity.DecisionUnclaimedArrivalClaim,
 			unclaimedArrivalDisposeLine: accessidentity.DecisionUnclaimedArrivalDisposition,
+			conditionRestoresLine:       accessidentity.DecisionConditionRestore,
 		}
 		if kind, writesOnBehalf := decisionLines[pattern]; writesOnBehalf && line.face.decision != kind {
 			t.Fatalf("%s 的决定种类 = %s，want %s", pattern, line.face.decision, kind)
@@ -762,6 +807,14 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			unclaimedArrivalDisposeLine:   {status, code},
 			unclaimedArrivalListLine:      {status, code},
 			unclaimedArrivalOneLine:       {status, code},
+			internalMovesLine:             {status, code},
+			formConversionsLine:           {status, code},
+			conditionConversionsLine:      {status, code},
+			shortageRegistrationsLine:     {status, code},
+			conditionRestoresLine:         {status, code},
+			internalJobsLine:              {status, code},
+			internalJobLine:               {status, code},
+			conditionRestoreReadLine:      {status, code},
 		}
 	}
 	cases := []struct {
@@ -818,6 +871,14 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			unclaimedArrivalDisposeLine:   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			unclaimedArrivalListLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			unclaimedArrivalOneLine:       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			internalMovesLine:             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			formConversionsLine:           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			conditionConversionsLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			shortageRegistrationsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			conditionRestoresLine:         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			internalJobsLine:              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			internalJobLine:               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			conditionRestoreReadLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		}},
 		{"read grant only", operationsReaderRegister{}, presentedOperatorToken, map[string]answer{
 			warehouseRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -867,6 +928,14 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			unclaimedArrivalDisposeLine:   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			unclaimedArrivalListLine:      {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			unclaimedArrivalOneLine:       {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			internalMovesLine:             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			formConversionsLine:           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			conditionConversionsLine:      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			shortageRegistrationsLine:     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			conditionRestoresLine:         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			internalJobsLine:              {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			internalJobLine:               {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			conditionRestoreReadLine:      {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 		}},
 		{"no bearer token", everyOperatorGrant{}, "", same(http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED")},
 		{"register is down", failingRegister{}, presentedOperatorToken, same(http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE")},
@@ -889,6 +958,14 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			t.Fatal(err)
 		}
 		wiring.unclaimedArrivalIntake = unclaimedIntake
+		moveIntake, formIntake, conditionIntake, shortageIntake, intakeErr := buildInternalJobIntakes(acceptingVerifier{}, testCase.register, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
+		if intakeErr != nil {
+			t.Fatal(intakeErr)
+		}
+		wiring.internalMoveIntake = moveIntake
+		wiring.formConversionIntake = formIntake
+		wiring.conditionConversionIntake = conditionIntake
+		wiring.shortageIntake = shortageIntake
 		router := warehouseFulfillmentRouter(t, channels, wiring)
 		for pattern, want := range testCase.want {
 			var response *httptest.ResponseRecorder
@@ -899,6 +976,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 				response = probeWorkFactPost(router, warehouseMeasurementsLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", warehouseMeasurementBody())
 			case unclaimedArrivalRegLine:
 				response = probeWorkFactPost(router, unclaimedArrivalRegLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", unclaimedArrivalBody())
+			case internalMovesLine, formConversionsLine, conditionConversionsLine, shortageRegistrationsLine:
+				response = probeWorkFactPost(router, pattern, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", `{}`)
 			default:
 				response = probeWarehouseFulfillment(router, pattern, testCase.token, `{}`)
 			}

@@ -53,9 +53,9 @@ func insertCartonMovementLine(
 		`INSERT INTO warehouse_fulfillment.carton_movement_line (
 		    tenant_id, movement_id, position, owner_account_id, warehouse_code,
 		    location_code, carton_number, owner_carton_number, inbound_batch_id, quantity_delta
-		 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)`,
+		 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		movement.Tenant().String(), movement.ID().String(), position, movement.Owner().String(), movement.Warehouse().String(),
-		line.Location().String(), line.Carton().String(), nullableText(line.OwnerCarton().String()), line.Batch().String(),
+		line.Location().String(), line.Carton().String(), nullableText(line.OwnerCarton().String()), line.Batch().String(), line.Delta(),
 	)
 	return err
 }
