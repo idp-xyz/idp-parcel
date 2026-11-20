@@ -6,7 +6,9 @@
 #   客户费用：这一户采用的计费时点是有效网络收寄已采用。收寄被采用后发起 SELL，与有没有路由无关。
 #   供应商预期成本：BUY 触发册只挂实际履约。一段已采用供应商委托，参与被有效交付结束时形成发生项，再形成预期成本。
 # 费用确认条件是有效交付已终局。所以这里在收寄之后只立一段末端交接、采用干线协议、做到有效交付，
-# 不走自营段、干线和班次。主张账期用 SYN-PERIOD-DEMO- 前缀，不写成费用归属日。
+# 不走自营段、干线和班次。主链的派送时间窗是初始路由计划交付段（计划版本#4）带在交接上的；
+# 这一件没有计划段，重问口因此答缺 DELIVERY_WINDOW。窗口改由运营建立派送任务时显式给出。
+# 主张账期用 SYN-PERIOD-DEMO- 前缀，不写成费用归属日。
 # 末尾读经营结果：这件要有 ESTIMATED 与 CONFIRMED 两行，账期都是 DIRECT，组成项都在；没有就失败退出。
 #
 # 不写 MAIN_*，不碰 10 / 30。库要已经灌过步骤 117。每跑一次一件新包裹（约占 9600 余额）。证据只记 S。
@@ -30,8 +32,13 @@ label_direct_facts() {
   step "段采用干线委托" "$OP" POST /transport-fulfillment-segment-commission-adoptions \
     "$(pj segment="$seg" commission="$commission" provider=SYN-PARTY-CARRIER-TRUNK-01)" 201:COMMISSION_ADOPTED
   sleep 1
-  step "派送任务（派送重问口）" "$OP" POST /transport-fulfillment-delivery-dispatch-triggers \
-    "$(pj segment="$seg" object="$PARCEL" occurredAt="$(now_utc)")" "201:DISPATCH_TASK_FORMED,200:DISPATCH_TASK_ALREADY_FORMED" task windowFrom windowTo
+  # 没有计划段就没有交付段窗口。运营建立口自己带窗口，不走重问口，也不去编一份路由计划。
+  from="$(now_utc)"
+  to="$(date -u -d '+4 hours' +%Y-%m-%dT%H:%M:%SZ)"
+  step "派送任务（运营建立，自带时间窗）" "$OP" POST /transport-fulfillment-dispatch-task-registrations \
+    "$(pj task="SYN-TASK-LABEL-${STAMP}" kind=DELIVERY objects:='["'"$PARCEL"'"]' place=SYN-PLACE-DEMO-CONSIGNEE \
+        windowFrom="$from" windowTo="$to" conditions=SYN-CONDITIONS-DEMO openedAt="$from")" \
+    "201:DISPATCH_TASK_OPENED,200:DISPATCH_TASK_ALREADY_OPEN" task windowFrom windowTo
   task="$(jget "$LAST" task)"; from="$(jget "$LAST" windowFrom)"; to="$(jget "$LAST" windowTo)"
   at="$(now_utc)"
   device_headers "${SG_LM[@]}"
