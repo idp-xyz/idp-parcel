@@ -189,6 +189,8 @@ func (fixture *rerouteFixture) seedLapsedSuggestion(t *testing.T) {
 			RerouteBlockers:   blockers,
 			Suggestion:        suggestion,
 			HasSuggestion:     true,
+			TriggerControl:    nrdomain.NodeIntakeControl,
+			TriggerLocation:   mustNRValue(t, nrdomain.NewActualLocationReference, "SYN-NODE-SZX-HUB"),
 			TriggerOccurredAt: fixture.suggestedAt,
 			ReassessedAt:      fixture.suggestedAt,
 		})
@@ -424,6 +426,8 @@ func TestARerouteDecisionWaitsForTheJudgmentKeyAndLosesToAConcurrentReassessment
 			Key:               fixture.key,
 			Conclusion:        nrports.ReassessmentPlanLapsed,
 			CandidateState:    nrports.NoQualifiedCandidates,
+			TriggerControl:    nrdomain.NodeIntakeControl,
+			TriggerLocation:   mustNRValue(t, nrdomain.NewActualLocationReference, "SYN-NODE-SZX-HUB"),
 			TriggerOccurredAt: fixture.suggestedAt.Add(time.Minute),
 			ReassessedAt:      time.Now(),
 		})
