@@ -175,6 +175,11 @@ func TestAGateVerificationRoundTripsItsWeightDiscrepancyReading(t *testing.T) {
 	if changedKey.Digest == key.Digest {
 		t.Fatal("换了实测没有换指纹")
 	}
+	// 毛重数字没变，只换实测来源，仍是另一次比较，指纹必须换。
+	_, sameWeightKey := weightGate(t, "2.40", "SYN-WEIGH-ALT")
+	if sameWeightKey.Digest == key.Digest {
+		t.Fatal("同重量换了实测来源没有换指纹")
+	}
 	var saved ports.GateVerificationSaveOutcome
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		outcome, err := fixture.gates.Save(txCtx, changedKey, changed)

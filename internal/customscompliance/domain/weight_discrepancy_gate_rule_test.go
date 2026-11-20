@@ -142,6 +142,49 @@ func TestWeightDiscrepancyJudgeFailsTheWholeGateWhenAnyMemberIsOut(t *testing.T)
 	}
 }
 
+// 容差比的是差的绝对值。实测比固定毛重轻，和偏重走同一条门；差得恰好等于容差仍算满足。
+func TestWeightDiscrepancyJudgeUsesAbsoluteDeltaWhenTheScaleReadsLight(t *testing.T) {
+	rule := weightRule(t, "0.50", "KG")
+	light := judgeWeights(t, rule, map[string]domain.MemberMeasuredWeight{
+		"parcel-a": weightAt(t, "parcel-a", "2.60", "KG", "SYN-WEIGH-A"),
+	}, map[string]domain.WeightDiscrepancyMemberActual{
+		"parcel-a": {GrossWeight: "1.80", GrossWeightUnit: "KG", MeasurementSource: "SYN-WEIGH-NOW"},
+	})
+	if light.State != domain.PreconditionUnmet || len(light.Members) != 1 || light.Members[0].WithinTolerance {
+		t.Fatalf("比固定轻 0.80 KG、容差 0.50 KG 该整门未满足：%+v", light)
+	}
+
+	edge := judgeWeights(t, rule, map[string]domain.MemberMeasuredWeight{
+		"parcel-a": weightAt(t, "parcel-a", "2.60", "KG", "SYN-WEIGH-A"),
+	}, map[string]domain.WeightDiscrepancyMemberActual{
+		"parcel-a": {GrossWeight: "2.10", GrossWeightUnit: "KG", MeasurementSource: "SYN-WEIGH-NOW"},
+	})
+	if edge.State != domain.PreconditionMet || !edge.Members[0].WithinTolerance {
+		t.Fatalf("轻恰好 0.50 KG 该满足：%+v", edge)
+	}
+}
+
+// 成员按包裹引用的字典序入行。排在前面的一件超差之后，后面一件在容差内不能把整门盖回满足。
+func TestWeightDiscrepancyJudgeStaysUnmetWhenAnEarlierMemberIsOutsideTolerance(t *testing.T) {
+	rule := weightRule(t, "0.50", "KG")
+	reading, err := rule.Judge(weightVersion(t, []string{"PARCEL-A", "PARCEL-B"}, map[string]domain.MemberMeasuredWeight{
+		"PARCEL-A": weightAt(t, "PARCEL-A", "2.00", "KG", "SYN-WEIGH-A"),
+		"PARCEL-B": weightAt(t, "PARCEL-B", "2.00", "KG", "SYN-WEIGH-B"),
+	}), weightActuals(t, map[string]domain.WeightDiscrepancyMemberActual{
+		"PARCEL-A": {GrossWeight: "2.60", GrossWeightUnit: "KG", MeasurementSource: "SYN-WEIGH-A2"},
+		"PARCEL-B": {GrossWeight: "2.10", GrossWeightUnit: "KG", MeasurementSource: "SYN-WEIGH-B2"},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reading.Members) != 2 ||
+		reading.Members[0].Parcel.String() != "PARCEL-A" || reading.Members[0].WithinTolerance ||
+		reading.Members[1].Parcel.String() != "PARCEL-B" || !reading.Members[1].WithinTolerance ||
+		reading.State != domain.PreconditionUnmet {
+		t.Fatalf("排在前面的一件超差，整门仍该未满足：%+v", reading)
+	}
+}
+
 func TestWeightDiscrepancyJudgeRefusesUnconvertibleWeightsAndARuleThatCannotJudge(t *testing.T) {
 	rule := weightRule(t, "0.5", "KG")
 	fixed := map[string]domain.MemberMeasuredWeight{

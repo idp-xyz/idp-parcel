@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -156,6 +158,9 @@ func TestAReleaseGateVerificationIsRecordedOrLeftUndecidedThroughTheProductionFa
 	if status != http.StatusCreated || answer["outcome"] != "RECORDED" || answer["conclusion"] != "MET" || answer["handoffReference"] != nil {
 		t.Fatalf("门禁满足 = %d %v", status, answer)
 	}
+	if _, present := answer["weightDiscrepancy"]; present {
+		t.Fatalf("毛重不构成前置条件，响应却带了 weightDiscrepancy：%v", answer["weightDiscrepancy"])
+	}
 	if status, answer = post(gateVerifier, body); status != http.StatusOK || answer["outcome"] != "EXISTING_RESULT" || answer["conclusion"] != "MET" {
 		t.Fatalf("重放 = %d %v，want 200 EXISTING_RESULT", status, answer)
 	}
@@ -164,5 +169,193 @@ func TestAReleaseGateVerificationIsRecordedOrLeftUndecidedThroughTheProductionFa
 	}
 	if n := count(intents); n != intentsBefore+1 {
 		t.Fatalf("核对意图 %d → %d，want 恰多一份（重放不多入）", intentsBefore, n)
+	}
+}
+
+// 生产装配把挂上的毛重读数原样带回 HTTP。没挂时省略那一键的断言在上一个用例：那里的规则是「不构成前置条件」。
+func TestAReleaseGateVerificationResponseCarriesTheWeightDiscrepancyReading(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	operators, err := aipg.NewOperatorRegistry(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	interval, err := accessidentity.NewEffectiveInterval(time.Now().Add(-time.Hour), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerOperator(t, db, operators, gateVerifier, interval, accessidentity.DecisionReleaseGateVerification)
+	minter, err := buildOperatorMinter(tokenSubjectVerifier{}, operators, admitAll{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, unwiredDecisionTargets{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := buildReleaseGateVerification(db)
+	if err != nil {
+		t.Fatalf("装配：%v", err)
+	}
+	var endpoint http.Handler
+	for _, feature := range endpointRegistry {
+		if feature.wiringKey != any((*releaseGateVerificationWiring)(nil)) {
+			continue
+		}
+		for _, mounted := range feature.mountWith(endpointChannels{operatorDecisions: decisions}, releaseGateVerificationWiring{verifier: verifier}) {
+			endpoint = mounted.Handler
+		}
+	}
+	if endpoint == nil {
+		t.Fatal("核对口没按登记处挂上")
+	}
+
+	const (
+		scope    = "SYN-UNIT-WD-01"
+		boundary = "SYN-PROC-WD"
+		parcel   = "SYN-PARCEL-WD-01"
+		version  = "SYN-VER-WD-01"
+	)
+	shell := &customsDecisionFixture{db: db, pool: pool}
+	associateCustomsParcel(t, shell, parcel)
+	recordCustomsMeasurement(t, shell, "SYN-HU-CMW-01", "WEIGH-1", "1.80", time.Date(2026, 11, 18, 8, 0, 0, 0, time.UTC))
+	saveWeightGateSubmission(t, db, scope, boundary, parcel, version)
+
+	registrations, err := ccpostgres.NewGateConditionRegistrations(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := mustValue(t, ccdomain.NewTenantID, customsDecisionTenant)
+	scopeRef := mustValue(t, ccdomain.NewDecisionScopeReference, scope)
+	boundaryRef := mustValue(t, ccdomain.NewCustomsProcedureReference, boundary)
+	rule, err := ccdomain.AllowWeightDeltaUpTo("0.50", "KG")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		saved, err := registrations.RegisterGateCatalog(txCtx, tenant, scopeRef, ccdomain.OutboundRelease, boundaryRef, time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC))
+		if err != nil {
+			return err
+		}
+		if saved != ccports.CaseConfigurationRegistered {
+			return fmt.Errorf("目录 %v", saved)
+		}
+		saved, err = registrations.RegisterDutyPaymentGateRule(txCtx, tenant, scopeRef, ccdomain.OutboundRelease, boundaryRef, ccdomain.DutyPaymentNotAPrecondition())
+		if err != nil {
+			return err
+		}
+		if saved != ccports.CaseConfigurationRegistered {
+			return fmt.Errorf("税费规则 %v", saved)
+		}
+		saved, err = registrations.RegisterWeightDiscrepancyGateRule(txCtx, tenant, scopeRef, ccdomain.OutboundRelease, boundaryRef, rule)
+		if err != nil {
+			return err
+		}
+		if saved != ccports.CaseConfigurationRegistered {
+			return fmt.Errorf("毛重规则 %v", saved)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("登记门禁：%v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/customs-release-gate-verifications", strings.NewReader(
+		`{"scope":"`+scope+`","action":"OUTBOUND_RELEASE","boundary":"`+boundary+`"}`))
+	request.Header.Set("Authorization", "Bearer "+gateVerifier)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, request)
+	var answer map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
+		t.Fatalf("答复不是 JSON：%s", response.Body.String())
+	}
+	if response.Code != http.StatusCreated || answer["outcome"] != "RECORDED" || answer["conclusion"] != "UNMET" {
+		t.Fatalf("挂了读数 = %d %v", response.Code, answer)
+	}
+	weight, ok := answer["weightDiscrepancy"].(map[string]any)
+	if !ok {
+		t.Fatalf("没有 weightDiscrepancy：%v", answer)
+	}
+	if weight["state"] != "UNMET" || weight["submissionVersion"] != version || weight["maxDelta"] != "0.5" || weight["unit"] != "KG" {
+		t.Fatalf("读数头 = %v", weight)
+	}
+	members, ok := weight["members"].([]any)
+	if !ok || len(members) != 1 {
+		t.Fatalf("成员 = %v", weight["members"])
+	}
+	member, ok := members[0].(map[string]any)
+	if !ok || member["parcel"] != parcel ||
+		member["declaredWeight"] != "2.60" || member["declaredUnit"] != "KG" || member["declaredSource"] != "WEIGH-0A" ||
+		member["measuredWeight"] != "1.80" || member["measuredUnit"] != "KG" || member["measurementSource"] != "WEIGH-1" ||
+		member["withinTolerance"] != false {
+		t.Fatalf("成员读数 = %v", member)
+	}
+}
+
+func saveWeightGateSubmission(t *testing.T, db *bentopg.DB, unitID, procedure, parcelID, versionID string) {
+	t.Helper()
+	submissions, err := ccpostgres.NewDeclarationSubmissions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unitRef := mustValue(t, ccdomain.NewDeclarationUnitID, unitID)
+	procedureRef := mustValue(t, ccdomain.NewCustomsProcedureReference, procedure)
+	parcel := mustValue(t, ccdomain.NewDeclaredParcelReference, parcelID)
+	unit, err := ccdomain.FormDeclarationUnit(
+		unitRef, mustValue(t, ccdomain.NewCustomsCaseID, "SYN-CASE-WD-01"), procedureRef,
+		[]ccdomain.DeclaredParcelReference{parcel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 11, 18, 1, 0, 0, 0, time.UTC)
+	readiness, err := ccdomain.JudgeReady(unitRef, mustValue(t, ccdomain.NewReadinessBasisReference, "readiness-wd"), at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorization, err := ccdomain.GrantSubmissionAuthority(unitRef, mustValue(t, ccdomain.NewSubmissionAuthorityReference, "authority-wd"), at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	weight, err := ccdomain.NewMemberMeasuredWeight(parcel, "2.60", "KG", "WEIGH-0A", at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err := ccdomain.FixSubmissionVersion(ccdomain.CustomsSubmissionVersionSpec{
+		ID:            mustValue(t, ccdomain.NewSubmissionVersionID, versionID),
+		Unit:          unit,
+		Dossier:       mustValue(t, ccdomain.NewDossierSnapshotReference, "dossier-wd"),
+		Roles:         mustValue(t, ccdomain.NewRoleSnapshotReference, "roles-wd"),
+		Readiness:     readiness,
+		Authorization: authorization,
+		FixedAt:       at.Add(time.Hour),
+		MemberWeights: []ccdomain.MemberMeasuredWeight{weight},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, err := ccdomain.InitialAttempt(version, "SYN-CHANNEL-WD", ccdomain.AttemptPendingConfirmation, at.Add(2*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := ccports.DeclarationSubmissionRecord{
+		Key: ccports.DeclarationSubmissionKey{
+			TenantID:  mustValue(t, ccdomain.NewTenantID, customsDecisionTenant),
+			Unit:      unitRef,
+			Procedure: procedureRef,
+		},
+		ContentDigest: "digest-wd",
+		Version:       version,
+		Attempt:       attempt,
+		RecordedAt:    at.Add(3 * time.Hour),
+	}
+	var outcome ccports.DeclarationSubmissionSaveOutcome
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		saved, err := submissions.Save(txCtx, record)
+		outcome = saved
+		return err
+	}); err != nil || outcome != ccports.DeclarationSubmissionSaved {
+		t.Fatalf("提交版本：err=%v outcome=%v", err, outcome)
 	}
 }

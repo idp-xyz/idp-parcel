@@ -59,6 +59,40 @@ func TestGateVersionDigestKeepsPriorBytesWhenWeightIsNotApplied(t *testing.T) {
 	}
 }
 
+// 指纹认的是这一次比较。毛重数字与单位不变，只换实测来源或成版来源，就是另一版门禁判断。
+func TestGateVersionDigestChangesWhenOnlyTheWeighingSourceChanges(t *testing.T) {
+	findings := []domain.PreconditionFinding{{
+		Precondition: mustDigestRef(t, domain.NewPreconditionReference, "RESTRICTION/released"),
+		State:        domain.PreconditionMet,
+	}}
+	digest := func(declaredSource, measuredSource string) string {
+		t.Helper()
+		return ports.GateVersionDigest(findings, domain.DutyPaymentGateReading{}, false, domain.WeightDiscrepancyGateReading{
+			State:             domain.PreconditionMet,
+			SubmissionVersion: mustDigestRef(t, domain.NewSubmissionVersionID, "submission-1"),
+			MaxDelta:          "0.5",
+			Unit:              "KG",
+			Members: []domain.WeightDiscrepancyMemberReading{{
+				Parcel:            mustDigestRef(t, domain.NewDeclaredParcelReference, "parcel-a"),
+				DeclaredWeight:    "2.20",
+				DeclaredUnit:      "KG",
+				DeclaredSource:    declaredSource,
+				MeasuredWeight:    "2.20",
+				MeasuredUnit:      "KG",
+				MeasurementSource: measuredSource,
+				WithinTolerance:   true,
+			}},
+		}, true)
+	}
+	base := digest("WEIGH-0A", "WEIGH-1")
+	if digest("WEIGH-0A", "WEIGH-2") == base {
+		t.Fatal("同重量只换实测来源，指纹没变")
+	}
+	if digest("WEIGH-0B", "WEIGH-1") == base {
+		t.Fatal("同重量只换成版来源，指纹没变")
+	}
+}
+
 func mustDigestRef[T any](t *testing.T, construct func(string) (T, error), raw string) T {
 	t.Helper()
 	value, err := construct(raw)
