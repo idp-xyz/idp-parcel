@@ -185,12 +185,10 @@ func (customerAPIRequestKeys) DeriveSubmissionRequestKey(_ context.Context, requ
 	if err != nil {
 		return "", err
 	}
-	// 提交的键是裸标识，与五口带前缀的键同在 PS 的一个判重空间：提交若用 `withdrawal:abc` 作标识，键就恰等于标识 `abc` 的撤回键。
-	// 保留前缀因此不许作提交标识的开头（ADR-0310 取舍 A）。送站预报在节点作业自己的册里判重，不与此同空间，不受此限。
-	for _, prefix := range reservedRequestKeyPrefixes {
-		if strings.HasPrefix(identifier, prefix) {
-			return "", fmt.Errorf("%w: %s must not start with the reserved command prefix %q", ErrRequestKeyNotDerived, AccessRequestIdentifier, prefix)
-		}
+	// 提交的键是裸标识，与带前缀的键同在 PS 的一个判重空间：提交若用 `withdrawal:abc` 作标识，键就恰等于标识 `abc` 的撤回键。
+	// 保留前缀因此不许作提交标识的开头（ADR-0310 取舍 A）。送站预报两口的推导同样拒（ADR-0384 决定六），在它们自己的函数里。
+	if err := rejectReservedRequestKeyPrefix(identifier); err != nil {
+		return "", err
 	}
 	return identifier, nil
 }
@@ -212,25 +210,54 @@ func accessRequestIdentifierOf(request ChannelRequest) (string, error) {
 	return trimmed, nil
 }
 
-// 五口来源请求键的命令前缀（ADR-0310 取舍 A）。提交与送站预报两口不带前缀，已登的来源请求键不改，所以裸标识与带前缀串在
-// 判重空间里是两把不同的键。
+// 首方族来源请求键的命令前缀。ADR-0310 的原有前缀在前；仓配货主写口随各口落地并入（ADR-0384 决定六）。
+// 提交与送站预报两口不带前缀，已登的来源请求键不改，所以裸标识与带前缀串在判重空间里是两把不同的键。
 const (
-	requestKeyPrefixWithdrawal         = "withdrawal:"
-	requestKeyPrefixParcelCancellation = "parcel-cancellation:"
-	requestKeyPrefixSourceDataAmend    = "source-data-amendment:"
-	requestKeyPrefixSupplement         = "supplement:"
-	requestKeyPrefixClaim              = "claim:"
+	requestKeyPrefixWithdrawal           = "withdrawal:"
+	requestKeyPrefixParcelCancellation   = "parcel-cancellation:"
+	requestKeyPrefixSourceDataAmend      = "source-data-amendment:"
+	requestKeyPrefixSupplement           = "supplement:"
+	requestKeyPrefixClaim                = "claim:"
+	requestKeyPrefixInboundPreAdvice     = "inbound-pre-advice:"
+	requestKeyPrefixInboundArrivalNotice = "inbound-arrival-notice:"
+	requestKeyPrefixInboundWithdrawal    = "inbound-withdrawal:"
+	requestKeyPrefixReceiptDiscrepancy   = "receipt-discrepancy:"
 )
 
-// reservedRequestKeyPrefixes 是五个命令前缀的全集，保留前缀只在这里列一次，推导与提交口的校验共用。
+// reservedRequestKeyPrefixes 是首方族保留前缀表，只在这里列一次。委托提交与送站预报两口的推导拒以其中任一前缀开头的标识；
+// 仓配入库预报三口在加上自己的前缀之前同样拒。
 var reservedRequestKeyPrefixes = []string{
 	requestKeyPrefixWithdrawal, requestKeyPrefixParcelCancellation, requestKeyPrefixSourceDataAmend,
 	requestKeyPrefixSupplement, requestKeyPrefixClaim,
+	requestKeyPrefixInboundPreAdvice, requestKeyPrefixInboundArrivalNotice, requestKeyPrefixInboundWithdrawal,
+	requestKeyPrefixReceiptDiscrepancy,
+}
+
+func rejectReservedRequestKeyPrefix(identifier string) error {
+	for _, prefix := range reservedRequestKeyPrefixes {
+		if strings.HasPrefix(identifier, prefix) {
+			return fmt.Errorf("%w: %s must not start with the reserved command prefix %q", ErrRequestKeyNotDerived, AccessRequestIdentifier, prefix)
+		}
+	}
+	return nil
 }
 
 func prefixedRequestKey(prefix string, request ChannelRequest) (string, error) {
 	identifier, err := accessRequestIdentifierOf(request)
 	if err != nil {
+		return "", err
+	}
+	return prefix + identifier, nil
+}
+
+// prefixedRequestKeyRejectingReserved 先拒以保留前缀开头的标识，再加这一口自己的前缀。标识若已带前缀，加上之后会和别的口的键撞上，
+// 或者把自己的前缀加两次。
+func prefixedRequestKeyRejectingReserved(prefix string, request ChannelRequest) (string, error) {
+	identifier, err := accessRequestIdentifierOf(request)
+	if err != nil {
+		return "", err
+	}
+	if err := rejectReservedRequestKeyPrefix(identifier); err != nil {
 		return "", err
 	}
 	return prefix + identifier, nil

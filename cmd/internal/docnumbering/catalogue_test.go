@@ -8,10 +8,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 )
 
-// Covers: ADR-0355 决定二、五、六——汇总出的恰是决定二那十一类，每类的默认模板与重置周期照决定五那张表，且各上下文
-// 的声明汇得起来（代码不重、默认模板过模板检查、不用加扰）。表在这里抄一遍是证据不是第二份口径：声明改了而 ADR 没改，
-// 这里会红，提醒改的人先去改决定。
-func TestCatalogueHoldsTheElevenDocumentTypesOfTheDecision(t *testing.T) {
+// Covers: ADR-0355 决定二、五、六——决定二那十一类都在，另加入库预报。每类的默认模板与重置周期照决定五那张表
+// （入库预报的模板、按日重置与开立方时区来路见 UC-WF-003）。各上下文的声明汇得起来
+// （代码不重、默认模板过模板检查、不用加扰）。表在这里抄一遍是证据不是第二份口径：声明改了而出处没改，这里会红。
+func TestCatalogueHoldsTheDeclaredDocumentTypes(t *testing.T) {
 	want := map[docnumber.TypeCode]struct {
 		template string
 		reset    numbering.Granularity
@@ -28,6 +28,7 @@ func TestCatalogueHoldsTheElevenDocumentTypesOfTheDecision(t *testing.T) {
 		"DELIVERY_HANDOVER_NOTE": {"HO-{yyyy}{mm}{dd}-{seq:5}", numbering.Daily, docnumber.DateTimeZoneFromIssuer},
 		"BOOKING":                {"BK-{yyyy}{mm}-{seq:5}", numbering.Monthly, docnumber.DateTimeZoneFromTenant},
 		"TRANSPORT_COMMISSION":   {"TC-{yyyy}{mm}-{seq:5}", numbering.Monthly, docnumber.DateTimeZoneFromTenant},
+		"INBOUND_PRE_ADVICE":     {"IB-{yyyy}{mm}{dd}-{seq:5}", numbering.Daily, docnumber.DateTimeZoneFromIssuer},
 	}
 
 	catalogue, err := Catalogue()
@@ -36,7 +37,7 @@ func TestCatalogueHoldsTheElevenDocumentTypesOfTheDecision(t *testing.T) {
 	}
 	declarations := catalogue.Declarations()
 	if len(declarations) != len(want) {
-		t.Fatalf("aggregated %d types, the decision lists %d", len(declarations), len(want))
+		t.Fatalf("aggregated %d types, want %d", len(declarations), len(want))
 	}
 	for _, declaration := range declarations {
 		expected, listed := want[declaration.Code]

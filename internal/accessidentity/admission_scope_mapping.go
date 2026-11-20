@@ -27,6 +27,9 @@ var ErrConflictingAdmissionScopeMappings = errors.New("access identity: two admi
 //
 // 首方客户族在铸造侧判准入的口取 CustomerCommandAdmissionCapability 与那一口的客户面能力词；委托提交不在铸造侧判，它的词
 // （ShipmentRequestSubmissionAdmission，ADR-0308）单独认下，给 PS 生产归属目录读；别的不在铸造侧判的口登不进来。作业事实登记面取能力面 CapabilityWorkFactRegistration 与 WorkFactKind，只收在铸造侧判准入的那几种。
+// 仓配没有作业事实的运营决定与客户面写口不走能力面那个词，也不走 CUSTOMER_COMMAND：能力词与事实类型词都取该口自己的字面量
+// （ADR-0384 决定八）。商品代录、入库预报代录、入库预报完结，以及入库预报的货主写口今天会提这几对。两格必须同是该口字面量；能力词是字面量、
+// 事实类型是别的字，登不进。WAREHOUSE_READ 不判准入，没有一对可登。
 func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 	switch requirement.Capability {
 	case CapabilityOperationDecision.String():
@@ -47,6 +50,29 @@ func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 		}
 	case CapabilityWorkFactRegistration.String():
 		if _, err := ParseWorkFactKind(requirement.FactKind); err == nil {
+			return nil
+		}
+	case DecisionGoodsRecordOnBehalf.String():
+		if requirement.FactKind == DecisionGoodsRecordOnBehalf.String() {
+			return nil
+		}
+	case DecisionInboundPreAdviceRecordOnBehalf.String():
+		if requirement.FactKind == DecisionInboundPreAdviceRecordOnBehalf.String() {
+			return nil
+		}
+	case DecisionInboundPreAdviceClose.String():
+		if requirement.FactKind == DecisionInboundPreAdviceClose.String() {
+			return nil
+		}
+	case DecisionReceiptDiscrepancyRecordOnBehalf.String():
+		if requirement.FactKind == DecisionReceiptDiscrepancyRecordOnBehalf.String() {
+			return nil
+		}
+	case CustomerCapabilityInboundPreAdviceSubmission.String(),
+		CustomerCapabilityInboundPreAdviceArrivalNotice.String(),
+		CustomerCapabilityInboundPreAdviceWithdrawal.String(),
+		CustomerCapabilityReceiptDiscrepancyConclusion.String():
+		if requirement.FactKind == requirement.Capability {
 			return nil
 		}
 	}

@@ -1,20 +1,21 @@
 # 仓配履约（`warehouse-fulfillment`）
 
-对照 main `99fc0037d`（2026-11-12）写成；「现状」与「已实现」两节 2026-11-19 对照 `2e2aabd7b` 改过。
+主数据登记册按已进 main 的代码写。商品、库存账、入库预报、收货确认、整箱库存、完结与少收、收货差异结论、待认领转记由写代码的会话对着代码写成，没有非作者复核。全文按这些代码进 main 之后的样子记现行规则。
 
-**只有「现状」与「已实现：主数据登记册」两节是现行规则。** 其余写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
+**只有「现状」「已实现：主数据登记册」「已实现：商品」「已实现：库存账」「已实现：入库预报」「已实现：收货确认」「已实现：整箱库存」「已实现：完结与少收」「已实现：收货差异结论」「已实现：待认领到货」是现行规则。** 其余写的是设计意图与词，供要做时定位；那些句子都不能当作产品现在的行为。
 
 ## 现状
 
-- 可选能力，首发不含。用户 2026-11-18 点名继续，按 PN-09 开发交接逐包做。
-- main 上有部署开关、依赖方向门禁，与仓、库区、库位类型、库位、包材各册的登记和查阅。别的都没有：商品、库存、入库、出库都没有代码；派发里没有仓配的路；没有受控批量口、登记 CLI、演示种子与管理台页面；货主的客户系统还查不了仓。
+- 可选能力，首发不含。用户 2026-11-18 点名继续，按 PN-09 开发交接逐包做。部署默认关。
+- 已有代码：部署开关与依赖方向门禁；仓、库区、库位类型、库位、包材的登记和查阅；商品的运营代录与运营查阅；库存账；入库预报的受理、告知版本、撤回、单据号、运营代录、运营查阅与货主口；收货确认（商品入库与整箱入库）；整箱库存；完结与少收（整箱按箱）；收货差异结论（货主与代录）；取消或完结之后到达的收货转成待认领到货，预报读口只标有无。路径、词与判定在下面各节。
+- 还没有：商品的货主口与仓测；货主查阅仓；待认领到货的认领与处置；开箱；建账导入；上架与库内作业；占用；库存读口的端点；出库、退货、代理仓执行与收费发生项。派发里没有仓配的路。没有受控批量口、登记 CLI、演示种子与管理台页面。
 - 部署开关是环境变量 `IDP_PARCEL_WAREHOUSE_FULFILLMENT_ENABLED`，去首尾空白后恰为 `true` 才开，默认关。读法在 `cmd/internal/warehouseswitch`。`parcel-api` 与 `parcel-dispatch` 启动时各读一次并写启动日志。
-- 开关关着时，仓配的端点答 `403 WAREHOUSE_FULFILLMENT_NOT_ENABLED`：在认证之前答，不读令牌、报文与册，不带 `outcome`。它与「接入渠道未配置」是两格，因为恢复动作是部署方打开开关。方法不对仍答 `405`。
+- 开关关着时，仓配的端点（含 `/v1/warehouse/`）答 `403 WAREHOUSE_FULFILLMENT_NOT_ENABLED`：在认证之前答，不读令牌、报文与册，不带 `outcome`。它与「接入渠道未配置」是两格，因为恢复动作是部署方打开开关。方法不对仍答 `405`。下面各口都受这一条管，不逐口再写。
 - 库表在 schema `warehouse_fulfillment`，进同一份迁移计划。开关关着的部署也建表，表是空的。
-- 派发里仓配的路只经 `registerWarehouseFulfillmentRoutes` 登记，开关关着时一路都不登记。它今天没有调用方。
+- 派发里仓配的路只经 `registerWarehouseFulfillmentRoutes` 登记，开关关着时一路都不登记。这个登记函数没有生产调用方，所以开着也还没有仓配的路。
 - 依赖方向门禁在 `internal/architecture/warehouse_fulfillment_dependency_gate_test.go`：别的上下文不得导入仓配，只留结算、计价、全程追踪各自的 `adapters/warehousefulfillment`。它不看测试文件，也不看库表与信封类型串。
 - 搜「仓储」命中的是持久化仓储（repository）的意思，与本上下文无关。
-- 文档写到开发交接：用例、客户面、接入词与 PN-09 交接都在 main 的 `docs/` 里。库内用例只评过一部分，没评到的记在票 08；出库用例评过一轮，修订记在票 09。票 10 至 12 的非作者评审没交卷。
+- 用例、客户面、接入词与 PN-09 交接在 `docs/`，是历史设计稿。规则以本节与下面各「已实现」为准。
 
 入库、库内、出库、平台备货与代理仓各段的设计概览见 [scenarios.md](../scenarios.md)「仓配履约」。
 
@@ -51,7 +52,80 @@
 - **包材**。内容：名称、外廓的长宽高与一个长度单位、重量与一个重量单位、是否停用。各仓共用。四个数值在报文里是字符串，只认 `12` 或 `12.50` 这种写法，整数部分至多 9 位、小数部分至多 6 位，按写出来的位数数；写法不对是坏载荷。数值为零、单位不在内置目录或类别不对，答 `CONTENT_INVALID`。数值按数值比，`12.5` 与 `12.50` 是同一内容。不折算单位，`30 CM` 与 `0.3 M` 是两份内容。
 - **库位类型与包材**在本租户一个仓都没登记时答 `NOT_CONFIGURED`，不落册；登记仓之后原样重交照常受理。
 - **库位**。内容：所属库区、库位类型（可缺）、优先级（可缺的 32 位整数，数字越大越优先）、是否停用。没有与有是不同的内容，优先级 0 与没有优先级是两份内容。所属库区登记后不改。仓、同一个仓下的库区、库位类型须已登记，否则 `REFERENCE_NOT_FOUND`。新指名的库位类型已停用答 `REFERENCE_DEACTIVATED`；沿用上一笔修订里的同一个类型、它后来被停用了，照常受理。不核仓与库区是否停用。
-- 停用的库区与库位「不再作移入目标」还没有做：那要等入库与库内作业。
+- 停用的库区与库位「不再作移入目标」还没有做，那要等上架与库内作业。收货确认里，库位已停用仍可入账。
+
+## 已实现：商品
+
+身份是（租户，货主客户账户，商品编码）。每笔修订是一份完整资料，从 1 起只追加。代码在 `internal/warehousefulfillment`。
+
+- 运营代录：`POST /warehouse-fulfillment-goods-on-behalf`，挂运营决定「商品代录」（`GOODS_RECORD_ON_BEHALF`）。准入的能力词与事实类型词都是这个字面量。货主客户账户在本租户查不到答 `404 OWNER_ACCOUNT_NOT_VISIBLE`，不带 `outcome`。
+- 答复：`REGISTERED`（201），其余 200：`EXISTING_RESULT`、`SOURCE_CONFLICT`、`BASIS_STALE`、`IMMUTABLE_FIELD`、`IDENTIFIER_CONFLICT`、`CONTENT_INVALID`、`NOT_CONFIGURED`。
+- 判定：代录先核货主账户。然后本租户一个仓都没登记答 `NOT_CONFIGURED`；再按（租户，提交途径，来源，键）认重放与冲突；再核基准、不可改的格、识别码、资料内容。重放排在基准之前。
+- 运营查阅挂主数据与运营查阅读，不判准入：`GET /warehouse-fulfillment-goods`、`GET /warehouse-fulfillment-goods-current`、`GET /warehouse-fulfillment-goods-revisions`、`GET /warehouse-fulfillment-goods-by-code`。找不到不答 404。
+- 并发：同一货主上的事务级锁。登记与问在库库存取独占；两个商品抢同一个码至多一个落册。记数取同一把锁的共享一侧，见库存账。
+- 没有：货主口、仓测、商品的停用。
+
+## 已实现：库存账
+
+一格是（租户，货主，仓，库位，商品，计量单位，库存状态，贴标别名，入库批次，批号，效期）。余额不存，由流水现算。没有自己的端点。商品入库的收货确认调用记数用例。整箱不进这本账。
+
+- 答复：`POSTED`、`ALREADY_POSTED`、`SOURCE_CONFLICT`、`REFUSED`。判重位置是（租户，原因，来源事实引用），重放排在校验之前。
+- 判定：先锁再认重放。原因是开箱时答 `REFUSED`，种类 `REASON_NOT_SUPPORTED`。仓须已登记且是自营仓，停用的仓不拒。行的形状随原因的类。逐行收齐不合之处，整笔不落。取走之后余额不为负。收货、退货入库、建账导入的记入行，以及加工、拆解的产出行，在记数时形成入库批次。
+- 并发：记数先取货主锁的共享一侧，再取（租户，货主，仓）的记数锁。商品修订问在库时取货主锁的独占一侧：修订先落，之后的记数照新修订判；记数先落，修订改跟踪批号或效期答 `IMMUTABLE_FIELD`。
+- 没有：开箱；取走时不指名入库批次；占用；库存读口的端点。开箱仍由这本账拒绝，不因为整箱库存另有一本账就改口。
+
+## 已实现：入库预报
+
+身份是（租户，预报标识）。预报不是库存。受理、告知与撤回都不写库存账。
+
+- 运营代录三个写口挂运营决定 `INBOUND_PRE_ADVICE_RECORD_ON_BEHALF`，准入两词都是这个字面量。`POST /warehouse-fulfillment-inbound-pre-advice-on-behalf` 代录提交；`POST /warehouse-fulfillment-inbound-pre-advice-notice-on-behalf` 代录告知；`POST /warehouse-fulfillment-inbound-pre-advice-withdrawal-on-behalf` 代录撤回。代录提交时货主账户查不到答 `404 OWNER_ACCOUNT_NOT_VISIBLE`。
+- 货主写口挂首方客户渠道，准入两词都是该口自己的字面量：`POST /v1/warehouse/inbound-pre-advices`（`INBOUND_PRE_ADVICE_SUBMISSION`）、`POST /v1/warehouse/inbound-pre-advices/arrival-notices`（`INBOUND_PRE_ADVICE_ARRIVAL_NOTICE`）、`POST /v1/warehouse/inbound-pre-advices/withdrawals`（`INBOUND_PRE_ADVICE_WITHDRAWAL`）。来源请求键是 `inbound-pre-advice:`、`inbound-arrival-notice:`、`inbound-withdrawal:` 加接入请求标识。
+- 答复：`ADVISED`（201），其余 200：`NOTICE_UPDATED`、`CANCELLED`、`EXISTING_RESULT`、`SOURCE_CONFLICT`、`WAREHOUSE_NOT_FOUND`、`NOT_CONFIGURED`、`WAREHOUSE_NOT_ACCEPTING`（原因 `DEACTIVATED` 或 `AGENT`）、`CONTENT_INVALID`、`STATUS_MISMATCH`、`RECEIPT_STARTED`、`PRE_ADVICE_NOT_FOUND`、`NUMBERING_RULE_COLLISION`。
+- 提交的判定：代录先核货主；按（租户，途径，来源，键）认重放，重放不取号；仓没登记、已停用或是代理仓按上列结果拒；明细有不合答 `CONTENT_INVALID`，不取号；同一事务里取号再落成已预报，告知第 1 版同笔写入。告知与撤回在一个仓都没登记时先答 `NOT_CONFIGURED`，不查预报在不在。已取消或已完结的告知答 `STATUS_MISMATCH`。已取消再撤答 `EXISTING_RESULT`；收货中或已完结的撤回答 `RECEIPT_STARTED`。
+- 单据号类型 `INBOUND_PRE_ADVICE`，默认模板 `IB-{yyyy}{mm}{dd}-{seq:5}`，按日重置。日期用仓已登记的业务时区；仓没登记业务时区就用租户的单据编号时区；都没有则照常受理、不带号，无号原因 `NUMBERING_TIME_ZONE_NOT_CONFIGURED`。撞号答 `NUMBERING_RULE_COLLISION`，不留预报。
+- 运营查阅挂主数据与运营查阅读，不判准入：`GET /warehouse-fulfillment-inbound-pre-advices`、`GET /warehouse-fulfillment-inbound-pre-advice`、`GET /warehouse-fulfillment-inbound-pre-advice-by-number`。货主读口能力词都是 `WAREHOUSE_READ`，不判准入：`GET /v1/warehouse/reads/inbound-pre-advices`、`GET /v1/warehouse/reads/inbound-pre-advice`、`GET /v1/warehouse/reads/inbound-pre-advice-by-number`。找不到不答 404。别的货主的预报与查无此预报同答。读出带状态、告知版本、单据号或无号原因、累计实收、逐次收货、完结与少收、差异的现行结论；有待认领到货时多一格 `unclaimedArrival`。货主读口不带登记责任方，也不带收货的设备与操作者。
+- 并发：提交锁判重位置；告知、撤回、收货与完结锁同一份预报。同一键并发至多一份预报。
+
+## 已实现：收货确认
+
+`POST /warehouse-fulfillment-receipt-confirmations`。挂作业事实登记，作业范围种类 `WAREHOUSE`，引用须等于载荷里的仓。铸造侧准入的能力词是 `WORK_FACT_REGISTRATION`，事实类型是 `RECEIPT_CONFIRMATION`。商品入库与整箱入库走同一口，按预报的入库方式分。
+
+- 答复：`CONFIRMED`（201），其余 200：`EXISTING_RESULT`、`CONTENT_CONFLICT`、`CONTENT_INVALID`、`WAREHOUSE_NOT_FOUND`、`PRE_ADVICE_NOT_FOUND`、`DIVERTED_TO_UNCLAIMED`。
+- 判定：先按事实身份认重放，重放不再入账。仓没登记、预报查不到、仓或行的形态与预报不符，整条不落。形态相符且是整箱入库时改走整箱账，不进商品库存。商品入库先整条核：库位须属于收货暂存，停用的库位仍可入账；认得出的商品再核计量单位、批号、效期与贴标别名。然后锁预报。已取消或已完结转待认领，不入账。否则成立的行以收货流水入账，并形成这一次的差异：多收 `OVERAGE`、错货 `WRONG_GOODS`、破损 `DAMAGE`。待检不记差异。少收不在这一次。认不出的行不入账。没有任何成立的行也答 `CONFIRMED`，预报进入收货中。
+- 并发：先锁事实身份，再锁预报，再让商品入账去拿货主锁与记数锁。同一份预报上的两次收货串行。
+- 没有：不带预报的到货另立登记；上架。
+
+## 已实现：整箱库存
+
+与商品库存分开。一箱是一件，不分库存状态，余额由整箱流水现算。没有自己的端点。整箱收货写入收货暂存，一箱一个入库批次，不把箱单拆进商品库存。
+
+- 这一段流水原因只有收货 `RECEIPT`。预报没列，或这份预报上已经收过的箱，不入账，记错货。要入账的箱号已经在这个货主这个仓的在库箱号里，不入账，也不形成差异。破损的入账箱另记 `DAMAGE`。
+- 并发：先锁预报，再锁（租户，货主，仓）的整箱账，不拿商品库存的货主锁。
+- 没有：开箱、取走、占用、整箱读口的端点。
+
+## 已实现：完结与少收
+
+`POST /warehouse-fulfillment-inbound-pre-advice-closures`，挂运营决定 `INBOUND_PRE_ADVICE_CLOSE`。准入的能力词与事实类型词都是这个字面量。不挂作业事实登记。
+
+- 答复：`CLOSED`（201），其余 200：`EXISTING_RESULT`、`STATUS_MISMATCH`、`PRE_ADVICE_NOT_FOUND`、`NOT_CONFIGURED`。
+- 判定：一个仓都没登记先答 `NOT_CONFIGURED`，不查预报。锁预报。已完结再完结答 `EXISTING_RESULT`，说明不同也不是另一份。已预报或已取消答 `STATUS_MISMATCH`。只完结收货中的。商品少收按基本单位，只留下大于 0 的；整箱少收是还没入账的预报箱号，一箱一行，数量是一箱。少收的种类是 `SHORTAGE`。有少收才另签一个差异标识，不写进这一次收货的差异行，也不改两本库存。
+- 并发：预报锁。一份预报至多一次完结。
+- 货主读口与运营查阅都带完结与少收。货主口不带完结操作者。没有少收就不出现少收行。
+
+## 已实现：收货差异结论
+
+货主口 `POST /v1/warehouse/receipt-discrepancy-conclusions`，能力 `RECEIPT_DISCREPANCY_CONCLUSION`，准入两词都是这个字面量，来源请求键前缀 `receipt-discrepancy:`。代录口 `POST /warehouse-fulfillment-receipt-discrepancy-conclusion-on-behalf`，决定 `RECEIPT_DISCREPANCY_RECORD_ON_BEHALF`，准入两词都是这个字面量。结论是 `CONFIRM` 或 `OBJECT`，不改库存。
+
+- 答复：`CONCLUSION_RECORDED`（201），其余 200：`EXISTING_RESULT`、`CONCLUSION_HELD`、`DISCREPANCY_NOT_FOUND`、`NOT_CONFIGURED`、`SOURCE_CONFLICT`。
+- 判定：一个仓都没登记先答 `NOT_CONFIGURED`。差异在这个货主名下查不到答 `DISCREPANCY_NOT_FOUND`。还没有结论就记下。现行是代录的：货主本人的结论取代它，不论相同还是不同，被取代的照留；代录不取代，相同答 `EXISTING_RESULT`，不同答 `CONCLUSION_HELD`。现行是货主本人的不再改。
+- 并发：先锁差异标识；货主口再锁来源请求键。
+- 收货形成的差异与完结形成的少收都能作结论。没有：开箱带来的差异。
+
+## 已实现：待认领到货
+
+只有这一格：取消或完结之后到达的收货，与一件待认领到货在同一笔事务里落下。走收货确认口，答 `DIVERTED_TO_UNCLAIMED`。原事实原样保全，不入商品库存也不入整箱库存，预报状态不变。预报读口有这种到货时多一格 `unclaimedArrival`，不带内容、标识与数量；没有就不出现这一格。转成待认领的那条收货不放进逐次收货。
+
+没有：认领、处置，以及不指向一份预报的无主到货登记。
 
 ## 设计意图：管什么，不管什么
 

@@ -62,17 +62,57 @@ func TestAnAdmissionScopeMappingTakesOnlyRequirementsAFaceAsksFor(t *testing.T) 
 			Capability: accessidentity.ExternalFactAdmissionCapability,
 			FactKind:   accessidentity.FactExternalFunds.String(),
 		},
+		// 商品代录的能力词与事实类型词都是决定字面量（ADR-0384 决定八）。认不下这一对，对照就登不进去，代录永远答不在准入范围。
+		"goods recorded on behalf": {
+			Capability: accessidentity.DecisionGoodsRecordOnBehalf.String(),
+			FactKind:   accessidentity.DecisionGoodsRecordOnBehalf.String(),
+		},
+		"inbound pre-advice recorded on behalf": {
+			Capability: accessidentity.DecisionInboundPreAdviceRecordOnBehalf.String(),
+			FactKind:   accessidentity.DecisionInboundPreAdviceRecordOnBehalf.String(),
+		},
+		"inbound pre-advice close": {
+			Capability: accessidentity.DecisionInboundPreAdviceClose.String(),
+			FactKind:   accessidentity.DecisionInboundPreAdviceClose.String(),
+		},
+		"receipt discrepancy conclusion on behalf": {
+			Capability: accessidentity.DecisionReceiptDiscrepancyRecordOnBehalf.String(),
+			FactKind:   accessidentity.DecisionReceiptDiscrepancyRecordOnBehalf.String(),
+		},
+		// 货主写口两格都是该口字面量，不用 CUSTOMER_COMMAND（ADR-0384 决定八）。
+		"inbound pre-advice submission": {
+			Capability: accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String(),
+			FactKind:   accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String(),
+		},
+		"inbound pre-advice arrival notice": {
+			Capability: accessidentity.CustomerCapabilityInboundPreAdviceArrivalNotice.String(),
+			FactKind:   accessidentity.CustomerCapabilityInboundPreAdviceArrivalNotice.String(),
+		},
+		"inbound pre-advice withdrawal": {
+			Capability: accessidentity.CustomerCapabilityInboundPreAdviceWithdrawal.String(),
+			FactKind:   accessidentity.CustomerCapabilityInboundPreAdviceWithdrawal.String(),
+		},
+		"receipt discrepancy conclusion": {
+			Capability: accessidentity.CustomerCapabilityReceiptDiscrepancyConclusion.String(),
+			FactKind:   accessidentity.CustomerCapabilityReceiptDiscrepancyConclusion.String(),
+		},
 	} {
 		if _, err := accessidentity.NewAdmissionScopeMapping("SYN-TENANT-01", "SYN-MAP-1", requirement, "SYN-PILOT-SCOPE/x@v1", interval, "SYN-BASIS"); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
 	for name, requirement := range map[string]accessidentity.AdmissionRequirement{
-		"synthetic capability word":      {Capability: "SYN-CAP/operation-decision", FactKind: accessidentity.DecisionLoadAssignment.String()},
-		"decision capability, fact type": {Capability: accessidentity.CapabilityOperationDecision.String(), FactKind: accessidentity.FactExternalFunds.String()},
-		"external fact, decision kind":   {Capability: accessidentity.ExternalFactAdmissionCapability, FactKind: accessidentity.DecisionLoadAssignment.String()},
-		"face without admission words":   {Capability: accessidentity.CapabilityWorkFactRegistration.String(), FactKind: "NODE_RECEPTION"},
-		"lower-cased word":               {Capability: "operation_decision", FactKind: accessidentity.DecisionLoadAssignment.String()},
+		"synthetic capability word":         {Capability: "SYN-CAP/operation-decision", FactKind: accessidentity.DecisionLoadAssignment.String()},
+		"decision capability, fact type":    {Capability: accessidentity.CapabilityOperationDecision.String(), FactKind: accessidentity.FactExternalFunds.String()},
+		"external fact, decision kind":      {Capability: accessidentity.ExternalFactAdmissionCapability, FactKind: accessidentity.DecisionLoadAssignment.String()},
+		"face without admission words":      {Capability: accessidentity.CapabilityWorkFactRegistration.String(), FactKind: "NODE_RECEPTION"},
+		"lower-cased word":                  {Capability: "operation_decision", FactKind: accessidentity.DecisionLoadAssignment.String()},
+		"goods capability, other kind":      {Capability: accessidentity.DecisionGoodsRecordOnBehalf.String(), FactKind: accessidentity.DecisionManualMeasurementEntry.String()},
+		"pre-advice capability, other kind": {Capability: accessidentity.DecisionInboundPreAdviceRecordOnBehalf.String(), FactKind: accessidentity.DecisionGoodsRecordOnBehalf.String()},
+		"close capability, other kind":      {Capability: accessidentity.DecisionInboundPreAdviceClose.String(), FactKind: accessidentity.DecisionGoodsRecordOnBehalf.String()},
+		"customer write, other fact":        {Capability: accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String(), FactKind: accessidentity.CustomerCapabilityInboundPreAdviceWithdrawal.String()},
+		"customer write under command word": {Capability: accessidentity.CustomerCommandAdmissionCapability, FactKind: accessidentity.CustomerCapabilityInboundPreAdviceSubmission.String()},
+		"warehouse read is not admission":   {Capability: accessidentity.CustomerCapabilityWarehouseRead.String(), FactKind: accessidentity.CustomerCapabilityWarehouseRead.String()},
 	} {
 		if _, err := accessidentity.NewAdmissionScopeMapping("SYN-TENANT-01", "SYN-MAP-1", requirement, "SYN-PILOT-SCOPE/x@v1", interval, "SYN-BASIS"); !errors.Is(err, accessidentity.ErrAdmissionRequirementUnknown) {
 			t.Fatalf("%s: err = %v, want ErrAdmissionRequirementUnknown", name, err)

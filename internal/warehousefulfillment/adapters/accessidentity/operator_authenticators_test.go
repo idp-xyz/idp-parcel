@@ -98,7 +98,7 @@ var (
 
 var grades = []error{
 	warehousehttp.ErrAccessChannelNotConfigured, warehousehttp.ErrOperatorCredentialRejected,
-	warehousehttp.ErrOperatorNotGranted, warehousehttp.ErrIdentityDependencyUnavailable,
+	warehousehttp.ErrOperatorNotGranted, warehousehttp.ErrOutsideAdmissionScope, warehousehttp.ErrIdentityDependencyUnavailable,
 }
 
 // Covers: AT-WF-010（仓的部分）——持登记册配置写授予的操作者认证到绑定的租户，登记责任方是（发行方，sub）这一对；不判准入范围：
@@ -213,6 +213,176 @@ func TestAuthenticatorsRefuseToBeBuiltWithoutAMinter(t *testing.T) {
 	if _, err := whaccess.NewOperatorOperationsReadAuthenticator(nil); err == nil {
 		t.Fatal("operations read authenticator built without a minter")
 	}
+	if _, err := whaccess.NewOperatorGoodsAuthenticator(nil); err == nil {
+		t.Fatal("goods on-behalf authenticator built without a minter")
+	}
+	if _, err := whaccess.NewOperatorPreAdviceAuthenticator(nil); err == nil {
+		t.Fatal("inbound pre-advice on-behalf authenticator built without a minter")
+	}
+}
+
+// goodsDecisionRegister 只登「商品代录」这一种运营决定。
+type goodsDecisionRegister struct {
+	kinds []identity.DecisionKind
+}
+
+func (register goodsDecisionRegister) FindOperator(_ context.Context, subject identity.OperatorSubject) (identity.OperatorStanding, bool, error) {
+	binding, err := identity.NewOperatorBinding(subject, operatorTenant, "SYN-BASIS-BINDING")
+	if err != nil {
+		return identity.OperatorStanding{}, false, err
+	}
+	interval, err := identity.NewEffectiveInterval(operatorNow.Add(-time.Hour), time.Time{})
+	if err != nil {
+		return identity.OperatorStanding{}, false, err
+	}
+	var grants []identity.RecordedGrant
+	for index, kind := range register.kinds {
+		grant, err := identity.NewOperationDecisionGrant(operatorTenant, "SYN-DECISION-"+string(rune('A'+index)), subject, kind, interval, "SYN-BASIS-GRANT")
+		if err != nil {
+			return identity.OperatorStanding{}, false, err
+		}
+		recorded, err := identity.NewRecordedGrant(grant, nil)
+		if err != nil {
+			return identity.OperatorStanding{}, false, err
+		}
+		grants = append(grants, recorded)
+	}
+	standing, err := identity.NewOperatorStanding(binding, grants)
+	return standing, err == nil, err
+}
+
+// goodsAdmission 记下代录实际拿去问的那一对准入词。
+type goodsAdmission struct {
+	asked  identity.AdmissionRequirement
+	calls  int
+	admit  bool
+	askErr error
+}
+
+func (scope *goodsAdmission) Admits(_ context.Context, _ string, requirement identity.AdmissionRequirement, _ time.Time) (bool, error) {
+	scope.calls++
+	scope.asked = requirement
+	if scope.askErr != nil {
+		return false, scope.askErr
+	}
+	return scope.admit, nil
+}
+
+func goodsAuthenticator(t *testing.T, register goodsDecisionRegister, admission identity.AdmissionScope) *whaccess.OperatorGoodsAuthenticator {
+	t.Helper()
+	minter, err := identity.NewOperatorMinter(operatorVerifier{}, register, admission, func() time.Time { return operatorNow })
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := whaccess.NewOperatorGoodsAuthenticator(minter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return built
+}
+
+// Covers: ADR-0384 决定二、决定八——商品代录核的是这一种决定的授予，不是登记册配置写；准入的能力词与事实类型词都是
+// GOODS_RECORD_ON_BEHALF。没有这一种授予时不探准入范围。准入范围没登答不在准入范围，读不动与身份依赖读不动同一格。
+func TestGoodsOnBehalfAsksForTheDecisionLiteralOnBothAdmissionWords(t *testing.T) {
+	kind := identity.DecisionGoodsRecordOnBehalf
+	granted := goodsDecisionRegister{kinds: []identity.DecisionKind{kind}}
+	scope := &goodsAdmission{admit: true}
+
+	operator, err := goodsAuthenticator(t, granted, scope).AuthenticateGoodsOnBehalf(context.Background(), "presented.operator.token")
+	if err != nil || operator.Tenant.String() != operatorTenant || operator.Registrant.String() != "https://id.syn.example/dex#SYN-OPERATOR-01" {
+		t.Fatalf("operator = %+v, err = %v", operator, err)
+	}
+	if scope.calls != 1 || scope.asked.Capability != kind.String() || scope.asked.FactKind != kind.String() {
+		t.Fatalf("准入词 = %+v，问了 %d 次，want 能力词与事实类型词都是 %s", scope.asked, scope.calls, kind)
+	}
+
+	onlyMeasurement := goodsDecisionRegister{kinds: []identity.DecisionKind{identity.DecisionManualMeasurementEntry}}
+	silent := &goodsAdmission{admit: true}
+	_, err = goodsAuthenticator(t, onlyMeasurement, silent).AuthenticateGoodsOnBehalf(context.Background(), "presented.operator.token")
+	assertOnlyGrade(t, err, warehousehttp.ErrOperatorNotGranted)
+	if silent.calls != 0 {
+		t.Fatal("没有商品代录授予时不该探准入范围")
+	}
+
+	_, err = goodsAuthenticator(t, granted, identity.UnconfiguredAdmissionScope{}).AuthenticateGoodsOnBehalf(context.Background(), "presented.operator.token")
+	assertOnlyGrade(t, err, warehousehttp.ErrOutsideAdmissionScope)
+
+	_, err = goodsAuthenticator(t, granted, &goodsAdmission{askErr: errors.New("scope down")}).AuthenticateGoodsOnBehalf(context.Background(), "presented.operator.token")
+	assertOnlyGrade(t, err, warehousehttp.ErrIdentityDependencyUnavailable)
+}
+
+// Covers: ADR-0384 决定二、决定八——入库预报代录核的是这一种决定的授予。准入的能力词与事实类型词都是
+// INBOUND_PRE_ADVICE_RECORD_ON_BEHALF。没有这一种授予时不探准入范围。
+func TestInboundPreAdviceOnBehalfAsksForTheDecisionLiteralOnBothAdmissionWords(t *testing.T) {
+	kind := identity.DecisionInboundPreAdviceRecordOnBehalf
+	granted := goodsDecisionRegister{kinds: []identity.DecisionKind{kind}}
+	scope := &goodsAdmission{admit: true}
+
+	operator, err := preAdviceAuthenticator(t, granted, scope).AuthenticatePreAdviceOnBehalf(context.Background(), "presented.operator.token")
+	if err != nil || operator.Tenant.String() != operatorTenant || operator.Registrant.String() != "https://id.syn.example/dex#SYN-OPERATOR-01" {
+		t.Fatalf("operator = %+v, err = %v", operator, err)
+	}
+	if scope.calls != 1 || scope.asked.Capability != kind.String() || scope.asked.FactKind != kind.String() {
+		t.Fatalf("准入词 = %+v，问了 %d 次，want 能力词与事实类型词都是 %s", scope.asked, scope.calls, kind)
+	}
+
+	onlyGoods := goodsDecisionRegister{kinds: []identity.DecisionKind{identity.DecisionGoodsRecordOnBehalf}}
+	silent := &goodsAdmission{admit: true}
+	_, err = preAdviceAuthenticator(t, onlyGoods, silent).AuthenticatePreAdviceOnBehalf(context.Background(), "presented.operator.token")
+	assertOnlyGrade(t, err, warehousehttp.ErrOperatorNotGranted)
+	if silent.calls != 0 {
+		t.Fatal("没有入库预报代录授予时不该探准入范围")
+	}
+}
+
+// Covers: ADR-0384 决定二、决定八——入库预报完结核的是这一种决定的授予。准入的能力词与事实类型词都是
+// INBOUND_PRE_ADVICE_CLOSE。没有这一种授予时不探准入范围。
+func TestInboundPreAdviceCloseAsksForTheDecisionLiteralOnBothAdmissionWords(t *testing.T) {
+	kind := identity.DecisionInboundPreAdviceClose
+	granted := goodsDecisionRegister{kinds: []identity.DecisionKind{kind}}
+	scope := &goodsAdmission{admit: true}
+
+	operator, err := preAdviceCloseAuthenticator(t, granted, scope).AuthenticatePreAdviceClose(context.Background(), "presented.operator.token")
+	if err != nil || operator.Tenant.String() != operatorTenant || operator.Registrant.String() != "https://id.syn.example/dex#SYN-OPERATOR-01" {
+		t.Fatalf("operator = %+v, err = %v", operator, err)
+	}
+	if scope.calls != 1 || scope.asked.Capability != kind.String() || scope.asked.FactKind != kind.String() {
+		t.Fatalf("准入词 = %+v，问了 %d 次，want 能力词与事实类型词都是 %s", scope.asked, scope.calls, kind)
+	}
+
+	onlyOnBehalf := goodsDecisionRegister{kinds: []identity.DecisionKind{identity.DecisionInboundPreAdviceRecordOnBehalf}}
+	silent := &goodsAdmission{admit: true}
+	_, err = preAdviceCloseAuthenticator(t, onlyOnBehalf, silent).AuthenticatePreAdviceClose(context.Background(), "presented.operator.token")
+	assertOnlyGrade(t, err, warehousehttp.ErrOperatorNotGranted)
+	if silent.calls != 0 {
+		t.Fatal("没有入库预报完结授予时不该探准入范围")
+	}
+}
+
+func preAdviceCloseAuthenticator(t *testing.T, register goodsDecisionRegister, admission identity.AdmissionScope) *whaccess.OperatorPreAdviceCloseAuthenticator {
+	t.Helper()
+	minter, err := identity.NewOperatorMinter(operatorVerifier{}, register, admission, func() time.Time { return operatorNow })
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := whaccess.NewOperatorPreAdviceCloseAuthenticator(minter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return built
+}
+
+func preAdviceAuthenticator(t *testing.T, register goodsDecisionRegister, admission identity.AdmissionScope) *whaccess.OperatorPreAdviceAuthenticator {
+	t.Helper()
+	minter, err := identity.NewOperatorMinter(operatorVerifier{}, register, admission, func() time.Time { return operatorNow })
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := whaccess.NewOperatorPreAdviceAuthenticator(minter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return built
 }
 
 func assertOnlyGrade(t *testing.T, err, want error) {

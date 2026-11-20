@@ -1,6 +1,6 @@
 # 入口总表
 
-由代码读出：管理台页面取自 `apps/admin-web/src/navigation.ts`，接口取自 `cmd/parcel-api/endpoints_*.go` 的登记处。页面状态核于 main `d118b4f83`（2026-11-12），其后只改各笔改动碰到的行；接口数量数于 main `543133d7a`（2026-11-18）的登记处，2026-11-19 另加仓配的十五个（在原数上加的，没有重数）。这一页是清单，不受行数上限约束；页面或接口增减时照代码重列。
+由代码读出：管理台页面取自 `apps/admin-web/src/navigation.ts`，接口取自 `cmd/parcel-api/endpoints_*.go` 的登记处。页面状态核于 main `d118b4f83`（2026-11-12），其后只改各笔改动碰到的行；接口数量数于 main `543133d7a`（2026-11-18）的登记处，2026-11-19 另加仓配的十五个（在原数上加的，没有重数）。2026-11-20 再数 `endpoints_warehouse_fulfillment.go`：登记处 36 行，其中客户面 7 行进客户接口表，其余 29 行里原先已计入 15 行，差额 14 行加进操作员与作业端；总数在 301 上加 21，没有重数整份登记。这一页是清单，不受行数上限约束；页面或接口增减时照代码重列。
 
 它回答「产品有哪些能操作的地方，今天各能做到哪」。
 
@@ -121,7 +121,7 @@
 
 ## 有接口、没有页面的操作
 
-后端已经有生产入口，管理台没有任何一页调它，现在只能直接调接口或走演示脚本。清关、账务、异常三组的决定口已接进各自页面的「运营决定」签（照提示填 JSON 提交，不是引导式表单），不在下表。运营决定类 79 个里有 30 个、登记类 73 个里有 22 个是这样。
+后端已经有生产入口，管理台没有任何一页调它，现在只能直接调接口或走演示脚本。清关、账务、异常三组的决定口已接进各自页面的「运营决定」签（照提示填 JSON 提交，不是引导式表单），不在下表。运营决定类 85 个里有 36 个、登记类 73 个里有 22 个是这样。仓配新加的 6 个运营决定口都没有页面，算在这 36 个里。
 
 | 领域 | 没有页面的操作 |
 |---|---|
@@ -132,7 +132,7 @@
 | 产品与价格 | 价卡退役与后继截断、评价回放、参考目录的登记与复核 |
 | 合作伙伴 | 渠道账号使用授权的登记与撤销、参与方关系替代、注册号类型的登记与停用 |
 
-作业事实登记的 20 个接口本来就不给管理台用，由一线作业端调。
+作业事实登记的 21 个接口本来就不给管理台用，由一线作业端调。其中仓配收货确认是在原来的 20 个上加的 1 个。
 
 ## 界面用词与领域词
 
@@ -154,18 +154,18 @@
 
 完整词典在 `apps/admin-web/src/vocabulary/`。
 
-## 接口：301 个，按接入面分
+## 接口：322 个，按接入面分
 
 谁能调哪一类接口，由接入面定。每一面的授予在[接入与身份](./contexts/access-identity.md)里登记。
 
 | 接入面 | 谁用 | 数量 |
 |---|---|---|
-| 客户接口 | 货主客户自己的系统。绑定一个客户账户，路径在 `/v1` 下 | 11 |
+| 客户接口 | 货主客户自己的系统。绑定一个客户账户，路径在 `/v1` 下 | 18 |
 | 集成客户端 | 外部系统回传事实：报关服务商、承运商、银行或财务系统 | 8 |
-| 作业事实登记 | 一线作业端用登记过的设备登事实：收寄、称重量方、交接、揽收、派送、交付 | 20 |
-| 运营决定 | 操作员作出要留名的决定：复核、处置、裁决、确认、审核、凭原件的手工录入 | 79 |
+| 作业事实登记 | 一线作业端用登记过的设备登事实：收寄、称重量方、交接、揽收、派送、交付、仓内收货 | 21 |
+| 运营决定 | 操作员作出要留名的决定：复核、处置、裁决、确认、审核、凭原件的手工录入 | 85 |
 | 登记册配置写 | 操作员登记主数据与规则：合同、价卡、网络、目录 | 80 |
-| 主数据与运营查阅读 | 操作员查阅 | 96 |
+| 主数据与运营查阅读 | 操作员查阅 | 103 |
 | 操作者与授予管理 | 管理员管谁能登录、持有哪几格授予 | 4 |
 | 隔离读 | 受理复核与授权处置的队列读口 | 3 |
 
@@ -184,6 +184,15 @@
 | POST | `/v1/shipment-requests/source-data-amendments` | 修订客户原始资料 |
 | POST | `/v1/shipment-requests/supplements` | 受控补充：交来新提交版本 |
 | POST | `/v1/shipment-requests/withdrawals` | 决定前撤回整份委托 |
+| POST | `/v1/warehouse/inbound-pre-advices` | 提交入库预报 |
+| POST | `/v1/warehouse/inbound-pre-advices/arrival-notices` | 更新入库预报的告知 |
+| POST | `/v1/warehouse/inbound-pre-advices/withdrawals` | 撤回入库预报 |
+| GET | `/v1/warehouse/reads/inbound-pre-advice` | 按预报标识读自己的一份入库预报 |
+| GET | `/v1/warehouse/reads/inbound-pre-advice-by-number` | 按单据号读自己的一份入库预报 |
+| GET | `/v1/warehouse/reads/inbound-pre-advices` | 读自己的入库预报列表 |
+| POST | `/v1/warehouse/receipt-discrepancy-conclusions` | 对一份收货差异作结论 |
+
+部署没打开仓配开关时，上表 `/v1/warehouse/` 各口不提供业务答复。
 
 ### 集成客户端接口
 
@@ -200,8 +209,8 @@
 
 ### 操作员与作业端接口
 
-其余各面的接口太多，不在这里逐条列；登记处就是完整清单。客户接口之外的 290 个按路径首词的数量（含上表集成客户端那 8 个）。`warehouse` 那 15 个是仓配的，部署没打开仓配开关时不提供业务答复：
-`transport` 52、`commercial` 43、`customs` 40、`pricing` 23、`settlement` 23、`node` 20、`visibility` 9、`network` 8、`shipment` 6、`reference` 5、`route` 5、`operator` 5、`document` 4、`post` 4、`cancellation` 2、`exception` 5、`evidence` 3、`eta` 2、`customer` 4、`control` 2、`claims` 1、`channel` 1、`collection` 1、`governance` 1、`label` 1、`work` 1、`operators` 1、`acceptance` 1、`authorized` 1、`tracking` 1、`warehouse` 15。
+其余各面的接口太多，不在这里逐条列；登记处就是完整清单。客户接口之外的 304 个按路径首词的数量（含上表集成客户端那 8 个）。`warehouse` 那 29 个是仓配的，部署没打开仓配开关时不提供业务答复：
+`transport` 52、`commercial` 43、`customs` 40、`pricing` 23、`settlement` 23、`node` 20、`visibility` 9、`network` 8、`shipment` 6、`reference` 5、`route` 5、`operator` 5、`document` 4、`post` 4、`cancellation` 2、`exception` 5、`evidence` 3、`eta` 2、`customer` 4、`control` 2、`claims` 1、`channel` 1、`collection` 1、`governance` 1、`label` 1、`work` 1、`operators` 1、`acceptance` 1、`authorized` 1、`tracking` 1、`warehouse` 29。
 
 ## 离线登记命令
 

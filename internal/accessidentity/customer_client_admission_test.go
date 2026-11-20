@@ -124,8 +124,8 @@ func TestCustomerWithdrawalRequestKeyCarriesTheCommandPrefix(t *testing.T) {
 	}
 }
 
-// Covers: AT-PS-121（ADR-0310 取舍 A）——提交口的接入请求标识不得以五个保留命令前缀之一开头（否则键会等于另一标识的命令键）；
-// 不带保留前缀的照常，含中间带冒号的。
+// Covers: AT-PS-121（ADR-0310 取舍 A）——提交口的接入请求标识不得以保留前缀表里的任一前缀开头（否则键会等于另一标识的命令键）；
+// 不带保留前缀的照常，含中间带冒号的。表里含 ADR-0310 的五个，也含后来并入的仓配前缀（ADR-0384 决定六）。
 func TestSubmissionRequestKeyRejectsReservedCommandPrefixes(t *testing.T) {
 	for _, prefix := range reservedRequestKeyPrefixes {
 		request := NewChannelRequest(map[string]string{AccessRequestIdentifier: " " + prefix + "abc "})
@@ -138,5 +138,26 @@ func TestSubmissionRequestKeyRejectsReservedCommandPrefixes(t *testing.T) {
 		if key, err := (customerAPIRequestKeys{}).DeriveSubmissionRequestKey(context.Background(), request); err != nil || key != id {
 			t.Fatalf("%q：key = %q, err = %v", id, key, err)
 		}
+	}
+}
+
+// Covers: ADR-0384 决定六——送站预报两口的键仍是去两端空白的裸标识；标识以保留前缀开头（含 inbound-pre-advice:）推不出键。
+func TestDeliveryPreAdviceRequestKeyRejectsReservedPrefixes(t *testing.T) {
+	keys := customerAPIRequestKeys{}
+	for _, prefix := range reservedRequestKeyPrefixes {
+		request := NewChannelRequest(map[string]string{AccessRequestIdentifier: " " + prefix + "abc "})
+		if key, err := keys.DeriveDeliveryPreAdviceSubmissionRequestKey(context.Background(), request); !errors.Is(err, ErrRequestKeyNotDerived) || key != "" {
+			t.Fatalf("提交 %s：key = %q, err = %v, want ErrRequestKeyNotDerived", prefix, key, err)
+		}
+		if key, err := keys.DeriveDeliveryPreAdviceWithdrawalRequestKey(context.Background(), request); !errors.Is(err, ErrRequestKeyNotDerived) || key != "" {
+			t.Fatalf("撤回 %s：key = %q, err = %v, want ErrRequestKeyNotDerived", prefix, key, err)
+		}
+	}
+	request := NewChannelRequest(map[string]string{AccessRequestIdentifier: " SYN-ACCESS-REQUEST-PA-0001 "})
+	if key, err := keys.DeriveDeliveryPreAdviceSubmissionRequestKey(context.Background(), request); err != nil || key != "SYN-ACCESS-REQUEST-PA-0001" {
+		t.Fatalf("不带前缀的提交：key = %q, err = %v", key, err)
+	}
+	if key, err := keys.DeriveDeliveryPreAdviceWithdrawalRequestKey(context.Background(), request); err != nil || key != "SYN-ACCESS-REQUEST-PA-0001" {
+		t.Fatalf("不带前缀的撤回：key = %q, err = %v", key, err)
 	}
 }

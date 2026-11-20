@@ -253,7 +253,7 @@ func TestQueryOperatorsListsTheTenantWithVocabulary(t *testing.T) {
 	if len(listed.DecisionKinds) != len(accessidentity.DecisionKinds()) || listed.DecisionKinds[0] != "MANUAL_REVIEW_COMPLETION" {
 		t.Fatalf("decisionKinds = %v", listed.DecisionKinds)
 	}
-	if strings.Join(listed.WorkScopeKinds, ",") != "NODE,OFFSITE" {
+	if strings.Join(listed.WorkScopeKinds, ",") != "NODE,OFFSITE,WAREHOUSE" {
 		t.Fatalf("workScopeKinds = %v", listed.WorkScopeKinds)
 	}
 	if len(listed.Operators) != 2 {

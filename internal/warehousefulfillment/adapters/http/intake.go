@@ -49,7 +49,46 @@ type CatalogueQuery struct {
 }
 
 // CatalogueIntake 把一次已认证的查阅请求翻译成查询。仓的各读口（各仓当前修订、一个仓的修订史）同属主数据与运营查阅，
-// 共用一个 Intake：分设只会让装配点看起来能只配一半。
+// 共用一个 Intake：分设只会让装配点看起来能只配一半。商品的运营查阅也用这一只。
 type CatalogueIntake interface {
 	IntakeCatalogueQuery(ctx context.Context, request *http.Request) (CatalogueQuery, error)
+}
+
+// GoodsOnBehalfAuthenticator 认证一次商品代录：核「商品代录」授予与准入范围，交回租户与登记责任方。失败只交回本包的格。
+type GoodsOnBehalfAuthenticator interface {
+	AuthenticateGoodsOnBehalf(ctx context.Context, bearerToken string) (OperatorIdentity, error)
+}
+
+// GoodsOnBehalfIntake 把一次已认证的代录请求翻译成商品登记命令。货主客户账户、决定标识与依据引用是载荷里的业务内容；
+// 租户与登记责任方只来自认证结果。认证先于请求体。
+type GoodsOnBehalfIntake interface {
+	IntakeGoodsOnBehalf(ctx context.Context, request *http.Request) (application.RegisterGoodsCommand, error)
+}
+
+// PreAdviceOnBehalfAuthenticator 认证一次入库预报代录：核「入库预报代录」授予与准入范围，交回租户与登记责任方。
+type PreAdviceOnBehalfAuthenticator interface {
+	AuthenticatePreAdviceOnBehalf(ctx context.Context, bearerToken string) (OperatorIdentity, error)
+}
+
+// PreAdviceCloseAuthenticator 认证一次入库预报完结：核「入库预报完结」授予与准入范围，交回租户与操作者。
+type PreAdviceCloseAuthenticator interface {
+	AuthenticatePreAdviceClose(ctx context.Context, bearerToken string) (OperatorIdentity, error)
+}
+
+// ClosePreAdviceIntake 把一次已认证的完结请求翻译成命令。认证先于请求体。载荷只有预报标识，说明可缺。
+type ClosePreAdviceIntake interface {
+	IntakeClosePreAdvice(ctx context.Context, request *http.Request) (application.ClosePreAdviceCommand, error)
+}
+
+// PreAdviceCloser 是完结口转交的编排。事务边界在编排侧给出。
+type PreAdviceCloser interface {
+	ClosePreAdvice(ctx context.Context, command application.ClosePreAdviceCommand) (application.ClosePreAdviceResult, error)
+}
+
+// PreAdviceOnBehalfIntake 把一次已认证的代录请求翻译成预报的提交、告知更新或撤回。三个写口共用这一只，认证先于请求体。
+// 代录撤回的键由预报标识构造，不从载荷收决定标识。
+type PreAdviceOnBehalfIntake interface {
+	IntakePreAdvice(ctx context.Context, request *http.Request) (application.AcceptPreAdviceCommand, error)
+	IntakePreAdviceNotice(ctx context.Context, request *http.Request) (application.UpdatePreAdviceNoticeCommand, error)
+	IntakePreAdviceWithdrawal(ctx context.Context, request *http.Request) (application.WithdrawPreAdviceCommand, error)
 }

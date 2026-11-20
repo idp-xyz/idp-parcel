@@ -364,6 +364,34 @@ func TestListDevicesReturnsOnlyThatTenantsRows(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0384 决定三——作业范围种类加仓之后，库上的 CHECK 放行一笔作业范围为仓的作业事实登记授予，也放行一台登在这个仓上的设备。
+func TestWarehouseWorkScopeGrantAndDeviceAreAccepted(t *testing.T) {
+	register := newDeviceRegister(t)
+	subject := subjectOf(t, syntheticIssuer, "SYN-OPERATOR-WH")
+	expectOutcome(t, "登主体", register.operators.bind(t, bindingOf(t, subject, tenantOne, "SYN-OPERATOR-BASIS-WH")),
+		accessidentity.OperatorRegistrationRecorded)
+	interval, err := accessidentity.NewEffectiveInterval(grantStartsAt, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	warehouse := scopeOf(t, accessidentity.WorkScopeWarehouse, "SYN-WH-01")
+	grant, err := accessidentity.NewWorkFactRegistrationGrant(tenantOne, "SYN-GRANT-WH", subject, warehouse, interval, "SYN-GRANT-BASIS-WH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectOutcome(t, "授予", register.operators.grant(t, grant), accessidentity.OperatorRegistrationRecorded)
+	standing := register.operators.standing(t, subject)
+	if !standing.HoldsWorkFactAt(warehouse, grantStartsAt.Add(time.Hour)) {
+		t.Fatal("仓上的作业事实登记授予没有读回来")
+	}
+	expectDeviceOutcome(t, "登设备",
+		register.register(t, deviceOf(t, tenantOne, "SYN-DEVICE-WH", warehouse, "SYN-DEVICE-BASIS-WH")),
+		accessidentity.DeviceRegistrationRecorded)
+	if recorded := register.find(t, tenantOne, "SYN-DEVICE-WH"); recorded.Registration().WorkScope() != warehouse {
+		t.Fatalf("设备的作业范围 = %s %s", recorded.Registration().WorkScope().Kind(), recorded.Registration().WorkScope().Reference())
+	}
+}
+
 func deviceIDs(rows []accessidentity.DeviceCatalogueRow) []string {
 	ids := make([]string, len(rows))
 	for i, row := range rows {

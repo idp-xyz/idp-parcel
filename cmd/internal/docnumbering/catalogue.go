@@ -13,6 +13,7 @@ import (
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	wfdomain "go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 )
 
 // Catalogue 交回汇总后的类型声明表。声明不合规（类型代码重复、默认模板过不了模板检查）是编程错误，调用方带着原因退出。
@@ -24,5 +25,6 @@ func Catalogue() (*docnumber.Catalogue, error) {
 		ccdomain.DocumentNumberTypes(),
 		nodomain.DocumentNumberTypes(),
 		tfdomain.DocumentNumberTypes(),
+		wfdomain.DocumentNumberTypes(),
 	)
 }

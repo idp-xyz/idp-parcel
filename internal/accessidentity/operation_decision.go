@@ -266,6 +266,22 @@ const DecisionETAEntry DecisionKind = "ETA_ENTRY"
 // 设备上报走作业事实登记，不走这一种决定。
 const DecisionManualMeasurementEntry DecisionKind = "MANUAL_MEASUREMENT_ENTRY"
 
+// DecisionGoodsRecordOnBehalf 是商品代录（ADR-0384 决定二）：持这一种授予的人按货主授权，替一个本租户已登记的货主客户账户登记商品修订。
+// 货主自己维护商品走客户面，不因此取得这一种决定；谁持有是租户取值。
+const DecisionGoodsRecordOnBehalf DecisionKind = "GOODS_RECORD_ON_BEHALF"
+
+// DecisionInboundPreAdviceRecordOnBehalf 是入库预报代录（ADR-0384 决定二）：持这一种授予的人按货主授权代录提交、告知更新与撤回。
+// 货主自己提交走客户面；谁持有是租户取值。代录撤回不带决定标识，重放身份取被指名的预报。
+const DecisionInboundPreAdviceRecordOnBehalf DecisionKind = "INBOUND_PRE_ADVICE_RECORD_ON_BEHALF"
+
+// DecisionInboundPreAdviceClose 是入库预报完结（ADR-0384 决定二）：持这一种授予的人确认一份预报收货结束。
+// 不带决定标识，重放身份取被指名的预报。谁持有是租户取值。
+const DecisionInboundPreAdviceClose DecisionKind = "INBOUND_PRE_ADVICE_CLOSE"
+
+// DecisionReceiptDiscrepancyRecordOnBehalf 是收货差异结论代录（ADR-0384 决定二）：持这一种授予的人按货主授权代录结论。
+// 不带决定标识，重放身份取被指名的差异。谁持有是租户取值。
+const DecisionReceiptDiscrepancyRecordOnBehalf DecisionKind = "RECEIPT_DISCREPANCY_RECORD_ON_BEHALF"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -307,11 +323,15 @@ var decisionKinds = []DecisionKind{
 	DecisionExternalManifestEntry,
 	DecisionETAEntry,
 	DecisionManualMeasurementEntry,
+	DecisionGoodsRecordOnBehalf,
+	DecisionInboundPreAdviceRecordOnBehalf,
 	DecisionRegulatoryRestrictionEstablishment, DecisionRegulatoryRestrictionRelease,
 	DecisionExceptionCaseTakeUp, DecisionExceptionCaseClosure, DecisionExceptionCaseMerge,
 	DecisionEvidenceSubmission, DecisionEvidenceAppraisal, DecisionEvidenceDisclosurePreparation,
 	DecisionCustomerDisclosureDecision, DecisionCustomerDisclosureAuthorization,
 	DecisionCustomerExceptionNotification,
+	DecisionInboundPreAdviceClose,
+	DecisionReceiptDiscrepancyRecordOnBehalf,
 }
 
 // DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。

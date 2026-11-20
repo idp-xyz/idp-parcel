@@ -120,16 +120,28 @@ func (minter *CustomerClientMinter) mintCustomerCommand(
 }
 
 // DeriveDeliveryPreAdviceSubmissionRequestKey 与 DeriveDeliveryPreAdviceWithdrawalRequestKey 是首方族在送站预报两口的推导口：都取载荷里
-// 的接入请求标识，口径同提交口（去两端空白，此外一字不动）。
+// 的接入请求标识，去两端空白，此外一字不动，不加命令前缀。标识以保留前缀开头则推不出键（ADR-0384 决定六）：这两口的键是裸标识，
+// 与带前缀的键若共用一个开头就会互相当成重放。
 //
 // 两口取同一格，不会让撤回被判成提交的重放——RequestKeyDerivation 头注担心的正是那件事：节点作业那一侧，预报与预报的撤回各在自己
 // 那本册里按（租户，来源，来源请求键）认重放，同一接入请求标识先交预报、再撤回，落在两个判重空间里，是两次来源请求。仍分两个方法，
 // 是让哪一口的推导日后要变时只动那一口。与委托撤回的推导（DeriveWithdrawalRequestKey）无关：那一口的判重空间与委托提交怎么分，
 // 归委托撤回换上首方 Intake 的那一票。
 func (customerAPIRequestKeys) DeriveDeliveryPreAdviceSubmissionRequestKey(_ context.Context, request ChannelRequest) (string, error) {
-	return accessRequestIdentifierOf(request)
+	return bareRequestKeyRejectingReserved(request)
 }
 
 func (customerAPIRequestKeys) DeriveDeliveryPreAdviceWithdrawalRequestKey(_ context.Context, request ChannelRequest) (string, error) {
-	return accessRequestIdentifierOf(request)
+	return bareRequestKeyRejectingReserved(request)
+}
+
+func bareRequestKeyRejectingReserved(request ChannelRequest) (string, error) {
+	identifier, err := accessRequestIdentifierOf(request)
+	if err != nil {
+		return "", err
+	}
+	if err := rejectReservedRequestKeyPrefix(identifier); err != nil {
+		return "", err
+	}
+	return identifier, nil
 }

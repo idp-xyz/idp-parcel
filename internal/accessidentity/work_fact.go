@@ -7,34 +7,35 @@ import (
 )
 
 // ErrWorkScopeRequired 表示「作业事实登记」这一格没带作业范围：它的授予按租户 × 作业范围登记（ADR-0149 决定二），
-// 不带范围的一笔等于把这个租户所有节点与场外作业范围一并授出。经 NewWorkFactRegistrationGrant 建。
+// 不带范围的一笔等于把这个租户所有节点、场外作业范围与仓一并授出。经 NewWorkFactRegistrationGrant 建。
 var ErrWorkScopeRequired = errors.New("access identity: work fact registration grant needs a work scope")
 
-// ErrWorkScopeKindUnknown 表示给出的作业范围种类不在 ADR-0149 决定二列出的那两种里。
+// ErrWorkScopeKindUnknown 表示给出的作业范围种类不在封闭集里。
 var ErrWorkScopeKindUnknown = errors.New("access identity: work scope kind is unknown")
 
 // ErrInvalidWorkScope 表示作业范围缺引用。
 var ErrInvalidWorkScope = errors.New("access identity: work scope needs a reference")
 
-// WorkScopeKind 是作业范围的种类：节点，或场外作业范围（ADR-0149 决定二）。
+// WorkScopeKind 是作业范围的种类：节点、场外作业范围（ADR-0149 决定二），或仓（ADR-0384 决定三）。
 //
-// 种类是册的列，由产品定；某租户有哪些节点、哪些场外作业范围，是租户取值。
+// 种类是册的列，由产品定；某租户有哪些节点、哪些场外作业范围、哪些仓，是租户取值。一台设备仍然只登记一个范围。
 type WorkScopeKind string
 
 const (
-	WorkScopeNode    WorkScopeKind = "NODE"
-	WorkScopeOffsite WorkScopeKind = "OFFSITE"
+	WorkScopeNode      WorkScopeKind = "NODE"
+	WorkScopeOffsite   WorkScopeKind = "OFFSITE"
+	WorkScopeWarehouse WorkScopeKind = "WAREHOUSE"
 )
 
 // WorkScopeKinds 交出全部作业范围种类，顺序固定：管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。
 func WorkScopeKinds() []WorkScopeKind {
-	return []WorkScopeKind{WorkScopeNode, WorkScopeOffsite}
+	return []WorkScopeKind{WorkScopeNode, WorkScopeOffsite, WorkScopeWarehouse}
 }
 
 // ParseWorkScopeKind 按字面取值认作业范围种类，大小写不折叠：册里存的就是这些字面量。
 func ParseWorkScopeKind(value string) (WorkScopeKind, error) {
 	switch kind := WorkScopeKind(value); kind {
-	case WorkScopeNode, WorkScopeOffsite:
+	case WorkScopeNode, WorkScopeOffsite, WorkScopeWarehouse:
 		return kind, nil
 	}
 	return "", ErrWorkScopeKindUnknown
@@ -42,8 +43,8 @@ func ParseWorkScopeKind(value string) (WorkScopeKind, error) {
 
 func (kind WorkScopeKind) String() string { return string(kind) }
 
-// WorkScope 是一个作业范围：种类加该租户给它的引用（节点或场外作业范围的编码）。引用只比相等，本包不解释它——
-// 节点与场外作业范围之间没有本包认得的上下级，按包含关系推就得替消费方的网络模型下判断。
+// WorkScope 是一个作业范围：种类加该租户给它的引用（节点、场外作业范围或仓的编码）。引用只比相等，本包不解释它——
+// 节点、场外作业范围与仓之间没有本包认得的上下级，按包含关系推就得替消费方下判断。
 type WorkScope struct {
 	kind      WorkScopeKind
 	reference string
