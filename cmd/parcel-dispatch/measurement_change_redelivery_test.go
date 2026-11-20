@@ -27,6 +27,7 @@ import (
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
+	tfinbox "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/inbox"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
@@ -172,19 +173,20 @@ func redeliverMeasurementChange(t *testing.T, confirmed bool) {
 		t.Fatalf("重办的信封 status = %q；失败码 = %q 原文 = %v", status, recordedFailureCode(t, db, measurementRedeliveryEnvelope), observed[measurementRedeliveryEnvelope])
 	}
 	// 重办确实被处理方办了一遍而不是被收件箱拦掉：每一路消费者名下，新信封身份各记一行，原来那行还在。
-	// 同一封实测变化现在有两路：结算重评与路由复核，各记各的 inbox 账。
+	// 同一封实测变化有三路：结算重评、路由复核、运输准备再判，各记各的 inbox 账。
 	original, redelivered := inboxConsumersOf(t, db, changeEnvelope), inboxConsumersOf(t, db, measurementRedeliveryEnvelope)
 	wantConsumers := []string{
 		nrinbox.ReassessOnMeasurementChangeConsumerName,
 		"settlement-accounting/reevaluate-on-measurement-change",
+		tfinbox.RePrepareOnMeasurementChangeConsumerName,
 	}
 	sort.Strings(wantConsumers)
 	if len(original) != len(wantConsumers) || len(redelivered) != len(wantConsumers) {
-		t.Fatalf("收件箱消费者：原信封 %v、重办信封 %v，want 两路各一行 %v", original, redelivered, wantConsumers)
+		t.Fatalf("收件箱消费者：原信封 %v、重办信封 %v，want 三路各一行 %v", original, redelivered, wantConsumers)
 	}
 	for i := range wantConsumers {
 		if original[i] != wantConsumers[i] || redelivered[i] != wantConsumers[i] {
-			t.Fatalf("收件箱消费者：原信封 %v、重办信封 %v，want 两路各一行 %v", original, redelivered, wantConsumers)
+			t.Fatalf("收件箱消费者：原信封 %v、重办信封 %v，want 三路各一行 %v", original, redelivered, wantConsumers)
 		}
 	}
 	settleBeats(t, beat)
