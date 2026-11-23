@@ -253,3 +253,20 @@ func TestPriceCardContentEndpointDoesNotDisguiseAReadFailureAsAbsence(t *testing
 		t.Fatalf("answer = %d %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestPriceCardContentEndpointEchoesThePublicationBasisVerbatim(t *testing.T) {
+	reader := newContentReader(t)
+	reader.content.PublicationBasis = "QTS-ACC-1"
+	reader.content.HasPublicationBasis = true
+	endpoint := pricinghttp.NewQueryPriceCardContentEndpoint(intakeDouble{query: catalogueQuery(t)}, reader)
+	body := decodeBody(t, getContent(endpoint, "/pricing-price-cards/content?id=plan-1&version=v1"))
+	if body["publicationBasis"] != "QTS-ACC-1" {
+		t.Fatalf("publicationBasis = %v", body["publicationBasis"])
+	}
+
+	bare := newContentReader(t)
+	bareBody := decodeBody(t, getContent(pricinghttp.NewQueryPriceCardContentEndpoint(intakeDouble{query: catalogueQuery(t)}, bare), "/pricing-price-cards/content?id=plan-1&version=v1"))
+	if _, present := bareBody["publicationBasis"]; present {
+		t.Fatalf("没记下依据却交出了 %v", bareBody["publicationBasis"])
+	}
+}

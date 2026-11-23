@@ -87,6 +87,31 @@ func TestTheDraftReferencePayloadIsClosed(t *testing.T) {
 	}
 }
 
+func TestPublicationBasisIsOptionalAndClosed(t *testing.T) {
+	intake, err := pricinghttp.NewOperatorRegistryIntake(grantedAuthenticator{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	without, err := intake.IntakePriceCardDraftPublication(context.Background(), progressRequest("/x", "t", draftReference))
+	if err != nil || without.Basis != "" || without.Plan.ID() != "SYN-PLAN-DRAFT-01" {
+		t.Fatalf("缺依据 = %+v %v", without, err)
+	}
+	withBasis, err := intake.IntakePriceCardDraftPublication(context.Background(), progressRequest("/x", "t",
+		`{"planId":"SYN-PLAN-DRAFT-01","planVersion":"v1","publicationBasis":" QTS-1 "}`))
+	if err != nil || withBasis.Basis != "QTS-1" {
+		t.Fatalf("带依据 = %+v %v", withBasis, err)
+	}
+	for name, body := range map[string]string{
+		"blank basis":  `{"planId":"SYN-PLAN-DRAFT-01","planVersion":"v1","publicationBasis":"   "}`,
+		"unknown key":  `{"planId":"SYN-PLAN-DRAFT-01","planVersion":"v1","basis":"QTS-1"}`,
+		"approval key": `{"planId":"SYN-PLAN-DRAFT-01","planVersion":"v1","publicationBasis":"QTS-1","approver":"someone"}`,
+	} {
+		if _, err := intake.IntakePriceCardDraftPublication(context.Background(), progressRequest("/x", "t", body)); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
+			t.Fatalf("%s: err = %v", name, err)
+		}
+	}
+}
+
 type approvalIntakeDouble struct{}
 
 func (approvalIntakeDouble) IntakePriceCardDraftApproval(context.Context, *http.Request) (application.ApprovePriceCardDraftCommand, error) {
@@ -222,6 +247,8 @@ func TestThePublicationEndpointHandsTheRegistrationAnswerThrough(t *testing.T) {
 			http.StatusOK, "NEWER_CANONICALIZATION_NOT_ENABLED", false},
 		{application.PublishPriceCardDraftResult{Outcome: application.PriceCardPublicationDraftNotApproved}, http.StatusOK, "", false},
 		{application.PublishPriceCardDraftResult{Outcome: application.PriceCardPublicationDraftWithdrawn}, http.StatusOK, "", false},
+		{application.PublishPriceCardDraftResult{Outcome: application.PriceCardPublicationAcceptanceRequired}, http.StatusOK, "", false},
+		{application.PublishPriceCardDraftResult{Outcome: application.PriceCardPublicationCitationRejected}, http.StatusOK, "", false},
 	}
 	for _, test := range cases {
 		status, answer := serve(t, pricinghttp.NewPublishPriceCardDraftEndpoint(publicationIntakeDouble{}, publisherDouble{result: test.result}),

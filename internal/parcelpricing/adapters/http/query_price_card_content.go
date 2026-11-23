@@ -90,7 +90,7 @@ func NewQueryPriceCardContentEndpoint(
 				PlanVersion: reference.Version(),
 			})
 		default:
-			writeJSON(response, http.StatusOK, priceCardContentResponse{
+			answer := priceCardContentResponse{
 				Outcome:             outcomePriceCardContentFound,
 				PlanID:              content.PlanID,
 				PlanVersion:         content.PlanVersion,
@@ -99,7 +99,11 @@ func NewQueryPriceCardContentEndpoint(
 				PublicationApprover: content.PublicationApprover,
 				RegisteredAt:        rfc3339(content.RegisteredAt),
 				Document:            content.Document,
-			})
+			}
+			if content.HasPublicationBasis {
+				answer.PublicationBasis = content.PublicationBasis
+			}
+			writeJSON(response, http.StatusOK, answer)
 		}
 	})
 }
@@ -115,6 +119,7 @@ type priceCardContentResponse struct {
 	PublicationApprover string          `json:"publicationApprover"`
 	RegisteredAt        string          `json:"registeredAt"`
 	Document            json.RawMessage `json:"document"`
+	PublicationBasis    string          `json:"publicationBasis,omitempty"`
 }
 
 // priceCardContentMissingResponse 是没有内容可交时的答复：只回显所问，让调用方核对答的是不是它问的那一版。
