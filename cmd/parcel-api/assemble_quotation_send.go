@@ -15,10 +15,13 @@ import (
 )
 
 // 报价发出的生产装配。写口一笔事务；列表、详情与再导出只读，不另开事务。
+// 答复与发出各写一笔，不把两件事放进同一笔。
 type quotationSendServices struct {
-	send   transactionalQuotationSend
-	query  *commercialapp.QueryQuotationSendsHandler
-	export *commercialapp.ExportQuotationHandler
+	send    transactionalQuotationSend
+	query   *commercialapp.QueryQuotationSendsHandler
+	reading *commercialapp.ReadQuotationHandler
+	reply   transactionalQuotationReply
+	export  *commercialapp.ExportQuotationHandler
 }
 
 type transactionalQuotationSend struct {
@@ -69,9 +72,37 @@ func buildQuotationSendServices(db *bentopg.DB) (quotationSendServices, error) {
 	if err != nil {
 		return none, err
 	}
+	replies, err := pcpostgres.NewQuotationReplies(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: quotation reply store: %w", err)
+	}
+	recorder, err := commercialapp.NewRecordQuotationReplyHandler(sends, replies, prices)
+	if err != nil {
+		return none, err
+	}
+	reading, err := commercialapp.NewReadQuotationHandler(sends, replies, prices)
+	if err != nil {
+		return none, err
+	}
 	return quotationSendServices{
-		send:   transactionalQuotationSend{transactor: db.Transactor(), inner: sender},
-		query:  query,
-		export: export,
+		send:    transactionalQuotationSend{transactor: db.Transactor(), inner: sender},
+		query:   query,
+		reading: reading,
+		reply:   transactionalQuotationReply{transactor: db.Transactor(), inner: recorder},
+		export:  export,
 	}, nil
+}
+
+type transactionalQuotationReply struct {
+	transactor bentoapp.Transactor
+	inner      *commercialapp.RecordQuotationReplyHandler
+}
+
+func (wrapper transactionalQuotationReply) Handle(
+	ctx context.Context,
+	command commercialapp.RecordQuotationReplyCommand,
+) (commercialapp.RecordQuotationReplyResult, error) {
+	return commercialInTransaction(ctx, wrapper.transactor, func(txCtx context.Context) (commercialapp.RecordQuotationReplyResult, error) {
+		return wrapper.inner.Handle(txCtx, command)
+	})
 }

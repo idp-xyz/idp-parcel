@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	commercialapp "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
@@ -10,9 +11,11 @@ import (
 
 func init() {
 	registerUnwired(quotationSendWiring{
-		send:   unwiredQuotationSend{},
-		query:  unwiredQuotationSendQuery{},
-		export: unwiredQuotationExport{},
+		send:    unwiredQuotationSend{},
+		query:   unwiredQuotationSendQuery{},
+		reading: unwiredQuotationReading{},
+		reply:   unwiredQuotationReply{},
+		export:  unwiredQuotationExport{},
 	})
 }
 
@@ -30,6 +33,18 @@ func (unwiredQuotationSendQuery) List(context.Context, domain.TenantID, int, por
 
 func (unwiredQuotationSendQuery) Get(context.Context, domain.TenantID, domain.QuotationID) (commercialapp.QuotationSendDetail, error) {
 	return commercialapp.QuotationSendDetail{}, errOrchestrationNotWired
+}
+
+type unwiredQuotationReply struct{}
+
+func (unwiredQuotationReply) Handle(context.Context, commercialapp.RecordQuotationReplyCommand) (commercialapp.RecordQuotationReplyResult, error) {
+	return commercialapp.RecordQuotationReplyResult{}, errOrchestrationNotWired
+}
+
+type unwiredQuotationReading struct{}
+
+func (unwiredQuotationReading) Get(context.Context, domain.TenantID, domain.QuotationID, time.Time) (commercialapp.QuotationReadingDetail, error) {
+	return commercialapp.QuotationReadingDetail{}, errOrchestrationNotWired
 }
 
 type unwiredQuotationExport struct{}

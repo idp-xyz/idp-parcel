@@ -210,11 +210,15 @@ func NewQueryQuotationSendsEndpoint(intake CommercialCatalogueIntake, reader Quo
 	})
 }
 
-func NewQueryQuotationSendEndpoint(intake CommercialCatalogueIntake, reader QuotationSendReader) http.Handler {
+func NewQueryQuotationSendEndpoint(intake CommercialCatalogueIntake, reader QuotationReading, now func() time.Time) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
 			response.Header().Set("Allow", http.MethodGet)
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		if now == nil {
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
@@ -227,7 +231,7 @@ func NewQueryQuotationSendEndpoint(intake CommercialCatalogueIntake, reader Quot
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-		detail, err := reader.Get(request.Context(), query.Scope.Tenant(), id)
+		detail, err := reader.Get(request.Context(), query.Scope.Tenant(), id, now())
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
@@ -238,10 +242,21 @@ func NewQueryQuotationSendEndpoint(intake CommercialCatalogueIntake, reader Quot
 			})
 			return
 		}
+		if detail.Status.String() == "" {
+			writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
+			return
+		}
 		body := quotationSendBodyOf(detail.Send)
-		writeJSON(response, http.StatusOK, quotationSendDetailAnswer{
-			Outcome: "QUOTATION_SEND", DeliveryNote: detail.DeliveryNote, DeliveryRecorded: false, Send: &body,
-		})
+		answer := quotationSendDetailAnswer{
+			Outcome: "QUOTATION_SEND", DeliveryNote: detail.DeliveryNote, DeliveryRecorded: false,
+			Send: &body, Reading: detail.Status.String(), Conclusion: detail.Conclusion,
+			ReferencedDraftWithdrawn: detail.ReferencedDraftWithdrawn,
+		}
+		if detail.HasReply {
+			recorded := quotationReplyBodyOf(detail.Reply)
+			answer.Reply = &recorded
+		}
+		writeJSON(response, http.StatusOK, answer)
 	})
 }
 
@@ -361,10 +376,14 @@ type quotationSendListAnswer struct {
 }
 
 type quotationSendDetailAnswer struct {
-	Outcome          string             `json:"outcome"`
-	DeliveryNote     string             `json:"deliveryNote"`
-	DeliveryRecorded bool               `json:"deliveryRecorded"`
-	Send             *quotationSendBody `json:"send,omitempty"`
+	Outcome                  string              `json:"outcome"`
+	DeliveryNote             string              `json:"deliveryNote"`
+	DeliveryRecorded         bool                `json:"deliveryRecorded"`
+	Send                     *quotationSendBody  `json:"send,omitempty"`
+	Reading                  string              `json:"reading,omitempty"`
+	Conclusion               string              `json:"conclusion,omitempty"`
+	ReferencedDraftWithdrawn bool                `json:"referencedDraftWithdrawn,omitempty"`
+	Reply                    *quotationReplyBody `json:"reply,omitempty"`
 }
 
 type quotationSendCursorBody struct {
