@@ -1025,6 +1025,16 @@ func (unwiredPriceCardDraftPublication) Handle(
 	return pricingapp.PublishPriceCardDraftResult{}, errOrchestrationNotWired
 }
 
+// unwiredPriceCardDraftWithdrawal 是价卡草稿撤下的命令占位。没接上时走到它就是装配漏了，不是业务答案。
+type unwiredPriceCardDraftWithdrawal struct{}
+
+func (unwiredPriceCardDraftWithdrawal) Handle(
+	context.Context,
+	pricingapp.WithdrawPriceCardDraftCommand,
+) (pricingapp.WithdrawPriceCardDraftResult, error) {
+	return pricingapp.WithdrawPriceCardDraftResult{}, errOrchestrationNotWired
+}
+
 // unwiredPriceCardDrafts 是草稿册查阅读口的占位（票 price-card-import/03）。不并进 unwiredPricingCatalogue：草稿不是
 // 价卡版本，生产装配点上它是草稿册自己的适配器，判据同 unwiredPricingEvaluations。
 type unwiredPriceCardDrafts struct{}

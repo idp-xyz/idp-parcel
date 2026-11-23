@@ -183,3 +183,41 @@ func buildPriceCardDraftPublication(db *bentopg.DB, newerCanonicalization bool) 
 	}
 	return transactionalPriceCardDraftPublication{transactor: db.Transactor(), inner: handler}, nil
 }
+
+// transactionalPriceCardDraftWithdrawal 把撤下包进一笔事务：读那一行、判、写回撤下痕迹同笔。推进口无事务即拒。
+type transactionalPriceCardDraftWithdrawal struct {
+	transactor bentoapp.Transactor
+	inner      *pricingapp.WithdrawPriceCardDraftHandler
+}
+
+var _ pricinghttp.PriceCardDraftWithdrawer = transactionalPriceCardDraftWithdrawal{}
+
+func (withdrawal transactionalPriceCardDraftWithdrawal) Handle(
+	ctx context.Context,
+	command pricingapp.WithdrawPriceCardDraftCommand,
+) (pricingapp.WithdrawPriceCardDraftResult, error) {
+	var result pricingapp.WithdrawPriceCardDraftResult
+	err := withdrawal.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		handled, handleErr := withdrawal.inner.Handle(txCtx, command)
+		result = handled
+		return handleErr
+	})
+	if err != nil {
+		return pricingapp.WithdrawPriceCardDraftResult{}, err
+	}
+	return result, nil
+}
+
+// buildPriceCardDraftWithdrawal 装配 `/pricing-price-card-draft-withdrawals` 的真编排：真库草稿册与系统时钟。
+// 不接审批职责规则，也不接报价册。
+func buildPriceCardDraftWithdrawal(db *bentopg.DB) (transactionalPriceCardDraftWithdrawal, error) {
+	drafts, err := pppostgres.NewPriceCardDrafts(db)
+	if err != nil {
+		return transactionalPriceCardDraftWithdrawal{}, fmt.Errorf("parcel-api: price card draft register: %w", err)
+	}
+	handler, err := pricingapp.NewWithdrawPriceCardDraftHandler(drafts, systemClock{})
+	if err != nil {
+		return transactionalPriceCardDraftWithdrawal{}, fmt.Errorf("parcel-api: price card draft withdrawal: %w", err)
+	}
+	return transactionalPriceCardDraftWithdrawal{transactor: db.Transactor(), inner: handler}, nil
+}

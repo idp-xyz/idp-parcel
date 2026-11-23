@@ -14,6 +14,7 @@ type pricingImportWiring struct {
 	priceCardDrafts           pricinghttp.PriceCardDraftReader
 	priceCardDraftApproval    pricinghttp.PriceCardDraftApprover
 	priceCardDraftPublication pricinghttp.PriceCardDraftPublisher
+	priceCardDraftWithdrawal  pricinghttp.PriceCardDraftWithdrawer
 }
 
 func init() {
@@ -24,6 +25,7 @@ func init() {
 			"/pricing-price-card-draft-views":        {method: http.MethodGet, face: registryWriteFace()},
 			"/pricing-price-card-draft-approvals":    {method: http.MethodPost, face: registryWriteFace()},
 			"/pricing-price-card-draft-publications": {method: http.MethodPost, face: registryWriteFace()},
+			"/pricing-price-card-draft-withdrawals":  {method: http.MethodPost, face: registryWriteFace()},
 		},
 		build: func(sources endpointSources) (pricingImportWiring, error) {
 			none := pricingImportWiring{}
@@ -50,12 +52,18 @@ func init() {
 			if err != nil {
 				return none, err
 			}
+			// 撤下与发布同一张登记写面：不读审批职责规则。报价册不在这条路上。
+			priceCardDraftWithdrawal, err := buildPriceCardDraftWithdrawal(sources.db)
+			if err != nil {
+				return none, err
+			}
 			return pricingImportWiring{
 				priceCardPreview:          priceCardPreview,
 				priceCardDraftSubmission:  priceCardDraftSubmission,
 				priceCardDrafts:           priceCardDrafts,
 				priceCardDraftApproval:    priceCardDraftApproval,
 				priceCardDraftPublication: priceCardDraftPublication,
+				priceCardDraftWithdrawal:  priceCardDraftWithdrawal,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring pricingImportWiring) []httpapi.BusinessEndpoint {
@@ -73,6 +81,8 @@ func init() {
 				// 不经 `/pricing-price-card-registrations` 那一口。
 				{Pattern: "/pricing-price-card-draft-approvals", Handler: pricinghttp.NewApprovePriceCardDraftEndpoint(channels.operatorRegistries.pricing, wiring.priceCardDraftApproval)},
 				{Pattern: "/pricing-price-card-draft-publications", Handler: pricinghttp.NewPublishPriceCardDraftEndpoint(channels.operatorRegistries.pricing, wiring.priceCardDraftPublication)},
+				// 撤下已批准的价卡草稿。与发布同一张登记写面，载荷不收撤下人。
+				{Pattern: "/pricing-price-card-draft-withdrawals", Handler: pricinghttp.NewWithdrawPriceCardDraftEndpoint(channels.operatorRegistries.pricing, wiring.priceCardDraftWithdrawal)},
 			}
 		},
 	})

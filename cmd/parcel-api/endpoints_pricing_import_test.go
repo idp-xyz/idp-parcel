@@ -7,5 +7,6 @@ func init() {
 		priceCardDrafts:           unwiredPriceCardDrafts{},
 		priceCardDraftApproval:    unwiredPriceCardDraftApproval{},
 		priceCardDraftPublication: unwiredPriceCardDraftPublication{},
+		priceCardDraftWithdrawal:  unwiredPriceCardDraftWithdrawal{},
 	})
 }

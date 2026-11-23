@@ -208,6 +208,11 @@ func syntheticPricingWeight(t *testing.T, value string) pricingdomain.Weight {
 // 期。形状抄计价真库测试的 catalogPlan，身份全取 SYN-PRC-REG 前缀避免与其它测试相撞。
 func syntheticPriceCardRegistration(t *testing.T) pricingdomain.PriceCardRegistration {
 	t.Helper()
+	return syntheticPriceCardRegistrationVersion(t, "v1")
+}
+
+func syntheticPriceCardRegistrationVersion(t *testing.T, planVersion string) pricingdomain.PriceCardRegistration {
+	t.Helper()
 	currency := mustValue(t, pricingdomain.NewCurrency, "USD")
 	amount, err := pricingdomain.NewMoneyFromString("10", currency)
 	if err != nil {
@@ -248,7 +253,7 @@ func syntheticPriceCardRegistration(t *testing.T) pricingdomain.PriceCardRegistr
 		t.Fatalf("构造计价重策略：%v", err)
 	}
 	plan, err := pricingdomain.NewPricingPlanVersion(
-		syntheticPricingReference(t, pricingdomain.ArtifactPricingPlan, "SYN-PRC-REG-PLAN", "v1"),
+		syntheticPricingReference(t, pricingdomain.ArtifactPricingPlan, "SYN-PRC-REG-PLAN", planVersion),
 		mustValue(t, pricingdomain.NewPricingScopeID, "SYN-PRC-REG-SCOPE"),
 		pricingdomain.PricingDirectionSell,
 		pricingdomain.PricingPurposeCustomerCharge,
