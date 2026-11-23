@@ -13,6 +13,7 @@ import (
 	pricingapp "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	pricingdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	platformidentity "go.idp.xyz/idp-parcel/internal/platform/identity"
+	saidentity "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/identity"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	settlementapp "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	settlementdomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -54,6 +55,10 @@ func newWarehouseChargeConsumer(sources dispatchSources) (*warehouseChargeConsum
 		return nil, err
 	}
 	charges, err := platformidentity.NewMinter("CHG")
+	if err != nil {
+		return nil, err
+	}
+	sellRequests, err := saidentity.NewWarehouseSellRequestIdentities()
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +113,7 @@ func newWarehouseChargeConsumer(sources dispatchSources) (*warehouseChargeConsum
 	handler := settlementapp.NewWarehouseChargeHandler(
 		store, pricing, accounts, mappings, customerCharges, conditions, conditions,
 		momentHandler, supersessions, charges, sources.clock,
-	).WithConfirmedDifference(reweighAdoptions, reweigh)
+	).WithConfirmedDifference(reweighAdoptions, reweigh).WithSellRequests(sellRequests)
 	return &warehouseChargeConsumer{occurrences: occurrences, settlement: handler, transactor: sources.db.Transactor()}, nil
 }
 

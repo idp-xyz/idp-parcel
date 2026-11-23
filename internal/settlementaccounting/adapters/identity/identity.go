@@ -102,3 +102,27 @@ func (factory *ShipmentSellEvaluationRequestIdentities) MintShipmentSellEvaluati
 	}
 	return domain.NewShipmentSellEvaluationRequestID(minted)
 }
+
+// warehouseSellRequestPrefix 让仓储发生项这一路的 SELL 请求与包裹的 SELLREQ、委托的 SHPREQ 分开。
+const warehouseSellRequestPrefix = "WHREQ"
+
+// WarehouseSellRequestIdentities 铸造仓储 SELL 请求标识。自然键仍是发生项与版本，标识只用于把这一次请求指出来。
+type WarehouseSellRequestIdentities struct {
+	minter platformidentity.Minter
+}
+
+func NewWarehouseSellRequestIdentities(options ...platformidentity.Option) (*WarehouseSellRequestIdentities, error) {
+	minter, err := platformidentity.NewMinter(warehouseSellRequestPrefix, options...)
+	if err != nil {
+		return nil, fmt.Errorf("settlement accounting identity: %w", err)
+	}
+	return &WarehouseSellRequestIdentities{minter: minter}, nil
+}
+
+func (factory *WarehouseSellRequestIdentities) Next() (string, error) {
+	minted, err := factory.minter.Next()
+	if err != nil {
+		return "", fmt.Errorf("mint warehouse sell request ID: %w", err)
+	}
+	return minted, nil
+}

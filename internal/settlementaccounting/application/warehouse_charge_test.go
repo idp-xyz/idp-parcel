@@ -110,8 +110,15 @@ func TestAnUnconfiguredConfirmationMomentFormsWithoutConfirming(t *testing.T) {
 	world.mapping = settleMapping(t)
 	world.mappingFound = true
 	outcome, chargeID, err := world.handler(t).Settle(context.Background(), settleTenant(t), settleFact(1))
+	saved := application.WarehouseChargeRequest{}
+	if len(world.saved) == 1 {
+		saved = world.saved[0]
+	}
 	if err != nil || outcome != application.WarehouseChargeFormed || chargeID == "" ||
-		len(world.saved) != 1 || world.saved[0].Status != "FORMED" || world.charges.estimated != 1 || world.charges.confirmed != 0 {
+		len(world.saved) != 1 || saved.Status != "FORMED" || saved.RequestID != "CHO-1/1" ||
+		saved.Account != "SYN-ACCT-WH" || saved.Scope != "SYN-SCOPE-WH" || saved.Currency != "CNY" ||
+		saved.EvaluationID != "WEV-1" || saved.BasisAt.IsZero() ||
+		world.charges.estimated != 1 || world.charges.confirmed != 0 {
 		t.Fatalf("没登记确认时点 %s %s %v %+v 费用%d 确认%d", outcome, chargeID, err, world.saved, world.charges.estimated, world.charges.confirmed)
 	}
 }

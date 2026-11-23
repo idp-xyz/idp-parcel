@@ -88,13 +88,18 @@ type WarehouseAdoption struct {
 	Registrant string
 }
 
-// WarehouseChargeRequest 是这一路已经记下的一版请求。
+// WarehouseChargeRequest 是这一路的 SELL 请求。自然键是发生项与版本。有采用行时带铸出来的请求标识、结算账户、结算币种、计价范围与计价基准时点。金额不在请求上。
 type WarehouseChargeRequest struct {
 	Occurrence   string
 	Version      int
 	Status       string
 	ChargeID     string
 	EvaluationID string
+	RequestID    string
+	Account      string
+	Currency     string
+	Scope        string
+	BasisAt      time.Time
 }
 
 // WarehouseChargeStore 是采用册与这一路请求册。
@@ -128,6 +133,7 @@ type WarehouseChargeHandler struct {
 	reweigh          interface {
 		SettleReweigh(context.Context, ReweighDifferenceCommand) (ReweighDifferenceOutcome, error)
 	}
+	sellIDs interface{ Next() (string, error) }
 }
 
 func NewWarehouseChargeHandler(
@@ -162,6 +168,12 @@ func (handler *WarehouseChargeHandler) WithConfirmedDifference(
 ) *WarehouseChargeHandler {
 	handler.reweighAdoptions = adoptions
 	handler.reweigh = reweigh
+	return handler
+}
+
+// WithSellRequests 给有采用行的那一版铸 SELL 请求标识。没接时用发生项与版本拼一个稳定标识，重投仍是同一份。
+func (handler *WarehouseChargeHandler) WithSellRequests(identities interface{ Next() (string, error) }) *WarehouseChargeHandler {
+	handler.sellIDs = identities
 	return handler
 }
 
@@ -245,30 +257,30 @@ func (handler *WarehouseChargeHandler) Settle(ctx context.Context, tenant domain
 	}
 	switch price.Status {
 	case "NOT_CONFIGURED":
-		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "NOT_CONFIGURED"}); err != nil {
+		if err := handler.note(ctx, tenant, fact, &adoption, &price, WarehouseChargeRequest{Status: "NOT_CONFIGURED", EvaluationID: price.EvaluationID}); err != nil {
 			return "", "", err
 		}
 		return WarehouseChargeNotConfigured, "", nil
 	case "PENDING", "CONFLICT":
-		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "PENDING"}); err != nil {
+		if err := handler.note(ctx, tenant, fact, &adoption, &price, WarehouseChargeRequest{Status: "PENDING", EvaluationID: price.EvaluationID}); err != nil {
 			return "", "", err
 		}
 		return WarehouseChargePending, "", nil
 	case "ZERO":
 		if priorCharge.ID().String() != "" && priorCharge.Stage() == domain.ChargeConfirmed {
-			return handler.settleConfirmed(ctx, tenant, fact, prior, price)
+			return handler.settleConfirmed(ctx, tenant, fact, prior, &adoption, price)
 		}
-		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "ZERO", EvaluationID: price.EvaluationID}); err != nil {
+		if err := handler.note(ctx, tenant, fact, &adoption, &price, WarehouseChargeRequest{Status: "ZERO", EvaluationID: price.EvaluationID}); err != nil {
 			return "", "", err
 		}
 		return WarehouseChargeZero, "", nil
 	}
 	if priorCharge.ID().String() != "" && priorCharge.Stage() == domain.ChargeConfirmed {
-		return handler.settleConfirmed(ctx, tenant, fact, prior, price)
+		return handler.settleConfirmed(ctx, tenant, fact, prior, &adoption, price)
 	}
 	charge, err := handler.form(ctx, tenant, fact, adoption, price)
 	if errors.Is(err, errPendingMapping) {
-		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "PENDING"}); err != nil {
+		if err := handler.note(ctx, tenant, fact, &adoption, &price, WarehouseChargeRequest{Status: "PENDING", EvaluationID: price.EvaluationID}); err != nil {
 			return "", "", err
 		}
 		return WarehouseChargePending, "", nil
@@ -291,8 +303,8 @@ func (handler *WarehouseChargeHandler) Settle(ctx context.Context, tenant domain
 		status = "CONFIRMED"
 		outcome = WarehouseChargeConfirmed
 	}
-	if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{
-		Occurrence: fact.ID, Version: fact.Version, Status: status, ChargeID: charge.ID().String(),
+	if err := handler.note(ctx, tenant, fact, &adoption, &price, WarehouseChargeRequest{
+		Status: status, ChargeID: charge.ID().String(), EvaluationID: price.EvaluationID,
 	}); err != nil {
 		return "", "", err
 	}
@@ -351,7 +363,17 @@ func (handler *WarehouseChargeHandler) voidPrior(ctx context.Context, tenant dom
 	}
 	if charge.Stage() == domain.ChargeConfirmed {
 		currency, _ := charge.SettlementAmount()
-		return handler.settleConfirmed(ctx, tenant, fact, prior, WarehouseChargePrice{
+		adoption, found, err := handler.adoptionAt(ctx, tenant, fact)
+		if err != nil {
+			return "", "", err
+		}
+		var adopted *WarehouseAdoption
+		if found {
+			adopted = &adoption
+		} else if facts, ok := charge.ConfirmedFacts(); ok {
+			adopted = &WarehouseAdoption{Account: facts.SettlementAccount.String(), Scope: facts.PrimaryChargingScope.String()}
+		}
+		return handler.settleConfirmed(ctx, tenant, fact, prior, adopted, WarehouseChargePrice{
 			EvaluationID: fact.ID + "/" + fmt.Sprint(fact.Version),
 			Status:       "ZERO",
 			TotalMinor:   0,
@@ -375,6 +397,7 @@ func (handler *WarehouseChargeHandler) settleConfirmed(
 	tenant domain.TenantID,
 	fact WarehouseOccurrenceFact,
 	prior WarehouseChargeRequest,
+	adoption *WarehouseAdoption,
 	price WarehouseChargePrice,
 ) (WarehouseChargeOutcome, string, error) {
 	chargeID, err := domain.NewCustomerChargeID(prior.ChargeID)
@@ -390,7 +413,7 @@ func (handler *WarehouseChargeHandler) settleConfirmed(
 	}
 	facts, confirmed := charge.ConfirmedFacts()
 	if !confirmed || handler.reweighAdoptions == nil || handler.reweigh == nil {
-		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "NOT_CONFIGURED"}); err != nil {
+		if err := handler.note(ctx, tenant, fact, adoption, &price, WarehouseChargeRequest{Status: "NOT_CONFIGURED", EvaluationID: price.EvaluationID}); err != nil {
 			return "", "", err
 		}
 		return WarehouseChargeNotConfigured, "", nil
@@ -400,7 +423,7 @@ func (handler *WarehouseChargeHandler) settleConfirmed(
 		return "", "", fmt.Errorf("settle warehouse charge: %w", err)
 	}
 	if !adopted {
-		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "NOT_CONFIGURED"}); err != nil {
+		if err := handler.note(ctx, tenant, fact, adoption, &price, WarehouseChargeRequest{Status: "NOT_CONFIGURED", EvaluationID: price.EvaluationID}); err != nil {
 			return "", "", err
 		}
 		return WarehouseChargeNotConfigured, "", nil
@@ -415,15 +438,15 @@ func (handler *WarehouseChargeHandler) settleConfirmed(
 	}
 	switch outcome {
 	case ReweighDifferenceNone, ReweighDifferenceRecorded, ReweighDifferenceReplayed:
-		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{
-			Occurrence: fact.ID, Version: fact.Version, Status: "DIFFERENCE", ChargeID: prior.ChargeID, EvaluationID: price.EvaluationID,
+		if err := handler.note(ctx, tenant, fact, adoption, &price, WarehouseChargeRequest{
+			Status: "DIFFERENCE", ChargeID: prior.ChargeID, EvaluationID: price.EvaluationID,
 		}); err != nil {
 			return "", "", err
 		}
 		return WarehouseChargeDifference, prior.ChargeID, nil
 	case ReweighDifferenceExceedsCharge:
-		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{
-			Occurrence: fact.ID, Version: fact.Version, Status: "AWAITING_PERSON", ChargeID: prior.ChargeID, EvaluationID: price.EvaluationID,
+		if err := handler.note(ctx, tenant, fact, adoption, &price, WarehouseChargeRequest{
+			Status: "AWAITING_PERSON", ChargeID: prior.ChargeID, EvaluationID: price.EvaluationID,
 		}); err != nil {
 			return "", "", err
 		}
@@ -433,6 +456,54 @@ func (handler *WarehouseChargeHandler) settleConfirmed(
 	default:
 		return "", "", fmt.Errorf("settle warehouse charge: reweigh %s", outcome)
 	}
+}
+
+// 有采用行才是一次 SELL 请求：账户、币种、范围和基准时点记在这一版上，评价标识指向刚刚算出的评价。
+// 不另投一份去计价。没接铸造口时用发生项与版本，重投仍是同一份；铸造失败不拿替代号顶上。
+func (handler *WarehouseChargeHandler) note(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact WarehouseOccurrenceFact,
+	adoption *WarehouseAdoption,
+	price *WarehouseChargePrice,
+	request WarehouseChargeRequest,
+) error {
+	request.Occurrence = fact.ID
+	request.Version = fact.Version
+	if price != nil && request.EvaluationID == "" {
+		request.EvaluationID = price.EvaluationID
+	}
+	if adoption == nil {
+		return handler.adoptions.SaveRequest(ctx, tenant, request)
+	}
+	request.Account = adoption.Account
+	request.Scope = adoption.Scope
+	request.BasisAt = fact.Occurred
+	if request.RequestID == "" {
+		if handler.sellIDs != nil {
+			minted, err := handler.sellIDs.Next()
+			if err != nil {
+				return err
+			}
+			request.RequestID = minted
+		} else {
+			request.RequestID = fact.ID + "/" + fmt.Sprint(fact.Version)
+		}
+	}
+	if request.Currency == "" && handler.accounts != nil && adoption.Account != "" {
+		accountID, err := domain.NewSettlementAccountID(adoption.Account)
+		if err != nil {
+			return err
+		}
+		account, found, err := handler.accounts.FindByID(ctx, tenant, accountID)
+		if err != nil {
+			return fmt.Errorf("settle warehouse charge: %w", err)
+		}
+		if found {
+			request.Currency = account.Key().Currency().String()
+		}
+	}
+	return handler.adoptions.SaveRequest(ctx, tenant, request)
 }
 
 func (handler *WarehouseChargeHandler) adoptionAt(ctx context.Context, tenant domain.TenantID, fact WarehouseOccurrenceFact) (WarehouseAdoption, bool, error) {

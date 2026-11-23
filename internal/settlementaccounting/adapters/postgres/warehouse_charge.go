@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -74,9 +75,12 @@ func (store *WarehouseCharges) SaveRequest(ctx context.Context, tenant domain.Te
 	}
 	if _, err := executor.Exec(ctx, `
 		INSERT INTO settlement_accounting.warehouse_charge_request (
-		    tenant_id, occurrence_id, version, status, charge_id, evaluation_id)
-		VALUES ($1,$2,$3,$4,$5,$6)`,
-		tenant.String(), request.Occurrence, request.Version, request.Status, nullable(request.ChargeID), nullable(request.EvaluationID)); err != nil {
+		    tenant_id, occurrence_id, version, status, charge_id, evaluation_id,
+		    request_id, account_id, settlement_currency, pricing_scope, pricing_basis_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		tenant.String(), request.Occurrence, request.Version, request.Status,
+		nullable(request.ChargeID), nullable(request.EvaluationID), nullable(request.RequestID),
+		nullable(request.Account), nullable(request.Currency), nullable(request.Scope), nullableTime(request.BasisAt)); err != nil {
 		return fmt.Errorf("save warehouse charge request: %w", err)
 	}
 	return nil
@@ -88,20 +92,28 @@ func (store *WarehouseCharges) LoadRequest(ctx context.Context, tenant domain.Te
 		return application.WarehouseChargeRequest{}, false, fmt.Errorf("load warehouse charge request: %w", err)
 	}
 	request := application.WarehouseChargeRequest{Occurrence: occurrence, Version: version}
-	var charge, evaluation *string
+	var charge, evaluation, requestID, account, currency, scope *string
+	var basis *time.Time
 	err = executor.QueryRow(ctx, `
-		SELECT status, charge_id, evaluation_id
+		SELECT status, charge_id, evaluation_id, request_id, account_id, settlement_currency, pricing_scope, pricing_basis_at
 		  FROM settlement_accounting.warehouse_charge_request
 		 WHERE tenant_id = $1 AND occurrence_id = $2 AND version = $3`,
-		tenant.String(), occurrence, version).Scan(&request.Status, &charge, &evaluation)
+		tenant.String(), occurrence, version).Scan(
+		&request.Status, &charge, &evaluation, &requestID, &account, &currency, &scope, &basis)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return application.WarehouseChargeRequest{}, false, nil
 	}
 	if err != nil {
 		return application.WarehouseChargeRequest{}, false, fmt.Errorf("load warehouse charge request: %w", err)
 	}
-	if charge != nil {
-		request.ChargeID = *charge
+	request.ChargeID = valueOf(charge)
+	request.EvaluationID = valueOf(evaluation)
+	request.RequestID = valueOf(requestID)
+	request.Account = valueOf(account)
+	request.Currency = valueOf(currency)
+	request.Scope = valueOf(scope)
+	if basis != nil {
+		request.BasisAt = *basis
 	}
 	return request, true, nil
 }
@@ -139,4 +151,18 @@ func nullable(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func nullableTime(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	return &value
+}
+
+func valueOf(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

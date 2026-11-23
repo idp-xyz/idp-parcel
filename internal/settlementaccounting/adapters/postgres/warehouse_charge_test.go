@@ -120,6 +120,11 @@ func TestWarehouseChargesFollowTheSyntheticOccurrence(t *testing.T) {
 		if err != nil || formed != application.WarehouseChargeFormed || chargeID == "" {
 			return fmt.Errorf("没确认时点 %s %s %v", formed, chargeID, err)
 		}
+		request, foundRequest, err := store.LoadRequest(ctx, tenant, "CHO-IN", 1)
+		if err != nil || !foundRequest || request.RequestID == "" || request.Account != account.ID().String() ||
+			request.Currency != "CNY" || request.Scope != "SYN-SCOPE-WH" || request.EvaluationID == "" || request.BasisAt.IsZero() {
+			return fmt.Errorf("销售请求 %+v %v", request, err)
+		}
 		if _, err := conditions.RegisterCondition(ctx, tenant, mustAccountRef(t, domain.NewFeeItemReference, "SYN-FEE-WH"), "WAREHOUSE_WORK_OCCURRED", clock.Now()); err != nil {
 			return err
 		}
