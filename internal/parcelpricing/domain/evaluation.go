@@ -1101,7 +1101,8 @@ func (evaluation PricingEvaluation) validCompletedCharges() bool {
 	// 费用行的聚合单位只能是主体那一级或 PACKAGE（按件计收的行）；逐包裹主体上两者是同一格（ADR-0111 Decision 一）。
 	subjectScope := ChargeScopePackage
 	switch evaluation.input.subject.kind {
-	case SubjectShipment:
+	case SubjectShipment, SubjectTransportChargeOccurrence:
+		// 费用行的单位来自卡的聚合方式。发生项主体只在逐委托的卡上形成，行上仍是每票一次，不把金额摊到每件。
 		subjectScope = ChargeScopeShipment
 	case SubjectMasterDocument:
 		subjectScope = ChargeScopeMasterDocument

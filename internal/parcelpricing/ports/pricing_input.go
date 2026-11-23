@@ -63,6 +63,9 @@ type PricingInputQuery struct {
 	BasisAt    time.Time
 	Sources    EligibleSourceReferences
 	Settlement domain.Currency
+	// Aggregation 是形成入口已经解析到的在用价卡的聚合方式。多件运输收费发生项只在逐委托时收成聚合输入；
+	// 没带或不是逐委托，仍答输入不可得。单件不看它。
+	Aggregation domain.AggregationMode
 }
 
 // SettlementCurrency 报出请求是否带了结算币种。

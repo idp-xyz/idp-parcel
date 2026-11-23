@@ -1,9 +1,10 @@
 // Package transportfulfillment 是计价消费运输履约的一侧（ADR-0025）。造计价输入快照的两只编排器都在这里：
 // 按包裹的那一只只问小包托运的申报测量与地址要素，SELL 请求点名包裹时直接用它（ADR-0190 决定四）；按发生项的
-// 那一只问话的键是运输收费发生项（目录名由此来），经运输履约找到成员包裹之后整段交给前者。按包裹的那一只不放
-// adapters/parcelshipment：按发生项那一只组合它，同包才不必为组合导出「从包裹到快照」那一步，实测优先、缺席取
-// 申报的取源规则（ADR-0171 决定二）也就只有一个入口。目录名的复核随 ADR-0171 越权风险点 1 归 PP owner。节点
-// 实测登记册与当前有效实测的派生在 adapters/nodeoperations，这一包只消费它答好的重量与尺寸。
+// 那一只问话的键是运输收费发生项（目录名由此来）。成员恰为一件时整段交给前者；多于一件且在用采购卡是逐委托时，
+// 用同一取源拼一份聚合输入，主体是发生项本身。按包裹的那一只不放 adapters/parcelshipment：按发生项那一只组合它，
+// 同包才不必为组合导出「从包裹到快照」那一步，实测优先、缺席取申报的取源规则（ADR-0171 决定二）也就只有一个入口。
+// 目录名的复核随 ADR-0171 越权风险点 1 归 PP owner。节点实测登记册与当前有效实测的派生在 adapters/nodeoperations，
+// 这一包只消费它答好的重量与尺寸。
 package transportfulfillment
 
 import (
@@ -269,8 +270,8 @@ type ResolverDeps struct {
 	Measured  ActualMeasurementView
 }
 
-// Resolver 按运输收费发生项造快照：找到唯一的成员包裹之后，取数整段交给 ParcelResolver。它实现
-// PricingInputResolver。不 import 提供方 application。
+// Resolver 按运输收费发生项造快照。成员恰为一件时取数整段交给 ParcelResolver；多于一件时只在逐委托的采购卡上
+// 另立聚合主体。它实现 PricingInputResolver。不 import 提供方 application。
 type Resolver struct {
 	members tfports.ChargeOccurrenceMemberView
 	parcels *ParcelResolver
@@ -318,10 +319,133 @@ func (resolver *Resolver) ResolvePricingInput(
 	case 0:
 		return unavailable(missingMemberCount), nil
 	case 1:
+		return resolver.parcels.resolve(ctx, query, members.Members[0].String(), members.OccurredAt)
 	default:
-		return unavailable(missingSingleMember), nil
+		if query.Aggregation != ppdomain.AggregationPerShipment {
+			return unavailable(missingSingleMember), nil
+		}
+		return resolver.resolveOccurrenceAggregate(ctx, query, members)
 	}
-	return resolver.parcels.resolve(ctx, query, members.Members[0].String(), members.OccurredAt)
+}
+
+// resolveOccurrenceAggregate 把已经形成、带多件已受理包裹的发生项收成一份聚合输入。主体是发生项本身。
+// 业务时点用发生项的发生时刻：请求上的计价基准时点是结算转抄的同一刻，不是这一路的权威。
+// 各件邮编路线必须一致才写进快照；不一致不挑第一件，分区与路线都空着，评价待判断。
+func (resolver *Resolver) resolveOccurrenceAggregate(
+	ctx context.Context,
+	query ppports.PricingInputQuery,
+	members tfports.ChargeOccurrenceMembers,
+) (ppports.PricingInputResolution, error) {
+	psTenant, err := psdomain.NewTenantID(query.Tenant.String())
+	if err != nil {
+		return unavailable(missingNotAParcel), nil
+	}
+	pieces := make([]ppdomain.MemberPiece, 0, len(members.Members))
+	ids := make([]ppdomain.PackageID, 0, len(members.Members))
+	var facts []ppdomain.VersionedFactReference
+	var missing []string
+	var agreed ppdomain.PostalRoute
+	routesDiffer := false
+	haveRoute := false
+	for _, member := range members.Members {
+		object := member.String()
+		parcel, err := psdomain.NewDeclaredParcelID(object)
+		if err != nil {
+			return unavailable(missingNotAParcel), nil
+		}
+		packageID, err := ppdomain.NewPackageID(object)
+		if err != nil {
+			return unavailable(missingNotAParcel), nil
+		}
+		weight, dimensions, pieceFacts, pieceMissing, err := resolver.parcels.weightAndDimensions(ctx, query.Tenant, psTenant, parcel, object)
+		if err != nil {
+			return ppports.PricingInputResolution{}, err
+		}
+		if names(pieceMissing, missingNotAParcel) {
+			return unavailable(missingNotAParcel), nil
+		}
+		if len(pieceMissing) > 0 {
+			for _, item := range pieceMissing {
+				missing = append(missing, object+": "+item)
+			}
+			continue
+		}
+		origin := ppdomain.PieceMeasurementDeclared
+		if len(pieceFacts) > 0 && pieceFacts[0].Reference().Kind() == ppdomain.ArtifactActualMeasurement {
+			origin = ppdomain.PieceMeasurementMeasured
+		}
+		piece, err := ppdomain.NewMemberPiece(packageID, weight, dimensions)
+		if err != nil {
+			return unavailable(missingWeightValue), nil
+		}
+		piece, err = piece.WithMeasurementOrigin(origin)
+		if err != nil {
+			return unavailable(missingWeightValue), nil
+		}
+		route, addressFact, routeMissing, err := resolver.parcels.postalRoute(ctx, psTenant, parcel)
+		if err != nil {
+			return ppports.PricingInputResolution{}, err
+		}
+		if names(routeMissing, missingNotAParcel) {
+			return unavailable(missingNotAParcel), nil
+		}
+		if len(routeMissing) > 0 {
+			for _, item := range routeMissing {
+				missing = append(missing, object+": "+item)
+			}
+			continue
+		}
+		pieces = append(pieces, piece)
+		ids = append(ids, packageID)
+		facts = append(facts, pieceFacts...)
+		facts = append(facts, addressFact)
+		if !haveRoute {
+			agreed, haveRoute = route, true
+			continue
+		}
+		if route.Origin() != agreed.Origin() || route.Destination() != agreed.Destination() {
+			routesDiffer = true
+		}
+	}
+	if len(missing) > 0 {
+		return unavailable(missing...), nil
+	}
+	if len(pieces) == 0 {
+		return unavailable(missingMemberCount), nil
+	}
+	total, err := sumPieceWeights(pieces)
+	if err != nil {
+		return unavailable(err.Error()), nil
+	}
+	manifest, err := ppdomain.NewMemberManifest(ids, total, nil)
+	if err != nil {
+		return unavailable(missingWeightValue), nil
+	}
+	manifest, err = manifest.WithPieces(pieces)
+	if err != nil {
+		return unavailable(missingWeightValue), nil
+	}
+	subject, err := ppdomain.NewTransportChargeOccurrenceSubject(query.Sources.Occurrence)
+	if err != nil {
+		return unavailable(missingMembers), nil
+	}
+	// 调用方没有分区。空分区只对这个主体合法：一致的路线随后补上，不一致则留给评价答待判断。
+	input, err := ppdomain.NewAggregatePricingInputSnapshot(
+		query.Tenant, query.Scope, subject, "", manifest, members.OccurredAt, facts...)
+	if err != nil {
+		return unavailable(missingWeightValue), nil
+	}
+	if haveRoute && !routesDiffer {
+		if input, err = input.WithPostalRoute(agreed); err != nil {
+			return unavailable(missingDestination), nil
+		}
+	}
+	if settlement, declared := query.SettlementCurrency(); declared {
+		if input, err = input.WithSettlementCurrency(settlement); err != nil {
+			return ppports.PricingInputResolution{}, err
+		}
+	}
+	return ppports.PricingInputResolution{Outcome: ppports.PricingInputResolved, Input: input}, nil
 }
 
 func (resolver *ParcelResolver) weightAndDimensions(

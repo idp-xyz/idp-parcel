@@ -48,7 +48,7 @@ func (handler *FormEvaluationFromRequestHandler) formAcrossSellPriceSources(
 			return FormEvaluationFromRequestResult{}, fmt.Errorf("%w: price card in-force outcome %d", ErrUnexpectedInForceOutcome, resolution.Outcome)
 		}
 
-		input, stopped, halt := handler.resolveInput(ctx, command)
+		input, stopped, halt := handler.resolveInput(ctx, command, resolution.Plan.Aggregation())
 		if halt {
 			kind := SellPriceSourceInputUnavailable
 			if stopped.Outcome == RequestEvaluationUndecided {

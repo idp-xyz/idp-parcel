@@ -15,26 +15,29 @@ type EvaluationSubjectKind string
 const (
 	SubjectAcceptedPackage EvaluationSubjectKind = "ACCEPTED_PACKAGE"
 	SubjectEstimate        EvaluationSubjectKind = "ESTIMATE"
-	// SubjectShipment（委托，票级）与 SubjectMasterDocument（承运总单，主单级）随 ADR-0111 加入（CONTEXT「评价对象」
-	// 四种）：服务按票、按主单计费的项目，输入带成员清单与合计量；金额向包裹的归因归 settlement-accounting。
+	// SubjectShipment（委托，票级）与 SubjectMasterDocument（承运总单，主单级）是多个包裹的集合：
+	// 服务按票、按主单计费的项目，输入带成员清单与合计量；金额向包裹的归因归 settlement-accounting。
 	SubjectShipment       EvaluationSubjectKind = "SHIPMENT"
 	SubjectMasterDocument EvaluationSubjectKind = "MASTER_DOCUMENT"
+	// SubjectTransportChargeOccurrence 是运输收费发生项本身。一张承运商运单下的多件不一定是整份客户委托，
+	// 同一委托上也可以有多笔发生项，所以不借用委托或承运总单。身份是发生项引用，版本留在结算的来源引用上。
+	SubjectTransportChargeOccurrence EvaluationSubjectKind = "TRANSPORT_CHARGE_OCCURRENCE"
 )
 
 func (kind EvaluationSubjectKind) String() string { return string(kind) }
 
 func (kind EvaluationSubjectKind) valid() bool {
 	switch kind {
-	case SubjectAcceptedPackage, SubjectEstimate, SubjectShipment, SubjectMasterDocument:
+	case SubjectAcceptedPackage, SubjectEstimate, SubjectShipment, SubjectMasterDocument, SubjectTransportChargeOccurrence:
 		return true
 	default:
 		return false
 	}
 }
 
-// aggregate 报出该主体是不是多个包裹的集合——那两种主体的输入带成员清单而不带尺寸。
+// aggregate 报出该主体是不是多个包裹的集合——这些主体的输入带成员清单而不带尺寸。
 func (kind EvaluationSubjectKind) aggregate() bool {
-	return kind == SubjectShipment || kind == SubjectMasterDocument
+	return kind == SubjectShipment || kind == SubjectMasterDocument || kind == SubjectTransportChargeOccurrence
 }
 
 // NewShipmentSubject 指名一个已受理的委托（ADR-0111 Decision 四）：身份由 parcel-shipment 拥有，本上下文不铸。
@@ -55,6 +58,15 @@ func NewMasterDocumentSubject(reference string) (EvaluationSubject, error) {
 		return EvaluationSubject{}, ErrPricingInputInvalid
 	}
 	return EvaluationSubject{kind: SubjectMasterDocument, id: reference}, nil
+}
+
+// NewTransportChargeOccurrenceSubject 指名一个运输收费发生项。身份由 transport-fulfillment 拥有，本上下文不铸。
+// 不收有效性版本：同一发生项换代后成员可能变，主体不变，版本在结算那一侧的来源引用上。
+func NewTransportChargeOccurrenceSubject(reference string) (EvaluationSubject, error) {
+	if !trimmed(reference) {
+		return EvaluationSubject{}, ErrPricingInputInvalid
+	}
+	return EvaluationSubject{kind: SubjectTransportChargeOccurrence, id: reference}, nil
 }
 
 // MemberManifest 是票级 / 主单级评价输入的成员清单（ADR-0111 Decision 二）：成员包裹引用、合计实重、可缺的合计
@@ -318,8 +330,9 @@ type PricingInputSnapshot struct {
 	comparison *Currency
 }
 
-// NewAggregatePricingInputSnapshot 立一份票级 / 主单级评价输入（ADR-0111 Decision 二）：主体是委托或承运总单，
+// NewAggregatePricingInputSnapshot 立一份聚合评价输入：主体是委托、承运总单或运输收费发生项，
 // 重量来自成员清单的合计，尺寸不适用。分区走调用方给值这一格，绑了目录的卡再 WithPostalRoute 补邮编路线。
+// 运输收费发生项可以不带调用方分区：分区由目录从邮编路线解出；各件路线不一致时分区与路线都空着，评价待判断。
 func NewAggregatePricingInputSnapshot(
 	tenantID TenantID,
 	scope PricingScopeID,
@@ -329,7 +342,10 @@ func NewAggregatePricingInputSnapshot(
 	businessAt time.Time,
 	factReferences ...VersionedFactReference,
 ) (PricingInputSnapshot, error) {
-	if !subject.kind.aggregate() || !members.valid() || strings.TrimSpace(zone) == "" {
+	if !subject.kind.aggregate() || !members.valid() {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	if strings.TrimSpace(zone) == "" && (zone != "" || subject.kind != SubjectTransportChargeOccurrence) {
 		return PricingInputSnapshot{}, ErrPricingInputInvalid
 	}
 	input, err := newPricingInputSnapshot(tenantID, scope, subject, zone, members.totalActual, nil, businessAt, factReferences)
@@ -694,7 +710,8 @@ func (input PricingInputSnapshot) valid() bool {
 		return false
 	}
 	// 分区与邮编路线至少一个在：两个都没有，没有任何一条路径能得出分区。
-	if input.zone == "" && input.postal == nil {
+	// 运输收费发生项可以两样都没有：各件邮编路线不一致时不挑一条，评价待判断。
+	if input.zone == "" && input.postal == nil && input.subject.kind != SubjectTransportChargeOccurrence {
 		return false
 	}
 	if input.postal != nil && !input.postal.valid() {

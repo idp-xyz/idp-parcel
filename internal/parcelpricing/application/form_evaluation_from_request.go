@@ -269,7 +269,7 @@ func (handler *FormEvaluationFromRequestHandler) formOneScope(
 		return FormEvaluationFromRequestResult{}, fmt.Errorf("%w: price card in-force outcome %d", ErrUnexpectedInForceOutcome, resolution.Outcome)
 	}
 
-	input, result, stopped := handler.resolveInput(ctx, command)
+	input, result, stopped := handler.resolveInput(ctx, command, resolution.Plan.Aggregation())
 	if stopped {
 		return result, nil
 	}
@@ -342,6 +342,7 @@ func (handler *FormEvaluationFromRequestHandler) declaredServiceProduct(
 func (handler *FormEvaluationFromRequestHandler) resolveInput(
 	ctx context.Context,
 	command FormEvaluationFromRequestCommand,
+	aggregation domain.AggregationMode,
 ) (domain.PricingInputSnapshot, FormEvaluationFromRequestResult, bool) {
 	if handler.deps.Inputs == nil {
 		return domain.PricingInputSnapshot{}, FormEvaluationFromRequestResult{
@@ -350,12 +351,13 @@ func (handler *FormEvaluationFromRequestHandler) resolveInput(
 		}, true
 	}
 	resolved, err := handler.deps.Inputs.ResolvePricingInput(ctx, ports.PricingInputQuery{
-		Tenant:     command.Tenant,
-		Scope:      command.Scope,
-		Purpose:    command.Purpose,
-		BasisAt:    command.BasisAt,
-		Sources:    command.Sources,
-		Settlement: command.Settlement,
+		Tenant:      command.Tenant,
+		Scope:       command.Scope,
+		Purpose:     command.Purpose,
+		BasisAt:     command.BasisAt,
+		Sources:     command.Sources,
+		Settlement:  command.Settlement,
+		Aggregation: aggregation,
 	})
 	if err != nil {
 		return domain.PricingInputSnapshot{}, undecidedFormation(RequestPricingInputResolutionUnavailable), true

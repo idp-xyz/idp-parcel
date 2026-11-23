@@ -356,7 +356,8 @@ func (mode AggregationMode) admits(kind EvaluationSubjectKind) bool {
 	case AggregationPerPackage:
 		return kind == SubjectAcceptedPackage || kind == SubjectEstimate
 	case AggregationPerShipment:
-		return kind == SubjectShipment
+		// 逐委托的卡也收运输收费发生项。逐包裹不收：多件发生项不拆成多份逐件评价。
+		return kind == SubjectShipment || kind == SubjectTransportChargeOccurrence
 	case AggregationPerMasterDocument:
 		return kind == SubjectMasterDocument
 	default:
