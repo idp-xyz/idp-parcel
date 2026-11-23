@@ -11,8 +11,8 @@ import (
 type AdjustmentKind string
 
 const (
-	AdjustmentIncrease   AdjustmentKind = "INCREASE"
-	AdjustmentDecrease   AdjustmentKind = "DECREASE"
+	AdjustmentIncrease    AdjustmentKind = "INCREASE"
+	AdjustmentDecrease    AdjustmentKind = "DECREASE"
 	AdjustmentDestruction AdjustmentKind = "DESTRUCTION"
 )
 
