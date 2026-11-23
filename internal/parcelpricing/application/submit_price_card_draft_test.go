@@ -54,8 +54,12 @@ func (fake *draftRegisterFake) SubmitDraft(_ context.Context, draft domain.Price
 	case domain.PriceCardDraftResubmissionRevision:
 		fake.rows[draftKey(draft)] = draft
 		return ports.PriceCardDraftRevised, nil
-	default:
+	case domain.PriceCardDraftResubmissionContentFixed:
 		return ports.PriceCardDraftContentFixed, nil
+	case domain.PriceCardDraftResubmissionWithdrawn:
+		return ports.PriceCardDraftWithdrawn, nil
+	default:
+		return ports.PriceCardDraftSubmitOutcomeInvalid, errors.New("unexpected resubmission")
 	}
 }
 
@@ -214,6 +218,28 @@ func TestResubmissionsAnswerReplayRevisionOrFixedContent(t *testing.T) {
 	reader.reading = validatedReading(t, "31")
 	if outcome := submit("v2 bytes").Outcome; outcome != application.PriceCardDraftReplayed {
 		t.Fatalf("已批准再录同一份 = %v", outcome)
+	}
+
+	withdrawn, err := register.rows[key].Withdraw(subject(t, "https://id.syn.example/dex#SYN-OPERATOR-03"), "客户拒绝这套价", progressClockAt.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	register.rows[key] = withdrawn
+	kept, _ := withdrawn.Content()
+	same := submit("v2 bytes")
+	if same.Outcome != application.PriceCardDraftResubmissionWithdrawn || same.Outcome.String() != "DRAFT_WITHDRAWN" {
+		t.Fatalf("已撤下再录同一份 = %v", same.Outcome)
+	}
+	reader.reading = validatedReading(t, "40")
+	changed := submit("v4 bytes")
+	if changed.Outcome.String() != "DRAFT_WITHDRAWN" {
+		t.Fatalf("已撤下换内容 = %v", changed.Outcome)
+	}
+	if register.rows[key].Status() != domain.PriceCardDraftStatusWithdrawn {
+		t.Fatal("已撤下再录替换了那一行")
+	}
+	if still, _ := register.rows[key].Content(); still.Plan.ContentDigest() != kept.Plan.ContentDigest() {
+		t.Fatal("已撤下再录改了册上的内容")
 	}
 }
 

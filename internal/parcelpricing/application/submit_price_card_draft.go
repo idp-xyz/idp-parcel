@@ -15,7 +15,7 @@ import (
 // readPriceCardImport——同一份字节过两口逐字节同摘要；读法决定草稿进哪一格，同版再录的落点由领域判、册上落定。
 // 身份（租户、录入者）由 Intake 从操作者信封交进命令，编排不从任何载荷里读身份。
 
-// SubmitPriceCardDraftOutcome 是录入的答复：草稿册四格落点逐名翻译，外加没落行的`未受理`。
+// SubmitPriceCardDraftOutcome 是录入的答复：草稿册落点逐名翻译，外加没落行的`未受理`。
 type SubmitPriceCardDraftOutcome uint8
 
 const (
@@ -28,6 +28,8 @@ const (
 	PriceCardDraftRevised
 	// PriceCardDraftContentFixed：那一版已批准或已发布，内容固定；换内容要另起版本号。
 	PriceCardDraftContentFixed
+	// PriceCardDraftResubmissionWithdrawn：那一版已撤下。同内容或换内容都是这一格，不替换、也不当重放。
+	PriceCardDraftResubmissionWithdrawn
 	// PriceCardDraftNotAccepted：命令立不住，或连方案身份都读不出来——没有行可落。
 	PriceCardDraftNotAccepted
 )
@@ -42,6 +44,8 @@ func (outcome SubmitPriceCardDraftOutcome) String() string {
 		return "DRAFT_REVISED"
 	case PriceCardDraftContentFixed:
 		return "CONTENT_FIXED"
+	case PriceCardDraftResubmissionWithdrawn:
+		return "DRAFT_WITHDRAWN"
 	case PriceCardDraftNotAccepted:
 		return "NOT_ACCEPTED"
 	default:
@@ -139,6 +143,8 @@ func (handler *SubmitPriceCardDraftHandler) Handle(ctx context.Context, command 
 		result.Outcome = PriceCardDraftRevised
 	case ports.PriceCardDraftContentFixed:
 		result.Outcome = PriceCardDraftContentFixed
+	case ports.PriceCardDraftWithdrawn:
+		result.Outcome = PriceCardDraftResubmissionWithdrawn
 	default:
 		return SubmitPriceCardDraftResult{}, fmt.Errorf("submit price card draft: unexpected register outcome %q", saved)
 	}

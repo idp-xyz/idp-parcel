@@ -28,6 +28,7 @@ const (
 	PriceCardApprovalDraftNotValidated
 	PriceCardApprovalDraftAlreadyApproved
 	PriceCardApprovalDraftAlreadyPublished
+	PriceCardApprovalDraftWithdrawn
 	PriceCardApprovalDraftChanged
 )
 
@@ -49,6 +50,8 @@ func (outcome ApprovePriceCardDraftOutcome) String() string {
 		return "DRAFT_ALREADY_APPROVED"
 	case PriceCardApprovalDraftAlreadyPublished:
 		return "DRAFT_ALREADY_PUBLISHED"
+	case PriceCardApprovalDraftWithdrawn:
+		return "DRAFT_WITHDRAWN"
 	case PriceCardApprovalDraftChanged:
 		return "DRAFT_CHANGED"
 	default:
@@ -110,6 +113,8 @@ func (handler *ApprovePriceCardDraftHandler) Handle(ctx context.Context, command
 		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalDraftAlreadyApproved}, nil
 	case domain.PriceCardDraftStatusPublished:
 		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalDraftAlreadyPublished}, nil
+	case domain.PriceCardDraftStatusWithdrawn:
+		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalDraftWithdrawn}, nil
 	}
 
 	rule, configured, err := handler.rules.LoadPriceCardApprovalDutyRule(ctx, command.Tenant)
@@ -162,6 +167,7 @@ const (
 	PriceCardPublicationDraftNotFound
 	PriceCardPublicationDraftNotApproved
 	PriceCardPublicationDraftAlreadyPublished
+	PriceCardPublicationDraftWithdrawn
 	PriceCardPublicationNotLanded
 )
 
@@ -175,6 +181,8 @@ func (outcome PublishPriceCardDraftOutcome) String() string {
 		return "DRAFT_NOT_APPROVED"
 	case PriceCardPublicationDraftAlreadyPublished:
 		return "DRAFT_ALREADY_PUBLISHED"
+	case PriceCardPublicationDraftWithdrawn:
+		return "DRAFT_WITHDRAWN"
 	case PriceCardPublicationNotLanded:
 		return "PUBLICATION_NOT_LANDED"
 	default:
@@ -237,6 +245,9 @@ func (handler *PublishPriceCardDraftHandler) Handle(ctx context.Context, command
 		return PublishPriceCardDraftResult{Outcome: PriceCardPublicationDraftNotApproved}, nil
 	case domain.PriceCardDraftStatusPublished:
 		return PublishPriceCardDraftResult{Outcome: PriceCardPublicationDraftAlreadyPublished}, nil
+	case domain.PriceCardDraftStatusWithdrawn:
+		// 已撤下的草稿不能发布，也不交给登记：价卡册里不该出现这一版。
+		return PublishPriceCardDraftResult{Outcome: PriceCardPublicationDraftWithdrawn}, nil
 	}
 
 	registration, err := draft.Registration()

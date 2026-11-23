@@ -24,6 +24,8 @@ const (
 	PriceCardDraftRevised
 	// PriceCardDraftContentFixed：草稿已`已批准`或`已发布`，内容固定，行一字不动。
 	PriceCardDraftContentFixed
+	// PriceCardDraftWithdrawn：这一版已撤下。同内容或换内容都落在这一格，行一字不动。
+	PriceCardDraftWithdrawn
 )
 
 func (outcome PriceCardDraftSubmitOutcome) String() string {
@@ -36,6 +38,8 @@ func (outcome PriceCardDraftSubmitOutcome) String() string {
 		return "REVISED"
 	case PriceCardDraftContentFixed:
 		return "CONTENT_FIXED"
+	case PriceCardDraftWithdrawn:
+		return "WITHDRAWN"
 	default:
 		return ""
 	}
