@@ -550,6 +550,13 @@ func (channels endpointChannels) allocationStrategy() warehousehttp.AllocationSt
 	return warehousehttp.UnconfiguredIntake{}
 }
 
+func (channels endpointChannels) returnOnBehalf() warehousehttp.ReturnOnBehalfIntake {
+	if channels.operatorDecisions.warehouseReturn != nil {
+		return channels.operatorDecisions.warehouseReturn
+	}
+	return warehousehttp.UnconfiguredReturnOnBehalfIntake{}
+}
+
 func (channels endpointChannels) outboundOnBehalf() warehousehttp.OutboundOnBehalfIntake {
 	if channels.operatorDecisions.warehouseOutbound != nil {
 		return channels.operatorDecisions.warehouseOutbound

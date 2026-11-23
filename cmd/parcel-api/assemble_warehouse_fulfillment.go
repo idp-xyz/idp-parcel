@@ -173,6 +173,7 @@ type warehouseFulfillmentOrchestration struct {
 	outbounds          transactionalOutbound
 	waves              transactionalWave
 	followUps          transactionalFollowUp
+	returns            transactionalReturn
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -634,6 +635,26 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		transactor: db.Transactor(),
 		inner:      warehouseapp.NewFollowUpHandler(outboundStore, waveStore, opener, systemClock{}),
 	}
+	returnStore, err := whpostgres.NewReturns(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: returns: %w", err)
+	}
+	returnNumbers, err := whpostgres.NewReturnNumbers(db, assigner)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: return numbers: %w", err)
+	}
+	returnIDs, err := whidentity.NewReturnIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: return identities: %w", err)
+	}
+	returns := transactionalReturn{
+		transactor: db.Transactor(),
+		inner: warehouseapp.NewReturnHandler(
+			returnStore, returnIDs, returnNumbers, warehouses, locations, zones, warehouses, owners, poster, stock,
+			warehouseapp.NewRegisterUnclaimedArrivalHandler(arrivals, arrivalIDs, warehouses, systemClock{}),
+			arrivals, systemClock{},
+		),
+	}
 	jobDiscrepancies := transactionalJobDiscrepancy{
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewJobDiscrepancyHandler(
@@ -717,7 +738,31 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		outbounds:                outbounds,
 		waves:                    waves,
 		followUps:                followUps,
+		returns:                  returns,
 	}, nil
+}
+
+type transactionalReturn struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.ReturnHandler
+}
+
+func (registration transactionalReturn) Accept(ctx context.Context, command warehouseapp.AcceptReturnCommand) (warehouseapp.ReturnResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ReturnResult, error) {
+		return registration.inner.Accept(txCtx, command)
+	})
+}
+
+func (registration transactionalReturn) Receive(ctx context.Context, command warehouseapp.ReceiveReturnCommand) (warehouseapp.ReturnResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ReturnResult, error) {
+		return registration.inner.Receive(txCtx, command)
+	})
+}
+
+func (registration transactionalReturn) Dispose(ctx context.Context, command warehouseapp.DisposeReturnCommand) (warehouseapp.ReturnResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ReturnResult, error) {
+		return registration.inner.Dispose(txCtx, command)
+	})
 }
 
 type transactionalFollowUp struct {

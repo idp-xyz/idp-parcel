@@ -35,6 +35,7 @@ type preAdviceWorld struct {
 	goods      *adapter.Goods
 	identities *whidentity.PreAdviceIdentities
 	registrar  *docnumber.Registrar
+	assigner   *docnumber.Assigner
 	clock      fixedClock
 }
 
@@ -92,7 +93,7 @@ func newPreAdviceWorld(t *testing.T, at time.Time) preAdviceWorld {
 	}
 	return preAdviceWorld{
 		pool: pool, db: db, transactor: db.Transactor(), preAdvices: preAdvices, numbers: numbers,
-		warehouses: warehouses, goods: goods, identities: identities, registrar: registrar, clock: clock,
+		warehouses: warehouses, goods: goods, identities: identities, registrar: registrar, assigner: assigner, clock: clock,
 	}
 }
 

@@ -59,6 +59,8 @@ const (
 	WorkFactOutboundConfirmation WorkFactKind = "OUTBOUND_CONFIRMATION"
 	// WorkFactPickupHandover 是自提交付（UC-WF-015；ADR-0384 决定三）。
 	WorkFactPickupHandover WorkFactKind = "PICKUP_HANDOVER"
+	// WorkFactReturnReceipt 是退货入库（UC-WF-017；ADR-0384 决定三）。
+	WorkFactReturnReceipt WorkFactKind = "RETURN_RECEIPT"
 )
 
 // workFactKindsAdmittedAtMint 是准入范围对照收哪几个词、认证方问哪一对准入要求的唯一来源：两处各抄一份，改了一份，登在旧词下的
@@ -84,6 +86,7 @@ var workFactKindsAdmittedAtMint = []WorkFactKind{
 	WorkFactPack,
 	WorkFactOutboundConfirmation,
 	WorkFactPickupHandover,
+	WorkFactReturnReceipt,
 }
 
 // ParseWorkFactKind 按字面取值认作业事实类型，大小写不折叠：对照册里存的就是这些字面量。

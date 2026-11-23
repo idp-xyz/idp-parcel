@@ -672,6 +672,7 @@ const (
 	outboundChecksLine          = "/warehouse-fulfillment-outbound-checks"
 	packsLine                   = "/warehouse-fulfillment-packs"
 	returnsLine                 = "/warehouse-fulfillment-returns"
+	returnReceiptsLine          = "/warehouse-fulfillment-return-receipts"
 	outboundConfirmationsLine   = "/warehouse-fulfillment-outbound-confirmations"
 	pickupHandoversLine         = "/warehouse-fulfillment-pickup-handovers"
 	ownerLabelsLine             = "/warehouse-fulfillment-owner-labels"
@@ -695,7 +696,7 @@ const (
 )
 
 func warehouseWorkLine(pattern string) bool {
-	return pattern == countEntriesLine || pattern == picksLine || pattern == outboundChecksLine || pattern == packsLine || pattern == returnsLine || pattern == outboundConfirmationsLine || pattern == pickupHandoversLine
+	return pattern == countEntriesLine || pattern == picksLine || pattern == outboundChecksLine || pattern == packsLine || pattern == returnsLine || pattern == returnReceiptsLine || pattern == outboundConfirmationsLine || pattern == pickupHandoversLine
 }
 
 // warehouseFulfillmentLines 是登记处里声明了仓配开关的各行，按路径排序。
@@ -813,6 +814,8 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/outbound-requests/splits":            {http.MethodPost, faceCustomerClient},
 		"/v1/warehouse/outbound-requests/supplements":       {http.MethodPost, faceCustomerClient},
 		"/v1/warehouse/outbound-requests/cancellations":     {http.MethodPost, faceCustomerClient},
+		"/v1/warehouse/return-pre-advices":                  {http.MethodPost, faceCustomerClient},
+		"/v1/warehouse/return-dispositions":                 {http.MethodPost, faceCustomerClient},
 
 		receiptConfirmationsLine:  {http.MethodPost, faceWorkFact},
 		warehouseMeasurementsLine: {http.MethodPost, faceWorkFact},
@@ -851,6 +854,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/warehouse-fulfillment-outbound-checks":                      {http.MethodPost, faceWorkFact},
 		"/warehouse-fulfillment-packs":                                {http.MethodPost, faceWorkFact},
 		"/warehouse-fulfillment-returns":                              {http.MethodPost, faceWorkFact},
+		"/warehouse-fulfillment-return-receipts":                      {http.MethodPost, faceWorkFact},
 		"/warehouse-fulfillment-outbound-confirmations":               {http.MethodPost, faceWorkFact},
 		"/warehouse-fulfillment-pickup-handovers":                     {http.MethodPost, faceWorkFact},
 		"/warehouse-fulfillment-owner-labels":                         {http.MethodPost, faceOperationDecision},
@@ -867,6 +871,8 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/warehouse-fulfillment-outbound-requests":                    {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-outbound-request-splits":              {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-outbound-cancellations":               {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-return-pre-advices":                   {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-return-dispositions":                  {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-shortage-policies":                    {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-allocation-strategy-adoptions":        {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-waves":                                {http.MethodPost, faceOperationDecision},
@@ -904,6 +910,8 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/outbound-requests/splits":            accessidentity.CustomerCapabilityOutboundRequestSubmission,
 		"/v1/warehouse/outbound-requests/supplements":       accessidentity.CustomerCapabilityOutboundRequestSubmission,
 		"/v1/warehouse/outbound-requests/cancellations":     accessidentity.CustomerCapabilityOutboundCancellation,
+		"/v1/warehouse/return-pre-advices":                  accessidentity.CustomerCapabilityReturnPreAdviceSubmission,
+		"/v1/warehouse/return-dispositions":                 accessidentity.CustomerCapabilityReturnDisposition,
 		"/v1/warehouse/reads/stock":                         accessidentity.CustomerCapabilityWarehouseRead,
 		customerGoodsWriteLine:                              accessidentity.CustomerCapabilityGoodsMaintenance,
 		customerGoodsListLine:                               accessidentity.CustomerCapabilityWarehouseRead,
@@ -961,6 +969,8 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 			"/warehouse-fulfillment-outbound-requests":                    accessidentity.DecisionOutboundRequestRecordOnBehalf,
 			"/warehouse-fulfillment-outbound-request-splits":              accessidentity.DecisionOutboundRequestRecordOnBehalf,
 			"/warehouse-fulfillment-outbound-cancellations":               accessidentity.DecisionOutboundRequestRecordOnBehalf,
+			"/warehouse-fulfillment-return-pre-advices":                   accessidentity.DecisionReturnRecordOnBehalf,
+			"/warehouse-fulfillment-return-dispositions":                  accessidentity.DecisionReturnRecordOnBehalf,
 			"/warehouse-fulfillment-owner-labels":                         accessidentity.DecisionOutboundRequestRecordOnBehalf,
 			"/warehouse-fulfillment-outbound-confirmation-corrections":    accessidentity.DecisionOutboundConfirmationCorrection,
 			"/warehouse-fulfillment-outbound-confirmation-replenishments": accessidentity.DecisionStockAdjustmentApproval,
@@ -1075,6 +1085,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			outboundChecksLine:                                     {status, code},
 			packsLine:                                              {status, code},
 			returnsLine:                                            {status, code},
+			returnReceiptsLine:                                     {status, code},
 			outboundConfirmationsLine:                              {status, code},
 			pickupHandoversLine:                                    {status, code},
 			ownerLabelsLine:                                        {status, code},
@@ -1091,6 +1102,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-outbound-requests":             {status, code},
 			"/warehouse-fulfillment-outbound-request-splits":       {status, code},
 			"/warehouse-fulfillment-outbound-cancellations":        {status, code},
+			"/warehouse-fulfillment-return-pre-advices":            {status, code},
+			"/warehouse-fulfillment-return-dispositions":           {status, code},
 			"/warehouse-fulfillment-shortage-policies":             {status, code},
 			"/warehouse-fulfillment-allocation-strategy-adoptions": {status, code},
 			"/warehouse-fulfillment-waves":                         {status, code},
@@ -1177,6 +1190,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			outboundChecksLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packsLine:                                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			returnsLine:                                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			returnReceiptsLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			outboundConfirmationsLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			pickupHandoversLine:                                    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			ownerLabelsLine:                                        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1195,6 +1209,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-outbound-requests":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-request-splits":       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-cancellations":        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-return-pre-advices":            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-return-dispositions":           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-waves":                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-stock":                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			internalJobsLine:                                       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1272,6 +1288,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			outboundChecksLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packsLine:                                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			returnsLine:                                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			returnReceiptsLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			outboundConfirmationsLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			pickupHandoversLine:                                    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			ownerLabelsLine:                                        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1288,6 +1305,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-outbound-requests":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-request-splits":       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-cancellations":        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-return-pre-advices":            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-return-dispositions":           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-shortage-policies":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-allocation-strategy-adoptions": {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-waves":                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1351,6 +1370,11 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			t.Fatal(returnErr)
 		}
 		wiring.returnIntake = returnIntake
+		returnReceiptIntake, receiptErr := buildReturnReceiptIntake(acceptingVerifier{}, testCase.register, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
+		if receiptErr != nil {
+			t.Fatal(receiptErr)
+		}
+		wiring.returnReceiptIntake = returnReceiptIntake
 		router := warehouseFulfillmentRouter(t, channels, wiring)
 		for pattern, want := range testCase.want {
 			var response *httptest.ResponseRecorder
@@ -1361,7 +1385,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 				response = probeWorkFactPost(router, warehouseMeasurementsLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", warehouseMeasurementBody())
 			case unclaimedArrivalRegLine:
 				response = probeWorkFactPost(router, unclaimedArrivalRegLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", unclaimedArrivalBody())
-			case internalMovesLine, formConversionsLine, conditionConversionsLine, shortageRegistrationsLine, processingExecutionsLine, relabelExecutionsLine, unboxingsLine, countEntriesLine, picksLine, outboundChecksLine, packsLine, returnsLine, outboundConfirmationsLine, pickupHandoversLine:
+			case internalMovesLine, formConversionsLine, conditionConversionsLine, shortageRegistrationsLine, processingExecutionsLine, relabelExecutionsLine, unboxingsLine, countEntriesLine, picksLine, outboundChecksLine, packsLine, returnsLine, returnReceiptsLine, outboundConfirmationsLine, pickupHandoversLine:
 				response = probeWorkFactPost(router, pattern, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", `{}`)
 			default:
 				response = probeWarehouseFulfillment(router, pattern, testCase.token, `{}`)

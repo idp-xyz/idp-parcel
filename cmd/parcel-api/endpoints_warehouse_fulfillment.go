@@ -94,6 +94,9 @@ type warehouseFulfillmentWiring struct {
 	outbounds                 warehousehttp.OutboundService
 	waves                     warehousehttp.WaveService
 	followUps                 warehousehttp.FollowUpService
+	returns                   warehousehttp.ReturnService
+	customerReturn            *warehousehttp.CustomerReturnIntake
+	returnReceiptIntake       *warehousehttp.ReturnReceiptIntake
 	countEntryIntake          *warehousehttp.CountEntryIntake
 	pickIntake                *warehousehttp.PickIntake
 	checkIntake               *warehousehttp.CheckIntake
@@ -433,6 +436,14 @@ func init() {
 				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityOutboundCancellation),
 				ownIntake: true, warehouseFulfillment: true,
 			},
+			"/v1/warehouse/return-pre-advices": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityReturnPreAdviceSubmission),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/v1/warehouse/return-dispositions": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityReturnDisposition),
+				ownIntake: true, warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-outbound-requests": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
 			},
@@ -441,6 +452,12 @@ func init() {
 			},
 			"/warehouse-fulfillment-outbound-cancellations": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-return-pre-advices": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionReturnRecordOnBehalf), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-return-dispositions": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionReturnRecordOnBehalf), warehouseFulfillment: true,
 			},
 			"/warehouse-fulfillment-shortage-policies": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
@@ -464,6 +481,10 @@ func init() {
 				ownIntake: true, warehouseFulfillment: true,
 			},
 			"/warehouse-fulfillment-returns": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-return-receipts": {
 				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
 				ownIntake: true, warehouseFulfillment: true,
 			},
@@ -521,6 +542,7 @@ func init() {
 			var customerConclusion *warehousehttp.CustomerDiscrepancyConclusionIntake
 			var customerInstructions *warehousehttp.CustomerInstructionIntake
 			var customerOutbound *warehousehttp.CustomerOutboundIntake
+			var customerReturn *warehousehttp.CustomerReturnIntake
 			if sources.customerClientMinter != nil {
 				customerPreAdvice, err = buildCustomerInboundPreAdviceIntake(sources.customerClientMinter)
 				if err != nil {
@@ -542,6 +564,10 @@ func init() {
 				if err != nil {
 					return warehouseFulfillmentWiring{}, err
 				}
+				customerReturn, err = buildCustomerReturnIntake(sources.customerClientMinter)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
 			}
 			var receiptIntake *warehousehttp.ReceiptWorkFactIntake
 			var measurementIntake *warehousehttp.WarehouseMeasurementWorkFactIntake
@@ -560,6 +586,7 @@ func init() {
 			var confirmIntake *warehousehttp.ConfirmIntake
 			var pickupIntake *warehousehttp.ConfirmIntake
 			var returnIntake *warehousehttp.ReturnIntake
+			var returnReceiptIntake *warehousehttp.ReturnReceiptIntake
 			if sources.operatorVerifier != nil && sources.operatorRegistry != nil && sources.deviceRegistry != nil && sources.admission != nil {
 				receiptIntake, err = buildReceiptConfirmationIntake(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
@@ -598,6 +625,12 @@ func init() {
 					return warehouseFulfillmentWiring{}, err
 				}
 				returnIntake, err = buildReturnIntake(
+					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
+				)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+				returnReceiptIntake, err = buildReturnReceiptIntake(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
 				)
 				if err != nil {
@@ -645,6 +678,7 @@ func init() {
 				customerConclusion:        customerConclusion,
 				customerInstructions:      customerInstructions,
 				customerOutbound:          customerOutbound,
+				customerReturn:            customerReturn,
 				discrepancyConclusion:     orchestration.discrepancyConclusion,
 				receiptIntake:             receiptIntake,
 				receiptConfirm:            orchestration.receiptConfirm,
@@ -675,6 +709,7 @@ func init() {
 				outbounds:                 orchestration.outbounds,
 				waves:                     orchestration.waves,
 				followUps:                 orchestration.followUps,
+				returns:                   orchestration.returns,
 				countEntryIntake:          countEntryIntake,
 				pickIntake:                pickIntake,
 				checkIntake:               checkIntake,
@@ -682,6 +717,7 @@ func init() {
 				confirmIntake:             confirmIntake,
 				pickupIntake:              pickupIntake,
 				returnIntake:              returnIntake,
+				returnReceiptIntake:       returnReceiptIntake,
 				internalJobs:              orchestration.internalJobs,
 				conditionRestore:          orchestration.internalJobs,
 				internalJobQueries:        orchestration.internalJobQueries,
@@ -783,9 +819,13 @@ func init() {
 			customerOutboundSplit := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			customerOutboundSupplement := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			customerOutboundCancellation := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerReturnAdvice := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerReturnDisposition := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			outboundOnBehalf := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			outboundSplit := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			outboundCancellation := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			returnAdvice := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			returnDisposition := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			shortagePolicy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			allocationStrategy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveRelease := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -793,6 +833,7 @@ func init() {
 			outboundCheck := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			pack := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			stockReturn := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			returnReceipt := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			outboundConfirmation := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			pickupHandover := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			ownerLabel := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -954,6 +995,10 @@ func init() {
 				customerOutboundSplit = warehousehttp.NewSplitCustomerOutboundEndpoint(warehousehttp.OpenCustomerOutboundIntake(wiring.customerOutbound), wiring.outbounds)
 				customerOutboundSupplement = warehousehttp.NewSupplementCustomerOutboundEndpoint(warehousehttp.OpenCustomerOutboundIntake(wiring.customerOutbound), wiring.followUps)
 				customerOutboundCancellation = warehousehttp.NewCancelCustomerOutboundEndpoint(warehousehttp.OpenCustomerOutboundIntake(wiring.customerOutbound), wiring.waves)
+				customerReturnAdvice = warehousehttp.NewAcceptCustomerReturnEndpoint(warehousehttp.OpenCustomerReturnIntake(wiring.customerReturn), wiring.returns)
+				customerReturnDisposition = warehousehttp.NewDisposeCustomerReturnEndpoint(warehousehttp.OpenCustomerReturnIntake(wiring.customerReturn), wiring.returns)
+				returnAdvice = warehousehttp.NewAcceptReturnEndpoint(channels.returnOnBehalf(), wiring.returns)
+				returnDisposition = warehousehttp.NewDisposeReturnEndpoint(channels.returnOnBehalf(), wiring.returns)
 				outboundOnBehalf = warehousehttp.NewRecordOutboundEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
 				outboundSplit = warehousehttp.NewSplitOutboundEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
 				outboundCancellation = warehousehttp.NewCancelOutboundEndpoint(channels.outboundOnBehalf(), wiring.waves)
@@ -977,6 +1022,12 @@ func init() {
 					stockReturn = warehousehttp.NewRecordReturnEndpoint(wiring.returnIntake, wiring.waves)
 				} else {
 					stockReturn = warehousehttp.NewRecordReturnEndpoint(plainReturn, wiring.waves)
+				}
+				plainReceipt := warehousehttp.UnconfiguredReturnReceiptIntake{}
+				if wiring.returnReceiptIntake != nil {
+					returnReceipt = warehousehttp.NewReceiveReturnEndpoint(wiring.returnReceiptIntake, wiring.returns)
+				} else {
+					returnReceipt = warehousehttp.NewReceiveReturnEndpoint(plainReceipt, wiring.returns)
 				}
 				plainPack := warehousehttp.UnconfiguredPackIntake{}
 				if wiring.packIntake != nil {
@@ -1107,9 +1158,13 @@ func init() {
 				{Pattern: "/v1/warehouse/outbound-requests/splits", Handler: customerOutboundSplit},
 				{Pattern: "/v1/warehouse/outbound-requests/supplements", Handler: customerOutboundSupplement},
 				{Pattern: "/v1/warehouse/outbound-requests/cancellations", Handler: customerOutboundCancellation},
+				{Pattern: "/v1/warehouse/return-pre-advices", Handler: customerReturnAdvice},
+				{Pattern: "/v1/warehouse/return-dispositions", Handler: customerReturnDisposition},
 				{Pattern: "/warehouse-fulfillment-outbound-requests", Handler: outboundOnBehalf},
 				{Pattern: "/warehouse-fulfillment-outbound-request-splits", Handler: outboundSplit},
 				{Pattern: "/warehouse-fulfillment-outbound-cancellations", Handler: outboundCancellation},
+				{Pattern: "/warehouse-fulfillment-return-pre-advices", Handler: returnAdvice},
+				{Pattern: "/warehouse-fulfillment-return-dispositions", Handler: returnDisposition},
 				{Pattern: "/warehouse-fulfillment-shortage-policies", Handler: shortagePolicy},
 				{Pattern: "/warehouse-fulfillment-allocation-strategy-adoptions", Handler: allocationStrategy},
 				{Pattern: "/warehouse-fulfillment-waves", Handler: waveRelease},
@@ -1117,6 +1172,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-outbound-checks", Handler: outboundCheck},
 				{Pattern: "/warehouse-fulfillment-packs", Handler: pack},
 				{Pattern: "/warehouse-fulfillment-returns", Handler: stockReturn},
+				{Pattern: "/warehouse-fulfillment-return-receipts", Handler: returnReceipt},
 				{Pattern: "/warehouse-fulfillment-outbound-confirmations", Handler: outboundConfirmation},
 				{Pattern: "/warehouse-fulfillment-pickup-handovers", Handler: pickupHandover},
 				{Pattern: "/warehouse-fulfillment-owner-labels", Handler: ownerLabel},
@@ -1132,6 +1188,31 @@ func init() {
 
 // buildCustomerInboundPreAdviceIntake 装配入库预报货主口的首方 Intake。铸造器与别的首方口同一只。铸造器缺席时不调用本函数，
 // 六口保持字面量未配置。
+func buildCustomerReturnIntake(minter *accessidentity.CustomerClientMinter) (*warehousehttp.CustomerReturnIntake, error) {
+	authenticator, err := whaccess.NewCustomerReturnAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewCustomerReturnIntake(authenticator)
+}
+
+func buildReturnReceiptIntake(
+	verifier accessidentity.OperatorCredentialVerifier,
+	operators accessidentity.OperatorRegistry,
+	devices accessidentity.DeviceRegistry,
+	admission accessidentity.AdmissionScope,
+) (*warehousehttp.ReturnReceiptIntake, error) {
+	minter, err := accessidentity.NewWorkFactMinter(verifier, operators, devices, admission, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: return receipt minter: %w", err)
+	}
+	authenticator, err := whaccess.NewInternalJobAuthenticator(minter, accessidentity.WorkFactReturnReceipt)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewReturnReceiptIntake(authenticator)
+}
+
 func buildCustomerOutboundIntake(minter *accessidentity.CustomerClientMinter) (*warehousehttp.CustomerOutboundIntake, error) {
 	authenticator, err := whaccess.NewCustomerOutboundAuthenticator(minter)
 	if err != nil {

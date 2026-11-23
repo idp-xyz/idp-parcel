@@ -17,7 +17,16 @@ var OutboundRequestDocumentNumberType = docnumber.TypeDeclaration{
 	DateTimeZone:    docnumber.DateTimeZoneFromIssuer,
 }
 
+// ReturnPreAdviceDocumentNumberType 是退货预报的单据号类型声明。日期时区来路与入库预报相同。
+var ReturnPreAdviceDocumentNumberType = docnumber.TypeDeclaration{
+	Code:            "RETURN_PRE_ADVICE",
+	DefaultTemplate: "RT-{yyyy}{mm}{dd}-{seq:5}",
+	DateTimeZone:    docnumber.DateTimeZoneFromIssuer,
+}
+
 // DocumentNumberTypes 交回本上下文声明的全部单据编号类型，由组合根汇总进规则册。
 func DocumentNumberTypes() []docnumber.TypeDeclaration {
-	return []docnumber.TypeDeclaration{InboundPreAdviceDocumentNumberType, OutboundRequestDocumentNumberType}
+	return []docnumber.TypeDeclaration{
+		InboundPreAdviceDocumentNumberType, OutboundRequestDocumentNumberType, ReturnPreAdviceDocumentNumberType,
+	}
 }

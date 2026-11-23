@@ -169,6 +169,12 @@ const (
 	// CustomerCapabilityOutboundCancellation 是出库截单（`/v1/warehouse/outbound-requests/cancellations`，UC-WF-016）。
 	// 不进 customerCapabilitiesAdmittedAtMint：准入两格都是这个字面量。
 	CustomerCapabilityOutboundCancellation CustomerCapability = "OUTBOUND_CANCELLATION"
+	// CustomerCapabilityReturnPreAdviceSubmission 是退货预报提交（`/v1/warehouse/return-pre-advices`，UC-WF-017）。
+	// 不进 customerCapabilitiesAdmittedAtMint：准入两格都是这个字面量。
+	CustomerCapabilityReturnPreAdviceSubmission CustomerCapability = "RETURN_PRE_ADVICE_SUBMISSION"
+	// CustomerCapabilityReturnDisposition 是货主提交回库处置（`/v1/warehouse/return-dispositions`，UC-WF-017）。
+	// 不进 customerCapabilitiesAdmittedAtMint：准入两格都是这个字面量。
+	CustomerCapabilityReturnDisposition CustomerCapability = "RETURN_DISPOSITION"
 )
 
 var customerCapabilities = []CustomerCapability{
@@ -195,6 +201,8 @@ var customerCapabilities = []CustomerCapability{
 	CustomerCapabilityRelabelInstructionWithdrawal,
 	CustomerCapabilityOutboundRequestSubmission,
 	CustomerCapabilityOutboundCancellation,
+	CustomerCapabilityReturnPreAdviceSubmission,
+	CustomerCapabilityReturnDisposition,
 }
 
 // ParseCustomerCapability 按字面取值认能力，大小写不折叠：册里存的就是这些字面量。

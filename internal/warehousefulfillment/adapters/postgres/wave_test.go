@@ -351,6 +351,26 @@ func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
 	if err := waves.CompleteReturn(ctx, tenant, "RET-1", "SYN-FACT-RET"); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("CompleteReturn：%v", err)
 	}
+	returns, err := adapter.NewReturns(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := returns.SaveAdvice(ctx, tenant, ports.ReturnAdvice{ID: valueOf(t, domain.NewReturnAdviceID, "RPA-1"), Owner: valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"), Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), Origin: domain.ReturnOriginCustomer, Key: "k", Tracking: "t", Received: preAdviceNumberingInstant}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveAdvice：%v", err)
+	}
+	if err := returns.SaveReceipt(ctx, tenant, ports.ReturnReceipt{Fact: valueOf(t, domain.NewReturnFactID, "RF-1"), Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), Location: valueOf(t, domain.NewLocationCode, "SYN-LOC-RET"), Goods: valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), Unit: valueOf(t, domain.NewGoodsUnitName, "件"), State: domain.StockStateGood, Quantity: 1, Outcome: "COUNTED", Occurred: preAdviceNumberingInstant}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveReceipt：%v", err)
+	}
+	if err := returns.SaveDisposition(ctx, tenant, ports.ReturnDisposition{Decision: valueOf(t, domain.NewReturnDecisionID, "RD-1"), Fact: valueOf(t, domain.NewReturnFactID, "RF-1"), Destination: domain.ReturnDestinationDestroy, Origin: domain.ReturnOriginCustomer, Decided: preAdviceNumberingInstant}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveDisposition：%v", err)
+	}
+	numbers, err := adapter.NewReturnNumbers(world.db, world.assigner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := numbers.IssueReturnNumber(ctx, tenant, domain.BusinessTimeZone{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("IssueReturnNumber：%v", err)
+	}
 }
 
 func (world receiptWorld) waves(t *testing.T) *application.WaveHandler {
