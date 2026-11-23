@@ -52,7 +52,7 @@
 - **包材**。内容：名称、外廓的长宽高与一个长度单位、重量与一个重量单位、是否停用。各仓共用。四个数值在报文里是字符串，只认 `12` 或 `12.50` 这种写法，整数部分至多 9 位、小数部分至多 6 位，按写出来的位数数；写法不对是坏载荷。数值为零、单位不在内置目录或类别不对，答 `CONTENT_INVALID`。数值按数值比，`12.5` 与 `12.50` 是同一内容。不折算单位，`30 CM` 与 `0.3 M` 是两份内容。
 - **库位类型与包材**在本租户一个仓都没登记时答 `NOT_CONFIGURED`，不落册；登记仓之后原样重交照常受理。
 - **库位**。内容：所属库区、库位类型（可缺）、优先级（可缺的 32 位整数，数字越大越优先）、是否停用。没有与有是不同的内容，优先级 0 与没有优先级是两份内容。所属库区登记后不改。仓、同一个仓下的库区、库位类型须已登记，否则 `REFERENCE_NOT_FOUND`。新指名的库位类型已停用答 `REFERENCE_DEACTIVATED`；沿用上一笔修订里的同一个类型、它后来被停用了，照常受理。不核仓与库区是否停用。
-- 停用的库区与库位「不再作移入目标」还没有做，那要等上架与库内作业。收货确认里，库位已停用仍可入账。
+- 停用的库区与库位不作移入目标。收货确认、整箱收货、库内移入与退货入库碰到停用的库位或库区时不入账；从停用库位移出仍可以。停用的仓另按各口自己的规则。
 
 ## 已实现：商品与仓测
 
@@ -180,7 +180,7 @@
 
 ## 已实现：库内作业
 
-- 四个登记口挂作业事实登记，范围种类 `WAREHOUSE`，引用等于载荷仓，先认证再读载荷：`POST /warehouse-fulfillment-internal-moves`（`INTERNAL_MOVE`，上架、移库与拣选位补货）、`form-conversions`（`FORM_CONVERSION`）、`condition-conversions`（`CONDITION_CONVERSION`）、`shortage-registrations`（`SHORTAGE`）。答复 `REGISTERED` 或 `SHORTAGE_REGISTERED`（201）、`EXISTING_RESULT`、`CONTENT_CONFLICT`、`CONTENT_INVALID`、`WAREHOUSE_NOT_FOUND`、`WAREHOUSE_NOT_ACCEPTING`。停用的仓、库区与库位照记；代理仓不受理。
+- 四个登记口挂作业事实登记，范围种类 `WAREHOUSE`，引用等于载荷仓，先认证再读载荷：`POST /warehouse-fulfillment-internal-moves`（`INTERNAL_MOVE`，上架、移库与拣选位补货）、`form-conversions`（`FORM_CONVERSION`）、`condition-conversions`（`CONDITION_CONVERSION`）、`shortage-registrations`（`SHORTAGE`）。答复 `REGISTERED` 或 `SHORTAGE_REGISTERED`（201）、`EXISTING_RESULT`、`CONTENT_CONFLICT`、`CONTENT_INVALID`、`WAREHOUSE_NOT_FOUND`、`WAREHOUSE_NOT_ACCEPTING`。停用的仓照记，停用的库区与库位不作移入目标；代理仓不受理。
 - 取得走的部分入账，其余各成一份待处理库存差异，写口不拒。没点名入库批次的从早到晚取。移入次品库区的同一笔转为次品。形态转换与带转入单位的补货只入账两头都折成整数个单位的部分，入库批次不另起。短少只记观察，不改账。上架没入账的数量可经 `POST /warehouse-fulfillment-job-discrepancy-approvals` 从源头补进目标位，短少经同一口在所在格调减；决定词与库存调整批准相同，驳回是 `job-discrepancy-rejections`。没登记批准职责时答未配置。形态转换与状态转换经同一口按原作业原因补入账：从源头的转出单位或状态取出，记入差异所在的转入单位或状态。整箱缺箱只在箱已在账上时从所在位移到报告库位，不新起入库批次；箱还不在账上时批准不成立。驳回不改账。占着的整箱仍不批。
 - 次品转良品 `POST /warehouse-fulfillment-condition-restores`，运营决定 `CONDITION_RESTORE`，整份成立或整份不成立，库位须在收货暂存或退货暂存。答复 `RESTORED`、`EXISTING_RESULT`、`SOURCE_CONFLICT`、`NOT_VALID`。
 - 运营查阅：`GET /warehouse-fulfillment-internal-jobs`、`internal-job`、`condition-restore`。冻结、盘点锁定、未分配预占和未拣完的分配都计入占用。整箱移动写 `-1` 与 `+1`，不新起入库批次。

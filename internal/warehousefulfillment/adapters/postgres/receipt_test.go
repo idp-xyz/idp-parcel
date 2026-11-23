@@ -731,8 +731,8 @@ func TestReceiptLocationMustBeReceivingStaging(t *testing.T) {
 		spec.Deactivated = true
 	}))
 	posted := world.confirm(t, receiptCommand(t, "SYN-FACT-OFF", advice.ID().String(), mustReceiptLine(t, receiptLineSpec{observed: "SYN-GOODS-01", quantity: 2})))
-	if posted.Outcome() != application.ConfirmReceiptConfirmed || world.stockOf(t, "SYN-GOODS-01") != 2 || world.adviceStatus(t, advice.ID()) != "RECEIVING" {
-		t.Fatalf("停用后仍收 %s 库存 %d 状态 %s", posted.Outcome(), world.stockOf(t, "SYN-GOODS-01"), world.adviceStatus(t, advice.ID()))
+	if posted.Outcome() != application.ConfirmReceiptContentInvalid || world.stockOf(t, "SYN-GOODS-01") != 0 || world.adviceStatus(t, advice.ID()) != "ADVISED" || world.receiptCount(t) != 0 {
+		t.Fatalf("停用库位仍收 %s 库存 %d 状态 %s", posted.Outcome(), world.stockOf(t, "SYN-GOODS-01"), world.adviceStatus(t, advice.ID()))
 	}
 }
 

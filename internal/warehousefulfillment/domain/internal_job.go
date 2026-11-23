@@ -275,6 +275,7 @@ const (
 	InternalJobIssueLineShape
 	InternalJobIssueNotEnough
 	InternalJobIssueHeld
+	InternalJobIssueMoveInDeactivated
 )
 
 func (kind InternalJobIssueKind) String() string {
@@ -317,6 +318,8 @@ func (kind InternalJobIssueKind) String() string {
 		return "NOT_ENOUGH"
 	case InternalJobIssueHeld:
 		return "HELD"
+	case InternalJobIssueMoveInDeactivated:
+		return "MOVE_IN_DEACTIVATED"
 	default:
 		return ""
 	}

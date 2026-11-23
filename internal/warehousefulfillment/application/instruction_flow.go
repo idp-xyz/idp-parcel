@@ -616,6 +616,6 @@ func (handler *InstructionHandler) executionPlace(ctx context.Context, tenant do
 		return 0, false, err
 	}
 	usage := zone.Content().Usage()
-	places[code.String()] = placeInfo{usage: usage}
+	places[code.String()] = placeInfo{usage: usage, deactivated: location.Content().Deactivated() || zone.Content().Deactivated()}
 	return usage, true, nil
 }

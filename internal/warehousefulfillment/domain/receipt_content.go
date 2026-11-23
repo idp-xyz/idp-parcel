@@ -19,6 +19,7 @@ const (
 	ReceiptIssueShapeMismatch
 	ReceiptIssueWarehouseMismatch
 	ReceiptIssueUnclaimedArrivalInvalid
+	ReceiptIssueLocationDeactivated
 )
 
 func (kind ReceiptContentIssueKind) String() string {
@@ -47,6 +48,8 @@ func (kind ReceiptContentIssueKind) String() string {
 		return "WAREHOUSE_MISMATCH"
 	case ReceiptIssueUnclaimedArrivalInvalid:
 		return "UNCLAIMED_ARRIVAL_INVALID"
+	case ReceiptIssueLocationDeactivated:
+		return "LOCATION_DEACTIVATED"
 	default:
 		return ""
 	}

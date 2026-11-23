@@ -441,6 +441,9 @@ func (handler *ReturnHandler) returnStaging(ctx context.Context, tenant domain.T
 	if err != nil {
 		return false, err
 	}
+	if place.Content().Deactivated() || zone.Content().Deactivated() {
+		return false, nil
+	}
 	return found && zone.Content().Usage() == domain.ZoneUsageReturnStaging, nil
 }
 

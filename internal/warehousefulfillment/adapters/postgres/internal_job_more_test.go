@@ -101,9 +101,8 @@ func TestInternalJobReplenishFifoDeactivatedAndCondition(t *testing.T) {
 	})
 	named.Lines = []domain.InternalJobLine{namedLine}
 	namedResult := world.registerJob(t, handler, named)
-	namedJob, _ := namedResult.Job()
-	if namedResult.Outcome() != application.RegisterInternalJobRegistered || namedJob.Lines()[0].Result().Posted != 3 || world.stockUnitAt(t, "SYN-LOC-OFF", "件") != 3 {
-		t.Fatalf("点名晚批次、目标已停用 %s 入账 %d", namedResult.Outcome(), namedJob.Lines()[0].Result().Posted)
+	if namedResult.Outcome() != application.RegisterInternalJobContentInvalid || world.stockUnitAt(t, "SYN-LOC-OFF", "件") != 0 || world.stockUnitAt(t, "SYN-LOC-RCV", "件") != 3 {
+		t.Fatalf("点名晚批次、目标已停用 %s 暂存 %d", namedResult.Outcome(), world.stockUnitAt(t, "SYN-LOC-RCV", "件"))
 	}
 
 	pendingAdvice := world.adviseGoods(t, "REQ-PEND", "SYN-GOODS-01", "件", 4)

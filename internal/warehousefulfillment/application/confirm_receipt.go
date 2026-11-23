@@ -190,7 +190,7 @@ func NewConfirmReceiptHandler(
 //  6. 还能收货才整条先核。有任何一处不合就 CONTENT_INVALID 并逐行指出全部不合，一行都不入账，也不推进预报：
 //     库位在这个仓不存在，或所属库区不是收货暂存；认得出的商品，计量单位不是入账这一刻当前修订的包装层级；
 //     跟踪批号或效期的没带，不跟踪的却带了；贴标别名不是该商品在事实发生时刻生效的那一笔修订上、且当时有效的平台商品码。
-//     库位已停用仍可入账。识别码按事实发生时刻生效的修订解析。解不出的码是认不出，不把整条判死，也不跨货主找。
+//     库位或它的库区已停用，整笔不入账。识别码按事实发生时刻生效的修订解析。解不出的码是认不出，不把整条判死，也不跨货主找。
 //     形态相符而且是整箱入库时，核的是箱行的库位，然后入整箱账，不进商品库存。
 //  7. 核过之后再 NoteReceiptStarted，把已预报推进收货中。这一步必须先于入账：
 //     入账会去拿货主锁与记数锁。若先拿货主锁再拿预报锁，会和改跟踪属性那一边成环——
@@ -340,7 +340,7 @@ func (handler *ConfirmReceiptHandler) screen(
 	if len(command.Lines) == 0 {
 		return nil, []domain.ReceiptContentIssue{domain.WholeReceiptIssue(domain.ReceiptIssueNoLines)}, nil
 	}
-	seenLocation := map[string]bool{}
+	seenLocation := map[string]domain.ReceiptContentIssueKind{}
 	var prepared []preparedLine
 	var issues []domain.ReceiptContentIssue
 	for index, line := range command.Lines {
@@ -348,17 +348,17 @@ func (handler *ConfirmReceiptHandler) screen(
 			issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueQuantityNotPositive))
 		}
 		location := line.Location().String()
-		rejected, seen := seenLocation[location]
+		kind, seen := seenLocation[location]
 		if !seen {
 			var err error
-			rejected, err = handler.locationRejected(ctx, command.Tenant, command.Warehouse, line.Location())
+			kind, err = handler.locationIssue(ctx, command.Tenant, command.Warehouse, line.Location())
 			if err != nil {
 				return nil, nil, err
 			}
-			seenLocation[location] = rejected
+			seenLocation[location] = kind
 		}
-		if rejected {
-			issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueLocationNotReceiving))
+		if kind != 0 {
+			issues = append(issues, domain.ReceiptLineIssue(index, kind))
 		}
 		known, err := handler.resolve(ctx, advice, command.OccurredAt, line)
 		if err != nil {
@@ -377,30 +377,34 @@ func (handler *ConfirmReceiptHandler) screen(
 	return prepared, nil, nil
 }
 
-func (handler *ConfirmReceiptHandler) locationRejected(
+// locationIssue 交回这一格库位不能收货的种类。零值是可以收。停用的库位或库区不作移入目标。
+func (handler *ConfirmReceiptHandler) locationIssue(
 	ctx context.Context,
 	tenant domain.TenantID,
 	warehouse domain.WarehouseCode,
 	code domain.LocationCode,
-) (bool, error) {
+) (domain.ReceiptContentIssueKind, error) {
 	location, found, err := handler.locations.LoadLatestLocation(ctx, tenant, warehouse, code)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	if !found {
-		return true, nil
+		return domain.ReceiptIssueLocationNotReceiving, nil
 	}
 	zone, found, err := handler.zones.LoadLatestZone(ctx, tenant, warehouse, location.Content().ZoneCode())
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	if !found {
-		return false, fmt.Errorf("库位 %s 已登记，它的库区 %s 读不到", code, location.Content().ZoneCode())
+		return 0, fmt.Errorf("库位 %s 已登记，它的库区 %s 读不到", code, location.Content().ZoneCode())
+	}
+	if location.Content().Deactivated() || zone.Content().Deactivated() {
+		return domain.ReceiptIssueLocationDeactivated, nil
 	}
 	if zone.Content().Usage() != domain.ZoneUsageReceivingStaging {
-		return true, nil
+		return domain.ReceiptIssueLocationNotReceiving, nil
 	}
-	return false, nil
+	return 0, nil
 }
 
 func (handler *ConfirmReceiptHandler) resolve(

@@ -213,7 +213,8 @@ func (handler *RegisterInternalJobHandler) Register(ctx context.Context, command
 }
 
 type placeInfo struct {
-	usage domain.ZoneUsage
+	usage       domain.ZoneUsage
+	deactivated bool
 }
 
 func (handler *RegisterInternalJobHandler) screen(
@@ -265,6 +266,8 @@ func (handler *RegisterInternalJobHandler) screenLine(
 			}
 			if !found {
 				add(domain.InternalJobIssueLocationNotFound)
+			} else if places[line.Target().String()].deactivated {
+				add(domain.InternalJobIssueMoveInDeactivated)
 			} else if usage != domain.ZoneUsageReceivingStaging && usage != domain.ZoneUsageStorage {
 				add(domain.InternalJobIssueCartonZone)
 			}
@@ -356,6 +359,10 @@ func (handler *RegisterInternalJobHandler) screenMove(
 		add(domain.InternalJobIssueLocationNotFound)
 		return issues, nil
 	}
+	if places[line.Target().String()].deactivated {
+		add(domain.InternalJobIssueMoveInDeactivated)
+		return issues, nil
+	}
 	if targetUsage == domain.ZoneUsageOutboundStaging {
 		add(domain.InternalJobIssueOutboundStaging)
 	}
@@ -408,7 +415,7 @@ func (handler *RegisterInternalJobHandler) place(
 		return 0, false, fmt.Errorf("库位 %s 已登记，它的库区 %s 读不到", code, location.Content().ZoneCode())
 	}
 	usage := zone.Content().Usage()
-	places[code.String()] = placeInfo{usage: usage}
+	places[code.String()] = placeInfo{usage: usage, deactivated: location.Content().Deactivated() || zone.Content().Deactivated()}
 	return usage, true, nil
 }
 

@@ -100,21 +100,21 @@ func (handler *ConfirmReceiptHandler) screenCarton(
 	if len(command.CartonLines) == 0 {
 		return nil, []domain.ReceiptContentIssue{domain.WholeReceiptIssue(domain.ReceiptIssueNoLines)}, nil
 	}
-	seenLocation := map[string]bool{}
+	seenLocation := map[string]domain.ReceiptContentIssueKind{}
 	var issues []domain.ReceiptContentIssue
 	for index, line := range command.CartonLines {
 		location := line.Location().String()
-		rejected, seen := seenLocation[location]
+		kind, seen := seenLocation[location]
 		if !seen {
 			var err error
-			rejected, err = handler.cartonLocationRejected(ctx, command.Tenant, command.Warehouse, line.Location())
+			kind, err = handler.cartonLocationIssue(ctx, command.Tenant, command.Warehouse, line.Location())
 			if err != nil {
 				return nil, nil, err
 			}
-			seenLocation[location] = rejected
+			seenLocation[location] = kind
 		}
-		if rejected {
-			issues = append(issues, domain.ReceiptLineIssue(index, domain.ReceiptIssueLocationNotReceiving))
+		if kind != 0 {
+			issues = append(issues, domain.ReceiptLineIssue(index, kind))
 		}
 	}
 	if len(issues) > 0 {
@@ -123,32 +123,35 @@ func (handler *ConfirmReceiptHandler) screenCarton(
 	return command.CartonLines, nil, nil
 }
 
-// cartonLocationRejected 核收货库位。整箱只许停在收货暂存、存储与待出库，这一段的收货再收窄到收货暂存。
-func (handler *ConfirmReceiptHandler) cartonLocationRejected(
+// cartonLocationIssue 核整箱收货库位。只许收货暂存。零值是可以收。停用的库位或库区不作移入目标。
+func (handler *ConfirmReceiptHandler) cartonLocationIssue(
 	ctx context.Context,
 	tenant domain.TenantID,
 	warehouse domain.WarehouseCode,
 	code domain.LocationCode,
-) (bool, error) {
+) (domain.ReceiptContentIssueKind, error) {
 	location, found, err := handler.locations.LoadLatestLocation(ctx, tenant, warehouse, code)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	if !found {
-		return true, nil
+		return domain.ReceiptIssueLocationNotReceiving, nil
 	}
 	zone, found, err := handler.zones.LoadLatestZone(ctx, tenant, warehouse, location.Content().ZoneCode())
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	if !found {
-		return false, fmt.Errorf("库位 %s 已登记，它的库区 %s 读不到", code, location.Content().ZoneCode())
+		return 0, fmt.Errorf("库位 %s 已登记，它的库区 %s 读不到", code, location.Content().ZoneCode())
+	}
+	if location.Content().Deactivated() || zone.Content().Deactivated() {
+		return domain.ReceiptIssueLocationDeactivated, nil
 	}
 	usage := zone.Content().Usage()
 	if usage != domain.ZoneUsageReceivingStaging || !domain.CartonStockZoneAllowed(usage) {
-		return true, nil
+		return domain.ReceiptIssueLocationNotReceiving, nil
 	}
-	return false, nil
+	return 0, nil
 }
 
 func markCartonsNotReceivable(lines []domain.CartonReceiptLine) ([]domain.CartonReceiptLine, error) {
