@@ -67,3 +67,31 @@ func TestProjectRefusesAFingerprintedVersionReference(t *testing.T) {
 		t.Fatalf("应点名那张价表，答的是 %s：%s", gap.Where, gap.Conclusion)
 	}
 }
+
+// 对客价格表与完整投影共用同一份表和金额行，只在 disclosedCardField 那一处拿掉价格方向授权。
+func TestDisclosedRateSheetKeepsAmountsAndDropsDirectionAuthorization(t *testing.T) {
+	reading := read(t, sellCard().bytes(t))
+	plan := validated(t, reading)
+	full, fullGap := projectPriceCard(plan, reading.Content.DirectionAuthorization)
+	if fullGap.Where != "" {
+		t.Fatal(fullGap.Conclusion)
+	}
+	projection, err := Reader{}.ProjectDisclosedRateSheet(plan, reading.Content.DirectionAuthorization)
+	if err != nil || projection.Gap.Where != "" {
+		t.Fatalf("对客价格表：%v %s", err, projection.Gap.Conclusion)
+	}
+	fullText := string(full.xlsx)
+	text := string(projection.Document.Body)
+	authID := reading.Content.DirectionAuthorization.ID()
+	if !strings.Contains(fullText, authID) || !strings.Contains(fullText, "directionAuthorizationId") {
+		t.Fatal("完整投影应当还带着价格方向授权，否则看不出对客表删掉了什么")
+	}
+	if strings.Contains(text, authID) || strings.Contains(text, "directionAuthorizationId") || strings.Contains(text, "directionAuthorizationVersion") {
+		t.Fatal("对客价格表不该出现价格方向授权")
+	}
+	for _, amount := range []string{"55", "18", "48", "15", "5"} {
+		if !strings.Contains(text, amount) || !strings.Contains(fullText, amount) {
+			t.Fatalf("金额 %s 应当在两份投影里都在", amount)
+		}
+	}
+}

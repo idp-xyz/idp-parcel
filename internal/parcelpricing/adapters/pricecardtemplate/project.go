@@ -51,6 +51,26 @@ func (Reader) ProjectPriceCardWorkbook(
 
 var errUnknownWorkbookCarrier = errors.New("pricecardtemplate: 不认的工作簿载体")
 
+// ProjectDisclosedRateSheet 见 ports.DisclosedRateSheetProjector。
+// 电子表格只留 disclosedCardField 放行的 card 格，价格表的金额行与完整投影逐格相同。
+func (Reader) ProjectDisclosedRateSheet(
+	plan domain.PricingPlanVersion,
+	authorization domain.VersionReference,
+) (ports.PriceCardWorkbookProjection, error) {
+	projected, gap := projectWorkbook(plan, authorization, true)
+	if gap.Where != "" {
+		return ports.PriceCardWorkbookProjection{Gap: ports.PriceCardWorkbookGap{Where: gap.Where, Conclusion: gap.Conclusion}}, nil
+	}
+	return ports.PriceCardWorkbookProjection{Document: ports.PriceCardWorkbookDocument{
+		TemplateVersion: projected.version,
+		FileName:        "rate-sheet.xlsx",
+		Body:            projected.xlsx,
+		MediaType:       priceCardWorkbookSheetType,
+	}}, nil
+}
+
+var _ ports.DisclosedRateSheetProjector = Reader{}
+
 // projectedWorkbook 是一张卡反推出来的两种载体。json 给读口与再导入，xlsx 给下载。
 // 表、列与封闭取值都用本包的 sheets、cardFields、closedVocabulary，不另写一套。
 type projectedWorkbook struct {
@@ -71,17 +91,35 @@ type workbookGap struct {
 // 进位只增不改，留空的新增格读出来与没写是同一张卡。
 // 领域不保留模板节点标识，内容摘要也不含它；条件树与计算树按先序重新编号，再导入得到的是同一棵树。
 func projectPriceCard(plan domain.PricingPlanVersion, authorization domain.VersionReference) (projectedWorkbook, workbookGap) {
-	p := &projector{plan: plan, authorization: authorization}
+	return projectWorkbook(plan, authorization, false)
+}
+
+// disclosedCardField 是对客价格表上 card 表留得下的格。只在这一处定义。
+// 价格方向授权引用是内部引用，不进交给客户的表。其余 card 格与各张价格表都留着。
+func disclosedCardField(key string) bool {
+	switch key {
+	case "directionAuthorizationId", "directionAuthorizationVersion":
+		return false
+	default:
+		return true
+	}
+}
+
+func projectWorkbook(plan domain.PricingPlanVersion, authorization domain.VersionReference, disclosed bool) (projectedWorkbook, workbookGap) {
+	p := &projector{plan: plan, authorization: authorization, disclosed: disclosed}
 	if !p.screen() || !p.emit() {
 		return projectedWorkbook{}, p.gap
-	}
-	jsonBody, err := p.jsonBytes()
-	if err != nil {
-		return projectedWorkbook{}, workbookGap{Where: "工作簿", Conclusion: "结构化工作簿写不出来"}
 	}
 	sheetBody, err := p.xlsxBytes()
 	if err != nil {
 		return projectedWorkbook{}, workbookGap{Where: "工作簿", Conclusion: "电子表格写不出来"}
+	}
+	if disclosed {
+		return projectedWorkbook{version: p.version, xlsx: sheetBody}, workbookGap{}
+	}
+	jsonBody, err := p.jsonBytes()
+	if err != nil {
+		return projectedWorkbook{}, workbookGap{Where: "工作簿", Conclusion: "结构化工作簿写不出来"}
 	}
 	return projectedWorkbook{version: p.version, json: jsonBody, xlsx: sheetBody}, workbookGap{}
 }
@@ -89,6 +127,7 @@ func projectPriceCard(plan domain.PricingPlanVersion, authorization domain.Versi
 type projector struct {
 	plan          domain.PricingPlanVersion
 	authorization domain.VersionReference
+	disclosed     bool
 	version       string
 	gap           workbookGap
 	remote        bool
@@ -309,6 +348,9 @@ func (p *projector) emitCard() bool {
 	}
 	for _, field := range cardFields {
 		if !availableIn(cardFieldSince[field.key], p.version) {
+			continue
+		}
+		if p.disclosed && !disclosedCardField(field.key) {
 			continue
 		}
 		if omittableCardFields[field.key] && values[field.key] == "" {

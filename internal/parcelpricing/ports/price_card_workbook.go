@@ -75,3 +75,12 @@ type PriceCardWorkbookProjector interface {
 		carrier PriceCardWorkbookCarrier,
 	) (PriceCardWorkbookProjection, error)
 }
+
+// DisclosedRateSheetProjector 把同一份投影写成交给客户的价格表。
+// 哪些格留得下只在投影实现里定义一处；这一口不另写一套表与列。
+type DisclosedRateSheetProjector interface {
+	ProjectDisclosedRateSheet(
+		plan domain.PricingPlanVersion,
+		authorization domain.VersionReference,
+	) (PriceCardWorkbookProjection, error)
+}
