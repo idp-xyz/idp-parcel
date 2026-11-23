@@ -833,6 +833,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/reads/inbound-pre-advices":           {http.MethodGet, faceCustomerClient},
 		"/v1/warehouse/reads/inbound-pre-advice":            {http.MethodGet, faceCustomerClient},
 		"/v1/warehouse/reads/inbound-pre-advice-by-number":  {http.MethodGet, faceCustomerClient},
+		"/v1/warehouse/reads/warehouses":                    {http.MethodGet, faceCustomerClient},
 
 		discrepancyConclusionLine:                           {http.MethodPost, faceOperationDecision},
 		customerDiscrepancyConclusionLine:                   {http.MethodPost, faceCustomerClient},
@@ -944,6 +945,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/reads/inbound-pre-advices":           accessidentity.CustomerCapabilityWarehouseRead,
 		"/v1/warehouse/reads/inbound-pre-advice":            accessidentity.CustomerCapabilityWarehouseRead,
 		"/v1/warehouse/reads/inbound-pre-advice-by-number":  accessidentity.CustomerCapabilityWarehouseRead,
+		"/v1/warehouse/reads/warehouses":                    accessidentity.CustomerCapabilityWarehouseRead,
 		customerDiscrepancyConclusionLine:                   accessidentity.CustomerCapabilityReceiptDiscrepancyConclusion,
 		"/v1/warehouse/processing-instructions":             accessidentity.CustomerCapabilityProcessingInstructionSubmission,
 		"/v1/warehouse/processing-instructions/withdrawals": accessidentity.CustomerCapabilityProcessingInstructionWithdrawal,

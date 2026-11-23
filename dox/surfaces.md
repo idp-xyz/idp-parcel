@@ -190,6 +190,7 @@
 | GET | `/v1/warehouse/reads/inbound-pre-advice` | 按预报标识读自己的一份入库预报 |
 | GET | `/v1/warehouse/reads/inbound-pre-advice-by-number` | 按单据号读自己的一份入库预报 |
 | GET | `/v1/warehouse/reads/inbound-pre-advices` | 读自己的入库预报列表 |
+| GET | `/v1/warehouse/reads/warehouses` | 读本租户各仓的当前修订 |
 | POST | `/v1/warehouse/receipt-discrepancy-conclusions` | 对一份收货差异作结论 |
 
 部署没打开仓配开关时，上表 `/v1/warehouse/` 各口不提供业务答复。

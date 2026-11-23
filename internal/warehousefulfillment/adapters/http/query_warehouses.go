@@ -67,3 +67,49 @@ func NewQueryWarehousesEndpoint(intake CatalogueIntake, reader WarehouseCatalogu
 		})
 	})
 }
+
+type customerWarehouseListResponse struct {
+	Outcome    string                  `json:"outcome"`
+	Warehouses []customerWarehouseBody `json:"warehouses"`
+	Page       cataloguepage.Page      `json:"page"`
+}
+
+// NewListCustomerWarehousesEndpoint 交回货主列出本租户各仓当前修订的入口（GET /v1/warehouse/reads/warehouses）。
+// 读的是运营列表同一只仓册，不另做一套。租户取自信封。查询串自带租户、货主或登记责任方是坏查询。空册答空数组。
+func NewListCustomerWarehousesEndpoint(intake CustomerInboundPreAdvicePorts, reader WarehouseCatalogueReader) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if refuseCustomerMethod(response, request, http.MethodGet) {
+			return
+		}
+		identity, err := intake.IntakeWarehouseRead(request.Context(), request)
+		if err != nil {
+			answerCustomerIntake(response, request, err)
+			return
+		}
+		if reason := refuseCarriedQueryIdentity(request); reason != "" {
+			writeCustomerProblem(response, request, http.StatusBadRequest, codeMalformedRequest, reason)
+			return
+		}
+		values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+		if err != nil {
+			writeCustomerQueryProblem(response, request, err)
+			return
+		}
+		pageQuery, err := ports.WarehousePages.Decode(values)
+		if err != nil {
+			writeCustomerQueryProblem(response, request, err)
+			return
+		}
+		page, err := reader.ListWarehouses(request.Context(), identity.Tenant, operatorCatalogueReadLimit, pageQuery)
+		if err != nil {
+			slog.ErrorContext(request.Context(), "customer warehouse list did not form an answer")
+			writeCustomerProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed, "")
+			return
+		}
+		writeJSON(response, http.StatusOK, customerWarehouseListResponse{
+			Outcome:    outcomeWarehousesListed,
+			Warehouses: customerWarehouseBodiesOfRows(page.Rows),
+			Page:       page.Page(operatorCatalogueReadLimit),
+		})
+	})
+}

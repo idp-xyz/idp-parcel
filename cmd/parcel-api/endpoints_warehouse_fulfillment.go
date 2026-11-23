@@ -228,6 +228,10 @@ func init() {
 				ownIntake: true, warehouseFulfillment: true,
 				probe: "/v1/warehouse/reads/inbound-pre-advice-by-number?documentNumber=IB-20261120-00001",
 			},
+			"/v1/warehouse/reads/warehouses": {
+				method: http.MethodGet, face: customerClientFace(accessidentity.CustomerCapabilityWarehouseRead),
+				ownIntake: true, warehouseFulfillment: true,
+			},
 			// 收货差异结论代录挂运营决定。准入的能力词与事实类型词都是这一种决定的字面量。不带决定标识。
 			"/warehouse-fulfillment-receipt-discrepancy-conclusion-on-behalf": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionReceiptDiscrepancyRecordOnBehalf), warehouseFulfillment: true,
@@ -810,6 +814,7 @@ func init() {
 			customerNotice := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			customerWithdrawal := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			customerList := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
+			customerWarehouses := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
 			customerOne := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
 			customerByNumber := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodGet))
 			customerConclusion := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
@@ -946,6 +951,7 @@ func init() {
 				customerList = warehousehttp.NewListCustomerInboundPreAdvicesEndpoint(customerPorts, wiring.preAdviceQueries)
 				customerOne = warehousehttp.NewGetCustomerInboundPreAdviceEndpoint(customerPorts, wiring.preAdviceQueries)
 				customerByNumber = warehousehttp.NewGetCustomerInboundPreAdviceByNumberEndpoint(customerPorts, wiring.preAdviceQueries)
+				customerWarehouses = warehousehttp.NewListCustomerWarehousesEndpoint(customerPorts, wiring.catalogue)
 				conclusionPorts := warehousehttp.OpenCustomerDiscrepancyConclusionIntake(wiring.customerConclusion)
 				customerConclusion = warehousehttp.NewConcludeDiscrepancyEndpoint(conclusionPorts, wiring.discrepancyConclusion)
 				instructionPorts := warehousehttp.OpenCustomerInstructionIntake(wiring.customerInstructions)
@@ -1177,6 +1183,7 @@ func init() {
 				{Pattern: "/v1/warehouse/reads/inbound-pre-advices", Handler: customerList},
 				{Pattern: "/v1/warehouse/reads/inbound-pre-advice", Handler: customerOne},
 				{Pattern: "/v1/warehouse/reads/inbound-pre-advice-by-number", Handler: customerByNumber},
+				{Pattern: "/v1/warehouse/reads/warehouses", Handler: customerWarehouses},
 				{Pattern: "/v1/warehouse/receipt-discrepancy-conclusions", Handler: customerConclusion},
 				{Pattern: "/v1/warehouse/processing-instructions", Handler: customerProcessing},
 				{Pattern: "/v1/warehouse/processing-instructions/withdrawals", Handler: customerProcessingWithdrawal},
