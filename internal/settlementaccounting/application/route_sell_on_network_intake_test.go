@@ -175,6 +175,34 @@ func TestAnAccountWithoutTheShipmentMomentDoesNotTrigger(t *testing.T) {
 	}
 }
 
+func TestAnUnregisteredAccountOnAShipmentStillRecordsTheParcelStall(t *testing.T) {
+	handler, parcel, registry := shipmentRoute(t, twoMemberPicture(true, true), true, "PER_SHIPMENT")
+	parcel.accounts.accounts = map[string]domain.SettlementAccountID{}
+	command := parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "network-intake/SYN-PARCEL-1/NODE_INTAKE/v1", parcelMomentNow)
+
+	result, err := handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.SellEvaluationRequestUnconfigured ||
+		result.UnconfiguredReason() != application.SellRequestSettlementAccountNotRegistered {
+		t.Fatalf("结果 = %s/%s，想要未配置、账户没登记", result.Outcome(), result.UnconfiguredReason())
+	}
+	if cause, stalled := result.StopCause(); !stalled || cause != domain.StopSettlementAccountNotRegistered {
+		t.Fatalf("停因 = %s %v，想要账户没登记", cause, stalled)
+	}
+	stall, found := parcel.stalls.sell[sellStallKey(command.TenantID, domain.SellEvaluationRequestNaturalKey{
+		Parcel: command.Parcel, Moment: command.Moment,
+	})]
+	if !found || stall.Cause() != domain.StopSettlementAccountNotRegistered || stall.Source() != command.Source ||
+		!stall.PricingBasisAt().Equal(command.PricingBasisAt) {
+		t.Fatalf("发起停办 found=%v cause=%s，想要原来那本册记下这一格", found, stall.Cause())
+	}
+	if len(registry.saved) != 0 || parcel.registry.saves != 0 {
+		t.Fatalf("账户没登记却落了委托请求 %d 份、包裹请求 %d 份", len(registry.saved), parcel.registry.saves)
+	}
+}
+
 func TestAShipmentCardDoesNotAlsoRequestParcelCharges(t *testing.T) {
 	handler, parcel, registry := shipmentRoute(t, twoMemberPicture(true, true), true, "PER_SHIPMENT")
 	result, err := handler.Handle(context.Background(), parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "network-intake/SYN-PARCEL-1/NODE_INTAKE/v1", parcelMomentNow))

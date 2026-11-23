@@ -7,6 +7,7 @@ import (
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -64,6 +65,32 @@ func TestShipmentSellRequestRefusesAWriteOutsideATransaction(t *testing.T) {
 	}
 	if _, err := requests.RecordConclusion(t.Context(), record.Key, domain.NewZeroTotalSellEvaluationRequestConclusion()); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("事务外 RecordConclusion = %v，想要 ErrTransactionRequired", err)
+	}
+}
+
+func TestShipmentSellEvaluationRequestHandoffRefusesToRunOutsideATransaction(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	handoff, err := adapter.NewOutboxShipmentSellEvaluationRequestHandoff(db, store, saHandoffClock{at: time.Now().UTC()})
+	if err != nil {
+		t.Fatalf("构造委托级请求交接：%v", err)
+	}
+	request := shipmentSellRequest(t)
+	record := ports.ShipmentSellEvaluationRequestRecord{
+		Key: ports.ShipmentSellEvaluationRequestKey{
+			TenantID: settlementTenant(t), Request: request.ID(),
+		},
+		Request: request, RecordedAt: time.Now().UTC(), State: domain.SellRequestSubmitted,
+	}
+	if err := handoff.HandOffShipmentSellEvaluationRequest(t.Context(), record); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("事务外 HandOffShipmentSellEvaluationRequest = %v，想要 ErrTransactionRequired", err)
 	}
 }
 

@@ -96,6 +96,11 @@ func (handler *RouteSellOnNetworkIntakeHandler) Handle(
 		return RequestSellEvaluationOnParcelMomentResult{}, err
 	}
 	if halted != nil {
+		// 发起停办只写在包裹那本册上。账户没登记时改道自己答未配置，这一拍没有格子，登记账户之后续办读不到它。
+		// 包裹坐在委托上也不改这一句：委托级请求要等账户，停办仍是原来那一格。
+		if halted.UnconfiguredReason() == SellRequestSettlementAccountNotRegistered {
+			return handler.deps.Parcels.Handle(ctx, command)
+		}
 		return *halted, nil
 	}
 	if len(scopes) == 0 {
