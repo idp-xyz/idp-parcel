@@ -68,6 +68,21 @@ type QuotedPriceReader interface {
 	ReadQuotedPrice(ctx context.Context, query QuotedPriceQuery) (QuotedPriceFact, error)
 }
 
+// RegisteredPriceFact 是所引方案版本在价卡册上的两件事实，加上发布时记下的不透明依据。
+// 在册与此刻还能被选中是两件事：退役或被后继截止的版本仍在册，但一刻也选不中。
+// PublicationBasis 原样交回，本上下文自己拿它和发出标识比，计价不解释它。
+type RegisteredPriceFact struct {
+	OnRegister          bool
+	SelectsNow          bool
+	PublicationBasis    string
+	HasPublicationBasis bool
+}
+
+// RegisteredPriceReader 用计价已有的选用读法回答这一版此刻还能不能被选中。
+type RegisteredPriceReader interface {
+	ReadRegisteredPrice(ctx context.Context, tenant domain.TenantID, planID, planVersion string, at time.Time) (RegisteredPriceFact, error)
+}
+
 // QuotationAppendOutcome 是写入落点。重放不改行，冲突也不改行。
 type QuotationAppendOutcome uint8
 

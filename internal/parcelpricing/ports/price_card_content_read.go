@@ -21,6 +21,9 @@ type PriceCardContent struct {
 	PublicationApprover string
 	RegisteredAt        time.Time
 	Document            json.RawMessage
+	// PublicationBasis 是发布时记下的不透明依据。没记下时 HasPublicationBasis 为假，空串不代表「依据是空的」。
+	PublicationBasis    string
+	HasPublicationBasis bool
 }
 
 // PriceCardContentRead 按（租户 + 方案版本引用）读回一版价卡的登记内容。与目录列面（PriceCardCatalogueRead）分开：

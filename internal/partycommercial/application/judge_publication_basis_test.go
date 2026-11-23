@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
@@ -83,6 +84,6 @@ func (view *publicationView) AcceptedQuotationReply(context.Context, domain.Tena
 	return view.digest, true, true, nil
 }
 
-func (view *publicationView) ContractNamesPricingScope(context.Context, domain.TenantID, string, string) (bool, error) {
+func (view *publicationView) ContractNamesPricingScope(context.Context, domain.TenantID, string, string, time.Time) (bool, error) {
 	return false, nil
 }

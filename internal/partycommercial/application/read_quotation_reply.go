@@ -27,13 +27,41 @@ type QuotationReadingDetail struct {
 	Effectiveness            QuotationEffectiveness
 }
 
+// QuotationPublicationRule 是租户登记的那道门，与这一条报价自己是不是有效接受分开。
+// 没登记不设门，读面答未配置，不把「还没带依据」写成规则本身。
+type QuotationPublicationRule uint8
+
+const (
+	QuotationPublicationRuleInvalid QuotationPublicationRule = iota
+	QuotationPublicationRuleUnconfigured
+	QuotationPublicationRuleRequired
+	QuotationPublicationRuleNotRequired
+)
+
+func (rule QuotationPublicationRule) String() string {
+	switch rule {
+	case QuotationPublicationRuleUnconfigured:
+		return "UNCONFIGURED"
+	case QuotationPublicationRuleRequired:
+		return "REQUIRED"
+	case QuotationPublicationRuleNotRequired:
+		return "NOT_REQUIRED"
+	default:
+		return ""
+	}
+}
+
 // QuotationEffectiveness 是这一条发出离「这位客户用上这套价」还差什么。不另存。
-// 合同还没指名这个计价范围时，下一步是冻着的换来源，不在这里发布新合同。
+// 三格都成立才是已生效：所引价格内容已在册、这一版此刻仍可被选中、这位客户此刻适用的合同指名了这个范围。
+// 合同还没指名时，下一步是冻着的换来源，不在这里发布新合同。
 type QuotationEffectiveness struct {
 	PriceOnRegister bool
+	SelectsNow      bool
 	Scope           string
 	ScopeNamed      bool
-	Requirement     string
+	Requirement     QuotationPublicationRule
+	ValidAcceptance bool
+	RecordedBasis   bool
 	NextStep        string
 }
 
@@ -43,6 +71,7 @@ type ReadQuotationHandler struct {
 	replies     ports.QuotationReplyStore
 	prices      ports.QuotedPriceReader
 	publication ports.QuotationPublicationView
+	registered  ports.RegisteredPriceReader
 }
 
 func NewReadQuotationHandler(
@@ -50,11 +79,14 @@ func NewReadQuotationHandler(
 	replies ports.QuotationReplyStore,
 	prices ports.QuotedPriceReader,
 	publication ports.QuotationPublicationView,
+	registered ports.RegisteredPriceReader,
 ) (*ReadQuotationHandler, error) {
 	if sends == nil || replies == nil || prices == nil {
 		return nil, fmt.Errorf("party commercial: quotation reading needs the send store, the reply store and the price reader")
 	}
-	return &ReadQuotationHandler{sends: sends, replies: replies, prices: prices, publication: publication}, nil
+	return &ReadQuotationHandler{
+		sends: sends, replies: replies, prices: prices, publication: publication, registered: registered,
+	}, nil
 }
 
 func (handler *ReadQuotationHandler) Get(
@@ -89,7 +121,7 @@ func (handler *ReadQuotationHandler) Get(
 	if err != nil {
 		return QuotationReadingDetail{}, err
 	}
-	effectiveness, err := handler.effectiveness(ctx, send, draftWithdrawn)
+	effectiveness, err := handler.effectiveness(ctx, send, draftWithdrawn, now)
 	if err != nil {
 		return QuotationReadingDetail{}, err
 	}
@@ -102,7 +134,7 @@ func (handler *ReadQuotationHandler) Get(
 	}, nil
 }
 
-func (handler *ReadQuotationHandler) effectiveness(ctx context.Context, send domain.QuotationSend, draftWithdrawn bool) (QuotationEffectiveness, error) {
+func (handler *ReadQuotationHandler) effectiveness(ctx context.Context, send domain.QuotationSend, draftWithdrawn bool, now time.Time) (QuotationEffectiveness, error) {
 	if handler.publication == nil {
 		return QuotationEffectiveness{}, nil
 	}
@@ -114,14 +146,35 @@ func (handler *ReadQuotationHandler) effectiveness(ctx context.Context, send dom
 	}
 	onRegister := fact.Standing == ports.QuotedPriceUseRegisteredCard ||
 		(send.Lane() == domain.QuotationPriceFromRegisteredCard && fact.Standing == ports.QuotedPriceReady)
-	named, err := handler.publication.ContractNamesPricingScope(ctx, send.Tenant(), send.Counterparty().String(), fact.Scope)
+	selects := false
+	recorded := false
+	if handler.registered != nil {
+		card, cardErr := handler.registered.ReadRegisteredPrice(ctx, send.Tenant(), send.PlanID(), send.PlanVersion(), now)
+		if cardErr != nil {
+			return QuotationEffectiveness{}, cardErr
+		}
+		onRegister = card.OnRegister
+		selects = card.SelectsNow
+		recorded = card.HasPublicationBasis && card.PublicationBasis == send.ID().String()
+	}
+	named, err := handler.publication.ContractNamesPricingScope(ctx, send.Tenant(), send.Counterparty().String(), fact.Scope, now)
 	if err != nil {
 		return QuotationEffectiveness{}, err
 	}
-	judgment, err := JudgePublicationBasis(ctx, handler.publication, PublicationBasisQuery{
-		Tenant: send.Tenant(), PlanID: send.PlanID(), PlanVersion: send.PlanVersion(),
-		ContentDigest: send.ContentDigest(),
-	})
+	requires, configured, err := handler.publication.LoadQuotationPublicationRequirement(ctx, send.Tenant())
+	if err != nil {
+		return QuotationEffectiveness{}, err
+	}
+	requirement := QuotationPublicationRuleUnconfigured
+	switch {
+	case !configured:
+		requirement = QuotationPublicationRuleUnconfigured
+	case requires:
+		requirement = QuotationPublicationRuleRequired
+	default:
+		requirement = QuotationPublicationRuleNotRequired
+	}
+	digest, accepted, found, err := handler.publication.AcceptedQuotationReply(ctx, send.Tenant(), send.ID().String())
 	if err != nil {
 		return QuotationEffectiveness{}, err
 	}
@@ -129,14 +182,19 @@ func (handler *ReadQuotationHandler) effectiveness(ctx context.Context, send dom
 	switch {
 	case draftWithdrawn && !onRegister:
 		next = "CANNOT_PUBLISH"
-	case onRegister && named:
-		next = "ALREADY_EFFECTIVE"
-	case !onRegister && named:
+	case !named:
+		next = "SOURCE_LIST_FROZEN"
+	case !onRegister:
 		next = "PUBLISH_CARD"
+	case !selects:
+		next = "NOT_SELECTABLE"
+	default:
+		next = "ALREADY_EFFECTIVE"
 	}
 	return QuotationEffectiveness{
-		PriceOnRegister: onRegister, Scope: fact.Scope, ScopeNamed: named,
-		Requirement: judgment.String(), NextStep: next,
+		PriceOnRegister: onRegister, SelectsNow: selects, Scope: fact.Scope, ScopeNamed: named,
+		Requirement: requirement, ValidAcceptance: found && accepted && digest == send.ContentDigest(),
+		RecordedBasis: recorded, NextStep: next,
 	}, nil
 }
 

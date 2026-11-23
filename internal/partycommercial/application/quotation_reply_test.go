@@ -240,7 +240,7 @@ func newReplyBook(t *testing.T) *replyBook {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader, err := application.NewReadQuotationHandler(base.store, replies, base.prices, nil)
+	reader, err := application.NewReadQuotationHandler(base.store, replies, base.prices, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
