@@ -171,6 +171,7 @@ func TestFormWorkbookTravelsTheWiredImportFacesAgainstARealDatabase(t *testing.T
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 	intakes := registriesFor(t, registryWriterRegister{})
+	publishDirectionAuthorizationForPricingSeed(t, db, "price-card-cn-sg-full-03.json")
 	preview, err := buildPriceCardImportPreview(db)
 	if err != nil {
 		t.Fatal(err)
@@ -375,6 +376,7 @@ func TestAFormDraftOfTheNewStructuresIsApprovedAndPublishedAsPPC6(t *testing.T) 
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
+	publishDirectionAuthorizationForPricingSeed(t, db, "price-card-cn-sg-full-03.json")
 	submission, err := buildPriceCardDraftSubmission(db)
 	if err != nil {
 		t.Fatal(err)

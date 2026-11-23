@@ -56,6 +56,7 @@ func TestTheWiredPriceCardRegistrationHonoursTheNewerCanonicalizationSwitch(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+	publishDirectionAuthorizationForCard(t, db, registration)
 	command := pricingapp.RegisterPriceCardCommand{Registration: registration}
 
 	off, err := buildPriceCardRegistrationOrchestration(db, false)

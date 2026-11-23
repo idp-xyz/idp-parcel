@@ -21,8 +21,13 @@ func buildPriceCardImportPreview(db *bentopg.DB) (*pricingapp.PreviewPriceCardIm
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: price card overlap finder: %w", err)
 	}
+	authorizations, err := directionAuthorizationReader(db)
+	if err != nil {
+		return nil, err
+	}
 	handler, err := pricingapp.NewPreviewPriceCardImportHandler(pricecardtemplate.Reader{},
-		pricingapp.WithWorkbookReader(pricecardtemplate.Reader{}), pricingapp.WithPriceCardOverlapFinder(cards))
+		pricingapp.WithWorkbookReader(pricecardtemplate.Reader{}), pricingapp.WithPriceCardOverlapFinder(cards),
+		pricingapp.WithDirectionAuthorizationReader(authorizations, systemClock{}))
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: price card import preview: %w", err)
 	}
@@ -164,8 +169,13 @@ func buildPriceCardDraftPublication(db *bentopg.DB, newerCanonicalization bool) 
 	if err != nil {
 		return transactionalPriceCardDraftPublication{}, err
 	}
+	authorizations, err := directionAuthorizationReader(db)
+	if err != nil {
+		return transactionalPriceCardDraftPublication{}, err
+	}
 	registrar := pricingapp.NewRegisterPriceCardHandler(pricingapp.RegisterPriceCardDeps{
 		Catalog: catalog, Registered: registered, NewerCanonicalizationEnabled: newerCanonicalization,
+		DirectionAuthorizations: authorizations, RegisteredContent: catalog, Clock: systemClock{},
 	})
 	handler, err := pricingapp.NewPublishPriceCardDraftHandler(drafts, registrar, systemClock{}, pricingapp.WithPriceCardOverlapFinder(catalog))
 	if err != nil {

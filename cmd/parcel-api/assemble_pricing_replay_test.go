@@ -40,6 +40,7 @@ func TestTheWiredEvaluationReplayRecordsAgainstARealDatabase(t *testing.T) {
 	}
 
 	registration := syntheticPriceCardRegistration(t)
+	publishDirectionAuthorizationForCard(t, db, registration)
 	if outcome, err := cards.Handle(t.Context(), pricingapp.RegisterPriceCardCommand{Registration: registration}); err != nil || outcome != pricingapp.PriceCardRecorded {
 		t.Fatalf("价卡首登 outcome = %s err = %v", outcome, err)
 	}

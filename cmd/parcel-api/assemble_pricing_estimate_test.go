@@ -109,6 +109,7 @@ func TestTheOperatorReadChannelEstimatesForTheEnvelopeTenantAgainstARealDatabase
 		t.Fatalf("装配价卡登记编排：%v", err)
 	}
 	registration := syntheticPriceCardRegistration(t)
+	publishDirectionAuthorizationForCard(t, db, registration)
 	if outcome, err := cards.Handle(t.Context(), pricingapp.RegisterPriceCardCommand{Registration: registration}); err != nil || outcome != pricingapp.PriceCardRecorded {
 		t.Fatalf("价卡首登 outcome = %s err = %v", outcome, err)
 	}
@@ -477,6 +478,7 @@ func registerCardTermsPricing(t *testing.T, db *bentopg.DB) {
 	if err != nil {
 		t.Fatalf("装配价卡登记编排：%v", err)
 	}
+	publishDirectionAuthorizationForCard(t, db, card)
 	if outcome, err := cards.Handle(ctx, pricingapp.RegisterPriceCardCommand{Registration: card}); err != nil || outcome != pricingapp.PriceCardRecorded {
 		t.Fatalf("价卡首登 outcome = %s err = %v", outcome, err)
 	}

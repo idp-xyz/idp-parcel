@@ -158,6 +158,7 @@ func TestTheWiredPriceCardDraftApprovalAndPublicationRecordAgainstARealDatabase(
 		t.Fatalf("换人批准 = %s, err = %v，想要 DRAFT_APPROVED", result.Outcome, err)
 	}
 
+	publishDirectionAuthorizationForCard(t, db, registration)
 	publish := pricingapp.PublishPriceCardDraftCommand{Tenant: draft.Tenant(), Plan: draft.Plan()}
 	published, err := publication.Handle(t.Context(), publish)
 	if err != nil || published.Outcome != pricingapp.PriceCardDraftPublished || published.Registration != pricingapp.PriceCardRecorded {

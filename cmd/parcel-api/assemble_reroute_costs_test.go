@@ -151,7 +151,9 @@ func registerRerouteSupplierCard(t *testing.T, db *bentopg.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	outcome, err := cards.Handle(t.Context(), ppapplication.RegisterPriceCardCommand{Registration: rerouteSupplierCostCard(t)})
+	registration := rerouteSupplierCostCard(t)
+	publishDirectionAuthorizationForCard(t, db, registration)
+	outcome, err := cards.Handle(t.Context(), ppapplication.RegisterPriceCardCommand{Registration: registration})
 	if err != nil {
 		t.Fatalf("登记价卡：%v", err)
 	}

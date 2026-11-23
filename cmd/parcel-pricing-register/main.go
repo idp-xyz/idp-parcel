@@ -29,10 +29,11 @@
 // NEWER_CANONICALIZATION_NOT_ENABLED、什么都不写（ADR-0352）。先把所有读价卡的进程升级到认这一版的构建，
 // 再在跑本工具的那一次设上它；与 parcel-api 的同名开关各读各的。
 //
-// 退出码：0 = 已登记/幂等重放；1 = 用法或输入不合法（含重建门拒绝）；2 = 登记册
-// 治理答案（版本内容冲突/规范化形状不同/复核的版本不在册/须换人复核/复核职责规则未配置/
-// 复核者不合格/规则内容冲突/收尾不成立——原行未被顶替，人工续办）；3 = 未决（依赖故障，
-// 登记与否未知）；4 = 较新规范化版本的价卡未启用登记（部署开关没开，什么都没写；开关打开后原样重跑）。
+// 退出码：0 = 已登记/幂等重放；1 = 用法或输入不合法（含重建门拒绝）；2 = 治理答案（版本内容冲突/
+// 规范化形状不同/引用的价格方向授权不在册或未发布、已到期或已收尾、方向不符/复核的版本不在册/
+// 须换人复核/复核职责规则未配置/复核者不合格/规则内容冲突/收尾不成立——原行未被顶替，人工续办）；
+// 3 = 未决（依赖故障，登记与否未知）；4 = 较新规范化版本的价卡未启用登记（部署开关没开，什么都没写；
+// 开关打开后原样重跑）。
 package main
 
 import (
@@ -52,9 +53,11 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	ppcommercial "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/partycommercial"
 	adapter "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
@@ -338,9 +341,18 @@ func assemble(db *bentopg.DB, newerCanonicalization bool) (assembly, error) {
 	if err != nil {
 		return assembly{}, fmt.Errorf("构造规则登记用例：%w", err)
 	}
+	publications, err := pcpostgres.NewCommercialPublications(db)
+	if err != nil {
+		return assembly{}, fmt.Errorf("构造商业发布册：%w", err)
+	}
+	authorizations, err := ppcommercial.NewDirectionAuthorizations(publications)
+	if err != nil {
+		return assembly{}, fmt.Errorf("构造价格方向授权读口：%w", err)
+	}
 	return assembly{
 		cards: application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{
 			Catalog: cards, Registered: registered, NewerCanonicalizationEnabled: newerCanonicalization,
+			DirectionAuthorizations: authorizations, RegisteredContent: cards, Clock: systemClock{},
 		}),
 		series: application.NewRegisterReferenceSeriesHandler(application.RegisterReferenceSeriesDeps{Register: series}),
 		reviewer: application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
@@ -501,7 +513,10 @@ func priceCardExitCode(outcome application.RegisterPriceCardOutcome) int {
 	switch outcome {
 	case application.PriceCardRecorded, application.PriceCardAlreadyOnRegister:
 		return exitRegistered
-	case application.PriceCardRegistrationConflict, application.PriceCardRegistrationIncomparable:
+	case application.PriceCardRegistrationConflict, application.PriceCardRegistrationIncomparable,
+		application.PriceCardRegistrationDirectionAuthorizationNotPublished,
+		application.PriceCardRegistrationDirectionAuthorizationNotInForce,
+		application.PriceCardRegistrationDirectionAuthorizationDirectionMismatch:
 		return exitGovernance
 	case application.PriceCardRegistrationNotAccepted:
 		return exitUsage

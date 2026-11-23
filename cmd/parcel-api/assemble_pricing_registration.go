@@ -10,8 +10,11 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
+	ppcommercial "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/partycommercial"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	pricingapp "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
+	pricingports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 )
 
 // transactionalPriceCardRegistration 把价卡登记用例包进一笔事务，理由随
@@ -148,6 +151,18 @@ func buildReferenceCatalogueRegistrationOrchestration(db *bentopg.DB) (transacti
 const pricingRegisterNewerCanonicalizationEnv = "IDP_PARCEL_PRICING_REGISTER_NEWER_CANONICALIZATION"
 
 // pricingRegisterNewerCanonicalization 在进程里只读一次：登记口与草稿发布口装同一个值，同一张卡在各口得到同一个答案。
+func directionAuthorizationReader(db *bentopg.DB) (pricingports.DirectionAuthorizationReader, error) {
+	publications, err := pcpostgres.NewCommercialPublications(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: commercial publications: %w", err)
+	}
+	reader, err := ppcommercial.NewDirectionAuthorizations(publications)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: direction authorization reader: %w", err)
+	}
+	return reader, nil
+}
+
 func pricingRegisterNewerCanonicalization(getenv func(string) string) bool {
 	return strings.TrimSpace(getenv(pricingRegisterNewerCanonicalizationEnv)) == "true"
 }
@@ -164,8 +179,13 @@ func buildPriceCardRegistrationOrchestration(db *bentopg.DB, newerCanonicalizati
 	if err != nil {
 		return transactionalPriceCardRegistration{}, err
 	}
+	authorizations, err := directionAuthorizationReader(db)
+	if err != nil {
+		return transactionalPriceCardRegistration{}, err
+	}
 	handler := pricingapp.NewRegisterPriceCardHandler(pricingapp.RegisterPriceCardDeps{
 		Catalog: catalog, Registered: registered, NewerCanonicalizationEnabled: newerCanonicalization,
+		DirectionAuthorizations: authorizations, RegisteredContent: catalog, Clock: systemClock{},
 	})
 	return transactionalPriceCardRegistration{transactor: db.Transactor(), inner: handler}, nil
 }

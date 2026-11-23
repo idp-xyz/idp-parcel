@@ -38,7 +38,9 @@ func TestTheWiredPricingRegistrationsRecordAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("装配序列登记编排：%v", err)
 	}
 
-	cardCommand := pricingapp.RegisterPriceCardCommand{Registration: syntheticPriceCardRegistration(t)}
+	cardRegistration := syntheticPriceCardRegistration(t)
+	publishDirectionAuthorizationForCard(t, db, cardRegistration)
+	cardCommand := pricingapp.RegisterPriceCardCommand{Registration: cardRegistration}
 	cardRecorded, err := cards.Handle(t.Context(), cardCommand)
 	if err != nil {
 		t.Fatalf("价卡首登：%v", err)

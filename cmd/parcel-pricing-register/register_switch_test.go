@@ -19,13 +19,16 @@ import (
 // 恰为 `true`。
 func TestTheNewerCanonicalizationRefusalHasItsOwnExitCode(t *testing.T) {
 	codes := map[application.RegisterPriceCardOutcome]int{
-		application.PriceCardRecorded:                                    exitRegistered,
-		application.PriceCardAlreadyOnRegister:                           exitRegistered,
-		application.PriceCardRegistrationConflict:                        exitGovernance,
-		application.PriceCardRegistrationIncomparable:                    exitGovernance,
-		application.PriceCardRegistrationNotAccepted:                     exitUsage,
-		application.PriceCardRegistrationUndecided:                       exitUndecided,
-		application.PriceCardRegistrationNewerCanonicalizationNotEnabled: exitNotEnabled,
+		application.PriceCardRecorded:                                            exitRegistered,
+		application.PriceCardAlreadyOnRegister:                                   exitRegistered,
+		application.PriceCardRegistrationConflict:                                exitGovernance,
+		application.PriceCardRegistrationIncomparable:                            exitGovernance,
+		application.PriceCardRegistrationNotAccepted:                             exitUsage,
+		application.PriceCardRegistrationUndecided:                               exitUndecided,
+		application.PriceCardRegistrationNewerCanonicalizationNotEnabled:         exitNotEnabled,
+		application.PriceCardRegistrationDirectionAuthorizationNotPublished:      exitGovernance,
+		application.PriceCardRegistrationDirectionAuthorizationNotInForce:        exitGovernance,
+		application.PriceCardRegistrationDirectionAuthorizationDirectionMismatch: exitGovernance,
 	}
 	for outcome, want := range codes {
 		if code := priceCardExitCode(outcome); code != want {
@@ -57,6 +60,11 @@ func TestTheControlledRegistrationOfANewerCanonicalizationWaitsForTheSwitch(t *t
 		return raw
 	}
 	newer, base := read("price-card-cn-sg-full-03.json"), read("price-card-cn-sg.json")
+	seeded, err := domain.RehydratePriceCardRegistration(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publishDirectionAuthorizationForCard(t, db, seeded)
 	off, err := assemble(db, false)
 	if err != nil {
 		t.Fatal(err)
