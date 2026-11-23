@@ -144,15 +144,9 @@ func exchangeRateBound(t *testing.T) ppdomain.PricingPlanStructures {
 // registerCostCard 走与 parcel-pricing-register 同一条登记用例。
 func registerCostCard(t *testing.T, db *bentopg.DB, registration ppdomain.PriceCardRegistration) {
 	t.Helper()
-	cards, err := pppostgres.NewPriceCards(db)
-	if err != nil {
-		t.Fatalf("构造价卡库：%v", err)
-	}
-	handler := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{
-		Catalog: cards, Registered: pricingParameterHandoffForTest(t, db),
-	})
+	handler := priceCardRegistrarForTest(t, db, registration)
 	var outcome ppapplication.RegisterPriceCardOutcome
-	err = db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
+	err := db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
 		result, registerErr := handler.Handle(ctx, ppapplication.RegisterPriceCardCommand{Registration: registration})
 		outcome = result
 		return registerErr

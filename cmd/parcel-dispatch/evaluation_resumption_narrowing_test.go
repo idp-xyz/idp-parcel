@@ -93,13 +93,7 @@ func syntheticBuyCard(
 
 func registerPriceCardForTest(t *testing.T, db *bentopg.DB, registration ppdomain.PriceCardRegistration) {
 	t.Helper()
-	cards, err := pppostgres.NewPriceCards(db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{
-		Catalog: cards, Registered: pricingParameterHandoffForTest(t, db),
-	})
+	handler := priceCardRegistrarForTest(t, db, registration)
 	var outcome ppapplication.RegisterPriceCardOutcome
 	mustWithinTX(t, db.Transactor(), t.Context(), func(ctx context.Context) error {
 		var err error

@@ -18,7 +18,6 @@ import (
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
-	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -310,13 +309,7 @@ func registerDemoCostCard(t *testing.T, db *bentopg.DB) {
 	if err != nil {
 		t.Fatalf("重建演示成本卡：%v", err)
 	}
-	cards, err := pppostgres.NewPriceCards(db)
-	if err != nil {
-		t.Fatalf("构造价卡库：%v", err)
-	}
-	handler := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{
-		Catalog: cards, Registered: pricingParameterHandoffForTest(t, db),
-	})
+	handler := priceCardRegistrarForTest(t, db, registration)
 	var outcome ppapplication.RegisterPriceCardOutcome
 	err = db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
 		result, registerErr := handler.Handle(ctx, ppapplication.RegisterPriceCardCommand{Registration: registration})

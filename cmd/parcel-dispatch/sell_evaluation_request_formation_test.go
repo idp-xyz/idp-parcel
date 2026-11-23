@@ -89,7 +89,7 @@ func registerDemoSellPricing(t *testing.T, db *bentopg.DB) {
 		t.Fatalf("重建演示售价卡：%v", err)
 	}
 	registered := pricingParameterHandoffForTest(t, db)
-	registerCard := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{Catalog: cards, Registered: registered})
+	registerCard := priceCardRegistrarForTest(t, db, card)
 	within("演示售价卡", func(ctx context.Context) (string, error) {
 		outcome, err := registerCard.Handle(ctx, ppapplication.RegisterPriceCardCommand{Registration: card})
 		return outcome.String(), err
