@@ -18,6 +18,9 @@ type EligibleSourceReferences struct {
 	FeeItem           string
 	SupplierAgreement string
 	Parcel            string
+	// Shipment 与 Members 是委托级销售请求带来的：主体是委托，成员是请求上钉下的那一份清单。Members 空着时不得由解析器自编。
+	Shipment string
+	Members  []string
 }
 
 // OccurrenceReferenced 报出发生项引用是否成形：身份与版本都在、不带首尾空白。BUY 请求只能拿它去键事实（成员对象、
@@ -29,6 +32,19 @@ func (sources EligibleSourceReferences) OccurrenceReferenced() bool {
 // ParcelReferenced 报出包裹引用是否成形。包裹是 SELL 请求键事实的那一件：申报测量、实测与邮编路线都按它读。
 func (sources EligibleSourceReferences) ParcelReferenced() bool {
 	return trimmedNonEmpty(sources.Parcel)
+}
+
+// ShipmentReferenced 报出委托级请求有没有把委托和成员清单一起带来。清单空着不算带来了：解析器不会自己补件。
+func (sources EligibleSourceReferences) ShipmentReferenced() bool {
+	if !trimmedNonEmpty(sources.Shipment) || len(sources.Members) == 0 {
+		return false
+	}
+	for _, member := range sources.Members {
+		if !trimmedNonEmpty(member) {
+			return false
+		}
+	}
+	return true
 }
 
 func trimmedNonEmpty(value string) bool {

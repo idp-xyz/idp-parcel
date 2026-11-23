@@ -68,11 +68,34 @@ type MemberManifest struct {
 	pieces          []MemberPiece
 }
 
+// PieceMeasurementOrigin 标明这一件的实重与尺寸取自实测还是申报。空串只留给还没写这一格的旧快照；
+// 新造的票级输入必须写上，免得把两种来源加进同一个合计却说不出每一件用的是哪一种。
+type PieceMeasurementOrigin string
+
+const (
+	PieceMeasurementMeasured PieceMeasurementOrigin = "MEASURED"
+	PieceMeasurementDeclared PieceMeasurementOrigin = "DECLARED"
+)
+
+func (origin PieceMeasurementOrigin) String() string {
+	switch origin {
+	case PieceMeasurementMeasured, PieceMeasurementDeclared:
+		return string(origin)
+	default:
+		return ""
+	}
+}
+
+func (origin PieceMeasurementOrigin) valid() bool {
+	return origin.String() != ""
+}
+
 // MemberPiece 是逐件求和的快照里的一件：实重必备，尺寸可缺。卡要体积重而尺寸缺了，评价待判断，不退回合计体积重。
 type MemberPiece struct {
 	id         PackageID
 	actual     Weight
 	dimensions *Dimensions
+	origin     PieceMeasurementOrigin
 }
 
 // NewMemberPiece 立一件的实重与可缺的尺寸。尺寸按传入的值复制，调用方随后改自己的那份不影响这一件。
@@ -92,11 +115,28 @@ func (piece MemberPiece) valid() bool {
 	if !piece.id.valid() || !piece.actual.valid() {
 		return false
 	}
+	if piece.origin != "" && !piece.origin.valid() {
+		return false
+	}
 	return piece.dimensions == nil || piece.dimensions.valid()
 }
 
 func (piece MemberPiece) ID() PackageID        { return piece.id }
 func (piece MemberPiece) ActualWeight() Weight { return piece.actual }
+
+// MeasurementOrigin 标明这一件取的是实测还是申报。旧快照没写时第二个返回值为假。
+func (piece MemberPiece) MeasurementOrigin() (PieceMeasurementOrigin, bool) {
+	return piece.origin, piece.origin.valid()
+}
+
+// WithMeasurementOrigin 交回标明了取源的副本。两种来源不能混在一件上：实测是整份取用，申报也是整份。
+func (piece MemberPiece) WithMeasurementOrigin(origin PieceMeasurementOrigin) (MemberPiece, error) {
+	if !piece.valid() || !origin.valid() {
+		return MemberPiece{}, ErrPricingInputInvalid
+	}
+	piece.origin = origin
+	return piece, nil
+}
 
 // Dimensions 只在这一件带了尺寸时给出。
 func (piece MemberPiece) Dimensions() (Dimensions, bool) {
@@ -338,6 +378,31 @@ func NewPostalPricingInputSnapshot(
 	}
 	declared := route
 	input.postal = &declared
+	return input, nil
+}
+
+// NewPostalAggregatePricingInputSnapshot 立一份不带调用方分区的票级或主单级输入。分区由绑了目录的卡从邮编路线解出；
+// 路线必须是委托上已经有的那一套，这里不另造。成员清单带逐件实重，合计实重取清单上的。
+func NewPostalAggregatePricingInputSnapshot(
+	tenantID TenantID,
+	scope PricingScopeID,
+	subject EvaluationSubject,
+	route PostalRoute,
+	members MemberManifest,
+	businessAt time.Time,
+	factReferences ...VersionedFactReference,
+) (PricingInputSnapshot, error) {
+	if !subject.kind.aggregate() || !members.valid() || !route.valid() {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	input, err := newPricingInputSnapshot(tenantID, scope, subject, "", members.totalActual, nil, businessAt, factReferences)
+	if err != nil {
+		return PricingInputSnapshot{}, err
+	}
+	declaredMembers := members
+	declaredRoute := route
+	input.members = &declaredMembers
+	input.postal = &declaredRoute
 	return input, nil
 }
 

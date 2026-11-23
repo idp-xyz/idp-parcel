@@ -80,10 +80,130 @@ func (resolver *ParcelResolver) ResolvePricingInput(
 	ctx context.Context,
 	query ppports.PricingInputQuery,
 ) (ppports.PricingInputResolution, error) {
+	if query.Sources.ShipmentReferenced() {
+		return resolver.resolveShipment(ctx, query)
+	}
 	if !query.Sources.ParcelReferenced() {
 		return unavailable(missingParcel), nil
 	}
 	return resolver.resolve(ctx, query, query.Sources.Parcel, query.BasisAt)
+}
+
+// resolveShipment 按请求钉下的成员清单逐件取实重与尺寸：有实测用实测，否则用申报，并在这一件上标明取的是哪一种。
+// 邮编路线取这些件上已经有的那一套；一件都没有，输入不可得，不另造一条路线，也不编一份件清单。
+func (resolver *ParcelResolver) resolveShipment(
+	ctx context.Context,
+	query ppports.PricingInputQuery,
+) (ppports.PricingInputResolution, error) {
+	psTenant, err := psdomain.NewTenantID(query.Tenant.String())
+	if err != nil {
+		return unavailable(missingNotAParcel), nil
+	}
+	pieces := make([]ppdomain.MemberPiece, 0, len(query.Sources.Members))
+	ids := make([]ppdomain.PackageID, 0, len(query.Sources.Members))
+	var facts []ppdomain.VersionedFactReference
+	var missing []string
+	var route ppdomain.PostalRoute
+	var routeFact ppdomain.VersionedFactReference
+	haveRoute := false
+	for _, member := range query.Sources.Members {
+		parcel, err := psdomain.NewDeclaredParcelID(member)
+		if err != nil {
+			return unavailable(missingNotAParcel), nil
+		}
+		packageID, err := ppdomain.NewPackageID(member)
+		if err != nil {
+			return unavailable(missingNotAParcel), nil
+		}
+		weight, dimensions, pieceFacts, pieceMissing, err := resolver.weightAndDimensions(ctx, query.Tenant, psTenant, parcel, member)
+		if err != nil {
+			return ppports.PricingInputResolution{}, err
+		}
+		if len(pieceMissing) > 0 {
+			for _, item := range pieceMissing {
+				missing = append(missing, member+": "+item)
+			}
+			continue
+		}
+		origin := ppdomain.PieceMeasurementDeclared
+		if len(pieceFacts) > 0 && pieceFacts[0].Reference().Kind() == ppdomain.ArtifactActualMeasurement {
+			origin = ppdomain.PieceMeasurementMeasured
+		}
+		piece, err := ppdomain.NewMemberPiece(packageID, weight, dimensions)
+		if err != nil {
+			return unavailable(missingWeightValue), nil
+		}
+		piece, err = piece.WithMeasurementOrigin(origin)
+		if err != nil {
+			return unavailable(missingWeightValue), nil
+		}
+		pieces = append(pieces, piece)
+		ids = append(ids, packageID)
+		facts = append(facts, pieceFacts...)
+		if !haveRoute {
+			candidate, addressFact, routeMissing, err := resolver.postalRoute(ctx, psTenant, parcel)
+			if err != nil {
+				return ppports.PricingInputResolution{}, err
+			}
+			if len(routeMissing) == 0 {
+				route, routeFact, haveRoute = candidate, addressFact, true
+			}
+		}
+	}
+	if len(missing) > 0 {
+		return unavailable(missing...), nil
+	}
+	if !haveRoute {
+		return unavailable(missingDestination), nil
+	}
+	facts = append(facts, routeFact)
+	if len(pieces) == 0 {
+		return unavailable(missingParcel), nil
+	}
+	total, err := sumPieceWeights(pieces)
+	if err != nil {
+		return unavailable(err.Error()), nil
+	}
+	manifest, err := ppdomain.NewMemberManifest(ids, total, nil)
+	if err != nil {
+		return unavailable(missingWeightValue), nil
+	}
+	manifest, err = manifest.WithPieces(pieces)
+	if err != nil {
+		return unavailable(missingWeightValue), nil
+	}
+	subject, err := ppdomain.NewShipmentSubject(query.Sources.Shipment)
+	if err != nil {
+		return unavailable(missingParcel), nil
+	}
+	input, err := ppdomain.NewPostalAggregatePricingInputSnapshot(
+		query.Tenant, query.Scope, subject, route, manifest, query.BasisAt, facts...)
+	if err != nil {
+		return unavailable(missingWeightValue), nil
+	}
+	if settlement, declared := query.SettlementCurrency(); declared {
+		if input, err = input.WithSettlementCurrency(settlement); err != nil {
+			return ppports.PricingInputResolution{}, err
+		}
+	}
+	return ppports.PricingInputResolution{Outcome: ppports.PricingInputResolved, Input: input}, nil
+}
+
+func sumPieceWeights(pieces []ppdomain.MemberPiece) (ppdomain.Weight, error) {
+	total := pieces[0].ActualWeight().Value()
+	unit := pieces[0].ActualWeight().Unit()
+	for _, piece := range pieces[1:] {
+		weight := piece.ActualWeight()
+		if weight.Unit() != unit {
+			return ppdomain.Weight{}, fmt.Errorf("parcel-shipment: member weights are not in one unit")
+		}
+		summed, err := total.Add(weight.Value())
+		if err != nil {
+			return ppdomain.Weight{}, err
+		}
+		total = summed
+	}
+	return ppdomain.NewWeight(total, unit)
 }
 
 // resolve 是两只共用的那一段：从一件包裹到一份快照。businessAt 由调用方给——按发生项时是发生项的业务时间，按包裹

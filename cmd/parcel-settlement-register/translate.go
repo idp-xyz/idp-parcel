@@ -44,6 +44,7 @@ const (
 	commandStatementCycle              = "statement-cycle"
 	commandPreAcceptanceEstimate       = "pre-acceptance-estimate-adoption"
 	commandSellBillingMomentAdoption   = "sell-billing-moment-adoption"
+	commandShipmentBillingMoment       = "shipment-billing-moment-adoption"
 	commandFeeItemMapping              = "fee-item-mapping"
 	commandEvaluationResume            = "evaluation-resume"
 	commandExpectedCostSupplier        = "expected-cost-supplier-backfill"
@@ -76,6 +77,7 @@ var allCommands = []string{
 	commandStatementCycle,
 	commandPreAcceptanceEstimate,
 	commandSellBillingMomentAdoption,
+	commandShipmentBillingMoment,
 	commandFeeItemMapping,
 	commandEvaluationResume,
 	commandExpectedCostSupplier,
@@ -198,6 +200,19 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 				return "", 0, err
 			}
 			message, code := catalogueAnswer(commandSellBillingMomentAdoption, effect, translated.Adoption.Account().String())
+			return message, code, nil
+		}, nil
+	case commandShipmentBillingMoment:
+		tenant, adoption, err := registrationjson.ShipmentBillingMomentAdoptionFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.shipmentMoments.Register(ctx, tenant, adoption)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandShipmentBillingMoment, effect, adoption.Account().String())
 			return message, code, nil
 		}, nil
 	case commandFeeItemMapping:

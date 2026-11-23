@@ -163,8 +163,21 @@ type FormEstimatedCustomerChargeDeps struct {
 // SELL 请求，经费用项目映射册把全部费用行映到同一个费用项目，以请求派生的费用标识调形成编排，再在请求册上记结论。
 // 费用行与请求改记在调用方的同一事务里：外键要求费用先落，任一步失败整笔回滚。
 type FormEstimatedCustomerChargeHandler struct {
-	deps   FormEstimatedCustomerChargeDeps
-	direct DirectOperatingNotifier
+	deps             FormEstimatedCustomerChargeDeps
+	direct           DirectOperatingNotifier
+	shipmentRequests shipmentSellChargeBook
+}
+
+// shipmentSellChargeBook 是委托级请求册的读与改记。不接时，回指一份委托级请求仍按「请求不在包裹册上」上抛——
+// 包裹那一路的测试不必造一本空册。生产装配接上之后，评价回指先问包裹册，没有再问这一本。
+type shipmentSellChargeBook interface {
+	ports.ShipmentSellEvaluationRequestView
+	ports.ShipmentSellEvaluationRequestConclusionRecorder
+}
+
+// UseShipmentRequests 接上委托级请求册。包裹费用的形成不读它。
+func (handler *FormEstimatedCustomerChargeHandler) UseShipmentRequests(book shipmentSellChargeBook) {
+	handler.shipmentRequests = book
 }
 
 func NewFormEstimatedCustomerChargeHandler(deps FormEstimatedCustomerChargeDeps) (*FormEstimatedCustomerChargeHandler, error) {
@@ -215,6 +228,9 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 		return undecidedEstimatedCharge(SellEvaluationRequestViewUnavailable, err), nil
 	}
 	if !found {
+		if handler.shipmentRequests != nil {
+			return handler.formShipmentCharge(ctx, command)
+		}
 		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: request %s", ErrSellEvaluationRequestMissing, adoption.Request)
 	}
 	if record.State != domain.SellRequestSubmitted {
@@ -429,4 +445,123 @@ func (handler *FormEstimatedCustomerChargeHandler) conclude(
 
 func undecidedEstimatedCharge(reason EstimatedCustomerChargeUndecidedReason, cause error) EstimatedCustomerChargeResult {
 	return EstimatedCustomerChargeResult{outcome: EstimatedCustomerChargeUndecided, reason: reason, cause: cause}
+}
+
+// formShipmentCharge 把一份回指委托级请求的评价收成客户费用。主体是委托：费用标识从那份请求派生，不改包裹费用的主键。
+// 不走包裹的确认跟进，也不按件派生直接成本——成员变化不在这里重算。
+func (handler *FormEstimatedCustomerChargeHandler) formShipmentCharge(
+	ctx context.Context,
+	command FormEstimatedCustomerChargeCommand,
+) (EstimatedCustomerChargeResult, error) {
+	adoption := command.Evaluation
+	requestID, err := domain.NewShipmentSellEvaluationRequestID(adoption.Request.String())
+	if err != nil {
+		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: request %s", ErrSellEvaluationRequestMissing, adoption.Request)
+	}
+	key := ports.ShipmentSellEvaluationRequestKey{TenantID: command.TenantID, Request: requestID}
+	record, found, err := handler.shipmentRequests.FindByID(ctx, key)
+	if err != nil {
+		return undecidedEstimatedCharge(SellEvaluationRequestViewUnavailable, err), nil
+	}
+	if !found {
+		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: request %s", ErrSellEvaluationRequestMissing, adoption.Request)
+	}
+	if record.State != domain.SellRequestSubmitted {
+		return EstimatedCustomerChargeResult{
+			outcome:   EstimatedCustomerChargeAlreadyConcluded,
+			state:     record.State,
+			charge:    record.FormedCharge,
+			stopCause: record.StopCause,
+		}, nil
+	}
+	switch adoption.Outcome {
+	case ports.SellEvaluationCompleted:
+	case ports.SellEvaluationPending:
+		return handler.concludeShipment(ctx, key, pendingJudgmentCauseOf(adoption.PendingCause))
+	case ports.SellEvaluationAmountUndeclared:
+		return handler.concludeShipment(ctx, key, domain.StopAmountRoundingUndeclared)
+	case ports.SellEvaluationUnratable:
+		return handler.concludeShipment(ctx, key, domain.StopEvaluationUnratable)
+	case ports.SellEvaluationConflict:
+		return handler.concludeShipment(ctx, key, domain.StopEvaluationConflict)
+	case ports.SellEvaluationNotFormed:
+		return handler.concludeShipment(ctx, key, domain.StopEvaluationFailed)
+	default:
+		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: %d", ErrUnexpectedSellEvaluationOutcome, adoption.Outcome)
+	}
+	if adoption.SettlementCurrency != record.Request.SettlementCurrency() {
+		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: request %s wants %s, evaluation %s carries %s",
+			ErrSellEvaluationCurrencyMismatch, adoption.Request, record.Request.SettlementCurrency(), adoption.Evaluation, adoption.SettlementCurrency)
+	}
+	feeItem, mapped, err := handler.singleFeeItem(ctx, command.TenantID, adoption.ChargeCodes)
+	if err != nil {
+		return undecidedEstimatedCharge(FeeItemMappingViewUnavailable, err), nil
+	}
+	if !mapped {
+		return handler.concludeShipment(ctx, key, domain.StopFeeItemMappingIncomplete)
+	}
+	charge := record.Request.EstimatedCustomerChargeID()
+	formed, err := handler.deps.Charges.Handle(ctx, FormSellCustomerChargeCommand{
+		TenantID:         command.TenantID,
+		Charge:           charge.String(),
+		FeeItem:          feeItem.String(),
+		Evaluation:       adoption.Evaluation.String(),
+		FormedAt:         handler.deps.Clock.Now(),
+		SourceOccurredAt: record.Request.PricingBasisAt(),
+	})
+	if err != nil {
+		return EstimatedCustomerChargeResult{}, err
+	}
+	switch formed.Outcome() {
+	case SellChargeFormed, SellChargeAlreadyFormed:
+		conclusion, err := domain.NewFormedSellEvaluationRequestConclusion(charge)
+		if err != nil {
+			return EstimatedCustomerChargeResult{}, err
+		}
+		return handler.recordShipmentConclusion(ctx, key, conclusion)
+	case SellChargeZeroTotal:
+		return handler.recordShipmentConclusion(ctx, key, domain.NewZeroTotalSellEvaluationRequestConclusion())
+	case SellChargeUndecided:
+		return undecidedEstimatedCharge(SellChargeFormationUndecided, fmt.Errorf("sell charge formation: %s", formed.UndecidedReason())), nil
+	default:
+		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: %s", ErrUnexpectedSellChargeFormation, formed.Outcome())
+	}
+}
+
+func (handler *FormEstimatedCustomerChargeHandler) concludeShipment(
+	ctx context.Context,
+	key ports.ShipmentSellEvaluationRequestKey,
+	cause domain.EvaluationStopCause,
+) (EstimatedCustomerChargeResult, error) {
+	conclusion, err := domain.NewStoppedSellEvaluationRequestConclusion(cause, handler.deps.Clock.Now())
+	if err != nil {
+		return EstimatedCustomerChargeResult{}, err
+	}
+	return handler.recordShipmentConclusion(ctx, key, conclusion)
+}
+
+func (handler *FormEstimatedCustomerChargeHandler) recordShipmentConclusion(
+	ctx context.Context,
+	key ports.ShipmentSellEvaluationRequestKey,
+	conclusion domain.SellEvaluationRequestConclusion,
+) (EstimatedCustomerChargeResult, error) {
+	effect, err := handler.shipmentRequests.RecordConclusion(ctx, key, conclusion)
+	if err != nil {
+		return undecidedEstimatedCharge(SellEvaluationRequestRegisterUnavailable, err), nil
+	}
+	charge, _ := conclusion.FormedCharge()
+	stopCause, _ := conclusion.StopCause()
+	switch effect {
+	case ports.SellEvaluationRequestConcluded, ports.SellEvaluationRequestConclusionReplayed:
+		return EstimatedCustomerChargeResult{
+			outcome:   EstimatedCustomerChargeConcluded,
+			state:     conclusion.State(),
+			charge:    charge,
+			stopCause: stopCause,
+		}, nil
+	case ports.SellEvaluationRequestConcludedOtherwise:
+		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: request %s, wanted %s", ErrSellEvaluationRequestConcludedOtherwise, key.Request, conclusion.State())
+	default:
+		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: %d", ErrUnexpectedSellRequestConclusionEffect, effect)
+	}
 }

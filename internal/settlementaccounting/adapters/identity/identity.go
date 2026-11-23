@@ -76,3 +76,29 @@ func (factory *SellEvaluationRequestIdentities) MintSellEvaluationRequestID(_ co
 	}
 	return domain.NewSellEvaluationRequestID(minted)
 }
+
+// shipmentSellRequestPrefix 让委托级请求标识与包裹那一路的 SELLREQ 分开。前缀不参与判断，只避免两本册的铸造空间撞在一起。
+const shipmentSellRequestPrefix = "SHPREQ"
+
+// ShipmentSellEvaluationRequestIdentities 铸造委托级销售评价请求的身份。
+type ShipmentSellEvaluationRequestIdentities struct {
+	minter platformidentity.Minter
+}
+
+func NewShipmentSellEvaluationRequestIdentities(options ...platformidentity.Option) (*ShipmentSellEvaluationRequestIdentities, error) {
+	minter, err := platformidentity.NewMinter(shipmentSellRequestPrefix, options...)
+	if err != nil {
+		return nil, fmt.Errorf("settlement accounting identity: %w", err)
+	}
+	return &ShipmentSellEvaluationRequestIdentities{minter: minter}, nil
+}
+
+var _ ports.ShipmentSellEvaluationRequestIdentityFactory = (*ShipmentSellEvaluationRequestIdentities)(nil)
+
+func (factory *ShipmentSellEvaluationRequestIdentities) MintShipmentSellEvaluationRequestID(_ context.Context) (domain.ShipmentSellEvaluationRequestID, error) {
+	minted, err := factory.minter.Next()
+	if err != nil {
+		return domain.ShipmentSellEvaluationRequestID{}, fmt.Errorf("mint shipment sell evaluation request ID: %w", err)
+	}
+	return domain.NewShipmentSellEvaluationRequestID(minted)
+}

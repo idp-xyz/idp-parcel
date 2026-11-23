@@ -151,6 +151,26 @@ func (handler *FormPlanGivenEstimateEvaluationsHandler) Handle(
 	return FormPlanGivenEstimateEvaluationsResult{Outcome: PlanGivenEstimatesFormed, Estimates: estimates}, nil
 }
 
+// EvaluateShipment 对一张逐委托的卡按整票形成一份试算评价。主体是委托，不把各件各自的试算再加起来。
+// 补齐读数读不回时 undecided 为真。输入立不起来时交回错误。
+func (handler *FormPlanGivenEstimateEvaluationsHandler) EvaluateShipment(
+	ctx context.Context,
+	id domain.EvaluationID,
+	plan domain.PricingPlanVersion,
+	input domain.PricingInputSnapshot,
+	evidence domain.EvidenceKind,
+) (domain.PricingEvaluation, bool, error) {
+	request, err := domain.NewEvaluationRequest(id, plan, input, evidence)
+	if err != nil {
+		return domain.PricingEvaluation{}, false, err
+	}
+	request, _, err = handler.completion.complete(ctx, request)
+	if err != nil {
+		return domain.PricingEvaluation{}, true, nil
+	}
+	return domain.EvaluatePricing(request), false, nil
+}
+
 // estimate 为一件声明造输入、补齐读数并形成评价。undecided 为真即补齐读数读不回。
 func (handler *FormPlanGivenEstimateEvaluationsHandler) estimate(
 	ctx context.Context,

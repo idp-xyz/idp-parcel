@@ -229,7 +229,9 @@ func sellRequestConsumption(result saapplication.RequestSellEvaluationOnParcelMo
 		saapplication.SellEvaluationRequestExisting,
 		saapplication.SellEvaluationRequestUnconfigured,
 		saapplication.SellEvaluationRequestParcelUnresolved,
-		saapplication.SellEvaluationNotPriced:
+		saapplication.SellEvaluationNotPriced,
+		saapplication.SellEvaluationMembersIncomplete,
+		saapplication.SellEvaluationPriceCardConflict:
 		return nil
 	case saapplication.SellEvaluationRequestUndecided:
 		return fmt.Errorf("%w: %s", ErrSellEvaluationRequestUndecided, result.UndecidedReason())

@@ -10,6 +10,8 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -194,6 +196,9 @@ func (handler *FormPreAcceptanceEstimatesHandler) Handle(
 		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance estimates: unhandled price card resolution %d", resolution.Outcome)
 	}
 	plan := resolution.Plan
+	if plan.Aggregation() == domain.AggregationPerShipment {
+		return handler.estimateWholeShipment(ctx, command, plan, declaration)
+	}
 
 	estimates, undecided, err := handler.estimate(ctx, command, plan, declaration)
 	if err != nil {
@@ -320,4 +325,124 @@ func trimmedReference(reference string) bool {
 
 func undecidedPreAcceptance(reason FormPreAcceptanceEstimatesUndecidedReason, plan domain.VersionReference) FormPreAcceptanceEstimatesResult {
 	return FormPreAcceptanceEstimatesResult{Outcome: PreAcceptanceEstimatesUndecided, Reason: reason, Plan: plan}
+}
+
+// estimateWholeShipment 在用卡是逐委托时按整票试算一次。读不到件清单不编一份；缺测量或没有邮编路线就停在缺件，不逐件相加。
+func (handler *FormPreAcceptanceEstimatesHandler) estimateWholeShipment(
+	ctx context.Context,
+	command FormPreAcceptanceEstimatesCommand,
+	plan domain.PricingPlanVersion,
+	declaration ports.SubmissionDeclaration,
+) (FormPreAcceptanceEstimatesResult, error) {
+	if len(declaration.Parcels) == 0 {
+		return FormPreAcceptanceEstimatesResult{Outcome: PreAcceptanceSubmissionNotVisible, Plan: plan.Reference()}, nil
+	}
+	incomplete := make([]PreAcceptanceParcelEstimate, 0)
+	pieces := make([]domain.MemberPiece, 0, len(declaration.Parcels))
+	ids := make([]domain.PackageID, 0, len(declaration.Parcels))
+	for _, parcel := range declaration.Parcels {
+		if parcel.Weight == nil {
+			incomplete = append(incomplete, PreAcceptanceParcelEstimate{
+				Parcel: parcel.Parcel, Answer: EstimateCandidateInputIncomplete, Missing: []string{EstimateMissingMeasurement},
+			})
+			continue
+		}
+		packageID, err := domain.NewPackageID(parcel.Parcel)
+		if err != nil {
+			return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+		}
+		piece, err := domain.NewMemberPiece(packageID, *parcel.Weight, parcel.Dimensions)
+		if err != nil {
+			return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+		}
+		piece, err = piece.WithMeasurementOrigin(domain.PieceMeasurementDeclared)
+		if err != nil {
+			return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+		}
+		pieces = append(pieces, piece)
+		ids = append(ids, packageID)
+	}
+	if len(incomplete) > 0 {
+		return FormPreAcceptanceEstimatesResult{
+			Outcome: PreAcceptanceDeclarationIncomplete, Plan: plan.Reference(), Estimates: incomplete,
+		}, nil
+	}
+	if declaration.Route == nil || declaration.Route.Destination() == "" {
+		return FormPreAcceptanceEstimatesResult{
+			Outcome: PreAcceptanceDeclarationIncomplete, Plan: plan.Reference(),
+			Estimates: []PreAcceptanceParcelEstimate{{
+				Parcel: command.ShipmentRequest, Answer: EstimateCandidateInputIncomplete, Missing: []string{EstimateMissingPostalRoute},
+			}},
+		}, nil
+	}
+	total := pieces[0].ActualWeight().Value()
+	unit := pieces[0].ActualWeight().Unit()
+	for _, piece := range pieces[1:] {
+		weight := piece.ActualWeight()
+		if weight.Unit() != unit {
+			return FormPreAcceptanceEstimatesResult{
+				Outcome: PreAcceptanceDeclarationIncomplete, Plan: plan.Reference(),
+				Estimates: []PreAcceptanceParcelEstimate{{
+					Parcel: piece.ID().String(), Answer: EstimateCandidateInputIncomplete, Missing: []string{EstimateMissingMeasurement},
+				}},
+			}, nil
+		}
+		summed, err := total.Add(weight.Value())
+		if err != nil {
+			return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+		}
+		total = summed
+	}
+	weight, err := domain.NewWeight(total, unit)
+	if err != nil {
+		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+	}
+	manifest, err := domain.NewMemberManifest(ids, weight, nil)
+	if err != nil {
+		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+	}
+	manifest, err = manifest.WithPieces(pieces)
+	if err != nil {
+		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+	}
+	subject, err := domain.NewShipmentSubject(command.ShipmentRequest)
+	if err != nil {
+		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+	}
+	input, err := domain.NewPostalAggregatePricingInputSnapshot(
+		command.Tenant, plan.Scope(), subject, *declaration.Route, manifest, command.At)
+	if err != nil {
+		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+	}
+	input, err = input.WithSettlementCurrency(command.Settlement)
+	if err != nil {
+		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+	}
+	if declaration.ServiceProduct.Declared() {
+		input, err = input.WithServiceProduct(declaration.ServiceProduct)
+		if err != nil {
+			return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+		}
+	}
+	digest := sha256.New()
+	planID := plan.Reference().ID() + "@" + plan.Reference().Version()
+	fmt.Fprintf(digest, "%d:%s%d:%s%d:%s", len(command.ShipmentRequest), command.ShipmentRequest,
+		len(command.SubmissionVersion), command.SubmissionVersion, len(planID), planID)
+	id, err := domain.NewEvaluationID("EST-SHIP-" + hex.EncodeToString(digest.Sum(nil)[:8]))
+	if err != nil {
+		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+	}
+	evaluation, undecided, err := handler.deps.Estimates.EvaluateShipment(ctx, id, plan, input, handler.deps.Evidence)
+	if err != nil {
+		return FormPreAcceptanceEstimatesResult{}, err
+	}
+	if undecided {
+		return undecidedPreAcceptance(PreAcceptanceReadingCompletionUnavailable, plan.Reference()), nil
+	}
+	return FormPreAcceptanceEstimatesResult{
+		Outcome: PreAcceptanceEstimatesFormed, Plan: plan.Reference(),
+		Estimates: []PreAcceptanceParcelEstimate{{
+			Parcel: command.ShipmentRequest, Answer: EstimateCandidateEvaluated, Evaluation: evaluation,
+		}},
+	}, nil
 }

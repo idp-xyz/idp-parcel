@@ -93,6 +93,8 @@ type memberPieceSnapshot struct {
 	ID         string              `json:"id"`
 	Actual     weightSnapshot      `json:"actual"`
 	Dimensions *dimensionsSnapshot `json:"dimensions,omitempty"`
+	// 空串不写出：旧快照没有这一格，读回仍是没标明取源的那一件。
+	Origin string `json:"origin,omitempty"`
 }
 
 type inputSnapshotDocument struct {
@@ -587,7 +589,7 @@ func inputDocumentOf(input PricingInputSnapshot) inputSnapshotDocument {
 		if len(input.members.pieces) > 0 {
 			manifest.Pieces = make([]memberPieceSnapshot, 0, len(input.members.pieces))
 			for _, piece := range input.members.pieces {
-				row := memberPieceSnapshot{ID: piece.id.String(), Actual: weightOf(piece.actual)}
+				row := memberPieceSnapshot{ID: piece.id.String(), Actual: weightOf(piece.actual), Origin: piece.origin.String()}
 				if piece.dimensions != nil {
 					sides := dimensionsSnapshot{
 						Longest:  decimalOf(piece.dimensions.longest),
@@ -676,7 +678,10 @@ func inputFrom(document inputSnapshotDocument) PricingInputSnapshot {
 		if len(document.Members.Pieces) > 0 {
 			manifest.pieces = make([]MemberPiece, 0, len(document.Members.Pieces))
 			for _, piece := range document.Members.Pieces {
-				row := MemberPiece{id: PackageID{identifier{value: piece.ID}}, actual: weightFrom(piece.Actual)}
+				row := MemberPiece{
+					id: PackageID{identifier{value: piece.ID}}, actual: weightFrom(piece.Actual),
+					origin: PieceMeasurementOrigin(piece.Origin),
+				}
 				if piece.Dimensions != nil {
 					sides := Dimensions{
 						longest:  decimalFrom(piece.Dimensions.Longest),

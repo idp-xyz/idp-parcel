@@ -45,6 +45,35 @@ func SellBillingMomentAdoptionFromJSON(raw []byte) (application.RegisterSellBill
 	return application.RegisterSellBillingMomentAdoptionCommand{Tenant: tenant, Adoption: adoption}, nil
 }
 
+// ShipmentBillingMomentAdoptionFromJSON 译装一行委托级计费时点采用。时点只认 SHIPMENT_MEMBERS_INTAKE_ADOPTED，不默认。
+func ShipmentBillingMomentAdoptionFromJSON(raw []byte) (domain.TenantID, domain.ShipmentBillingMomentAdoption, error) {
+	var document sellBillingMomentAdoptionDocument
+	if err := decodeStrict(raw, &document); err != nil {
+		return domain.TenantID{}, domain.ShipmentBillingMomentAdoption{}, fmt.Errorf("委托级计费时点采用登记输入不是本入口的形状：%w", err)
+	}
+	tenant, err := domain.NewTenantID(document.TenantID)
+	if err != nil {
+		return domain.TenantID{}, domain.ShipmentBillingMomentAdoption{}, fmt.Errorf("tenantId：%w", err)
+	}
+	account, err := domain.NewSettlementAccountID(document.AccountID)
+	if err != nil {
+		return domain.TenantID{}, domain.ShipmentBillingMomentAdoption{}, fmt.Errorf("accountId：%w", err)
+	}
+	moment, err := domain.ShipmentBillingMomentFromName(document.BillingMoment)
+	if err != nil {
+		return domain.TenantID{}, domain.ShipmentBillingMomentAdoption{}, fmt.Errorf("billingMoment：%w", err)
+	}
+	scope, err := optionalPricingScope(document.PricingScopeID)
+	if err != nil {
+		return domain.TenantID{}, domain.ShipmentBillingMomentAdoption{}, fmt.Errorf("pricingScopeId：%w", err)
+	}
+	adoption, err := domain.NewShipmentBillingMomentAdoption(account, moment, scope)
+	if err != nil {
+		return domain.TenantID{}, domain.ShipmentBillingMomentAdoption{}, err
+	}
+	return tenant, adoption, nil
+}
+
 type feeItemMappingDocument struct {
 	TenantID          string `json:"tenantId"`
 	PricingChargeCode string `json:"pricingChargeCode"`

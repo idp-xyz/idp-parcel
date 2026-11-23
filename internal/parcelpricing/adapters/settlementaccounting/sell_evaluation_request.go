@@ -79,3 +79,59 @@ func TranslateSellEvaluationRequest(
 		Evidence:   evidence,
 	}, nil
 }
+
+// TranslateShipmentSellEvaluationRequest 把一份委托级销售请求译成同一只形成命令。来源引用带委托和请求上的成员清单，不带包裹。
+// 计价基准时点是请求上钉的第一件责任起点，这里不重算。
+func TranslateShipmentSellEvaluationRequest(
+	record saports.ShipmentSellEvaluationRequestRecord,
+	evidence ppdomain.EvidenceKind,
+) (ppapplication.FormEvaluationFromRequestCommand, error) {
+	none := ppapplication.FormEvaluationFromRequestCommand{}
+	if !evidence.Declared() {
+		return none, fmt.Errorf("%w: evidence kind %q is not one of S / R / P", ErrUntranslatableAnswer, evidence)
+	}
+	tenant, err := ppdomain.NewTenantID(record.Key.TenantID.String())
+	if err != nil {
+		return none, fmt.Errorf("%w: tenant: %v", ErrUntranslatableAnswer, err)
+	}
+	reference, err := ppdomain.NewEvaluationRequestReference(record.Key.Request.String())
+	if err != nil {
+		return none, fmt.Errorf("%w: request reference: %v", ErrUntranslatableAnswer, err)
+	}
+	request := record.Request
+	scope, err := ppdomain.NewPricingScopeID(request.PricingScope().String())
+	if err != nil {
+		return none, fmt.Errorf("%w: pricing scope: %v", ErrUntranslatableAnswer, err)
+	}
+	var scopes []ppdomain.PricingScopeID
+	if listed, ordered := request.PricingScopes(); ordered {
+		scopes = make([]ppdomain.PricingScopeID, 0, len(listed))
+		for _, source := range listed {
+			translated, err := ppdomain.NewPricingScopeID(source.String())
+			if err != nil {
+				return none, fmt.Errorf("%w: sell price source %q: %v", ErrUntranslatableAnswer, source.String(), err)
+			}
+			scopes = append(scopes, translated)
+		}
+	}
+	settlement, err := ppdomain.NewCurrency(request.SettlementCurrency().String())
+	if err != nil {
+		return none, fmt.Errorf("%w: settlement currency %q: %v", ErrUntranslatableAnswer, request.SettlementCurrency().String(), err)
+	}
+	members := make([]string, 0, len(request.Members()))
+	for _, member := range request.Members() {
+		members = append(members, member.String())
+	}
+	return ppapplication.FormEvaluationFromRequestCommand{
+		Tenant:     tenant,
+		Request:    reference,
+		Scope:      scope,
+		Scopes:     scopes,
+		Direction:  ppdomain.PricingDirectionSell,
+		Purpose:    ppdomain.PricingPurposeCustomerCharge,
+		BasisAt:    request.PricingBasisAt(),
+		Sources:    ppports.EligibleSourceReferences{Shipment: request.Shipment().String(), Members: members},
+		Settlement: settlement,
+		Evidence:   evidence,
+	}, nil
+}

@@ -324,10 +324,17 @@ func (handler *FormEvaluationFromRequestHandler) declaredServiceProduct(
 	ctx context.Context,
 	command FormEvaluationFromRequestCommand,
 ) (domain.ServiceProductReference, error) {
-	if command.Direction != domain.PricingDirectionSell || !command.Sources.ParcelReferenced() {
+	if command.Direction != domain.PricingDirectionSell {
 		return domain.ServiceProductReference{}, nil
 	}
-	return handler.deps.ServiceProducts.LoadAcceptedServiceProduct(ctx, command.Tenant, command.Sources.Parcel)
+	parcel := command.Sources.Parcel
+	if command.Sources.ShipmentReferenced() {
+		parcel = command.Sources.Members[0]
+	}
+	if parcel == "" {
+		return domain.ServiceProductReference{}, nil
+	}
+	return handler.deps.ServiceProducts.LoadAcceptedServiceProduct(ctx, command.Tenant, parcel)
 }
 
 // resolveInput 是第 ② 步。没接读口与读口答不可得落同一格，缺项来路不同：前者由本入口点名三只读口，后者照读口
@@ -395,7 +402,7 @@ func (command FormEvaluationFromRequestCommand) accepted() bool {
 			return false
 		}
 	}
-	if !command.Sources.OccurrenceReferenced() && !command.Sources.ParcelReferenced() {
+	if !command.Sources.OccurrenceReferenced() && !command.Sources.ParcelReferenced() && !command.Sources.ShipmentReferenced() {
 		return false
 	}
 	if !command.Purpose.PairsWithDirection(command.Direction) {

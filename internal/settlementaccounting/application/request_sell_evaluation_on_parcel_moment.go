@@ -30,6 +30,10 @@ const (
 	SellEvaluationRequestUndecided
 	// SellEvaluationNotPriced：合同显式不计销售价。不发起、不记发起停办，调用方入账不重投。
 	SellEvaluationNotPriced
+	// SellEvaluationMembersIncomplete：委托级时点还没到。当前有效各件里还有没完成有效网络收寄的，不形成费用。
+	SellEvaluationMembersIncomplete
+	// SellEvaluationPriceCardConflict：这个范围上逐包裹与逐委托的销售卡同时在用，或同一层多于一张。不挑，两路都不收。
+	SellEvaluationPriceCardConflict
 )
 
 func (outcome SellEvaluationRequestOutcome) String() string {
@@ -48,6 +52,10 @@ func (outcome SellEvaluationRequestOutcome) String() string {
 		return "SELL_EVALUATION_REQUEST_UNDECIDED"
 	case SellEvaluationNotPriced:
 		return "SELL_EVALUATION_NOT_PRICED"
+	case SellEvaluationMembersIncomplete:
+		return "SHIPMENT_MEMBERS_INTAKE_INCOMPLETE"
+	case SellEvaluationPriceCardConflict:
+		return "PRICE_CARD_APPLICABILITY_CONFLICT"
 	default:
 		return ""
 	}
@@ -99,6 +107,12 @@ const (
 	SellRequestHandoffUnavailable
 	SellRequestStallRegisterUnavailable
 	SellRequestSellPriceArrangementUnavailable
+	SellRequestShipmentPictureUnavailable
+	SellRequestShipmentPriceCardUnavailable
+	SellRequestShipmentAdoptionUnavailable
+	SellRequestShipmentRegistryUnavailable
+	SellRequestShipmentIdentityUnavailable
+	SellRequestShipmentHandoffUnavailable
 )
 
 func (reason SellEvaluationRequestUndecidedReason) String() string {
@@ -121,6 +135,18 @@ func (reason SellEvaluationRequestUndecidedReason) String() string {
 		return "SELL_EVALUATION_INITIATION_STALL_REGISTER_UNAVAILABLE"
 	case SellRequestSellPriceArrangementUnavailable:
 		return "SELL_PRICE_ARRANGEMENT_UNAVAILABLE"
+	case SellRequestShipmentPictureUnavailable:
+		return "SHIPMENT_INTAKE_PICTURE_UNAVAILABLE"
+	case SellRequestShipmentPriceCardUnavailable:
+		return "SELL_PRICE_CARD_PATH_UNAVAILABLE"
+	case SellRequestShipmentAdoptionUnavailable:
+		return "SHIPMENT_BILLING_MOMENT_ADOPTION_UNAVAILABLE"
+	case SellRequestShipmentRegistryUnavailable:
+		return "SHIPMENT_SELL_EVALUATION_REQUEST_REGISTRY_UNAVAILABLE"
+	case SellRequestShipmentIdentityUnavailable:
+		return "SHIPMENT_SELL_EVALUATION_REQUEST_IDENTITY_UNAVAILABLE"
+	case SellRequestShipmentHandoffUnavailable:
+		return "SHIPMENT_SELL_EVALUATION_REQUEST_HANDOFF_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -149,6 +175,7 @@ type RequestSellEvaluationOnParcelMomentResult struct {
 	record       ports.SellEvaluationRequestRecord
 	hasRecord    bool
 	stopCause    domain.EvaluationStopCause
+	missing      []domain.ParcelReference
 }
 
 // StopCause 交回发起停办册上记下的停因；没记（发起了、`采用了别的时点`、未受理、未决）第二个返回值为假。
@@ -173,6 +200,11 @@ func (result RequestSellEvaluationOnParcelMomentResult) UndecidedReason() SellEv
 // Request 在已发起与`已存在`两格交回册上那一份；`已存在`交回的是先到者。
 func (result RequestSellEvaluationOnParcelMomentResult) Request() (ports.SellEvaluationRequestRecord, bool) {
 	return result.record, result.hasRecord
+}
+
+// MissingMembers 在委托级时点还没到时，交回还没完成有效网络收寄的那些当前有效件。
+func (result RequestSellEvaluationOnParcelMomentResult) MissingMembers() []domain.ParcelReference {
+	return append([]domain.ParcelReference(nil), result.missing...)
 }
 
 // RequestSellEvaluationOnParcelMomentDeps 各口都必备：链的三段缺一段就走不到账户，采用册缺了就只能默认一种时点，

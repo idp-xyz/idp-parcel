@@ -71,6 +71,54 @@ func (handler *RegisterSellBillingMomentAdoptionHandler) Register(
 	return effect, nil
 }
 
+// RegisterShipmentBillingMomentAdoptionHandler 登记一户采用的委托级计费时点。不交包裹计费时点那一封「参数已登记」：
+// 那封信续办的是包裹请求，接到这里会把没采用包裹时点的账户再跑一遍包裹计费。
+type RegisterShipmentBillingMomentAdoptionHandler struct {
+	adoptions      ports.ShipmentBillingMomentAdoptionRegister
+	clock          ports.Clock
+	estimateScopes ports.PreAcceptanceEstimateAdoptionView
+	parcelScopes   ports.SellBillingMomentAdoptionView
+}
+
+func NewRegisterShipmentBillingMomentAdoptionHandler(
+	adoptions ports.ShipmentBillingMomentAdoptionRegister,
+	clock ports.Clock,
+) (*RegisterShipmentBillingMomentAdoptionHandler, error) {
+	if adoptions == nil || clock == nil {
+		return nil, fmt.Errorf("%w: shipment billing moment adoption register", ErrNilDependency)
+	}
+	return &RegisterShipmentBillingMomentAdoptionHandler{adoptions: adoptions, clock: clock}, nil
+}
+
+func (handler *RegisterShipmentBillingMomentAdoptionHandler) ComparePeerScopes(
+	estimates ports.PreAcceptanceEstimateAdoptionView,
+	parcels ports.SellBillingMomentAdoptionView,
+) {
+	handler.estimateScopes = estimates
+	handler.parcelScopes = parcels
+}
+
+func (handler *RegisterShipmentBillingMomentAdoptionHandler) Register(
+	ctx context.Context,
+	tenant domain.TenantID,
+	adoption domain.ShipmentBillingMomentAdoption,
+) (ports.CatalogueRegistrationEffect, error) {
+	if tenant.String() == "" || adoption.Account().String() == "" {
+		return 0, fmt.Errorf("%w: shipment billing moment adoption command", domain.ErrBlankValue)
+	}
+	if disagree, err := estimateScopeDisagrees(ctx, handler.estimateScopes, tenant, adoption.Account(), adoption.PricingScope()); err != nil {
+		return 0, fmt.Errorf("register shipment billing moment adoption: %w", err)
+	} else if disagree {
+		return ports.CatalogueConflict, nil
+	}
+	if disagree, err := momentScopeDisagrees(ctx, handler.parcelScopes, tenant, adoption.Account(), adoption.PricingScope()); err != nil {
+		return 0, fmt.Errorf("register shipment billing moment adoption: %w", err)
+	} else if disagree {
+		return ports.CatalogueConflict, nil
+	}
+	return handler.adoptions.SaveShipmentBillingMomentAdoption(ctx, tenant, adoption, handler.clock.Now())
+}
+
 // announceEvaluationParameter 按落点交「评价参数已登记」：`已登记`与`重放`都交（重放重发同一封，由适配器按同一个 ID
 // 去重；本口落地之前登进册的行也借重放补上它那一封），`冲突`不交——冲突那一行没写进册，续办只会再撞见同一个缺口。
 // 交接失败上抛，信封与登记行同生共死。

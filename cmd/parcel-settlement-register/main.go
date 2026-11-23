@@ -92,6 +92,7 @@ type registrar struct {
 	cycles           *application.RegisterStatementCycleHandler
 	adoptions        *application.RegisterPreAcceptanceEstimateAdoptionHandler
 	sellMoments      *application.RegisterSellBillingMomentAdoptionHandler
+	shipmentMoments  *application.RegisterShipmentBillingMomentAdoptionHandler
 	feeMappings      *application.RegisterFeeItemMappingHandler
 	reweighAdoptions *application.RegisterReweighAdjustmentAdoptionHandler
 	basisAdoptions   *application.RegisterOperatingBasisAdoptionHandler
@@ -378,6 +379,15 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	}
 	adoptionHandler.CompareSellBillingMomentScopes(sellMomentStore)
 	sellMomentHandler.CompareEstimateScopes(adoptionStore)
+	shipmentMomentStore, err := sapostgres.NewShipmentBillingMomentAdoptions(db)
+	if err != nil {
+		return none, fmt.Errorf("构造委托级计费时点采用册：%w", err)
+	}
+	shipmentMomentHandler, err := application.NewRegisterShipmentBillingMomentAdoptionHandler(shipmentMomentStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造委托级计费时点采用登记：%w", err)
+	}
+	shipmentMomentHandler.ComparePeerScopes(adoptionStore, sellMomentStore)
 	feeItemMappingStore, err := sapostgres.NewFeeItemMappings(db)
 	if err != nil {
 		return none, fmt.Errorf("构造费用项目映射册：%w", err)
@@ -430,6 +440,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		cycles:           cycleHandler,
 		adoptions:        adoptionHandler,
 		sellMoments:      sellMomentHandler,
+		shipmentMoments:  shipmentMomentHandler,
 		feeMappings:      feeItemMappingHandler,
 		reweighAdoptions: reweighAdoptionHandler,
 		basisAdoptions:   basisAdoptionHandler,

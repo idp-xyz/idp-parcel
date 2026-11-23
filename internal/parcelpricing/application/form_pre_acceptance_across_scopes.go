@@ -30,6 +30,18 @@ func (handler *FormPreAcceptanceEstimatesHandler) estimateAcrossSellPriceSources
 		resolved[index] = resolution
 	}
 
+	for _, resolution := range resolved {
+		if resolution.Outcome == ports.PriceCardApplicabilityConflict {
+			break
+		}
+		if resolution.Outcome == ports.PriceCardVersionInForce && resolution.Plan.Aggregation() == domain.AggregationPerShipment {
+			return handler.estimateWholeShipment(ctx, command, resolution.Plan, declaration)
+		}
+		if resolution.Outcome == ports.PriceCardVersionInForce {
+			break
+		}
+	}
+
 	estimates := make([]PreAcceptanceParcelEstimate, len(declaration.Parcels))
 	settlement := command.Settlement
 	formedAny := false

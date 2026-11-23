@@ -18,10 +18,21 @@ import (
 // 哨兵与 BUY 那一路共用：每一枚说的是入口停在哪一格、等谁，与请求出自哪本册无关；装配为两路各登一份未决名单。答不出
 // 评价的那三格同样经「评价未形成」交给结算。
 type FormOnSellEvaluationRequestSubmittedAdapter struct {
-	requests SellEvaluationRequestSource
-	former   EvaluationFormer
-	unformed ppports.EvaluationRequestUnformedHandoff
-	evidence ppdomain.EvidenceKind
+	requests  SellEvaluationRequestSource
+	shipments ShipmentSellEvaluationRequestSource
+	former    EvaluationFormer
+	unformed  ppports.EvaluationRequestUnformedHandoff
+	evidence  ppdomain.EvidenceKind
+}
+
+// ShipmentSellEvaluationRequestSource 是委托级销售请求册的只读半边。不接时，信封上的标识只去包裹那本册。
+type ShipmentSellEvaluationRequestSource interface {
+	FindByID(ctx context.Context, key saports.ShipmentSellEvaluationRequestKey) (saports.ShipmentSellEvaluationRequestRecord, bool, error)
+}
+
+// UseShipmentRequests 接上委托级请求册。包裹那一路的回读不经过它。
+func (adapter *FormOnSellEvaluationRequestSubmittedAdapter) UseShipmentRequests(source ShipmentSellEvaluationRequestSource) {
+	adapter.shipments = source
 }
 
 // NewFormOnSellEvaluationRequestSubmittedAdapter 构造期拒 nil 与未声明的证据层级，理由同 BUY 那一路。
@@ -68,6 +79,9 @@ func (adapter *FormOnSellEvaluationRequestSubmittedAdapter) HandleSubmittedSellE
 		return fmt.Errorf("%w: %v", ErrEvaluationRequestNotVisible, err)
 	}
 	if !found {
+		if adapter.shipments != nil {
+			return adapter.formShipment(ctx, tenant, submitted.SellEvaluationRequestID)
+		}
 		return fmt.Errorf("%w: sell evaluation request %s", ErrEvaluationRequestNotVisible, requestID)
 	}
 
@@ -80,4 +94,31 @@ func (adapter *FormOnSellEvaluationRequestSubmittedAdapter) HandleSubmittedSellE
 		return fmt.Errorf("form evaluation from sell request %s: %w", requestID, err)
 	}
 	return foldFormation(ctx, adapter.unformed, command, requestID.String(), result)
+}
+
+func (adapter *FormOnSellEvaluationRequestSubmittedAdapter) formShipment(
+	ctx context.Context,
+	tenant sadomain.TenantID,
+	requestID string,
+) error {
+	id, err := sadomain.NewShipmentSellEvaluationRequestID(requestID)
+	if err != nil {
+		return fmt.Errorf("%w: shipment sell evaluation request: %v", ErrUntranslatableReference, err)
+	}
+	record, found, err := adapter.shipments.FindByID(ctx, saports.ShipmentSellEvaluationRequestKey{TenantID: tenant, Request: id})
+	if err != nil || !found {
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrEvaluationRequestNotVisible, err)
+		}
+		return fmt.Errorf("%w: sell evaluation request %s", ErrEvaluationRequestNotVisible, requestID)
+	}
+	command, err := TranslateShipmentSellEvaluationRequest(record, adapter.evidence)
+	if err != nil {
+		return err
+	}
+	result, err := adapter.former.Handle(ctx, command)
+	if err != nil {
+		return fmt.Errorf("form evaluation from shipment sell request %s: %w", requestID, err)
+	}
+	return foldFormation(ctx, adapter.unformed, command, requestID, result)
 }

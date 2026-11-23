@@ -191,7 +191,8 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/settlementaccounting/adapters/postgres/evaluation_parameter_registered_handoff.go": partitionSubjectPrefix + "租户（运营登记续办）" + partitionRulingMark + "ADR-0229 决定五：与计价的参数已登记、结算账户已登记同字符串同队；评价未形成另队",
 	// SELL 评价请求（ADR-0190 决定一）按包裹排队，键带 /sell-evaluation-request/ 段：与 PS 采用链、VE 各口的「租户/包裹」
 	// 同名不同串，不共队。
-	"internal/settlementaccounting/adapters/postgres/sell_evaluation_request_handoff.go": partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "ADR-0190 决定一：本口键带 /sell-evaluation-request/ 段，与 PS、VE 的包裹分区不是同一字符串、不同队；同一件包裹在本缝上的各拍同区排队",
+	"internal/settlementaccounting/adapters/postgres/sell_evaluation_request_handoff.go":          partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "ADR-0190 决定一：本口键带 /sell-evaluation-request/ 段，与 PS、VE 的包裹分区不是同一字符串、不同队；同一件包裹在本缝上的各拍同区排队",
+	"internal/settlementaccounting/adapters/postgres/shipment_sell_evaluation_request_handoff.go": partitionSubjectPrefix + "租户/委托（票级销售评价）",
 
 	// —— transport-fulfillment ——
 	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":           partitionPerEnvelopePrefix + "键取（租户/池/预占/口名），含信封 ID 的全部维（各消耗事实互不相干）",

@@ -2680,6 +2680,11 @@ func formEstimatedCustomerChargeOnSellEvaluationConsumer(
 		return nil, fmt.Errorf("parcel-dispatch: direct operating results: %w", err)
 	}
 	formation.NoticeDirectOperating(direct)
+	shipmentRequests, err := sapostgres.NewShipmentSellEvaluationRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell evaluation requests: %w", err)
+	}
+	formation.UseShipmentRequests(shipmentRequests)
 	processing, err := sapricing.NewFormOnSellEvaluationRecordedAdapter(view, formation)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form on sell evaluation recorded: %w", err)
@@ -2803,6 +2808,11 @@ func formEvaluationOnSellEvaluationRequestConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form on sell evaluation request submitted: %w", err)
 	}
+	shipmentRequests, err := sapostgres.NewShipmentSellEvaluationRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell evaluation request view: %w", err)
+	}
+	processing.UseShipmentRequests(shipmentRequests)
 	consumer, err := ppinbox.NewSellEvaluationRequestSubmittedConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: sell evaluation request submitted consumer: %w", err)
@@ -3012,11 +3022,15 @@ func requestSellEvaluationOnNetworkIntakeConsumer(
 	if err != nil {
 		return nil, err
 	}
+	router, err := routeSellOnNetworkIntake(db, outboxStore, clock, requester)
+	if err != nil {
+		return nil, err
+	}
 	adoptions, err := pspostgres.NewIntakeAdoptions(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: intake adoptions for sell evaluation: %w", err)
 	}
-	processing, err := saparcelshipment.NewRequestOnNetworkIntakeAdapter(adoptions, requester)
+	processing, err := saparcelshipment.NewRequestOnNetworkIntakeAdapter(adoptions, router)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: request sell evaluation on network intake: %w", err)
 	}
@@ -3025,6 +3039,111 @@ func requestSellEvaluationOnNetworkIntakeConsumer(
 		return nil, fmt.Errorf("parcel-dispatch: sell evaluation on network intake consumer: %w", err)
 	}
 	return consumer, nil
+}
+
+// routeSellOnNetworkIntake 在有效网络收寄这一拍上按在用销售卡的聚合方式改道。终局那一拍仍只走包裹计费。
+func routeSellOnNetworkIntake(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	clock systemClock,
+	parcels *saapplication.RequestSellEvaluationOnParcelMomentHandler,
+) (*saapplication.RouteSellOnNetworkIntakeHandler, error) {
+	shipments, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment intake picture: %w", err)
+	}
+	cancellations, err := pspostgres.NewParcelCancellations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel cancellations for shipment sell: %w", err)
+	}
+	intakes, err := pspostgres.NewIntakeAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: intake adoptions for shipment picture: %w", err)
+	}
+	picture, err := saparcelshipment.NewShipmentIntakePictureAdapter(shipments, shipments, intakes, cancellations, shipments)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment intake picture adapter: %w", err)
+	}
+	cards, err := pppostgres.NewPriceCards(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: price cards for shipment sell path: %w", err)
+	}
+	paths, err := sapricing.NewSellPriceCardPaths(cards)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell price card paths: %w", err)
+	}
+	shipmentAdoptions, err := sapostgres.NewShipmentBillingMomentAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment billing moment adoptions: %w", err)
+	}
+	shipmentRequests, err := sapostgres.NewShipmentSellEvaluationRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell evaluation requests: %w", err)
+	}
+	identities, err := saidentity.NewShipmentSellEvaluationRequestIdentities()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell evaluation request identities: %w", err)
+	}
+	handoff, err := sapostgres.NewOutboxShipmentSellEvaluationRequestHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell evaluation request handoff: %w", err)
+	}
+	resolutions, terms, accounts, parcelAdoptions, sellPrices, err := sellChainReads(db)
+	if err != nil {
+		return nil, err
+	}
+	router, err := saapplication.NewRouteSellOnNetworkIntakeHandler(saapplication.RouteSellOnNetworkIntakeDeps{
+		Parcels: parcels, Resolutions: resolutions, Terms: terms, Accounts: accounts, SellPrices: sellPrices,
+		ParcelAdoptions: parcelAdoptions, ShipmentAdoptions: shipmentAdoptions, Pictures: picture, Cards: paths,
+		Registry: shipmentRequests, Identity: identities, Downstream: handoff, Clock: clock,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: route sell on network intake: %w", err)
+	}
+	return router, nil
+}
+
+func sellChainReads(db *bentopg.DB) (
+	resolutions *saparcelshipment.ParcelCommercialResolutions,
+	terms *sapartycommercial.AdoptedSettlementTerms,
+	accounts *sapostgres.SettlementAccounts,
+	adoptions *sapostgres.SellBillingMomentAdoptions,
+	sellPrices *sapartycommercial.AdoptedSellPriceArrangement,
+	err error,
+) {
+	shipments, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("parcel-dispatch: parcel commercial resolution source: %w", err)
+	}
+	resolutions, err = saparcelshipment.NewParcelCommercialResolutions(shipments)
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("parcel-dispatch: parcel commercial resolutions: %w", err)
+	}
+	closures, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("parcel-dispatch: commercial closures for settlement terms: %w", err)
+	}
+	terms, err = sapartycommercial.NewAdoptedSettlementTerms(closures)
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("parcel-dispatch: adopted settlement terms: %w", err)
+	}
+	sellPriceRows, err := pcpostgres.NewContractSellPriceArrangements(db)
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("parcel-dispatch: contract sell price arrangements: %w", err)
+	}
+	sellPrices, err = sapartycommercial.NewAdoptedSellPriceArrangement(closures, sellPriceRows)
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("parcel-dispatch: adopted sell price arrangement: %w", err)
+	}
+	accounts, err = sapostgres.NewSettlementAccounts(db)
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("parcel-dispatch: settlement accounts: %w", err)
+	}
+	adoptions, err = sapostgres.NewSellBillingMomentAdoptions(db)
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("parcel-dispatch: sell billing moment adoptions: %w", err)
+	}
+	return resolutions, terms, accounts, adoptions, sellPrices, nil
 }
 
 // requestSellEvaluationOnFinalOutcomeConsumer 接「有效交付已终局」那一拍：PS 终局信封 → SA 消费门 → 按终局采用键回读
