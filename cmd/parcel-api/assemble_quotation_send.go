@@ -86,7 +86,15 @@ func buildQuotationSendServices(db *bentopg.DB) (quotationSendServices, error) {
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: quotation publication view: %w", err)
 	}
-	reading, err := commercialapp.NewReadQuotationHandler(sends, replies, prices, publication)
+	bases, err := pricingpostgres.NewPublicationBases(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: publication basis for quotation reading: %w", err)
+	}
+	registered, err := quotedprice.NewRegisteredPrices(cards, bases)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: registered price reading: %w", err)
+	}
+	reading, err := commercialapp.NewReadQuotationHandler(sends, replies, prices, publication, registered)
 	if err != nil {
 		return none, err
 	}

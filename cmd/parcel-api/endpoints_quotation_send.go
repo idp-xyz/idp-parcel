@@ -21,10 +21,10 @@ type quotationSendWiring struct {
 func init() {
 	registerEndpoints(endpointFeature[quotationSendWiring]{
 		lines: map[string]endpointLine{
-			"/commercial-quotation-send-registrations":       {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-quotation-reply-registrations":      {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-quotation-publication-requirements": {method: http.MethodPost, face: registryWriteFace()},
-			"/commercial-quotation-sends":                    {method: http.MethodGet, face: operationsReadFace()},
+			"/commercial-quotation-send-registrations":                    {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-quotation-reply-registrations":                   {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-quotation-publication-requirement-registrations": {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-quotation-sends":                                 {method: http.MethodGet, face: operationsReadFace()},
 			"/commercial-quotation-sends/{quotationId}": {
 				method: http.MethodGet, face: operationsReadFace(),
 				probe: "/commercial-quotation-sends/QTS-PROBE",
@@ -48,7 +48,7 @@ func init() {
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/commercial-quotation-send-registrations", Handler: commercialhttp.NewSendQuotationEndpoint(channels.operatorRegistries.commercial, wiring.send, time.Now)},
 				{Pattern: "/commercial-quotation-reply-registrations", Handler: commercialhttp.NewRecordQuotationReplyEndpoint(channels.operatorRegistries.commercial, wiring.reply, time.Now)},
-				{Pattern: "/commercial-quotation-publication-requirements", Handler: commercialhttp.NewQuotationPublicationRequirementEndpoint(channels.operatorRegistries.commercial, wiring.rule)},
+				{Pattern: "/commercial-quotation-publication-requirement-registrations", Handler: commercialhttp.NewQuotationPublicationRequirementEndpoint(channels.operatorRegistries.commercial, wiring.rule)},
 				{Pattern: "/commercial-quotation-sends", Handler: commercialhttp.NewQueryQuotationSendsEndpoint(channels.commercialCatalogue(), wiring.query)},
 				{Pattern: "/commercial-quotation-sends/{quotationId}", Handler: commercialhttp.NewQueryQuotationSendEndpoint(channels.commercialCatalogue(), wiring.reading, time.Now)},
 				{Pattern: "/commercial-quotation-sends/{quotationId}/workbook", Handler: commercialhttp.NewExportQuotationEndpoint(channels.commercialCatalogue(), wiring.export)},
