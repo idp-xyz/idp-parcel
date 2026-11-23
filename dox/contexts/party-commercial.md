@@ -1,16 +1,16 @@
 # 参与方与商业（`party-commercial`）
 
-代码在 `internal/partycommercial`。签署证据那一句对照 `7f45dd2ef`；其余对照 main `99fc0037d`（2026-11-12）。
+代码在 `internal/partycommercial`。签署证据那一句对照 `7f45dd2ef`；报价发出那一句对照 `0be72767a`；其余对照 main `99fc0037d`（2026-11-12）。
 
 **这份文件核到什么程度**：取值表、解析结果、发布与登记结果、入口四节是从代码里读出来的。「规则」与「生命周期」两节的句子是从旧 `docs/domain/party-commercial/CONTEXT.md` 提炼的，每条只用 grep 确认了代码里有对应的机制（类型、函数、错误或结果码），没有逐条跑测试验证行为；旧文档写了而代码里没有的，单列在最后一节。
 
 ## 管什么，不管什么
 
-管：参与方身份（业务参与方、责任法人、货主客户账户）及其资料，参与方关系，注册号类型目录，启用范围登记册；服务产品、客户合同、供应商商业协议、接单规则包、各类政策与规则的商业版本及其发布、收尾；产品—渠道映射，渠道账号使用授权；商业依据解析与商业授权裁定。
+管：参与方身份（业务参与方、责任法人、货主客户账户）及其资料，参与方关系，注册号类型目录，启用范围登记册；服务产品、客户合同、供应商商业协议、接单规则包、各类政策与规则的商业版本及其发布、收尾；产品—渠道映射，渠道账号使用授权；商业依据解析与商业授权裁定；报价的发出记录。
 
 不管：
 
-- 可执行价卡、评价与金额——`parcel-pricing`。本上下文只有商业价格政策和定价方案绑定。
+- 可执行价卡、评价与金额——`parcel-pricing`。本上下文有商业价格政策、定价方案绑定，以及报价的发出记录；发出记录不拥有价格内容。
 - 客户委托、接受或拒绝决定、面单交易、具体渠道选择、关闭与重开的具体决定——`parcel-shipment`。它保存所引用的商业快照，不能改商业版本。
 - 实际运输委托、履约事实、收费发生项的登记——`transport-fulfillment`。
 - 费用、余额、冻结、对账、核销、结算账户——`settlement-accounting`。
@@ -165,7 +165,7 @@
 - **参与方关系**：候选 → 已生效 → 已到期、已撤销或已替代。
 - **商业版本**：草稿 → 已发布 → 到生效边界即已生效 → 已到期或已退役。被截止只收窄可选区间，不是状态迁移。`SUPERSEDED` 一格在集合里，换版目前走截止或同起点退役。
 - **待批准发布**：待批准 → 已批准 → 已发布。待批准的可以按同一版本重新录入替换；已批准的内容已固定，要改就换版本号。
-- **产品—渠道映射、启用范围、注册号类型**：只增修订，旧修订保留。**渠道账号使用授权**：建立 → 撤销或自然到期；换范围是另一笔授权，不是第二版。
+- **产品—渠道映射、启用范围、注册号类型**：只增修订，旧修订保留。**渠道账号使用授权**：建立 → 撤销或自然到期；换范围是另一笔授权，不是第二版。**报价发出**：只增不改，没有状态列；再导出不另插一行，送达不在这里记。
 
 ## 入口
 
@@ -183,9 +183,10 @@
 | 待批准发布 | `/commercial-publication-vocabularies` `/commercial-publication-previews` `/commercial-publication-drafts` `/commercial-open-publication-drafts` `/commercial-publication-draft-readbacks/{kind}/{objectId}/{version}` `/commercial-publication-draft-approvals` `/commercial-publication-draft-publications` |
 | 受控发布与收尾 | `/commercial-publications` `/commercial-version-successor-cuts` `/commercial-version-retirements` |
 | 签署证据 | `/commercial-signing-evidence-registrations` `/commercial-signing-evidence-requirement-registrations` `/commercial-signing-evidences/{kind}/{objectId}/{version}` |
+| 报价发出 | `/commercial-quotation-send-registrations` `/commercial-quotation-sends` `/commercial-quotation-sends/{quotationId}` `/commercial-quotation-sends/{quotationId}/workbook` |
 | 商业版本读口 | `/commercial-version-readbacks/{kind}/{objectId}/{version}` `/commercial-customer-contracts` `/commercial-supplier-agreements` `/commercial-policies` |
 
-离线口：`cmd/parcel-commercial`，运营在数据库网络内手跑，不监听端口，内容全部来自 `-input` 文件。子命令：`publish` `register-resolution-key` `register-parties` `deactivate-party-identity` `end-party-relationships` `register-products` `register-registration-number-types` `register-legal-entity-profiles` `register-version-closures` `register-approval-duty-rule`。退出码 0 全部落定，1 技术失败，2 有未决或冲突要商业责任方看。 商业依据解析、授权裁定、交付条件读取没有 HTTP 口，由其他上下文在进程内调用。
+离线口：`cmd/parcel-commercial`，运营在数据库网络内手跑，不监听端口，内容全部来自 `-input` 文件。子命令：`publish` `register-resolution-key` `register-parties` `deactivate-party-identity` `end-party-relationships` `register-products` `register-registration-number-types` `register-legal-entity-profiles` `register-version-closures` `register-approval-duty-rule` `register-quotation-send`。退出码 0 全部落定，1 技术失败，2 有未决或冲突要商业责任方看。 商业依据解析、授权裁定、交付条件读取没有 HTTP 口，由其他上下文在进程内调用。
 
 ## 旧文档写了、代码里还没有的
 
@@ -195,5 +196,4 @@
 - **客户服务规则合同层「只能收紧」**：继承是有的，没找到比较合同层与产品层孰严的校验（在 `customer_service_rule.go` 与相关适配器里搜 `收紧`、`Widened`）。
 - **指定渠道产品的锁定与显式渠道变更授权**：本上下文只有渠道约束的收窄（`CandidatesAllowedBy`），该类型明说不提供锁定；搜 `锁定`、`Lock` 没有别的机制。锁定结果按旧文档本就归拥有交易的上下文，这里没核。
 - **监管、安全暂停与硬限制的单独记录**：搜 `Suspension`、`Restriction`、`暂停`、`硬限制` 无一命中。
-- **结算政策「明确允许哪些合同版本归入同一结算账户」**：代码里一份政策只指名一个合同版本（六维之一），没有允许清单。
-- 旧文档里关于面单服务默认终局、关闭与重开时重新校验当前授权的句子，说的是 `parcel-shipment` 怎么用这些声明。本上下文只登声明，那些行为没在这里核。
+- **结算政策「明确允许哪些合同版本归入同一结算账户」**：代码里一份政策只指名一个合同版本（六维之一），没有允许清单。旧文档里关于面单服务默认终局、关闭与重开时重新校验当前授权的句子，说的是 `parcel-shipment` 怎么用这些声明。本上下文只登声明，那些行为没在这里核。
