@@ -69,7 +69,7 @@
 一格是（租户，货主，仓，库位，商品，计量单位，库存状态，贴标别名，入库批次，批号，效期）。余额不存，由流水现算。没有自己的端点。商品入库的收货确认调用记数用例。整箱不进这本账。
 
 - 答复：`POSTED`、`ALREADY_POSTED`、`SOURCE_CONFLICT`、`REFUSED`。判重位置是（租户，原因，来源事实引用），重放排在校验之前。
-- 判定：先锁再认重放。原因是开箱时答 `REFUSED`，种类 `REASON_NOT_SUPPORTED`。仓须已登记且是自营仓，停用的仓不拒。行的形状随原因的类。逐行收齐不合之处，整笔不落。取走之后余额不为负。收货、退货入库、建账导入的记入行，以及加工、拆解的产出行，在记数时形成入库批次。建账导入提交是 `POST /warehouse-fulfillment-stock-import-submissions`，查阅是 `GET /warehouse-fulfillment-stock-imports` 与 `stock-import`。提交不改账。批准口还没有。
+- 判定：先锁再认重放。原因是开箱时答 `REFUSED`，种类 `REASON_NOT_SUPPORTED`。仓须已登记且是自营仓，停用的仓不拒。行的形状随原因的类。逐行收齐不合之处，整笔不落。取走之后余额不为负。收货、退货入库、建账导入的记入行，以及加工、拆解的产出行，在记数时形成入库批次。建账导入提交是 `POST /warehouse-fulfillment-stock-import-submissions`，查阅是 `GET /warehouse-fulfillment-stock-imports` 与 `stock-import`。提交不改账。批准与驳回是 `POST /warehouse-fulfillment-stock-import-approvals` 与 `stock-import-rejections`，授予与库存调整批准相同。职责规则没登记时批准答未配置，驳回不比这套规则。
 - 并发：记数先取货主锁的共享一侧，再取（租户，货主，仓）的记数锁。商品修订问在库时取货主锁的独占一侧：修订先落，之后的记数照新修订判；记数先落，修订改跟踪批号或效期答 `IMMUTABLE_FIELD`。
 - 没有：开箱；取走时不指名入库批次；占用；库存读口的端点。开箱仍由这本账拒绝，不因为整箱库存另有一本账就改口。
 

@@ -239,6 +239,8 @@ type StockApprovalIntake interface {
 	IntakeApproveJobDiscrepancy(ctx context.Context, request *http.Request) (application.ApproveCountCommand, error)
 	IntakeRejectJobDiscrepancy(ctx context.Context, request *http.Request) (application.RejectCountCommand, error)
 	IntakeApproveReplenishment(ctx context.Context, request *http.Request) (application.ApproveReplenishmentCommand, error)
+	IntakeApproveStockImport(ctx context.Context, request *http.Request) (application.PostStockImportCommand, error)
+	IntakeRejectStockImport(ctx context.Context, request *http.Request) (application.RejectStockImportCommand, error)
 }
 
 type OperatorStockApprovalIntake struct {
@@ -374,6 +376,42 @@ func (intake *OperatorStockApprovalIntake) IntakeApproveReplenishment(ctx contex
 	command.Tenant = identity.Tenant
 	command.Operator = identity.Registrant
 	return command, nil
+}
+
+func (intake *OperatorStockApprovalIntake) IntakeApproveStockImport(ctx context.Context, request *http.Request) (application.PostStockImportCommand, error) {
+	identity, err := intake.authenticator.AuthenticateStockApproval(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.PostStockImportCommand{}, err
+	}
+	command, err := registrationjson.ApproveStockImportCommand(requestBody(request))
+	if err != nil {
+		return application.PostStockImportCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	command.Poster = identity.Registrant
+	return command, nil
+}
+
+func (intake *OperatorStockApprovalIntake) IntakeRejectStockImport(ctx context.Context, request *http.Request) (application.RejectStockImportCommand, error) {
+	identity, err := intake.authenticator.AuthenticateStockApproval(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.RejectStockImportCommand{}, err
+	}
+	command, err := registrationjson.RejectStockImportCommand(requestBody(request))
+	if err != nil {
+		return application.RejectStockImportCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	command.Rejector = identity.Registrant
+	return command, nil
+}
+
+func (UnconfiguredStockApprovalIntake) IntakeApproveStockImport(context.Context, *http.Request) (application.PostStockImportCommand, error) {
+	return application.PostStockImportCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredStockApprovalIntake) IntakeRejectStockImport(context.Context, *http.Request) (application.RejectStockImportCommand, error) {
+	return application.RejectStockImportCommand{}, ErrAccessChannelNotConfigured
 }
 
 func (UnconfiguredStockApprovalIntake) IntakeApproveReplenishment(context.Context, *http.Request) (application.ApproveReplenishmentCommand, error) {

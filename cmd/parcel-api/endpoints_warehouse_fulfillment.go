@@ -77,6 +77,7 @@ type warehouseFulfillmentWiring struct {
 	unclaimedArrivalManage   warehousehttp.UnclaimedArrivalManager
 	unclaimedArrivalQueries  warehousehttp.UnclaimedArrivalQueries
 	stockImportSubmit        warehousehttp.StockImportSubmissions
+	stockImportDecisions     warehousehttp.StockImportDecisions
 	stockImportQueries       warehousehttp.StockImportQueries
 
 	internalMoveIntake        *warehousehttp.InternalJobWorkFactIntake
@@ -340,6 +341,12 @@ func init() {
 			},
 			"/warehouse-fulfillment-stock-import-submissions": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockImportSubmission), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-import-approvals": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentApproval), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-stock-import-rejections": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentApproval), warehouseFulfillment: true,
 			},
 			"/warehouse-fulfillment-stock-imports": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
@@ -732,6 +739,7 @@ func init() {
 				unclaimedArrivalManage:    orchestration.unclaimedArrivalManage,
 				unclaimedArrivalQueries:   orchestration.unclaimedArrivalQueries,
 				stockImportSubmit:         orchestration.stockImportSubmit,
+				stockImportDecisions:      orchestration.stockImportSubmit,
 				stockImportQueries:        orchestration.stockImportQueries,
 				internalMoveIntake:        internalMoveIntake,
 				formConversionIntake:      formConversionIntake,
@@ -831,6 +839,8 @@ func init() {
 			unclaimedArrivalList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			unclaimedArrivalOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			stockImportSubmission := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockImportApproval := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockImportRejection := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			stockImportList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			stockImportOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			internalMove := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -978,6 +988,8 @@ func init() {
 				unclaimedArrivalList = warehousehttp.NewQueryUnclaimedArrivalsEndpoint(catalogueIntake, wiring.unclaimedArrivalQueries)
 				unclaimedArrivalOne = warehousehttp.NewQueryUnclaimedArrivalEndpoint(catalogueIntake, wiring.unclaimedArrivalQueries)
 				stockImportSubmission = warehousehttp.NewSubmitStockImportEndpoint(channels.stockImportSubmission(), wiring.stockImportSubmit)
+				stockImportApproval = warehousehttp.NewApproveStockImportEndpoint(channels.stockApproval(), wiring.stockImportDecisions)
+				stockImportRejection = warehousehttp.NewRejectStockImportEndpoint(channels.stockApproval(), wiring.stockImportDecisions)
 				stockImportList = warehousehttp.NewQueryStockImportsEndpoint(catalogueIntake, wiring.stockImportQueries)
 				stockImportOne = warehousehttp.NewQueryStockImportEndpoint(catalogueIntake, wiring.stockImportQueries)
 				internalMoveIntake := warehousehttp.UnconfiguredInternalJobIntake{}
@@ -1192,6 +1204,8 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrivals", Handler: unclaimedArrivalList},
 				{Pattern: "/warehouse-fulfillment-unclaimed-arrival", Handler: unclaimedArrivalOne},
 				{Pattern: "/warehouse-fulfillment-stock-import-submissions", Handler: stockImportSubmission},
+				{Pattern: "/warehouse-fulfillment-stock-import-approvals", Handler: stockImportApproval},
+				{Pattern: "/warehouse-fulfillment-stock-import-rejections", Handler: stockImportRejection},
 				{Pattern: "/warehouse-fulfillment-stock-imports", Handler: stockImportList},
 				{Pattern: "/warehouse-fulfillment-stock-import", Handler: stockImportOne},
 				{Pattern: "/warehouse-fulfillment-internal-moves", Handler: internalMove},

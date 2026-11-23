@@ -159,23 +159,24 @@ func (errInvalidStockImport) Error() string { return "warehouse fulfillment: inv
 
 // StockImport 是一份已落册的建账导入。
 type StockImport struct {
-	tenant      TenantID
-	id          StockImportID
-	owner       OwnerAccountID
-	warehouse   WarehouseCode
-	reason      StockImportReason
-	goods       []StockImportGoodsLine
-	cartons     []StockImportCartonLine
-	submitter   Registrant
-	submittedAt time.Time
-	status      StockImportStatus
-	poster      Registrant
-	postedAt    time.Time
-	goodsMove   StockMovementID
-	cartonMove  CartonMovementID
-	rejector    Registrant
-	rejectedAt  time.Time
-	rejectNote  string
+	tenant       TenantID
+	id           StockImportID
+	owner        OwnerAccountID
+	warehouse    WarehouseCode
+	reason       StockImportReason
+	goods        []StockImportGoodsLine
+	cartons      []StockImportCartonLine
+	submitter    Registrant
+	submittedAt  time.Time
+	status       StockImportStatus
+	poster       Registrant
+	postedAt     time.Time
+	goodsMove    StockMovementID
+	cartonMove   CartonMovementID
+	rejector     Registrant
+	rejectedAt   time.Time
+	rejectNote   string
+	dutyRevision int
 }
 
 func NewPendingStockImport(
@@ -259,6 +260,17 @@ func (item StockImport) CartonMovementID() CartonMovementID { return item.carton
 func (item StockImport) Rejector() Registrant               { return item.rejector }
 func (item StockImport) RejectedAt() time.Time              { return item.rejectedAt }
 func (item StockImport) RejectionNote() string              { return item.rejectNote }
+func (item StockImport) DutyRevision() int                  { return item.dutyRevision }
+
+// RememberDuty 把这次批准所据的职责规则修订记在已入账的导入上。修订从 1 起。
+func (item StockImport) RememberDuty(revision int) (StockImport, error) {
+	if item.status != StockImportPosted || revision < 1 {
+		return StockImport{}, ErrInvalidStockImport
+	}
+	next := item
+	next.dutyRevision = revision
+	return next, nil
+}
 
 // SameContent 只比载荷：货主、仓、原因与各行的先后。提交人、时刻与状态不参与。
 func (item StockImport) SameContent(owner OwnerAccountID, warehouse WarehouseCode, reason StockImportReason, goods []StockImportGoodsLine, cartons []StockImportCartonLine) bool {

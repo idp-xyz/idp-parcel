@@ -28,7 +28,7 @@ func NewStockImports(db *bentopg.DB) (*StockImports, error) {
 
 var _ ports.StockImportStore = (*StockImports)(nil)
 
-const stockImportColumns = `tenant_id, import_id, owner_account_id, warehouse_code, reason, status, submitter, submitted_at, poster, posted_at, goods_movement_id, carton_movement_id, rejector, rejected_at, rejection_note`
+const stockImportColumns = `tenant_id, import_id, owner_account_id, warehouse_code, reason, status, submitter, submitted_at, poster, posted_at, goods_movement_id, carton_movement_id, rejector, rejected_at, rejection_note, duty_revision`
 
 const stockImportListed = `WITH listed AS (
 	SELECT ` + stockImportColumns + `
@@ -150,10 +150,10 @@ func (store *StockImports) MarkPosted(ctx context.Context, item domain.StockImpo
 	}
 	tag, err := executor.Exec(ctx,
 		`UPDATE warehouse_fulfillment.stock_import
-		    SET status = 'POSTED', poster = $3, posted_at = $4, goods_movement_id = $5, carton_movement_id = $6
+		    SET status = 'POSTED', poster = $3, posted_at = $4, goods_movement_id = $5, carton_movement_id = $6, duty_revision = $7
 		  WHERE tenant_id = $1 AND import_id = $2 AND status = 'PENDING'`,
 		item.Tenant().String(), item.ID().String(), item.Poster().String(), item.PostedAt(),
-		nullableText(item.GoodsMovementID().String()), nullableText(item.CartonMovementID().String()),
+		nullableText(item.GoodsMovementID().String()), nullableText(item.CartonMovementID().String()), nullableRevision(item.DutyRevision()),
 	)
 	if err != nil {
 		return fmt.Errorf("%s: %w", operation, err)
@@ -236,13 +236,14 @@ type stockImportHeader struct {
 	submittedAt                                             time.Time
 	poster, goodsMove, cartonMove, rejector, note           *string
 	postedAt, rejectedAt                                    *time.Time
+	duty                                                    *int
 }
 
 func (store *StockImports) scanImport(ctx context.Context, querier bentopg.Querier, row interface{ Scan(dest ...any) error }) (domain.StockImport, error) {
 	var header stockImportHeader
 	if err := row.Scan(
 		&header.tenant, &header.id, &header.owner, &header.warehouse, &header.reason, &header.status, &header.submitter, &header.submittedAt,
-		&header.poster, &header.postedAt, &header.goodsMove, &header.cartonMove, &header.rejector, &header.rejectedAt, &header.note,
+		&header.poster, &header.postedAt, &header.goodsMove, &header.cartonMove, &header.rejector, &header.rejectedAt, &header.note, &header.duty,
 	); err != nil {
 		return domain.StockImport{}, err
 	}
@@ -254,7 +255,11 @@ func (store *StockImports) scanImport(ctx context.Context, querier bentopg.Queri
 	if err != nil {
 		return domain.StockImport{}, err
 	}
-	return rebuildStockImport(header, goods, cartons)
+	item, err := rebuildStockImport(header, goods, cartons)
+	if err != nil || header.duty == nil {
+		return item, err
+	}
+	return item.RememberDuty(*header.duty)
 }
 
 func loadStockImportGoods(ctx context.Context, querier bentopg.Querier, tenant, id string) ([]domain.StockImportGoodsLine, error) {
@@ -419,6 +424,13 @@ func nullableTime(at time.Time) any {
 		return nil
 	}
 	return at
+}
+
+func nullableRevision(revision int) any {
+	if revision < 1 {
+		return nil
+	}
+	return revision
 }
 
 func timeOrZero(at *time.Time) time.Time {

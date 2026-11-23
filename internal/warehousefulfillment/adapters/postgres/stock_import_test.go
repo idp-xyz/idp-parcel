@@ -450,6 +450,124 @@ func cartonLine(t *testing.T, location, number string, declared time.Time) domai
 	return line
 }
 
+// Covers: 批准职责没登记时批准答未配置；须不同主体时提交人不能批自己的；另一个人批准记下修订并入账；
+// 已入账再批答已有结果；驳回不比职责规则、不改账；已驳回再批答状态不符；查不到答查无此导入。
+func TestStockImportApprovalUsesTheDutyRule(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedReceiving(t)
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-STORE", 1, func(spec *domain.ZoneContentSpec) {
+		spec.Name = valueOf(t, domain.NewZoneName, "存储")
+		spec.Usage = domain.ZoneUsageStorage
+	}))
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-STORE", 1, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-STORE")
+	}))
+	imports, err := adapter.NewStockImports(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts, err := adapter.NewCounts(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	submitter := valueOf(t, domain.NewRegistrant, "op-submit")
+	approverID := valueOf(t, domain.NewRegistrant, "op-approve")
+	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
+	handler := application.NewStockImportHandler(
+		imports, presentOwnerAccounts{}, world.warehouses, world.locations, world.zones, world.goods,
+		world.cartons, world.cartonIDs,
+		application.NewPostStockMovementHandler(world.ledger, world.warehouses, world.locations, world.zones, world.goods, world.stockIDs, fixedClock{at: baseInstant}),
+		fixedClock{at: baseInstant},
+	).WithApproval(counts, world.warehouses)
+	submit := func(id string) {
+		t.Helper()
+		err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+			_, runErr := handler.Submit(ctx, application.SubmitStockImportCommand{
+				Tenant: tenant, ID: valueOf(t, domain.NewStockImportID, id),
+				Owner:     valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"),
+				Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"),
+				Reason:    valueOf(t, domain.NewStockImportReason, "系统切换"),
+				Goods:     []domain.StockImportGoodsLine{goodsLine(t, "SYN-LOC-STORE", "SYN-GOODS-01", "件", domain.StockStateGood, 4, "", "", "", time.Time{})},
+				Submitter: submitter,
+			})
+			return runErr
+		})
+		if err != nil {
+			t.Fatalf("提交 %s：%v", id, err)
+		}
+	}
+	approve := func(id string, poster domain.Registrant) application.StockImportResult {
+		t.Helper()
+		var result application.StockImportResult
+		err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+			var runErr error
+			result, runErr = handler.Approve(ctx, application.PostStockImportCommand{
+				Tenant: tenant, ID: valueOf(t, domain.NewStockImportID, id), Poster: poster,
+			})
+			return runErr
+		})
+		if err != nil {
+			t.Fatalf("批准 %s：%v", id, err)
+		}
+		return result
+	}
+	reject := func(id string) application.StockImportResult {
+		t.Helper()
+		var result application.StockImportResult
+		err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+			var runErr error
+			result, runErr = handler.Reject(ctx, application.RejectStockImportCommand{
+				Tenant: tenant, ID: valueOf(t, domain.NewStockImportID, id), Rejector: approverID, Note: "不收",
+			})
+			return runErr
+		})
+		if err != nil {
+			t.Fatalf("驳回 %s：%v", id, err)
+		}
+		return result
+	}
+
+	submit("SYN-IMP-DUTY")
+	if result := approve("SYN-IMP-DUTY", approverID); result.Outcome() != application.StockImportNotConfigured {
+		t.Fatalf("没登记规则 = %s", result.Outcome())
+	}
+	if world.registerDuty(t, world.approver(t, counts), true).Outcome() != application.ApprovalDutyRegistered {
+		t.Fatal("规则没登记上")
+	}
+	if result := approve("SYN-IMP-DUTY", submitter); result.Outcome() != application.StockImportDutyBlocked {
+		t.Fatalf("提交人自批 = %s", result.Outcome())
+	}
+	if world.stockUnitAt(t, "SYN-LOC-STORE", "件") != 0 {
+		t.Fatalf("拦住之后库存 = %d", world.stockUnitAt(t, "SYN-LOC-STORE", "件"))
+	}
+	posted := approve("SYN-IMP-DUTY", approverID)
+	item, ok := posted.Import()
+	if posted.Outcome() != application.StockImportPosted || !ok || item.DutyRevision() != 1 || item.Poster().String() != "op-approve" {
+		t.Fatalf("批准 = %s 修订 %d 批准人 %s", posted.Outcome(), item.DutyRevision(), item.Poster())
+	}
+	if world.stockUnitAt(t, "SYN-LOC-STORE", "件") != 4 {
+		t.Fatalf("入账后库存 = %d", world.stockUnitAt(t, "SYN-LOC-STORE", "件"))
+	}
+	if again := approve("SYN-IMP-DUTY", approverID); again.Outcome() != application.StockImportExistingResult {
+		t.Fatalf("再批 = %s", again.Outcome())
+	}
+	if missing := approve("SYN-IMP-NONE", approverID); missing.Outcome() != application.StockImportNotFound {
+		t.Fatalf("查无 = %s", missing.Outcome())
+	}
+
+	submit("SYN-IMP-REJ-DUTY")
+	before := world.stockUnitAt(t, "SYN-LOC-STORE", "件")
+	if result := reject("SYN-IMP-REJ-DUTY"); result.Outcome() != application.StockImportRejected {
+		t.Fatalf("驳回 = %s", result.Outcome())
+	}
+	if world.stockUnitAt(t, "SYN-LOC-STORE", "件") != before {
+		t.Fatalf("驳回改了库存 %d", world.stockUnitAt(t, "SYN-LOC-STORE", "件"))
+	}
+	if result := approve("SYN-IMP-REJ-DUTY", approverID); result.Outcome() != application.StockImportStatusMismatch {
+		t.Fatalf("已驳回再批 = %s", result.Outcome())
+	}
+}
+
 func hasIssue(result application.StockImportResult, kind application.StockImportIssueKind) bool {
 	for _, issue := range result.Issues() {
 		if issue.Kind == kind {

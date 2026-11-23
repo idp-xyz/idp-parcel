@@ -367,6 +367,24 @@ func (submission transactionalStockImport) Submit(
 	})
 }
 
+func (submission transactionalStockImport) Approve(
+	ctx context.Context,
+	command warehouseapp.PostStockImportCommand,
+) (warehouseapp.StockImportResult, error) {
+	return inTransaction(ctx, submission.transactor, func(txCtx context.Context) (warehouseapp.StockImportResult, error) {
+		return submission.inner.Approve(txCtx, command)
+	})
+}
+
+func (submission transactionalStockImport) Reject(
+	ctx context.Context,
+	command warehouseapp.RejectStockImportCommand,
+) (warehouseapp.StockImportResult, error) {
+	return inTransaction(ctx, submission.transactor, func(txCtx context.Context) (warehouseapp.StockImportResult, error) {
+		return submission.inner.Reject(txCtx, command)
+	})
+}
+
 func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.Assigner, isolated *isolatedWriteAdmission, selfAuthority string) (warehouseFulfillmentOrchestration, error) {
 	none := warehouseFulfillmentOrchestration{}
 	warehouses, err := whpostgres.NewWarehouses(db)
@@ -787,7 +805,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 			transactor: db.Transactor(),
 			inner: warehouseapp.NewStockImportHandler(
 				stockImports, owners, warehouses, locations, zones, goods, cartons, cartonIDs, poster, systemClock{},
-			),
+			).WithApproval(countStore, warehouses),
 		},
 		stockImportQueries: stockImports,
 		internalJobs:       internalJobs,

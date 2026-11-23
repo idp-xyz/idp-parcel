@@ -28,6 +28,8 @@ const (
 	StockImportRejected
 	StockImportStatusMismatch
 	StockImportNotFound
+	StockImportNotConfigured
+	StockImportDutyBlocked
 )
 
 func (outcome StockImportOutcome) String() string {
@@ -54,6 +56,10 @@ func (outcome StockImportOutcome) String() string {
 		return "STATUS_MISMATCH"
 	case StockImportNotFound:
 		return "NOT_FOUND"
+	case StockImportNotConfigured:
+		return "NOT_CONFIGURED"
+	case StockImportDutyBlocked:
+		return "DUTY_BLOCKED"
 	default:
 		return ""
 	}
@@ -209,9 +215,10 @@ func (command SubmitStockImportCommand) assemblyError() error {
 }
 
 type PostStockImportCommand struct {
-	Tenant domain.TenantID
-	ID     domain.StockImportID
-	Poster domain.Registrant
+	Tenant       domain.TenantID
+	ID           domain.StockImportID
+	Poster       domain.Registrant
+	DutyRevision int
 }
 
 type RejectStockImportCommand struct {
@@ -223,16 +230,25 @@ type RejectStockImportCommand struct {
 
 // StockImportHandler 提交建账导入，并在批准成立或驳回时改状态。事务边界在调用方。
 type StockImportHandler struct {
-	imports    ports.StockImportStore
-	owners     ports.OwnerAccountLookup
-	warehouses ports.WarehouseLookup
-	locations  ports.StockLocationLookup
-	zones      ports.ZoneLookup
-	goods      ports.StockGoodsLookup
-	cartons    ports.CartonLedger
-	identities ports.CartonIdentities
-	stock      *PostStockMovementHandler
-	clock      ports.Clock
+	imports      ports.StockImportStore
+	owners       ports.OwnerAccountLookup
+	warehouses   ports.WarehouseLookup
+	locations    ports.StockLocationLookup
+	zones        ports.ZoneLookup
+	goods        ports.StockGoodsLookup
+	cartons      ports.CartonLedger
+	identities   ports.CartonIdentities
+	stock        *PostStockMovementHandler
+	clock        ports.Clock
+	duties       ports.ApprovalDutyStore
+	anyWarehouse ports.TenantWarehouseLookup
+}
+
+// WithApproval 让批准走本租户的批准职责规则。驳回只问有没有仓，不比这套规则。
+func (handler *StockImportHandler) WithApproval(duties ports.ApprovalDutyStore, anyWarehouse ports.TenantWarehouseLookup) *StockImportHandler {
+	handler.duties = duties
+	handler.anyWarehouse = anyWarehouse
+	return handler
 }
 
 func NewStockImportHandler(
@@ -317,6 +333,42 @@ func (handler *StockImportHandler) Submit(ctx context.Context, command SubmitSto
 	return StockImportResult{outcome: StockImportSubmitted, item: pending, hasItem: true}, nil
 }
 
+// Approve 先按批准职责规则放行，再重判并入账。规则没登记答未配置。须不同主体时提交人不能批自己的。
+func (handler *StockImportHandler) Approve(ctx context.Context, command PostStockImportCommand) (StockImportResult, error) {
+	if handler.duties == nil || handler.anyWarehouse == nil {
+		return StockImportResult{outcome: StockImportNotConfigured}, nil
+	}
+	configured, err := handler.anyWarehouse.HasAnyWarehouse(ctx, command.Tenant)
+	if err != nil {
+		return StockImportResult{}, fmt.Errorf("approve stock import: %w", err)
+	}
+	if !configured {
+		return StockImportResult{outcome: StockImportNotConfigured}, nil
+	}
+	duty, found, err := handler.duties.LoadDuty(ctx, command.Tenant)
+	if err != nil {
+		return StockImportResult{}, fmt.Errorf("approve stock import: %w", err)
+	}
+	if !found {
+		return StockImportResult{outcome: StockImportNotConfigured}, nil
+	}
+	if err := handler.imports.Hold(ctx, command.Tenant, command.ID); err != nil {
+		return StockImportResult{}, fmt.Errorf("approve stock import: %w", err)
+	}
+	item, found, err := handler.imports.Load(ctx, command.Tenant, command.ID)
+	if err != nil {
+		return StockImportResult{}, fmt.Errorf("approve stock import: %w", err)
+	}
+	if !found {
+		return StockImportResult{outcome: StockImportNotFound}, nil
+	}
+	if item.Status() == domain.StockImportPending && duty.Distinct && item.Submitter().String() == command.Poster.String() {
+		return StockImportResult{outcome: StockImportDutyBlocked, status: item.Status(), hasStatus: true, item: item, hasItem: true}, nil
+	}
+	command.DutyRevision = duty.Revision
+	return handler.Post(ctx, command)
+}
+
 // Post 在批准成立时重判各行并同笔记账。停用的仓不挡已经提交的导入。
 // 有行已不成立答 NO_LONGER_VALID，导入留在待批准。
 func (handler *StockImportHandler) Post(ctx context.Context, command PostStockImportCommand) (StockImportResult, error) {
@@ -375,6 +427,12 @@ func (handler *StockImportHandler) Post(ctx context.Context, command PostStockIm
 	if err != nil {
 		return StockImportResult{}, fmt.Errorf("post stock import: %w", err)
 	}
+	if command.DutyRevision > 0 {
+		posted, err = posted.RememberDuty(command.DutyRevision)
+		if err != nil {
+			return StockImportResult{}, fmt.Errorf("post stock import: %w", err)
+		}
+	}
 	if err := handler.imports.MarkPosted(ctx, posted); err != nil {
 		return StockImportResult{}, fmt.Errorf("post stock import: %w", err)
 	}
@@ -385,6 +443,15 @@ func (handler *StockImportHandler) Post(ctx context.Context, command PostStockIm
 func (handler *StockImportHandler) Reject(ctx context.Context, command RejectStockImportCommand) (StockImportResult, error) {
 	if command.Tenant.String() == "" || command.ID.String() == "" || command.Rejector.String() == "" {
 		return StockImportResult{}, errors.New("reject stock import: 缺租户、导入标识或驳回人")
+	}
+	if handler.anyWarehouse != nil {
+		configured, err := handler.anyWarehouse.HasAnyWarehouse(ctx, command.Tenant)
+		if err != nil {
+			return StockImportResult{}, fmt.Errorf("reject stock import: %w", err)
+		}
+		if !configured {
+			return StockImportResult{outcome: StockImportNotConfigured}, nil
+		}
 	}
 	if err := handler.imports.Hold(ctx, command.Tenant, command.ID); err != nil {
 		return StockImportResult{}, fmt.Errorf("reject stock import: %w", err)

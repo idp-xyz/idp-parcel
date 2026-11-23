@@ -57,6 +57,16 @@ type StockImportSubmissions interface {
 	Submit(ctx context.Context, command application.SubmitStockImportCommand) (application.StockImportResult, error)
 }
 
+type StockImportDecisionIntake interface {
+	IntakeApproveStockImport(ctx context.Context, request *http.Request) (application.PostStockImportCommand, error)
+	IntakeRejectStockImport(ctx context.Context, request *http.Request) (application.RejectStockImportCommand, error)
+}
+
+type StockImportDecisions interface {
+	Approve(ctx context.Context, command application.PostStockImportCommand) (application.StockImportResult, error)
+	Reject(ctx context.Context, command application.RejectStockImportCommand) (application.StockImportResult, error)
+}
+
 type StockImportQueries interface {
 	Load(ctx context.Context, tenant domain.TenantID, id domain.StockImportID) (domain.StockImport, bool, error)
 	List(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[domain.StockImport], error)
@@ -80,6 +90,46 @@ func NewSubmitStockImportEndpoint(intake StockImportSubmissionIntake, submission
 		if err != nil {
 			slog.ErrorContext(request.Context(), "stock import submission did not form an answer",
 				"importId", command.ID.String(), "warehouse", command.Warehouse.String())
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeStockImportAnswer(response, result, true)
+	})
+}
+
+func NewApproveStockImportEndpoint(intake StockImportDecisionIntake, decisions StockImportDecisions) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if refuseMethod(response, request, http.MethodPost) {
+			return
+		}
+		command, err := intake.IntakeApproveStockImport(request.Context(), request)
+		if err != nil {
+			writeIntakeProblem(response, err)
+			return
+		}
+		result, err := decisions.Approve(request.Context(), command)
+		if err != nil {
+			slog.ErrorContext(request.Context(), "stock import approval did not form an answer", "importId", command.ID.String())
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeStockImportAnswer(response, result, true)
+	})
+}
+
+func NewRejectStockImportEndpoint(intake StockImportDecisionIntake, decisions StockImportDecisions) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if refuseMethod(response, request, http.MethodPost) {
+			return
+		}
+		command, err := intake.IntakeRejectStockImport(request.Context(), request)
+		if err != nil {
+			writeIntakeProblem(response, err)
+			return
+		}
+		result, err := decisions.Reject(request.Context(), command)
+		if err != nil {
+			slog.ErrorContext(request.Context(), "stock import rejection did not form an answer", "importId", command.ID.String())
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
@@ -189,6 +239,7 @@ type stockImportBody struct {
 	GoodsLines       []stockImportGoodsBody  `json:"goodsLines"`
 	CartonLines      []stockImportCartonBody `json:"cartonLines"`
 	Poster           string                  `json:"poster,omitempty"`
+	DutyRevision     int                     `json:"dutyRevision,omitempty"`
 	PostedAt         string                  `json:"postedAt,omitempty"`
 	GoodsMovementID  string                  `json:"goodsMovementId,omitempty"`
 	CartonMovementID string                  `json:"cartonMovementId,omitempty"`
@@ -230,7 +281,7 @@ func writeStockImportAnswer(response http.ResponseWriter, result application.Sto
 	answer := stockImportAnswer{Outcome: name}
 	status := http.StatusOK
 	switch result.Outcome() {
-	case application.StockImportSubmitted, application.StockImportExistingResult:
+	case application.StockImportSubmitted, application.StockImportExistingResult, application.StockImportPosted, application.StockImportRejected:
 		item, present := result.Import()
 		if !present {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -238,7 +289,7 @@ func writeStockImportAnswer(response http.ResponseWriter, result application.Sto
 		}
 		body := stockImportBodyOf(item)
 		answer.Import = &body
-		if created && result.Outcome() == application.StockImportSubmitted {
+		if created && (result.Outcome() == application.StockImportSubmitted || result.Outcome() == application.StockImportPosted || result.Outcome() == application.StockImportRejected) {
 			status = http.StatusCreated
 		}
 	case application.StockImportWarehouseNotAccepting:
@@ -291,6 +342,7 @@ func stockImportBodyOf(item domain.StockImport) stockImportBody {
 	if item.Poster().String() != "" {
 		body.Poster = item.Poster().String()
 		body.PostedAt = cataloguepage.FormatInstant(item.PostedAt())
+		body.DutyRevision = item.DutyRevision()
 	}
 	body.GoodsMovementID = item.GoodsMovementID().String()
 	body.CartonMovementID = item.CartonMovementID().String()

@@ -209,6 +209,7 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		unclaimedArrivalManage:   unwiredUnclaimedArrival{},
 		unclaimedArrivalQueries:  unwiredUnclaimedArrival{},
 		stockImportSubmit:        unwiredStockImport{},
+		stockImportDecisions:     unwiredStockImport{},
 		stockImportQueries:       unwiredStockImport{},
 		internalJobs:             unwiredInternalJob{},
 		conditionRestore:         unwiredInternalJob{},
@@ -415,6 +416,14 @@ func (unwiredDisposalRuleCatalogue) DisposalRuleRevisions(
 type unwiredStockImport struct{}
 
 func (unwiredStockImport) Submit(context.Context, warehouseapp.SubmitStockImportCommand) (warehouseapp.StockImportResult, error) {
+	return warehouseapp.StockImportResult{}, errOrchestrationNotWired
+}
+
+func (unwiredStockImport) Approve(context.Context, warehouseapp.PostStockImportCommand) (warehouseapp.StockImportResult, error) {
+	return warehouseapp.StockImportResult{}, errOrchestrationNotWired
+}
+
+func (unwiredStockImport) Reject(context.Context, warehouseapp.RejectStockImportCommand) (warehouseapp.StockImportResult, error) {
 	return warehouseapp.StockImportResult{}, errOrchestrationNotWired
 }
 
@@ -676,6 +685,8 @@ const (
 	unclaimedArrivalListLine      = "/warehouse-fulfillment-unclaimed-arrivals"
 	unclaimedArrivalOneLine       = "/warehouse-fulfillment-unclaimed-arrival"
 	stockImportSubmissionsLine    = "/warehouse-fulfillment-stock-import-submissions"
+	stockImportApprovalsLine      = "/warehouse-fulfillment-stock-import-approvals"
+	stockImportRejectionsLine     = "/warehouse-fulfillment-stock-import-rejections"
 	stockImportListLine           = "/warehouse-fulfillment-stock-imports"
 	stockImportOneLine            = "/warehouse-fulfillment-stock-import"
 
@@ -851,6 +862,8 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		unclaimedArrivalListLine:                                      {http.MethodGet, faceOperationsRead},
 		unclaimedArrivalOneLine:                                       {http.MethodGet, faceOperationsRead},
 		stockImportSubmissionsLine:                                    {http.MethodPost, faceOperationDecision},
+		stockImportApprovalsLine:                                      {http.MethodPost, faceOperationDecision},
+		stockImportRejectionsLine:                                     {http.MethodPost, faceOperationDecision},
 		stockImportListLine:                                           {http.MethodGet, faceOperationsRead},
 		stockImportOneLine:                                            {http.MethodGet, faceOperationsRead},
 		internalMovesLine:                                             {http.MethodPost, faceWorkFact},
@@ -979,6 +992,8 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 			unclaimedArrivalRevokeLine:                                    accessidentity.DecisionUnclaimedArrivalClaim,
 			unclaimedArrivalDisposeLine:                                   accessidentity.DecisionUnclaimedArrivalDisposition,
 			stockImportSubmissionsLine:                                    accessidentity.DecisionStockImportSubmission,
+			stockImportApprovalsLine:                                      accessidentity.DecisionStockAdjustmentApproval,
+			stockImportRejectionsLine:                                     accessidentity.DecisionStockAdjustmentApproval,
 			conditionRestoresLine:                                         accessidentity.DecisionConditionRestore,
 			"/warehouse-fulfillment-processing-instructions":              accessidentity.DecisionProcessingInstruction,
 			"/warehouse-fulfillment-processing-instruction-voids":         accessidentity.DecisionProcessingInstruction,
@@ -1094,6 +1109,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			unclaimedArrivalListLine:                               {status, code},
 			unclaimedArrivalOneLine:                                {status, code},
 			stockImportSubmissionsLine:                             {status, code},
+			stockImportApprovalsLine:                               {status, code},
+			stockImportRejectionsLine:                              {status, code},
 			stockImportListLine:                                    {status, code},
 			stockImportOneLine:                                     {status, code},
 			internalMovesLine:                                      {status, code},
@@ -1210,6 +1227,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			unclaimedArrivalListLine:                               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			unclaimedArrivalOneLine:                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			stockImportSubmissionsLine:                             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			stockImportApprovalsLine:                               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			stockImportRejectionsLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			stockImportListLine:                                    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			stockImportOneLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			internalMovesLine:                                      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1319,6 +1338,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			unclaimedArrivalListLine:                               {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			unclaimedArrivalOneLine:                                {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			stockImportSubmissionsLine:                             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			stockImportApprovalsLine:                               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			stockImportRejectionsLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			stockImportListLine:                                    {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			stockImportOneLine:                                     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			internalMovesLine:                                      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},

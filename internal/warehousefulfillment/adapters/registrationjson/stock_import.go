@@ -194,3 +194,55 @@ func stockImportCartons(raw *[]stockImportCartonLine) ([]domain.StockImportCarto
 	}
 	return lines, nil
 }
+
+type stockImportDecisionDocument struct {
+	carriedIdentity
+	refusedOwner
+	ImportID *string `json:"importId"`
+	Note     *string `json:"note"`
+	Reason   *string `json:"reason"`
+}
+
+// ApproveStockImportCommand 把批准一份建账导入译成命令。货主与内容取自册上那一份，载荷里再带货主即坏载荷。
+func ApproveStockImportCommand(reader io.Reader) (application.PostStockImportCommand, error) {
+	id, _, err := readStockImportDecision(reader, false)
+	if err != nil {
+		return application.PostStockImportCommand{}, err
+	}
+	return application.PostStockImportCommand{ID: id}, nil
+}
+
+// RejectStockImportCommand 把驳回一份建账导入译成命令。原因必带。
+func RejectStockImportCommand(reader io.Reader) (application.RejectStockImportCommand, error) {
+	id, reason, err := readStockImportDecision(reader, true)
+	if err != nil {
+		return application.RejectStockImportCommand{}, err
+	}
+	return application.RejectStockImportCommand{ID: id, Note: reason}, nil
+}
+
+func readStockImportDecision(reader io.Reader, reject bool) (domain.StockImportID, string, error) {
+	var none domain.StockImportID
+	document, err := decodeDocument[stockImportDecisionDocument](reader, "stock import decision")
+	if err != nil {
+		return none, "", err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, "", err
+	}
+	if err := document.refuseOwner(); err != nil {
+		return none, "", err
+	}
+	id, err := requiredText("importId", document.ImportID, domain.NewStockImportID)
+	if err != nil {
+		return none, "", err
+	}
+	reason := ""
+	if document.Reason != nil {
+		reason = *document.Reason
+	}
+	if reject && reason == "" {
+		return none, "", malformed("reason is required")
+	}
+	return id, reason, nil
+}
