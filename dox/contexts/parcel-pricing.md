@@ -1,6 +1,6 @@
 # 小包计价（`parcel-pricing`）
 
-代码在 `internal/parcelpricing`。适用期重叠只提示那一句对照 `9d94c7808`；工作簿读回那一句对照 `348ba3028`；票级聚合那一句对照 `7f502a7a6`；方向授权那一句对照 `93e688ac5`；其余对照 main `3dd72c42a`（2026-11-12）。
+代码在 `internal/parcelpricing`。适用期重叠只提示那一句对照 `9d94c7808`；工作簿读回那一句对照 `348ba3028`；票级聚合那一句对照 `7f502a7a6`；方向授权那一句对照 `93e688ac5`；已批准草稿撤下那一句对照 `54171deee`；其余对照 main `3dd72c42a`（2026-11-12）。
 
 **这份文件核到什么程度**：取值表、评价状态、问题码、入口三节是从代码里读出来的。「规则」一节的句子是从旧 `docs/domain/parcel-pricing/CONTEXT.md` 提炼的，每条只确认了代码里有对应的机制，没有逐条跑测试验证行为；旧文档写了而代码里没有的，单列在最后一节。
 
@@ -131,7 +131,7 @@
 
 ## 生命周期
 
-- **价卡**：草稿 → 提交 → 批准并发布 → 在用 →（后继截断，或退役）。也可以经受控登记口直接登记一版。已发布的要改，另起草稿。
+- **价卡**：草稿 → 提交 → 批准 → 发布 → 在用 →（后继截断，或退役）。已批准、还没发布的可以撤下，终态不能恢复，也不能再发布，版本号不再使用。也可以经受控登记口直接登记一版。已发布的要改，另起草稿。
 - **序列版本**：已登记 → 复核通过即在用，或退回；更新的版本复核通过后，旧版被替代。登记与复核记录只增不改。
 - **评价**：形成即定为上面五种结果之一，此后不变。
 
@@ -142,7 +142,7 @@
 | 做什么 | 路径 |
 |---|---|
 | 评价、试算、回放 | `/pricing-evaluations` `/pricing-estimates` `/pricing-evaluation-replays` `/pricing-pending-series-evaluations` |
-| 价卡草稿到发布 | `/pricing-price-card-previews` `/pricing-price-card-drafts` `/pricing-price-card-draft-views` `/pricing-price-card-draft-approvals` `/pricing-price-card-draft-publications` |
+| 价卡草稿到发布 | `/pricing-price-card-previews` `/pricing-price-card-drafts` `/pricing-price-card-draft-views` `/pricing-price-card-draft-approvals` `/pricing-price-card-draft-publications` `/pricing-price-card-draft-withdrawals` |
 | 价卡登记、读、收尾 | `/pricing-price-card-registrations` `/pricing-price-cards` `/pricing-price-cards/content` `/pricing-price-cards/workbook` `/pricing-price-card-successor-cuts` `/pricing-price-card-retirements` `/pricing-price-card-template/spec` |
 | 参考序列 | `/pricing-reference-series` `/pricing-reference-series-previews` `/pricing-reference-series-registrations` `/pricing-reference-series-reviews` `/pricing-reference-series-coverage` `/pricing-reference-catalogue-reviews` |
 
@@ -151,7 +151,7 @@
 ## 旧文档写了、代码里还没有的
 
 - **仓储计费方案**（计量费用规则、声明值采用、仓储作业收费发生项的评价）：旧 `CONTEXT.md` 写成现行规则，`internal/parcelpricing` 里没有对应的类型。它属可选的仓配履约，在做，还没做到这一格。
-- **对客报价的发出、答复，以及已批准价卡草稿的撤下**：决定已定，见 [decisions.md](../decisions.md)「对客报价」。代码里还没有这些类型。
+- **对客报价的发出与答复**：决定已定，见 [decisions.md](../decisions.md)「对客报价」。代码里还没有发出与答复。已批准草稿的撤下已经有。
 ## 证据限制
 
 外部参考设计带来的那张第三方价卡只能当**结构来源**（有哪些费用、怎么触发、怎么算），不能当金额来源：卡内有人工录入痕迹，源文件哈希也对不上。相关案例只算 `S` 证据。
