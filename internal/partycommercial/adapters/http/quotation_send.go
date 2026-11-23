@@ -251,6 +251,10 @@ func NewQueryQuotationSendEndpoint(intake CommercialCatalogueIntake, reader Quot
 			Outcome: "QUOTATION_SEND", DeliveryNote: detail.DeliveryNote, DeliveryRecorded: false,
 			Send: &body, Reading: detail.Status.String(), Conclusion: detail.Conclusion,
 			ReferencedDraftWithdrawn: detail.ReferencedDraftWithdrawn,
+			PriceOnRegister:          detail.Effectiveness.PriceOnRegister,
+			ScopeNamed:               detail.Effectiveness.ScopeNamed,
+			PublicationRequirement:   detail.Effectiveness.Requirement,
+			EffectivenessNextStep:    detail.Effectiveness.NextStep,
 		}
 		if detail.HasReply {
 			recorded := quotationReplyBodyOf(detail.Reply)
@@ -384,6 +388,10 @@ type quotationSendDetailAnswer struct {
 	Conclusion               string              `json:"conclusion,omitempty"`
 	ReferencedDraftWithdrawn bool                `json:"referencedDraftWithdrawn,omitempty"`
 	Reply                    *quotationReplyBody `json:"reply,omitempty"`
+	PriceOnRegister          bool                `json:"priceOnRegister,omitempty"`
+	ScopeNamed               bool                `json:"scopeNamed,omitempty"`
+	PublicationRequirement   string              `json:"publicationRequirement,omitempty"`
+	EffectivenessNextStep    string              `json:"effectivenessNextStep,omitempty"`
 }
 
 type quotationSendCursorBody struct {

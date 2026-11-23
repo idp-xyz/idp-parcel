@@ -156,3 +156,47 @@ type QuotationReading interface {
 }
 
 var _ QuotationReading = (*application.ReadQuotationHandler)(nil)
+
+type QuotationPublicationRequirementRecorder interface {
+	Handle(context.Context, domain.TenantID, bool) (application.QuotationPublicationRequirementOutcome, error)
+}
+
+func NewQuotationPublicationRequirementEndpoint(intake *OperatorRegistryIntake, recorder QuotationPublicationRequirementRecorder) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		operator, err := intake.authenticate(request.Context(), request)
+		if err != nil {
+			writeRegistrationIntakeProblem(response, err)
+			return
+		}
+		var document struct {
+			Requires *bool `json:"requires"`
+		}
+		decoder := json.NewDecoder(request.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&document); err != nil || decoder.More() || document.Requires == nil {
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		result, err := recorder.Handle(request.Context(), operator.Tenant, *document.Requires)
+		if err != nil {
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		if result.String() == "" {
+			writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
+			return
+		}
+		status := http.StatusOK
+		if result == application.QuotationPublicationRequirementRecorded {
+			status = http.StatusCreated
+		}
+		writeJSON(response, status, struct {
+			Outcome string `json:"outcome"`
+		}{Outcome: result.String()})
+	})
+}

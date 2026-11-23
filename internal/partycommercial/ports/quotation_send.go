@@ -56,6 +56,7 @@ type QuotedPriceFact struct {
 	DirectionSell    bool
 	Canonicalization string
 	ContentDigest    string
+	Scope            string
 	Workbook         []byte
 	MediaType        string
 	GapWhere         string

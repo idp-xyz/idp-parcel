@@ -107,6 +107,7 @@ func (reader *QuotedPrices) project(
 ) (ports.QuotedPriceFact, error) {
 	fact.Canonicalization = plan.CanonicalizationVersion()
 	fact.ContentDigest = plan.ContentDigest()
+	fact.Scope = plan.Scope().String()
 	fact.DirectionSell = plan.Direction() == ppdomain.PricingDirectionSell
 	projection, err := reader.sheets.ProjectDisclosedRateSheet(plan, authorization)
 	if err != nil {

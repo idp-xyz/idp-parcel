@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import {
-  downloadQuotationWorkbook,
-  listQuotationSends,
-  readQuotationSend,
-  recordQuotationReply,
-  type QuotationSendBody,
-  type QuotationSendDetailBody,
-} from './quotation-api';
+import { downloadQuotationWorkbook, listQuotationSends, readQuotationSend, recordQuotationReply, type QuotationSendBody, type QuotationSendDetailBody } from './quotation-api';
+import { publishPriceCardDraft } from './api';
 import { quotationDeliveryNote } from './quotation-send';
 import { quotationReadingLabels, quotationReplyOutcomeLabels, quotationReplyPayload } from './quotation-reply';
 
 const info = moduleInfoById['quotation-sends'];
+
+function effectivenessLabel(step: string): string {
+  switch (step) {
+    case 'PUBLISH_CARD':
+      return '合同已经指名这个计价范围。下一步是发布这张价卡。';
+    case 'ALREADY_EFFECTIVE':
+      return '价卡已在册，合同已经指名这个范围。';
+    case 'CANNOT_PUBLISH':
+      return '所引草稿已撤下，不能发布。';
+    default:
+      return '合同还没指名这个计价范围。给已登记客户换来源列表还不能做，这里不发布新合同。';
+  }
+}
 
 /** 发出记录的列表与详情。详情上再下载同一份文件，不新增记录。 */
 export function QuotationSendsPage() {
@@ -105,6 +112,24 @@ export function QuotationSendsPage() {
             <p>条款 {selected.terms === '' ? '没有另加条款' : selected.terms}</p>
             <p className="type-caption text-idpxyz-textMuted">{quotationDeliveryNote}</p>
             <p>读法 {quotationReadingLabels[detail?.reading ?? ''] ?? '待读'}</p>
+            {detail?.effectivenessNextStep ? <p>生效 {effectivenessLabel(detail.effectivenessNextStep)}</p> : null}
+            {detail?.effectivenessNextStep === 'PUBLISH_CARD' && selected.lane === 'APPROVED_DRAFT' ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  void publishPriceCardDraft({
+                    planId: selected.planId,
+                    planVersion: selected.planVersion,
+                    publicationBasis: selected.quotationId,
+                  }).then((answer) => {
+                    setMessage(answer.kind === 'outcome' ? answer.body.outcome : answer.kind === 'transport' ? answer.message : '没有发布');
+                    void open(selected.quotationId);
+                  });
+                }}
+              >
+                发布这张价卡
+              </Button>
+            ) : null}
             {detail?.conclusion ? <p>{detail.conclusion}</p> : null}
             {detail?.reply ? (
               <p>

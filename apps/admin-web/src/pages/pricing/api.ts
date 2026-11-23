@@ -281,6 +281,7 @@ export interface PriceCardDraftProgressBody {
 export interface PriceCardDraftReferencePayload {
   planId: string;
   planVersion: string;
+  publicationBasis?: string;
 }
 
 /** 撤下载荷只有草稿引用和原因。撤下人在操作者信封里，这里不放。 */

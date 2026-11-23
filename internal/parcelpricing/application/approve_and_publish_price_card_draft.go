@@ -168,6 +168,8 @@ const (
 	PriceCardPublicationDraftNotApproved
 	PriceCardPublicationDraftAlreadyPublished
 	PriceCardPublicationDraftWithdrawn
+	PriceCardPublicationAcceptanceRequired
+	PriceCardPublicationCitationRejected
 	PriceCardPublicationNotLanded
 )
 
@@ -183,6 +185,10 @@ func (outcome PublishPriceCardDraftOutcome) String() string {
 		return "DRAFT_ALREADY_PUBLISHED"
 	case PriceCardPublicationDraftWithdrawn:
 		return "DRAFT_WITHDRAWN"
+	case PriceCardPublicationAcceptanceRequired:
+		return "ACCEPTANCE_REQUIRED"
+	case PriceCardPublicationCitationRejected:
+		return "CITATION_REJECTED"
 	case PriceCardPublicationNotLanded:
 		return "PUBLICATION_NOT_LANDED"
 	default:
@@ -194,6 +200,8 @@ func (outcome PublishPriceCardDraftOutcome) String() string {
 type PublishPriceCardDraftCommand struct {
 	Tenant domain.TenantID
 	Plan   domain.VersionReference
+	// Basis 是可缺的不透明依据。空着表示这次发布不带依据。
+	Basis string
 }
 
 // PublishPriceCardDraftResult 是发布的结果。Registration 是登记用例的答复，只在真交给了它时在场（`已发布`与`发布
@@ -210,10 +218,12 @@ type PublishPriceCardDraftResult struct {
 // PublishPriceCardDraftHandler 收的是具体的 *RegisterPriceCardHandler 而不是接口：发布 = 交既有登记用例是 ADR-0101
 // 决定五的形，接口会让装配点把别的东西接进来而编译仍绿。
 type PublishPriceCardDraftHandler struct {
-	drafts    ports.PriceCardDraftProgress
-	registrar *RegisterPriceCardHandler
-	clock     ports.Clock
-	overlaps  ports.PriceCardOverlapFinder
+	drafts       ports.PriceCardDraftProgress
+	registrar    *RegisterPriceCardHandler
+	clock        ports.Clock
+	overlaps     ports.PriceCardOverlapFinder
+	basis        ports.PublicationBasisReader
+	basisRecords ports.PublicationBasisRecord
 }
 
 func NewPublishPriceCardDraftHandler(
@@ -225,8 +235,10 @@ func NewPublishPriceCardDraftHandler(
 	if drafts == nil || registrar == nil || clock == nil {
 		return nil, errors.New("parcel pricing: price card draft publication needs a draft register, the price card registration and a clock")
 	}
+	resolved := importOptionsOf(options)
 	return &PublishPriceCardDraftHandler{
-		drafts: drafts, registrar: registrar, clock: clock, overlaps: importOptionsOf(options).overlaps,
+		drafts: drafts, registrar: registrar, clock: clock, overlaps: resolved.overlaps,
+		basis: resolved.basis, basisRecords: resolved.basisRecords,
 	}, nil
 }
 
@@ -250,6 +262,29 @@ func (handler *PublishPriceCardDraftHandler) Handle(ctx context.Context, command
 		return PublishPriceCardDraftResult{Outcome: PriceCardPublicationDraftWithdrawn}, nil
 	}
 
+	if handler.basis != nil {
+		content, hasContent := draft.Content()
+		if !hasContent {
+			return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: approved draft has no content")
+		}
+		standing, judgeErr := handler.basis.JudgePublicationBasis(ctx, ports.PublicationBasisQuery{
+			Tenant: command.Tenant, PlanID: command.Plan.ID(), PlanVersion: command.Plan.Version(),
+			ContentDigest: content.Plan.ContentDigest(), Basis: command.Basis,
+		})
+		if judgeErr != nil {
+			return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: %w", judgeErr)
+		}
+		switch standing {
+		case ports.PublicationBasisAllow:
+		case ports.PublicationBasisAcceptanceRequired:
+			return PublishPriceCardDraftResult{Outcome: PriceCardPublicationAcceptanceRequired}, nil
+		case ports.PublicationBasisCitationRejected:
+			return PublishPriceCardDraftResult{Outcome: PriceCardPublicationCitationRejected}, nil
+		default:
+			return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: basis standing %s", standing)
+		}
+	}
+
 	registration, err := draft.Registration()
 	if err != nil {
 		return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: %w", err)
@@ -265,6 +300,14 @@ func (handler *PublishPriceCardDraftHandler) Handle(ctx context.Context, command
 	default:
 		result.Outcome = PriceCardPublicationNotLanded
 		return result, nil
+	}
+	if command.Basis != "" {
+		if handler.basisRecords == nil {
+			return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: basis was accepted but there is nowhere to record it")
+		}
+		if err := handler.basisRecords.SavePublicationBasis(ctx, command.Tenant, command.Plan.ID(), command.Plan.Version(), command.Basis); err != nil {
+			return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: %w", err)
+		}
 	}
 
 	overlaps, err := overlapsOfDraft(ctx, handler.overlaps, command.Tenant, draft)

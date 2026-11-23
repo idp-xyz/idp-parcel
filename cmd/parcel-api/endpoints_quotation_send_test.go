@@ -15,6 +15,7 @@ func init() {
 		query:   unwiredQuotationSendQuery{},
 		reading: unwiredQuotationReading{},
 		reply:   unwiredQuotationReply{},
+		rule:    unwiredQuotationRequirement{},
 		export:  unwiredQuotationExport{},
 	})
 }
@@ -39,6 +40,12 @@ type unwiredQuotationReply struct{}
 
 func (unwiredQuotationReply) Handle(context.Context, commercialapp.RecordQuotationReplyCommand) (commercialapp.RecordQuotationReplyResult, error) {
 	return commercialapp.RecordQuotationReplyResult{}, errOrchestrationNotWired
+}
+
+type unwiredQuotationRequirement struct{}
+
+func (unwiredQuotationRequirement) Handle(context.Context, domain.TenantID, bool) (commercialapp.QuotationPublicationRequirementOutcome, error) {
+	return 0, errOrchestrationNotWired
 }
 
 type unwiredQuotationReading struct{}

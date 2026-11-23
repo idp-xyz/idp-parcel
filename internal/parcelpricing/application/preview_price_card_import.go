@@ -84,6 +84,8 @@ type priceCardImportOptions struct {
 	overlaps       ports.PriceCardOverlapFinder
 	authorizations ports.DirectionAuthorizationReader
 	clock          ports.Clock
+	basis          ports.PublicationBasisReader
+	basisRecords   ports.PublicationBasisRecord
 }
 
 // WithWorkbookReader 装上页面表单提交的工作簿读口。预览与录入要装同一个，同一份内容过两口才得同一个来源标识与同一份读法。
@@ -103,6 +105,14 @@ func WithDirectionAuthorizationReader(reader ports.DirectionAuthorizationReader,
 	return func(options *priceCardImportOptions) {
 		options.authorizations = reader
 		options.clock = clock
+	}
+}
+
+// WithPublicationBasis 装上发布依据门和依据落笔。没装时发布不设这道门，也不记依据。
+func WithPublicationBasis(reader ports.PublicationBasisReader, records ports.PublicationBasisRecord) PriceCardImportOption {
+	return func(options *priceCardImportOptions) {
+		options.basis = reader
+		options.basisRecords = records
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
@@ -144,6 +145,35 @@ func DecodePriceCardDraftReferencePayload(body io.Reader) (domain.VersionReferen
 	return plan, nil
 }
 
+// PriceCardDraftPublicationPayload 比草稿引用多一格可缺的发布依据。批准口不收这一格。
+type PriceCardDraftPublicationPayload struct {
+	PlanID           string `json:"planId"`
+	PlanVersion      string `json:"planVersion"`
+	PublicationBasis string `json:"publicationBasis,omitempty"`
+}
+
+// DecodePriceCardDraftPublicationPayload 解发布载荷。依据可缺；在场时去空白后不能空。
+func DecodePriceCardDraftPublicationPayload(body io.Reader) (domain.VersionReference, string, error) {
+	var payload PriceCardDraftPublicationPayload
+	decoder := json.NewDecoder(body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil {
+		return domain.VersionReference{}, "", fmt.Errorf("%w: price card draft publication: %v", ErrMalformedRequest, err)
+	}
+	if decoder.More() {
+		return domain.VersionReference{}, "", fmt.Errorf("%w: price card draft publication: trailing content", ErrMalformedRequest)
+	}
+	plan, err := domain.NewVersionReferenceIdentity(domain.ArtifactPricingPlan, payload.PlanID, payload.PlanVersion)
+	if err != nil {
+		return domain.VersionReference{}, "", fmt.Errorf("%w: price card draft publication: %v", ErrMalformedRequest, err)
+	}
+	basis := strings.TrimSpace(payload.PublicationBasis)
+	if payload.PublicationBasis != "" && basis == "" {
+		return domain.VersionReference{}, "", fmt.Errorf("%w: publicationBasis is blank", ErrMalformedRequest)
+	}
+	return plan, basis, nil
+}
+
 var (
 	_ PriceCardDraftApprovalIntake    = (*OperatorRegistryIntake)(nil)
 	_ PriceCardDraftPublicationIntake = (*OperatorRegistryIntake)(nil)
@@ -180,14 +210,14 @@ func (intake *OperatorRegistryIntake) IntakePriceCardDraftPublication(ctx contex
 	if err != nil {
 		return application.PublishPriceCardDraftCommand{}, err
 	}
-	plan, err := DecodePriceCardDraftReferencePayload(body)
+	plan, basis, err := DecodePriceCardDraftPublicationPayload(body)
 	if err != nil {
 		return application.PublishPriceCardDraftCommand{}, err
 	}
 	if operator.Tenant.String() == "" {
 		return application.PublishPriceCardDraftCommand{}, ErrOperatorIdentityMissing
 	}
-	return application.PublishPriceCardDraftCommand{Tenant: operator.Tenant, Plan: plan}, nil
+	return application.PublishPriceCardDraftCommand{Tenant: operator.Tenant, Plan: plan, Basis: basis}, nil
 }
 
 var (

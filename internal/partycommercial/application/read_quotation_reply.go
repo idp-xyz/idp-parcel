@@ -24,24 +24,37 @@ type QuotationReadingDetail struct {
 	ReferencedDraftWithdrawn bool
 	Reply                    domain.QuotationReply
 	HasReply                 bool
+	Effectiveness            QuotationEffectiveness
+}
+
+// QuotationEffectiveness 是这一条发出离「这位客户用上这套价」还差什么。不另存。
+// 合同还没指名这个计价范围时，下一步是冻着的换来源，不在这里发布新合同。
+type QuotationEffectiveness struct {
+	PriceOnRegister bool
+	Scope           string
+	ScopeNamed      bool
+	Requirement     string
+	NextStep        string
 }
 
 // ReadQuotationHandler 读一条发出并派生状态。now 是服务端此刻。
 type ReadQuotationHandler struct {
-	sends   ports.QuotationSendStore
-	replies ports.QuotationReplyStore
-	prices  ports.QuotedPriceReader
+	sends       ports.QuotationSendStore
+	replies     ports.QuotationReplyStore
+	prices      ports.QuotedPriceReader
+	publication ports.QuotationPublicationView
 }
 
 func NewReadQuotationHandler(
 	sends ports.QuotationSendStore,
 	replies ports.QuotationReplyStore,
 	prices ports.QuotedPriceReader,
+	publication ports.QuotationPublicationView,
 ) (*ReadQuotationHandler, error) {
 	if sends == nil || replies == nil || prices == nil {
 		return nil, fmt.Errorf("party commercial: quotation reading needs the send store, the reply store and the price reader")
 	}
-	return &ReadQuotationHandler{sends: sends, replies: replies, prices: prices}, nil
+	return &ReadQuotationHandler{sends: sends, replies: replies, prices: prices, publication: publication}, nil
 }
 
 func (handler *ReadQuotationHandler) Get(
@@ -76,11 +89,54 @@ func (handler *ReadQuotationHandler) Get(
 	if err != nil {
 		return QuotationReadingDetail{}, err
 	}
+	effectiveness, err := handler.effectiveness(ctx, send, draftWithdrawn)
+	if err != nil {
+		return QuotationReadingDetail{}, err
+	}
 	return QuotationReadingDetail{
 		Found: true, Send: send, DeliveryNote: quotationDeliveryNote,
 		Status: reading.Status, Conclusion: quotationReadingConclusion(reading),
 		ReferencedDraftWithdrawn: reading.ReferencedDraftWithdrawn,
 		Reply:                    reply, HasReply: hasReply,
+		Effectiveness: effectiveness,
+	}, nil
+}
+
+func (handler *ReadQuotationHandler) effectiveness(ctx context.Context, send domain.QuotationSend, draftWithdrawn bool) (QuotationEffectiveness, error) {
+	if handler.publication == nil {
+		return QuotationEffectiveness{}, nil
+	}
+	fact, err := handler.prices.ReadQuotedPrice(ctx, ports.QuotedPriceQuery{
+		Tenant: send.Tenant(), Lane: send.Lane(), PlanID: send.PlanID(), PlanVersion: send.PlanVersion(),
+	})
+	if err != nil {
+		return QuotationEffectiveness{}, err
+	}
+	onRegister := fact.Standing == ports.QuotedPriceUseRegisteredCard ||
+		(send.Lane() == domain.QuotationPriceFromRegisteredCard && fact.Standing == ports.QuotedPriceReady)
+	named, err := handler.publication.ContractNamesPricingScope(ctx, send.Tenant(), send.Counterparty().String(), fact.Scope)
+	if err != nil {
+		return QuotationEffectiveness{}, err
+	}
+	judgment, err := JudgePublicationBasis(ctx, handler.publication, PublicationBasisQuery{
+		Tenant: send.Tenant(), PlanID: send.PlanID(), PlanVersion: send.PlanVersion(),
+		ContentDigest: send.ContentDigest(),
+	})
+	if err != nil {
+		return QuotationEffectiveness{}, err
+	}
+	next := "SOURCE_LIST_FROZEN"
+	switch {
+	case draftWithdrawn && !onRegister:
+		next = "CANNOT_PUBLISH"
+	case onRegister && named:
+		next = "ALREADY_EFFECTIVE"
+	case !onRegister && named:
+		next = "PUBLISH_CARD"
+	}
+	return QuotationEffectiveness{
+		PriceOnRegister: onRegister, Scope: fact.Scope, ScopeNamed: named,
+		Requirement: judgment.String(), NextStep: next,
 	}, nil
 }
 

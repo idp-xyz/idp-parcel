@@ -8,9 +8,11 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
+	pricingparty "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/partycommercial"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/pricecardtemplate"
 	pricingapp "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
+	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 )
 
 // buildPriceCardImportPreview 装配 `/pricing-price-card-previews` 的真编排（ADR-0101 决定四；票 price-card-import/02）。
@@ -177,7 +179,23 @@ func buildPriceCardDraftPublication(db *bentopg.DB, newerCanonicalization bool) 
 		Catalog: catalog, Registered: registered, NewerCanonicalizationEnabled: newerCanonicalization,
 		DirectionAuthorizations: authorizations, RegisteredContent: catalog, Clock: systemClock{},
 	})
-	handler, err := pricingapp.NewPublishPriceCardDraftHandler(drafts, registrar, systemClock{}, pricingapp.WithPriceCardOverlapFinder(catalog))
+	basisView, err := pcpostgres.NewQuotationPublication(db)
+	if err != nil {
+		return transactionalPriceCardDraftPublication{}, fmt.Errorf("parcel-api: quotation publication view: %w", err)
+	}
+	basisReader, err := pricingparty.NewPublicationBasis(basisView)
+	if err != nil {
+		return transactionalPriceCardDraftPublication{}, fmt.Errorf("parcel-api: publication basis: %w", err)
+	}
+	basisRecords, err := pppostgres.NewPublicationBases(db)
+	if err != nil {
+		return transactionalPriceCardDraftPublication{}, fmt.Errorf("parcel-api: publication basis record: %w", err)
+	}
+	handler, err := pricingapp.NewPublishPriceCardDraftHandler(
+		drafts, registrar, systemClock{},
+		pricingapp.WithPriceCardOverlapFinder(catalog),
+		pricingapp.WithPublicationBasis(basisReader, basisRecords),
+	)
 	if err != nil {
 		return transactionalPriceCardDraftPublication{}, fmt.Errorf("parcel-api: price card draft publication: %w", err)
 	}

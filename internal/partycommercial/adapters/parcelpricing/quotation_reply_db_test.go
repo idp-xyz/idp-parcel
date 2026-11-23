@@ -61,7 +61,7 @@ func TestQuotationReplyOnTheRealDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader, err := application.NewReadQuotationHandler(sends, replies, prices)
+	reader, err := application.NewReadQuotationHandler(sends, replies, prices, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

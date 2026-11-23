@@ -12,6 +12,7 @@ import (
 	quotedprice "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/parcelpricing"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	commercialapp "go.idp.xyz/idp-parcel/internal/partycommercial/application"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
 
 // 报价发出的生产装配。写口一笔事务；列表、详情与再导出只读，不另开事务。
@@ -21,6 +22,7 @@ type quotationSendServices struct {
 	query   *commercialapp.QueryQuotationSendsHandler
 	reading *commercialapp.ReadQuotationHandler
 	reply   transactionalQuotationReply
+	rule    transactionalQuotationRequirement
 	export  *commercialapp.ExportQuotationHandler
 }
 
@@ -80,7 +82,11 @@ func buildQuotationSendServices(db *bentopg.DB) (quotationSendServices, error) {
 	if err != nil {
 		return none, err
 	}
-	reading, err := commercialapp.NewReadQuotationHandler(sends, replies, prices)
+	publication, err := pcpostgres.NewQuotationPublication(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: quotation publication view: %w", err)
+	}
+	reading, err := commercialapp.NewReadQuotationHandler(sends, replies, prices, publication)
 	if err != nil {
 		return none, err
 	}
@@ -89,6 +95,7 @@ func buildQuotationSendServices(db *bentopg.DB) (quotationSendServices, error) {
 		query:   query,
 		reading: reading,
 		reply:   transactionalQuotationReply{transactor: db.Transactor(), inner: recorder},
+		rule:    transactionalQuotationRequirement{transactor: db.Transactor(), view: publication},
 		export:  export,
 	}, nil
 }
@@ -104,5 +111,20 @@ func (wrapper transactionalQuotationReply) Handle(
 ) (commercialapp.RecordQuotationReplyResult, error) {
 	return commercialInTransaction(ctx, wrapper.transactor, func(txCtx context.Context) (commercialapp.RecordQuotationReplyResult, error) {
 		return wrapper.inner.Handle(txCtx, command)
+	})
+}
+
+type transactionalQuotationRequirement struct {
+	transactor bentoapp.Transactor
+	view       *pcpostgres.QuotationPublication
+}
+
+func (wrapper transactionalQuotationRequirement) Handle(ctx context.Context, tenant domain.TenantID, requires bool) (commercialapp.QuotationPublicationRequirementOutcome, error) {
+	requirement, err := domain.NewQuotationPublicationRequirement(tenant, requires)
+	if err != nil {
+		return 0, err
+	}
+	return commercialInTransaction(ctx, wrapper.transactor, func(txCtx context.Context) (commercialapp.QuotationPublicationRequirementOutcome, error) {
+		return commercialapp.RegisterQuotationPublicationRequirement(txCtx, wrapper.view, requirement)
 	})
 }

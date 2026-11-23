@@ -66,6 +66,10 @@ export interface QuotationSendDetailBody {
   conclusion?: string;
   referencedDraftWithdrawn?: boolean;
   reply?: QuotationReplyBody;
+  priceOnRegister?: boolean;
+  scopeNamed?: boolean;
+  publicationRequirement?: string;
+  effectivenessNextStep?: string;
 }
 
 export const quotationReplyRegistrationPath = '/commercial-quotation-reply-registrations';
