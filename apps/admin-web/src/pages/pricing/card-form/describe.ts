@@ -34,7 +34,7 @@ export function conditionRowText(row: ConditionRow): string | null {
   return doc === null ? null : describeTrigger(doc);
 }
 
-/** 整个触发条件的一句话；任何一行没填完整就答 null。 */
+/** 整个触发条件的一句话；任何一行没填完整就答 null。多个判定按费用上的全部/任一连，偏远档位不另写死任一。 */
 export function feeConditionText(fee: FeeItemState): string | null {
   const rows: ConditionRow[] =
     fee.kind === 'TABLE_REMOTE'
@@ -45,6 +45,5 @@ export function feeConditionText(fee: FeeItemState): string | null {
   if (docs.some((doc) => doc === null)) return null;
   const operands = docs as Doc[];
   if (operands.length === 1) return describeTrigger(operands[0]);
-  const kind = fee.kind === 'TABLE_REMOTE' ? 'ANY_OF' : fee.combine;
-  return describeTrigger({ kind, operands });
+  return describeTrigger({ kind: fee.combine, operands });
 }

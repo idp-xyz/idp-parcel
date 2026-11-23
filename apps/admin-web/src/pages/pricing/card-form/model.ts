@@ -265,7 +265,8 @@ export function newFee(kind: FeeKind, weightUnit: string): FeeItemState {
     percentage: '',
     basis: 'BASE',
     tableRows: kind === 'TABLE_ZONE' || kind === 'TABLE_REMOTE' ? [newRateRow({ minimum: '0' })] : [],
-    combine: 'ALL_OF',
+    // 偏远新建起手为任一：页面不另给组合选择，收件地址只落在一个档位。读回的全部/任一仍记在这一格，生成时照它交回。
+    combine: kind === 'TABLE_REMOTE' ? 'ANY_OF' : 'ALL_OF',
     conditions: kind === 'CONDITIONAL' ? [newCondition()] : needsCondition ? [alwaysCondition(weightUnit)] : [],
     groupName: '',
     priority: '',

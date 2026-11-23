@@ -223,6 +223,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
     }
 
     // 触发条件：偏远档位由价表里的档位推出，其余取条件构造器里的行。
+    // 多于一个判定才套组合，种类用费用上的全部/任一。偏远也用这一格：写死任一会把「每个档位都要等于才加收」改成命中任一档位就加收。
     const predicates: ConditionRow[] =
       fee.kind === 'TABLE_REMOTE'
         ? remoteTiers(fee).map((tier, tierIndex) => ({
@@ -240,7 +241,7 @@ export function formToWorkbook(state: CardFormState, spec: PriceCardTemplateSpec
     if (grouped) {
       add(
         sheetNames.conditions,
-        { nodeId: conditionRoot, kind: fee.kind === 'TABLE_REMOTE' ? 'ANY_OF' : fee.combine },
+        { nodeId: conditionRoot, kind: fee.combine },
         { path: `${path} · 条件组合`, fallback: conditionTarget, cells: { kind: { field: field.fee(fee.uid, 'combine'), label: '条件组合' } } },
       );
     }

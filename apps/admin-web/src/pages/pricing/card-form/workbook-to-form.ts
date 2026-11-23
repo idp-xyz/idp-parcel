@@ -2,8 +2,8 @@
 //
 // 价卡详情的「改出新版」把读口交回的工作簿从这里开场。还原时把现成的标识记进 idHints，生成时原样用回，
 // 所以没改过的内容再交回去，内容摘要与原卡相同。新版本号由操作者填，workbookAsNewVersion 把方案版本清空。
-// 表单表达不了的结构（取较大者、排除条款、条件最低计价重量、版本清单依赖、嵌套条件组……）抛 NotRepresentable，
-// 不静默丢掉；那种卡改用同一读口的电子表格下载。
+// 表单表达不了的结构（取较大者、排除条款、条件最低计价重量、版本清单依赖、嵌套条件组、
+// 带不走的参考序列绑定……）抛 NotRepresentable，不静默丢掉；那种卡改用同一读口的电子表格下载。
 
 import type { PriceCardWorkbook } from '../api';
 import { featureMeasure } from '../price-card-content';
@@ -203,12 +203,10 @@ export function workbookToForm(workbook: PriceCardWorkbook): CardFormState {
           fee.basis = 'BASE';
         } else throw new NotRepresentable('百分比的基数只表达「基础运费」或「其他全部费用」');
         if (text(calc, 'seriesKind') !== '') {
-          if (text(calc, 'seriesKind') !== 'FUEL_RATE') throw new NotRepresentable('只表达燃油费率序列');
+          // 百分比按序列取值时，表单只认得燃油费率。汇率等别的种类没有编辑器，这里不能收成燃油再交回去。
+          if (text(calc, 'seriesKind') !== 'FUEL_RATE') throw new NotRepresentable('表单不表达 reference_series');
           fee.percentMode = 'SERIES';
           fee.seriesFactor = text(calc, 'seriesFactor');
-          const fuel = seriesBindings.filter((row) => text(row, 'kind') === 'FUEL_RATE');
-          if (fuel.length !== 1) throw new NotRepresentable('燃油序列绑定不唯一');
-          fee.seriesId = text(fuel[0], 'seriesId');
         } else {
           fee.percentMode = 'FIXED';
           fee.percentage = text(calc, 'percentage');
@@ -239,7 +237,24 @@ export function workbookToForm(workbook: PriceCardWorkbook): CardFormState {
     }
     state.fees.push(fee);
   }
+  // 绑定若在这里丢掉，交回去的卡少了序列：结算币种与价卡币种不同会改答汇率未解出，缺读数时也不再待判断。
+  // 表单带得走的只有「没有绑定」，或「恰好一条燃油费率，且只有一个百分比费用按序列在读它」。
+  requireCarryableSeries(seriesBindings, state.fees, text);
   return state;
+}
+
+function requireCarryableSeries(rows: readonly Row[], fees: readonly FeeItemState[], text: (row: Row, key: string) => string) {
+  const seriesFees = fees.filter((fee) => fee.kind === 'PERCENT' && fee.percentMode === 'SERIES');
+  if (rows.length === 0) {
+    if (seriesFees.length > 0) throw new NotRepresentable('表单不表达 reference_series');
+    return;
+  }
+  const [only] = rows;
+  const [seriesFee] = seriesFees;
+  if (rows.length !== 1 || only === undefined || text(only, 'kind') !== 'FUEL_RATE' || seriesFees.length !== 1 || seriesFee === undefined) {
+    throw new NotRepresentable('表单不表达 reference_series');
+  }
+  seriesFee.seriesId = text(only, 'seriesId');
 }
 
 function blankFee(kind: FeeKind): FeeItemState {

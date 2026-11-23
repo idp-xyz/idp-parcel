@@ -102,6 +102,7 @@ export function sampleState(): CardFormState {
     fee('TABLE_REMOTE', {
       name: '偏远地区费（合成演示值）',
       code: 'REMOTE_AREA_SURCHARGE',
+      combine: 'ANY_OF',
       tableRows: [newRateRow({ zone: 'T1', minimum: '0', amount: '12' }), newRateRow({ zone: 'T2', minimum: '0', amount: '28' })],
     }),
   ];

@@ -1,8 +1,9 @@
 import { test } from 'node:test';
-import { deepEqual, equal, ok } from 'node:assert/strict';
+import { deepEqual, equal, ok, throws } from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { PriceCardTemplateSpec, PriceCardWorkbook } from '../api';
 import { parsePriceCardContent } from '../price-card-content';
+import { feeConditionText } from './describe';
 import { workbookServiceProducts, workbookToDocument } from './document';
 import { closedValuesWhen } from './spec';
 import { stepOfField } from './fields';
@@ -23,7 +24,7 @@ import { mapProblems, problemCountsByStep, problemWords, unlocatedWords } from '
 import { sampleState } from './sample';
 import { validateAll, validateStep } from './validate';
 import { formToWorkbook, specTakesServiceProducts, specTakesShipmentWeightAggregation } from './workbook';
-import { workbookAsNewVersion, workbookToForm } from './workbook-to-form';
+import { NotRepresentable, workbookAsNewVersion, workbookToForm } from './workbook-to-form';
 
 // 价卡编辑器的纯函数验收。参照物有两个，各自独立：
 //   1. 后端测试数据里的 FULL-03 结构化工作簿（internal/parcelpricing/adapters/pricecardtemplate/testdata）——
@@ -126,6 +127,100 @@ function withoutVolatile(doc: Record<string, unknown>) {
 test('FULL-03：表单生成的工作簿译成的文档，与种子里服务端登记的规范化文档一致', () => {
   const { workbook } = formToWorkbook(workbookToForm(full03Workbook()), spec);
   deepEqual(comparable(withoutVolatile(workbookToDocument(workbook))), comparable(withoutVolatile(seedPlan('price-card-cn-sg-full-03.json'))));
+});
+
+function remoteFee(state: CardFormState) {
+  const fee = state.fees.find((item) => item.kind === 'TABLE_REMOTE');
+  ok(fee);
+  return fee;
+}
+
+test('偏远条件读入全部再生成，组合仍是全部；任一仍是任一', () => {
+  const anyOf = full03Workbook();
+  const anyState = workbookToForm(anyOf);
+  equal(remoteFee(anyState).combine, 'ANY_OF');
+  equal(feeConditionText(remoteFee(anyState)), '偏远档位属于 T1、T2');
+  equal(formToWorkbook(anyState, spec).workbook.sheets.conditions.find((row) => row.nodeId === 'C-REMOTE')?.kind, 'ANY_OF');
+
+  const allOf = full03Workbook();
+  const root = allOf.sheets.conditions.find((row) => row.nodeId === 'C-REMOTE');
+  ok(root);
+  root.kind = 'ALL_OF';
+  const allState = workbookToForm(allOf);
+  equal(remoteFee(allState).combine, 'ALL_OF');
+  equal(feeConditionText(remoteFee(allState)), '偏远档位等于 T1，且偏远档位等于 T2');
+  assertSameWorkbook(formToWorkbook(allState, spec).workbook, allOf);
+});
+
+test('偏远档位只有一个判定时不套组合', () => {
+  const workbook = full03Workbook();
+  workbook.sheets.conditions = workbook.sheets.conditions.filter((row) => row.nodeId !== 'C-REMOTE-T2');
+  workbook.sheets.rates_weight_zone = workbook.sheets.rates_weight_zone.filter((row) => row.zone !== 'T2');
+  const generated = formToWorkbook(workbookToForm(workbook), spec).workbook;
+  deepEqual(
+    generated.sheets.conditions.filter((row) => row.nodeId === 'C-REMOTE' || row.parentId === 'C-REMOTE'),
+    [{ nodeId: 'C-REMOTE', kind: 'PREDICATE', source: 'ADDRESS_TYPE', operator: 'EQ', category: 'T1' }],
+  );
+});
+
+function rejectsSeries(workbook: PriceCardWorkbook) {
+  throws(
+    () => workbookToForm(workbook),
+    (error: unknown) => {
+      ok(error instanceof NotRepresentable);
+      equal((error as NotRepresentable).message, '表单不表达 reference_series');
+      return true;
+    },
+  );
+}
+
+test('多一条参考序列、种类不是燃油、或没有百分比费用在读：表单不表达，不交少了绑定的卡', () => {
+  const extra = full03Workbook();
+  extra.sheets.reference_series.push({ kind: 'EXCHANGE_RATE', seriesId: 'SYN-SERIES-FX-01' });
+  rejectsSeries(extra);
+
+  const anotherFuel = full03Workbook();
+  anotherFuel.sheets.reference_series.push({ kind: 'FUEL_RATE', seriesId: 'SYN-SERIES-FUEL-FULL-02' });
+  rejectsSeries(anotherFuel);
+
+  const exchangeOnly = full03Workbook();
+  exchangeOnly.sheets.reference_series = [{ kind: 'EXCHANGE_RATE', seriesId: 'SYN-SERIES-FX-01' }];
+  rejectsSeries(exchangeOnly);
+
+  const unread = full03Workbook();
+  const fuel = unread.sheets.calculations.find((row) => row.nodeId === 'K-FUEL');
+  ok(fuel);
+  delete fuel.seriesKind;
+  delete fuel.seriesFactor;
+  fuel.percentage = '12.5';
+  rejectsSeries(unread);
+
+  const twoReaders = full03Workbook();
+  twoReaders.sheets.calculations.push({
+    basisDependencyId: 'SYN-DEP-FULL3-FUEL',
+    method: 'PERCENT_OF_BASIS',
+    nodeId: 'K-FUEL-2',
+    seriesFactor: '1',
+    seriesKind: 'FUEL_RATE',
+  });
+  twoReaders.sheets.conditions.push({
+    kind: 'PREDICATE',
+    nodeId: 'C-FUEL-2',
+    operator: 'GT',
+    source: 'ACTUAL_WEIGHT',
+    threshold: '0',
+    unit: 'KG',
+  });
+  twoReaders.sheets.surcharges.push({
+    calculationId: 'K-FUEL-2',
+    chargeCode: 'FUEL_SURCHARGE_2',
+    conditionId: 'C-FUEL-2',
+    description: '第二条燃油',
+    effect: 'ADD',
+    exclusivity: 'STANDALONE',
+    ruleId: 'SYN-RULE-FULL3-FUEL-2',
+  });
+  rejectsSeries(twoReaders);
 });
 
 // ---- 只有基础运费的小卡：种子 SYN-PLAN-CN-SG-COST-01 ----
