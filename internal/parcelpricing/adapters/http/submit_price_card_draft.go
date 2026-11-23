@@ -77,21 +77,24 @@ type priceCardDraftSubmissionResponse struct {
 }
 
 // priceCardDraftBody 是草稿册上的一行，录入口与查阅读口同形。录入者与批准者并排（ADR-0101 Consequences）；
-// 批准与发布两格的痕迹缺席即还没走到那一步，内容概要自`已校验`起在场，逐格问题只有`草稿`有。`sourceOrigin` 只在草稿来自
+// 批准、发布与撤下的痕迹缺席即还没走到那一步，内容概要自`已校验`起在场，逐格问题只有`草稿`有。`sourceOrigin` 只在草稿来自
 // 页面表单时有（"FORM"，ADR-0349）：那时 sourceFile 的名称是 form:<散列前 12 位>、散列是规范化工作簿的散列，不是一份文件；
 // 上传文件的草稿没有这一格，答复与此前一字不差。
 type priceCardDraftBody struct {
-	Plan        planReferenceBody      `json:"plan"`
-	Status      string                 `json:"status"`
-	SourceFile  sourceFileBody         `json:"sourceFile"`
-	Origin      string                 `json:"sourceOrigin,omitempty"`
-	Submitter   string                 `json:"submitter"`
-	SubmittedAt string                 `json:"submittedAt"`
-	Approver    string                 `json:"approver,omitempty"`
-	ApprovedAt  string                 `json:"approvedAt,omitempty"`
-	PublishedAt string                 `json:"publishedAt,omitempty"`
-	Content     *priceCardContentBody  `json:"content,omitempty"`
-	Problems    []priceCardProblemBody `json:"problems"`
+	Plan             planReferenceBody      `json:"plan"`
+	Status           string                 `json:"status"`
+	SourceFile       sourceFileBody         `json:"sourceFile"`
+	Origin           string                 `json:"sourceOrigin,omitempty"`
+	Submitter        string                 `json:"submitter"`
+	SubmittedAt      string                 `json:"submittedAt"`
+	Approver         string                 `json:"approver,omitempty"`
+	ApprovedAt       string                 `json:"approvedAt,omitempty"`
+	PublishedAt      string                 `json:"publishedAt,omitempty"`
+	WithdrawnBy      string                 `json:"withdrawnBy,omitempty"`
+	WithdrawnAt      string                 `json:"withdrawnAt,omitempty"`
+	WithdrawalReason string                 `json:"withdrawalReason,omitempty"`
+	Content          *priceCardContentBody  `json:"content,omitempty"`
+	Problems         []priceCardProblemBody `json:"problems"`
 }
 
 func priceCardDraftBodyOf(draft domain.PriceCardDraft) priceCardDraftBody {
@@ -114,6 +117,15 @@ func priceCardDraftBodyOf(draft domain.PriceCardDraft) priceCardDraftBody {
 	}
 	if publishedAt, ok := draft.PublishedAt(); ok {
 		body.PublishedAt = rfc3339(publishedAt)
+	}
+	if withdrawer, ok := draft.Withdrawer(); ok {
+		body.WithdrawnBy = withdrawer
+	}
+	if withdrawnAt, ok := draft.WithdrawnAt(); ok {
+		body.WithdrawnAt = rfc3339(withdrawnAt)
+	}
+	if reason, ok := draft.WithdrawalReason(); ok {
+		body.WithdrawalReason = reason
 	}
 	if content, ok := draft.Content(); ok {
 		summary := priceCardContentBodyOf(content.Plan)

@@ -221,6 +221,7 @@ func TestThePublicationEndpointHandsTheRegistrationAnswerThrough(t *testing.T) {
 			Registration: application.PriceCardRegistrationNewerCanonicalizationNotEnabled, HasRegistration: true},
 			http.StatusOK, "NEWER_CANONICALIZATION_NOT_ENABLED", false},
 		{application.PublishPriceCardDraftResult{Outcome: application.PriceCardPublicationDraftNotApproved}, http.StatusOK, "", false},
+		{application.PublishPriceCardDraftResult{Outcome: application.PriceCardPublicationDraftWithdrawn}, http.StatusOK, "", false},
 	}
 	for _, test := range cases {
 		status, answer := serve(t, pricinghttp.NewPublishPriceCardDraftEndpoint(publicationIntakeDouble{}, publisherDouble{result: test.result}),
