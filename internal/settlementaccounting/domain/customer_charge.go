@@ -81,9 +81,16 @@ func EffectiveDeliveryFinalizedBasis() ConfirmationBasisKind {
 var ErrUnknownConfirmationBasisKind = errors.New("settlement accounting: unknown confirmation basis kind")
 
 // ConfirmationBasisKindFromName 只认产品内置的依据种类。没有任何一路会写下别的种类，登上去的条件就永远满足不了。
+// WarehouseWorkOccurredBasis 是仓储费的内置确认依据：这一版仓储作业收费发生项已经形成。
+func WarehouseWorkOccurredBasis() ConfirmationBasisKind {
+	return ConfirmationBasisKind{requiredValue{value: "WAREHOUSE_WORK_OCCURRED"}}
+}
+
 func ConfirmationBasisKindFromName(name string) (ConfirmationBasisKind, error) {
-	if kind := EffectiveDeliveryFinalizedBasis(); name == kind.String() {
-		return kind, nil
+	for _, kind := range []ConfirmationBasisKind{EffectiveDeliveryFinalizedBasis(), WarehouseWorkOccurredBasis()} {
+		if name == kind.String() {
+			return kind, nil
+		}
 	}
 	return ConfirmationBasisKind{}, fmt.Errorf("%w: %q", ErrUnknownConfirmationBasisKind, name)
 }

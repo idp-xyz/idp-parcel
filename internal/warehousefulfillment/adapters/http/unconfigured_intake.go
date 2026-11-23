@@ -28,6 +28,7 @@ var (
 	_ ShortagePolicyIntake                = UnconfiguredIntake{}
 	_ AgentIntake                         = UnconfiguredIntake{}
 	_ ChargeIntake                        = UnconfiguredIntake{}
+	_ WarehouseAdoptionIntake             = UnconfiguredIntake{}
 	_ AllocationStrategyIntake            = UnconfiguredIntake{}
 	_ GoodsOnBehalfIntake                 = UnconfiguredIntake{}
 	_ PreAdviceOnBehalfIntake             = UnconfiguredIntake{}
@@ -116,6 +117,10 @@ func (UnconfiguredIntake) IntakeAgentStatement(context.Context, *http.Request) (
 
 func (UnconfiguredIntake) IntakeAgentResult(context.Context, *http.Request) (domain.TenantID, ports.AgentResult, error) {
 	return domain.TenantID{}, ports.AgentResult{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeWarehouseAdoption(context.Context, *http.Request) (domain.TenantID, WarehouseAdoptionCommand, error) {
+	return domain.TenantID{}, WarehouseAdoptionCommand{}, ErrAccessChannelNotConfigured
 }
 
 func (UnconfiguredIntake) IntakeChargeUnits(context.Context, *http.Request) (domain.TenantID, application.RegisterChargeUnitsCommand, error) {

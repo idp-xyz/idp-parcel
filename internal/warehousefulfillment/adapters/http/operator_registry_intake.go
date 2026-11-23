@@ -48,6 +48,7 @@ var (
 	_ ShortagePolicyIntake                = (*OperatorRegistryIntake)(nil)
 	_ AgentIntake                         = (*OperatorRegistryIntake)(nil)
 	_ ChargeIntake                        = (*OperatorRegistryIntake)(nil)
+	_ WarehouseAdoptionIntake             = (*OperatorRegistryIntake)(nil)
 	_ AllocationStrategyIntake            = (*OperatorRegistryIntake)(nil)
 	_ DisposalRuleRegistrationIntake      = (*OperatorRegistryIntake)(nil)
 )
@@ -144,6 +145,21 @@ func (intake *OperatorRegistryIntake) IntakeAgentResult(ctx context.Context, req
 		return domain.TenantID{}, ports.AgentResult{}, asMalformed(err)
 	}
 	return identity.Tenant, result, nil
+}
+
+func (intake *OperatorRegistryIntake) IntakeWarehouseAdoption(ctx context.Context, request *http.Request) (domain.TenantID, WarehouseAdoptionCommand, error) {
+	identity, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return domain.TenantID{}, WarehouseAdoptionCommand{}, err
+	}
+	command, err := decodeWarehouseAdoption(bodyOrEmpty(request))
+	if err != nil {
+		return domain.TenantID{}, WarehouseAdoptionCommand{}, err
+	}
+	if command.Registrant == "" {
+		command.Registrant = identity.Registrant.String()
+	}
+	return identity.Tenant, command, nil
 }
 
 func (intake *OperatorRegistryIntake) IntakeChargeUnits(ctx context.Context, request *http.Request) (domain.TenantID, application.RegisterChargeUnitsCommand, error) {

@@ -53,6 +53,7 @@ var (
 	_ PriceCardPreviewIntake               = UnconfiguredIntake{}
 	_ PriceCardDraftSubmissionIntake       = UnconfiguredIntake{}
 	_ PriceCardDraftQueryIntake            = UnconfiguredIntake{}
+	_ WarehousePlanIntake                  = UnconfiguredIntake{}
 )
 
 // IntakePriceCardDraftSubmission 不读请求，判据同预览口：录入者与租户都要从信封来。操作者渠道的译法在

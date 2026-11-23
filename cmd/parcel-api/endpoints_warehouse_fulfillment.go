@@ -97,6 +97,7 @@ type warehouseFulfillmentWiring struct {
 	returns                   warehousehttp.ReturnService
 	agents                    warehousehttp.AgentService
 	charges                   warehousehttp.ChargeService
+	warehouseAdoptions       warehousehttp.WarehouseAdoptionService
 	customerReturn            *warehousehttp.CustomerReturnIntake
 	returnReceiptIntake       *warehousehttp.ReturnReceiptIntake
 	countEntryIntake          *warehousehttp.CountEntryIntake
@@ -476,6 +477,9 @@ func init() {
 			"/warehouse-fulfillment-charge-measure-units": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-charge-adoptions": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-charge-aging-bases": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
@@ -741,6 +745,7 @@ func init() {
 				returns:                   orchestration.returns,
 				agents:                    orchestration.agents,
 				charges:                   orchestration.charges,
+				warehouseAdoptions:        orchestration.warehouseAdoptions,
 				countEntryIntake:          countEntryIntake,
 				pickIntake:                pickIntake,
 				checkIntake:               checkIntake,
@@ -862,6 +867,7 @@ func init() {
 			agentStatement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentResult := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			chargeUnits := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			warehouseAdoption := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			chargeAging := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			chargeProject := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			storageDay := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -1047,6 +1053,7 @@ func init() {
 				agentStatement = warehousehttp.NewRecordAgentStatementEndpoint(channels.agentIntake(), wiring.agents)
 				agentResult = warehousehttp.NewRecordAgentResultEndpoint(channels.agentIntake(), wiring.agents)
 				chargeUnits = warehousehttp.NewRegisterChargeUnitsEndpoint(channels.chargeIntake(), wiring.charges)
+				warehouseAdoption = warehousehttp.NewRegisterWarehouseAdoptionEndpoint(channels.warehouseAdoptionIntake(), wiring.warehouseAdoptions)
 				chargeAging = warehousehttp.NewRegisterChargeAgingEndpoint(channels.chargeIntake(), wiring.charges)
 				chargeProject = warehousehttp.NewRegisterChargeProjectEndpoint(channels.chargeIntake(), wiring.charges)
 				storageDay = warehousehttp.NewCloseStorageDayEndpoint(channels.chargeIntake(), wiring.charges)
@@ -1219,6 +1226,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-agent-stock-statements", Handler: agentStatement},
 				{Pattern: "/warehouse-fulfillment-agent-outbound-results", Handler: agentResult},
 				{Pattern: "/warehouse-fulfillment-charge-measure-units", Handler: chargeUnits},
+				{Pattern: "/warehouse-fulfillment-charge-adoptions", Handler: warehouseAdoption},
 				{Pattern: "/warehouse-fulfillment-charge-aging-bases", Handler: chargeAging},
 				{Pattern: "/warehouse-fulfillment-charge-service-projects", Handler: chargeProject},
 				{Pattern: "/warehouse-fulfillment-storage-day-closes", Handler: storageDay},

@@ -578,6 +578,13 @@ func (channels endpointChannels) chargeIntake() warehousehttp.ChargeIntake {
 	return warehousehttp.UnconfiguredIntake{}
 }
 
+func (channels endpointChannels) warehouseAdoptionIntake() warehousehttp.WarehouseAdoptionIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
 func (channels endpointChannels) shortagePolicy() warehousehttp.ShortagePolicyIntake {
 	if channels.operatorRegistries.warehouse != nil {
 		return channels.operatorRegistries.warehouse

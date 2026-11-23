@@ -13,6 +13,7 @@ type pricingRegistrationWiring struct {
 	referenceSeriesReview          pricinghttp.ReferenceSeriesReviewer
 	referenceSeriesPreview         pricinghttp.ReferenceSeriesPreviewer
 	referenceCatalogueRegistration pricinghttp.ReferenceCatalogueRegistrar
+	warehousePlanRegistration      pricinghttp.WarehousePlanRegistrar
 }
 
 func init() {
@@ -23,6 +24,7 @@ func init() {
 			"/pricing-reference-series-reviews":          {method: http.MethodPost, face: registryWriteFace()},
 			"/pricing-reference-series-previews":         {method: http.MethodPost, face: registryWriteFace()},
 			"/pricing-reference-catalogue-registrations": {method: http.MethodPost, face: registryWriteFace()},
+			"/pricing-warehouse-plans":                   {method: http.MethodPost, face: registryWriteFace()},
 		},
 		build: func(sources endpointSources) (pricingRegistrationWiring, error) {
 			none := pricingRegistrationWiring{}
@@ -48,12 +50,17 @@ func init() {
 			if err != nil {
 				return none, err
 			}
+			warehousePlans, err := buildWarehousePlanRegistrationOrchestration(sources.db, sources.registerNewerCanonicalization)
+			if err != nil {
+				return none, err
+			}
 			return pricingRegistrationWiring{
 				priceCardRegistration:          priceCardRegistration,
 				referenceSeriesRegistration:    referenceSeriesRegistration,
 				referenceSeriesReview:          referenceSeriesReview,
 				referenceSeriesPreview:         referenceSeriesPreview,
 				referenceCatalogueRegistration: referenceCatalogueRegistration,
+				warehousePlanRegistration:      warehousePlans,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring pricingRegistrationWiring) []httpapi.BusinessEndpoint {
@@ -77,6 +84,7 @@ func init() {
 				// 计价参考目录登记写面（ADR-0109 Decision 二，票 price-card-shape-gaps/01）：模板导入的命令行，
 				// 挂操作者渠道的登记册 Intake，判据同两个登记口。
 				{Pattern: "/pricing-reference-catalogue-registrations", Handler: pricinghttp.NewRegisterReferenceCatalogueEndpoint(channels.operatorRegistries.pricing, wiring.referenceCatalogueRegistration)},
+				{Pattern: "/pricing-warehouse-plans", Handler: pricinghttp.NewRegisterWarehousePlanEndpoint(channels.operatorRegistries.pricing, wiring.warehousePlanRegistration)},
 			}
 		},
 	})

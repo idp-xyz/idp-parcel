@@ -2,6 +2,8 @@ package warehousehttp
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 
@@ -120,4 +122,76 @@ type chargeAnswer struct {
 	Outcome      string `json:"outcome"`
 	OccurrenceID string `json:"occurrenceId,omitempty"`
 	Version      int    `json:"version,omitempty"`
+}
+
+// WarehouseAdoptionCommand 是仓储计费采用的登记内容。金额不在这里。
+type WarehouseAdoptionCommand struct {
+	Owner      string
+	Warehouse  string
+	Revision   int
+	Effective  time.Time
+	Account    string
+	Scope      string
+	Basis      string
+	Registrant string
+}
+
+// WarehouseAdoptionService 把采用交给结算。结果是结算那一侧的答案名。
+type WarehouseAdoptionService interface {
+	Adopt(ctx context.Context, tenant domain.TenantID, command WarehouseAdoptionCommand) (string, error)
+}
+
+// WarehouseAdoptionIntake 先认证再读采用行。
+type WarehouseAdoptionIntake interface {
+	IntakeWarehouseAdoption(ctx context.Context, request *http.Request) (domain.TenantID, WarehouseAdoptionCommand, error)
+}
+
+func NewRegisterWarehouseAdoptionEndpoint(intake WarehouseAdoptionIntake, service WarehouseAdoptionService) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		tenant, command, err := intake.IntakeWarehouseAdoption(request.Context(), request)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		outcome, err := service.Adopt(request.Context(), tenant, command)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		if outcome == "" {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeUnnamedOutcome)
+			return
+		}
+		status := http.StatusOK
+		if outcome == "FORMED" {
+			status = http.StatusCreated
+		}
+		writeJSON(response, status, chargeAnswer{Outcome: outcome})
+	})
+}
+
+func decodeWarehouseAdoption(reader io.Reader) (WarehouseAdoptionCommand, error) {
+	var document struct {
+		Owner      string    `json:"ownerAccount"`
+		Warehouse  string    `json:"warehouse"`
+		Revision   int       `json:"revision"`
+		Effective  time.Time `json:"effectiveAt"`
+		Account    string    `json:"account"`
+		Scope      string    `json:"pricingScope"`
+		Basis      string    `json:"basis"`
+		Registrant string    `json:"registrant"`
+	}
+	if err := json.NewDecoder(reader).Decode(&document); err != nil || document.Owner == "" || document.Warehouse == "" ||
+		document.Account == "" || document.Scope == "" || document.Basis == "" || document.Revision < 1 || document.Effective.IsZero() {
+		return WarehouseAdoptionCommand{}, &malformedRequest{reason: "warehouse adoption"}
+	}
+	return WarehouseAdoptionCommand{
+		Owner: document.Owner, Warehouse: document.Warehouse, Revision: document.Revision, Effective: document.Effective,
+		Account: document.Account, Scope: document.Scope, Basis: document.Basis, Registrant: document.Registrant,
+	}, nil
 }

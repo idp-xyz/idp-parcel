@@ -13,8 +13,10 @@ import (
 	ppcommercial "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/partycommercial"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	pricingapp "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
+	pricingdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	pricingports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	platformidentity "go.idp.xyz/idp-parcel/internal/platform/identity"
 )
 
 // transactionalPriceCardRegistration 把价卡登记用例包进一笔事务，理由随
@@ -267,3 +269,41 @@ func buildReferenceSeriesPreviewOrchestration(db *bentopg.DB) (*pricingapp.Previ
 }
 
 var _ pricinghttp.ReferenceSeriesPreviewer = (*pricingapp.PreviewReferenceSeriesHandler)(nil)
+
+type transactionalWarehousePlan struct {
+	transactor bentoapp.Transactor
+	inner      *pricingapp.WarehousePlanHandler
+}
+
+var _ pricinghttp.WarehousePlanRegistrar = transactionalWarehousePlan{}
+
+func (registration transactionalWarehousePlan) Register(ctx context.Context, tenant string, plan pricingdomain.WarehousePlan) (pricingapp.WarehousePlanOutcome, error) {
+	var outcome pricingapp.WarehousePlanOutcome
+	err := registration.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		registered, registerErr := registration.inner.Register(txCtx, tenant, plan)
+		if registerErr != nil {
+			return registerErr
+		}
+		outcome = registered
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return outcome, nil
+}
+
+func buildWarehousePlanRegistrationOrchestration(db *bentopg.DB, newerCanonicalization bool) (transactionalWarehousePlan, error) {
+	store, err := pppostgres.NewWarehousePlans(db)
+	if err != nil {
+		return transactionalWarehousePlan{}, fmt.Errorf("parcel-api: warehouse plans: %w", err)
+	}
+	identities, err := platformidentity.NewMinter("WEV")
+	if err != nil {
+		return transactionalWarehousePlan{}, fmt.Errorf("parcel-api: warehouse plans: %w", err)
+	}
+	return transactionalWarehousePlan{
+		transactor: db.Transactor(),
+		inner:      pricingapp.NewWarehousePlanHandler(store, newerCanonicalization, identities),
+	}, nil
+}

@@ -16,6 +16,7 @@ import (
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
+	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
 	whidentity "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/identity"
 	whparcel "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/parcelshipment"
 	whparty "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/partycommercial"
@@ -178,6 +179,7 @@ type warehouseFulfillmentOrchestration struct {
 	returns            transactionalReturn
 	agents             transactionalAgent
 	charges            transactionalCharge
+	warehouseAdoptions warehousehttp.WarehouseAdoptionService
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -682,6 +684,10 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		).WithCharges(chargeHandler),
 	}
 	charges := transactionalCharge{transactor: db.Transactor(), inner: chargeHandler}
+	warehouseAdoptions, err := buildWarehouseAdoptionService(db)
+	if err != nil {
+		return none, err
+	}
 	jobDiscrepancies := transactionalJobDiscrepancy{
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewJobDiscrepancyHandler(
@@ -768,6 +774,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		returns:                  returns,
 		agents:                   agents,
 		charges:                  charges,
+		warehouseAdoptions:       warehouseAdoptions,
 	}, nil
 }
 
