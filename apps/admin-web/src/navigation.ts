@@ -392,7 +392,7 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
   },
   'quotation-sends': {
     title: '报价发出',
-    summary: '把已经固定的销售价格报给往来单位，并导出交给客户的价格表。送达不在这里记。',
+    summary: '把已经固定的销售价格报给往来单位，导出交给客户的价格表，并代录客户的接受或拒绝。送达不在这里记。',
     owner: '参与方与商业（party-commercial）',
     source: 'dox/decisions.md「对客报价」',
   },

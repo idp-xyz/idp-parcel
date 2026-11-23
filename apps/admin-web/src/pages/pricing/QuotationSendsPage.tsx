@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import { downloadQuotationWorkbook, listQuotationSends, readQuotationSend, type QuotationSendBody } from './quotation-api';
+import {
+  downloadQuotationWorkbook,
+  listQuotationSends,
+  readQuotationSend,
+  recordQuotationReply,
+  type QuotationSendBody,
+  type QuotationSendDetailBody,
+} from './quotation-api';
 import { quotationDeliveryNote } from './quotation-send';
+import { quotationReadingLabels, quotationReplyOutcomeLabels, quotationReplyPayload } from './quotation-reply';
 
 const info = moduleInfoById['quotation-sends'];
 
@@ -11,7 +19,12 @@ export function QuotationSendsPage() {
   const [items, setItems] = useState<QuotationSendBody[]>([]);
   const [note, setNote] = useState(quotationDeliveryNote);
   const [selected, setSelected] = useState<QuotationSendBody | null>(null);
+  const [detail, setDetail] = useState<QuotationSendDetailBody | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [decision, setDecision] = useState<'ACCEPTED' | 'REJECTED'>('ACCEPTED');
+  const [repliedAt, setRepliedAt] = useState('');
+  const [evidenceIndex, setEvidenceIndex] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const load = useCallback(async () => {
     const answer = await listQuotationSends();
@@ -32,9 +45,11 @@ export function QuotationSendsPage() {
     if (answer.kind !== 'outcome' || !answer.body.send) {
       setMessage(answer.kind === 'outcome' ? answer.body.deliveryNote : '这一条没有读回来');
       setSelected(null);
+      setDetail(null);
       return;
     }
     setSelected(answer.body.send);
+    setDetail(answer.body);
     setNote(answer.body.deliveryNote);
   };
 
@@ -89,6 +104,66 @@ export function QuotationSendsPage() {
             </p>
             <p>条款 {selected.terms === '' ? '没有另加条款' : selected.terms}</p>
             <p className="type-caption text-idpxyz-textMuted">{quotationDeliveryNote}</p>
+            <p>读法 {quotationReadingLabels[detail?.reading ?? ''] ?? '待读'}</p>
+            {detail?.conclusion ? <p>{detail.conclusion}</p> : null}
+            {detail?.reply ? (
+              <p>
+                答复 {detail.reply.decision}，客户时刻 {detail.reply.repliedAt}，证据 {detail.reply.evidenceIndex}
+              </p>
+            ) : (
+              <form
+                className="space-y-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const payload = quotationReplyPayload({
+                    quotationId: selected.quotationId,
+                    decision,
+                    repliedAt,
+                    evidenceIndex,
+                    rejectionReason,
+                    contentDigest: selected.contentDigest,
+                  });
+                  if (!payload.repliedAt || payload.evidenceIndex.trim() === '') {
+                    setMessage(quotationReplyOutcomeLabels.NOT_ACCEPTED);
+                    return;
+                  }
+                  void recordQuotationReply(payload).then((answer) => {
+                    if (answer.kind !== 'outcome') {
+                      setMessage(answer.kind === 'transport' ? answer.message : '没有记下');
+                      return;
+                    }
+                    setMessage(quotationReplyOutcomeLabels[answer.body.outcome] ?? answer.body.conclusion ?? answer.body.outcome);
+                    void open(selected.quotationId);
+                  });
+                }}
+              >
+                <label className="block type-caption text-idpxyz-textMuted">
+                  客户答复时刻（协调世界时）
+                  <input className="mt-0.5 w-full rounded border border-idpxyz-border bg-transparent px-2 py-1" value={repliedAt} onChange={(event) => setRepliedAt(event.target.value)} required />
+                </label>
+                <label className="block type-caption text-idpxyz-textMuted">
+                  证据索引
+                  <input className="mt-0.5 w-full rounded border border-idpxyz-border bg-transparent px-2 py-1" value={evidenceIndex} onChange={(event) => setEvidenceIndex(event.target.value)} required />
+                </label>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant={decision === 'ACCEPTED' ? 'default' : 'outline'} onClick={() => setDecision('ACCEPTED')}>
+                    接受
+                  </Button>
+                  <Button type="button" size="sm" variant={decision === 'REJECTED' ? 'default' : 'outline'} onClick={() => setDecision('REJECTED')}>
+                    拒绝
+                  </Button>
+                </div>
+                {decision === 'REJECTED' ? (
+                  <label className="block type-caption text-idpxyz-textMuted">
+                    拒绝原因，可以空着
+                    <input className="mt-0.5 w-full rounded border border-idpxyz-border bg-transparent px-2 py-1" value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} />
+                  </label>
+                ) : null}
+                <Button size="sm" type="submit">
+                  代录答复
+                </Button>
+              </form>
+            )}
             <Button size="sm" variant="outline" onClick={() => void download()}>
               再下载同一份文件
             </Button>

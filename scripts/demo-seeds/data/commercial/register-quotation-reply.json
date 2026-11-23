@@ -1,0 +1,11 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "quotationId": "SYN-QUOTATION-01",
+  "decision": "ACCEPTED",
+  "repliedAt": "2026-11-24T00:00:00Z",
+  "evidenceIndex": "SYN-EVIDENCE-QUOTATION-01",
+  "rejectionReason": "",
+  "contentDigest": "6f964f789b78fa6207216e26749f3af84880d22430927329792fb42564fc2405",
+  "recorder": "SYN-OPERATOR-01",
+  "recordedAt": "2026-11-24T01:00:00Z"
+}
