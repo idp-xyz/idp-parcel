@@ -86,6 +86,10 @@ const (
 	OutboundPicked
 	OutboundChecked
 	OutboundPacked
+	OutboundShipped
+	OutboundCancelled
+	OutboundAwaitingReturn
+	OutboundPartiallyCancelled
 )
 
 func (status OutboundStatus) String() string {
@@ -110,13 +114,21 @@ func (status OutboundStatus) String() string {
 		return "CHECKED"
 	case OutboundPacked:
 		return "PACKED"
+	case OutboundShipped:
+		return "SHIPPED"
+	case OutboundCancelled:
+		return "CANCELLED"
+	case OutboundAwaitingReturn:
+		return "AWAITING_RETURN"
+	case OutboundPartiallyCancelled:
+		return "PARTIALLY_CANCELLED"
 	default:
 		return ""
 	}
 }
 
 func NewOutboundStatus(word string) (OutboundStatus, error) {
-	for _, status := range []OutboundStatus{OutboundReserved, OutboundPartiallyReserved, OutboundRejected, OutboundPendingPolicy, OutboundHandedOff, OutboundSplit, OutboundAllocated, OutboundPicked, OutboundChecked, OutboundPacked} {
+	for _, status := range []OutboundStatus{OutboundReserved, OutboundPartiallyReserved, OutboundRejected, OutboundPendingPolicy, OutboundHandedOff, OutboundSplit, OutboundAllocated, OutboundPicked, OutboundChecked, OutboundPacked, OutboundShipped, OutboundCancelled, OutboundAwaitingReturn, OutboundPartiallyCancelled} {
 		if status.String() == word {
 			return status, nil
 		}

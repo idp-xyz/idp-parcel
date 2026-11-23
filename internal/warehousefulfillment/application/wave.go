@@ -27,6 +27,13 @@ const (
 	WaveChecked
 	WaveMismatch
 	WavePacked
+	WaveConfirmed
+	WaveRecorded
+	WaveWithheld
+	WaveCorrected
+	WavePending
+	WavePosted
+	WaveDutyBlocked
 	WaveSubmitted
 	WaveUnresolved
 	WavePaused
@@ -60,6 +67,20 @@ func (outcome WaveOutcome) String() string {
 		return "CHECK_MISMATCH"
 	case WavePacked:
 		return "PACKED"
+	case WaveConfirmed:
+		return "CONFIRMED"
+	case WaveRecorded:
+		return "RECORDED"
+	case WaveWithheld:
+		return "WITHHELD"
+	case WaveCorrected:
+		return "CORRECTED"
+	case WavePending:
+		return "PENDING"
+	case WavePosted:
+		return "POSTED"
+	case WaveDutyBlocked:
+		return "DUTY_BLOCKED"
 	case WaveSubmitted:
 		return "SUBMITTED"
 	case WaveUnresolved:
@@ -127,6 +148,7 @@ type WaveHandler struct {
 	ledger interface {
 		ListOnHandCells(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode) ([]ports.StockBalanceRow, error)
 		LoadInboundBatch(context.Context, domain.TenantID, domain.InboundBatchID) (domain.InboundBatch, bool, error)
+		LoadMovementBySource(context.Context, domain.TenantID, domain.StockMovementReason, domain.SourceFactReference) (domain.StockMovement, bool, error)
 		SerializePosting(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode) error
 	}
 	locations ports.StockLocationLookup
@@ -137,6 +159,12 @@ type WaveHandler struct {
 	holds        ports.StockHolds
 	clock        ports.Clock
 	anyWarehouse ports.TenantWarehouseLookup
+	// confirmation 缺席时出库确认照样落册，只是不把事实交给全程追踪。
+	confirmation outboundConfirmationHandoff
+	// duties 缺席时，判不成立的回补批准答未配置。
+	duties ports.ApprovalDutyStore
+	// releaser 缺席时，已经提交委托的截单答未配置，不先拆包。
+	releaser shipmentReleaser
 }
 
 func NewWaveHandler(
@@ -152,6 +180,7 @@ func NewWaveHandler(
 	ledger interface {
 		ListOnHandCells(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode) ([]ports.StockBalanceRow, error)
 		LoadInboundBatch(context.Context, domain.TenantID, domain.InboundBatchID) (domain.InboundBatch, bool, error)
+		LoadMovementBySource(context.Context, domain.TenantID, domain.StockMovementReason, domain.SourceFactReference) (domain.StockMovement, bool, error)
 		SerializePosting(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode) error
 	},
 	locations ports.StockLocationLookup,
@@ -167,6 +196,24 @@ func NewWaveHandler(
 		waves: waves, requests: requests, tasks: tasks, differences: differences, poster: poster, ledger: ledger,
 		locations: locations, zones: zones, goods: goods, holds: holds, clock: clock, anyWarehouse: anyWarehouse,
 	}
+}
+
+// WithConfirmationHandoff 接上交给全程追踪的出库确认。没接时确认照样落册。
+func (handler *WaveHandler) WithConfirmationHandoff(handoff outboundConfirmationHandoff) *WaveHandler {
+	handler.confirmation = handoff
+	return handler
+}
+
+// WithApprovalDuties 接上批准职责规则。没接时回补批准答未配置。
+func (handler *WaveHandler) WithApprovalDuties(duties ports.ApprovalDutyStore) *WaveHandler {
+	handler.duties = duties
+	return handler
+}
+
+// WithShipmentReleaser 接上询问小包托运放不放行撤回。没接时，已提交委托的截单答未配置。
+func (handler *WaveHandler) WithShipmentReleaser(releaser shipmentReleaser) *WaveHandler {
+	handler.releaser = releaser
+	return handler
 }
 
 func (handler *WaveHandler) Adopt(ctx context.Context, command AdoptStrategyCommand) (WaveResult, error) {
@@ -278,6 +325,33 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 	if !found {
 		return WaveResult{outcome: WaveNotFound}, nil
 	}
+	if task.Status == "CANCELLED" || task.Status == "LATE" {
+		if task.Fact == command.FactID.String() && task.Picked == command.Quantity {
+			return WaveResult{outcome: WaveExisting, tasks: []ports.PickTask{task}}, nil
+		}
+		if task.Status == "LATE" || command.Quantity <= 0 || command.Quantity > task.Quantity {
+			return WaveResult{outcome: WaveConflict}, nil
+		}
+		request, found, err := handler.requests.LoadByID(ctx, command.Tenant, task.Request)
+		if err != nil {
+			return WaveResult{}, fmt.Errorf("pick: %w", err)
+		}
+		if !found {
+			return WaveResult{outcome: WaveNotFound}, nil
+		}
+		task.Picked = command.Quantity
+		task.Staging = command.Target
+		if err := handler.postPick(ctx, request, task, command); err != nil {
+			return WaveResult{}, fmt.Errorf("pick: %w", err)
+		}
+		if err := handler.waves.SaveLatePick(ctx, command.Tenant, task, command.FactID.String()); err != nil {
+			return WaveResult{}, fmt.Errorf("pick: %w", err)
+		}
+		if err := handler.queueReturns(ctx, command.Tenant, task.Request, 0, []ports.PickTask{task}); err != nil {
+			return WaveResult{}, err
+		}
+		return WaveResult{outcome: WaveRecorded, tasks: []ports.PickTask{task}}, nil
+	}
 	if task.Status != "OPEN" {
 		if task.Fact == command.FactID.String() && task.Picked == command.Quantity {
 			return WaveResult{outcome: WaveExisting, tasks: []ports.PickTask{task}}, nil
@@ -306,6 +380,7 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 		return WaveResult{}, fmt.Errorf("pick: %w", err)
 	}
 	task.Picked = command.Quantity
+	task.Staging = command.Target
 	task.Status = "DONE"
 	short := task.Quantity - command.Quantity
 	if short > 0 {

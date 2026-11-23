@@ -240,6 +240,24 @@ func (unwiredWave) Check(context.Context, warehouseapp.CheckCommand) (warehousea
 func (unwiredWave) Pack(context.Context, warehouseapp.PackCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
 }
+func (unwiredWave) Confirm(context.Context, warehouseapp.ConfirmCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+func (unwiredWave) RegisterOwnerLabel(context.Context, warehouseapp.RegisterOwnerLabelCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+func (unwiredWave) Correct(context.Context, warehouseapp.CorrectConfirmationCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+func (unwiredWave) ApproveReplenishment(context.Context, warehouseapp.ApproveReplenishmentCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+func (unwiredWave) Cutoff(context.Context, warehouseapp.CutoffCommand) (warehouseapp.CutoffResult, error) {
+	return warehouseapp.CutoffResult{}, errOrchestrationNotWired
+}
+func (unwiredWave) Return(context.Context, warehouseapp.ReturnCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
 
 type unwiredOutbound struct{}
 
@@ -642,21 +660,27 @@ const (
 	unclaimedArrivalListLine      = "/warehouse-fulfillment-unclaimed-arrivals"
 	unclaimedArrivalOneLine       = "/warehouse-fulfillment-unclaimed-arrival"
 
-	internalMovesLine         = "/warehouse-fulfillment-internal-moves"
-	formConversionsLine       = "/warehouse-fulfillment-form-conversions"
-	conditionConversionsLine  = "/warehouse-fulfillment-condition-conversions"
-	shortageRegistrationsLine = "/warehouse-fulfillment-shortage-registrations"
-	processingExecutionsLine  = "/warehouse-fulfillment-processing-executions"
-	relabelExecutionsLine     = "/warehouse-fulfillment-relabel-executions"
-	unboxingsLine             = "/warehouse-fulfillment-unboxings"
-	countEntriesLine          = "/warehouse-fulfillment-count-entries"
-	picksLine                 = "/warehouse-fulfillment-picks"
-	outboundChecksLine        = "/warehouse-fulfillment-outbound-checks"
-	packsLine                 = "/warehouse-fulfillment-packs"
-	conditionRestoresLine     = "/warehouse-fulfillment-condition-restores"
-	internalJobsLine          = "/warehouse-fulfillment-internal-jobs"
-	internalJobLine           = "/warehouse-fulfillment-internal-job"
-	conditionRestoreReadLine  = "/warehouse-fulfillment-condition-restore"
+	internalMovesLine           = "/warehouse-fulfillment-internal-moves"
+	formConversionsLine         = "/warehouse-fulfillment-form-conversions"
+	conditionConversionsLine    = "/warehouse-fulfillment-condition-conversions"
+	shortageRegistrationsLine   = "/warehouse-fulfillment-shortage-registrations"
+	processingExecutionsLine    = "/warehouse-fulfillment-processing-executions"
+	relabelExecutionsLine       = "/warehouse-fulfillment-relabel-executions"
+	unboxingsLine               = "/warehouse-fulfillment-unboxings"
+	countEntriesLine            = "/warehouse-fulfillment-count-entries"
+	picksLine                   = "/warehouse-fulfillment-picks"
+	outboundChecksLine          = "/warehouse-fulfillment-outbound-checks"
+	packsLine                   = "/warehouse-fulfillment-packs"
+	returnsLine                 = "/warehouse-fulfillment-returns"
+	outboundConfirmationsLine   = "/warehouse-fulfillment-outbound-confirmations"
+	pickupHandoversLine         = "/warehouse-fulfillment-pickup-handovers"
+	ownerLabelsLine             = "/warehouse-fulfillment-owner-labels"
+	confirmationCorrectionsLine = "/warehouse-fulfillment-outbound-confirmation-corrections"
+	replenishmentsLine          = "/warehouse-fulfillment-outbound-confirmation-replenishments"
+	conditionRestoresLine       = "/warehouse-fulfillment-condition-restores"
+	internalJobsLine            = "/warehouse-fulfillment-internal-jobs"
+	internalJobLine             = "/warehouse-fulfillment-internal-job"
+	conditionRestoreReadLine    = "/warehouse-fulfillment-condition-restore"
 
 	customerGoodsWriteLine         = "/v1/warehouse/goods"
 	customerGoodsListLine          = "/v1/warehouse/reads/goods"
@@ -671,7 +695,7 @@ const (
 )
 
 func warehouseWorkLine(pattern string) bool {
-	return pattern == countEntriesLine || pattern == picksLine || pattern == outboundChecksLine || pattern == packsLine
+	return pattern == countEntriesLine || pattern == picksLine || pattern == outboundChecksLine || pattern == packsLine || pattern == returnsLine || pattern == outboundConfirmationsLine || pattern == pickupHandoversLine
 }
 
 // warehouseFulfillmentLines 是登记处里声明了仓配开关的各行，按路径排序。
@@ -788,61 +812,69 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/outbound-requests":                   {http.MethodPost, faceCustomerClient},
 		"/v1/warehouse/outbound-requests/splits":            {http.MethodPost, faceCustomerClient},
 		"/v1/warehouse/outbound-requests/supplements":       {http.MethodPost, faceCustomerClient},
+		"/v1/warehouse/outbound-requests/cancellations":     {http.MethodPost, faceCustomerClient},
 
 		receiptConfirmationsLine:  {http.MethodPost, faceWorkFact},
 		warehouseMeasurementsLine: {http.MethodPost, faceWorkFact},
 		goodsMeasurementsLine:     {http.MethodGet, faceOperationsRead},
 		cartonMeasurementsLine:    {http.MethodGet, faceOperationsRead},
 
-		disposalRuleRegistrationsLine:                          {http.MethodPost, faceRegistryWrite},
-		disposalRuleListLine:                                   {http.MethodGet, faceOperationsRead},
-		disposalRuleRevisionsLine:                              {http.MethodGet, faceOperationsRead},
-		unclaimedArrivalRegLine:                                {http.MethodPost, faceWorkFact},
-		unclaimedArrivalClaimLine:                              {http.MethodPost, faceOperationDecision},
-		unclaimedArrivalRevokeLine:                             {http.MethodPost, faceOperationDecision},
-		unclaimedArrivalDisposeLine:                            {http.MethodPost, faceOperationDecision},
-		unclaimedArrivalListLine:                               {http.MethodGet, faceOperationsRead},
-		unclaimedArrivalOneLine:                                {http.MethodGet, faceOperationsRead},
-		internalMovesLine:                                      {http.MethodPost, faceWorkFact},
-		formConversionsLine:                                    {http.MethodPost, faceWorkFact},
-		conditionConversionsLine:                               {http.MethodPost, faceWorkFact},
-		shortageRegistrationsLine:                              {http.MethodPost, faceWorkFact},
-		processingExecutionsLine:                               {http.MethodPost, faceWorkFact},
-		relabelExecutionsLine:                                  {http.MethodPost, faceWorkFact},
-		unboxingsLine:                                          {http.MethodPost, faceWorkFact},
-		conditionRestoresLine:                                  {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-processing-instructions":       {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-processing-instruction-voids":  {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-relabel-instructions":          {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-relabel-instruction-voids":     {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-stock-freezes":                 {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-stock-unfreezes":               {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-stock-counts":                  {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-stock-count-starts":            {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-stock-count-completions":       {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-stock-count-voids":             {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-count-entries":                 {http.MethodPost, faceWorkFact},
-		"/warehouse-fulfillment-picks":                         {http.MethodPost, faceWorkFact},
-		"/warehouse-fulfillment-outbound-checks":               {http.MethodPost, faceWorkFact},
-		"/warehouse-fulfillment-packs":                         {http.MethodPost, faceWorkFact},
-		"/warehouse-fulfillment-approval-duty-rules":           {http.MethodPost, faceRegistryWrite},
-		"/warehouse-fulfillment-count-approvals":               {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-count-rejections":              {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-stock-adjustments":             {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-stock-adjustment-approvals":    {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-stock-adjustment-rejections":   {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-job-discrepancy-approvals":     {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-job-discrepancy-rejections":    {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-outbound-requests":             {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-outbound-request-splits":       {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-shortage-policies":             {http.MethodPost, faceRegistryWrite},
-		"/warehouse-fulfillment-allocation-strategy-adoptions": {http.MethodPost, faceRegistryWrite},
-		"/warehouse-fulfillment-waves":                         {http.MethodPost, faceOperationDecision},
-		"/warehouse-fulfillment-stock":                         {http.MethodGet, faceOperationsRead},
-		"/v1/warehouse/reads/stock":                            {http.MethodGet, faceCustomerClient},
-		internalJobsLine:                                       {http.MethodGet, faceOperationsRead},
-		internalJobLine:                                        {http.MethodGet, faceOperationsRead},
-		conditionRestoreReadLine:                               {http.MethodGet, faceOperationsRead},
+		disposalRuleRegistrationsLine:                                 {http.MethodPost, faceRegistryWrite},
+		disposalRuleListLine:                                          {http.MethodGet, faceOperationsRead},
+		disposalRuleRevisionsLine:                                     {http.MethodGet, faceOperationsRead},
+		unclaimedArrivalRegLine:                                       {http.MethodPost, faceWorkFact},
+		unclaimedArrivalClaimLine:                                     {http.MethodPost, faceOperationDecision},
+		unclaimedArrivalRevokeLine:                                    {http.MethodPost, faceOperationDecision},
+		unclaimedArrivalDisposeLine:                                   {http.MethodPost, faceOperationDecision},
+		unclaimedArrivalListLine:                                      {http.MethodGet, faceOperationsRead},
+		unclaimedArrivalOneLine:                                       {http.MethodGet, faceOperationsRead},
+		internalMovesLine:                                             {http.MethodPost, faceWorkFact},
+		formConversionsLine:                                           {http.MethodPost, faceWorkFact},
+		conditionConversionsLine:                                      {http.MethodPost, faceWorkFact},
+		shortageRegistrationsLine:                                     {http.MethodPost, faceWorkFact},
+		processingExecutionsLine:                                      {http.MethodPost, faceWorkFact},
+		relabelExecutionsLine:                                         {http.MethodPost, faceWorkFact},
+		unboxingsLine:                                                 {http.MethodPost, faceWorkFact},
+		conditionRestoresLine:                                         {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-processing-instructions":              {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-processing-instruction-voids":         {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-relabel-instructions":                 {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-relabel-instruction-voids":            {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-stock-freezes":                        {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-stock-unfreezes":                      {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-stock-counts":                         {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-stock-count-starts":                   {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-stock-count-completions":              {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-stock-count-voids":                    {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-count-entries":                        {http.MethodPost, faceWorkFact},
+		"/warehouse-fulfillment-picks":                                {http.MethodPost, faceWorkFact},
+		"/warehouse-fulfillment-outbound-checks":                      {http.MethodPost, faceWorkFact},
+		"/warehouse-fulfillment-packs":                                {http.MethodPost, faceWorkFact},
+		"/warehouse-fulfillment-returns":                              {http.MethodPost, faceWorkFact},
+		"/warehouse-fulfillment-outbound-confirmations":               {http.MethodPost, faceWorkFact},
+		"/warehouse-fulfillment-pickup-handovers":                     {http.MethodPost, faceWorkFact},
+		"/warehouse-fulfillment-owner-labels":                         {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-outbound-confirmation-corrections":    {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-outbound-confirmation-replenishments": {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-approval-duty-rules":                  {http.MethodPost, faceRegistryWrite},
+		"/warehouse-fulfillment-count-approvals":                      {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-count-rejections":                     {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-stock-adjustments":                    {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-stock-adjustment-approvals":           {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-stock-adjustment-rejections":          {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-job-discrepancy-approvals":            {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-job-discrepancy-rejections":           {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-outbound-requests":                    {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-outbound-request-splits":              {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-outbound-cancellations":               {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-shortage-policies":                    {http.MethodPost, faceRegistryWrite},
+		"/warehouse-fulfillment-allocation-strategy-adoptions":        {http.MethodPost, faceRegistryWrite},
+		"/warehouse-fulfillment-waves":                                {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-stock":                                {http.MethodGet, faceOperationsRead},
+		"/v1/warehouse/reads/stock":                                   {http.MethodGet, faceCustomerClient},
+		internalJobsLine:                                              {http.MethodGet, faceOperationsRead},
+		internalJobLine:                                               {http.MethodGet, faceOperationsRead},
+		conditionRestoreReadLine:                                      {http.MethodGet, faceOperationsRead},
 
 		customerGoodsWriteLine:         {http.MethodPost, faceCustomerClient},
 		customerGoodsListLine:          {http.MethodGet, faceCustomerClient},
@@ -871,6 +903,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/v1/warehouse/outbound-requests":                   accessidentity.CustomerCapabilityOutboundRequestSubmission,
 		"/v1/warehouse/outbound-requests/splits":            accessidentity.CustomerCapabilityOutboundRequestSubmission,
 		"/v1/warehouse/outbound-requests/supplements":       accessidentity.CustomerCapabilityOutboundRequestSubmission,
+		"/v1/warehouse/outbound-requests/cancellations":     accessidentity.CustomerCapabilityOutboundCancellation,
 		"/v1/warehouse/reads/stock":                         accessidentity.CustomerCapabilityWarehouseRead,
 		customerGoodsWriteLine:                              accessidentity.CustomerCapabilityGoodsMaintenance,
 		customerGoodsListLine:                               accessidentity.CustomerCapabilityWarehouseRead,
@@ -898,36 +931,40 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 			t.Fatalf("%s 的能力词 = %s，want %s", pattern, line.face.capability, capability)
 		}
 		decisionLines := map[string]accessidentity.DecisionKind{
-			goodsOnBehalfLine:                                     accessidentity.DecisionGoodsRecordOnBehalf,
-			preAdviceOnBehalfLine:                                 accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
-			preAdviceNoticeLine:                                   accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
-			preAdviceWithdrawalLine:                               accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
-			preAdviceCloseLine:                                    accessidentity.DecisionInboundPreAdviceClose,
-			discrepancyConclusionLine:                             accessidentity.DecisionReceiptDiscrepancyRecordOnBehalf,
-			unclaimedArrivalClaimLine:                             accessidentity.DecisionUnclaimedArrivalClaim,
-			unclaimedArrivalRevokeLine:                            accessidentity.DecisionUnclaimedArrivalClaim,
-			unclaimedArrivalDisposeLine:                           accessidentity.DecisionUnclaimedArrivalDisposition,
-			conditionRestoresLine:                                 accessidentity.DecisionConditionRestore,
-			"/warehouse-fulfillment-processing-instructions":      accessidentity.DecisionProcessingInstruction,
-			"/warehouse-fulfillment-processing-instruction-voids": accessidentity.DecisionProcessingInstruction,
-			"/warehouse-fulfillment-relabel-instructions":         accessidentity.DecisionRelabelInstruction,
-			"/warehouse-fulfillment-relabel-instruction-voids":    accessidentity.DecisionRelabelInstruction,
-			"/warehouse-fulfillment-stock-freezes":                accessidentity.DecisionStockFreeze,
-			"/warehouse-fulfillment-stock-unfreezes":              accessidentity.DecisionStockFreeze,
-			"/warehouse-fulfillment-stock-counts":                 accessidentity.DecisionStockCount,
-			"/warehouse-fulfillment-stock-count-starts":           accessidentity.DecisionStockCount,
-			"/warehouse-fulfillment-stock-count-completions":      accessidentity.DecisionStockCount,
-			"/warehouse-fulfillment-stock-count-voids":            accessidentity.DecisionStockCount,
-			"/warehouse-fulfillment-count-approvals":              accessidentity.DecisionStockAdjustmentApproval,
-			"/warehouse-fulfillment-count-rejections":             accessidentity.DecisionStockAdjustmentApproval,
-			"/warehouse-fulfillment-stock-adjustments":            accessidentity.DecisionStockAdjustmentSubmission,
-			"/warehouse-fulfillment-stock-adjustment-approvals":   accessidentity.DecisionStockAdjustmentApproval,
-			"/warehouse-fulfillment-stock-adjustment-rejections":  accessidentity.DecisionStockAdjustmentApproval,
-			"/warehouse-fulfillment-job-discrepancy-approvals":    accessidentity.DecisionStockAdjustmentApproval,
-			"/warehouse-fulfillment-job-discrepancy-rejections":   accessidentity.DecisionStockAdjustmentApproval,
-			"/warehouse-fulfillment-outbound-requests":            accessidentity.DecisionOutboundRequestRecordOnBehalf,
-			"/warehouse-fulfillment-outbound-request-splits":      accessidentity.DecisionOutboundRequestRecordOnBehalf,
-			"/warehouse-fulfillment-waves":                        accessidentity.DecisionWaveRelease,
+			goodsOnBehalfLine:                                             accessidentity.DecisionGoodsRecordOnBehalf,
+			preAdviceOnBehalfLine:                                         accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
+			preAdviceNoticeLine:                                           accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
+			preAdviceWithdrawalLine:                                       accessidentity.DecisionInboundPreAdviceRecordOnBehalf,
+			preAdviceCloseLine:                                            accessidentity.DecisionInboundPreAdviceClose,
+			discrepancyConclusionLine:                                     accessidentity.DecisionReceiptDiscrepancyRecordOnBehalf,
+			unclaimedArrivalClaimLine:                                     accessidentity.DecisionUnclaimedArrivalClaim,
+			unclaimedArrivalRevokeLine:                                    accessidentity.DecisionUnclaimedArrivalClaim,
+			unclaimedArrivalDisposeLine:                                   accessidentity.DecisionUnclaimedArrivalDisposition,
+			conditionRestoresLine:                                         accessidentity.DecisionConditionRestore,
+			"/warehouse-fulfillment-processing-instructions":              accessidentity.DecisionProcessingInstruction,
+			"/warehouse-fulfillment-processing-instruction-voids":         accessidentity.DecisionProcessingInstruction,
+			"/warehouse-fulfillment-relabel-instructions":                 accessidentity.DecisionRelabelInstruction,
+			"/warehouse-fulfillment-relabel-instruction-voids":            accessidentity.DecisionRelabelInstruction,
+			"/warehouse-fulfillment-stock-freezes":                        accessidentity.DecisionStockFreeze,
+			"/warehouse-fulfillment-stock-unfreezes":                      accessidentity.DecisionStockFreeze,
+			"/warehouse-fulfillment-stock-counts":                         accessidentity.DecisionStockCount,
+			"/warehouse-fulfillment-stock-count-starts":                   accessidentity.DecisionStockCount,
+			"/warehouse-fulfillment-stock-count-completions":              accessidentity.DecisionStockCount,
+			"/warehouse-fulfillment-stock-count-voids":                    accessidentity.DecisionStockCount,
+			"/warehouse-fulfillment-count-approvals":                      accessidentity.DecisionStockAdjustmentApproval,
+			"/warehouse-fulfillment-count-rejections":                     accessidentity.DecisionStockAdjustmentApproval,
+			"/warehouse-fulfillment-stock-adjustments":                    accessidentity.DecisionStockAdjustmentSubmission,
+			"/warehouse-fulfillment-stock-adjustment-approvals":           accessidentity.DecisionStockAdjustmentApproval,
+			"/warehouse-fulfillment-stock-adjustment-rejections":          accessidentity.DecisionStockAdjustmentApproval,
+			"/warehouse-fulfillment-job-discrepancy-approvals":            accessidentity.DecisionStockAdjustmentApproval,
+			"/warehouse-fulfillment-job-discrepancy-rejections":           accessidentity.DecisionStockAdjustmentApproval,
+			"/warehouse-fulfillment-outbound-requests":                    accessidentity.DecisionOutboundRequestRecordOnBehalf,
+			"/warehouse-fulfillment-outbound-request-splits":              accessidentity.DecisionOutboundRequestRecordOnBehalf,
+			"/warehouse-fulfillment-outbound-cancellations":               accessidentity.DecisionOutboundRequestRecordOnBehalf,
+			"/warehouse-fulfillment-owner-labels":                         accessidentity.DecisionOutboundRequestRecordOnBehalf,
+			"/warehouse-fulfillment-outbound-confirmation-corrections":    accessidentity.DecisionOutboundConfirmationCorrection,
+			"/warehouse-fulfillment-outbound-confirmation-replenishments": accessidentity.DecisionStockAdjustmentApproval,
+			"/warehouse-fulfillment-waves":                                accessidentity.DecisionWaveRelease,
 		}
 		if kind, writesOnBehalf := decisionLines[pattern]; writesOnBehalf && line.face.decision != kind {
 			t.Fatalf("%s 的决定种类 = %s，want %s", pattern, line.face.decision, kind)
@@ -1037,6 +1074,12 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			picksLine:                                              {status, code},
 			outboundChecksLine:                                     {status, code},
 			packsLine:                                              {status, code},
+			returnsLine:                                            {status, code},
+			outboundConfirmationsLine:                              {status, code},
+			pickupHandoversLine:                                    {status, code},
+			ownerLabelsLine:                                        {status, code},
+			confirmationCorrectionsLine:                            {status, code},
+			replenishmentsLine:                                     {status, code},
 			"/warehouse-fulfillment-approval-duty-rules":           {status, code},
 			"/warehouse-fulfillment-count-approvals":               {status, code},
 			"/warehouse-fulfillment-count-rejections":              {status, code},
@@ -1047,6 +1090,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-job-discrepancy-rejections":    {status, code},
 			"/warehouse-fulfillment-outbound-requests":             {status, code},
 			"/warehouse-fulfillment-outbound-request-splits":       {status, code},
+			"/warehouse-fulfillment-outbound-cancellations":        {status, code},
 			"/warehouse-fulfillment-shortage-policies":             {status, code},
 			"/warehouse-fulfillment-allocation-strategy-adoptions": {status, code},
 			"/warehouse-fulfillment-waves":                         {status, code},
@@ -1132,6 +1176,12 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			picksLine:                                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			outboundChecksLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packsLine:                                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			returnsLine:                                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			outboundConfirmationsLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			pickupHandoversLine:                                    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			ownerLabelsLine:                                        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			confirmationCorrectionsLine:                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			replenishmentsLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-approval-duty-rules":           {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-shortage-policies":             {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-allocation-strategy-adoptions": {http.StatusBadRequest, "MALFORMED_REQUEST"},
@@ -1144,6 +1194,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-job-discrepancy-rejections":    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-requests":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-request-splits":       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-outbound-cancellations":        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-waves":                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-stock":                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			internalJobsLine:                                       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1220,6 +1271,12 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			picksLine:                                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			outboundChecksLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packsLine:                                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			returnsLine:                                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			outboundConfirmationsLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			pickupHandoversLine:                                    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			ownerLabelsLine:                                        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			confirmationCorrectionsLine:                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			replenishmentsLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-approval-duty-rules":           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-count-approvals":               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-count-rejections":              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1230,6 +1287,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-job-discrepancy-rejections":    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-requests":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-request-splits":       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-outbound-cancellations":        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-shortage-policies":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-allocation-strategy-adoptions": {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-waves":                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1279,13 +1337,20 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			t.Fatal(countEntryErr)
 		}
 		wiring.countEntryIntake = countEntry
-		pickIntake, checkIntake, packIntake, workIntakeErr := buildOutboundWorkIntakes(acceptingVerifier{}, testCase.register, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
+		pickIntake, checkIntake, packIntake, confirmIntake, pickupIntake, workIntakeErr := buildOutboundWorkIntakes(acceptingVerifier{}, testCase.register, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
 		if workIntakeErr != nil {
 			t.Fatal(workIntakeErr)
 		}
 		wiring.pickIntake = pickIntake
 		wiring.checkIntake = checkIntake
 		wiring.packIntake = packIntake
+		wiring.confirmIntake = confirmIntake
+		wiring.pickupIntake = pickupIntake
+		returnIntake, returnErr := buildReturnIntake(acceptingVerifier{}, testCase.register, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{})
+		if returnErr != nil {
+			t.Fatal(returnErr)
+		}
+		wiring.returnIntake = returnIntake
 		router := warehouseFulfillmentRouter(t, channels, wiring)
 		for pattern, want := range testCase.want {
 			var response *httptest.ResponseRecorder
@@ -1296,7 +1361,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 				response = probeWorkFactPost(router, warehouseMeasurementsLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", warehouseMeasurementBody())
 			case unclaimedArrivalRegLine:
 				response = probeWorkFactPost(router, unclaimedArrivalRegLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", unclaimedArrivalBody())
-			case internalMovesLine, formConversionsLine, conditionConversionsLine, shortageRegistrationsLine, processingExecutionsLine, relabelExecutionsLine, unboxingsLine, countEntriesLine, picksLine, outboundChecksLine, packsLine:
+			case internalMovesLine, formConversionsLine, conditionConversionsLine, shortageRegistrationsLine, processingExecutionsLine, relabelExecutionsLine, unboxingsLine, countEntriesLine, picksLine, outboundChecksLine, packsLine, returnsLine, outboundConfirmationsLine, pickupHandoversLine:
 				response = probeWorkFactPost(router, pattern, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", `{}`)
 			default:
 				response = probeWarehouseFulfillment(router, pattern, testCase.token, `{}`)

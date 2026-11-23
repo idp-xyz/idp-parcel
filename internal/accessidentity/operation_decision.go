@@ -325,6 +325,9 @@ const DecisionOutboundRequestRecordOnBehalf DecisionKind = "OUTBOUND_REQUEST_REC
 // DecisionWaveRelease 是把已预占的出库请求放进波次（UC-WF-013）。谁持有是租户取值。
 const DecisionWaveRelease DecisionKind = "WAVE_RELEASE"
 
+// DecisionOutboundConfirmationCorrection 是出库确认的更正（UC-WF-015）。改时点当场成立；判不成立只留下待回补，回补的批准仍用库存调整批准。谁持有是租户取值。
+const DecisionOutboundConfirmationCorrection DecisionKind = "OUTBOUND_CONFIRMATION_CORRECTION"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -386,6 +389,7 @@ var decisionKinds = []DecisionKind{
 	DecisionStockAdjustmentSubmission,
 	DecisionOutboundRequestRecordOnBehalf,
 	DecisionWaveRelease,
+	DecisionOutboundConfirmationCorrection,
 }
 
 // DecisionKinds 交出全部决定种类，顺序固定：这是「运营决定」一格的列，管理台据它摆选项而不在前端抄第二份（ADR-0363 决定二）。

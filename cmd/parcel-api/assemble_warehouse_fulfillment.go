@@ -6,6 +6,7 @@ import (
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psparty "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
@@ -610,11 +611,19 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	if err != nil {
 		return none, err
 	}
+	outboxStore, err := outbox.NewStore(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: outbound confirmation outbox: %w", err)
+	}
+	confirmationHandoff, err := whpostgres.NewOutboxOutboundConfirmationHandoff(db, outboxStore, systemClock{})
+	if err != nil {
+		return none, err
+	}
 	waves := transactionalWave{
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewWaveHandler(
 			waveStore, outboundStore, pickTaskIDs, discrepancyIDs, poster, stock, locations, zones, goods, holds, systemClock{}, warehouses,
-		),
+		).WithConfirmationHandoff(confirmationHandoff).WithApprovalDuties(countStore),
 		commissions: warehouseapp.NewCommissionHandler(outboundStore, waveStore, opener, warehouses),
 	}
 	followUps := transactionalFollowUp{
@@ -880,6 +889,42 @@ func (registration transactionalWave) Pick(ctx context.Context, command warehous
 func (registration transactionalWave) Check(ctx context.Context, command warehouseapp.CheckCommand) (warehouseapp.WaveResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
 		return registration.inner.Check(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) Return(ctx context.Context, command warehouseapp.ReturnCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.Return(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) Cutoff(ctx context.Context, command warehouseapp.CutoffCommand) (warehouseapp.CutoffResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.CutoffResult, error) {
+		return registration.inner.Cutoff(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) Correct(ctx context.Context, command warehouseapp.CorrectConfirmationCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.Correct(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) ApproveReplenishment(ctx context.Context, command warehouseapp.ApproveReplenishmentCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.ApproveReplenishment(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) Confirm(ctx context.Context, command warehouseapp.ConfirmCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.Confirm(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) RegisterOwnerLabel(ctx context.Context, command warehouseapp.RegisterOwnerLabelCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.RegisterOwnerLabel(txCtx, command)
 	})
 }
 

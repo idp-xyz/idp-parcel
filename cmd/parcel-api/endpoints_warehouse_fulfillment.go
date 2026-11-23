@@ -9,6 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	whaccess "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/accessidentity"
 	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
+	warehouseapp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	warehousedomain "go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 )
 
@@ -97,6 +98,9 @@ type warehouseFulfillmentWiring struct {
 	pickIntake                *warehousehttp.PickIntake
 	checkIntake               *warehousehttp.CheckIntake
 	packIntake                *warehousehttp.PackIntake
+	confirmIntake             *warehousehttp.ConfirmIntake
+	pickupIntake              *warehousehttp.ConfirmIntake
+	returnIntake              *warehousehttp.ReturnIntake
 	internalJobs              warehousehttp.InternalJobRegistrar
 	conditionRestore          warehousehttp.ConditionRestorer
 	internalJobQueries        warehousehttp.InternalJobQueries
@@ -425,10 +429,17 @@ func init() {
 				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityOutboundRequestSubmission),
 				ownIntake: true, warehouseFulfillment: true,
 			},
+			"/v1/warehouse/outbound-requests/cancellations": {
+				method: http.MethodPost, face: customerClientFace(accessidentity.CustomerCapabilityOutboundCancellation),
+				ownIntake: true, warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-outbound-requests": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
 			},
 			"/warehouse-fulfillment-outbound-request-splits": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-outbound-cancellations": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
 			},
 			"/warehouse-fulfillment-shortage-policies": {
@@ -451,6 +462,27 @@ func init() {
 			"/warehouse-fulfillment-packs": {
 				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
 				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-returns": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-outbound-confirmations": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-pickup-handovers": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-owner-labels": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-outbound-confirmation-corrections": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundConfirmationCorrection), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-outbound-confirmation-replenishments": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentApproval), warehouseFulfillment: true,
 			},
 			"/warehouse-fulfillment-count-rejections": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionStockAdjustmentApproval), warehouseFulfillment: true,
@@ -525,6 +557,9 @@ func init() {
 			var pickIntake *warehousehttp.PickIntake
 			var checkIntake *warehousehttp.CheckIntake
 			var packIntake *warehousehttp.PackIntake
+			var confirmIntake *warehousehttp.ConfirmIntake
+			var pickupIntake *warehousehttp.ConfirmIntake
+			var returnIntake *warehousehttp.ReturnIntake
 			if sources.operatorVerifier != nil && sources.operatorRegistry != nil && sources.deviceRegistry != nil && sources.admission != nil {
 				receiptIntake, err = buildReceiptConfirmationIntake(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
@@ -556,7 +591,13 @@ func init() {
 				if err != nil {
 					return warehouseFulfillmentWiring{}, err
 				}
-				pickIntake, checkIntake, packIntake, err = buildOutboundWorkIntakes(
+				pickIntake, checkIntake, packIntake, confirmIntake, pickupIntake, err = buildOutboundWorkIntakes(
+					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
+				)
+				if err != nil {
+					return warehouseFulfillmentWiring{}, err
+				}
+				returnIntake, err = buildReturnIntake(
 					sources.operatorVerifier, sources.operatorRegistry, sources.deviceRegistry, sources.admission,
 				)
 				if err != nil {
@@ -638,6 +679,9 @@ func init() {
 				pickIntake:                pickIntake,
 				checkIntake:               checkIntake,
 				packIntake:                packIntake,
+				confirmIntake:             confirmIntake,
+				pickupIntake:              pickupIntake,
+				returnIntake:              returnIntake,
 				internalJobs:              orchestration.internalJobs,
 				conditionRestore:          orchestration.internalJobs,
 				internalJobQueries:        orchestration.internalJobQueries,
@@ -738,14 +782,22 @@ func init() {
 			customerOutboundRequest := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			customerOutboundSplit := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			customerOutboundSupplement := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
+			customerOutboundCancellation := http.Handler(warehousehttp.NewCustomerNotEnabledEndpoint(http.MethodPost))
 			outboundOnBehalf := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			outboundSplit := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			outboundCancellation := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			shortagePolicy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			allocationStrategy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveRelease := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			pick := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			outboundCheck := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			pack := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			stockReturn := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			outboundConfirmation := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			pickupHandover := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			ownerLabel := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			confirmationCorrection := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			replenishment := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			internalJobList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			internalJobOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			conditionRestoreOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
@@ -901,8 +953,10 @@ func init() {
 				customerOutboundRequest = warehousehttp.NewSubmitOutboundEndpoint(warehousehttp.OpenCustomerOutboundIntake(wiring.customerOutbound), wiring.outbounds)
 				customerOutboundSplit = warehousehttp.NewSplitCustomerOutboundEndpoint(warehousehttp.OpenCustomerOutboundIntake(wiring.customerOutbound), wiring.outbounds)
 				customerOutboundSupplement = warehousehttp.NewSupplementCustomerOutboundEndpoint(warehousehttp.OpenCustomerOutboundIntake(wiring.customerOutbound), wiring.followUps)
+				customerOutboundCancellation = warehousehttp.NewCancelCustomerOutboundEndpoint(warehousehttp.OpenCustomerOutboundIntake(wiring.customerOutbound), wiring.waves)
 				outboundOnBehalf = warehousehttp.NewRecordOutboundEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
 				outboundSplit = warehousehttp.NewSplitOutboundEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
+				outboundCancellation = warehousehttp.NewCancelOutboundEndpoint(channels.outboundOnBehalf(), wiring.waves)
 				shortagePolicy = warehousehttp.NewRegisterShortagePolicyEndpoint(channels.shortagePolicy(), wiring.outbounds)
 				allocationStrategy = warehousehttp.NewAdoptAllocationStrategyEndpoint(channels.allocationStrategy(), wiring.waves)
 				waveRelease = warehousehttp.NewReleaseWaveEndpoint(channels.waveRelease(), wiring.waves)
@@ -918,12 +972,32 @@ func init() {
 				} else {
 					outboundCheck = warehousehttp.NewRecordCheckEndpoint(plainCheck, wiring.waves)
 				}
+				plainReturn := warehousehttp.UnconfiguredReturnIntake{}
+				if wiring.returnIntake != nil {
+					stockReturn = warehousehttp.NewRecordReturnEndpoint(wiring.returnIntake, wiring.waves)
+				} else {
+					stockReturn = warehousehttp.NewRecordReturnEndpoint(plainReturn, wiring.waves)
+				}
 				plainPack := warehousehttp.UnconfiguredPackIntake{}
 				if wiring.packIntake != nil {
 					pack = warehousehttp.NewRecordPackEndpoint(wiring.packIntake, wiring.waves)
 				} else {
 					pack = warehousehttp.NewRecordPackEndpoint(plainPack, wiring.waves)
 				}
+				plainConfirm := warehousehttp.UnconfiguredConfirmIntake{}
+				if wiring.confirmIntake != nil {
+					outboundConfirmation = warehousehttp.NewRecordConfirmationEndpoint(wiring.confirmIntake, wiring.waves)
+				} else {
+					outboundConfirmation = warehousehttp.NewRecordConfirmationEndpoint(plainConfirm, wiring.waves)
+				}
+				if wiring.pickupIntake != nil {
+					pickupHandover = warehousehttp.NewRecordConfirmationEndpoint(wiring.pickupIntake, wiring.waves)
+				} else {
+					pickupHandover = warehousehttp.NewRecordConfirmationEndpoint(plainConfirm, wiring.waves)
+				}
+				ownerLabel = warehousehttp.NewRegisterOwnerLabelEndpoint(channels.outboundOnBehalf(), wiring.waves)
+				confirmationCorrection = warehousehttp.NewCorrectConfirmationEndpoint(channels.confirmationCorrection(), wiring.waves)
+				replenishment = warehousehttp.NewApproveReplenishmentEndpoint(channels.stockApproval(), wiring.waves)
 				stockCount = warehousehttp.NewCreateCountEndpoint(channels.stockCount(), wiring.counts)
 				stockCountStart = warehousehttp.NewStartCountEndpoint(channels.stockCount(), wiring.counts)
 				stockCountComplete = warehousehttp.NewCompleteCountEndpoint(channels.stockCount(), wiring.counts)
@@ -1032,14 +1106,22 @@ func init() {
 				{Pattern: "/v1/warehouse/outbound-requests", Handler: customerOutboundRequest},
 				{Pattern: "/v1/warehouse/outbound-requests/splits", Handler: customerOutboundSplit},
 				{Pattern: "/v1/warehouse/outbound-requests/supplements", Handler: customerOutboundSupplement},
+				{Pattern: "/v1/warehouse/outbound-requests/cancellations", Handler: customerOutboundCancellation},
 				{Pattern: "/warehouse-fulfillment-outbound-requests", Handler: outboundOnBehalf},
 				{Pattern: "/warehouse-fulfillment-outbound-request-splits", Handler: outboundSplit},
+				{Pattern: "/warehouse-fulfillment-outbound-cancellations", Handler: outboundCancellation},
 				{Pattern: "/warehouse-fulfillment-shortage-policies", Handler: shortagePolicy},
 				{Pattern: "/warehouse-fulfillment-allocation-strategy-adoptions", Handler: allocationStrategy},
 				{Pattern: "/warehouse-fulfillment-waves", Handler: waveRelease},
 				{Pattern: "/warehouse-fulfillment-picks", Handler: pick},
 				{Pattern: "/warehouse-fulfillment-outbound-checks", Handler: outboundCheck},
 				{Pattern: "/warehouse-fulfillment-packs", Handler: pack},
+				{Pattern: "/warehouse-fulfillment-returns", Handler: stockReturn},
+				{Pattern: "/warehouse-fulfillment-outbound-confirmations", Handler: outboundConfirmation},
+				{Pattern: "/warehouse-fulfillment-pickup-handovers", Handler: pickupHandover},
+				{Pattern: "/warehouse-fulfillment-owner-labels", Handler: ownerLabel},
+				{Pattern: "/warehouse-fulfillment-outbound-confirmation-corrections", Handler: confirmationCorrection},
+				{Pattern: "/warehouse-fulfillment-outbound-confirmation-replenishments", Handler: replenishment},
 				{Pattern: "/warehouse-fulfillment-internal-jobs", Handler: internalJobList},
 				{Pattern: "/warehouse-fulfillment-internal-job", Handler: internalJobOne},
 				{Pattern: "/warehouse-fulfillment-condition-restore", Handler: conditionRestoreOne},
@@ -1241,34 +1323,67 @@ func buildOutboundWorkIntakes(
 	operators accessidentity.OperatorRegistry,
 	devices accessidentity.DeviceRegistry,
 	admission accessidentity.AdmissionScope,
-) (*warehousehttp.PickIntake, *warehousehttp.CheckIntake, *warehousehttp.PackIntake, error) {
+) (*warehousehttp.PickIntake, *warehousehttp.CheckIntake, *warehousehttp.PackIntake, *warehousehttp.ConfirmIntake, *warehousehttp.ConfirmIntake, error) {
 	minter, err := accessidentity.NewWorkFactMinter(verifier, operators, devices, admission, time.Now)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("parcel-api: outbound work minter: %w", err)
+		return nil, nil, nil, nil, nil, fmt.Errorf("parcel-api: outbound work minter: %w", err)
 	}
 	pickAuthenticator, err := whaccess.NewInternalJobAuthenticator(minter, accessidentity.WorkFactPick)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	checkAuthenticator, err := whaccess.NewInternalJobAuthenticator(minter, accessidentity.WorkFactOutboundCheck)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	packAuthenticator, err := whaccess.NewInternalJobAuthenticator(minter, accessidentity.WorkFactPack)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
+	}
+	confirmAuthenticator, err := whaccess.NewInternalJobAuthenticator(minter, accessidentity.WorkFactOutboundConfirmation)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	pickupAuthenticator, err := whaccess.NewInternalJobAuthenticator(minter, accessidentity.WorkFactPickupHandover)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
 	}
 	pick, err := warehousehttp.NewPickIntake(pickAuthenticator)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	check, err := warehousehttp.NewCheckIntake(checkAuthenticator)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	pack, err := warehousehttp.NewPackIntake(packAuthenticator)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
-	return pick, check, pack, nil
+	confirm, err := warehousehttp.NewConfirmIntake(confirmAuthenticator, warehouseapp.ConfirmKindOutbound)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	pickup, err := warehousehttp.NewConfirmIntake(pickupAuthenticator, warehouseapp.ConfirmKindPickup)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	return pick, check, pack, confirm, pickup, nil
+}
+
+func buildReturnIntake(
+	verifier accessidentity.OperatorCredentialVerifier,
+	operators accessidentity.OperatorRegistry,
+	devices accessidentity.DeviceRegistry,
+	admission accessidentity.AdmissionScope,
+) (*warehousehttp.ReturnIntake, error) {
+	minter, err := accessidentity.NewWorkFactMinter(verifier, operators, devices, admission, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: return minter: %w", err)
+	}
+	authenticator, err := whaccess.NewInternalJobAuthenticator(minter, accessidentity.WorkFactInternalMove)
+	if err != nil {
+		return nil, err
+	}
+	return warehousehttp.NewReturnIntake(authenticator)
 }

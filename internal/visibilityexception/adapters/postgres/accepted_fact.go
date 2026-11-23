@@ -168,7 +168,7 @@ func (repository *AcceptedFacts) Save(
 	return ports.FactSaved, nil
 }
 
-// sourceContextFrom 把列值译回封闭五值。迁移 CHECK 已拦住集合外取值，这里的 default
+// sourceContextFrom 把列值译回封闭集合。迁移 CHECK 已拦住集合外取值，这里的 default
 // 只在库被绕过迁移改写时才会走到。
 func sourceContextFrom(value string) (domain.SourceContext, error) {
 	switch value {
@@ -182,6 +182,8 @@ func sourceContextFrom(value string) (domain.SourceContext, error) {
 		return domain.SourceTransportFulfillment, nil
 	case "CUSTOMS_COMPLIANCE":
 		return domain.SourceCustomsCompliance, nil
+	case "WAREHOUSE_FULFILLMENT":
+		return domain.SourceWarehouseFulfillment, nil
 	default:
 		return domain.SourceContextInvalid,
 			fmt.Errorf("visibility exception postgres: unknown source context %q", value)

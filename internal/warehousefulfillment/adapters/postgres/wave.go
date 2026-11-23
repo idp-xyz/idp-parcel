@@ -156,7 +156,7 @@ func (store *Waves) LoadTask(ctx context.Context, tenant domain.TenantID, id dom
 		return ports.PickTask{}, false, err
 	}
 	task, err := scanPickTask(querier.QueryRow(ctx,
-		`SELECT task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state, inbound_batch_id, quantity, picked, status, fact_id
+		`SELECT task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state, inbound_batch_id, quantity, picked, status, fact_id, staging_location
 		   FROM warehouse_fulfillment.pick_task
 		  WHERE tenant_id = $1 AND task_id = $2`, tenant.String(), id.String()))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -174,7 +174,7 @@ func (store *Waves) TasksOf(ctx context.Context, tenant domain.TenantID, request
 		return nil, err
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state, inbound_batch_id, quantity, picked, status, fact_id
+		`SELECT task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state, inbound_batch_id, quantity, picked, status, fact_id, staging_location
 		   FROM warehouse_fulfillment.pick_task
 		  WHERE tenant_id = $1 AND request_id = $2
 		  ORDER BY task_id`, tenant.String(), request.String())
@@ -200,9 +200,9 @@ func (store *Waves) SavePick(ctx context.Context, tenant domain.TenantID, task p
 	}
 	tag, err := executor.Exec(ctx,
 		`UPDATE warehouse_fulfillment.pick_task
-		    SET picked = $3, status = $4, fact_id = $5
+		    SET picked = $3, status = $4, fact_id = $5, staging_location = NULLIF($6, '')
 		  WHERE tenant_id = $1 AND task_id = $2 AND status = 'OPEN'`,
-		tenant.String(), task.ID.String(), task.Picked, task.Status, factID)
+		tenant.String(), task.ID.String(), task.Picked, task.Status, factID, task.Staging.String())
 	if err != nil {
 		return fmt.Errorf("save pick: %w", err)
 	}
@@ -679,9 +679,9 @@ type pickRowScanner interface {
 
 func scanPickTask(row pickRowScanner) (ports.PickTask, error) {
 	var task, wave, request, location, goods, unit, state, inbound, status string
-	var fact *string
+	var fact, staging *string
 	var quantity, picked int64
-	if err := row.Scan(&task, &wave, &request, &location, &goods, &unit, &state, &inbound, &quantity, &picked, &status, &fact); err != nil {
+	if err := row.Scan(&task, &wave, &request, &location, &goods, &unit, &state, &inbound, &quantity, &picked, &status, &fact, &staging); err != nil {
 		return ports.PickTask{}, err
 	}
 	parsedTask, err := domain.NewPickTaskID(task)
@@ -716,9 +716,501 @@ func scanPickTask(row pickRowScanner) (ports.PickTask, error) {
 	if err != nil {
 		return ports.PickTask{}, err
 	}
+	var parsedStaging domain.LocationCode
+	if staging != nil && *staging != "" {
+		parsedStaging, err = domain.NewLocationCode(*staging)
+		if err != nil {
+			return ports.PickTask{}, err
+		}
+	}
 	return ports.PickTask{
-		ID: parsedTask, WaveID: parsedWave, Request: parsedRequest, Location: parsedLocation, Goods: parsedGoods,
+		ID: parsedTask, WaveID: parsedWave, Request: parsedRequest, Location: parsedLocation, Staging: parsedStaging, Goods: parsedGoods,
 		Unit: parsedUnit, State: parsedState, Inbound: parsedInbound, Quantity: quantity, Picked: picked, Status: status,
 		Fact: valueOrEmpty(fact),
 	}, nil
+}
+
+func (store *Waves) LoadConfirmation(ctx context.Context, tenant domain.TenantID, factID string) (ports.OutboundConfirmation, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.OutboundConfirmation{}, false, err
+	}
+	var request, kind, missing string
+	var sequence int
+	var offline bool
+	var external, party, credential *string
+	var occurred time.Time
+	err = querier.QueryRow(ctx,
+		`SELECT request_id, parcel_sequence, kind, offline, missing, external_number, pickup_party, pickup_credential, occurred_at
+		   FROM warehouse_fulfillment.outbound_confirmation
+		  WHERE tenant_id = $1 AND fact_id = $2`,
+		tenant.String(), factID).Scan(&request, &sequence, &kind, &offline, &missing, &external, &party, &credential, &occurred)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.OutboundConfirmation{}, false, nil
+	}
+	if err != nil {
+		return ports.OutboundConfirmation{}, false, fmt.Errorf("load outbound confirmation: %w", err)
+	}
+	parsed, err := domain.NewOutboundRequestID(request)
+	if err != nil {
+		return ports.OutboundConfirmation{}, false, err
+	}
+	return ports.OutboundConfirmation{
+		FactID: factID, Request: parsed, Sequence: sequence, Kind: kind, Offline: offline, Missing: missing,
+		ExternalNumber: valueOrEmpty(external), PickupParty: valueOrEmpty(party), PickupCredential: valueOrEmpty(credential),
+		OccurredAt: occurred,
+	}, true, nil
+}
+
+func (store *Waves) SaveConfirmation(ctx context.Context, tenant domain.TenantID, confirmation ports.OutboundConfirmation) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save outbound confirmation: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.outbound_confirmation (
+		    tenant_id, fact_id, request_id, parcel_sequence, kind, offline, missing,
+		    external_number, pickup_party, pickup_credential, occurred_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7, NULLIF($8,''), NULLIF($9,''), NULLIF($10,''), $11)`,
+		tenant.String(), confirmation.FactID, confirmation.Request.String(), confirmation.Sequence, confirmation.Kind,
+		confirmation.Offline, confirmation.Missing, confirmation.ExternalNumber, confirmation.PickupParty,
+		confirmation.PickupCredential, confirmation.OccurredAt); err != nil {
+		return fmt.Errorf("save outbound confirmation: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_parcel SET confirmation_state = $4
+		  WHERE tenant_id = $1 AND request_id = $2 AND parcel_sequence = $3 AND confirmation_state IS NULL`,
+		tenant.String(), confirmation.Request.String(), confirmation.Sequence, confirmation.State)
+	if err != nil {
+		return fmt.Errorf("save outbound confirmation: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("save outbound confirmation: parcel %d of %s was already confirmed", confirmation.Sequence, confirmation.Request.String())
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_request SET status = 'SHIPPED'
+		  WHERE tenant_id = $1 AND request_id = $2 AND status = 'PACKED'
+		    AND NOT EXISTS (
+		        SELECT 1 FROM warehouse_fulfillment.outbound_parcel
+		         WHERE tenant_id = $1 AND request_id = $2 AND confirmation_state IS NULL)`,
+		tenant.String(), confirmation.Request.String()); err != nil {
+		return fmt.Errorf("save outbound confirmation: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) ParcelConfirmed(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int) (bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, err
+	}
+	var state *string
+	err = querier.QueryRow(ctx,
+		`SELECT confirmation_state FROM warehouse_fulfillment.outbound_parcel
+		  WHERE tenant_id = $1 AND request_id = $2 AND parcel_sequence = $3`,
+		tenant.String(), request.String(), sequence).Scan(&state)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("load parcel confirmation: %w", err)
+	}
+	return state != nil && *state != "", nil
+}
+
+func (store *Waves) LoadOwnerLabel(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int) (string, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	var number string
+	err = querier.QueryRow(ctx,
+		`SELECT external_number FROM warehouse_fulfillment.outbound_owner_label
+		  WHERE tenant_id = $1 AND request_id = $2 AND parcel_sequence = $3`,
+		tenant.String(), request.String(), sequence).Scan(&number)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("load owner label: %w", err)
+	}
+	return number, true, nil
+}
+
+func (store *Waves) SaveOwnerLabel(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, externalNumber string) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save owner label: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.outbound_owner_label (tenant_id, request_id, parcel_sequence, external_number)
+		 VALUES ($1,$2,$3,$4)`,
+		tenant.String(), request.String(), sequence, externalNumber); err != nil {
+		return fmt.Errorf("save owner label: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) OwnerLabelsOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (map[int]string, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT parcel_sequence, external_number FROM warehouse_fulfillment.outbound_owner_label
+		  WHERE tenant_id = $1 AND request_id = $2`,
+		tenant.String(), request.String())
+	if err != nil {
+		return nil, fmt.Errorf("list owner labels: %w", err)
+	}
+	defer rows.Close()
+	labels := map[int]string{}
+	for rows.Next() {
+		var sequence int
+		var number string
+		if err := rows.Scan(&sequence, &number); err != nil {
+			return nil, err
+		}
+		labels[sequence] = number
+	}
+	return labels, rows.Err()
+}
+
+func (store *Waves) LoadCorrection(ctx context.Context, tenant domain.TenantID, factID string) (ports.ConfirmationCorrection, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.ConfirmationCorrection{}, false, err
+	}
+	var kind, operator, status string
+	var occurred *time.Time
+	err = querier.QueryRow(ctx,
+		`SELECT kind, occurred_at, operator_id, status FROM warehouse_fulfillment.outbound_confirmation_correction
+		  WHERE tenant_id = $1 AND fact_id = $2`,
+		tenant.String(), factID).Scan(&kind, &occurred, &operator, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.ConfirmationCorrection{}, false, nil
+	}
+	if err != nil {
+		return ports.ConfirmationCorrection{}, false, fmt.Errorf("load confirmation correction: %w", err)
+	}
+	correction := ports.ConfirmationCorrection{FactID: factID, Kind: kind, Operator: operator, Status: status}
+	if occurred != nil {
+		correction.OccurredAt = *occurred
+	}
+	return correction, true, nil
+}
+
+func (store *Waves) SaveCorrection(ctx context.Context, tenant domain.TenantID, correction ports.ConfirmationCorrection) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save confirmation correction: %w", err)
+	}
+	var occurred *time.Time
+	if !correction.OccurredAt.IsZero() {
+		at := correction.OccurredAt.UTC()
+		occurred = &at
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.outbound_confirmation_correction (
+		    tenant_id, fact_id, kind, occurred_at, operator_id, status)
+		 VALUES ($1,$2,$3,$4,$5,$6)`,
+		tenant.String(), correction.FactID, correction.Kind, occurred, correction.Operator, correction.Status); err != nil {
+		return fmt.Errorf("save confirmation correction: %w", err)
+	}
+	if correction.Kind == "TIME" {
+		if _, err := executor.Exec(ctx,
+			`UPDATE warehouse_fulfillment.outbound_confirmation SET occurred_at = $3
+			  WHERE tenant_id = $1 AND fact_id = $2`,
+			tenant.String(), correction.FactID, correction.OccurredAt.UTC()); err != nil {
+			return fmt.Errorf("save confirmation correction: %w", err)
+		}
+	}
+	return nil
+}
+
+func (store *Waves) PostReplenishment(ctx context.Context, tenant domain.TenantID, factID string, approver domain.Registrant, dutyRevision int, at time.Time) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("post replenishment: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_confirmation_correction
+		    SET status = 'POSTED', approver_id = $3, duty_revision = $4, approved_at = $5
+		  WHERE tenant_id = $1 AND fact_id = $2 AND status = 'PENDING'`,
+		tenant.String(), factID, approver.String(), dutyRevision, at.UTC())
+	if err != nil {
+		return fmt.Errorf("post replenishment: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("post replenishment: %s was not pending", factID)
+	}
+	var request string
+	var sequence int
+	if err := executor.QueryRow(ctx,
+		`SELECT request_id, parcel_sequence FROM warehouse_fulfillment.outbound_confirmation
+		  WHERE tenant_id = $1 AND fact_id = $2`,
+		tenant.String(), factID).Scan(&request, &sequence); err != nil {
+		return fmt.Errorf("post replenishment: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_parcel SET confirmation_state = NULL
+		  WHERE tenant_id = $1 AND request_id = $2 AND parcel_sequence = $3`,
+		tenant.String(), request, sequence); err != nil {
+		return fmt.Errorf("post replenishment: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_request SET status = 'PACKED'
+		  WHERE tenant_id = $1 AND request_id = $2 AND status = 'SHIPPED'`,
+		tenant.String(), request); err != nil {
+		return fmt.Errorf("post replenishment: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) LoadCutoff(ctx context.Context, tenant domain.TenantID, key string) (string, int, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return "", 0, false, err
+	}
+	var request string
+	var sequence *int
+	err = querier.QueryRow(ctx,
+		`SELECT request_id, parcel_sequence FROM warehouse_fulfillment.outbound_cutoff
+		  WHERE tenant_id = $1 AND cutoff_key = $2`,
+		tenant.String(), key).Scan(&request, &sequence)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", 0, false, nil
+	}
+	if err != nil {
+		return "", 0, false, fmt.Errorf("load cutoff: %w", err)
+	}
+	if sequence == nil {
+		return request, 0, true, nil
+	}
+	return request, *sequence, true, nil
+}
+
+func (store *Waves) SaveCutoff(ctx context.Context, tenant domain.TenantID, key, requestID string, sequence int, basis, outcome string, at time.Time) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save cutoff: %w", err)
+	}
+	var parcel *int
+	if sequence > 0 {
+		parcel = &sequence
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.outbound_cutoff (
+		    tenant_id, cutoff_key, request_id, parcel_sequence, basis, outcome, posted_at)
+		 VALUES ($1,$2,$3,$4, NULLIF($5,''), $6, $7)`,
+		tenant.String(), key, requestID, parcel, basis, outcome, at.UTC()); err != nil {
+		return fmt.Errorf("save cutoff: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) ReleaseReservations(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("release reservations: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_reservation
+		    SET quantity = 0, from_unlabeled = 0
+		  WHERE tenant_id = $1 AND request_id = $2`,
+		tenant.String(), request.String()); err != nil {
+		return fmt.Errorf("release reservations: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) CancelOpenTasks(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("cancel open tasks: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.pick_task SET status = 'CANCELLED'
+		  WHERE tenant_id = $1 AND request_id = $2 AND status = 'OPEN'`,
+		tenant.String(), request.String()); err != nil {
+		return fmt.Errorf("cancel open tasks: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) SaveReturnTask(ctx context.Context, tenant domain.TenantID, task ports.ReturnTask) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save return task: %w", err)
+	}
+	var sequence *int
+	if task.Sequence > 0 {
+		value := task.Sequence
+		sequence = &value
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.return_task (
+		    tenant_id, return_id, request_id, parcel_sequence, location_code, goods_code, unit_name,
+		    stock_state, inbound_batch_id, quantity, status)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'OPEN')`,
+		tenant.String(), task.ID, task.Request.String(), sequence, task.Location.String(), task.Goods.String(),
+		task.Unit.String(), task.State.String(), task.Inbound.String(), task.Quantity); err != nil {
+		return fmt.Errorf("save return task: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) SetRequestStatus(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, status domain.OutboundStatus) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("set request status: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_request SET status = $3
+		  WHERE tenant_id = $1 AND request_id = $2`,
+		tenant.String(), request.String(), status.String()); err != nil {
+		return fmt.Errorf("set request status: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) MarkParcelCutoff(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int) (domain.OutboundStatus, error) {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return domain.OutboundStatusInvalid, fmt.Errorf("mark parcel cutoff: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_parcel SET cutoff_state = 'CANCELLED'
+		  WHERE tenant_id = $1 AND request_id = $2 AND parcel_sequence = $3
+		    AND cutoff_state IS NULL AND confirmation_state IS NULL`,
+		tenant.String(), request.String(), sequence)
+	if err != nil {
+		return domain.OutboundStatusInvalid, fmt.Errorf("mark parcel cutoff: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return domain.OutboundStatusInvalid, fmt.Errorf("mark parcel cutoff: parcel %d of %s was not open", sequence, request.String())
+	}
+	var remaining int
+	if err := executor.QueryRow(ctx,
+		`SELECT count(*) FROM warehouse_fulfillment.outbound_parcel
+		  WHERE tenant_id = $1 AND request_id = $2 AND cutoff_state IS NULL AND confirmation_state IS NULL`,
+		tenant.String(), request.String()).Scan(&remaining); err != nil {
+		return domain.OutboundStatusInvalid, fmt.Errorf("mark parcel cutoff: %w", err)
+	}
+	next := domain.OutboundPartiallyCancelled
+	if remaining == 0 {
+		next = domain.OutboundCancelled
+	}
+	if err := store.SetRequestStatus(ctx, tenant, request, next); err != nil {
+		return domain.OutboundStatusInvalid, err
+	}
+	return next, nil
+}
+
+func (store *Waves) SaveLatePick(ctx context.Context, tenant domain.TenantID, task ports.PickTask, factID string) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save late pick: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.pick_task
+		    SET picked = $3, status = 'LATE', fact_id = $4, staging_location = NULLIF($5, '')
+		  WHERE tenant_id = $1 AND task_id = $2 AND status = 'CANCELLED'`,
+		tenant.String(), task.ID.String(), task.Picked, factID, task.Staging.String())
+	if err != nil {
+		return fmt.Errorf("save late pick: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("save late pick: %s was not cancelled", task.ID.String())
+	}
+	return nil
+}
+
+func (store *Waves) LoadReturnTask(ctx context.Context, tenant domain.TenantID, id string) (ports.ReturnTask, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.ReturnTask{}, false, err
+	}
+	var request, location, goods, unit, state, inbound, status string
+	var sequence *int
+	var fact *string
+	var quantity int64
+	err = querier.QueryRow(ctx,
+		`SELECT request_id, parcel_sequence, location_code, goods_code, unit_name, stock_state,
+		        inbound_batch_id, quantity, status, fact_id
+		   FROM warehouse_fulfillment.return_task
+		  WHERE tenant_id = $1 AND return_id = $2`,
+		tenant.String(), id).Scan(&request, &sequence, &location, &goods, &unit, &state, &inbound, &quantity, &status, &fact)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.ReturnTask{}, false, nil
+	}
+	if err != nil {
+		return ports.ReturnTask{}, false, fmt.Errorf("load return task: %w", err)
+	}
+	parsedRequest, err := domain.NewOutboundRequestID(request)
+	if err != nil {
+		return ports.ReturnTask{}, false, err
+	}
+	parsedLocation, err := domain.NewLocationCode(location)
+	if err != nil {
+		return ports.ReturnTask{}, false, err
+	}
+	parsedGoods, err := domain.NewGoodsCode(goods)
+	if err != nil {
+		return ports.ReturnTask{}, false, err
+	}
+	parsedUnit, err := domain.NewGoodsUnitName(unit)
+	if err != nil {
+		return ports.ReturnTask{}, false, err
+	}
+	parsedState, err := domain.NewStockState(state)
+	if err != nil {
+		return ports.ReturnTask{}, false, err
+	}
+	parsedInbound, err := domain.NewInboundBatchID(inbound)
+	if err != nil {
+		return ports.ReturnTask{}, false, err
+	}
+	task := ports.ReturnTask{
+		ID: id, Request: parsedRequest, Location: parsedLocation, Goods: parsedGoods, Unit: parsedUnit,
+		State: parsedState, Inbound: parsedInbound, Quantity: quantity, Status: status, Fact: valueOrEmpty(fact),
+	}
+	if sequence != nil {
+		task.Sequence = *sequence
+	}
+	return task, true, nil
+}
+
+func (store *Waves) CompleteReturn(ctx context.Context, tenant domain.TenantID, id, factID string) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("complete return: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.return_task SET status = 'DONE', fact_id = $3
+		  WHERE tenant_id = $1 AND return_id = $2 AND status = 'OPEN'`,
+		tenant.String(), id, factID)
+	if err != nil {
+		return fmt.Errorf("complete return: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("complete return: %s was not open", id)
+	}
+	return nil
+}
+
+func (store *Waves) OpenReturns(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (int, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var count int
+	err = querier.QueryRow(ctx,
+		`SELECT count(*) FROM warehouse_fulfillment.return_task
+		  WHERE tenant_id = $1 AND request_id = $2 AND status = 'OPEN'`,
+		tenant.String(), request.String()).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count open returns: %w", err)
+	}
+	return count, nil
 }

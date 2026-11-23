@@ -55,6 +55,10 @@ const (
 	WorkFactOutboundCheck WorkFactKind = "OUTBOUND_CHECK"
 	// WorkFactPack 是打包（UC-WF-013；ADR-0384 决定三）。
 	WorkFactPack WorkFactKind = "PACK"
+	// WorkFactOutboundConfirmation 是出库确认（UC-WF-015；ADR-0384 决定三）。
+	WorkFactOutboundConfirmation WorkFactKind = "OUTBOUND_CONFIRMATION"
+	// WorkFactPickupHandover 是自提交付（UC-WF-015；ADR-0384 决定三）。
+	WorkFactPickupHandover WorkFactKind = "PICKUP_HANDOVER"
 )
 
 // workFactKindsAdmittedAtMint 是准入范围对照收哪几个词、认证方问哪一对准入要求的唯一来源：两处各抄一份，改了一份，登在旧词下的
@@ -78,6 +82,8 @@ var workFactKindsAdmittedAtMint = []WorkFactKind{
 	WorkFactPick,
 	WorkFactOutboundCheck,
 	WorkFactPack,
+	WorkFactOutboundConfirmation,
+	WorkFactPickupHandover,
 }
 
 // ParseWorkFactKind 按字面取值认作业事实类型，大小写不折叠：对照册里存的就是这些字面量。

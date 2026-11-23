@@ -13,6 +13,7 @@ type CustomerOutboundMinter interface {
 	MintOutboundRequestSubmission(ctx context.Context, credential identity.IntegrationClientCredential, readRequest func() (identity.ChannelRequest, error)) (identity.OutboundRequestSubmissionEnvelope, error)
 	MintOutboundRequestSplit(ctx context.Context, credential identity.IntegrationClientCredential, readRequest func() (identity.ChannelRequest, error)) (identity.OutboundRequestSubmissionEnvelope, error)
 	MintOutboundRequestSupplement(ctx context.Context, credential identity.IntegrationClientCredential, readRequest func() (identity.ChannelRequest, error)) (identity.OutboundRequestSubmissionEnvelope, error)
+	MintOutboundCancellation(ctx context.Context, credential identity.IntegrationClientCredential, readRequest func() (identity.ChannelRequest, error)) (identity.OutboundRequestSubmissionEnvelope, error)
 }
 
 // CustomerOutboundAuthenticator 把首方铸造译成仓配的客户身份。
@@ -39,6 +40,10 @@ func (authenticator *CustomerOutboundAuthenticator) AuthenticateOutboundRequestS
 
 func (authenticator *CustomerOutboundAuthenticator) AuthenticateOutboundRequestSupplement(ctx context.Context, credential warehousehttp.PresentedCustomerCredential, accessRequestID func() (string, error)) (warehousehttp.CustomerCommandIdentity, error) {
 	return authenticator.authenticate(ctx, credential, accessRequestID, authenticator.minter.MintOutboundRequestSupplement)
+}
+
+func (authenticator *CustomerOutboundAuthenticator) AuthenticateOutboundCancellation(ctx context.Context, credential warehousehttp.PresentedCustomerCredential, accessRequestID func() (string, error)) (warehousehttp.CustomerCommandIdentity, error) {
+	return authenticator.authenticate(ctx, credential, accessRequestID, authenticator.minter.MintOutboundCancellation)
 }
 
 func (authenticator *CustomerOutboundAuthenticator) authenticate(
@@ -88,4 +93,22 @@ func NewOperatorWaveAuthenticator(minter Minter) (*OperatorWaveAuthenticator, er
 
 func (authenticator *OperatorWaveAuthenticator) AuthenticateWaveRelease(ctx context.Context, bearerToken string) (warehousehttp.OperatorIdentity, error) {
 	return mintWarehouseDecision(ctx, authenticator.minter, bearerToken, identity.DecisionWaveRelease)
+}
+
+// OperatorCorrectionAuthenticator 认证出库确认更正。
+type OperatorCorrectionAuthenticator struct {
+	minter Minter
+}
+
+var _ warehousehttp.CorrectionAuthenticator = (*OperatorCorrectionAuthenticator)(nil)
+
+func NewOperatorCorrectionAuthenticator(minter Minter) (*OperatorCorrectionAuthenticator, error) {
+	if minter == nil {
+		return nil, errors.New("warehouse fulfillment accessidentity: correction authenticator needs a minter")
+	}
+	return &OperatorCorrectionAuthenticator{minter: minter}, nil
+}
+
+func (authenticator *OperatorCorrectionAuthenticator) AuthenticateCorrection(ctx context.Context, bearerToken string) (warehousehttp.OperatorIdentity, error) {
+	return mintWarehouseDecision(ctx, authenticator.minter, bearerToken, identity.DecisionOutboundConfirmationCorrection)
 }

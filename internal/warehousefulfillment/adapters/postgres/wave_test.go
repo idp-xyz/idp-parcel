@@ -8,6 +8,7 @@ import (
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	whidentity "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/identity"
 	adapter "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/postgres"
@@ -313,6 +314,42 @@ func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 	if err := waves.SetCorrection(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), 1, "ADOPTED"); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SetCorrection：%v", err)
+	}
+	if err := waves.SaveConfirmation(ctx, tenant, ports.OutboundConfirmation{FactID: "SYN-FACT-OUT", Request: valueOf(t, domain.NewOutboundRequestID, "OBR-1"), Sequence: 1, Kind: "OUTBOUND_CONFIRMATION", State: "CONFIRMED", OccurredAt: preAdviceNumberingInstant}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveConfirmation：%v", err)
+	}
+	if err := waves.SaveOwnerLabel(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), 1, "EXT-1"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveOwnerLabel：%v", err)
+	}
+	if err := waves.SaveCorrection(ctx, tenant, ports.ConfirmationCorrection{FactID: "SYN-FACT-OUT", Kind: "INVALIDATE", Operator: "operator-1", Status: "PENDING"}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveCorrection：%v", err)
+	}
+	if err := waves.PostReplenishment(ctx, tenant, "SYN-FACT-OUT", valueOf(t, domain.NewRegistrant, "operator-2"), 1, preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("PostReplenishment：%v", err)
+	}
+	if err := waves.SaveCutoff(ctx, tenant, "cutoff-1", "OBR-1", 0, "", "CANCELLED", preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveCutoff：%v", err)
+	}
+	if err := waves.ReleaseReservations(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1")); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("ReleaseReservations：%v", err)
+	}
+	if err := waves.CancelOpenTasks(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1")); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("CancelOpenTasks：%v", err)
+	}
+	if err := waves.SaveReturnTask(ctx, tenant, ports.ReturnTask{ID: "RET-1", Request: valueOf(t, domain.NewOutboundRequestID, "OBR-1"), Location: valueOf(t, domain.NewLocationCode, "SYN-LOC-OUT"), Goods: valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), Unit: valueOf(t, domain.NewGoodsUnitName, "件"), State: domain.StockStateGood, Inbound: valueOf(t, domain.NewInboundBatchID, "IB-1"), Quantity: 1}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveReturnTask：%v", err)
+	}
+	if err := waves.SetRequestStatus(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), domain.OutboundCancelled); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SetRequestStatus：%v", err)
+	}
+	if _, err := waves.MarkParcelCutoff(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), 1); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("MarkParcelCutoff：%v", err)
+	}
+	if err := waves.SaveLatePick(ctx, tenant, ports.PickTask{ID: valueOf(t, domain.NewPickTaskID, "PKT-1"), Picked: 1, Staging: valueOf(t, domain.NewLocationCode, "SYN-LOC-OUT")}, "SYN-FACT-LATE"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveLatePick：%v", err)
+	}
+	if err := waves.CompleteReturn(ctx, tenant, "RET-1", "SYN-FACT-RET"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("CompleteReturn：%v", err)
 	}
 }
 
@@ -677,6 +714,420 @@ func parcelCount(t *testing.T, world receiptWorld) int {
 func requestStatus(t *testing.T, world receiptWorld, id domain.OutboundRequestID) string {
 	t.Helper()
 	return parentStatus(t, world, id)
+}
+
+func TestAnOutboundConfirmationFollowsTheReleaseCells(t *testing.T) {
+	world, handler, request := packedOutbound(t, "REQ-CONFIRM-NET", domain.DispatchProductNetwork, "SYN-SERVICE", 4)
+	if _, err := world.pool.Exec(t.Context(),
+		`UPDATE warehouse_fulfillment.outbound_parcel
+		    SET commission_state = 'ACCEPTED', shipment_request_id = 'SHR-CONFIRM', declared_parcel_id = 'DPCL-CONFIRM'
+		  WHERE tenant_id = 'SYN-TENANT-01' AND request_id = $1`, request.String()); err != nil {
+		t.Fatal(err)
+	}
+	online := world.confirmOutbound(t, handler, request, "SYN-FACT-CONFIRM-ON", application.ConfirmKindOutbound, false)
+	if online.Outcome() != application.WaveNotConfigured || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 4 {
+		t.Fatalf("面单本体没配置：%s 待出库 %d", online.Outcome(), world.stockUnitAt(t, "SYN-LOC-OUT", "件"))
+	}
+	offline := world.confirmOutbound(t, handler, request, "SYN-FACT-CONFIRM-OFF", application.ConfirmKindOutbound, true)
+	if offline.Outcome() != application.WaveRecorded || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 0 || requestStatus(t, world, request) != "SHIPPED" {
+		t.Fatalf("离线照记 %s 待出库 %d 状态 %s", offline.Outcome(), world.stockUnitAt(t, "SYN-LOC-OUT", "件"), requestStatus(t, world, request))
+	}
+	again := world.confirmOutbound(t, handler, request, "SYN-FACT-CONFIRM-OFF", application.ConfirmKindOutbound, true)
+	if again.Outcome() != application.WaveExisting {
+		t.Fatalf("重放 %s", again.Outcome())
+	}
+}
+
+func TestAnOwnerLabelConfirmsWhenTheLabelCountMatches(t *testing.T) {
+	world, handler, request := packedOutbound(t, "REQ-CONFIRM-LABEL", domain.DispatchOwnerLabel, "", 4)
+	if world.registerLabel(t, handler, request, 1, "EXT-1").Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("面单没有登记")
+	}
+	expired := confirmCommand(t, request, "SYN-FACT-LABEL-LATE", application.ConfirmKindOutbound, false)
+	expired.ValidUntil = preAdviceNumberingInstant
+	if world.confirmCommand(t, handler, expired).Outcome() != application.WaveWithheld || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 4 {
+		t.Fatal("出区间仍交出了")
+	}
+	confirmed := world.confirmOutbound(t, handler, request, "SYN-FACT-LABEL", application.ConfirmKindOutbound, false)
+	if confirmed.Outcome() != application.WaveConfirmed || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 0 {
+		t.Fatalf("自备面单 %s 待出库 %d", confirmed.Outcome(), world.stockUnitAt(t, "SYN-LOC-OUT", "件"))
+	}
+}
+
+func TestAConfirmationCorrectionChangesTheTimeOrWaitsForReplenishment(t *testing.T) {
+	world, handler, request := packedOutbound(t, "REQ-CORRECT", domain.DispatchOwnerLabel, "", 4)
+	if world.registerLabel(t, handler, request, 1, "EXT-CORRECT").Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("面单没有登记")
+	}
+	if world.confirmOutbound(t, handler, request, "SYN-FACT-CORRECT", application.ConfirmKindOutbound, false).Outcome() != application.WaveConfirmed {
+		t.Fatal("确认没有成立")
+	}
+	counts, err := adapter.NewCounts(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler = handler.WithApprovalDuties(counts)
+	corrected := world.correctConfirmation(t, handler, "SYN-FACT-CORRECT", "operator-1", preAdviceNumberingInstant.Add(time.Minute), false)
+	if corrected.Outcome() != application.WaveCorrected || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 0 {
+		t.Fatalf("改时点 %s 待出库 %d", corrected.Outcome(), world.stockUnitAt(t, "SYN-LOC-OUT", "件"))
+	}
+	if world.correctConfirmation(t, handler, "SYN-FACT-CORRECT", "operator-1", preAdviceNumberingInstant.Add(2*time.Minute), false).Outcome() != application.WaveConflict {
+		t.Fatal("同一版又能改一次")
+	}
+
+	againWorld, againHandler, againRequest := packedOutbound(t, "REQ-INVALID", domain.DispatchOwnerLabel, "", 4)
+	if againWorld.registerLabel(t, againHandler, againRequest, 1, "EXT-INVALID").Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("面单没有登记")
+	}
+	if againWorld.confirmOutbound(t, againHandler, againRequest, "SYN-FACT-INVALID", application.ConfirmKindOutbound, false).Outcome() != application.WaveConfirmed {
+		t.Fatal("确认没有成立")
+	}
+	againCounts, err := adapter.NewCounts(againWorld.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	againHandler = againHandler.WithApprovalDuties(againCounts)
+	if againWorld.correctConfirmation(t, againHandler, "SYN-FACT-INVALID", "operator-1", time.Time{}, true).Outcome() != application.WavePending {
+		t.Fatal("判不成立没有停在待回补")
+	}
+	if againWorld.approveReplenishment(t, againHandler, "SYN-FACT-INVALID", "operator-2").Outcome() != application.WaveNotConfigured || againWorld.stockUnitAt(t, "SYN-LOC-OUT", "件") != 0 {
+		t.Fatal("没登记批准职责却回补了")
+	}
+	if err := againWorld.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		return againCounts.SaveDuty(ctx, valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), ports.ApprovalDuty{
+			Revision: 1, Distinct: true, Operator: valueOf(t, domain.NewRegistrant, "operator-1"), RegisteredAt: preAdviceNumberingInstant,
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if againWorld.approveReplenishment(t, againHandler, "SYN-FACT-INVALID", "operator-1").Outcome() != application.WaveDutyBlocked {
+		t.Fatal("提交人把自己的回补批了")
+	}
+	posted := againWorld.approveReplenishment(t, againHandler, "SYN-FACT-INVALID", "operator-2")
+	if posted.Outcome() != application.WavePosted || againWorld.stockUnitAt(t, "SYN-LOC-OUT", "件") != 4 || requestStatus(t, againWorld, againRequest) != "PACKED" {
+		t.Fatalf("回补 %s 待出库 %d 状态 %s", posted.Outcome(), againWorld.stockUnitAt(t, "SYN-LOC-OUT", "件"), requestStatus(t, againWorld, againRequest))
+	}
+}
+
+func TestACutoffReleasesWhatHasNotLeftAndRefusesAConfirmedParcel(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedStorageStock(t, 8)
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-OUT", 1, func(spec *domain.ZoneContentSpec) {
+		spec.Usage = domain.ZoneUsageOutboundStaging
+	}))
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-OUT", 1, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-OUT")
+	}))
+	outbound := world.outbound(t)
+	reserved := world.acceptOutbound(t, outbound, outboundCommand(t, "REQ-CUT-RES", 4))
+	reservedRequest, ok := reserved.Request()
+	if reserved.Outcome() != application.OutboundReserved || !ok {
+		t.Fatalf("预占 %s", reserved.Outcome())
+	}
+	handler := world.waves(t)
+	if world.cutoff(t, handler, reservedRequest.ID(), 0, "cutoff-reserved").Outcome() != application.CutoffCancelled || reservationOf(t, world, reservedRequest.ID()) != 0 || requestStatus(t, world, reservedRequest.ID()) != "CANCELLED" {
+		t.Fatalf("未分配截单 预占 %d 状态 %s", reservationOf(t, world, reservedRequest.ID()), requestStatus(t, world, reservedRequest.ID()))
+	}
+	if world.cutoff(t, handler, reservedRequest.ID(), 0, "cutoff-reserved").Outcome() != application.CutoffExisting {
+		t.Fatal("同一撤回没有重放")
+	}
+
+	allocated := world.acceptOutbound(t, outbound, outboundCommand(t, "REQ-CUT-ALLOC", 4))
+	allocatedRequest, _ := allocated.Request()
+	if world.adoptStrategy(t, handler).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("策略没有采用")
+	}
+	released := world.releaseWave(t, handler, "WAVE-CUT", allocatedRequest.ID())
+	if released.Outcome() != application.WaveAllocated || len(released.Tasks()) != 1 {
+		t.Fatalf("分配 %s", released.Outcome())
+	}
+	if world.cutoff(t, handler, allocatedRequest.ID(), 0, "cutoff-allocated").Outcome() != application.CutoffCancelled || requestStatus(t, world, allocatedRequest.ID()) != "CANCELLED" {
+		t.Fatal("已分配未拣没有整份取消")
+	}
+	late := world.pick(t, handler, released.Tasks()[0].ID, 4)
+	if late.Outcome() != application.WaveRecorded || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 4 || returnTasks(t, world) != 1 {
+		t.Fatalf("晚到拣货 %s 待出库 %d 回库 %d", late.Outcome(), world.stockUnitAt(t, "SYN-LOC-OUT", "件"), returnTasks(t, world))
+	}
+
+	packedWorld, packedHandler, packedRequest := packedOutbound(t, "REQ-CUT-PACK", domain.DispatchOwnerLabel, "", 4)
+	if packedWorld.registerLabel(t, packedHandler, packedRequest, 1, "EXT-CUT").Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("面单没有登记")
+	}
+	if packedWorld.confirmOutbound(t, packedHandler, packedRequest, "SYN-FACT-CUT", application.ConfirmKindOutbound, false).Outcome() != application.WaveConfirmed {
+		t.Fatal("确认没有成立")
+	}
+	if packedWorld.cutoff(t, packedHandler, packedRequest, 1, "cutoff-confirmed").Outcome() != application.CutoffStatusMismatch || packedWorld.stockUnitAt(t, "SYN-LOC-OUT", "件") != 0 {
+		t.Fatal("已出库确认仍被截回")
+	}
+}
+
+func TestAReturnMovesPickedGoodsBackAndARefusedShipmentStaysPacked(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedStorageStock(t, 4)
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-OUT", 1, func(spec *domain.ZoneContentSpec) {
+		spec.Usage = domain.ZoneUsageOutboundStaging
+	}))
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-OUT", 1, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-OUT")
+	}))
+	accepted := world.acceptOutbound(t, world.outbound(t), outboundCommand(t, "REQ-RETURN", 4))
+	request, ok := accepted.Request()
+	if !ok {
+		t.Fatal("没有请求")
+	}
+	handler := world.waves(t)
+	if world.adoptStrategy(t, handler).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("策略没有采用")
+	}
+	released := world.releaseWave(t, handler, "WAVE-RETURN", request.ID())
+	if world.pick(t, handler, released.Tasks()[0].ID, 4).Outcome() != application.WavePicked {
+		t.Fatal("拣货没有成立")
+	}
+	if world.cutoff(t, handler, request.ID(), 0, "cutoff-return").Outcome() != application.CutoffReturnRequired || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 4 {
+		t.Fatal("已拣出的没有停在待回库")
+	}
+	var returnID string
+	if err := world.pool.QueryRow(t.Context(),
+		`SELECT return_id FROM warehouse_fulfillment.return_task WHERE tenant_id = $1 AND status = 'OPEN'`,
+		"SYN-TENANT-01").Scan(&returnID); err != nil {
+		t.Fatal(err)
+	}
+	returned := world.completeReturn(t, handler, returnID, "SYN-FACT-RETURN", "SYN-LOC-STORE")
+	if returned.Outcome() != application.WaveRecorded || world.stockUnitAt(t, "SYN-LOC-STORE", "件") != 4 || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 0 || requestStatus(t, world, request.ID()) != "CANCELLED" {
+		t.Fatalf("回库 %s 存储 %d 待出库 %d 状态 %s", returned.Outcome(), world.stockUnitAt(t, "SYN-LOC-STORE", "件"), world.stockUnitAt(t, "SYN-LOC-OUT", "件"), requestStatus(t, world, request.ID()))
+	}
+
+	packedWorld, packedHandler, packedRequest := packedOutbound(t, "REQ-HELD", domain.DispatchProductNetwork, "SYN-SERVICE", 4)
+	if _, err := packedWorld.pool.Exec(t.Context(),
+		`UPDATE warehouse_fulfillment.outbound_parcel SET shipment_request_id = 'SHR-HELD'
+		  WHERE tenant_id = 'SYN-TENANT-01' AND request_id = $1`, packedRequest.String()); err != nil {
+		t.Fatal(err)
+	}
+	packedHandler = packedHandler.WithShipmentReleaser(scriptedReleaser{word: application.ShipmentRefused})
+	if packedWorld.cutoff(t, packedHandler, packedRequest, 1, "cutoff-refused").Outcome() != application.CutoffRefused || packedWorld.stockUnitAt(t, "SYN-LOC-OUT", "件") != 4 {
+		t.Fatal("不放行的委托被拆了")
+	}
+	packedHandler = packedHandler.WithShipmentReleaser(scriptedReleaser{word: application.ShipmentReleased})
+	if packedWorld.cutoff(t, packedHandler, packedRequest, 1, "cutoff-released").Outcome() != application.CutoffCancelled {
+		t.Fatal("放行后没有截回")
+	}
+}
+
+type scriptedReleaser struct{ word string }
+
+func (releaser scriptedReleaser) Release(context.Context, string, string, string) (string, error) {
+	return releaser.word, nil
+}
+
+func TestAPickupHandoverStaysUnconfiguredUntilACredentialIsRegistered(t *testing.T) {
+	world, handler, request := packedOutbound(t, "REQ-CONFIRM-PICKUP", domain.DispatchPickup, "", 4)
+	online := world.confirmOutbound(t, handler, request, "SYN-FACT-PICKUP", application.ConfirmKindPickup, false)
+	if online.Outcome() != application.WaveNotConfigured || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 4 {
+		t.Fatalf("自提 %s 待出库 %d", online.Outcome(), world.stockUnitAt(t, "SYN-LOC-OUT", "件"))
+	}
+}
+
+func TestOutboundConfirmationHandoffRefusesToRunOutsideATransaction(t *testing.T) {
+	world := newReceiptWorld(t)
+	store, err := outbox.NewStore(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handoff, err := adapter.NewOutboxOutboundConfirmationHandoff(world.db, store, world.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = handoff.HandOffOutboundConfirmation(context.Background(), "SYN-TENANT-01", "SYN-FACT-1", "DPCL-1", preAdviceNumberingInstant, "1", "")
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("HandOffOutboundConfirmation：%v", err)
+	}
+}
+
+func packedOutbound(t *testing.T, key string, dispatch domain.DispatchMethod, service string, quantity int64) (receiptWorld, *application.WaveHandler, domain.OutboundRequestID) {
+	t.Helper()
+	world := newReceiptWorld(t)
+	world.seedStorageStock(t, quantity)
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-OUT", 1, func(spec *domain.ZoneContentSpec) {
+		spec.Usage = domain.ZoneUsageOutboundStaging
+	}))
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-OUT", 1, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-OUT")
+	}))
+	command := outboundCommand(t, key, quantity)
+	command.Dispatch = dispatch
+	command.Service = service
+	accepted := world.acceptOutbound(t, world.outbound(t), command)
+	request, ok := accepted.Request()
+	if accepted.Outcome() != application.OutboundReserved || !ok {
+		t.Fatalf("预占 %s", accepted.Outcome())
+	}
+	handler := world.waves(t)
+	if world.adoptStrategy(t, handler).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("策略没有采用")
+	}
+	released := world.releaseWave(t, handler, "WAVE-"+key, request.ID())
+	if released.Outcome() != application.WaveAllocated || len(released.Tasks()) != 1 {
+		t.Fatalf("分配 %s", released.Outcome())
+	}
+	if world.pick(t, handler, released.Tasks()[0].ID, quantity).Outcome() != application.WavePicked {
+		t.Fatal("拣货没有成立")
+	}
+	if world.checkOutbound(t, handler, request.ID(), "SYN-CHECK-"+key, quantity).Outcome() != application.WaveChecked {
+		t.Fatal("复核没有成立")
+	}
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		result, packErr := handler.Pack(ctx, application.PackCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), FactID: valueOf(t, domain.NewPickFactID, "SYN-PACK-"+key),
+			Request: request.ID(), Parcels: []application.PackParcelCommand{parcelOf(t, 1, quantity)},
+		})
+		if packErr != nil {
+			return packErr
+		}
+		if result.Outcome() != application.WavePacked {
+			return errors.New(result.Outcome().String())
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("打包：%v", err)
+	}
+	return world, handler, request.ID()
+}
+
+func (world receiptWorld) confirmOutbound(t *testing.T, handler *application.WaveHandler, request domain.OutboundRequestID, fact, kind string, offline bool) application.WaveResult {
+	t.Helper()
+	return world.confirmCommand(t, handler, confirmCommand(t, request, fact, kind, offline))
+}
+
+func confirmCommand(t *testing.T, request domain.OutboundRequestID, fact, kind string, offline bool) application.ConfirmCommand {
+	t.Helper()
+	return application.ConfirmCommand{
+		Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), FactID: valueOf(t, domain.NewPickFactID, fact),
+		Request: request, Sequence: 1, Kind: kind, Offline: offline, OccurredAt: preAdviceNumberingInstant,
+		ValidFrom: preAdviceNumberingInstant.Add(-time.Hour), ValidUntil: preAdviceNumberingInstant.Add(time.Hour),
+	}
+}
+
+func (world receiptWorld) confirmCommand(t *testing.T, handler *application.WaveHandler, command application.ConfirmCommand) application.WaveResult {
+	t.Helper()
+	var result application.WaveResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var confirmErr error
+		result, confirmErr = handler.Confirm(ctx, command)
+		return confirmErr
+	})
+	if err != nil {
+		t.Fatalf("出库确认：%v", err)
+	}
+	return result
+}
+
+func (world receiptWorld) correctConfirmation(t *testing.T, handler *application.WaveHandler, fact, operator string, occurred time.Time, invalidate bool) application.WaveResult {
+	t.Helper()
+	var result application.WaveResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var correctErr error
+		result, correctErr = handler.Correct(ctx, application.CorrectConfirmationCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Operator: valueOf(t, domain.NewRegistrant, operator),
+			FactID: valueOf(t, domain.NewPickFactID, fact), OccurredAt: occurred, Invalidate: invalidate,
+		})
+		return correctErr
+	})
+	if err != nil {
+		t.Fatalf("更正：%v", err)
+	}
+	return result
+}
+
+func (world receiptWorld) approveReplenishment(t *testing.T, handler *application.WaveHandler, fact, operator string) application.WaveResult {
+	t.Helper()
+	var result application.WaveResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var approveErr error
+		result, approveErr = handler.ApproveReplenishment(ctx, application.ApproveReplenishmentCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Operator: valueOf(t, domain.NewRegistrant, operator),
+			FactID: valueOf(t, domain.NewPickFactID, fact),
+		})
+		return approveErr
+	})
+	if err != nil {
+		t.Fatalf("回补：%v", err)
+	}
+	return result
+}
+
+func (world receiptWorld) completeReturn(t *testing.T, handler *application.WaveHandler, returnID, fact, target string) application.WaveResult {
+	t.Helper()
+	var result application.WaveResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var returnErr error
+		result, returnErr = handler.Return(ctx, application.ReturnCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), FactID: valueOf(t, domain.NewPickFactID, fact),
+			ReturnID: returnID, Target: valueOf(t, domain.NewLocationCode, target),
+			Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"),
+		})
+		return returnErr
+	})
+	if err != nil {
+		t.Fatalf("回库：%v", err)
+	}
+	return result
+}
+
+func (world receiptWorld) cutoff(t *testing.T, handler *application.WaveHandler, request domain.OutboundRequestID, sequence int, key string) application.CutoffResult {
+	t.Helper()
+	var result application.CutoffResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var cutoffErr error
+		result, cutoffErr = handler.Cutoff(ctx, application.CutoffCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Owner: valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"),
+			Request: request, Sequence: sequence, Key: key, Origin: domain.OutboundOriginCustomer,
+		})
+		return cutoffErr
+	})
+	if err != nil {
+		t.Fatalf("截单：%v", err)
+	}
+	return result
+}
+
+func reservationOf(t *testing.T, world receiptWorld, request domain.OutboundRequestID) int64 {
+	t.Helper()
+	var quantity int64
+	err := world.pool.QueryRow(t.Context(),
+		`SELECT COALESCE(SUM(quantity), 0) FROM warehouse_fulfillment.outbound_reservation WHERE tenant_id = $1 AND request_id = $2`,
+		"SYN-TENANT-01", request.String()).Scan(&quantity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return quantity
+}
+
+func returnTasks(t *testing.T, world receiptWorld) int {
+	t.Helper()
+	var count int
+	err := world.pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM warehouse_fulfillment.return_task WHERE tenant_id = $1`, "SYN-TENANT-01").Scan(&count)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
+func (world receiptWorld) registerLabel(t *testing.T, handler *application.WaveHandler, request domain.OutboundRequestID, sequence int, number string) application.WaveResult {
+	t.Helper()
+	var result application.WaveResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var registerErr error
+		result, registerErr = handler.RegisterOwnerLabel(ctx, application.RegisterOwnerLabelCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Request: request, Sequence: sequence, ExternalNumber: number,
+		})
+		return registerErr
+	})
+	if err != nil {
+		t.Fatalf("登记面单：%v", err)
+	}
+	return result
 }
 
 func pickDifferences(t *testing.T, world receiptWorld) int {

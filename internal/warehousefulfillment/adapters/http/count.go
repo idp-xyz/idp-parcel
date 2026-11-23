@@ -238,6 +238,7 @@ type StockApprovalIntake interface {
 	IntakeRejectAdjustment(ctx context.Context, request *http.Request) (application.RejectAdjustmentCommand, error)
 	IntakeApproveJobDiscrepancy(ctx context.Context, request *http.Request) (application.ApproveCountCommand, error)
 	IntakeRejectJobDiscrepancy(ctx context.Context, request *http.Request) (application.RejectCountCommand, error)
+	IntakeApproveReplenishment(ctx context.Context, request *http.Request) (application.ApproveReplenishmentCommand, error)
 }
 
 type OperatorStockApprovalIntake struct {
@@ -359,6 +360,24 @@ func (UnconfiguredStockApprovalIntake) IntakeApproveJobDiscrepancy(context.Conte
 
 func (UnconfiguredStockApprovalIntake) IntakeRejectJobDiscrepancy(context.Context, *http.Request) (application.RejectCountCommand, error) {
 	return application.RejectCountCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (intake *OperatorStockApprovalIntake) IntakeApproveReplenishment(ctx context.Context, request *http.Request) (application.ApproveReplenishmentCommand, error) {
+	identity, err := intake.authenticator.AuthenticateStockApproval(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.ApproveReplenishmentCommand{}, err
+	}
+	command, err := registrationjson.ApproveReplenishmentCommand(requestBody(request))
+	if err != nil {
+		return application.ApproveReplenishmentCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	command.Operator = identity.Registrant
+	return command, nil
+}
+
+func (UnconfiguredStockApprovalIntake) IntakeApproveReplenishment(context.Context, *http.Request) (application.ApproveReplenishmentCommand, error) {
+	return application.ApproveReplenishmentCommand{}, ErrAccessChannelNotConfigured
 }
 
 func NewRegisterApprovalDutyEndpoint(intake ApprovalDutyIntake, approver CountApprover) http.Handler {

@@ -123,6 +123,8 @@ var declaredPartitionSubjects = map[string]string{
 	// 两链信封落同一分区（票 01 Comments 二实测）。ADR-0074 只裁了 TF×VE，这一对没有裁定
 	// 记录，按门禁第二查的口径显式带待裁句，不静默。
 	"internal/parcelshipment/adapters/postgres/acceptance_decision_handoff.go": partitionSubjectPrefix + "租户/委托请求",
+	// 待受控补充与接受决定同取（租户/委托）：同一份委托的补充与决定排同一条队。
+	"internal/parcelshipment/adapters/postgres/customer_supplement_handoff.go": partitionSubjectPrefix + "租户/委托请求",
 	// 继续尝试决定判断意图口（票 label-channel/30）与面单交易判断意图口同取「租户/包裹」，同为 ADR-0134 决定一的
 	// 选择：关闭 / 重开决定触发的终局判断与同一包裹的其它拍排同一条队；与 VE 四口共用那一半沿用下面的待裁句。
 	"internal/parcelshipment/adapters/postgres/continued_attempt_decision_handoff.go": partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "ADR-0134 决定一：与 PS 终局口同队有意；与 VE 四口共用包裹分区是否有意仍待裁，无裁定记录（ADR-0074 只裁 TF×VE）",
@@ -210,6 +212,10 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go":           partitionPerEnvelopePrefix + "键取（租户/协作事项/口名），含信封 ID 的全部维（监管处置承接）",
 	"internal/transportfulfillment/adapters/postgres/transport_commission_handoff.go":            partitionPerEnvelopePrefix + "键取（租户/委托/口名），含信封 ID 的全部维（运输委托提交一拍）",
 	"internal/transportfulfillment/adapters/postgres/transport_handover_registration_handoff.go": partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /transport-handover-registration）",
+
+	// —— warehouse-fulfillment ——
+	// 出库确认按包裹排队，键带 /outbound-confirmation/ 段，与全程追踪的「租户/包裹」不是同一字符串。
+	"internal/warehousefulfillment/adapters/postgres/outbound_confirmation_handoff.go": partitionSubjectPrefix + "租户/出库确认",
 
 	// —— visibility-exception ——
 	"internal/visibilityexception/adapters/postgres/customer_view_handoff.go":  partitionSubjectPrefix + "租户/客户",

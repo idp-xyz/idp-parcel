@@ -28,6 +28,7 @@ type CustomerOutboundAuthenticator interface {
 	AuthenticateOutboundRequestSubmission(ctx context.Context, credential PresentedCustomerCredential, accessRequestID func() (string, error)) (CustomerCommandIdentity, error)
 	AuthenticateOutboundRequestSplit(ctx context.Context, credential PresentedCustomerCredential, accessRequestID func() (string, error)) (CustomerCommandIdentity, error)
 	AuthenticateOutboundRequestSupplement(ctx context.Context, credential PresentedCustomerCredential, accessRequestID func() (string, error)) (CustomerCommandIdentity, error)
+	AuthenticateOutboundCancellation(ctx context.Context, credential PresentedCustomerCredential, accessRequestID func() (string, error)) (CustomerCommandIdentity, error)
 }
 
 // CustomerOutboundPorts 是货主出库口在渠道没配时也能挂上的那一面。
@@ -35,6 +36,7 @@ type CustomerOutboundPorts interface {
 	IntakeOutboundRequest(ctx context.Context, request *http.Request) (application.AcceptOutboundCommand, error)
 	IntakeOutboundSplit(ctx context.Context, request *http.Request) (application.SplitOutboundCommand, error)
 	IntakeOutboundSupplement(ctx context.Context, request *http.Request) (application.ResubmitCommand, error)
+	IntakeOutboundCancellation(ctx context.Context, request *http.Request) (application.CutoffCommand, error)
 }
 
 type CustomerOutboundIntake struct {
@@ -67,6 +69,10 @@ func (unconfiguredCustomerOutbound) IntakeOutboundSplit(context.Context, *http.R
 
 func (unconfiguredCustomerOutbound) IntakeOutboundSupplement(context.Context, *http.Request) (application.ResubmitCommand, error) {
 	return application.ResubmitCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (unconfiguredCustomerOutbound) IntakeOutboundCancellation(context.Context, *http.Request) (application.CutoffCommand, error) {
+	return application.CutoffCommand{}, ErrAccessChannelNotConfigured
 }
 
 func (intake *CustomerOutboundIntake) IntakeOutboundRequest(ctx context.Context, request *http.Request) (application.AcceptOutboundCommand, error) {
@@ -127,6 +133,26 @@ func (intake *CustomerOutboundIntake) IntakeOutboundSupplement(ctx context.Conte
 	return command, nil
 }
 
+func (intake *CustomerOutboundIntake) IntakeOutboundCancellation(ctx context.Context, request *http.Request) (application.CutoffCommand, error) {
+	var command application.CutoffCommand
+	identity, err := intake.authenticator.AuthenticateOutboundCancellation(ctx, presentedCustomerCredential(request), func() (string, error) {
+		accessID, read, readErr := registrationjson.ReadOwnerOutboundCancellation(bodyOrEmpty(request))
+		if readErr != nil {
+			return "", asMalformed(readErr)
+		}
+		command = read
+		return accessID, nil
+	})
+	if err != nil {
+		return application.CutoffCommand{}, err
+	}
+	command.Tenant = identity.Tenant
+	command.Owner = identity.Owner
+	command.Key = identity.RequestKey.String()
+	command.Origin = domain.OutboundOriginCustomer
+	return command, nil
+}
+
 // OutboundOnBehalfAuthenticator 认证出库请求代录。
 type OutboundOnBehalfAuthenticator interface {
 	AuthenticateOutboundOnBehalf(ctx context.Context, bearerToken string) (OperatorIdentity, error)
@@ -135,6 +161,8 @@ type OutboundOnBehalfAuthenticator interface {
 type OutboundOnBehalfIntake interface {
 	IntakeOutboundOnBehalf(ctx context.Context, request *http.Request) (application.AcceptOutboundCommand, error)
 	IntakeOutboundSplit(ctx context.Context, request *http.Request) (application.SplitOutboundCommand, error)
+	IntakeOwnerLabel(ctx context.Context, request *http.Request) (application.RegisterOwnerLabelCommand, error)
+	IntakeOutboundCutoff(ctx context.Context, request *http.Request) (application.CutoffCommand, error)
 }
 
 type OperatorOutboundIntake struct {
@@ -177,6 +205,35 @@ func (intake *OperatorOutboundIntake) IntakeOutboundSplit(ctx context.Context, r
 	return command, nil
 }
 
+func (intake *OperatorOutboundIntake) IntakeOwnerLabel(ctx context.Context, request *http.Request) (application.RegisterOwnerLabelCommand, error) {
+	identity, err := intake.authenticator.AuthenticateOutboundOnBehalf(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.RegisterOwnerLabelCommand{}, err
+	}
+	command, err := registrationjson.OperatorOwnerLabel(requestBody(request))
+	if err != nil {
+		return application.RegisterOwnerLabelCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	return command, nil
+}
+
+func (intake *OperatorOutboundIntake) IntakeOutboundCutoff(ctx context.Context, request *http.Request) (application.CutoffCommand, error) {
+	identity, err := intake.authenticator.AuthenticateOutboundOnBehalf(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.CutoffCommand{}, err
+	}
+	command, err := registrationjson.OperatorOutboundCutoff(requestBody(request))
+	if err != nil {
+		return application.CutoffCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	command.Operator = identity.Registrant
+	command.Key = command.Basis
+	command.Origin = domain.OutboundOriginOperator
+	return command, nil
+}
+
 type UnconfiguredOutboundIntake struct{}
 
 func (UnconfiguredOutboundIntake) IntakeOutboundOnBehalf(context.Context, *http.Request) (application.AcceptOutboundCommand, error) {
@@ -185,6 +242,14 @@ func (UnconfiguredOutboundIntake) IntakeOutboundOnBehalf(context.Context, *http.
 
 func (UnconfiguredOutboundIntake) IntakeOutboundSplit(context.Context, *http.Request) (application.SplitOutboundCommand, error) {
 	return application.SplitOutboundCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredOutboundIntake) IntakeOwnerLabel(context.Context, *http.Request) (application.RegisterOwnerLabelCommand, error) {
+	return application.RegisterOwnerLabelCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredOutboundIntake) IntakeOutboundCutoff(context.Context, *http.Request) (application.CutoffCommand, error) {
+	return application.CutoffCommand{}, ErrAccessChannelNotConfigured
 }
 
 // ShortagePolicyIntake 是缺货处置登记口的 Intake。
@@ -218,6 +283,61 @@ func NewRecordOutboundEndpoint(intake OutboundOnBehalfIntake, service OutboundSe
 		}
 		return service.Accept(request.Context(), command)
 	})
+}
+
+func NewCancelCustomerOutboundEndpoint(intake CustomerOutboundPorts, waves WaveService) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		command, err := intake.IntakeOutboundCancellation(request.Context(), request)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		result, err := waves.Cutoff(request.Context(), command)
+		if err != nil {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeCutoffAnswer(response, request, result)
+	})
+}
+
+func NewCancelOutboundEndpoint(intake OutboundOnBehalfIntake, waves WaveService) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		command, err := intake.IntakeOutboundCutoff(request.Context(), request)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		result, err := waves.Cutoff(request.Context(), command)
+		if err != nil {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeCutoffAnswer(response, request, result)
+	})
+}
+
+func writeCutoffAnswer(response http.ResponseWriter, request *http.Request, result application.CutoffResult) {
+	name := result.Outcome().String()
+	if name == "" {
+		httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeUnnamedOutcome)
+		return
+	}
+	status := http.StatusOK
+	if result.Outcome() == application.CutoffCancelled || result.Outcome() == application.CutoffPartial || result.Outcome() == application.CutoffReturnRequired {
+		status = http.StatusCreated
+	}
+	writeJSON(response, status, outboundAnswer{Outcome: name})
 }
 
 func NewSupplementCustomerOutboundEndpoint(intake CustomerOutboundPorts, follow FollowUpService) http.Handler {

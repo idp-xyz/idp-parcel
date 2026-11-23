@@ -56,3 +56,19 @@ func (minter *CustomerClientMinter) MintOutboundRequestSupplement(
 func (customerAPIRequestKeys) DeriveOutboundRequestSupplementRequestKey(_ context.Context, request ChannelRequest) (string, error) {
 	return prefixedRequestKeyRejectingReserved(requestKeyPrefixOutboundSupplement, request)
 }
+
+// MintOutboundCancellation 铸一次出库截单。准入两格都是 OUTBOUND_CANCELLATION。
+func (minter *CustomerClientMinter) MintOutboundCancellation(
+	ctx context.Context, credential IntegrationClientCredential, readRequest func() (ChannelRequest, error),
+) (OutboundRequestSubmissionEnvelope, error) {
+	envelope, err := minter.mintWarehouseCustomerWrite(ctx, credential, readRequest, CustomerCapabilityOutboundCancellation,
+		customerAPIRequestKeys{}.DeriveOutboundCancellationRequestKey)
+	if err != nil {
+		return OutboundRequestSubmissionEnvelope{}, err
+	}
+	return OutboundRequestSubmissionEnvelope{envelope: envelope}, nil
+}
+
+func (customerAPIRequestKeys) DeriveOutboundCancellationRequestKey(_ context.Context, request ChannelRequest) (string, error) {
+	return prefixedRequestKeyRejectingReserved(requestKeyPrefixOutboundCancellation, request)
+}

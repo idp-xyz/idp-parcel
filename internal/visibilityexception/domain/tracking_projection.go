@@ -43,7 +43,7 @@ func NewTenantID(value string) (TenantID, error) {
 	return TenantID{required}, err
 }
 
-// SourceContext 是可提供已接受事实的源上下文封闭集合。投影只消费这五处的事实——
+// SourceContext 是可提供已接受事实的源上下文封闭集合。投影只消费这六处的事实——
 // 来源消息、原始扫描或外部状态码未经业务所有者接受，在类型上就没有入口。
 type SourceContext uint8
 
@@ -54,12 +54,13 @@ const (
 	SourceNodeOperations
 	SourceTransportFulfillment
 	SourceCustomsCompliance
+	SourceWarehouseFulfillment
 )
 
 func (source SourceContext) valid() bool {
 	switch source {
 	case SourceParcelShipment, SourceNetworkRouting, SourceNodeOperations,
-		SourceTransportFulfillment, SourceCustomsCompliance:
+		SourceTransportFulfillment, SourceCustomsCompliance, SourceWarehouseFulfillment:
 		return true
 	default:
 		return false
@@ -78,6 +79,8 @@ func (source SourceContext) String() string {
 		return "TRANSPORT_FULFILLMENT"
 	case SourceCustomsCompliance:
 		return "CUSTOMS_COMPLIANCE"
+	case SourceWarehouseFulfillment:
+		return "WAREHOUSE_FULFILLMENT"
 	default:
 		return ""
 	}

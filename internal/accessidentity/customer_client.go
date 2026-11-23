@@ -166,6 +166,9 @@ const (
 	// CustomerCapabilityOutboundRequestSubmission 是出库请求提交（`/v1/warehouse/outbound-requests`，UC-WF-012）。
 	// 不进 customerCapabilitiesAdmittedAtMint：准入两格都是这个字面量。
 	CustomerCapabilityOutboundRequestSubmission CustomerCapability = "OUTBOUND_REQUEST_SUBMISSION"
+	// CustomerCapabilityOutboundCancellation 是出库截单（`/v1/warehouse/outbound-requests/cancellations`，UC-WF-016）。
+	// 不进 customerCapabilitiesAdmittedAtMint：准入两格都是这个字面量。
+	CustomerCapabilityOutboundCancellation CustomerCapability = "OUTBOUND_CANCELLATION"
 )
 
 var customerCapabilities = []CustomerCapability{
@@ -191,6 +194,7 @@ var customerCapabilities = []CustomerCapability{
 	CustomerCapabilityRelabelInstructionSubmission,
 	CustomerCapabilityRelabelInstructionWithdrawal,
 	CustomerCapabilityOutboundRequestSubmission,
+	CustomerCapabilityOutboundCancellation,
 }
 
 // ParseCustomerCapability 按字面取值认能力，大小写不折叠：册里存的就是这些字面量。

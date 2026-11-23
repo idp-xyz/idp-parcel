@@ -3,6 +3,7 @@ package registrationjson
 import (
 	"io"
 	"strings"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
@@ -581,4 +582,293 @@ func ShortagePolicyCommand(reader io.Reader, tenant domain.TenantID, operator do
 		return none, malformed("kind must be PARTIAL or REJECT")
 	}
 	return application.RegisterShortagePolicyCommand{Tenant: tenant, Owner: owner, Revision: *document.Revision, Kind: kind, Operator: operator}, nil
+}
+
+type confirmDocument struct {
+	carriedIdentity
+	FactID           *string `json:"factId"`
+	RequestID        *string `json:"requestId"`
+	Warehouse        *string `json:"warehouse"`
+	ParcelSequence   *int    `json:"parcelSequence"`
+	Offline          *bool   `json:"offline"`
+	OccurredAt       *string `json:"occurredAt"`
+	ValidFrom        *string `json:"validFrom"`
+	ValidUntil       *string `json:"validUntil"`
+	ExternalNumber   *string `json:"externalNumber"`
+	PickupParty      *string `json:"pickupParty"`
+	PickupCredential *string `json:"pickupCredential"`
+}
+
+// ConfirmCommand 把出库确认或自提交付译成命令。事实种类由口绑上，不从载荷取。
+func ConfirmCommand(reader io.Reader, kind string) (application.ConfirmCommand, error) {
+	var none application.ConfirmCommand
+	document, err := decodeDocument[confirmDocument](reader, "outbound confirmation")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	fact, err := requiredText("factId", document.FactID, domain.NewPickFactID)
+	if err != nil {
+		return none, err
+	}
+	request, err := requiredText("requestId", document.RequestID, domain.NewOutboundRequestID)
+	if err != nil {
+		return none, err
+	}
+	warehouse, err := requiredText("warehouse", document.Warehouse, domain.NewWarehouseCode)
+	if err != nil {
+		return none, err
+	}
+	if document.ParcelSequence == nil || *document.ParcelSequence < 1 {
+		return none, malformed("parcelSequence must be a positive integer")
+	}
+	occurred, err := requiredConfirmInstant("occurredAt", document.OccurredAt)
+	if err != nil {
+		return none, err
+	}
+	from, err := optionalConfirmInstant("validFrom", document.ValidFrom)
+	if err != nil {
+		return none, err
+	}
+	until, err := optionalConfirmInstant("validUntil", document.ValidUntil)
+	if err != nil {
+		return none, err
+	}
+	offline := document.Offline != nil && *document.Offline
+	return application.ConfirmCommand{
+		FactID: fact, Request: request, Sequence: *document.ParcelSequence, Warehouse: warehouse, Kind: kind, Offline: offline,
+		OccurredAt: occurred, ValidFrom: from, ValidUntil: until,
+		ExternalNumber: textOrEmpty(document.ExternalNumber), PickupParty: textOrEmpty(document.PickupParty),
+		PickupCredential: textOrEmpty(document.PickupCredential),
+	}, nil
+}
+
+func requiredConfirmInstant(name string, raw *string) (time.Time, error) {
+	if raw == nil || *raw == "" {
+		return time.Time{}, malformed("%s is required", name)
+	}
+	at, err := time.Parse(time.RFC3339, *raw)
+	if err != nil {
+		return time.Time{}, malformed("%s must be RFC3339", name)
+	}
+	return at, nil
+}
+
+func optionalConfirmInstant(name string, raw *string) (time.Time, error) {
+	if raw == nil || *raw == "" {
+		return time.Time{}, nil
+	}
+	return requiredConfirmInstant(name, raw)
+}
+
+func textOrEmpty(raw *string) string {
+	if raw == nil {
+		return ""
+	}
+	return *raw
+}
+
+type ownerLabelDocument struct {
+	carriedIdentity
+	refusedOwner
+	RequestID      *string `json:"requestId"`
+	ParcelSequence *int    `json:"parcelSequence"`
+	ExternalNumber *string `json:"externalNumber"`
+}
+
+// OperatorOwnerLabel 把代录的货主面单译成命令。货主取自出库请求，载荷里再带货主即坏载荷。
+func OperatorOwnerLabel(reader io.Reader) (application.RegisterOwnerLabelCommand, error) {
+	var none application.RegisterOwnerLabelCommand
+	document, err := decodeDocument[ownerLabelDocument](reader, "owner label")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	if len(document.OwnerAccount) > 0 {
+		return none, malformed("ownerAccount must not be carried in the payload")
+	}
+	request, err := requiredText("requestId", document.RequestID, domain.NewOutboundRequestID)
+	if err != nil {
+		return none, err
+	}
+	if document.ParcelSequence == nil || *document.ParcelSequence < 1 {
+		return none, malformed("parcelSequence must be a positive integer")
+	}
+	if document.ExternalNumber == nil || strings.TrimSpace(*document.ExternalNumber) == "" {
+		return none, malformed("externalNumber is required")
+	}
+	return application.RegisterOwnerLabelCommand{
+		Request: request, Sequence: *document.ParcelSequence, ExternalNumber: strings.TrimSpace(*document.ExternalNumber),
+	}, nil
+}
+
+type correctionDocument struct {
+	carriedIdentity
+	FactID     *string `json:"factId"`
+	OccurredAt *string `json:"occurredAt"`
+	Invalidate *bool   `json:"invalidate"`
+}
+
+// CorrectConfirmationCommand 把出库确认更正译成命令。改时点与判不成立二选一。
+func CorrectConfirmationCommand(reader io.Reader) (application.CorrectConfirmationCommand, error) {
+	var none application.CorrectConfirmationCommand
+	document, err := decodeDocument[correctionDocument](reader, "outbound confirmation correction")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	fact, err := requiredText("factId", document.FactID, domain.NewPickFactID)
+	if err != nil {
+		return none, err
+	}
+	invalidate := document.Invalidate != nil && *document.Invalidate
+	occurred, err := optionalConfirmInstant("occurredAt", document.OccurredAt)
+	if err != nil {
+		return none, err
+	}
+	return application.CorrectConfirmationCommand{FactID: fact, OccurredAt: occurred, Invalidate: invalidate}, nil
+}
+
+type replenishmentDocument struct {
+	carriedIdentity
+	FactID *string `json:"factId"`
+}
+
+// ApproveReplenishmentCommand 把回补批准译成命令。
+func ApproveReplenishmentCommand(reader io.Reader) (application.ApproveReplenishmentCommand, error) {
+	var none application.ApproveReplenishmentCommand
+	document, err := decodeDocument[replenishmentDocument](reader, "outbound replenishment")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	fact, err := requiredText("factId", document.FactID, domain.NewPickFactID)
+	if err != nil {
+		return none, err
+	}
+	return application.ApproveReplenishmentCommand{FactID: fact}, nil
+}
+
+type outboundCancellationDocument struct {
+	carriedIdentity
+	refusedOwner
+	AccessRequestID *string `json:"accessRequestId"`
+	RequestID       *string `json:"requestId"`
+	ParcelSequence  *int    `json:"parcelSequence"`
+}
+
+// ReadOwnerOutboundCancellation 把货主截单译成命令。货主与请求键由信封填。
+func ReadOwnerOutboundCancellation(reader io.Reader) (string, application.CutoffCommand, error) {
+	var none application.CutoffCommand
+	document, err := decodeDocument[outboundCancellationDocument](reader, "outbound cancellation")
+	if err != nil {
+		return "", none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return "", none, err
+	}
+	if len(document.OwnerAccount) > 0 {
+		return "", none, malformed("ownerAccount must not be carried in the payload")
+	}
+	request, sequence, err := cutoffTarget(document.RequestID, document.ParcelSequence)
+	if err != nil {
+		return "", none, err
+	}
+	return rawAccessRequestID(document.AccessRequestID), application.CutoffCommand{Request: request, Sequence: sequence}, nil
+}
+
+type operatorCutoffDocument struct {
+	carriedIdentity
+	refusedOwner
+	RequestID      *string `json:"requestId"`
+	ParcelSequence *int    `json:"parcelSequence"`
+	Basis          *string `json:"basis"`
+}
+
+// OperatorOutboundCutoff 把代录截单译成命令。货主取自被截的请求，依据引用必填。
+func OperatorOutboundCutoff(reader io.Reader) (application.CutoffCommand, error) {
+	var none application.CutoffCommand
+	document, err := decodeDocument[operatorCutoffDocument](reader, "outbound cancellation")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	if len(document.OwnerAccount) > 0 {
+		return none, malformed("ownerAccount must not be carried in the payload")
+	}
+	if document.Basis == nil || strings.TrimSpace(*document.Basis) == "" {
+		return none, malformed("basis is required")
+	}
+	request, sequence, err := cutoffTarget(document.RequestID, document.ParcelSequence)
+	if err != nil {
+		return none, err
+	}
+	return application.CutoffCommand{Request: request, Sequence: sequence, Basis: strings.TrimSpace(*document.Basis)}, nil
+}
+
+type returnDocument struct {
+	carriedIdentity
+	FactID    *string `json:"factId"`
+	ReturnID  *string `json:"returnId"`
+	Target    *string `json:"target"`
+	Warehouse *string `json:"warehouse"`
+}
+
+// ReturnCommand 把回库事实译成命令。目标库位必须可分配，由编排核。
+func ReturnCommand(reader io.Reader) (application.ReturnCommand, error) {
+	var none application.ReturnCommand
+	document, err := decodeDocument[returnDocument](reader, "return")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	fact, err := requiredText("factId", document.FactID, domain.NewPickFactID)
+	if err != nil {
+		return none, err
+	}
+	returnID, err := requiredText("returnId", document.ReturnID, func(value string) (string, error) {
+		if strings.TrimSpace(value) == "" {
+			return "", malformed("returnId is required")
+		}
+		return strings.TrimSpace(value), nil
+	})
+	if err != nil {
+		return none, err
+	}
+	target, err := requiredText("target", document.Target, domain.NewLocationCode)
+	if err != nil {
+		return none, err
+	}
+	warehouse, err := requiredText("warehouse", document.Warehouse, domain.NewWarehouseCode)
+	if err != nil {
+		return none, err
+	}
+	return application.ReturnCommand{FactID: fact, ReturnID: returnID, Target: target, Warehouse: warehouse}, nil
+}
+
+func cutoffTarget(requestID *string, sequence *int) (domain.OutboundRequestID, int, error) {
+	var none domain.OutboundRequestID
+	request, err := requiredText("requestId", requestID, domain.NewOutboundRequestID)
+	if err != nil {
+		return none, 0, err
+	}
+	if sequence == nil {
+		return request, 0, nil
+	}
+	if *sequence < 1 {
+		return none, 0, malformed("parcelSequence must be a positive integer")
+	}
+	return request, *sequence, nil
 }

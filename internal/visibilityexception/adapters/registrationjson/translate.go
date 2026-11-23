@@ -96,7 +96,7 @@ func (document versionHeaderDocument) header() ports.CatalogVersionHeader {
 	return header
 }
 
-// sourceContextFromToken 把输入词译成封闭五值。词形取 domain.SourceContext.String()
+// sourceContextFromToken 把输入词译成封闭集合。词形取 domain.SourceContext.String()
 // 的原词（与目录列取值同源），不自造第二套拼法。
 func sourceContextFromToken(token string) (domain.SourceContext, error) {
 	for _, candidate := range []domain.SourceContext{
@@ -105,6 +105,7 @@ func sourceContextFromToken(token string) (domain.SourceContext, error) {
 		domain.SourceNodeOperations,
 		domain.SourceTransportFulfillment,
 		domain.SourceCustomsCompliance,
+		domain.SourceWarehouseFulfillment,
 	} {
 		if candidate.String() == token {
 			return candidate, nil

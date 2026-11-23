@@ -50,8 +50,9 @@ func (handoff *OutboxCustomerSupplementHandoff) HandOffCustomerSupplement(ctx co
 	}
 	now := handoff.clock.Now().UTC()
 	envelope := eventing.Envelope{
-		SpecVersion: eventing.SpecVersion, ID: eventing.EventID(intent.SubmissionVersion.String()),
-		Source: eventSource, Type: customerSupplementEventType, Version: 1,
+		SpecVersion: eventing.SpecVersion,
+		ID:          outboxintent.FingerprintEventID("customer-supplement", intent.Identity.TenantID().String(), intent.ShipmentRequestID.String(), intent.SubmissionVersion.String()),
+		Source:      eventSource, Type: customerSupplementEventType, Version: 1,
 		Scope: intent.Identity.TenantID().String(), Subject: intent.ShipmentRequestID.String(),
 		PartitionKey: intent.Identity.TenantID().String() + "/" + intent.ShipmentRequestID.String(),
 		OccurredAt:   now, RecordedAt: now, ContentType: eventing.JSONContentType, Payload: body,

@@ -529,6 +529,13 @@ func (channels endpointChannels) approvalDuty() warehousehttp.ApprovalDutyIntake
 	return warehousehttp.UnconfiguredIntake{}
 }
 
+func (channels endpointChannels) confirmationCorrection() warehousehttp.CorrectionIntake {
+	if channels.operatorDecisions.warehouseCorrection != nil {
+		return channels.operatorDecisions.warehouseCorrection
+	}
+	return warehousehttp.UnconfiguredCorrectionIntake{}
+}
+
 func (channels endpointChannels) waveRelease() warehousehttp.WaveReleaseIntake {
 	if channels.operatorDecisions.warehouseWave != nil {
 		return channels.operatorDecisions.warehouseWave

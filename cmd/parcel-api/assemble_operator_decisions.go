@@ -68,6 +68,7 @@ type operatorDecisionIntakes struct {
 	warehouseStockAdjustment       *warehousehttp.OperatorStockAdjustmentIntake
 	warehouseOutbound              *warehousehttp.OperatorOutboundIntake
 	warehouseWave                  *warehousehttp.OperatorWaveIntake
+	warehouseCorrection            *warehousehttp.OperatorCorrectionIntake
 }
 
 // buildOperatorMinter 建本进程唯一一只操作者铸造器：运营决定与登记写面各口共用它。
@@ -330,6 +331,14 @@ func buildOperatorDecisionIntakes(
 	if err != nil {
 		return operatorDecisionIntakes{}, err
 	}
+	correctionAuthenticator, err := whaccess.NewOperatorCorrectionAuthenticator(minter)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
+	warehouseCorrection, err := warehousehttp.NewOperatorCorrectionIntake(correctionAuthenticator)
+	if err != nil {
+		return operatorDecisionIntakes{}, err
+	}
 	return operatorDecisionIntakes{shipment: shipment, transport: transport, nodeOperations: nodeOperations, customs: customs,
 		settlement: settlement, networkRouting: networkRouting, visibility: visibility, warehouseGoods: warehouseGoods,
 		warehousePreAdvice: warehousePreAdvice, warehousePreAdviceClose: warehousePreAdviceClose,
@@ -344,7 +353,8 @@ func buildOperatorDecisionIntakes(
 		warehouseStockApproval:         warehouseStockApproval,
 		warehouseStockAdjustment:       warehouseStockAdjustment,
 		warehouseOutbound:              warehouseOutbound,
-		warehouseWave:                  warehouseWave}, nil
+		warehouseWave:                  warehouseWave,
+		warehouseCorrection:            warehouseCorrection}, nil
 }
 
 // operatorRegistryIntakes 是操作者渠道登记册配置写能力面在各上下文的 Intake（ADR-0100 决定四；票 operator-channel/04）。
