@@ -8,7 +8,7 @@
 
 - 可选能力，首发不含。用户 2026-11-18 点名继续，按 PN-09 开发交接逐包做。部署默认关。
 - 已有代码：部署开关与依赖方向门禁；仓、库区、库位类型、库位、包材的登记和查阅；商品的货主口、运营代录、货主与运营查阅；仓测尺寸重量（按商品包装层级与按在库一箱，作业事实登记与货主/运营查阅）；库存账；入库预报的受理、告知版本、撤回、单据号、运营代录、运营查阅与货主口；收货确认（商品入库与整箱入库，支持引用已认领待认领到货）；整箱库存；完结与少收（整箱按箱）；收货差异结论（货主与代录）；待认领到货完整链路（一线直接登记、取消/完结收货转来、认领与撤销、处置规则修订册、按规则处置与运营查阅），以及下面各「已实现」节。路径、词与判定在那些节。
-- 还没有：货主查阅仓；形态转换、状态转换与整箱缺箱的批准；已接受委托的包裹取消；平台备货整份一份委托；受控批量口、登记 CLI 与管理台页面。演示种子走出库前的收费：登记方案、采用，入库与仓储各确认一笔，金额只用 `SYN-`。
+- 还没有：货主查阅仓；已接受委托的包裹取消；平台备货整份一份委托；受控批量口、登记 CLI 与管理台页面。演示种子走出库前的收费：登记方案、采用，入库与仓储各确认一笔，金额只用 `SYN-`。
 - 部署开关是环境变量 `IDP_PARCEL_WAREHOUSE_FULFILLMENT_ENABLED`，去首尾空白后恰为 `true` 才开，默认关。读法在 `cmd/internal/warehouseswitch`。`parcel-api` 与 `parcel-dispatch` 启动时各读一次并写启动日志。
 - 开关关着时，仓配的端点（含 `/v1/warehouse/`）答 `403 WAREHOUSE_FULFILLMENT_NOT_ENABLED`：在认证之前答，不读令牌、报文与册，不带 `outcome`。它与「接入渠道未配置」是两格，因为恢复动作是部署方打开开关。方法不对仍答 `405`。下面各口都受这一条管，不逐口再写。
 - 库表在 schema `warehouse_fulfillment`，进同一份迁移计划。开关关着的部署也建表，表是空的。
@@ -173,7 +173,7 @@
 
 没有发现的：
 
-- 形态转换、状态转换和整箱缺箱还没批。已接受委托的包裹取消还没接上，仍答未配置。平台备货整份一份委托还没有。拒绝接受不拆包。操作者提交的库存调整仍不收待出库库区。
+- 已接受委托的包裹取消还没接上，仍答未配置。平台备货整份一份委托还没有。拒绝接受不拆包。操作者提交的库存调整仍不收待出库库区。
 - 仓储计费方案在 `internal/parcelpricing`，采用、预计与确认在 `internal/settlementaccounting`。评价不进包裹那四种对象。确认依据 `WAREHOUSE_WORK_OCCURRED`。已确认费用的更正答待人处理。这一路不生成 SELL 请求。
 - 全程追踪已能收下 `warehouse-outbound-confirmed`。里程碑映射没登记，不编默认。
 - 回补走批准口，不走库存调整那个提交口。
@@ -181,7 +181,7 @@
 ## 已实现：库内作业
 
 - 四个登记口挂作业事实登记，范围种类 `WAREHOUSE`，引用等于载荷仓，先认证再读载荷：`POST /warehouse-fulfillment-internal-moves`（`INTERNAL_MOVE`，上架、移库与拣选位补货）、`form-conversions`（`FORM_CONVERSION`）、`condition-conversions`（`CONDITION_CONVERSION`）、`shortage-registrations`（`SHORTAGE`）。答复 `REGISTERED` 或 `SHORTAGE_REGISTERED`（201）、`EXISTING_RESULT`、`CONTENT_CONFLICT`、`CONTENT_INVALID`、`WAREHOUSE_NOT_FOUND`、`WAREHOUSE_NOT_ACCEPTING`。停用的仓、库区与库位照记；代理仓不受理。
-- 取得走的部分入账，其余各成一份待处理库存差异，写口不拒。没点名入库批次的从早到晚取。移入次品库区的同一笔转为次品。形态转换与带转入单位的补货只入账两头都折成整数个单位的部分，入库批次不另起。短少只记观察，不改账。上架没入账的数量可经 `POST /warehouse-fulfillment-job-discrepancy-approvals` 从源头补进目标位，短少经同一口在所在格调减；决定词与库存调整批准相同，驳回是 `job-discrepancy-rejections`。没登记批准职责时答未配置。形态转换、状态转换和整箱缺箱还没批。
+- 取得走的部分入账，其余各成一份待处理库存差异，写口不拒。没点名入库批次的从早到晚取。移入次品库区的同一笔转为次品。形态转换与带转入单位的补货只入账两头都折成整数个单位的部分，入库批次不另起。短少只记观察，不改账。上架没入账的数量可经 `POST /warehouse-fulfillment-job-discrepancy-approvals` 从源头补进目标位，短少经同一口在所在格调减；决定词与库存调整批准相同，驳回是 `job-discrepancy-rejections`。没登记批准职责时答未配置。形态转换与状态转换经同一口按原作业原因补入账：从源头的转出单位或状态取出，记入差异所在的转入单位或状态。整箱缺箱只在箱已在账上时从所在位移到报告库位，不新起入库批次；箱还不在账上时批准不成立。驳回不改账。占着的整箱仍不批。
 - 次品转良品 `POST /warehouse-fulfillment-condition-restores`，运营决定 `CONDITION_RESTORE`，整份成立或整份不成立，库位须在收货暂存或退货暂存。答复 `RESTORED`、`EXISTING_RESULT`、`SOURCE_CONFLICT`、`NOT_VALID`。
 - 运营查阅：`GET /warehouse-fulfillment-internal-jobs`、`internal-job`、`condition-restore`。冻结、盘点锁定、未分配预占和未拣完的分配都计入占用。整箱移动写 `-1` 与 `+1`，不新起入库批次。
 

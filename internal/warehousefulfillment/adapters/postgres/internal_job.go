@@ -692,9 +692,10 @@ func (store *InternalJobs) LoadDiscrepancy(ctx context.Context, tenant domain.Te
 	var fact, kind, operator, owner, warehouse, status string
 	var location, goods, unit, state, alias, batch, expiry, inbound, source, carton *string
 	var quantity int64
+	var linePosition int
 	var missing bool
 	err = querier.QueryRow(ctx,
-		`SELECT discrepancy.fact_id, job.kind, job.operator_id, discrepancy.owner_account_id, discrepancy.warehouse_code,
+		`SELECT discrepancy.fact_id, discrepancy.line_position, job.kind, job.operator_id, discrepancy.owner_account_id, discrepancy.warehouse_code,
 		        discrepancy.location_code, discrepancy.goods_code, discrepancy.unit_name, discrepancy.stock_state,
 		        discrepancy.label_alias, discrepancy.batch_number, discrepancy.expiry_date::text, discrepancy.inbound_batch_id,
 		        discrepancy.source_location, discrepancy.carton_number, discrepancy.quantity, discrepancy.carton_missing, discrepancy.status
@@ -703,7 +704,7 @@ func (store *InternalJobs) LoadDiscrepancy(ctx context.Context, tenant domain.Te
 		     ON job.tenant_id = discrepancy.tenant_id AND job.fact_id = discrepancy.fact_id
 		  WHERE discrepancy.tenant_id = $1 AND discrepancy.discrepancy_id = $2`,
 		tenant.String(), id.String()).Scan(
-		&fact, &kind, &operator, &owner, &warehouse, &location, &goods, &unit, &state, &alias, &batch, &expiry,
+		&fact, &linePosition, &kind, &operator, &owner, &warehouse, &location, &goods, &unit, &state, &alias, &batch, &expiry,
 		&inbound, &source, &carton, &quantity, &missing, &status,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -713,7 +714,7 @@ func (store *InternalJobs) LoadDiscrepancy(ctx context.Context, tenant domain.Te
 		return ports.StoredJobDiscrepancy{}, false, fmt.Errorf("load job discrepancy: %w", err)
 	}
 	return ports.StoredJobDiscrepancy{
-		Tenant: tenant, ID: id, FactID: mustFact(fact), Kind: kind, Operator: operator, Owner: mustOwnerID(owner), Warehouse: mustWarehouse(warehouse),
+		Tenant: tenant, ID: id, FactID: mustFact(fact), Line: linePosition, Kind: kind, Operator: operator, Owner: mustOwnerID(owner), Warehouse: mustWarehouse(warehouse),
 		Location: mustLocation(location), Source: mustLocation(source), Goods: mustGoods(goods), Unit: mustUnit(unit), State: mustState(state),
 		Alias: mustAlias(alias), Batch: mustBatch(batch), Expiry: mustExpiry(expiry), Inbound: mustInbound(inbound), Quantity: quantity,
 		Carton: mustCarton(carton), CartonMissing: missing, Status: status,

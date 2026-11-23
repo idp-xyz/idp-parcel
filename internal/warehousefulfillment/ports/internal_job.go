@@ -38,6 +38,7 @@ type StoredJobDiscrepancy struct {
 	Tenant        domain.TenantID
 	ID            domain.StockDiscrepancyID
 	FactID        domain.InternalJobFactID
+	Line          int
 	Kind          string
 	Operator      string
 	Owner         domain.OwnerAccountID

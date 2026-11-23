@@ -734,7 +734,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewJobDiscrepancyHandler(
 			internalJobStore, countStore, poster, stock, holds, systemClock{}, warehouses,
-		).WithAllocationFollow(waveStore, pickTaskIDs, locations, zones),
+		).WithAllocationFollow(waveStore, pickTaskIDs, locations, zones).WithCatalogues(goods, cartons, cartonIDs),
 	}
 	freezes := transactionalFreeze{
 		transactor: db.Transactor(),
