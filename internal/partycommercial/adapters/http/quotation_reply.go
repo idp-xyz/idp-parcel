@@ -14,6 +14,7 @@ import (
 // 报价答复的在线口。写面与发出同一张登记写面。
 // 载荷不收租户、代录人与登记时刻：租户与代录人取认证信封，登记时刻取服务端时钟。
 // 客户答复时刻、证据索引与决定由代录人交来。
+// 客户时刻空着（字段不在或空串）交给应用层答未受理；写了但不是 RFC3339 才是坏报文。
 
 type QuotationReplyIntake interface {
 	IntakeQuotationReply(ctx context.Context, request *http.Request, now time.Time) (application.RecordQuotationReplyCommand, error)
@@ -60,9 +61,13 @@ func (intake *OperatorRegistryIntake) IntakeQuotationReply(ctx context.Context, 
 	if !known {
 		return none, fmt.Errorf("%w: decision must be ACCEPTED or REJECTED", ErrMalformedRequest)
 	}
-	repliedAt, err := time.Parse(time.RFC3339, document.RepliedAt)
+	var repliedRaw *string
+	if document.RepliedAt != "" {
+		repliedRaw = &document.RepliedAt
+	}
+	repliedAt, err := optionalClock(repliedRaw, "repliedAt")
 	if err != nil {
-		return none, fmt.Errorf("%w: repliedAt must be RFC3339", ErrMalformedRequest)
+		return none, err
 	}
 	if document.ContentDigest == "" {
 		return none, fmt.Errorf("%w: contentDigest is required", ErrMalformedRequest)
