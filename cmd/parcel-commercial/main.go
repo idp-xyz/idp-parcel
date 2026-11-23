@@ -53,7 +53,7 @@ func main() {
 
 func run(ctx context.Context, args []string, getenv func(string) string, out, errOut io.Writer) int {
 	if len(args) < 1 {
-		fmt.Fprintln(errOut, "用法：parcel-commercial <publish|register-resolution-key|register-parties|deactivate-party-identity|end-party-relationships|register-products|register-registration-number-types|register-legal-entity-profiles|register-version-closures|register-approval-duty-rule|register-signing-evidence-requirement|register-quotation-send|register-quotation-reply> -input <file>")
+		fmt.Fprintln(errOut, "用法：parcel-commercial <publish|register-resolution-key|register-parties|deactivate-party-identity|end-party-relationships|register-products|register-registration-number-types|register-legal-entity-profiles|register-version-closures|register-approval-duty-rule|register-signing-evidence-requirement|register-quotation-send|register-quotation-reply|register-quotation-publication-requirement> -input <file>")
 		return exitTechnical
 	}
 	switch args[0] {
@@ -83,8 +83,10 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 		return runRegisterQuotationSend(ctx, args[1:], getenv, out, errOut)
 	case "register-quotation-reply":
 		return runRegisterQuotationReply(ctx, args[1:], getenv, out, errOut)
+	case "register-quotation-publication-requirement":
+		return runRegisterQuotationPublicationRequirement(ctx, args[1:], getenv, out, errOut)
 	default:
-		fmt.Fprintf(errOut, "未知子命令 %q；可用：publish、register-resolution-key、register-parties、deactivate-party-identity、end-party-relationships、register-products、register-registration-number-types、register-legal-entity-profiles、register-version-closures、register-approval-duty-rule、register-signing-evidence-requirement、register-quotation-send、register-quotation-reply\n", args[0])
+		fmt.Fprintf(errOut, "未知子命令 %q；可用：publish、register-resolution-key、register-parties、deactivate-party-identity、end-party-relationships、register-products、register-registration-number-types、register-legal-entity-profiles、register-version-closures、register-approval-duty-rule、register-signing-evidence-requirement、register-quotation-send、register-quotation-reply、register-quotation-publication-requirement\n", args[0])
 		return exitTechnical
 	}
 }
