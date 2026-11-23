@@ -44,6 +44,12 @@ func NewCustomerAccountID(value string) (CustomerAccountID, error) {
 // SourceWarehouseOutbound 是仓配履约以货主名义提交委托的来源字面（ADR-0371）。
 const SourceWarehouseOutbound = "WAREHOUSE_OUTBOUND"
 
+// WarehouseFulfillmentRequester 是仓配履约作为货主的授权代表出现在撤回留痕上的名字。
+const WarehouseFulfillmentRequester = "warehouse-fulfillment"
+
+// OutboundCutoffReason 是出库截单发起撤回时记下的结构化原因。
+const OutboundCutoffReason = "OUTBOUND_CUTOFF"
+
 type Source struct{ requiredValue }
 
 func NewSource(value string) (Source, error) {

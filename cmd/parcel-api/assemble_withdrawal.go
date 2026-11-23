@@ -92,6 +92,15 @@ func buildCustomerWithdrawalOrchestration(db *bentopg.DB) (shipmenthttp.Withdraw
 }
 
 func assembleWithdrawalOrchestration(db *bentopg.DB, authorizer ports.WithdrawalAuthorizer) (shipmenthttp.WithdrawalHandler, error) {
+	handler, err := buildActingWithdrawal(db, authorizer)
+	if err != nil {
+		return nil, err
+	}
+	return transactionalWithdrawal{transactor: db.Transactor(), inner: handler}, nil
+}
+
+// buildActingWithdrawal 装撤回编排，自己不开事务。首方撤回口在外面套事务；出库截单调用时已经在自己的事务里。
+func buildActingWithdrawal(db *bentopg.DB, authorizer ports.WithdrawalAuthorizer) (*shipmentapp.WithdrawShipmentRequestHandler, error) {
 	sources, err := pspostgres.NewSourceSubmissions(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: source submissions: %w", err)
@@ -132,7 +141,7 @@ func assembleWithdrawalOrchestration(db *bentopg.DB, authorizer ports.Withdrawal
 		// Scopes 留空：释放按存下的作用域认领，用不到它，见函数注释。
 	})
 
-	handler := shipmentapp.NewWithdrawShipmentRequestHandler(shipmentapp.WithdrawShipmentRequestDeps{
+	return shipmentapp.NewWithdrawShipmentRequestHandler(shipmentapp.WithdrawShipmentRequestDeps{
 		Sources:    sources,
 		Requests:   requests,
 		Authorizer: authorizer,
@@ -143,6 +152,5 @@ func assembleWithdrawalOrchestration(db *bentopg.DB, authorizer ports.Withdrawal
 		ScopeLock:  pssettlement.NewControlScopeLocks(scopeLocks),
 		Identities: identities,
 		Clock:      clock,
-	})
-	return transactionalWithdrawal{transactor: db.Transactor(), inner: handler}, nil
+	}), nil
 }

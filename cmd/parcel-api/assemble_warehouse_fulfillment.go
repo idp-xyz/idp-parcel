@@ -619,11 +619,15 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	if err != nil {
 		return none, err
 	}
+	releaser, err := buildWarehouseShipmentReleaser(db)
+	if err != nil {
+		return none, err
+	}
 	waves := transactionalWave{
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewWaveHandler(
 			waveStore, outboundStore, pickTaskIDs, discrepancyIDs, poster, stock, locations, zones, goods, holds, systemClock{}, warehouses,
-		).WithConfirmationHandoff(confirmationHandoff).WithApprovalDuties(countStore),
+		).WithConfirmationHandoff(confirmationHandoff).WithApprovalDuties(countStore).WithShipmentReleaser(releaser),
 		commissions: warehouseapp.NewCommissionHandler(outboundStore, waveStore, opener, warehouses),
 	}
 	followUps := transactionalFollowUp{
@@ -824,6 +828,34 @@ type transactionalWave struct {
 	transactor  bentoapp.Transactor
 	inner       *warehouseapp.WaveHandler
 	commissions *warehouseapp.CommissionHandler
+}
+
+func buildWarehouseShipmentReleaser(db *bentopg.DB) (*whparcel.Releaser, error) {
+	grants, err := pcpostgres.NewAuthorityGrants(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: warehouse withdrawal grants: %w", err)
+	}
+	keys, err := pspostgres.NewCommercialResolutionKeyStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: warehouse withdrawal resolution keys: %w", err)
+	}
+	agency, err := psparty.NewWarehouseAgencyAuthorizer(keys, pcapplication.NewAdjudicateCommercialAuthorizationHandler(grants), systemClock{})
+	if err != nil {
+		return nil, err
+	}
+	authorizer, err := psparty.NewWarehouseWithdrawalAuthorizer(agency)
+	if err != nil {
+		return nil, err
+	}
+	withdrawal, err := buildActingWithdrawal(db, authorizer)
+	if err != nil {
+		return nil, err
+	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: warehouse withdrawal requests: %w", err)
+	}
+	return whparcel.NewReleaser(agency, requests, withdrawal, systemClock{})
 }
 
 func buildWarehouseOutboundOpener(db *bentopg.DB, isolated *isolatedWriteAdmission, selfAuthority string, assigner *docnumber.Assigner) (*whparcel.Opener, error) {

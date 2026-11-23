@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
@@ -33,58 +34,80 @@ func NewWarehouseAgencyAuthorizer(
 	return &WarehouseAgencyAuthorizer{keys: keys, adjudicator: adjudicator, clock: clock}, nil
 }
 
-// Allow 报告这次代办是否获准。false 且 err 为空是未配置。
+// 提交与撤回问的是同一个动作。原因只标明这次询问是哪一件事，不另造授权。
+const (
+	warehouseOutboundSubmissionReason = "WAREHOUSE_OUTBOUND_SUBMISSION"
+	warehouseOutboundWithdrawalReason = "WAREHOUSE_OUTBOUND_WITHDRAWAL"
+)
+
+// Allow 报告这次代办是否获准。false 且 err 为空是未配置或未获准，提交口都答未配置。
 func (authorizer *WarehouseAgencyAuthorizer) Allow(ctx context.Context, tenantID, ownerID string) (bool, error) {
+	_, outcome, err := authorizer.Reference(ctx, tenantID, ownerID, warehouseOutboundSubmissionReason, "warehouse-outbound:"+tenantID+"/"+ownerID)
+	if err != nil {
+		return false, err
+	}
+	return outcome == psports.AuthorizationGranted, nil
+}
+
+// Reference 问仓配代办，并在获准时带回所采用授予版本。解析键没登记与规则没登记都是未配置；适用冲突原样上抛。
+func (authorizer *WarehouseAgencyAuthorizer) Reference(
+	ctx context.Context, tenantID, ownerID, reasonText, evidenceText string,
+) (string, psports.AuthorizationOutcome, error) {
 	row, found, err := authorizer.keys.FindResolutionKey(ctx, tenantID, ownerID)
 	if err != nil {
-		return false, fmt.Errorf("warehouse agency: %w", err)
+		return "", 0, fmt.Errorf("warehouse agency: %w", err)
 	}
 	if !found {
-		return false, nil
+		return "", psports.AuthorizationRulesNotConfigured, nil
 	}
 	tenant, err := pcdomain.NewTenantID(tenantID)
 	if err != nil {
-		return false, err
+		return "", 0, err
 	}
 	account, err := pcdomain.NewCustomerAccountID(ownerID)
 	if err != nil {
-		return false, err
+		return "", 0, err
 	}
 	requester, err := pcdomain.RequestedByCustomerAccount(account)
 	if err != nil {
-		return false, err
+		return "", 0, err
 	}
 	legalEntity, err := pcdomain.NewLegalEntityReference(row.LegalEntity)
 	if err != nil {
-		return false, err
+		return "", 0, err
 	}
 	scope, err := pcdomain.NewCommercialScopeReference(row.Scope)
 	if err != nil {
-		return false, err
+		return "", 0, err
 	}
 	level, err := pcdomain.NewAuthorityLevel(WarehouseFulfillmentAgentLevel)
 	if err != nil {
-		return false, err
+		return "", 0, err
 	}
-	reason, err := pcdomain.NewStructuredReason("WAREHOUSE_OUTBOUND_SUBMISSION")
+	reason, err := pcdomain.NewStructuredReason(reasonText)
 	if err != nil {
-		return false, err
+		return "", 0, err
 	}
-	evidence, err := pcdomain.NewEvidenceReference("warehouse-outbound:" + tenantID + "/" + ownerID)
+	evidence, err := pcdomain.NewEvidenceReference(evidenceText)
 	if err != nil {
-		return false, err
+		return "", 0, err
 	}
 	request, err := pcdomain.NewAuthorizationRequestBy(
 		requester, pcdomain.WarehouseFulfillmentAgencyAction, legalEntity, level, scope, reason, evidence, authorizer.clock.Now().UTC(),
 	)
 	if err != nil {
-		return false, err
+		return "", 0, err
 	}
-	if _, err := authorizer.adjudicator.Handle(ctx, tenant, request); err != nil {
-		if errors.Is(err, pcdomain.ErrAuthorityRulesNotConfigured) || errors.Is(err, pcdomain.ErrNotAuthorized) {
-			return false, nil
+	authorized, err := authorizer.adjudicator.Handle(ctx, tenant, request)
+	if err != nil {
+		switch {
+		case errors.Is(err, pcdomain.ErrAuthorityRulesNotConfigured):
+			return "", psports.AuthorizationRulesNotConfigured, nil
+		case errors.Is(err, pcdomain.ErrNotAuthorized):
+			return "", psports.AuthorizationRefused, nil
+		default:
+			return "", 0, err
 		}
-		return false, err
 	}
-	return true, nil
+	return authorized.GrantVersion().ObjectID().String() + "/" + authorized.GrantVersion().Version().String(), psports.AuthorizationGranted, nil
 }

@@ -76,7 +76,7 @@ const (
 )
 
 type shipmentReleaser interface {
-	Release(ctx context.Context, tenant, owner, shipmentID string) (string, error)
+	Release(ctx context.Context, tenant, owner, shipmentID, request string, sequence int) (string, error)
 }
 
 func (handler *WaveHandler) Cutoff(ctx context.Context, command CutoffCommand) (CutoffResult, error) {
@@ -200,7 +200,7 @@ func (handler *WaveHandler) cutOff(ctx context.Context, command CutoffCommand, r
 		if handler.releaser == nil {
 			return CutoffNotConfigured, none, nil
 		}
-		word, err := handler.releaser.Release(ctx, command.Tenant.String(), request.Owner().String(), parcel.ShipmentRequestID)
+		word, err := handler.releaser.Release(ctx, command.Tenant.String(), request.Owner().String(), parcel.ShipmentRequestID, command.Request.String(), command.Sequence)
 		if err != nil {
 			return CutoffOutcomeInvalid, none, fmt.Errorf("cut off outbound: %w", err)
 		}
