@@ -5,6 +5,7 @@ import { operatorRefusalSentence, type OperatorRefusalKind } from '../../auth/ac
 import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
 import type { ApiResult } from '../catalogue-api';
+import { type CatalogueConditions } from '../catalogue-query';
 import { catalogueViewState } from '../catalogue-view';
 import { httpRows, type TechnicalRow } from '../../components/TechnicalDetails';
 import {
@@ -33,6 +34,7 @@ export const priceCardDraftOutcomeLabels: Record<string, string> = {
   DRAFT_REPLAYED: '同一版、同样的内容早已存过，这次没有变化',
   DRAFT_REVISED: '这一版还没批准，已换成这次上传的内容',
   CONTENT_FIXED: '这一版已经批准，内容不能再改；要改请换一个新版本号',
+  DRAFT_WITHDRAWN: '这一版已经撤下，版本号不再使用；要再用请换一个新版本号重新录入',
   NOT_ACCEPTED: '没能存为草稿，请先按预览里的问题改好',
 };
 
@@ -41,7 +43,12 @@ export const priceCardDraftStatusLabels: Record<string, string> = {
   VALIDATED: '已校验',
   APPROVED: '已批准',
   PUBLISHED: '已发布',
+  // 总表里 WITHDRAWN 是「已撤回」。价卡这一格的词是「已撤下」，不改总表。
+  WITHDRAWN: '已撤下',
 };
+
+/** 草稿状态筛选的词序，与读口 status 维的词表同一批。 */
+export const priceCardDraftStatusOrder = ['DRAFT', 'VALIDATED', 'APPROVED', 'PUBLISHED', 'WITHDRAWN'] as const;
 
 /**
  * 存草稿要先看过这一份文件的读法。未配置、传输失败、未形成答复都没让人看到读法，按「看过预览」
@@ -80,6 +87,7 @@ export const priceCardApprovalOutcomeLabels: Record<string, string> = {
   DRAFT_NOT_VALIDATED: '这一版检查没通过，不能批准；改好后重新导入',
   DRAFT_ALREADY_APPROVED: '这一版已经批准过了',
   DRAFT_ALREADY_PUBLISHED: '这一版已经发布了',
+  DRAFT_WITHDRAWN: '这一版已经撤下，不能再批准',
   DRAFT_CHANGED: '批准时这一版刚被人重新导入替换，这次没有批准；刷新后再看',
   DRAFT_NOT_FOUND: '找不到这一版草稿，刷新后再看',
 };
@@ -90,24 +98,60 @@ export const priceCardPublicationOutcomeLabels: Record<string, string> = {
   PUBLICATION_NOT_LANDED: '没有发布成功，草稿仍是已批准',
   DRAFT_NOT_APPROVED: '这一版还没批准，不能发布',
   DRAFT_ALREADY_PUBLISHED: '这一版已经发布了',
+  DRAFT_WITHDRAWN: '这一版已经撤下，不能发布，也不会进价卡册',
   DRAFT_NOT_FOUND: '找不到这一版草稿，刷新后再看',
 };
 
-export type PriceCardDraftAction = 'approve' | 'publish';
+/** 撤下口的答案代数（`application.WithdrawPriceCardDraftOutcome` 原名）。 */
+export const priceCardWithdrawalOutcomeLabels: Record<string, string> = {
+  DRAFT_WITHDRAWN: '已撤下。这一版不能再发布，版本号不再使用；还要用就另起版本号重新录入、重新批准',
+  DRAFT_NOT_APPROVED: '这一版还没批准，不能撤下',
+  DRAFT_PUBLISHED: '这一版已经发布。已发布的去处是后继截止或退役，不是撤下',
+  NOT_ACCEPTED: '没写原因，或原因里有不能保存的字符，没有撤下',
+  DRAFT_CHANGED: '撤下时这一版刚被人动过，这次没有撤下；刷新后再看',
+  DRAFT_NOT_FOUND: '找不到这一版草稿，刷新后再看',
+};
+
+export type PriceCardDraftAction = 'approve' | 'publish' | 'withdraw';
 
 export const priceCardDraftActionLabels: Record<PriceCardDraftAction, string> = {
   approve: '批准',
   publish: '发布',
+  withdraw: '撤下',
 };
 
 /**
  * 动作只在对应状态出现：已校验才能批准，已批准才能发布；草稿与已发布没有动作。别的状态名（服务端新增一格）同样
  * 不给动作——给错一个按钮比少一个按钮代价大，服务端照样会按它自己的那一格拒。
  */
+/** 已校验给批准；已批准同时给发布和撤下。别的状态，包括已撤下，不给动作。 */
+export function draftActionsOf(status: string): PriceCardDraftAction[] {
+  if (status === 'VALIDATED') return ['approve'];
+  if (status === 'APPROVED') return ['publish', 'withdraw'];
+  return [];
+}
+
 export function draftActionOf(status: string): PriceCardDraftAction | null {
-  if (status === 'VALIDATED') return 'approve';
-  if (status === 'APPROVED') return 'publish';
-  return null;
+  return draftActionsOf(status)[0] ?? null;
+}
+
+/**
+ * 撤下原因：去首尾空白后必须还有字，且不含控制字符。空的不受理，页面不发出去。
+ * 控制字符的范围与服务端认的那一档对齐：拉丁-1 里的控制字符。
+ */
+export function withdrawalReason(raw: string): string | null {
+  const reason = raw.trim();
+  if (reason === '') return null;
+  for (const char of reason) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return null;
+  }
+  return reason;
+}
+
+/** 草稿列表的状态筛选。null 是全部，不往读口发 status。 */
+export function draftListConditions(status: string | null): CatalogueConditions {
+  return { filters: { status: status === null ? [] : [status] } };
 }
 
 /** 两口的载荷只有草稿引用；租户与批准者在操作者信封里，这里不放任何身份格。 */
@@ -151,7 +195,12 @@ export function draftActionNoteOf(
   const verb = priceCardDraftActionLabels[action];
   switch (answer.kind) {
     case 'outcome': {
-      const labels = action === 'approve' ? priceCardApprovalOutcomeLabels : priceCardPublicationOutcomeLabels;
+      const labels =
+    action === 'approve'
+      ? priceCardApprovalOutcomeLabels
+      : action === 'publish'
+        ? priceCardPublicationOutcomeLabels
+        : priceCardWithdrawalOutcomeLabels;
       const { outcome, registration } = answer.body;
       const head = `${verb}：${labelOf(labels, outcome)}`;
       return {
@@ -208,12 +257,14 @@ export function draftListViewState(
   answer: ApiResult<PriceCardDraftListResponseBody> | null,
   retry: () => void,
   module: ModuleInfo,
+  narrowed = false,
 ): TemplateViewState {
   const state = catalogueViewState(answer, answer?.kind === 'outcome' ? answer.body.drafts.length : 0, retry, {
     module,
     endpoint: `GET ${priceCardDraftViewsPath}`,
     emptyTitle: '还没有价卡草稿',
     emptyDescription: '在「新建价卡」或「导入价卡」签里存为草稿后，会出现在这里等批准与发布。',
+    narrowed,
   });
   if (answer?.kind === 'noAnswer' && state.kind === 'error') {
     const description = draftRegisterNoAnswerNotes[answer.code];

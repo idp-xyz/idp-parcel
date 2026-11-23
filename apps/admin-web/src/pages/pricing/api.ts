@@ -146,6 +146,10 @@ export interface PriceCardDraftRow {
   approver?: string;
   approvedAt?: string;
   publishedAt?: string;
+  /** 已撤下才有。撤下人是服务端从操作者信封记下的主体，不是页面自报。 */
+  withdrawnBy?: string;
+  withdrawnAt?: string;
+  withdrawalReason?: string;
   content?: PriceCardImportContent;
   problems?: PriceCardProblem[];
 }
@@ -258,6 +262,7 @@ export function submitPriceCardWorkbookDraft(
 export const priceCardDraftViewsPath = '/pricing-price-card-draft-views';
 export const priceCardDraftApprovalPath = '/pricing-price-card-draft-approvals';
 export const priceCardDraftPublicationPath = '/pricing-price-card-draft-publications';
+export const priceCardDraftWithdrawalPath = '/pricing-price-card-draft-withdrawals';
 
 export interface PriceCardDraftListResponseBody {
   outcome: string;
@@ -278,6 +283,11 @@ export interface PriceCardDraftReferencePayload {
   planVersion: string;
 }
 
+/** 撤下载荷只有草稿引用和原因。撤下人在操作者信封里，这里不放。 */
+export interface PriceCardDraftWithdrawalPayload extends PriceCardDraftReferencePayload {
+  reason: string;
+}
+
 /** 价卡草稿查阅,收哪些键见 ports.PriceCardDraftPages(status 可重复给,维内为或)。 */
 export function listPriceCardDrafts(
   conditions: CatalogueConditions = {},
@@ -296,6 +306,12 @@ export function publishPriceCardDraft(
   payload: PriceCardDraftReferencePayload,
 ): Promise<ApiResult<PriceCardDraftProgressBody>> {
   return afterPricingWrite(postMasterData<PriceCardDraftProgressBody>(priceCardDraftPublicationPath, payload));
+}
+
+export function withdrawPriceCardDraft(
+  payload: PriceCardDraftWithdrawalPayload,
+): Promise<ApiResult<PriceCardDraftProgressBody>> {
+  return afterPricingWrite(postMasterData<PriceCardDraftProgressBody>(priceCardDraftWithdrawalPath, payload));
 }
 
 export function registerReferenceSeries(

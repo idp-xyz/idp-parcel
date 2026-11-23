@@ -5,7 +5,11 @@ import { priceCardUploadField, priceCardUploadForm } from './api';
 import {
   draftActionNoteOf,
   draftActionOf,
+  draftActionsOf,
+  draftListConditions,
   draftListViewState,
+  priceCardWithdrawalOutcomeLabels,
+  withdrawalReason,
   draftReferencePayload,
   draftSubmittable,
   priceCardApprovalOutcomeLabels,
@@ -67,6 +71,7 @@ const approvalOutcomes = [
   'DRAFT_NOT_VALIDATED',
   'DRAFT_ALREADY_APPROVED',
   'DRAFT_ALREADY_PUBLISHED',
+  'DRAFT_WITHDRAWN',
   'DRAFT_CHANGED',
 ];
 const publicationOutcomes = [
@@ -74,7 +79,16 @@ const publicationOutcomes = [
   'DRAFT_NOT_FOUND',
   'DRAFT_NOT_APPROVED',
   'DRAFT_ALREADY_PUBLISHED',
+  'DRAFT_WITHDRAWN',
   'PUBLICATION_NOT_LANDED',
+];
+const withdrawalOutcomes = [
+  'DRAFT_WITHDRAWN',
+  'DRAFT_NOT_APPROVED',
+  'DRAFT_PUBLISHED',
+  'NOT_ACCEPTED',
+  'DRAFT_CHANGED',
+  'DRAFT_NOT_FOUND',
 ];
 
 function draftRow(over: Partial<PriceCardDraftRow>): PriceCardDraftRow {
@@ -92,18 +106,33 @@ function draftRow(over: Partial<PriceCardDraftRow>): PriceCardDraftRow {
 const pricingModule: ModuleInfo = { title: '价卡目录', owner: '小包计价（parcel-pricing）', source: '价卡出处' };
 
 // Covers: 两口的答案代数逐格有中文，与服务端原名一一对上，不多不少。
-test('批准与发布两口的每一格答案都有中文，不多不少', () => {
+test('批准、发布与撤下三口的每一格答案都有中文，不多不少', () => {
   deepEqual(Object.keys(priceCardApprovalOutcomeLabels).sort(), [...approvalOutcomes].sort());
   deepEqual(Object.keys(priceCardPublicationOutcomeLabels).sort(), [...publicationOutcomes].sort());
+  deepEqual(Object.keys(priceCardWithdrawalOutcomeLabels).sort(), [...withdrawalOutcomes].sort());
 });
 
 // Covers: 要做的 2「动作按钮只在对应状态出现」。
-test('动作只在对应状态出现：已校验给批准，已批准给发布，草稿、已发布与没见过的状态不给', () => {
+test('动作只在对应状态出现：已校验给批准，已批准给发布和撤下，草稿、已发布、已撤下与没见过的状态不给', () => {
   equal(draftActionOf('VALIDATED'), 'approve');
   equal(draftActionOf('APPROVED'), 'publish');
+  deepEqual(draftActionsOf('APPROVED'), ['publish', 'withdraw']);
   equal(draftActionOf('DRAFT'), null);
   equal(draftActionOf('PUBLISHED'), null);
+  deepEqual(draftActionsOf('WITHDRAWN'), []);
   equal(draftActionOf('SOMETHING_NEW'), null);
+});
+
+test('撤下原因去首尾空白后必须非空，且不含控制字符', () => {
+  equal(withdrawalReason('  客户拒绝这套价  '), '客户拒绝这套价');
+  equal(withdrawalReason(''), null);
+  equal(withdrawalReason('   '), null);
+  equal(withdrawalReason('客户\n拒绝'), null);
+});
+
+test('状态筛选把选中的一格交给读口，全部则不发 status', () => {
+  deepEqual(draftListConditions(null), { filters: { status: [] } });
+  deepEqual(draftListConditions('WITHDRAWN'), { filters: { status: ['WITHDRAWN'] } });
 });
 
 // Covers: 两口载荷只收草稿引用（票 04 第 5 条）；身份在信封里，夹带身份格服务端即拒。
@@ -141,6 +170,9 @@ test('批准门的负向各格如实呈现为答案：审批职责规则未配�
   ok(notConfigured.tone === 'answered' && notConfigured.technical.some((row) => row.value === 'NOT_CONFIGURED'));
   match(note('NEEDS_ANOTHER_APPROVER').text, /录入人不能自己批准/);
   match(note('APPROVER_NOT_QUALIFIED').text, /没有批准权限/);
+  match(draftActionNoteOf('withdraw', { kind: 'outcome', status: 200, body: { outcome: 'DRAFT_NOT_APPROVED' } }).text, /还没批准，不能撤下/);
+  match(draftActionNoteOf('withdraw', { kind: 'outcome', status: 200, body: { outcome: 'DRAFT_PUBLISHED' } }).text, /后继截止或退役/);
+  match(draftActionNoteOf('publish', { kind: 'outcome', status: 200, body: { outcome: 'DRAFT_WITHDRAWN' } }).text, /不能发布/);
   match(note('SOMETHING_NEW').text, /批准：SOMETHING_NEW$/);
 });
 

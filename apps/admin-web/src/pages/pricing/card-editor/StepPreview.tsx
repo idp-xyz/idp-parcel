@@ -25,6 +25,7 @@ const draftOutcomeText: Record<string, string> = {
   DRAFT_REPLAYED: '这张卡已经存过一份一模一样的草稿，没有重复保存。',
   DRAFT_REVISED: '这一版还没批准，已用这一份替换了原来的草稿。',
   CONTENT_FIXED: '这一版已经批准，内容不能再改，这次没有保存。要调价请新建下一个版本。',
+  DRAFT_WITHDRAWN: '这一版已经撤下，版本号不再使用，这次没有保存。要再用请新建下一个版本。',
   NOT_ACCEPTED: '没有保存：这份内容连方案标识和版本都读不出来。',
 };
 
