@@ -21,11 +21,15 @@ func (double shipmentPictureDouble) LoadByParcel(context.Context, domain.TenantI
 
 type shipmentCardDouble struct {
 	path ports.SellPriceCardPath
+	at   *time.Time
 }
 
 func (double shipmentCardDouble) ResolveSellPriceCardPath(
-	context.Context, domain.TenantID, domain.EstimatePricingScope, time.Time, string,
+	_ context.Context, _ domain.TenantID, _ domain.EstimatePricingScope, at time.Time, _ string,
 ) (ports.SellPriceCardPath, error) {
+	if double.at != nil {
+		*double.at = at
+	}
 	return double.path, nil
 }
 
@@ -81,6 +85,13 @@ func shipmentRoute(t *testing.T, picture ports.ShipmentIntakePicture, adopted bo
 	*application.RouteSellOnNetworkIntakeHandler, *parcelMomentFixture, *shipmentRegistryDouble,
 ) {
 	t.Helper()
+	return shipmentRouteAt(t, picture, adopted, aggregation, nil)
+}
+
+func shipmentRouteAt(t *testing.T, picture ports.ShipmentIntakePicture, adopted bool, aggregation string, asked *time.Time) (
+	*application.RouteSellOnNetworkIntakeHandler, *parcelMomentFixture, *shipmentRegistryDouble,
+) {
+	t.Helper()
 	parcel := newParcelMomentFixture(t, domain.BillingMomentNetworkIntakeAdopted)
 	account := value(t, domain.NewSettlementAccountID, "SYN-ACCT-1")
 	var adoption domain.ShipmentBillingMomentAdoption
@@ -104,7 +115,7 @@ func shipmentRoute(t *testing.T, picture ports.ShipmentIntakePicture, adopted bo
 		Pictures:          shipmentPictureDouble{picture: picture, found: true},
 		Cards: shipmentCardDouble{path: ports.SellPriceCardPath{
 			Outcome: ports.SellPriceCardInForce, Aggregation: aggregation,
-		}},
+		}, at: asked},
 		Registry: registry, Identity: shipmentIdentityDouble{}, Downstream: &shipmentHandoffDouble{},
 		Clock: fixedClock{at: parcelMomentNow},
 	})
@@ -199,6 +210,67 @@ func TestAFormedShipmentRequestIsNotRecomputedWhenAMemberIsCancelled(t *testing.
 	}
 	if result.Outcome() != application.SellEvaluationRequestExisting || len(again.saved) != 1 {
 		t.Fatalf("结果 = %s 请求 %d，取消一件不该另起一份", result.Outcome(), len(again.saved))
+	}
+}
+
+func laterMemberCommand(t *testing.T) application.RequestSellEvaluationOnParcelMomentCommand {
+	t.Helper()
+	command := parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "network-intake/SYN-PARCEL-2/NODE_INTAKE/v1", parcelMomentNow)
+	command.Parcel = value(t, domain.NewParcelReference, "SYN-PARCEL-2")
+	return command
+}
+
+func recognizeLaterMember(t *testing.T, parcel *parcelMomentFixture) {
+	t.Helper()
+	resolution, found := parcel.resolutions.resolutions["SYN-PARCEL-1"]
+	if !found {
+		t.Fatal("夹具没有第一件的解析")
+	}
+	parcel.resolutions.resolutions["SYN-PARCEL-2"] = resolution
+}
+
+func TestAParcelCardBillsALaterShipmentMemberWhileTheFirstIsNotIntaken(t *testing.T) {
+	var asked time.Time
+	handler, parcel, registry := shipmentRouteAt(t, twoMemberPicture(false, true), true, "PER_PACKAGE", &asked)
+	recognizeLaterMember(t, parcel)
+	result, err := handler.Handle(context.Background(), laterMemberCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	record, ok := result.Request()
+	if result.Outcome() != application.SellEvaluationRequested || !ok || record.Request.Parcel().String() != "SYN-PARCEL-2" ||
+		!record.Request.PricingBasisAt().Equal(time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("结果 = %s 包裹 = %s 基准 = %s，想要第二件按自己的责任起点形成包裹级请求",
+			result.Outcome(), record.Request.Parcel(), record.Request.PricingBasisAt())
+	}
+	if parcel.registry.saves != 1 || len(registry.saved) != 0 {
+		t.Fatalf("包裹请求 %d 份、委托请求 %d 份，想要只落第二件的包裹级请求", parcel.registry.saves, len(registry.saved))
+	}
+	if !asked.Equal(time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("看价卡的时刻 = %s，想要这一拍这一件在画面上的责任起点", asked)
+	}
+}
+
+func TestAShipmentCardNamesTheFirstMemberWhileItIsNotIntaken(t *testing.T) {
+	var asked time.Time
+	handler, parcel, registry := shipmentRouteAt(t, twoMemberPicture(false, true), true, "PER_SHIPMENT", &asked)
+	recognizeLaterMember(t, parcel)
+	result, err := handler.Handle(context.Background(), laterMemberCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.SellEvaluationMembersIncomplete {
+		t.Fatalf("结果 = %s，想要还没齐", result.Outcome())
+	}
+	missing := result.MissingMembers()
+	if len(missing) != 1 || missing[0].String() != "SYN-PARCEL-1" {
+		t.Fatalf("缺件 = %v，想要 SYN-PARCEL-1", missing)
+	}
+	if len(registry.saved) != 0 || parcel.registry.saves != 0 {
+		t.Fatalf("第一件未到却落了委托请求 %d 份、包裹请求 %d 份", len(registry.saved), parcel.registry.saves)
+	}
+	if !asked.Equal(time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("看价卡的时刻 = %s，想要这一拍这一件在画面上的责任起点", asked)
 	}
 }
 

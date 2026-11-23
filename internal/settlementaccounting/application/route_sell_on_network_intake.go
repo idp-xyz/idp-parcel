@@ -85,8 +85,9 @@ func (handler *RouteSellOnNetworkIntakeHandler) Handle(
 	if len(valid) == 0 {
 		return RequestSellEvaluationOnParcelMomentResult{outcome: SellEvaluationMembersIncomplete}, nil
 	}
-	first := valid[0]
-	if !first.Adopted || first.ResponsibilityStart.IsZero() {
+	// 逐包裹按已经收寄的件计费。声明顺序里的第一件还没到就整单停住的话，靠后已经收寄的件会一直不计。
+	basis, known := responsibilityStartOf(valid, command.Parcel)
+	if !known {
 		return membersIncomplete(missing), nil
 	}
 
@@ -100,7 +101,7 @@ func (handler *RouteSellOnNetworkIntakeHandler) Handle(
 	if len(scopes) == 0 {
 		return handler.billParcels(ctx, command, valid)
 	}
-	path, err := handler.cardPath(ctx, command.TenantID, scopes, first.ResponsibilityStart, picture.ServiceProduct)
+	path, err := handler.cardPath(ctx, command.TenantID, scopes, basis, picture.ServiceProduct)
 	if err != nil {
 		return sellRequestUndecided(SellRequestShipmentPriceCardUnavailable), nil
 	}
@@ -109,6 +110,10 @@ func (handler *RouteSellOnNetworkIntakeHandler) Handle(
 		return RequestSellEvaluationOnParcelMomentResult{outcome: SellEvaluationPriceCardConflict}, nil
 	case ports.SellPriceCardInForce:
 		if path.Aggregation == "PER_SHIPMENT" {
+			first := valid[0]
+			if len(missing) > 0 || first.ResponsibilityStart.IsZero() {
+				return membersIncomplete(missing), nil
+			}
 			return handler.billShipment(ctx, command, shipment, valid, missing, account, currency, scopes, first.ResponsibilityStart)
 		}
 	}
@@ -373,6 +378,19 @@ func (handler *RouteSellOnNetworkIntakeHandler) cardPath(
 		last.Outcome = ports.SellPriceCardNotConfigured
 	}
 	return last, nil
+}
+
+func responsibilityStartOf(members []ports.ShipmentMemberIntake, parcel domain.ParcelReference) (time.Time, bool) {
+	for _, member := range members {
+		if member.Parcel != parcel.String() {
+			continue
+		}
+		if !member.Adopted || member.ResponsibilityStart.IsZero() {
+			return time.Time{}, false
+		}
+		return member.ResponsibilityStart, true
+	}
+	return time.Time{}, false
 }
 
 func classifyShipmentMembers(members []ports.ShipmentMemberIntake) (valid, missing []ports.ShipmentMemberIntake) {
