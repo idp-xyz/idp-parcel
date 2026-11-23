@@ -21,6 +21,7 @@ import {
   type ReferenceRow,
 } from './price-card-content';
 import { usePriceCardContent } from './use-price-card-content';
+import { QuotationSendForm } from './QuotationSendForm';
 import { servedProductsLabel, servedProductsText } from './service-products';
 
 // 价格表工作台的详情栏：点开一张价卡，直接看到它有哪些费用项、每项怎么收、什么时候收，不用靠试算一个个试。
@@ -388,6 +389,14 @@ export function PriceCardDetailPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         <Body answer={answer} view={view} retry={retry} />
+        {row.direction === 'SELL' && mayWrite ? (
+          <QuotationSendForm
+            lane="REGISTERED_PRICE_CARD"
+            planId={row.planId}
+            planVersion={row.planVersion}
+            contentDigest={row.contentDigest}
+          />
+        ) : null}
       </div>
     </div>
   );

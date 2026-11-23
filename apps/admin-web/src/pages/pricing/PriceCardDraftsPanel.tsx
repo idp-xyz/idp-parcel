@@ -41,6 +41,7 @@ import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { technicalRows } from '../settlement/ops-ui';
 import { useMayWriteRegistry } from '../use-operator-grants';
+import { QuotationSendForm } from './QuotationSendForm';
 
 const info = moduleInfoById['price-card-catalog'];
 
@@ -325,6 +326,14 @@ function DraftRow({
           <Button size="sm" onClick={() => onAct('publish')} disabled={locked}>
             {pending === 'publish' ? `${priceCardDraftActionLabels.publish}中…` : priceCardDraftActionLabels.publish}
           </Button>
+        ) : null}
+        {row.status === 'APPROVED' && row.content?.direction === 'SELL' && row.content.contentDigest && mayWrite ? (
+          <QuotationSendForm
+            lane="APPROVED_DRAFT"
+            planId={row.plan.id}
+            planVersion={row.plan.version}
+            contentDigest={row.content.contentDigest}
+          />
         ) : null}
         {actions.includes('withdraw') && mayWrite ? (
           <form

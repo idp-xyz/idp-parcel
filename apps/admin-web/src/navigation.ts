@@ -127,6 +127,7 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { id: 'service-products', label: '服务产品', icon: 'service-products' },
       { id: 'price-card-catalog', label: '价格表', icon: 'price-card-catalog' },
+      { id: 'quotation-sends', label: '报价发出', icon: 'quotation-sends' },
       { id: 'reference-series', label: '汇率与燃油费率', icon: 'reference-series' },
       { id: 'pricing-evaluation', label: '计费记录', icon: 'pricing-evaluation' },
       { id: 'pricing-estimate', label: '计价试算', icon: 'pricing-estimate' },
@@ -214,6 +215,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'commercial-policies': SlidersHorizontal,
   'pending-publications': FileClock,
   'price-card-catalog': BadgeDollarSign,
+  'quotation-sends': FileText,
   'reference-series': TrendingUp,
   'pricing-evaluation': Calculator,
   'pricing-estimate': Calculator,
@@ -387,6 +389,12 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     summary: '对客户与对供应商的价格表版本：导入、批准与发布。',
     owner: '小包计价（parcel-pricing）',
     source: 'docs/domain/parcel-pricing/CONTEXT.md「定价方案与价表版本」生命周期与价卡发布门禁',
+  },
+  'quotation-sends': {
+    title: '报价发出',
+    summary: '把已经固定的销售价格报给往来单位，并导出交给客户的价格表。送达不在这里记。',
+    owner: '参与方与商业（party-commercial）',
+    source: 'dox/decisions.md「对客报价」',
   },
   'reference-series': {
     title: '汇率与燃油费率',
