@@ -62,6 +62,8 @@ type WaveStore interface {
 	CancelOpenTasks(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) error
 	SaveReturnTask(ctx context.Context, tenant domain.TenantID, task ReturnTask) error
 	SetRequestStatus(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, status domain.OutboundStatus) error
+	SavePrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, shipmentID, declaredParcelID string) error
+	LoadPrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (shipmentID, declaredParcelID string, found bool, err error)
 	MarkParcelCutoff(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int) (domain.OutboundStatus, error)
 	SaveLatePick(ctx context.Context, tenant domain.TenantID, task PickTask, factID string) error
 	LoadReturnTask(ctx context.Context, tenant domain.TenantID, id string) (ReturnTask, bool, error)

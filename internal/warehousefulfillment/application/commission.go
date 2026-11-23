@@ -102,11 +102,12 @@ type commissionRequests interface {
 type commissionParcels interface {
 	ParcelsOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) ([]ports.PackParcel, error)
 	MarkShipment(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, shipmentRequestID, declaredParcelID string) error
+	LoadPrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (shipmentID, declaredParcelID string, found bool, err error)
 }
 
 // CommissionHandler 在出库请求打包之后提交委托。没标平台备货时每个包裹一份，来源请求键是（出库请求，包裹序号）。
 // 标了平台备货则等全部包裹都已打包，按（出库请求，提交轮次）交一份。代办授予没登记时答未配置，不建委托。
-// 预取不在这里：放波次只记下选择。
+// 预取过的包裹序号 1 沿用放波次交出去的那份委托，不再另交。
 type CommissionHandler struct {
 	requests     commissionRequests
 	parcels      commissionParcels
@@ -164,8 +165,18 @@ func (handler *CommissionHandler) Submit(ctx context.Context, tenant domain.Tena
 	if !pending {
 		return CommissionResult{outcome: CommissionExisting}, nil
 	}
+	prefetched, declared, foundPrefetch, err := handler.parcels.LoadPrefetch(ctx, tenant, requestID)
+	if err != nil {
+		return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
+	}
 	for _, parcel := range parcels {
 		if parcel.ShipmentRequestID != "" {
+			continue
+		}
+		if foundPrefetch && parcel.Sequence == 1 {
+			if err := handler.parcels.MarkShipment(ctx, tenant, requestID, parcel.Sequence, prefetched, declared); err != nil {
+				return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
+			}
 			continue
 		}
 		answer, err := handler.commissioner.Submit(ctx, ports.CommissionSubmission{

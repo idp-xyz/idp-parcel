@@ -1170,6 +1170,52 @@ func (store *Waves) SaveReturnTask(ctx context.Context, tenant domain.TenantID, 
 	return nil
 }
 
+func (store *Waves) SavePrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, shipmentID, declaredParcelID string) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save prefetch: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_request
+		    SET prefetch_shipment_id = $3, prefetch_declared_parcel_id = NULLIF($4, '')
+		  WHERE tenant_id = $1 AND request_id = $2 AND prefetch_shipment_id IS NULL`,
+		tenant.String(), request.String(), shipmentID, declaredParcelID)
+	if err != nil {
+		return fmt.Errorf("save prefetch: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("save prefetch: %s already has a shipment", request.String())
+	}
+	return nil
+}
+
+func (store *Waves) LoadPrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (string, string, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return "", "", false, err
+	}
+	var shipment, declared *string
+	err = querier.QueryRow(ctx,
+		`SELECT prefetch_shipment_id, prefetch_declared_parcel_id
+		   FROM warehouse_fulfillment.outbound_request
+		  WHERE tenant_id = $1 AND request_id = $2`,
+		tenant.String(), request.String()).Scan(&shipment, &declared)
+	if errors.Is(err, pgx.ErrNoRows) || shipment == nil || *shipment == "" {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return "", "", false, fmt.Errorf("load prefetch: %w", err)
+		}
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, fmt.Errorf("load prefetch: %w", err)
+	}
+	declaredID := ""
+	if declared != nil {
+		declaredID = *declared
+	}
+	return *shipment, declaredID, true, nil
+}
+
 func (store *Waves) SetRequestStatus(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, status domain.OutboundStatus) error {
 	executor, err := store.db.RequireExecutor(ctx)
 	if err != nil {

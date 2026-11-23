@@ -107,7 +107,7 @@ func (result WaveResult) Tasks() []ports.PickTask {
 	return append([]ports.PickTask(nil), result.tasks...)
 }
 
-// ReleaseWaveCommand 把已预占的请求放进一个波次。预取只记下选择，提交委托不在这一段。
+// ReleaseWaveCommand 把已预占的请求放进一个波次。标了预取并且选了包材时，本产品网络、非平台备货、仓测齐、代办已登记的请求按包裹序号 1 交一份估算委托。
 type ReleaseWaveCommand struct {
 	Tenant    domain.TenantID
 	ID        domain.WaveID
@@ -115,6 +115,7 @@ type ReleaseWaveCommand struct {
 	Operator  domain.Registrant
 	Requests  []domain.OutboundRequestID
 	Prefetch  bool
+	Packaging domain.PackagingMaterialCode
 }
 
 // PickCommand 是一条拣货事实。实拣可以少于任务数量。
@@ -167,6 +168,8 @@ type WaveHandler struct {
 	releaser shipmentReleaser
 	// charges 缺席时出库确认照样成立。重量体积单位没登记时出库作业发生项不形成。
 	charges chargeFormer
+	// prefetch 缺席时，标了预取也只分配，打包后再交委托。
+	prefetch *wavePrefetch
 }
 
 func NewWaveHandler(
@@ -310,6 +313,9 @@ func (handler *WaveHandler) Release(ctx context.Context, command ReleaseWaveComm
 	}
 	if err := handler.waves.SaveWave(ctx, command.Tenant, command.ID, command.Warehouse, command.Operator, command.Prefetch, handler.clock.Now(), command.Requests, tasks); err != nil {
 		return WaveResult{}, fmt.Errorf("release wave: %w", err)
+	}
+	if err := handler.prefetchRequests(ctx, command, tasks); err != nil {
+		return WaveResult{}, err
 	}
 	return WaveResult{outcome: WaveAllocated, tasks: tasks}, nil
 }

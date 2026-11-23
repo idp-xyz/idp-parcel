@@ -344,6 +344,7 @@ type waveDocument struct {
 	Warehouse *string   `json:"warehouse"`
 	Requests  *[]string `json:"requests"`
 	Prefetch  *bool     `json:"prefetch"`
+	Packaging *string   `json:"packagingMaterial"`
 }
 
 // ReleaseWaveCommand 把放波次译成命令。
@@ -379,7 +380,14 @@ func ReleaseWaveCommand(reader io.Reader) (application.ReleaseWaveCommand, error
 	if document.Prefetch != nil {
 		prefetch = *document.Prefetch
 	}
-	return application.ReleaseWaveCommand{ID: id, Warehouse: warehouse, Requests: requests, Prefetch: prefetch}, nil
+	var packaging domain.PackagingMaterialCode
+	if document.Packaging != nil && *document.Packaging != "" {
+		packaging, err = domain.NewPackagingMaterialCode(*document.Packaging)
+		if err != nil {
+			return none, malformed("packagingMaterial is not a code")
+		}
+	}
+	return application.ReleaseWaveCommand{ID: id, Warehouse: warehouse, Requests: requests, Prefetch: prefetch, Packaging: packaging}, nil
 }
 
 type pickDocument struct {

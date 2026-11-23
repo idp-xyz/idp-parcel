@@ -690,7 +690,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewWaveHandler(
 			waveStore, outboundStore, pickTaskIDs, discrepancyIDs, poster, stock, locations, zones, goods, holds, systemClock{}, warehouses,
-		).WithConfirmationHandoff(confirmationHandoff).WithApprovalDuties(countStore).WithShipmentReleaser(releaser).WithCharges(chargeHandler),
+		).WithConfirmationHandoff(confirmationHandoff).WithApprovalDuties(countStore).WithShipmentReleaser(releaser).WithCharges(chargeHandler).WithPrefetch(opener, measurementStore, packagingMaterials),
 		commissions: warehouseapp.NewCommissionHandler(outboundStore, waveStore, opener, warehouses),
 	}
 	followUps := transactionalFollowUp{

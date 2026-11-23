@@ -55,6 +55,55 @@ func TestAWaveAllocatesReservedStockAndAPickMovesItOut(t *testing.T) {
 	}
 }
 
+func TestAPrefetchedWaveSubmitsOneEstimatedCommission(t *testing.T) {
+	measured := newMeasurementWorld(t)
+	measured.seedStorageStock(t, 10)
+	recorded := measured.record(t, measured.clock.Now(), goodsLevelMeasureCommand(
+		t, "SYN-FACT-MEASURE", "DEV-1", measured.clock.Now(), 1, "SYN-WH-01", "SYN-OWNER-01", "SYN-GOODS-01", "件",
+		"10", "10", "10", "CM", "1", "KG",
+	))
+	if recorded.Outcome().String() == "" {
+		t.Fatal("仓测没有记下")
+	}
+	materials, err := adapter.NewPackagingMaterials(measured.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if savePackagingMaterial(t, packagingMaterialStores{transactor: measured.transactor, pool: measured.pool, packagingMaterials: materials}, packagingMaterialFixture(t, "SYN-TENANT-01", "SYN-BOX-PRE", 1, nil)) != ports.RegistryRevisionSaved {
+		t.Fatal("包材没有记下")
+	}
+	accepted := measured.acceptOutbound(t, measured.outbound(t), outboundCommand(t, "REQ-PREFETCH", 10))
+	request, ok := accepted.Request()
+	if accepted.Outcome() != application.OutboundReserved || !ok {
+		t.Fatalf("预占 %s", accepted.Outcome())
+	}
+	commissioner := &scriptedCommissioner{outcome: ports.CommissionSubmittedWord, id: "SHR-PRE"}
+	handler := measured.waves(t).WithPrefetch(commissioner, measured.measurements, materials)
+	if measured.adoptStrategy(t, handler).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("策略没有采用")
+	}
+	var released application.WaveResult
+	err = measured.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var releaseErr error
+		released, releaseErr = handler.Release(ctx, application.ReleaseWaveCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), ID: valueOf(t, domain.NewWaveID, "WAVE-PRE"),
+			Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), Operator: valueOf(t, domain.NewRegistrant, "operator-1"),
+			Requests: []domain.OutboundRequestID{request.ID()}, Prefetch: true,
+			Packaging: valueOf(t, domain.NewPackagingMaterialCode, "SYN-BOX-PRE"),
+		})
+		return releaseErr
+	})
+	if err != nil || released.Outcome() != application.WaveAllocated || commissioner.called != 1 || commissioner.last.Sequence != 1 || commissioner.last.Parcel.Quantity != 10 || commissioner.last.Parcel.Weight != "10.25" {
+		t.Fatalf("预取 %s 调用 %d 重量 %s err %v", released.Outcome(), commissioner.called, commissioner.last.Parcel.Weight, err)
+	}
+	var shipment string
+	if err := measured.pool.QueryRow(t.Context(),
+		`SELECT prefetch_shipment_id FROM warehouse_fulfillment.outbound_request WHERE tenant_id = 'SYN-TENANT-01' AND request_id = $1`,
+		request.ID().String()).Scan(&shipment); err != nil || shipment != "SHR-PRE-1" {
+		t.Fatalf("记下的委托 %s err %v", shipment, err)
+	}
+}
+
 func TestAShortPickKeepsTheUnpickedReservation(t *testing.T) {
 	world := newReceiptWorld(t)
 	world.seedStorageStock(t, 10)
@@ -408,6 +457,9 @@ func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 	if err := waves.SaveReturnTask(ctx, tenant, ports.ReturnTask{ID: "RET-1", Request: valueOf(t, domain.NewOutboundRequestID, "OBR-1"), Location: valueOf(t, domain.NewLocationCode, "SYN-LOC-OUT"), Goods: valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), Unit: valueOf(t, domain.NewGoodsUnitName, "件"), State: domain.StockStateGood, Inbound: valueOf(t, domain.NewInboundBatchID, "IB-1"), Quantity: 1}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveReturnTask：%v", err)
+	}
+	if err := waves.SavePrefetch(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), "SHR-1", "DPCL-1"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SavePrefetch：%v", err)
 	}
 	if err := waves.SetRequestStatus(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), domain.OutboundCancelled); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SetRequestStatus：%v", err)
