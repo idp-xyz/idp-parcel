@@ -23,6 +23,9 @@ export const priceCardPreviewOutcomeLabels: Record<string, string> = {
   VALIDATED: '检查通过，可以存为草稿',
   HAS_PROBLEMS: '有问题：按下表逐格改好，再重新上传',
   NOT_ACCEPTED: '读不出这是哪张价卡（方案编号或版本没填），请用模板重新填写',
+  DIRECTION_AUTHORIZATION_NOT_PUBLISHED: '引用的价格方向授权不在册，或还没发布。检查没有通过，不能当已校验',
+  DIRECTION_AUTHORIZATION_EXPIRED_OR_CLOSED: '引用的价格方向授权已到期或已收尾。检查没有通过',
+  DIRECTION_AUTHORIZATION_DIRECTION_MISMATCH: '引用的授权方向和价卡方向不一致。检查没有通过',
 };
 
 export const priceCardDraftOutcomeLabels: Record<string, string> = {

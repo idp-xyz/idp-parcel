@@ -10,7 +10,7 @@ import type { Issue } from '../card-form/validate';
 import { unlocatedWords, type LocatedProblem, type MappedProblems } from '../card-form/problems';
 import { parsePriceCardContent, type PriceCardContentView } from '../price-card-content';
 import { PriceCardViewSections } from '../PriceCardDetailPanel';
-import { priceCardDraftStatusLabels } from '../price-card-import';
+import { priceCardDraftStatusLabels, priceCardPreviewOutcomeLabels } from '../price-card-import';
 import { SectionTitle, hintClass } from './controls';
 import { ChannelProblem } from './ChannelProblem';
 import { stepTitles } from '../card-form/model';
@@ -207,6 +207,11 @@ export function StepPreview({
           ) : null}
           {reading.outcome === 'NOT_ACCEPTED' && (preview?.mapped.located.length ?? 0) + (preview?.mapped.unlocated.length ?? 0) === 0 ? (
             <p className="type-body text-[color:var(--ds-status-danger-fg)]">这份内容没有被接受，也没有给出具体原因；请检查方案标识和版本是否填好。</p>
+          ) : null}
+          {reading.outcome !== 'HAS_PROBLEMS' && reading.outcome !== 'NOT_ACCEPTED' && (preview?.mapped.located.length ?? 0) + (preview?.mapped.unlocated.length ?? 0) === 0 ? (
+            <p className="type-body text-[color:var(--ds-status-danger-fg)]">
+              {priceCardPreviewOutcomeLabels[reading.outcome] ?? reading.outcome}
+            </p>
           ) : null}
         </section>
       ) : null}

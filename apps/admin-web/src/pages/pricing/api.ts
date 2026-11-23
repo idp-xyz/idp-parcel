@@ -48,6 +48,9 @@ export const registrationOutcomeLabels: Record<string, string> = {
   // ADR-0352：不是卡有错，是部署还没放开较新的计价结构；续办在运维，不在改卡。
   NEWER_CANONICALIZATION_NOT_ENABLED:
     '这张价卡用了较新的计价结构，当前环境尚未允许登记。请先确认所有服务都已升级到新版本，再请运维开启开关后重试。',
+  DIRECTION_AUTHORIZATION_NOT_PUBLISHED: '这张价卡引用的价格方向授权不在册，或还没发布，没有登记',
+  DIRECTION_AUTHORIZATION_EXPIRED_OR_CLOSED: '这张价卡引用的价格方向授权已到期或已收尾，没有登记',
+  DIRECTION_AUTHORIZATION_DIRECTION_MISMATCH: '这张价卡引用的授权方向和价卡方向不一致，没有登记',
 };
 
 export function registerPriceCard(

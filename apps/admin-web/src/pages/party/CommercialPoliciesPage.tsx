@@ -3,6 +3,7 @@ import { useAnswer, useRetryWhenChanged } from '../../query/answers';
 import { partyAnswersDomain } from './party-writes';
 import { commercialVersionReadbackEndpointNote, readCommercialVersion, readVersionOf } from './commercial-version-api';
 import { VersionObjectPage } from './VersionObjectPage';
+import { CitingPriceCards } from './CitingPriceCards';
 import { versionObjectHash, versionObjectOf, type VersionObjectAddress } from './version-object-address';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { useRegisterList } from './register-list';
@@ -330,6 +331,17 @@ function PolicyObjectPage({ register, objectId, version, directory }: VersionObj
               收尾…
             </Button>
           ) : undefined
+        }
+        extraSections={
+          register === 'PRICE_POLICY' || register === 'AUTHORIZATION_RULE'
+            ? [
+                {
+                  id: 'citing-price-cards',
+                  title: '引用它的价卡',
+                  content: <CitingPriceCards register={register} objectId={objectId} version={version} />,
+                },
+              ]
+            : undefined
         }
         viewState={catalogueViewState(answer, row ? 1 : 0, readback.retry, {
           module: info,
