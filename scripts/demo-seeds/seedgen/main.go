@@ -9,6 +9,7 @@
 // 全部实例值是 SYN- 前缀的合成内容，证据层级 S：不影射任何真实企业，不写生产默认值，
 // 不进参数登记册。跨上下文引用按所有权只引不解析：方向授权与汇率口径指向
 // party-commercial 的合成发布对象（SYN-AUTH-PRICE-DIR-01 / SYN-PRICE-RULE-CN-SG）。
+// 成本卡引 SYN-AUTH-COST-DIR-01 的 v2：v1 壳指名服务产品，读不出买入方向。
 package main
 
 import (
@@ -295,7 +296,9 @@ func buyCardSnapshot() []byte {
 	)
 	must("成本方案", err)
 
-	return marshalCard(plan, "SYN-CARD-CN-SG-COST-01.xlsx", "SYN-AUTH-COST-DIR-01")
+	// v1 是首发批里的壳，壳上指名服务产品而不是价格规则，入册前的方向核对读不出买入。
+	// v2 由步骤 145 发布，指名买入价格规则；金额仍是这张卡上原有的合成取值。
+	return marshalCardAt(plan, "SYN-CARD-CN-SG-COST-01.xlsx", "SYN-AUTH-COST-DIR-01", "v2")
 }
 
 // fuelSeriesSnapshot 折装燃油系数序列 SYN-SERIES-FUEL-01 v1：三期取值、每期带合成
@@ -342,6 +345,10 @@ func fxSeriesSnapshot() []byte {
 }
 
 func marshalCard(plan domain.PricingPlanVersion, sourceName, authorizationID string) []byte {
+	return marshalCardAt(plan, sourceName, authorizationID, "v1")
+}
+
+func marshalCardAt(plan domain.PricingPlanVersion, sourceName, authorizationID, authorizationVersion string) []byte {
 	// 合成源文件并不存在，SHA-256 取文件名字符串的摘要：确定性、可复算，且不冒充
 	// 真实证据库里的任何东西。
 	digest := sha256.Sum256([]byte(sourceName))
@@ -350,7 +357,7 @@ func marshalCard(plan domain.PricingPlanVersion, sourceName, authorizationID str
 
 	registration, err := domain.NewPriceCardRegistration(
 		tenant(), plan, source,
-		reference(domain.ArtifactCommercialAuthorization, authorizationID, "v1"),
+		reference(domain.ArtifactCommercialAuthorization, authorizationID, authorizationVersion),
 		approver,
 	)
 	must("价卡登记 "+sourceName, err)

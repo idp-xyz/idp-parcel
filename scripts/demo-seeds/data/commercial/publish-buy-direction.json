@@ -1,0 +1,47 @@
+{
+  "items": [
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "PRICE_RULE",
+      "objectId": "SYN-PRICE-RULE-CN-SG-BUY",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "PCC-1:8c942cd4310fdace1fa42c61053cca64465db40c372369e33673559ca12c8094",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-038",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "pricePolicyBody": {
+          "direction": "BUY",
+          "pricingPlan": "SYN-PLAN-CN-SG-COST-01",
+          "planDirection": "BUY",
+          "conversion": "NONE",
+          "scope": "SYN-SCOPE-01",
+          "effectiveStartsAt": "2026-01-01T00:00:00Z"
+        }
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "AUTHORIZATION_RULE",
+      "objectId": "SYN-AUTH-COST-DIR-01",
+      "version": "v2",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-AUTH-COST-DIR-01-v2",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "PRICE_RULE": "SYN-PRICE-RULE-CN-SG-BUY"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-039",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED"
+    }
+  ]
+}
