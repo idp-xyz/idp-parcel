@@ -95,4 +95,12 @@ func TestPricingWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := drafts.SubmitDraft(ctx, domain.PriceCardDraft{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务录入草稿应返回 ErrTransactionRequired，实得：%v", err)
 	}
+
+	bases, err := adapter.NewPublicationBases(db)
+	if err != nil {
+		t.Fatalf("构造发布依据册：%v", err)
+	}
+	if err := bases.SavePublicationBasis(ctx, domain.TenantID{}, "", "", ""); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务记发布依据应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }

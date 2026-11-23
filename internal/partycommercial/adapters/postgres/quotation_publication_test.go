@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -19,6 +20,21 @@ type publicationTestError string
 func errPublication(text string) error { return publicationTestError(text) }
 
 func (err publicationTestError) Error() string { return string(err) }
+
+// 写口在无事务上下文必须被 RequireExecutor 拒绝。拒绝先于任何入参解读，所以传零值就够。
+func TestQuotationPublicationRequirementWritesRefuseToRunOutsideATransaction(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	view, err := adapter.NewQuotationPublication(db)
+	if err != nil {
+		t.Fatalf("构造发布前提册：%v", err)
+	}
+	if _, _, err := view.SaveQuotationPublicationRequirement(t.Context(), domain.QuotationPublicationRequirement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记发布前提应返回 ErrTransactionRequired，实得：%v", err)
+	}
+}
 
 func TestAnUnconfiguredPublicationRuleDoesNotNameAScope(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
