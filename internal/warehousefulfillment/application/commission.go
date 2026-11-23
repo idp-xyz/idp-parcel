@@ -104,8 +104,9 @@ type commissionParcels interface {
 	MarkShipment(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, shipmentRequestID, declaredParcelID string) error
 }
 
-// CommissionHandler 在出库请求打包之后，为本产品网络的每个包裹提交一份委托。
-// 来源请求键是（出库请求，包裹序号）。代办授予没登记时答未配置，不建委托。预取不在这里：放波次只记下选择。
+// CommissionHandler 在出库请求打包之后提交委托。没标平台备货时每个包裹一份，来源请求键是（出库请求，包裹序号）。
+// 标了平台备货则等全部包裹都已打包，按（出库请求，提交轮次）交一份。代办授予没登记时答未配置，不建委托。
+// 预取不在这里：放波次只记下选择。
 type CommissionHandler struct {
 	requests     commissionRequests
 	parcels      commissionParcels
@@ -150,6 +151,9 @@ func (handler *CommissionHandler) Submit(ctx context.Context, tenant domain.Tena
 	if len(parcels) == 0 {
 		return CommissionResult{outcome: CommissionStatusMismatch}, nil
 	}
+	if request.PlatformStocking() {
+		return handler.submitPlatform(ctx, tenant, request, requestID, parcels)
+	}
 	pending := false
 	for _, parcel := range parcels {
 		if parcel.ShipmentRequestID == "" {
@@ -191,6 +195,67 @@ func (handler *CommissionHandler) Submit(ctx context.Context, tenant domain.Tena
 		}
 	}
 	return CommissionResult{outcome: CommissionSubmitted}, nil
+}
+
+func (handler *CommissionHandler) submitPlatform(
+	ctx context.Context,
+	tenant domain.TenantID,
+	request domain.OutboundRequest,
+	requestID domain.OutboundRequestID,
+	parcels []ports.PackParcel,
+) (CommissionResult, error) {
+	pending := 0
+	packed := make([]ports.CommissionParcel, 0, len(parcels))
+	for _, parcel := range parcels {
+		if parcel.ShipmentRequestID == "" {
+			pending++
+		}
+		packed = append(packed, commissionParcelOf(parcel))
+	}
+	if pending == 0 {
+		return CommissionResult{outcome: CommissionExisting}, nil
+	}
+	if pending != len(parcels) {
+		return CommissionResult{}, fmt.Errorf("submit outbound commission: platform stocking left some parcels unmarked")
+	}
+	answer, err := handler.commissioner.Submit(ctx, ports.CommissionSubmission{
+		Tenant: tenant.String(), Owner: request.Owner().String(), Request: requestID.String(), Round: 1,
+		Service: request.Service(), Recipient: request.Recipient(), Address: request.Address(), Parcels: packed,
+	})
+	if err != nil {
+		return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
+	}
+	outcome := commissionOutcomeOf(answer.Outcome)
+	if outcome == CommissionOutcomeInvalid {
+		return CommissionResult{}, fmt.Errorf("submit outbound commission: unnamed outcome %q", answer.Outcome)
+	}
+	if outcome != CommissionSubmitted && outcome != CommissionExisting {
+		return CommissionResult{outcome: outcome}, nil
+	}
+	if answer.ShipmentRequestID == "" {
+		return CommissionResult{}, fmt.Errorf("submit outbound commission: %s named no shipment request", answer.Outcome)
+	}
+	members := answer.Members
+	if len(members) == 0 && len(parcels) == 1 {
+		members = []ports.CommissionMember{{Sequence: parcels[0].Sequence, DeclaredParcelID: answer.DeclaredParcelID}}
+	}
+	if len(members) != len(parcels) {
+		return CommissionResult{}, fmt.Errorf("submit outbound commission: platform stocking named %d parcels, packed %d", len(members), len(parcels))
+	}
+	for _, member := range members {
+		if err := handler.parcels.MarkShipment(ctx, tenant, requestID, member.Sequence, answer.ShipmentRequestID, member.DeclaredParcelID); err != nil {
+			return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
+		}
+	}
+	return CommissionResult{outcome: CommissionSubmitted}, nil
+}
+
+func commissionParcelOf(parcel ports.PackParcel) ports.CommissionParcel {
+	return ports.CommissionParcel{
+		Sequence: parcel.Sequence, Weight: parcel.Weight, WeightUnit: parcel.WeightUnit,
+		Length: parcel.Length, Width: parcel.Width, Height: parcel.Height, Dimension: parcel.Dimension,
+		Goods: parcel.Goods.String(), Unit: parcel.Unit.String(), Quantity: parcel.Quantity,
+	}
 }
 
 func commissionOutcomeOf(word string) CommissionOutcome {

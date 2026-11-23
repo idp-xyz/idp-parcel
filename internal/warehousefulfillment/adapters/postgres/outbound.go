@@ -131,12 +131,13 @@ func (store *OutboundRequests) Save(ctx context.Context, request domain.Outbound
 		`INSERT INTO warehouse_fulfillment.outbound_request (
 		    tenant_id, request_id, owner_account_id, warehouse_code, origin, request_key, dispatch,
 		    service_product, recipient, address, basis, operator_id, status, document_number, numbering_absence, received_at,
-		    parent_request_id
-		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+		    parent_request_id, platform_stocking
+		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
 		request.Tenant().String(), request.ID().String(), request.Owner().String(), request.Warehouse().String(),
 		request.Origin().String(), request.Key().String(), request.Dispatch().String(), nullableText(request.Service()),
 		request.Recipient(), request.Address(), nullableText(request.Basis()), nullableText(request.Operator()),
 		request.Status().String(), number, absence, request.ReceivedAt(), nullableText(request.Parent().String()),
+		request.PlatformStocking(),
 	); err != nil {
 		return fmt.Errorf("save outbound request: %w", err)
 	}
@@ -277,12 +278,14 @@ func scanOutbound(ctx context.Context, querier bentopg.Querier, tenant domain.Te
 	var id, owner, warehouse, origin, key, dispatch, recipient, address, status string
 	var service, basis, operator, number, absence, parent *string
 	var received time.Time
+	var platformStocking bool
 	err := querier.QueryRow(ctx,
 		`SELECT request_id, owner_account_id, warehouse_code, origin, request_key, dispatch, service_product,
-		        recipient, address, basis, operator_id, status, document_number, numbering_absence, received_at, parent_request_id
+		        recipient, address, basis, operator_id, status, document_number, numbering_absence, received_at, parent_request_id,
+		        platform_stocking
 		   FROM warehouse_fulfillment.outbound_request
 		  WHERE tenant_id = $1 AND `+where,
-		args...).Scan(&id, &owner, &warehouse, &origin, &key, &dispatch, &service, &recipient, &address, &basis, &operator, &status, &number, &absence, &received, &parent)
+		args...).Scan(&id, &owner, &warehouse, &origin, &key, &dispatch, &service, &recipient, &address, &basis, &operator, &status, &number, &absence, &received, &parent, &platformStocking)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.OutboundRequest{}, false, nil
 	}
@@ -351,6 +354,7 @@ func scanOutbound(ctx context.Context, querier bentopg.Querier, tenant domain.Te
 		Dispatch: parsedDispatch, Service: valueOrEmpty(service), Recipient: recipient, Address: address,
 		Basis: valueOrEmpty(basis), Operator: valueOrEmpty(operator), Status: parsedStatus, Parent: parsedParent,
 		Number: document, Absence: numbering, Lines: lines, Reservations: reservations, ReceivedAt: received,
+		PlatformStocking: platformStocking,
 	})
 	if err != nil {
 		return domain.OutboundRequest{}, false, err

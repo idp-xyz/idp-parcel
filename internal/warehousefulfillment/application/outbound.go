@@ -79,19 +79,20 @@ func (result OutboundResult) Request() (domain.OutboundRequest, bool) {
 
 // AcceptOutboundCommand 是货主提交或运营代录一份出库请求。货主口的货主取自信封。
 type AcceptOutboundCommand struct {
-	Tenant    domain.TenantID
-	Owner     domain.OwnerAccountID
-	Warehouse domain.WarehouseCode
-	Origin    domain.OutboundOrigin
-	Key       domain.RequestKey
-	Dispatch  domain.DispatchMethod
-	Service   string
-	Recipient string
-	Address   string
-	Basis     string
-	Operator  domain.Registrant
-	Lines     []domain.OutboundLine
-	Parent    domain.OutboundRequestID
+	Tenant           domain.TenantID
+	Owner            domain.OwnerAccountID
+	Warehouse        domain.WarehouseCode
+	Origin           domain.OutboundOrigin
+	Key              domain.RequestKey
+	Dispatch         domain.DispatchMethod
+	Service          string
+	Recipient        string
+	Address          string
+	Basis            string
+	Operator         domain.Registrant
+	Lines            []domain.OutboundLine
+	Parent           domain.OutboundRequestID
+	PlatformStocking bool
 }
 
 // RegisterShortagePolicyCommand 登记某个货主的缺货处置。修订只追加。
@@ -291,7 +292,7 @@ func (handler *OutboundHandler) save(
 		Key: command.Key, Dispatch: command.Dispatch, Service: command.Service, Recipient: command.Recipient,
 		Address: command.Address, Basis: command.Basis, Operator: command.Operator.String(), Status: status,
 		Parent: command.Parent, Number: number, Absence: absence, Lines: command.Lines, Reservations: planned,
-		ReceivedAt: handler.clock.Now(),
+		ReceivedAt: handler.clock.Now(), PlatformStocking: command.PlatformStocking,
 	})
 	if err != nil {
 		return OutboundResult{}, fmt.Errorf("accept outbound: %w", err)
@@ -337,7 +338,7 @@ func sameOutboundSubmission(existing domain.OutboundRequest, command AcceptOutbo
 		Tenant: existing.Tenant(), ID: existing.ID(), Owner: existing.Owner(), Warehouse: command.Warehouse,
 		Origin: existing.Origin(), Key: existing.Key(), Dispatch: command.Dispatch, Service: command.Service,
 		Recipient: command.Recipient, Address: command.Address, Status: existing.Status(), Lines: command.Lines,
-		ReceivedAt: existing.ReceivedAt(),
+		ReceivedAt: existing.ReceivedAt(), PlatformStocking: command.PlatformStocking,
 	})
 	if err != nil {
 		return false

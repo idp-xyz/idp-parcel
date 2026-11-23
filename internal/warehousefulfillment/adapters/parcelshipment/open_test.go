@@ -101,6 +101,31 @@ func TestAGrantedAgencySubmitsWarehouseOutboundUnderTheParcelKey(t *testing.T) {
 	}
 }
 
+func TestAPlatformStockingRoundSubmitsEveryParcelUnderOneKey(t *testing.T) {
+	shipments := &shipmentDouble{}
+	opener, err := NewOpener(allowanceDouble{granted: true}, shipments, ownershipDouble{}, frozenClock{at: time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	submission := commissionOf()
+	submission.Round = 1
+	submission.Sequence = 0
+	second := submission.Parcel
+	second.Sequence = 3
+	second.Quantity = 2
+	submission.Parcels = []ports.CommissionParcel{submission.Parcel, second}
+	answer, err := opener.Submit(t.Context(), submission)
+	if err != nil || shipments.called != 1 {
+		t.Fatalf("err %v called %d", err, shipments.called)
+	}
+	if shipments.command.Identity.RequestKey().String() != "OBR-1/round/1" || len(shipments.command.DeclaredParcelIDs) != 2 || len(answer.Members) != 2 {
+		t.Fatalf("key %s members %d answer %d", shipments.command.Identity.RequestKey(), len(shipments.command.DeclaredParcelIDs), len(answer.Members))
+	}
+	if answer.Members[0].Sequence != 2 || answer.Members[1].Sequence != 3 || answer.DeclaredParcelID != "" {
+		t.Fatalf("members %+v single %s", answer.Members, answer.DeclaredParcelID)
+	}
+}
+
 type frozenClock struct{ at time.Time }
 
 func (clock frozenClock) Now() time.Time { return clock.at }

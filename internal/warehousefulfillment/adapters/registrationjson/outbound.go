@@ -19,24 +19,26 @@ type outboundLineDocument struct {
 type ownerOutboundDocument struct {
 	carriedIdentity
 	refusedOwner
-	AccessRequestID *string                 `json:"accessRequestId"`
-	Warehouse       *string                 `json:"warehouse"`
-	Dispatch        *string                 `json:"dispatch"`
-	Service         *string                 `json:"service"`
-	Recipient       *string                 `json:"recipient"`
-	Address         *string                 `json:"address"`
-	Lines           *[]outboundLineDocument `json:"lines"`
+	AccessRequestID  *string                 `json:"accessRequestId"`
+	Warehouse        *string                 `json:"warehouse"`
+	Dispatch         *string                 `json:"dispatch"`
+	Service          *string                 `json:"service"`
+	Recipient        *string                 `json:"recipient"`
+	Address          *string                 `json:"address"`
+	Lines            *[]outboundLineDocument `json:"lines"`
+	PlatformStocking *bool                   `json:"platformStocking"`
 }
 
 // OwnerOutboundFields 是货主口译出的出库请求。货主与来源请求键由信封填。
 type OwnerOutboundFields struct {
-	AccessRequestID string
-	Warehouse       domain.WarehouseCode
-	Dispatch        domain.DispatchMethod
-	Service         string
-	Recipient       string
-	Address         string
-	Lines           []domain.OutboundLine
+	AccessRequestID  string
+	Warehouse        domain.WarehouseCode
+	Dispatch         domain.DispatchMethod
+	Service          string
+	Recipient        string
+	Address          string
+	Lines            []domain.OutboundLine
+	PlatformStocking bool
 }
 
 // ReadOwnerOutbound 把货主提交的出库请求译成字段。
@@ -57,20 +59,22 @@ func ReadOwnerOutbound(reader io.Reader) (OwnerOutboundFields, error) {
 		return none, err
 	}
 	fields.AccessRequestID = rawAccessRequestID(document.AccessRequestID)
+	fields.PlatformStocking = markedPlatformStocking(document.PlatformStocking)
 	return fields, nil
 }
 
 type operatorOutboundDocument struct {
 	carriedIdentity
-	DecisionID   *string                 `json:"decisionId"`
-	OwnerAccount *string                 `json:"ownerAccount"`
-	Basis        *string                 `json:"basis"`
-	Warehouse    *string                 `json:"warehouse"`
-	Dispatch     *string                 `json:"dispatch"`
-	Service      *string                 `json:"service"`
-	Recipient    *string                 `json:"recipient"`
-	Address      *string                 `json:"address"`
-	Lines        *[]outboundLineDocument `json:"lines"`
+	DecisionID       *string                 `json:"decisionId"`
+	OwnerAccount     *string                 `json:"ownerAccount"`
+	Basis            *string                 `json:"basis"`
+	Warehouse        *string                 `json:"warehouse"`
+	Dispatch         *string                 `json:"dispatch"`
+	Service          *string                 `json:"service"`
+	Recipient        *string                 `json:"recipient"`
+	Address          *string                 `json:"address"`
+	Lines            *[]outboundLineDocument `json:"lines"`
+	PlatformStocking *bool                   `json:"platformStocking"`
 }
 
 // OperatorOutboundCommand 把代录的出库请求译成命令。租户与操作者由 Intake 填。
@@ -101,8 +105,12 @@ func OperatorOutboundCommand(reader io.Reader) (application.AcceptOutboundComman
 	return application.AcceptOutboundCommand{
 		Owner: owner, Warehouse: fields.Warehouse, Origin: domain.OutboundOriginOperator, Key: key,
 		Dispatch: fields.Dispatch, Service: fields.Service, Recipient: fields.Recipient, Address: fields.Address,
-		Basis: *document.Basis, Lines: fields.Lines,
+		Basis: *document.Basis, Lines: fields.Lines, PlatformStocking: markedPlatformStocking(document.PlatformStocking),
 	}, nil
+}
+
+func markedPlatformStocking(value *bool) bool {
+	return value != nil && *value
 }
 
 func outboundFields(warehouse, dispatch, service, recipient, address *string, lines *[]outboundLineDocument) (OwnerOutboundFields, error) {

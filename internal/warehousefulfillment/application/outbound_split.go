@@ -102,6 +102,7 @@ func (handler *OutboundHandler) Split(ctx context.Context, command SplitOutbound
 			Tenant: command.Tenant, Owner: owner, Warehouse: parent.Warehouse(), Origin: command.Origin, Key: part.Key,
 			Dispatch: parent.Dispatch(), Service: parent.Service(), Recipient: parent.Recipient(), Address: parent.Address(),
 			Basis: command.Basis, Operator: command.Operator, Lines: part.Lines, Parent: parent.ID(),
+			PlatformStocking: parent.PlatformStocking(),
 		})
 		if err != nil {
 			return SplitResult{}, err

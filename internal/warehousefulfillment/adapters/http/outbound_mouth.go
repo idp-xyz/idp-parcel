@@ -91,7 +91,7 @@ func (intake *CustomerOutboundIntake) IntakeOutboundRequest(ctx context.Context,
 	return application.AcceptOutboundCommand{
 		Tenant: identity.Tenant, Owner: identity.Owner, Warehouse: fields.Warehouse, Origin: domain.OutboundOriginCustomer,
 		Key: identity.RequestKey, Dispatch: fields.Dispatch, Service: fields.Service, Recipient: fields.Recipient,
-		Address: fields.Address, Lines: fields.Lines,
+		Address: fields.Address, Lines: fields.Lines, PlatformStocking: fields.PlatformStocking,
 	}, nil
 }
 

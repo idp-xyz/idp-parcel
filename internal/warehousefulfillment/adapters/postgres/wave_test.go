@@ -189,6 +189,48 @@ func TestAPackedNetworkParcelSubmitsOneCommissionPerParcel(t *testing.T) {
 	}
 }
 
+func TestPlatformStockingSubmitsOneCommissionForEveryPackedParcel(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedStorageStock(t, 10)
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-OUT", 1, func(spec *domain.ZoneContentSpec) {
+		spec.Usage = domain.ZoneUsageOutboundStaging
+	}))
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-OUT", 1, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-OUT")
+	}))
+	command := outboundCommand(t, "REQ-PLATFORM", 10)
+	command.PlatformStocking = true
+	accepted := world.acceptOutbound(t, world.outbound(t), command)
+	request, _ := accepted.Request()
+	if !request.PlatformStocking() {
+		t.Fatal("平台备货没有落在请求上")
+	}
+	handler := world.waves(t)
+	if world.adoptStrategy(t, handler).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("策略没有采用")
+	}
+	released := world.releaseWave(t, handler, "WAVE-PLATFORM", request.ID())
+	if len(released.Tasks()) == 0 || world.pick(t, handler, released.Tasks()[0].ID, 10).Outcome() != application.WavePicked {
+		t.Fatal("没有拣完")
+	}
+	if world.checkOutbound(t, handler, request.ID(), "SYN-FACT-PLATFORM", 10).Outcome() != application.WaveChecked {
+		t.Fatal("没有复核")
+	}
+	if world.packOutbound(t, handler, request.ID(), "SYN-FACT-PLATFORM-PACK", 6, 4).Outcome() != application.WavePacked {
+		t.Fatal("没有打包")
+	}
+	one := &scriptedCommissioner{outcome: ports.CommissionSubmittedWord, id: "SHR-PLATFORM"}
+	if got := world.submitCommission(t, one, request.ID()); got != application.CommissionSubmitted || one.called != 1 || one.last.Round != 1 || len(one.last.Parcels) != 2 || submittedParcels(t, world, request.ID()) != 2 {
+		t.Fatalf("平台备货 %s 调用 %d 轮次 %d 包裹 %d 已提交 %d", got, one.called, one.last.Round, len(one.last.Parcels), submittedParcels(t, world, request.ID()))
+	}
+	var shipments int
+	if err := world.pool.QueryRow(t.Context(),
+		`SELECT count(DISTINCT shipment_request_id) FROM warehouse_fulfillment.outbound_parcel
+		  WHERE tenant_id = 'SYN-TENANT-01' AND request_id = $1`, request.ID().String()).Scan(&shipments); err != nil || shipments != 1 {
+		t.Fatalf("委托份数 %d err %v", shipments, err)
+	}
+}
+
 // Covers: 接受决定信封推进装箱记录。来源不是仓配出库的入账收工，包裹不动。同一决定再投答已有结果。
 func TestAnAcceptanceEnvelopeAdvancesTheMatchingParcel(t *testing.T) {
 	world := newReceiptWorld(t)
@@ -728,13 +770,23 @@ type scriptedCommissioner struct {
 	outcome string
 	id      string
 	called  int
+	last    ports.CommissionSubmission
 }
 
-func (commissioner *scriptedCommissioner) Submit(context.Context, ports.CommissionSubmission) (ports.CommissionAnswer, error) {
+func (commissioner *scriptedCommissioner) Submit(_ context.Context, submission ports.CommissionSubmission) (ports.CommissionAnswer, error) {
 	commissioner.called++
+	commissioner.last = submission
 	answer := ports.CommissionAnswer{Outcome: commissioner.outcome}
 	if commissioner.id != "" {
 		answer.ShipmentRequestID = commissioner.id + "-" + strconv.Itoa(commissioner.called)
+	}
+	for _, parcel := range submission.Parcels {
+		answer.Members = append(answer.Members, ports.CommissionMember{
+			Sequence: parcel.Sequence, DeclaredParcelID: "DCL-" + strconv.Itoa(parcel.Sequence),
+		})
+	}
+	if len(answer.Members) == 1 {
+		answer.DeclaredParcelID = answer.Members[0].DeclaredParcelID
 	}
 	return answer, nil
 }

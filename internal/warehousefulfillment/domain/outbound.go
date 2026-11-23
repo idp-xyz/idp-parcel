@@ -235,47 +235,49 @@ type OutboundReservation struct {
 
 // OutboundRequest 是已经落册的出库请求。
 type OutboundRequest struct {
-	tenant       TenantID
-	id           OutboundRequestID
-	owner        OwnerAccountID
-	warehouse    WarehouseCode
-	origin       OutboundOrigin
-	key          RequestKey
-	dispatch     DispatchMethod
-	service      string
-	recipient    string
-	address      string
-	basis        string
-	operator     string
-	status       OutboundStatus
-	parent       OutboundRequestID
-	number       DocumentNumber
-	absence      NumberingAbsence
-	lines        []OutboundLine
-	reservations []OutboundReservation
-	receivedAt   time.Time
+	tenant           TenantID
+	id               OutboundRequestID
+	owner            OwnerAccountID
+	warehouse        WarehouseCode
+	origin           OutboundOrigin
+	key              RequestKey
+	dispatch         DispatchMethod
+	service          string
+	recipient        string
+	address          string
+	basis            string
+	operator         string
+	status           OutboundStatus
+	parent           OutboundRequestID
+	number           DocumentNumber
+	absence          NumberingAbsence
+	lines            []OutboundLine
+	reservations     []OutboundReservation
+	receivedAt       time.Time
+	platformStocking bool
 }
 
 type OutboundRequestSpec struct {
-	Tenant       TenantID
-	ID           OutboundRequestID
-	Owner        OwnerAccountID
-	Warehouse    WarehouseCode
-	Origin       OutboundOrigin
-	Key          RequestKey
-	Dispatch     DispatchMethod
-	Service      string
-	Recipient    string
-	Address      string
-	Basis        string
-	Operator     string
-	Status       OutboundStatus
-	Parent       OutboundRequestID
-	Number       DocumentNumber
-	Absence      NumberingAbsence
-	Lines        []OutboundLine
-	Reservations []OutboundReservation
-	ReceivedAt   time.Time
+	Tenant           TenantID
+	ID               OutboundRequestID
+	Owner            OwnerAccountID
+	Warehouse        WarehouseCode
+	Origin           OutboundOrigin
+	Key              RequestKey
+	Dispatch         DispatchMethod
+	Service          string
+	Recipient        string
+	Address          string
+	Basis            string
+	Operator         string
+	Status           OutboundStatus
+	Parent           OutboundRequestID
+	Number           DocumentNumber
+	Absence          NumberingAbsence
+	Lines            []OutboundLine
+	Reservations     []OutboundReservation
+	ReceivedAt       time.Time
+	PlatformStocking bool
 }
 
 func NewOutboundRequest(spec OutboundRequestSpec) (OutboundRequest, error) {
@@ -291,7 +293,7 @@ func NewOutboundRequest(spec OutboundRequestSpec) (OutboundRequest, error) {
 		tenant: spec.Tenant, id: spec.ID, owner: spec.Owner, warehouse: spec.Warehouse, origin: spec.Origin, key: spec.Key,
 		dispatch: spec.Dispatch, service: spec.Service, recipient: spec.Recipient, address: spec.Address, basis: spec.Basis,
 		operator: spec.Operator, status: spec.Status, parent: spec.Parent, number: spec.Number, absence: spec.Absence, lines: lines,
-		reservations: reservations, receivedAt: spec.ReceivedAt,
+		reservations: reservations, receivedAt: spec.ReceivedAt, platformStocking: spec.PlatformStocking,
 	}, nil
 }
 
@@ -315,7 +317,8 @@ func (request OutboundRequest) Lines() []OutboundLine {
 func (request OutboundRequest) Reservations() []OutboundReservation {
 	return append([]OutboundReservation(nil), request.reservations...)
 }
-func (request OutboundRequest) ReceivedAt() time.Time { return request.receivedAt }
+func (request OutboundRequest) ReceivedAt() time.Time  { return request.receivedAt }
+func (request OutboundRequest) PlatformStocking() bool { return request.platformStocking }
 
 func (request OutboundRequest) DocumentNumber() (DocumentNumber, bool) {
 	if request.number.Assigned() {
@@ -328,7 +331,8 @@ func (request OutboundRequest) NumberingAbsence() NumberingAbsence { return requ
 
 func (request OutboundRequest) SameSubmission(other OutboundRequest) bool {
 	if request.warehouse != other.warehouse || request.dispatch != other.dispatch || request.service != other.service ||
-		request.recipient != other.recipient || request.address != other.address || len(request.lines) != len(other.lines) {
+		request.recipient != other.recipient || request.address != other.address || request.platformStocking != other.platformStocking ||
+		len(request.lines) != len(other.lines) {
 		return false
 	}
 	for index := range request.lines {

@@ -114,8 +114,15 @@ func (opener *Opener) Submit(ctx context.Context, submission ports.CommissionSub
 	if id, present := result.ShipmentRequestID(); present {
 		answer.ShipmentRequestID = id.String()
 	}
-	if len(command.DeclaredParcelIDs) == 1 {
-		answer.DeclaredParcelID = command.DeclaredParcelIDs[0].String()
+	packed := submissionParcels(submission)
+	if len(command.DeclaredParcelIDs) == len(packed) {
+		answer.Members = make([]ports.CommissionMember, len(packed))
+		for index, parcel := range packed {
+			answer.Members[index] = ports.CommissionMember{Sequence: parcel.Sequence, DeclaredParcelID: command.DeclaredParcelIDs[index].String()}
+		}
+	}
+	if len(answer.Members) == 1 {
+		answer.DeclaredParcelID = answer.Members[0].DeclaredParcelID
 	}
 	return answer, nil
 }
@@ -135,6 +142,9 @@ func (opener *Opener) command(ctx context.Context, submission ports.CommissionSu
 		return none, err
 	}
 	keyText := submission.Request + "/" + strconv.Itoa(submission.Sequence)
+	if submission.Round > 0 {
+		keyText = submission.Request + "/round/" + strconv.Itoa(submission.Round)
+	}
 	key, err := psdomain.NewSourceRequestKey(keyText)
 	if err != nil {
 		return none, err
@@ -147,9 +157,14 @@ func (opener *Opener) command(ctx context.Context, submission ports.CommissionSu
 	if err != nil {
 		return none, err
 	}
-	customerParcel, err := psdomain.NewDeclaredParcelID(keyText)
-	if err != nil {
-		return none, err
+	packed := submissionParcels(submission)
+	customerParcels := make([]psdomain.DeclaredParcelID, 0, len(packed))
+	for _, parcel := range packed {
+		customerParcel, err := psdomain.NewDeclaredParcelID(submission.Request + "/" + strconv.Itoa(parcel.Sequence))
+		if err != nil {
+			return none, err
+		}
+		customerParcels = append(customerParcels, customerParcel)
 	}
 	requestValue, err := opener.requests.Next()
 	if err != nil {
@@ -167,19 +182,35 @@ func (opener *Opener) command(ctx context.Context, submission ports.CommissionSu
 	if err != nil {
 		return none, err
 	}
-	parcelValue, err := opener.parcels.Next()
-	if err != nil {
-		return none, err
+	parcelIDs := make([]psdomain.DeclaredParcelID, 0, len(packed))
+	profiles := make([]psdomain.DeclaredParcelProfile, 0, len(packed))
+	lines := make([]psdomain.GoodsLineSpec, 0, len(packed))
+	measures := map[string]string{psdomain.RequestedServiceProductEntryName: submission.Service}
+	for _, parcel := range packed {
+		parcelValue, err := opener.parcels.Next()
+		if err != nil {
+			return none, err
+		}
+		parcelID, err := psdomain.NewDeclaredParcelID(parcelValue)
+		if err != nil {
+			return none, err
+		}
+		profile, err := measurementProfile(parcelID, parcel)
+		if err != nil {
+			return none, err
+		}
+		parcelIDs = append(parcelIDs, parcelID)
+		profiles = append(profiles, profile)
+		lines = append(lines, goodsSpec(parcel).Lines...)
+		member := submission.Request + "/" + strconv.Itoa(parcel.Sequence)
+		measures["parcel["+member+"].weight.value"] = parcel.Weight
+		measures["parcel["+member+"].weight.unit"] = parcel.WeightUnit
+		measures["parcel["+member+"].dimensions.length"] = parcel.Length
+		measures["parcel["+member+"].dimensions.width"] = parcel.Width
+		measures["parcel["+member+"].dimensions.height"] = parcel.Height
+		measures["parcel["+member+"].dimensions.unit"] = parcel.Dimension
 	}
-	parcelID, err := psdomain.NewDeclaredParcelID(parcelValue)
-	if err != nil {
-		return none, err
-	}
-	profile, err := measurementProfile(parcelID, submission.Parcel)
-	if err != nil {
-		return none, err
-	}
-	goods, err := psdomain.NewGoodsDetails(goodsSpec(submission.Parcel), []psdomain.DeclaredParcelID{parcelID})
+	goods, err := psdomain.NewGoodsDetails(psdomain.GoodsDetailsSpec{Lines: lines}, parcelIDs)
 	if err != nil {
 		return none, err
 	}
@@ -194,18 +225,10 @@ func (opener *Opener) command(ctx context.Context, submission ports.CommissionSu
 	}
 	canonical, err := psdomain.CanonicalizeSubmission(psdomain.SubmissionPayloadSpec{
 		RequestReference:  reference,
-		DeclaredParcelIDs: []psdomain.DeclaredParcelID{customerParcel},
+		DeclaredParcelIDs: customerParcels,
 		Scope:             entries(map[string]string{"recipient.relation": submission.Recipient, "recipient.address": submission.Address}),
-		Service: entries(map[string]string{
-			psdomain.RequestedServiceProductEntryName:   submission.Service,
-			"parcel[" + keyText + "].weight.value":      submission.Parcel.Weight,
-			"parcel[" + keyText + "].weight.unit":       submission.Parcel.WeightUnit,
-			"parcel[" + keyText + "].dimensions.length": submission.Parcel.Length,
-			"parcel[" + keyText + "].dimensions.width":  submission.Parcel.Width,
-			"parcel[" + keyText + "].dimensions.height": submission.Parcel.Height,
-			"parcel[" + keyText + "].dimensions.unit":   submission.Parcel.Dimension,
-		}),
-		Goods: goods,
+		Service:           entries(measures),
+		Goods:             goods,
 	})
 	if err != nil {
 		return none, err
@@ -213,11 +236,18 @@ func (opener *Opener) command(ctx context.Context, submission ports.CommissionSu
 	now := opener.clock.Now().UTC()
 	return psapplication.SubmitShipmentRequestCommand{
 		Identity: identityValue, PayloadDigest: canonical.Digest(), OccurredAt: now, ReceivedAt: now,
-		BatchID: batchID, ShipmentRequestID: requestID, DeclaredParcelIDs: []psdomain.DeclaredParcelID{parcelID},
+		BatchID: batchID, ShipmentRequestID: requestID, DeclaredParcelIDs: parcelIDs,
 		AdmissionScope: admission, ExpectedRevision: decision.Revision(),
-		DeclaredProfiles: []psdomain.DeclaredParcelProfile{profile}, DeclaredElements: canonical.DeclaredElements(),
+		DeclaredProfiles: profiles, DeclaredElements: canonical.DeclaredElements(),
 		RequestedServiceProduct: canonical.RequestedServiceProduct(), DeclaredGoods: goods,
 	}, nil
+}
+
+func submissionParcels(submission ports.CommissionSubmission) []ports.CommissionParcel {
+	if len(submission.Parcels) > 0 {
+		return submission.Parcels
+	}
+	return []ports.CommissionParcel{submission.Parcel}
 }
 
 func (opener *Opener) revision(ctx context.Context, revision ports.CommissionRevision) (psapplication.FormNewSubmissionVersionCommand, error) {
