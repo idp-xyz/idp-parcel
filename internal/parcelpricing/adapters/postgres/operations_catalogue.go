@@ -146,7 +146,9 @@ var priceCardPages = ports.PriceCardPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"registeredAt": "v.registered_at", "planId": "v.plan_id"},
 	Identity: []string{"v.plan_id", "v.plan_version"},
 	Filters: map[string]string{
-		"direction": "v.direction",
+		"direction":            "v.direction",
+		"authorizationId":      "v.authorization_id",
+		"authorizationVersion": "v.authorization_version",
 		"retired": `(EXISTS (
 			SELECT 1 FROM parcel_pricing.price_card_version_retirement AS r
 			 WHERE r.tenant_id = v.tenant_id AND r.plan_id = v.plan_id AND r.plan_version = v.plan_version))::text`,

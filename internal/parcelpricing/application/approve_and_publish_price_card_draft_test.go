@@ -321,7 +321,7 @@ func TestApprovalThatLosesTheRaceOrItsDependenciesIsNotAnApproval(t *testing.T) 
 
 func newPublishHandler(t *testing.T, drafts *draftProgressFake, catalog *priceCardCatalogDouble) *application.PublishPriceCardDraftHandler {
 	t.Helper()
-	registrar := application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: catalog, Registered: &pricingParameterDouble{}})
+	registrar := application.NewRegisterPriceCardHandler(registerDeps(catalog, &pricingParameterDouble{}, false, nil))
 	handler, err := application.NewPublishPriceCardDraftHandler(drafts, registrar, fixedClock{at: progressClockAt.Add(time.Minute)})
 	if err != nil {
 		t.Fatalf("构造发布编排：%v", err)

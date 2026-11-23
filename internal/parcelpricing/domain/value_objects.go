@@ -514,8 +514,8 @@ const (
 	ArtifactReferenceCatalogue ArtifactKind = "reference-catalogue"
 	// 汇率的口径依据由商业价格政策版本声明。计价引用它，所有权在 party-commercial。
 	ArtifactCommercialPolicy ArtifactKind = "commercial-policy"
-	// 价格方向授权由 party-commercial 签发。价卡登记引用它作为 BUY/SELL 方向的
-	// 授权依据，这里只登引用不解析其内容——解析属授权工件的所有者。
+	// 价格方向授权由 party-commercial 签发。价卡上只登这条引用；它是不是一版已发布、
+	// 登记时刻仍有效、方向与价卡相同的授权，由入册前的消费侧去问所有者，不在这里解析。
 	ArtifactCommercialAuthorization ArtifactKind = "commercial-authorization"
 	ArtifactNumericProfile          ArtifactKind = "numeric-profile"
 	// 客户申报测量进入计价输入快照时的事实种类。版本串以 declaration 开头，标明来源是申报不是实测。

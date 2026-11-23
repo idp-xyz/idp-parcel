@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 
@@ -35,6 +36,12 @@ const (
 	// PriceCardRegistrationNewerCanonicalizationNotEnabled：方案记的规范化版本不是基础版，而本部署没开登记较新版本
 	// 的开关；未到达仓储，什么都没写。续办是升级全部读价卡的进程后由运维开开关再重试，不是改卡。
 	PriceCardRegistrationNewerCanonicalizationNotEnabled
+	// PriceCardRegistrationDirectionAuthorizationNotPublished：引用的授权不在册，或还没发布。未入册。
+	PriceCardRegistrationDirectionAuthorizationNotPublished
+	// PriceCardRegistrationDirectionAuthorizationNotInForce：授权已到期、已收尾，或登记时刻不在它的有效区间内。未入册。
+	PriceCardRegistrationDirectionAuthorizationNotInForce
+	// PriceCardRegistrationDirectionAuthorizationDirectionMismatch：授权的方向与价卡方向不同。未入册。
+	PriceCardRegistrationDirectionAuthorizationDirectionMismatch
 )
 
 func (outcome RegisterPriceCardOutcome) String() string {
@@ -53,6 +60,12 @@ func (outcome RegisterPriceCardOutcome) String() string {
 		return "UNDECIDED"
 	case PriceCardRegistrationNewerCanonicalizationNotEnabled:
 		return "NEWER_CANONICALIZATION_NOT_ENABLED"
+	case PriceCardRegistrationDirectionAuthorizationNotPublished:
+		return "DIRECTION_AUTHORIZATION_NOT_PUBLISHED"
+	case PriceCardRegistrationDirectionAuthorizationNotInForce:
+		return "DIRECTION_AUTHORIZATION_EXPIRED_OR_CLOSED"
+	case PriceCardRegistrationDirectionAuthorizationDirectionMismatch:
+		return "DIRECTION_AUTHORIZATION_DIRECTION_MISMATCH"
 	default:
 		return ""
 	}
@@ -70,14 +83,24 @@ type RegisterPriceCardCommand struct {
 // NewerCanonicalizationEnabled 是部署开关「允许登记基础版之外的规范化版本」，由装配从环境读一次后交进来，零值即关。
 // 只认基础版的旧进程读到较新版本的卡会停在「不认这一版」，租户级的序列与目录登记 / 复核还会整笔失败；所以第一张
 // 较新版本的卡入册之前，所有读价卡的进程必须已是新构建——这件事只有部署方知道，产品不替它猜（ADR-0352）。
+//
+// DirectionAuthorizations 在入册前核卡上引用的价格方向授权。缺了它，新登记答未决：不能把没核过的引用写成已登记。
+// RegisteredContent 用来认出同一份已入册内容的幂等重放；重放答已登记，不再用授权这道门把重放打成拒绝。生产上它就是
+// 价卡册自己。Clock 是登记时刻；没装时用当前时刻。
 type RegisterPriceCardDeps struct {
 	Catalog                      ports.PriceCardCatalog
 	Registered                   ports.PricingParameterRegisteredHandoff
 	NewerCanonicalizationEnabled bool
+	DirectionAuthorizations      ports.DirectionAuthorizationReader
+	RegisteredContent            ports.PriceCardVersionLoader
+	Clock                        ports.Clock
 }
 
 // ErrPriceCardRegistrationHandoffMissing 说明装配没给价卡登记接「参数已登记」交接口。
 var ErrPriceCardRegistrationHandoffMissing = errors.New("parcel pricing: price card registration has no pricing parameter registered handoff")
+
+// ErrPriceCardDirectionAuthorizationUnreadable 说明授权读口没装，或交回了结果代数以外的答复。登记与否未知。
+var ErrPriceCardDirectionAuthorizationUnreadable = errors.New("parcel pricing: price card direction authorization could not be read")
 
 // RegisterPriceCardHandler 编排价卡登记用例（票 07 件③）。治理判断全在领域与仓储
 // （登记门在构造器，冲突判定在仓储的结果代数），这里只做受理与答案翻译。
@@ -109,6 +132,22 @@ func (handler *RegisterPriceCardHandler) Handle(
 	if command.Registration.Plan().CanonicalizationVersion() != domain.CurrentCanonicalizationVersion() &&
 		!handler.deps.NewerCanonicalizationEnabled {
 		return PriceCardRegistrationNewerCanonicalizationNotEnabled, nil
+	}
+	// 同一份已入册内容的重放不进授权这道门：旧卡引用后来悬空或被收尾，重放仍答已登记，不把它们赶出选择。
+	// 内容不同的尝试（含同版本异文）和新登记仍要核。规范化版本那道门在前面，不因这一段而放行较新版本的重放。
+	same, err := handler.sameRegisteredContent(ctx, command.Registration)
+	if err != nil {
+		return PriceCardRegistrationUndecided, fmt.Errorf("register price card: %w", err)
+	}
+	if !same {
+		refused, refuseErr := assessCitedDirectionAuthorization(ctx, handler.deps.DirectionAuthorizations, handler.deps.Clock,
+			command.Registration.Tenant(), command.Registration.DirectionAuthorization(), command.Registration.Plan().Direction())
+		if refuseErr != nil {
+			return refused, fmt.Errorf("register price card: %w", refuseErr)
+		}
+		if refused != 0 {
+			return refused, nil
+		}
 	}
 
 	saved, err := handler.deps.Catalog.Register(ctx, command.Registration)
@@ -144,4 +183,65 @@ func (handler *RegisterPriceCardHandler) announce(
 		return PriceCardRegistrationUndecided, fmt.Errorf("register price card: %w", err)
 	}
 	return outcome, nil
+}
+
+// sameRegisteredContent 回答册上是不是已经有同一方案版本、同一规范化版本、同一内容摘要。读不回是未决。
+// 没装读口时答否：认不出重放，于是新登记照常走授权门，不会把没核过的卡放进去。
+func (handler *RegisterPriceCardHandler) sameRegisteredContent(
+	ctx context.Context,
+	registration domain.PriceCardRegistration,
+) (bool, error) {
+	if handler.deps.RegisteredContent == nil {
+		return false, nil
+	}
+	stored, found, err := handler.deps.RegisteredContent.FindByReference(ctx, registration.Tenant(), registration.Plan().Reference())
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return false, nil
+	}
+	incoming := registration.Plan()
+	return stored.CanonicalizationVersion() == incoming.CanonicalizationVersion() &&
+		stored.ContentDigest() == incoming.ContentDigest(), nil
+}
+
+// assessCitedDirectionAuthorization 是登记与预览共用的那一次核对。通过时结果为零。读口没装、读失败、
+// 答复不在封闭集里都是未决，不是拒绝。
+func assessCitedDirectionAuthorization(
+	ctx context.Context,
+	reader ports.DirectionAuthorizationReader,
+	clock ports.Clock,
+	tenant domain.TenantID,
+	authorization domain.VersionReference,
+	direction domain.PricingDirection,
+) (RegisterPriceCardOutcome, error) {
+	if reader == nil {
+		return PriceCardRegistrationUndecided, ErrPriceCardDirectionAuthorizationUnreadable
+	}
+	at := time.Now().UTC()
+	if clock != nil {
+		at = clock.Now().UTC()
+	}
+	if at.IsZero() {
+		return PriceCardRegistrationUndecided, ErrPriceCardDirectionAuthorizationUnreadable
+	}
+	assessment, err := reader.ReadDirectionAuthorization(ctx, ports.DirectionAuthorizationQuery{
+		Tenant: tenant, Authorization: authorization, Direction: direction, At: at,
+	})
+	if err != nil {
+		return PriceCardRegistrationUndecided, err
+	}
+	switch assessment {
+	case ports.DirectionAuthorizationMatches:
+		return 0, nil
+	case ports.DirectionAuthorizationNotPublished:
+		return PriceCardRegistrationDirectionAuthorizationNotPublished, nil
+	case ports.DirectionAuthorizationNotInForce:
+		return PriceCardRegistrationDirectionAuthorizationNotInForce, nil
+	case ports.DirectionAuthorizationDirectionMismatch:
+		return PriceCardRegistrationDirectionAuthorizationDirectionMismatch, nil
+	default:
+		return PriceCardRegistrationUndecided, fmt.Errorf("%w: %d", ErrPriceCardDirectionAuthorizationUnreadable, assessment)
+	}
 }

@@ -13,9 +13,7 @@ import (
 // 本文件证登记较新规范化版本的部署开关（ADR-0352）：门在登记用例里、仓储之前，只看方案记的版本是不是基础版。
 
 func gatedRegisterHandler(catalog *priceCardCatalogDouble, handoff *pricingParameterDouble, enabled bool) *application.RegisterPriceCardHandler {
-	return application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{
-		Catalog: catalog, Registered: handoff, NewerCanonicalizationEnabled: enabled,
-	})
+	return application.NewRegisterPriceCardHandler(registerDeps(catalog, handoff, enabled, nil))
 }
 
 // Covers: AT-PP-048，ADR-0352「基础版之外要开关」——开关关 / 开 × 基础版 / 较新版四格：基础版的卡两种开关下都照常入册并交

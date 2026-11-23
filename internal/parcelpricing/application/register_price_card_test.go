@@ -32,6 +32,63 @@ func (double *priceCardCatalogDouble) Register(
 	return double.outcome, nil
 }
 
+type directionAuthorizationDouble struct {
+	assessment ports.DirectionAuthorizationAssessment
+	err        error
+	calls      int
+}
+
+func (double *directionAuthorizationDouble) ReadDirectionAuthorization(
+	context.Context,
+	ports.DirectionAuthorizationQuery,
+) (ports.DirectionAuthorizationAssessment, error) {
+	double.calls++
+	if double.err != nil {
+		return 0, double.err
+	}
+	if double.assessment == 0 {
+		return ports.DirectionAuthorizationMatches, nil
+	}
+	return double.assessment, nil
+}
+
+type registeredContentDouble struct {
+	plan  domain.PricingPlanVersion
+	found bool
+	err   error
+}
+
+func (double *registeredContentDouble) FindByReference(
+	context.Context,
+	domain.TenantID,
+	domain.VersionReference,
+) (domain.PricingPlanVersion, bool, error) {
+	if double.err != nil {
+		return domain.PricingPlanVersion{}, false, double.err
+	}
+	return double.plan, double.found, nil
+}
+
+func matchingDirectionAuthorization() application.PriceCardImportOption {
+	return application.WithDirectionAuthorizationReader(&directionAuthorizationDouble{}, fixedClock{at: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)})
+}
+
+func registerDeps(
+	catalog ports.PriceCardCatalog,
+	registered ports.PricingParameterRegisteredHandoff,
+	enabled bool,
+	reader ports.DirectionAuthorizationReader,
+) application.RegisterPriceCardDeps {
+	if reader == nil {
+		reader = &directionAuthorizationDouble{}
+	}
+	return application.RegisterPriceCardDeps{
+		Catalog: catalog, Registered: registered, NewerCanonicalizationEnabled: enabled,
+		DirectionAuthorizations: reader,
+		Clock:                   fixedClock{at: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)},
+	}
+}
+
 func (double *priceCardCatalogDouble) LoadApplicable(
 	_ context.Context,
 	_ domain.TenantID,
@@ -75,7 +132,7 @@ func registrationFixtureOf(t *testing.T, plan domain.PricingPlanVersion) domain.
 }
 
 func registerHandler(double *priceCardCatalogDouble) *application.RegisterPriceCardHandler {
-	return application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: double, Registered: &pricingParameterDouble{}})
+	return application.NewRegisterPriceCardHandler(registerDeps(double, &pricingParameterDouble{}, false, nil))
 }
 
 // TestRegisterPriceCardRecordsNewVersion 证新版本入册答`已登记`且登记原样交给仓储。
@@ -165,9 +222,8 @@ func TestARegisteredPriceCardAnnouncesItsScope(t *testing.T) {
 		{ports.PriceCardCanonicalizationDiffers, false},
 	} {
 		registered := &pricingParameterDouble{}
-		handler := application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{
-			Catalog: &priceCardCatalogDouble{outcome: tc.saved}, Registered: registered,
-		})
+		handler := application.NewRegisterPriceCardHandler(registerDeps(
+			&priceCardCatalogDouble{outcome: tc.saved}, registered, false, nil))
 		registration := registrationFixture(t)
 		if _, err := handler.Handle(t.Context(), application.RegisterPriceCardCommand{Registration: registration}); err != nil {
 			t.Fatalf("%v：%v", tc.saved, err)
@@ -185,14 +241,14 @@ func TestARegisteredPriceCardAnnouncesItsScope(t *testing.T) {
 		}
 	}
 
-	failing := application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{
-		Catalog: &priceCardCatalogDouble{outcome: ports.PriceCardRegistered}, Registered: &pricingParameterDouble{err: errors.New("outbox down")},
-	})
+	failing := application.NewRegisterPriceCardHandler(registerDeps(
+		&priceCardCatalogDouble{outcome: ports.PriceCardRegistered}, &pricingParameterDouble{err: errors.New("outbox down")}, false, nil))
 	if outcome, err := failing.Handle(t.Context(), application.RegisterPriceCardCommand{Registration: registrationFixture(t)}); err == nil ||
 		outcome != application.PriceCardRegistrationUndecided {
 		t.Fatalf("交不出 outcome = %s err = %v", outcome, err)
 	}
-	unwired := application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: &priceCardCatalogDouble{outcome: ports.PriceCardRegistered}})
+	unwired := application.NewRegisterPriceCardHandler(registerDeps(
+		&priceCardCatalogDouble{outcome: ports.PriceCardRegistered}, nil, false, nil))
 	if _, err := unwired.Handle(t.Context(), application.RegisterPriceCardCommand{Registration: registrationFixture(t)}); !errors.Is(err, application.ErrPriceCardRegistrationHandoffMissing) {
 		t.Fatalf("漏装交接口 err = %v", err)
 	}

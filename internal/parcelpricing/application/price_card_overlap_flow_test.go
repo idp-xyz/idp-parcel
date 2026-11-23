@@ -84,6 +84,7 @@ func TestPreviewKeepsValidatedAndReportsTheRegisteredOverlap(t *testing.T) {
 	handler, err := application.NewPreviewPriceCardImportHandler(
 		&templateReaderDouble{reading: validatedReading(t, "30")},
 		application.WithPriceCardOverlapFinder(finder),
+		matchingDirectionAuthorization(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -132,6 +133,7 @@ func TestPreviewSurfacesAFinderFailureInsteadOfABusinessAnswer(t *testing.T) {
 	handler, err := application.NewPreviewPriceCardImportHandler(
 		&templateReaderDouble{reading: validatedReading(t, "30")},
 		application.WithPriceCardOverlapFinder(&overlapFinderFake{err: broken}),
+		matchingDirectionAuthorization(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -213,9 +215,8 @@ func TestPublicationKeepsPublishedAndReportsTheOverlap(t *testing.T) {
 	}
 	finder := &overlapFinderFake{overlaps: []domain.PriceCardOverlap{successorCutOverlap(t, registered)}}
 	drafts := newDraftProgressFake(approved)
-	registrar := application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{
-		Catalog: &priceCardCatalogDouble{outcome: ports.PriceCardRegistered}, Registered: &pricingParameterDouble{},
-	})
+	registrar := application.NewRegisterPriceCardHandler(registerDeps(
+		&priceCardCatalogDouble{outcome: ports.PriceCardRegistered}, &pricingParameterDouble{}, false, nil))
 	handler, err := application.NewPublishPriceCardDraftHandler(
 		drafts, registrar, fixedClock{at: progressClockAt.Add(time.Minute)},
 		application.WithPriceCardOverlapFinder(finder),

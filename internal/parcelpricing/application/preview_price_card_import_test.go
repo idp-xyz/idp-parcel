@@ -26,7 +26,7 @@ func (double *templateReaderDouble) ReadPriceCardTemplate(raw []byte) ports.Pric
 
 func previewHandler(t *testing.T, reader ports.PriceCardTemplateReader) *application.PreviewPriceCardImportHandler {
 	t.Helper()
-	handler, err := application.NewPreviewPriceCardImportHandler(reader)
+	handler, err := application.NewPreviewPriceCardImportHandler(reader, matchingDirectionAuthorization())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -41,7 +41,7 @@ func (double *workbookReaderDouble) ReadPriceCardWorkbook(canonical []byte) port
 
 func previewWithWorkbook(t *testing.T, files ports.PriceCardTemplateReader, workbook ports.PriceCardWorkbookReader) *application.PreviewPriceCardImportHandler {
 	t.Helper()
-	handler, err := application.NewPreviewPriceCardImportHandler(files, application.WithWorkbookReader(workbook))
+	handler, err := application.NewPreviewPriceCardImportHandler(files, application.WithWorkbookReader(workbook), matchingDirectionAuthorization())
 	if err != nil {
 		t.Fatal(err)
 	}

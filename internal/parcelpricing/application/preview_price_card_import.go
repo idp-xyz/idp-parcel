@@ -26,6 +26,10 @@ const (
 	PriceCardImportHasProblems
 	// PriceCardImportNotAccepted：命令立不住（缺租户、文件名不合格），或整份文件不收（带那一条问题）。
 	PriceCardImportNotAccepted
+	// 下面三格与登记用例同一套结论：模板读得通，但引用的授权过不了入册前那道门。不得答成已校验。
+	PriceCardImportDirectionAuthorizationNotPublished
+	PriceCardImportDirectionAuthorizationNotInForce
+	PriceCardImportDirectionAuthorizationDirectionMismatch
 )
 
 func (outcome PreviewPriceCardImportOutcome) String() string {
@@ -36,6 +40,12 @@ func (outcome PreviewPriceCardImportOutcome) String() string {
 		return "HAS_PROBLEMS"
 	case PriceCardImportNotAccepted:
 		return "NOT_ACCEPTED"
+	case PriceCardImportDirectionAuthorizationNotPublished:
+		return PriceCardRegistrationDirectionAuthorizationNotPublished.String()
+	case PriceCardImportDirectionAuthorizationNotInForce:
+		return PriceCardRegistrationDirectionAuthorizationNotInForce.String()
+	case PriceCardImportDirectionAuthorizationDirectionMismatch:
+		return PriceCardRegistrationDirectionAuthorizationDirectionMismatch.String()
 	default:
 		return ""
 	}
@@ -70,8 +80,10 @@ var ErrWorkbookCarrierNotWired = errors.New("parcel pricing: price card import w
 type PriceCardImportOption func(*priceCardImportOptions)
 
 type priceCardImportOptions struct {
-	workbook ports.PriceCardWorkbookReader
-	overlaps ports.PriceCardOverlapFinder
+	workbook       ports.PriceCardWorkbookReader
+	overlaps       ports.PriceCardOverlapFinder
+	authorizations ports.DirectionAuthorizationReader
+	clock          ports.Clock
 }
 
 // WithWorkbookReader 装上页面表单提交的工作簿读口。预览与录入要装同一个，同一份内容过两口才得同一个来源标识与同一份读法。
@@ -85,6 +97,15 @@ func WithPriceCardOverlapFinder(finder ports.PriceCardOverlapFinder) PriceCardIm
 	return func(options *priceCardImportOptions) { options.overlaps = finder }
 }
 
+// WithDirectionAuthorizationReader 让预览走与登记同一道授权核对。没装时，一份本来会答已校验的读法改为未决：
+// 不能把「授权还没发布」答成检查通过。
+func WithDirectionAuthorizationReader(reader ports.DirectionAuthorizationReader, clock ports.Clock) PriceCardImportOption {
+	return func(options *priceCardImportOptions) {
+		options.authorizations = reader
+		options.clock = clock
+	}
+}
+
 func importOptionsOf(options []PriceCardImportOption) priceCardImportOptions {
 	var resolved priceCardImportOptions
 	for _, option := range options {
@@ -95,9 +116,11 @@ func importOptionsOf(options []PriceCardImportOption) priceCardImportOptions {
 
 // PreviewPriceCardImportHandler 预览不写库。模板读口必装；重叠查找口可选，装上之后已校验的答复多一格在册版本。
 type PreviewPriceCardImportHandler struct {
-	reader   ports.PriceCardTemplateReader
-	workbook ports.PriceCardWorkbookReader
-	overlaps ports.PriceCardOverlapFinder
+	reader         ports.PriceCardTemplateReader
+	workbook       ports.PriceCardWorkbookReader
+	overlaps       ports.PriceCardOverlapFinder
+	authorizations ports.DirectionAuthorizationReader
+	clock          ports.Clock
 }
 
 func NewPreviewPriceCardImportHandler(reader ports.PriceCardTemplateReader, options ...PriceCardImportOption) (*PreviewPriceCardImportHandler, error) {
@@ -105,7 +128,10 @@ func NewPreviewPriceCardImportHandler(reader ports.PriceCardTemplateReader, opti
 		return nil, errors.New("parcel pricing: price card import preview needs a template reader")
 	}
 	resolved := importOptionsOf(options)
-	return &PreviewPriceCardImportHandler{reader: reader, workbook: resolved.workbook, overlaps: resolved.overlaps}, nil
+	return &PreviewPriceCardImportHandler{
+		reader: reader, workbook: resolved.workbook, overlaps: resolved.overlaps,
+		authorizations: resolved.authorizations, clock: resolved.clock,
+	}, nil
 }
 
 func (handler *PreviewPriceCardImportHandler) Handle(ctx context.Context, command PreviewPriceCardImportCommand) (PriceCardImportPreview, error) {
@@ -118,10 +144,34 @@ func (handler *PreviewPriceCardImportHandler) Handle(ctx context.Context, comman
 	} else {
 		preview = readPriceCardImport(handler.reader, command.Tenant, command.FileName, command.Raw)
 	}
+	if preview.Outcome == PriceCardImportValidated && preview.Content != nil {
+		refused, err := assessCitedDirectionAuthorization(ctx, handler.authorizations, handler.clock,
+			command.Tenant, preview.Content.DirectionAuthorization, preview.Content.Plan.Direction())
+		if err != nil {
+			return PriceCardImportPreview{}, fmt.Errorf("preview price card import: %w", err)
+		}
+		if outcome, refuse := previewOutcomeForDirectionRefusal(refused); refuse {
+			preview.Outcome = outcome
+			return preview, nil
+		}
+	}
 	if err := attachOverlaps(ctx, handler.overlaps, command.Tenant, &preview); err != nil {
 		return PriceCardImportPreview{}, fmt.Errorf("preview price card import: %w", err)
 	}
 	return preview, nil
+}
+
+func previewOutcomeForDirectionRefusal(refused RegisterPriceCardOutcome) (PreviewPriceCardImportOutcome, bool) {
+	switch refused {
+	case PriceCardRegistrationDirectionAuthorizationNotPublished:
+		return PriceCardImportDirectionAuthorizationNotPublished, true
+	case PriceCardRegistrationDirectionAuthorizationNotInForce:
+		return PriceCardImportDirectionAuthorizationNotInForce, true
+	case PriceCardRegistrationDirectionAuthorizationDirectionMismatch:
+		return PriceCardImportDirectionAuthorizationDirectionMismatch, true
+	default:
+		return 0, false
+	}
 }
 
 // readPriceCardImport 是预览与录入共用的那一段：命令立不住（缺租户、文件名不合格）答未受理、不读文件；否则按上传

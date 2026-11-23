@@ -60,6 +60,9 @@ var PriceCardPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 			domain.PricingDirectionInternal.String(),
 		}},
 		{Name: "retired", Vocabulary: cataloguepage.BooleanVocabulary()},
+		// 授权规则对象页按价卡记下的引用精确列出引用它的卡。两维都是开放标识，不设词表。
+		{Name: "authorizationId"},
+		{Name: "authorizationVersion"},
 	},
 })
 
