@@ -70,6 +70,9 @@ type acceptanceStore interface {
 	SaveAcceptance(ctx context.Context, tenant domain.TenantID, decisionID, source, key, state string, at time.Time) error
 	ParcelsOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) ([]ports.PackParcel, error)
 	SetCommissionState(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, state string) error
+	TasksOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) ([]ports.PickTask, error)
+	SaveReturnTask(ctx context.Context, tenant domain.TenantID, task ports.ReturnTask) error
+	MarkParcelCutoff(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int) (domain.OutboundStatus, error)
 }
 
 // AcceptanceHandler 按接受决定信封推进装箱记录。来源不是仓配出库的入账收工。不读委托内部状态。
@@ -105,7 +108,7 @@ func (handler *AcceptanceHandler) Record(ctx context.Context, command Acceptance
 		}
 		return AcceptanceResult{outcome: AcceptancePosted}, nil
 	}
-	requestID, sequence, ok := splitCommissionKey(command.SourceRequestKey)
+	requestID, selected, whole, ok := acceptanceParcels(command.SourceRequestKey)
 	if !ok {
 		return AcceptanceResult{outcome: AcceptanceContentInvalid}, nil
 	}
@@ -117,36 +120,87 @@ func (handler *AcceptanceHandler) Record(ctx context.Context, command Acceptance
 	if err != nil {
 		return AcceptanceResult{}, fmt.Errorf("record acceptance: %w", err)
 	}
-	var parcel ports.PackParcel
-	seen := false
-	for _, item := range parcels {
-		if item.Sequence == sequence {
-			parcel = item
-			seen = true
-			break
+	matched := matchAcceptanceParcels(parcels, selected, whole)
+	if len(matched) == 0 {
+		return AcceptanceResult{}, fmt.Errorf("record acceptance: parcel %s is not packed", command.SourceRequestKey)
+	}
+	for _, parcel := range matched {
+		if parcel.ShipmentRequestID == "" {
+			return AcceptanceResult{}, fmt.Errorf("record acceptance: parcel %s/%d has no shipment", requestID, parcel.Sequence)
+		}
+		if parcel.CommissionState != "" && parcel.CommissionState != command.State {
+			return AcceptanceResult{outcome: AcceptanceConflict}, nil
 		}
 	}
-	if !seen {
-		return AcceptanceResult{}, fmt.Errorf("record acceptance: parcel %s/%d is not packed", requestID, sequence)
-	}
-	if parcel.ShipmentRequestID == "" {
-		return AcceptanceResult{}, fmt.Errorf("record acceptance: parcel %s/%d has no shipment", requestID, sequence)
-	}
-	if parcel.CommissionState != "" && parcel.CommissionState != command.State {
-		return AcceptanceResult{outcome: AcceptanceConflict}, nil
-	}
-	if parcel.CommissionState == "" {
-		if err := handler.store.SetCommissionState(ctx, command.Tenant, request, sequence, command.State); err != nil {
-			return AcceptanceResult{}, fmt.Errorf("record acceptance: %w", err)
+	for _, parcel := range matched {
+		if parcel.CommissionState == "" {
+			if err := handler.store.SetCommissionState(ctx, command.Tenant, request, parcel.Sequence, command.State); err != nil {
+				return AcceptanceResult{}, fmt.Errorf("record acceptance: %w", err)
+			}
 		}
 	}
 	if err := handler.store.SaveAcceptance(ctx, command.Tenant, command.DecisionID, command.Source, command.SourceRequestKey, command.State, handler.clock.Now().UTC()); err != nil {
 		return AcceptanceResult{}, fmt.Errorf("record acceptance: %w", err)
 	}
 	if command.State == "REJECTED" {
+		if err := handler.unpack(ctx, command.Tenant, request, matched, whole); err != nil {
+			return AcceptanceResult{}, err
+		}
 		return AcceptanceResult{outcome: AcceptanceRejected}, nil
 	}
 	return AcceptanceResult{outcome: AcceptanceAccepted}, nil
+}
+
+// unpack 把拒绝接受的包裹拆开。整票一份委托时回库按请求生成一次；按包裹提交的只回这一件。装箱记录标成已截单。
+func (handler *AcceptanceHandler) unpack(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, parcels []ports.PackParcel, whole bool) error {
+	tasks, err := handler.store.TasksOf(ctx, tenant, request)
+	if err != nil {
+		return fmt.Errorf("record acceptance: %w", err)
+	}
+	if whole {
+		if err := queueReturnTasks(ctx, handler.store, tenant, request, 0, tasks); err != nil {
+			return fmt.Errorf("record acceptance: %w", err)
+		}
+	}
+	for _, parcel := range parcels {
+		if !whole {
+			if err := queueReturnTasks(ctx, handler.store, tenant, request, parcel.Sequence, tasksForParcel(tasks, parcel)); err != nil {
+				return fmt.Errorf("record acceptance: %w", err)
+			}
+		}
+		if _, err := handler.store.MarkParcelCutoff(ctx, tenant, request, parcel.Sequence); err != nil {
+			return fmt.Errorf("record acceptance: %w", err)
+		}
+	}
+	return nil
+}
+
+// acceptanceParcels 从委托来源键认出请求和要推进的包裹。整票一轮的键是请求/round/轮次，作用于这一请求已打包的全部包裹。
+func acceptanceParcels(key string) (string, int, bool, bool) {
+	if request, round, ok := strings.Cut(key, "/round/"); ok {
+		sequence, err := strconv.Atoi(round)
+		if err != nil || sequence < 1 || request == "" || strings.Contains(request, "/") {
+			return "", 0, false, false
+		}
+		return request, 0, true, true
+	}
+	request, sequence, ok := splitCommissionKey(key)
+	if !ok {
+		return "", 0, false, false
+	}
+	return request, sequence, false, true
+}
+
+func matchAcceptanceParcels(parcels []ports.PackParcel, sequence int, whole bool) []ports.PackParcel {
+	if whole {
+		return parcels
+	}
+	for _, parcel := range parcels {
+		if parcel.Sequence == sequence {
+			return []ports.PackParcel{parcel}
+		}
+	}
+	return nil
 }
 
 func splitCommissionKey(key string) (string, int, bool) {

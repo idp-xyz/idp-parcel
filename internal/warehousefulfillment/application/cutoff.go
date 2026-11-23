@@ -245,23 +245,26 @@ func tasksForParcel(tasks []ports.PickTask, parcel ports.PackParcel) []ports.Pic
 }
 
 func (handler *WaveHandler) queueReturns(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, tasks []ports.PickTask) error {
+	return queueReturnTasks(ctx, handler.waves, tenant, request, sequence, tasks)
+}
+
+// queueReturnTasks 为已拣出的货生成回库任务。货还在待出库，完成回库才移回可分配库区。
+func queueReturnTasks(ctx context.Context, store interface {
+	SaveReturnTask(ctx context.Context, tenant domain.TenantID, task ports.ReturnTask) error
+}, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, tasks []ports.PickTask) error {
 	for _, task := range tasks {
 		if task.Picked <= 0 || task.Staging.String() == "" {
 			continue
 		}
-		quantity := task.Picked
 		id := request.String() + "/" + task.ID.String()
 		if sequence > 0 {
 			id = request.String() + "/" + fmt.Sprint(sequence) + "/" + task.ID.String()
-			if task.Picked > quantity {
-				quantity = task.Picked
-			}
 		}
-		if err := handler.waves.SaveReturnTask(ctx, tenant, ports.ReturnTask{
+		if err := store.SaveReturnTask(ctx, tenant, ports.ReturnTask{
 			ID: id, Request: request, Sequence: sequence, Location: task.Staging, Goods: task.Goods,
-			Unit: task.Unit, State: task.State, Inbound: task.Inbound, Quantity: quantity,
+			Unit: task.Unit, State: task.State, Inbound: task.Inbound, Quantity: task.Picked,
 		}); err != nil {
-			return fmt.Errorf("cut off outbound: %w", err)
+			return fmt.Errorf("queue return: %w", err)
 		}
 	}
 	return nil

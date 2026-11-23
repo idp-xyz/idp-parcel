@@ -256,11 +256,33 @@ func TestAnAcceptanceEnvelopeAdvancesTheMatchingParcel(t *testing.T) {
 		t.Fatalf("别的来源 %s 状态 %s", other, commissionState(t, world, "OBR-ACC", 1))
 	}
 	insertPackedParcel(t, world, "OBR-REJ", "PRODUCT_NETWORK", "SYN-SERVICE", "SHR-REJ", 1)
+	if _, err := world.pool.Exec(t.Context(),
+		`INSERT INTO warehouse_fulfillment.pick_task (
+		    tenant_id, task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state,
+		    inbound_batch_id, quantity, picked, status, staging_location)
+		 VALUES ('SYN-TENANT-01','TASK-REJ','WAVE-REJ','OBR-REJ','SYN-LOC-STORE','SYN-GOODS-01','件','GOOD',
+		         'SYN-BATCH-REJ',1,1,'DONE','SYN-LOC-OUT')`); err != nil {
+		t.Fatal(err)
+	}
 	rejected := world.recordAcceptance(t, handler, application.AcceptanceCommand{
 		Tenant: tenant, DecisionID: "ADEC-3", Source: domain.WarehouseOutboundSource, SourceRequestKey: "OBR-REJ/1", State: "REJECTED",
 	})
-	if rejected != application.AcceptanceRejected || commissionState(t, world, "OBR-REJ", 1) != "REJECTED" {
-		t.Fatalf("拒绝 %s 状态 %s", rejected, commissionState(t, world, "OBR-REJ", 1))
+	var returns int
+	var requestStatus, cutoff string
+	if err := world.pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM warehouse_fulfillment.return_task WHERE tenant_id = 'SYN-TENANT-01' AND request_id = 'OBR-REJ'`).Scan(&returns); err != nil {
+		t.Fatal(err)
+	}
+	if err := world.pool.QueryRow(t.Context(),
+		`SELECT request.status, parcel.cutoff_state
+		   FROM warehouse_fulfillment.outbound_request AS request
+		   JOIN warehouse_fulfillment.outbound_parcel AS parcel
+		     ON parcel.tenant_id = request.tenant_id AND parcel.request_id = request.request_id
+		  WHERE request.tenant_id = 'SYN-TENANT-01' AND request.request_id = 'OBR-REJ'`).Scan(&requestStatus, &cutoff); err != nil {
+		t.Fatal(err)
+	}
+	if rejected != application.AcceptanceRejected || commissionState(t, world, "OBR-REJ", 1) != "REJECTED" || returns != 1 || requestStatus != "CANCELLED" || cutoff != "CANCELLED" {
+		t.Fatalf("拒绝 %s 状态 %s 回库 %d 请求 %s 截单 %s", rejected, commissionState(t, world, "OBR-REJ", 1), returns, requestStatus, cutoff)
 	}
 	insertPackedParcel(t, world, "OBR-SUP", "PRODUCT_NETWORK", "SYN-SERVICE", "SHR-SUP", 1)
 	supplements := application.NewSupplementHandler(wavesOf(t, world), acceptanceClock{})
