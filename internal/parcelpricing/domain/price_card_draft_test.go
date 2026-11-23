@@ -355,7 +355,23 @@ func TestTheRehydrationDoorRefusesRowsNoPathCouldHaveWritten(t *testing.T) {
 	add("文档里的方案不是键上那一版", validated, validatedDocument, func(s *domain.RehydratePriceCardDraftSpec) {
 		s.Plan = versionReference(t, domain.ArtifactPricingPlan, "plan-draft", "v2")
 	})
-	add("状态不在四格里", validated, validatedDocument, func(s *domain.RehydratePriceCardDraftSpec) { s.Status = domain.PriceCardDraftStatus(9) })
+	add("状态不是草稿册认得的一格", validated, validatedDocument, func(s *domain.RehydratePriceCardDraftSpec) { s.Status = domain.PriceCardDraftStatus(9) })
+	add("已批准带着撤下痕迹", validated, validatedDocument, func(s *domain.RehydratePriceCardDraftSpec) {
+		s.Status, s.Approver, s.ApprovedAt = domain.PriceCardDraftStatusApproved, "SYN-APPROVER", approvedAt
+		s.Withdrawer, s.WithdrawnAt, s.WithdrawalReason = "SYN-OPERATOR-03", publishedAt, "客户拒绝这套价"
+	})
+	add("已撤下缺原因", validated, validatedDocument, func(s *domain.RehydratePriceCardDraftSpec) {
+		s.Status, s.Approver, s.ApprovedAt = domain.PriceCardDraftStatusWithdrawn, "SYN-APPROVER", approvedAt
+		s.Withdrawer, s.WithdrawnAt = "SYN-OPERATOR-03", publishedAt
+	})
+	add("已撤下早于批准", validated, validatedDocument, func(s *domain.RehydratePriceCardDraftSpec) {
+		s.Status, s.Approver, s.ApprovedAt = domain.PriceCardDraftStatusWithdrawn, "SYN-APPROVER", approvedAt
+		s.Withdrawer, s.WithdrawnAt, s.WithdrawalReason = "SYN-OPERATOR-03", approvedAt.Add(-time.Second), "客户拒绝这套价"
+	})
+	add("已撤下原因含控制字符", validated, validatedDocument, func(s *domain.RehydratePriceCardDraftSpec) {
+		s.Status, s.Approver, s.ApprovedAt = domain.PriceCardDraftStatusWithdrawn, "SYN-APPROVER", approvedAt
+		s.Withdrawer, s.WithdrawnAt, s.WithdrawalReason = "SYN-OPERATOR-03", publishedAt, "客户\n拒绝"
+	})
 	add("录入者为空", validated, validatedDocument, func(s *domain.RehydratePriceCardDraftSpec) { s.Submitter = "" })
 	add("文档不是 JSON", validated, []byte(`not json`), func(s *domain.RehydratePriceCardDraftSpec) {})
 	add("摘要被改过", validated, tamperedDocument(t, validatedDocument, func(document map[string]any) {
@@ -384,6 +400,7 @@ func TestEveryDraftStatusIsNamedAndParsedBack(t *testing.T) {
 	for _, status := range []domain.PriceCardDraftStatus{
 		domain.PriceCardDraftStatusDraft, domain.PriceCardDraftStatusValidated,
 		domain.PriceCardDraftStatusApproved, domain.PriceCardDraftStatusPublished,
+		domain.PriceCardDraftStatusWithdrawn,
 	} {
 		parsed, ok := domain.ParsePriceCardDraftStatus(status.String())
 		if !ok || parsed != status {
@@ -407,7 +424,7 @@ func mustContentDocument(t *testing.T, draft domain.PriceCardDraft) []byte {
 }
 
 func specOf(draft domain.PriceCardDraft, document []byte) domain.RehydratePriceCardDraftSpec {
-	return domain.RehydratePriceCardDraftSpec{
+	spec := domain.RehydratePriceCardDraftSpec{
 		Tenant:      draft.Tenant(),
 		Plan:        draft.Plan(),
 		Status:      draft.Status(),
@@ -416,6 +433,25 @@ func specOf(draft domain.PriceCardDraft, document []byte) domain.RehydratePriceC
 		Submitter:   draft.Submitter(),
 		SubmittedAt: draft.SubmittedAt(),
 	}
+	if approver, ok := draft.Approver(); ok {
+		spec.Approver = approver
+	}
+	if at, ok := draft.ApprovedAt(); ok {
+		spec.ApprovedAt = at
+	}
+	if at, ok := draft.PublishedAt(); ok {
+		spec.PublishedAt = at
+	}
+	if withdrawer, ok := draft.Withdrawer(); ok {
+		spec.Withdrawer = withdrawer
+	}
+	if at, ok := draft.WithdrawnAt(); ok {
+		spec.WithdrawnAt = at
+	}
+	if reason, ok := draft.WithdrawalReason(); ok {
+		spec.WithdrawalReason = reason
+	}
+	return spec
 }
 
 // withTraces 经重建门造一份已批准或已发布的草稿：推进动作归票 04，本票只立这两格的形与读回门。
@@ -425,6 +461,11 @@ func withTraces(t *testing.T, validated domain.PriceCardDraft, status domain.Pri
 	spec.Status, spec.Approver, spec.ApprovedAt = status, "SYN-APPROVER", draftSubmittedAt.Add(time.Hour)
 	if status == domain.PriceCardDraftStatusPublished {
 		spec.PublishedAt = draftSubmittedAt.Add(2 * time.Hour)
+	}
+	if status == domain.PriceCardDraftStatusWithdrawn {
+		spec.Withdrawer = "https://id.syn.example/dex#SYN-OPERATOR-03"
+		spec.WithdrawnAt = draftSubmittedAt.Add(2 * time.Hour)
+		spec.WithdrawalReason = "客户拒绝这套价"
 	}
 	draft, err := domain.RehydratePriceCardDraft(spec)
 	if err != nil {

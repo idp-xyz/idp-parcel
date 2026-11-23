@@ -31,6 +31,8 @@ var (
 	ErrInvalidPriceCardApprovalDutyRule        = errors.New("parcel pricing: invalid price card approval duty rule")
 	ErrInvalidOperatorSubject                  = errors.New("parcel pricing: invalid operator subject")
 	ErrInvalidOperatorGrant                    = errors.New("parcel pricing: invalid operator grant")
+	// ErrPriceCardWithdrawalReasonRejected 是撤下原因去首尾空白后为空，或含控制字符。恢复动作是重写原因，不是改草稿。
+	ErrPriceCardWithdrawalReasonRejected = errors.New("parcel pricing: the withdrawal reason is blank or contains a control character")
 )
 
 // OperatorGrant 是操作者持有的一格授予：信封里认证出的生效授予，在领域里只以名字出现、只比相等，领域不枚举、不解释。
@@ -141,13 +143,36 @@ func (draft PriceCardDraft) Approve(approver OperatorSubject, rule PriceCardAppr
 
 // Registration 交回发布要交给既有价卡登记的那一份（ADR-0101 决定五）：方案、源文件身份与方向授权引用即草稿上记下的
 // 那几样，发布批准责任方即批准者主体。方案是同一个值、不重解析不重算（决定四），规范化版本与内容摘要随它原样过去，
-// 登记册记下的摘要因此与草稿上的逐字节相等。只有`已批准`及其后的草稿有登记可交。
+// 登记册记下的摘要因此与草稿上的逐字节相等。只有`已批准`与`已发布`有登记可交；`已撤下`不能发布。
 func (draft PriceCardDraft) Registration() (PriceCardRegistration, error) {
 	if draft.status != PriceCardDraftStatusApproved && draft.status != PriceCardDraftStatusPublished {
 		return PriceCardRegistration{}, fmt.Errorf("%w: draft is %s", ErrPriceCardDraftNotApproved, draft.status)
 	}
 	return NewPriceCardRegistration(draft.tenant, draft.content.Plan, draft.source,
 		draft.content.DirectionAuthorization, draft.approver)
+}
+
+// Withdraw 把`已批准`推进到`已撤下`。撤下人是操作者信封里的主体，时刻由调用方交服务端时钟，原因去首尾空白后必须非空且不含
+// 控制字符。不套审批职责规则：这一步只让草稿不能再发布，不放行任何东西。已发布与尚未批准都不是这一格；已撤下不能从这里恢复。
+func (draft PriceCardDraft) Withdraw(withdrawer OperatorSubject, reason string, withdrawnAt time.Time) (PriceCardDraft, error) {
+	if draft.status != PriceCardDraftStatusApproved {
+		return PriceCardDraft{}, fmt.Errorf("%w: draft is %s", ErrPriceCardDraftNotApproved, draft.status)
+	}
+	if !withdrawer.valid() {
+		return PriceCardDraft{}, ErrInvalidOperatorSubject
+	}
+	cleaned, ok := cleanWithdrawalReason(reason)
+	if !ok {
+		return PriceCardDraft{}, fmt.Errorf("%w: %w", ErrPriceCardWithdrawalReasonRejected, ErrInvalidPriceCardDraft)
+	}
+	if withdrawnAt.IsZero() || withdrawnAt.Before(draft.approvedAt) {
+		return PriceCardDraft{}, fmt.Errorf("%w：撤下时刻缺或早于批准", ErrInvalidPriceCardDraft)
+	}
+	draft.status = PriceCardDraftStatusWithdrawn
+	draft.withdrawer = withdrawer.reference
+	draft.withdrawnAt = withdrawnAt.UTC()
+	draft.withdrawalReason = cleaned
+	return draft, nil
 }
 
 // MarkPublished 在登记落定之后把`已批准`推进到`已发布`，且发布时刻不得早于批准。

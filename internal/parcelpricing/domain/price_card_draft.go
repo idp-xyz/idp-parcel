@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // 本文件是价卡草稿册的一行（ADR-0101 决定三；票 price-card-import/03）：一次导入立下的一份草稿，键为
 // 租户 × 方案标识 × 方案版本，一版一行。它不是价卡版本——不进版本清单，任何评价读不到它；发布把已批准的
 // 草稿交给既有的价卡登记（ADR-0101 决定五）。
 //
-// 状态四格对齐 CONTEXT「定价方案与价表版本」生命周期（spec 自决第 1 格）。前两格只由录入进入，由读口的读法
+// 状态对齐「定价方案与价表版本」那条线，并在已批准之后多一格终态`已撤下`。前两格只由录入进入，由读口的读法
 // 决定、不由调用方声明：读通了是`已校验`，带过了构造门的方案与方向授权引用——登记要的除批准者外一样不缺；
-// 没读通是`草稿`，只记逐格问题。后两格只从前一格推进而来，推进动作不在本文件；这里立它们的痕迹与读回门。
+// 没读通是`草稿`，只记逐格问题。已批准、已发布、已撤下只从前一格推进而来，推进动作不在本文件；这里立它们的痕迹与读回门。
 //
 // 草稿与已发布版本是两条持久化路径，所以有自己的一扇门（判据见 plan_snapshot.go 头注）；方案部分复用登记
 // 文档那组折装函数，不另立第二个口径。
@@ -27,7 +28,7 @@ var (
 	ErrInvalidRehydratedPriceCardDraft = errors.New("parcel pricing: invalid rehydrated price card draft")
 )
 
-// PriceCardDraftStatus 是草稿的状态四格。
+// PriceCardDraftStatus 是草稿册的状态。零值无效。
 type PriceCardDraftStatus uint8
 
 const (
@@ -40,6 +41,8 @@ const (
 	PriceCardDraftStatusApproved
 	// PriceCardDraftStatusPublished：已交登记、进了版本清单。
 	PriceCardDraftStatusPublished
+	// PriceCardDraftStatusWithdrawn：已批准之后撤下。终态，不能恢复，也不能再发布；版本号不再使用。
+	PriceCardDraftStatusWithdrawn
 )
 
 func (status PriceCardDraftStatus) String() string {
@@ -52,6 +55,8 @@ func (status PriceCardDraftStatus) String() string {
 		return "APPROVED"
 	case PriceCardDraftStatusPublished:
 		return "PUBLISHED"
+	case PriceCardDraftStatusWithdrawn:
+		return "WITHDRAWN"
 	default:
 		return ""
 	}
@@ -59,7 +64,7 @@ func (status PriceCardDraftStatus) String() string {
 
 // ParsePriceCardDraftStatus 按名字认一格状态：库上的列与查阅读口的筛选写的都是名字。
 func ParsePriceCardDraftStatus(name string) (PriceCardDraftStatus, bool) {
-	for status := PriceCardDraftStatusDraft; status <= PriceCardDraftStatusPublished; status++ {
+	for status := PriceCardDraftStatusDraft; status <= PriceCardDraftStatusWithdrawn; status++ {
 		if status.String() == name {
 			return status, true
 		}
@@ -68,11 +73,11 @@ func ParsePriceCardDraftStatus(name string) (PriceCardDraftStatus, bool) {
 }
 
 func (status PriceCardDraftStatus) valid() bool {
-	return status >= PriceCardDraftStatusDraft && status <= PriceCardDraftStatusPublished
+	return status >= PriceCardDraftStatusDraft && status <= PriceCardDraftStatusWithdrawn
 }
 
 func (status PriceCardDraftStatus) carriesContent() bool {
-	return status >= PriceCardDraftStatusValidated && status <= PriceCardDraftStatusPublished
+	return status >= PriceCardDraftStatusValidated && status <= PriceCardDraftStatusWithdrawn
 }
 
 // PriceCardDraftProblem 是`草稿`上的一条逐格问题。坐标与码照模板读口交出的原样记：码的封闭集合与各码的情形归
@@ -130,17 +135,20 @@ type PriceCardDraftSubmission struct {
 
 // PriceCardDraft 是草稿册的一行。值类型：读回与推进都交回新值，不改接收者。
 type PriceCardDraft struct {
-	tenant      TenantID
-	plan        VersionReference
-	status      PriceCardDraftStatus
-	source      SourceFileIdentity
-	content     PriceCardDraftContent
-	problems    []PriceCardDraftProblem
-	submitter   string
-	submittedAt time.Time
-	approver    string
-	approvedAt  time.Time
-	publishedAt time.Time
+	tenant           TenantID
+	plan             VersionReference
+	status           PriceCardDraftStatus
+	source           SourceFileIdentity
+	content          PriceCardDraftContent
+	problems         []PriceCardDraftProblem
+	submitter        string
+	submittedAt      time.Time
+	approver         string
+	approvedAt       time.Time
+	publishedAt      time.Time
+	withdrawer       string
+	withdrawnAt      time.Time
+	withdrawalReason string
 }
 
 // SubmitPriceCardDraft 由一次录入立一份草稿：带内容的进`已校验`，带问题的进`草稿`，两样都带或都不带的立不住。
@@ -167,11 +175,11 @@ func SubmitPriceCardDraft(submission PriceCardDraftSubmission) (PriceCardDraft, 
 	return draft, nil
 }
 
-// incoherence 答这份草稿哪里立不住，空串即立得住。录入与重建共用这一道判据：录入只进得了前两格，重建四格都查。
+// incoherence 答这份草稿哪里立不住，空串即立得住。录入与重建共用这一道判据：录入只进得了前两格，重建每一格都查。
 func (draft PriceCardDraft) incoherence() string {
 	switch {
 	case !draft.status.valid():
-		return "状态不在四格里"
+		return "状态不是草稿册认得的一格"
 	case !draft.tenant.valid():
 		return "缺租户"
 	case draft.plan.kind != ArtifactPricingPlan || !draft.plan.valid():
@@ -203,14 +211,14 @@ func (draft PriceCardDraft) incoherence() string {
 	return draft.traceIncoherence()
 }
 
-// traceIncoherence 按格查批准与发布的痕迹：批准者与批准时刻自`已批准`起在场且批准不早于录入，发布时刻只在
-// `已发布`在场且不早于批准。
+// traceIncoherence 按格查批准、发布与撤下的痕迹：批准者与批准时刻自`已批准`起在场且批准不早于录入，发布时刻只在
+// `已发布`在场且不早于批准，撤下人、时刻与原因只在`已撤下`在场且撤下不早于批准。
 func (draft PriceCardDraft) traceIncoherence() string {
 	approved := trimmed(draft.approver) && !draft.approvedAt.IsZero() && !draft.approvedAt.Before(draft.submittedAt)
 	switch draft.status {
 	case PriceCardDraftStatusDraft, PriceCardDraftStatusValidated:
-		if draft.approver != "" || !draft.approvedAt.IsZero() || !draft.publishedAt.IsZero() {
-			return "还没批准的草稿带着批准或发布痕迹"
+		if draft.approver != "" || !draft.approvedAt.IsZero() || !draft.publishedAt.IsZero() || !draft.withdrawalAbsent() {
+			return "还没批准的草稿带着批准、发布或撤下痕迹"
 		}
 	case PriceCardDraftStatusApproved:
 		if !approved {
@@ -219,6 +227,9 @@ func (draft PriceCardDraft) traceIncoherence() string {
 		if !draft.publishedAt.IsZero() {
 			return "已批准未发布的草稿带着发布时刻"
 		}
+		if !draft.withdrawalAbsent() {
+			return "已批准未撤下的草稿带着撤下痕迹"
+		}
 	case PriceCardDraftStatusPublished:
 		if !approved {
 			return "已发布的草稿缺批准者或批准时刻，或批准早于录入"
@@ -226,8 +237,41 @@ func (draft PriceCardDraft) traceIncoherence() string {
 		if draft.publishedAt.IsZero() || draft.publishedAt.Before(draft.approvedAt) {
 			return "已发布的草稿缺发布时刻，或发布早于批准"
 		}
+		if !draft.withdrawalAbsent() {
+			return "已发布的草稿带着撤下痕迹"
+		}
+	case PriceCardDraftStatusWithdrawn:
+		if !approved {
+			return "已撤下的草稿缺批准者或批准时刻，或批准早于录入"
+		}
+		if !draft.publishedAt.IsZero() {
+			return "已撤下的草稿带着发布时刻"
+		}
+		if !draft.withdrawalHolds() {
+			return "已撤下的草稿缺撤下人、时刻或原因，撤下早于批准，或原因空、带首尾空白或含控制字符"
+		}
 	}
 	return ""
+}
+
+func (draft PriceCardDraft) withdrawalAbsent() bool {
+	return draft.withdrawer == "" && draft.withdrawnAt.IsZero() && draft.withdrawalReason == ""
+}
+
+// withdrawalHolds 答撤下痕迹是不是一份能落册的记录：撤下人与原因都已去掉首尾空白，原因不含控制字符，时刻不早于批准。
+func (draft PriceCardDraft) withdrawalHolds() bool {
+	cleaned, ok := cleanWithdrawalReason(draft.withdrawalReason)
+	return trimmed(draft.withdrawer) && !draft.withdrawnAt.IsZero() &&
+		!draft.withdrawnAt.Before(draft.approvedAt) && ok && cleaned == draft.withdrawalReason
+}
+
+// cleanWithdrawalReason 去掉首尾空白。空白去尽后为空，或剩下的字里有控制字符，都不收。
+func cleanWithdrawalReason(raw string) (string, bool) {
+	reason := strings.TrimSpace(raw)
+	if reason == "" || strings.IndexFunc(reason, unicode.IsControl) >= 0 {
+		return "", false
+	}
+	return reason, true
 }
 
 func (draft PriceCardDraft) Tenant() TenantID               { return draft.tenant }
@@ -262,17 +306,31 @@ func (draft PriceCardDraft) PublishedAt() (time.Time, bool) {
 	return draft.publishedAt, !draft.publishedAt.IsZero()
 }
 
+func (draft PriceCardDraft) Withdrawer() (string, bool) {
+	return draft.withdrawer, draft.withdrawer != ""
+}
+
+func (draft PriceCardDraft) WithdrawnAt() (time.Time, bool) {
+	return draft.withdrawnAt, !draft.withdrawnAt.IsZero()
+}
+
+func (draft PriceCardDraft) WithdrawalReason() (string, bool) {
+	return draft.withdrawalReason, draft.withdrawalReason != ""
+}
+
 // PriceCardDraftResubmission 是同一版再录一次时那一行的落点。
 type PriceCardDraftResubmission uint8
 
 const (
 	PriceCardDraftResubmissionInvalid PriceCardDraftResubmission = iota
-	// PriceCardDraftResubmissionReplay：同版同内容再录，行一字不动——不论草稿此刻在哪一格。
+	// PriceCardDraftResubmissionReplay：同版同内容再录，行一字不动。已撤下不在此列。
 	PriceCardDraftResubmissionReplay
 	// PriceCardDraftResubmissionRevision：`已批准`之前换了内容，替换那一行，内容、录入者与录入时刻随之更新。
 	PriceCardDraftResubmissionRevision
 	// PriceCardDraftResubmissionContentFixed：草稿已`已批准`或`已发布`，内容固定；换内容要另起版本号。
 	PriceCardDraftResubmissionContentFixed
+	// PriceCardDraftResubmissionWithdrawn：这一版已经撤下。内容相同或不同都是这一格，不替换、也不当重放。
+	PriceCardDraftResubmissionWithdrawn
 )
 
 func (resubmission PriceCardDraftResubmission) String() string {
@@ -283,6 +341,8 @@ func (resubmission PriceCardDraftResubmission) String() string {
 		return "REVISION"
 	case PriceCardDraftResubmissionContentFixed:
 		return "CONTENT_FIXED"
+	case PriceCardDraftResubmissionWithdrawn:
+		return "WITHDRAWN"
 	default:
 		return ""
 	}
@@ -305,6 +365,9 @@ func (draft PriceCardDraft) ResubmissionOf(incoming PriceCardDraft) (PriceCardDr
 		return PriceCardDraftResubmissionInvalid, fmt.Errorf("%w：交来的不是同一版", ErrInvalidPriceCardDraft)
 	}
 	switch {
+	case draft.status == PriceCardDraftStatusWithdrawn:
+		// 先于同内容与内容固定：已撤下的版本号不再使用，相同内容也不能再当成重放。
+		return PriceCardDraftResubmissionWithdrawn, nil
 	case draft.sameContentAs(incoming):
 		return PriceCardDraftResubmissionReplay, nil
 	case draft.status.carriesContent() && draft.status != PriceCardDraftStatusValidated:
@@ -374,16 +437,19 @@ func MarshalPriceCardDraftContent(draft PriceCardDraft) ([]byte, error) {
 
 // RehydratePriceCardDraftSpec 是一行草稿在库里的样子：键、状态、源文件身份、内容文档、录入者与各格痕迹。
 type RehydratePriceCardDraftSpec struct {
-	Tenant      TenantID
-	Plan        VersionReference
-	Status      PriceCardDraftStatus
-	Source      SourceFileIdentity
-	Document    []byte
-	Submitter   string
-	SubmittedAt time.Time
-	Approver    string
-	ApprovedAt  time.Time
-	PublishedAt time.Time
+	Tenant           TenantID
+	Plan             VersionReference
+	Status           PriceCardDraftStatus
+	Source           SourceFileIdentity
+	Document         []byte
+	Submitter        string
+	SubmittedAt      time.Time
+	Approver         string
+	ApprovedAt       time.Time
+	PublishedAt      time.Time
+	Withdrawer       string
+	WithdrawnAt      time.Time
+	WithdrawalReason string
 }
 
 // RehydratePriceCardDraft 从库里读到的一行重建草稿：字段一律当数据收下，只校不变量（ADR-0028）。方案部分经登记文档
@@ -398,15 +464,18 @@ func RehydratePriceCardDraft(spec RehydratePriceCardDraftSpec) (PriceCardDraft, 
 		return PriceCardDraft{}, rehydratedDraftRefusal("内容与状态对不上：`草稿`不带方案，已校验起必带")
 	}
 	draft := PriceCardDraft{
-		tenant:      spec.Tenant,
-		plan:        spec.Plan,
-		status:      spec.Status,
-		source:      spec.Source,
-		submitter:   spec.Submitter,
-		submittedAt: spec.SubmittedAt.UTC(),
-		approver:    spec.Approver,
-		approvedAt:  spec.ApprovedAt.UTC(),
-		publishedAt: spec.PublishedAt.UTC(),
+		tenant:           spec.Tenant,
+		plan:             spec.Plan,
+		status:           spec.Status,
+		source:           spec.Source,
+		submitter:        spec.Submitter,
+		submittedAt:      spec.SubmittedAt.UTC(),
+		approver:         spec.Approver,
+		approvedAt:       spec.ApprovedAt.UTC(),
+		publishedAt:      spec.PublishedAt.UTC(),
+		withdrawer:       spec.Withdrawer,
+		withdrawnAt:      spec.WithdrawnAt.UTC(),
+		withdrawalReason: spec.WithdrawalReason,
 	}
 	if document.Plan != nil {
 		if !supportedCanonicalization(document.Plan.Canonicalization) {

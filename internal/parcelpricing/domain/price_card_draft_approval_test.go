@@ -100,6 +100,7 @@ func TestOnlyAValidatedDraftCanBeApproved(t *testing.T) {
 		"DRAFT":     submitDraft(t, problemSubmission(t, draftSource(t, "card.xlsx", synSourceSHA), draftProblem(t, "价表", 3, "base", "AMOUNT_INVALID"))),
 		"APPROVED":  withTraces(t, validated, domain.PriceCardDraftStatusApproved),
 		"PUBLISHED": withTraces(t, validated, domain.PriceCardDraftStatusPublished),
+		"WITHDRAWN": withTraces(t, validated, domain.PriceCardDraftStatusWithdrawn),
 	}
 	for name, draft := range drafts {
 		t.Run(name, func(t *testing.T) {
@@ -173,6 +174,66 @@ func TestTheRegistrationIsTheApprovedDraftItself(t *testing.T) {
 	}
 	if again, err := published.Registration(); err != nil || again.Plan().ContentDigest() != registration.Plan().ContentDigest() {
 		t.Fatalf("已发布草稿交回的登记变了：%v", err)
+	}
+}
+
+// 已批准才能撤下。已校验与已发布都不是这一格；撤下记下的是操作者主体、服务端时刻与原因，批准时的内容与批准痕迹还在。
+func TestOnlyAnApprovedDraftCanBeWithdrawn(t *testing.T) {
+	validated := validatedDraft(t)
+	withdrawer := operatorSubject(t, "https://id.syn.example/dex#SYN-OPERATOR-03")
+	at := draftApprovedAt.Add(time.Minute)
+
+	if _, err := validated.Withdraw(withdrawer, "客户拒绝这套价", at); !errors.Is(err, domain.ErrPriceCardDraftNotApproved) {
+		t.Fatalf("已校验撤下：err = %v，want ErrPriceCardDraftNotApproved", err)
+	}
+	approved, err := validated.Approve(operatorSubject(t, "https://id.syn.example/dex#SYN-OPERATOR-02"), approvalDutyRule(t, false, ""), draftApprovedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published, err := approved.MarkPublished(at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := published.Withdraw(withdrawer, "客户拒绝这套价", at.Add(time.Minute)); !errors.Is(err, domain.ErrPriceCardDraftNotApproved) {
+		t.Fatalf("已发布撤下：err = %v，want ErrPriceCardDraftNotApproved", err)
+	}
+	for _, reason := range []string{"", "   ", "客户\n拒绝"} {
+		if _, err := approved.Withdraw(withdrawer, reason, at); !errors.Is(err, domain.ErrInvalidPriceCardDraft) {
+			t.Fatalf("原因 %q：err = %v，want ErrInvalidPriceCardDraft", reason, err)
+		}
+	}
+	withdrawn, err := approved.Withdraw(withdrawer, "  客户拒绝这套价  ", at)
+	if err != nil {
+		t.Fatalf("已批准撤下：%v", err)
+	}
+	if withdrawn.Status() != domain.PriceCardDraftStatusWithdrawn || withdrawn.Status().String() != "WITHDRAWN" {
+		t.Fatalf("status = %v", withdrawn.Status())
+	}
+	if who, ok := withdrawn.Withdrawer(); !ok || who != withdrawer.Reference() {
+		t.Fatalf("withdrawer = %q %v", who, ok)
+	}
+	if when, ok := withdrawn.WithdrawnAt(); !ok || !when.Equal(at) {
+		t.Fatalf("withdrawnAt = %v %v", when, ok)
+	}
+	if reason, ok := withdrawn.WithdrawalReason(); !ok || reason != "客户拒绝这套价" {
+		t.Fatalf("reason = %q %v", reason, ok)
+	}
+	if approver, _ := withdrawn.Approver(); approver == "" {
+		t.Fatal("撤下丢掉了批准痕迹")
+	}
+	if content, ok := withdrawn.Content(); !ok || content.Plan.ContentDigest() == "" {
+		t.Fatal("撤下丢掉了批准时的内容")
+	}
+	if approved.Status() != domain.PriceCardDraftStatusApproved {
+		t.Fatal("撤下改了接收者")
+	}
+	same := submitDraft(t, validatedSubmission(t, draftPlan(t, "30"), draftSource(t, "card.xlsx", synSourceSHA)))
+	other := submitDraft(t, validatedSubmission(t, draftPlan(t, "31"), draftSource(t, "card.xlsx", otherSourceSHA)))
+	for _, incoming := range []domain.PriceCardDraft{same, other} {
+		got, err := withdrawn.ResubmissionOf(incoming)
+		if err != nil || got != domain.PriceCardDraftResubmissionWithdrawn || got.String() != "WITHDRAWN" {
+			t.Fatalf("已撤下再录 = %v %v，want WITHDRAWN", got, err)
+		}
 	}
 }
 
