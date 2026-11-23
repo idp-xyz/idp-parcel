@@ -86,7 +86,7 @@ func TestQuotationEffectivenessNamesTheStepThatIsStillOpen(t *testing.T) {
 		next       string
 	}{
 		{name: "草稿已撤下", withdrawn: true, named: true, next: "CANNOT_PUBLISH"},
-		{name: "合同还没指名", named: false, onRegister: true, selects: true, next: "SOURCE_LIST_FROZEN"},
+		{name: "合同还没指名", named: false, onRegister: true, selects: true, next: "PUBLISH_CONTRACT"},
 		{name: "等发布价卡", named: true, next: "PUBLISH_CARD"},
 		{name: "已在册但此刻选不中", named: true, onRegister: true, next: "NOT_SELECTABLE"},
 		{name: "三格都成立", named: true, onRegister: true, selects: true, next: "ALREADY_EFFECTIVE"},

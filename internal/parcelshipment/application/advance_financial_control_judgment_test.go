@@ -35,6 +35,9 @@ func TestFinancialControlRunsUnderTheAsOfDeclaredForItsOwnKind(t *testing.T) {
 	if kind := fixture.commercial.lastAsOfQuery.Declared.Kind(); kind != domain.FinancialControlJudgmentKind {
 		t.Fatalf("second stage asked for %q, want FINANCIAL_CONTROL——用了可达性那一项的声明", kind)
 	}
+	if !fixture.commercial.lastQuery.AcceptanceFix {
+		t.Fatal("这条腿与接受判断共用同一次固定解析，却没有标成接受固定")
+	}
 
 	requested := fixture.controller.lastAsOf
 	if !requested.At().Equal(controlPolicyFormedAsOf) {

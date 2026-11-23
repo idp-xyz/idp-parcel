@@ -1095,6 +1095,7 @@ func acceptanceCommercialBasis(
 		Rules:        rulePackages,
 		Keys:         keys,
 		Values:       values,
+		Requests:     requests,
 	}), nil
 }
 

@@ -527,6 +527,8 @@ func formAdoptedBasis(
 		Identity:          scope.Identity,
 		ShipmentRequestID: scope.ShipmentRequestID,
 		SubmissionVersion: scope.SubmissionVersion,
+		// 委托接受固定的是这一次解析。选择锚点的时刻在适配器里改成该版提交的来源发生时间。
+		AcceptanceFix: true,
 	})
 	if err != nil {
 		return adoptedBasis{}, basisStall{reason: CommercialBasisUnavailable}, nil

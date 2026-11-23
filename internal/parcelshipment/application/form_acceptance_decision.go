@@ -477,6 +477,8 @@ func (handler *FormAcceptanceDecisionHandler) resolve(
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
 		SubmissionVersion: command.SubmissionVersion,
+		// 提交前重解仍是这一次接受在固定解析，锚点时刻同样取该版提交的来源发生时间。
+		AcceptanceFix: true,
 	})
 }
 

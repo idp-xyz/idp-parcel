@@ -53,7 +53,7 @@ func (rule QuotationPublicationRule) String() string {
 
 // QuotationEffectiveness 是这一条发出离「这位客户用上这套价」还差什么。不另存。
 // 三格都成立才是已生效：所引价格内容已在册、这一版此刻仍可被选中、这位客户此刻适用的合同指名了这个范围。
-// 合同还没指名时，下一步是冻着的换来源，不在这里发布新合同。
+// 合同还没指名时，下一步是发布指名这个范围的新一版合同。不在这里发布新合同，也不造合同正文。
 type QuotationEffectiveness struct {
 	PriceOnRegister bool
 	SelectsNow      bool
@@ -178,12 +178,12 @@ func (handler *ReadQuotationHandler) effectiveness(ctx context.Context, send dom
 	if err != nil {
 		return QuotationEffectiveness{}, err
 	}
-	next := "SOURCE_LIST_FROZEN"
+	next := "PUBLISH_CONTRACT"
 	switch {
 	case draftWithdrawn && !onRegister:
 		next = "CANNOT_PUBLISH"
 	case !named:
-		next = "SOURCE_LIST_FROZEN"
+		next = "PUBLISH_CONTRACT"
 	case !onRegister:
 		next = "PUBLISH_CARD"
 	case !selects:

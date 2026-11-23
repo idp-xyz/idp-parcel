@@ -27,7 +27,8 @@ test('生效三格与下一步各说自己的话', () => {
   match(lines[1], /不在适用期内/);
   equal(quotationNextStepText('NOT_SELECTABLE').includes('不在适用期内'), true);
   equal(quotationNextStepText('ALREADY_EFFECTIVE').includes('已在册'), true);
-  equal(quotationNextStepText(undefined).includes('还不能做'), true);
+  equal(quotationNextStepText('PUBLISH_CONTRACT').includes('发布指名这个范围的新一版合同'), true);
+  equal(quotationNextStepText(undefined).includes('发布指名这个范围的新一版合同'), true);
 });
 
 test('发布按钮只在合同已指名、已批准草稿且未撤下、还没在册时出现', () => {

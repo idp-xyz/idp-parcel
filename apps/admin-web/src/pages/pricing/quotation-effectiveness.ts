@@ -31,8 +31,10 @@ export function quotationNextStepText(step: string | undefined): string {
       return '所引草稿已撤下，不能发布。';
     case 'NOT_SELECTABLE':
       return '价卡已在册，合同已经指名这个范围，但这一版此刻不在适用期内，或已被后继截止、退役。';
+    case 'PUBLISH_CONTRACT':
+      return '合同还没指名这个计价范围。下一步是发布指名这个范围的新一版合同。新接受落在新版区间里才换上来源列表。这里不发布新合同。';
     default:
-      return '合同还没指名这个计价范围。给已登记客户换来源列表还不能做，这里不发布新合同。';
+      return '合同还没指名这个计价范围。下一步是发布指名这个范围的新一版合同。新接受落在新版区间里才换上来源列表。这里不发布新合同。';
   }
 }
 

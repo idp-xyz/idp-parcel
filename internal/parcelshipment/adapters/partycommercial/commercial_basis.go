@@ -3,6 +3,7 @@ package partycommercial
 import (
 	"context"
 	"fmt"
+	"time"
 
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -20,6 +21,8 @@ const (
 	reasonAsOfPoliciesUnreadable    = "PC-ASOF_POLICIES_UNREADABLE"
 	reasonPendingRoutingUnreadable  = "PC-PENDING_ROUTING_UNREADABLE"
 	reasonResolutionContentConflict = "PC-RESOLUTION_CONTENT_CONFLICT"
+	// 接受这一次要用来源发生时间当选择锚点，时刻为零不能退回账户行上的登记时刻。
+	reasonAcceptanceOccurredAtNotConfigured = "ACCEPTANCE_OCCURRED_AT_NOT_CONFIGURED"
 )
 
 // ResolutionKeySource 把一次消费方查询折成提供方的闭包解析键。
@@ -46,6 +49,7 @@ type CommercialBasisAdapter struct {
 	rules        pcports.AcceptanceRulePackageContentView
 	keys         ResolutionKeySource
 	values       AsOfValueSource
+	requests     shipmentRequestFinder
 }
 
 // CommercialBasisAdapterDeps 收拢各协作方；≥5 个输入按本仓分界用结构体。
@@ -60,6 +64,9 @@ type CommercialBasisAdapterDeps struct {
 	Rules  pcports.AcceptanceRulePackageContentView
 	Keys   ResolutionKeySource
 	Values AsOfValueSource
+	// Requests 只在委托接受固定解析时用来读这一版提交的来源发生时间。不接时那一次停在未配置，
+	// 不拿账户行上的登记时刻顶。
+	Requests shipmentRequestFinder
 }
 
 // NewCommercialBasisAdapter 装配三个阶段。Keys 与 Values 允许为 nil：今天没有任何租户
@@ -75,6 +82,7 @@ func NewCommercialBasisAdapter(deps CommercialBasisAdapterDeps) *CommercialBasis
 		rules:        deps.Rules,
 		keys:         deps.Keys,
 		values:       deps.Values,
+		requests:     deps.Requests,
 	}
 }
 
@@ -96,12 +104,52 @@ func (adapter *CommercialBasisAdapter) ResolveCommercialBasis(
 	if !formed {
 		return undeterminedResolution(reasonKeyNotConfigured)
 	}
+	// 已经固定进册的解析按标识读回，不在这里重选。这一次接受才用该版提交的来源发生时间当选择锚点：
+	// 策略版本仍是账户行上的那一版，时刻不用那一行登记的，也不拿系统时钟顶。旧解析因此不改口。
+	if query.AcceptanceFix {
+		occurredAt, configured, err := acceptanceOccurredAt(ctx, adapter.requests, query)
+		if err != nil {
+			return psports.CommercialBasisResolution{}, err
+		}
+		if !configured {
+			return undeterminedResolution(reasonAcceptanceOccurredAtNotConfigured)
+		}
+		anchor, err := pcdomain.NewSelectionAnchor(occurredAt, key.Anchor.PolicyVersion())
+		if err != nil {
+			return psports.CommercialBasisResolution{}, fmt.Errorf("acceptance selection anchor: %w", err)
+		}
+		key.Anchor = anchor
+	}
 
 	answer, err := adapter.resolve.Handle(ctx, pcapplication.ResolveCommercialBasisCommand{Key: key})
 	if err != nil {
 		return psports.CommercialBasisResolution{}, fmt.Errorf("resolve commercial basis: %w", err)
 	}
 	return adapter.answeredResolution(ctx, answer)
+}
+
+// acceptanceOccurredAt 取这一版来源提交的发生时间。读不到、版本不在这份委托上、或时刻为零，都是未配置：
+// 不退回账户行上的登记时刻。读委托失败是依赖故障，与未配置分开。
+func acceptanceOccurredAt(
+	ctx context.Context,
+	requests shipmentRequestFinder,
+	query psports.CommercialBasisQuery,
+) (time.Time, bool, error) {
+	if requests == nil {
+		return time.Time{}, false, nil
+	}
+	request, found, err := requests.FindBySourceIdentity(ctx, query.Identity)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("acceptance occurred at: %w", err)
+	}
+	if !found {
+		return time.Time{}, false, nil
+	}
+	version, ok := request.SubmissionVersionByID(query.SubmissionVersion)
+	if !ok || version.SourceSubmission().OccurredAt().IsZero() {
+		return time.Time{}, false, nil
+	}
+	return version.SourceSubmission().OccurredAt(), true, nil
 }
 
 // answeredResolution 在翻译闭包之前先看解析固定在提供方持久化面的落点。顺序不能反：

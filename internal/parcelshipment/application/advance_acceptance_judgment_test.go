@@ -427,6 +427,16 @@ func newJudgmentFixture(t *testing.T) *judgmentFixture {
 	return value
 }
 
+func TestTheAcceptanceJudgmentMarksThisResolutionAsTheAcceptanceFix(t *testing.T) {
+	fixture := newJudgmentFixture(t)
+	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if !fixture.commercial.lastQuery.AcceptanceFix {
+		t.Fatal("接受判断没有把这一次标成固定解析")
+	}
+}
+
 func (value *judgmentFixture) command(t *testing.T) application.AdvanceAcceptanceJudgmentCommand {
 	t.Helper()
 	return application.AdvanceAcceptanceJudgmentCommand{
@@ -449,6 +459,7 @@ type commercialBasisDouble struct {
 	err                          error
 	record                       func(string)
 	calls                        int
+	lastQuery                    ports.CommercialBasisQuery
 
 	// 第二阶段：默认形成，测试按需改成四种未成形之一或让端口自己答不出。
 	asOfOutcome         ports.JudgmentAsOfOutcome
@@ -462,11 +473,12 @@ type commercialBasisDouble struct {
 
 func (double *commercialBasisDouble) ResolveCommercialBasis(
 	_ context.Context,
-	_ ports.CommercialBasisQuery,
+	query ports.CommercialBasisQuery,
 ) (ports.CommercialBasisResolution, error) {
 	double.t.Helper()
 	double.record("resolve-commercial-basis")
 	double.calls++
+	double.lastQuery = query
 
 	if double.err != nil {
 		return ports.CommercialBasisResolution{}, double.err

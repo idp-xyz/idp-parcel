@@ -903,6 +903,9 @@ func TestADecisionWithoutAPriorResolutionStillResolves(t *testing.T) {
 	if fixture.commercial.calls == 0 {
 		t.Fatal("既不重解也不解析，这份委托就此挂住")
 	}
+	if !fixture.commercial.lastQuery.AcceptanceFix {
+		t.Fatal("首次解析没有标成委托接受固定")
+	}
 }
 
 type decisionFixture struct {

@@ -838,6 +838,10 @@ type CommercialBasisQuery struct {
 	Identity          domain.SourceIdentity
 	ShipmentRequestID domain.ShipmentRequestID
 	SubmissionVersion domain.SubmissionVersionID
+	// AcceptanceFix 为真时，这一次是委托接受在固定解析。选择锚点的时刻取该提交版本的来源发生时间，
+	// 策略版本仍从账户那一行解析键读。发生时间为零就停在未配置，不退回那一行上的时刻。
+	// 受理前估价、信用和接受前财务控制不置这一格，仍用那一行上的时刻。
+	AcceptanceFix bool
 }
 
 // CommercialBasisResolution 是 parcel-shipment 视角下的一次商业解析结果。
