@@ -79,6 +79,50 @@ func TestQuotationSendStringNamesEveryNonZeroConstant(t *testing.T) {
 	}
 }
 
+func TestQuotationSendDropsSubMicrosecondInstants(t *testing.T) {
+	start := time.Date(2026, 11, 1, 0, 0, 0, 1500, time.UTC)
+	end := start.Add(24 * time.Hour).Add(1800 * time.Nanosecond)
+	sentAt := start.Add(time.Hour).Add(2500 * time.Nanosecond)
+	spec := domain.QuotationSendSpec{
+		ID:               commercialValue(t, domain.NewQuotationID, "QTS-1"),
+		Tenant:           commercialValue(t, domain.NewTenantID, "tenant-1"),
+		Lane:             domain.QuotationPriceFromApprovedDraft,
+		PlanID:           "PLAN-1",
+		PlanVersion:      "v1",
+		Canonicalization: "PPC-5",
+		ContentDigest:    "digest-1",
+		Counterparty:     commercialValue(t, domain.NewPartyID, "party-1"),
+		CounterpartyName: commercialValue(t, domain.NewPartyName, "相对方"),
+		LegalEntity:      commercialValue(t, domain.NewLegalEntityReference, "le-1"),
+		LegalEntityName:  commercialValue(t, domain.NewPartyName, "责任法人"),
+		StartsAt:         start,
+		EndsAt:           end,
+		Terms:            "",
+		Sender:           commercialValue(t, domain.NewOperatorSubjectReference, "op-1"),
+		SentAt:           sentAt,
+		Method:           domain.QuotationSendByWorkbookExport,
+	}
+	send, err := domain.NewQuotationSend(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !send.Validity().StartsAt().Equal(start.UTC().Truncate(time.Microsecond)) ||
+		!send.Validity().EndsAt().Equal(end.UTC().Truncate(time.Microsecond)) ||
+		!send.SentAt().Equal(sentAt.UTC().Truncate(time.Microsecond)) {
+		t.Fatalf("有效期 %s–%s，发出时刻 %s，应当截到微秒", send.Validity().StartsAt(), send.Validity().EndsAt(), send.SentAt())
+	}
+	spec.StartsAt = send.Validity().StartsAt()
+	spec.EndsAt = send.Validity().EndsAt()
+	spec.SentAt = send.SentAt()
+	again, err := domain.NewQuotationSend(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !send.SameFact(again) {
+		t.Fatal("截到同一微秒应当是同一条发出")
+	}
+}
+
 func TestQuotationSendRejectsAnOpenValidityBorrowedFromElsewhere(t *testing.T) {
 	// 商业版本的适用区间允许不写终点。报价的有效期不走那一条。
 	open, err := domain.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})

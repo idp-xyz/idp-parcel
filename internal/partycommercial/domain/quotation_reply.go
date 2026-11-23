@@ -11,7 +11,7 @@ import (
 // 证据只存索引，文件字节不进这条记录。不复用签署证据：那一套挂在合同或协议版本旁，还要文件名和哈希。
 
 // ErrInvalidQuotationReply 是一条答复的身份立不住：缺发出、缺租户、缺代录人或登记时刻。
-// 证据、原因与客户时刻立不住走 ErrQuotationNotAccepted，那是未受理，不是这条记录的其余事实。
+// 证据、原因、客户时刻，以及带首尾空白的代录人，立不住走 ErrQuotationNotAccepted。那是未受理，不是这条记录的其余事实。
 var ErrInvalidQuotationReply = errQuotation("invalid reply")
 
 // QuotationReplyDecision 是客户的答复。零值无效。接受与拒绝都登记，没有第三格。
@@ -119,18 +119,24 @@ func NewQuotationReply(spec QuotationReplySpec) (QuotationReply, error) {
 	if spec.Decision == QuotationReplyAccepted && reason.Text() != "" {
 		return QuotationReply{}, ErrQuotationNotAccepted
 	}
-	if spec.RepliedAt.IsZero() {
+	repliedAt := quotationClock(spec.RepliedAt)
+	recordedAt := quotationClock(spec.RecordedAt)
+	if repliedAt.IsZero() {
+		return QuotationReply{}, ErrQuotationNotAccepted
+	}
+	// 带首尾空白的代录人不去掉，也不换成去掉空白后的另一个人。库要求原文就等于去掉空白后的自己。
+	if spec.RecordedBy.String() != strings.TrimSpace(spec.RecordedBy.String()) {
 		return QuotationReply{}, ErrQuotationNotAccepted
 	}
 	reply := QuotationReply{
 		quotationID:     spec.QuotationID,
 		tenant:          spec.Tenant,
 		decision:        spec.Decision,
-		repliedAt:       spec.RepliedAt.UTC(),
+		repliedAt:       repliedAt,
 		evidence:        evidence,
 		rejectionReason: reason,
 		recordedBy:      spec.RecordedBy,
-		recordedAt:      spec.RecordedAt.UTC(),
+		recordedAt:      recordedAt,
 	}
 	if !reply.valid() {
 		return QuotationReply{}, ErrInvalidQuotationReply
@@ -141,6 +147,7 @@ func NewQuotationReply(spec QuotationReplySpec) (QuotationReply, error) {
 func (reply QuotationReply) valid() bool {
 	return reply.quotationID.valid() && reply.tenant.valid() && reply.decision.String() != "" &&
 		!reply.repliedAt.IsZero() && reply.evidence.valid() && reply.recordedBy.valid() &&
+		reply.recordedBy.String() == strings.TrimSpace(reply.recordedBy.String()) &&
 		!reply.recordedAt.IsZero() &&
 		(reply.decision != QuotationReplyAccepted || reply.rejectionReason.Text() == "")
 }

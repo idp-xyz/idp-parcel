@@ -90,11 +90,19 @@ type QuotationValidity struct {
 	endsAt   time.Time
 }
 
+// quotationClock 对齐到库能存住的精度。timestamptz 只到微秒，写进去再读回来若还带着更细的零头，
+// 同一次事实会被 SameFact 看成两条。
+func quotationClock(at time.Time) time.Time {
+	return at.UTC().Truncate(time.Microsecond)
+}
+
 func NewQuotationValidity(startsAt, endsAt time.Time) (QuotationValidity, error) {
+	startsAt = quotationClock(startsAt)
+	endsAt = quotationClock(endsAt)
 	if startsAt.IsZero() || endsAt.IsZero() || !endsAt.After(startsAt) {
 		return QuotationValidity{}, ErrQuotationNotAccepted
 	}
-	return QuotationValidity{startsAt: startsAt.UTC(), endsAt: endsAt.UTC()}, nil
+	return QuotationValidity{startsAt: startsAt, endsAt: endsAt}, nil
 }
 
 func (interval QuotationValidity) StartsAt() time.Time { return interval.startsAt }
@@ -194,7 +202,7 @@ func NewQuotationSend(spec QuotationSendSpec) (QuotationSend, error) {
 		validity:         validity,
 		terms:            terms,
 		sender:           spec.Sender,
-		sentAt:           spec.SentAt.UTC(),
+		sentAt:           quotationClock(spec.SentAt),
 		method:           spec.Method,
 	}
 	if !send.valid() {

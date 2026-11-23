@@ -57,6 +57,39 @@ func TestAQuotationReplyRecordsAcceptanceWithoutAReason(t *testing.T) {
 	}
 }
 
+func TestQuotationReplyRejectsARecorderWithSurroundingSpace(t *testing.T) {
+	send := quotationSend(t, "")
+	repliedAt := send.Validity().StartsAt()
+	recordedAt := repliedAt.Add(time.Minute)
+	spec := replySpec(t, send, domain.QuotationReplyAccepted, repliedAt, recordedAt, "SYN-EVIDENCE-01", "")
+	spec.RecordedBy = commercialValue(t, domain.NewOperatorSubjectReference, "  op-reply  ")
+	reply, err := domain.NewQuotationReply(spec)
+	if !errors.Is(err, domain.ErrQuotationNotAccepted) {
+		t.Fatalf("代录人首尾空白 = %v，想要未受理", err)
+	}
+	if reply.RecordedBy().String() != "" {
+		t.Fatalf("拒下之后仍留下代录人 %q，不去空白、也不换成另一个人", reply.RecordedBy())
+	}
+	spec.RecordedBy = commercialValue(t, domain.NewOperatorSubjectReference, "op reply")
+	if _, err := domain.NewQuotationReply(spec); err != nil {
+		t.Fatalf("名字中间的空白应当留下：%v", err)
+	}
+}
+
+func TestQuotationReplyDropsSubMicrosecondInstants(t *testing.T) {
+	send := quotationSend(t, "")
+	repliedAt := send.Validity().StartsAt().Add(time.Hour).Add(1500 * time.Nanosecond)
+	recordedAt := repliedAt.Add(time.Minute).Add(2500 * time.Nanosecond)
+	reply := quotationReply(t, send, domain.QuotationReplyAccepted, repliedAt, recordedAt, "SYN-EVIDENCE-01", "")
+	if !reply.RepliedAt().Equal(repliedAt.UTC().Truncate(time.Microsecond)) || !reply.RecordedAt().Equal(recordedAt.UTC().Truncate(time.Microsecond)) {
+		t.Fatalf("客户时刻 %s，登记时刻 %s，应当截到微秒", reply.RepliedAt(), reply.RecordedAt())
+	}
+	again := quotationReply(t, send, domain.QuotationReplyAccepted, repliedAt.UTC().Truncate(time.Microsecond), recordedAt.UTC().Truncate(time.Microsecond), "SYN-EVIDENCE-01", "")
+	if !reply.SameFact(again) {
+		t.Fatal("细过微秒的零头截掉之后应当是同一条")
+	}
+}
+
 func TestQuotationReplySameFactIgnoresWhoRecordedIt(t *testing.T) {
 	send := quotationSend(t, "")
 	repliedAt := send.Validity().StartsAt()
