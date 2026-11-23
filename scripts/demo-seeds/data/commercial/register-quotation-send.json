@@ -1,0 +1,15 @@
+{
+  "quotationId": "SYN-QUOTATION-01",
+  "tenantId": "SYN-TENANT-01",
+  "sender": "SYN-OPERATOR-01",
+  "sentAt": "2026-11-23T08:00:00Z",
+  "lane": "REGISTERED_PRICE_CARD",
+  "planId": "SYN-PLAN-CN-SG-01",
+  "planVersion": "v1",
+  "contentDigest": "6f964f789b78fa6207216e26749f3af84880d22430927329792fb42564fc2405",
+  "counterpartyPartyId": "SYN-PARTY-SHIPPER-01",
+  "legalEntityId": "SYN-LE-01",
+  "validFrom": "2026-11-23T00:00:00Z",
+  "validUntil": "2027-11-23T00:00:00Z",
+  "terms": "SYN 演示条款。证据 S。"
+}
