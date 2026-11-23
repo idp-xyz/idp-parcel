@@ -36,6 +36,11 @@ func (repository *QuotationReplies) AppendQuotationReply(ctx context.Context, re
 	if err != nil {
 		return ports.QuotationReplyAppendOutcomeInvalid, fmt.Errorf("append quotation reply: %w", err)
 	}
+	// 主键冲突会把当前事务标成失败。先落保存点，撞键后滚回这一点，同一笔事务才读得回既有行。
+	// 别的库错误原样交回，不译成重放或冲突。
+	if _, err := executor.Exec(ctx, "SAVEPOINT quotation_reply_insert"); err != nil {
+		return ports.QuotationReplyAppendOutcomeInvalid, fmt.Errorf("append quotation reply: %w", err)
+	}
 	_, err = executor.Exec(ctx,
 		`INSERT INTO party_commercial.quotation_reply (
 		    tenant_id, quotation_id, decision, replied_at, evidence_index, rejection_reason, recorded_by, recorded_at)
@@ -49,6 +54,9 @@ func (repository *QuotationReplies) AppendQuotationReply(ctx context.Context, re
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != pgUniqueViolation {
 		return ports.QuotationReplyAppendOutcomeInvalid, fmt.Errorf("append quotation reply: %w", err)
+	}
+	if _, rollbackErr := executor.Exec(ctx, "ROLLBACK TO SAVEPOINT quotation_reply_insert"); rollbackErr != nil {
+		return ports.QuotationReplyAppendOutcomeInvalid, fmt.Errorf("append quotation reply: %w", rollbackErr)
 	}
 	existing, found, loadErr := repository.load(ctx, executor, reply.Tenant(), reply.QuotationID())
 	if loadErr != nil {
