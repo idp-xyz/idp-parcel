@@ -107,6 +107,18 @@ func cancellationOrchestrationWith(
 	db *bentopg.DB,
 	authority psports.CancellationAuthorityView,
 ) (shipmenthttp.CancellationHandler, error) {
+	handler, err := buildCancelParcelHandler(db, authority)
+	if err != nil {
+		return nil, err
+	}
+	return transactionalCancellation{transactor: db.Transactor(), inner: handler}, nil
+}
+
+// buildCancelParcelHandler 装包裹取消编排，自己不开事务。首方取消口在外面套事务；出库截单调用时已经在自己的事务里。
+func buildCancelParcelHandler(
+	db *bentopg.DB,
+	authority psports.CancellationAuthorityView,
+) (*shipmentapp.CancelParcelHandler, error) {
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
@@ -149,7 +161,7 @@ func cancellationOrchestrationWith(
 		return nil, fmt.Errorf("parcel-api: cancellation boundary locks: %w", err)
 	}
 
-	handler := shipmentapp.NewCancelParcelHandler(shipmentapp.CancelParcelDeps{
+	return shipmentapp.NewCancelParcelHandler(shipmentapp.CancelParcelDeps{
 		Requests:       requests,
 		Authority:      authority,
 		Adoptions:      adoptions,
@@ -161,6 +173,5 @@ func cancellationOrchestrationWith(
 		Downstream:     downstream,
 		Clock:          clock,
 		BoundaryLock:   boundaryLocks,
-	})
-	return transactionalCancellation{transactor: db.Transactor(), inner: handler}, nil
+	}), nil
 }

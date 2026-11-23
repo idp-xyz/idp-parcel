@@ -1043,7 +1043,15 @@ func buildWarehouseShipmentReleaser(db *bentopg.DB) (*whparcel.Releaser, error) 
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: warehouse withdrawal requests: %w", err)
 	}
-	return whparcel.NewReleaser(agency, requests, withdrawal, systemClock{})
+	authority, err := buildCancellationAuthority(db)
+	if err != nil {
+		return nil, err
+	}
+	canceller, err := buildCancelParcelHandler(db, authority)
+	if err != nil {
+		return nil, err
+	}
+	return whparcel.NewReleaser(agency, requests, withdrawal, canceller, systemClock{})
 }
 
 func buildWarehouseOutboundOpener(db *bentopg.DB, isolated *isolatedWriteAdmission, selfAuthority string, assigner *docnumber.Assigner) (*whparcel.Opener, error) {

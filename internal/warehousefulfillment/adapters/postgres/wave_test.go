@@ -990,7 +990,7 @@ func TestAReturnMovesPickedGoodsBackAndARefusedShipmentStaysPacked(t *testing.T)
 
 type scriptedReleaser struct{ word string }
 
-func (releaser scriptedReleaser) Release(context.Context, string, string, string, string, int) (string, error) {
+func (releaser scriptedReleaser) Release(context.Context, string, string, string, string, string, int) (string, error) {
 	return releaser.word, nil
 }
 

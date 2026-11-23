@@ -8,6 +8,7 @@ import (
 
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	warehouseapp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 )
 
@@ -19,11 +20,17 @@ type withdrawalHandler interface {
 	Handle(ctx context.Context, command psapplication.WithdrawShipmentRequestCommand) (psapplication.WithdrawShipmentRequestResult, error)
 }
 
-// Releaser 问一份已提交的仓配出库委托能不能撤回。代办没获准时不调用撤回编排，免得没登记的租户留下撤回来源。
+type parcelCanceller interface {
+	Handle(ctx context.Context, command psapplication.CancelParcelCommand) (psapplication.CancelParcelResult, error)
+}
+
+// Releaser 问一份仓配出库委托能不能放开。代办没获准时不调用撤回或取消，免得没登记的租户留下来源。
+// 已提交走撤回。已接受走现有的包裹取消，不另造一套取消规则。
 type Releaser struct {
 	agency   agencyAllowance
 	requests shipmentBySource
 	withdraw func(context.Context, psapplication.WithdrawShipmentRequestCommand) (string, string, string, error)
+	cancel   func(context.Context, psapplication.CancelParcelCommand) (string, string, string, error)
 	clock    interface{ Now() time.Time }
 }
 
@@ -31,10 +38,11 @@ func NewReleaser(
 	agency agencyAllowance,
 	requests shipmentBySource,
 	handler withdrawalHandler,
+	canceller parcelCanceller,
 	clock interface{ Now() time.Time },
 ) (*Releaser, error) {
-	if agency == nil || requests == nil || handler == nil || clock == nil {
-		return nil, fmt.Errorf("warehouse fulfillment parcel shipment: releaser needs an agency allowance, a request store, a withdrawal handler and a clock")
+	if agency == nil || requests == nil || handler == nil || canceller == nil || clock == nil {
+		return nil, fmt.Errorf("warehouse fulfillment parcel shipment: releaser needs an agency allowance, a request store, a withdrawal handler, a parcel canceller and a clock")
 	}
 	return &Releaser{
 		agency: agency, requests: requests, clock: clock,
@@ -45,11 +53,23 @@ func NewReleaser(
 			}
 			return result.Outcome().String(), result.State().String(), result.PendingReason().String(), nil
 		},
+		cancel: func(ctx context.Context, command psapplication.CancelParcelCommand) (string, string, string, error) {
+			result, err := canceller.Handle(ctx, command)
+			if err != nil {
+				return "", "", "", err
+			}
+			kind := ""
+			if record, ok := result.Record(); ok {
+				kind = record.Kind.String()
+			}
+			return result.Outcome().String(), kind, result.UndecidedReason().String(), nil
+		},
 	}, nil
 }
 
-// Release 按出库请求与包裹序号找回那份委托。已撤回或已拒绝视为已经放行。已接受要走包裹取消，那一口还没接，答未配置。
-func (releaser *Releaser) Release(ctx context.Context, tenant, owner, shipmentID, request string, sequence int) (string, error) {
+// Release 按出库请求与包裹序号找回那份委托。已撤回或已拒绝视为已经放行。
+// 已接受交给包裹取消：取消成立才放行，不成立或授权没登记都不放行。
+func (releaser *Releaser) Release(ctx context.Context, tenant, owner, shipmentID, declaredParcel, request string, sequence int) (string, error) {
 	if sequence < 1 || shipmentID == "" || request == "" {
 		return "", fmt.Errorf("release shipment: parcel identity is incomplete")
 	}
@@ -75,7 +95,7 @@ func (releaser *Releaser) Release(ctx context.Context, tenant, owner, shipmentID
 	case psdomain.ShipmentRequestWithdrawn, psdomain.ShipmentRequestRejected:
 		return warehouseapp.ShipmentReleased, nil
 	case psdomain.ShipmentRequestAccepted:
-		return warehouseapp.ShipmentNotConfigured, nil
+		return releaser.cancelAccepted(ctx, identity, found, declaredParcel)
 	case psdomain.ShipmentRequestSubmitted:
 	default:
 		return "", fmt.Errorf("release shipment: state %s", found.State())
@@ -88,7 +108,68 @@ func (releaser *Releaser) Release(ctx context.Context, tenant, owner, shipmentID
 	if err != nil {
 		return "", err
 	}
+	if outcome == psapplication.WithdrawalDecisionAlreadyFormed.String() && state == psdomain.ShipmentRequestAccepted.String() {
+		return releaser.cancelAccepted(ctx, identity, found, declaredParcel)
+	}
 	return releaseWord(outcome, state, pending)
+}
+
+// cancelAccepted 以货主本人的名义把这一件交给现有的包裹取消。请求时刻用委托的提交时刻，同一份截单重放才对得上已有取消。
+func (releaser *Releaser) cancelAccepted(ctx context.Context, identity psdomain.SourceIdentity, request psdomain.ShipmentRequest, declaredParcel string) (string, error) {
+	if releaser.cancel == nil {
+		return warehouseapp.ShipmentNotConfigured, nil
+	}
+	if declaredParcel == "" {
+		return "", fmt.Errorf("release shipment: declared parcel is missing")
+	}
+	parcel, err := psdomain.NewDeclaredParcelID(declaredParcel)
+	if err != nil {
+		return "", err
+	}
+	requester, err := psdomain.NewCustomerAccountCancellationRequester(identity.CustomerAccountID())
+	if err != nil {
+		return "", err
+	}
+	reason, err := psdomain.NewCancellationReasonReference(psdomain.OutboundCutoffReason)
+	if err != nil {
+		return "", err
+	}
+	command := psapplication.CancelParcelCommand{
+		Identity: identity, ShipmentRequestID: request.ShipmentRequestID(), CustomerAccount: identity.CustomerAccountID(),
+		Parcel: parcel, Requester: requester, Reason: reason, RequestedAt: request.SubmittedAt().UTC(),
+	}
+	outcome, kind, undecided, err := releaser.cancel(ctx, command)
+	if err != nil {
+		return "", err
+	}
+	return cancellationWord(outcome, kind, undecided)
+}
+
+func cancellationWord(outcome, recordKind, undecided string) (string, error) {
+	switch outcome {
+	case psapplication.ParcelCancelled.String():
+		return warehouseapp.ShipmentReleased, nil
+	case psapplication.CancellationRefused.String(), psapplication.DispositionPending.String(), psapplication.CancellationFinalOutcomeStands.String():
+		return warehouseapp.ShipmentRefused, nil
+	case psapplication.CancellationExistingResult.String():
+		switch recordKind {
+		case psports.RecordParcelCancelled.String():
+			return warehouseapp.ShipmentReleased, nil
+		case psports.RecordCancellationRefused.String(), psports.RecordDispositionPending.String():
+			return warehouseapp.ShipmentRefused, nil
+		default:
+			return "", fmt.Errorf("release shipment: existing cancellation %s", recordKind)
+		}
+	case psapplication.CancellationUndecided.String():
+		if undecided == psapplication.CancelAuthorityUnconfigured.String() {
+			return warehouseapp.ShipmentNotConfigured, nil
+		}
+		return "", fmt.Errorf("release shipment: %s", undecided)
+	case psapplication.CancellationRequestEnded.String():
+		return warehouseapp.ShipmentReleased, nil
+	default:
+		return "", fmt.Errorf("release shipment: %s", outcome)
+	}
 }
 
 func (releaser *Releaser) command(identity psdomain.SourceIdentity, request psdomain.ShipmentRequest) (psapplication.WithdrawShipmentRequestCommand, error) {

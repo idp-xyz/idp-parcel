@@ -7,6 +7,7 @@ import (
 
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	warehouseapp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 )
 
@@ -132,7 +133,7 @@ func releaserOf(requests requestDouble, withdraw *withdrawDouble, granted bool) 
 func TestAnUngrantedCutoffDoesNotWithdraw(t *testing.T) {
 	withdraw := &withdrawDouble{outcome: psapplication.WithdrawalFormed.String()}
 	releaser := releaserOf(requestDouble{request: shipmentAt(t, psdomain.ShipmentRequestSubmitted), found: true}, withdraw, false)
-	word, err := releaser.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "OBR-1", 1)
+	word, err := releaser.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "parcel-1", "OBR-1", 1)
 	if err != nil || word != warehouseapp.ShipmentNotConfigured || withdraw.called != 0 {
 		t.Fatalf("word %s err %v called %d", word, err, withdraw.called)
 	}
@@ -141,7 +142,7 @@ func TestAnUngrantedCutoffDoesNotWithdraw(t *testing.T) {
 func TestAGrantedCutoffWithdrawsASubmittedShipmentAndLeavesADecidedOne(t *testing.T) {
 	withdraw := &withdrawDouble{outcome: psapplication.WithdrawalFormed.String(), state: psdomain.ShipmentRequestWithdrawn.String()}
 	releaser := releaserOf(requestDouble{request: shipmentAt(t, psdomain.ShipmentRequestSubmitted), found: true}, withdraw, true)
-	word, err := releaser.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "OBR-1", 1)
+	word, err := releaser.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "parcel-1", "OBR-1", 1)
 	if err != nil || word != warehouseapp.ShipmentReleased || withdraw.called != 1 {
 		t.Fatalf("word %s err %v called %d", word, err, withdraw.called)
 	}
@@ -149,18 +150,84 @@ func TestAGrantedCutoffWithdrawsASubmittedShipmentAndLeavesADecidedOne(t *testin
 		t.Fatalf("requester %s key %s", withdraw.command.Requester, withdraw.command.WithdrawalIdentity.RequestKey())
 	}
 	withdraw.outcome = psapplication.WithdrawalNotAuthorized.String()
-	refused, err := releaser.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "OBR-1", 1)
+	refused, err := releaser.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "parcel-1", "OBR-1", 1)
 	if err != nil || refused != warehouseapp.ShipmentRefused {
 		t.Fatalf("refused %s err %v", refused, err)
 	}
 	held := releaserOf(requestDouble{request: shipmentAt(t, psdomain.ShipmentRequestWithdrawn), found: true}, withdraw, true)
 	before := withdraw.called
-	released, err := held.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "OBR-1", 1)
+	released, err := held.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "parcel-1", "OBR-1", 1)
 	if err != nil || released != warehouseapp.ShipmentReleased || withdraw.called != before {
 		t.Fatalf("already withdrawn %s err %v called %d", released, err, withdraw.called)
 	}
 	accepted, err := releaseWord(psapplication.WithdrawalDecisionAlreadyFormed.String(), psdomain.ShipmentRequestAccepted.String(), "")
 	if err != nil || accepted != warehouseapp.ShipmentNotConfigured {
 		t.Fatalf("accepted %s err %v", accepted, err)
+	}
+}
+
+type cancelDouble struct {
+	called    int
+	command   psapplication.CancelParcelCommand
+	outcome   string
+	kind      string
+	undecided string
+}
+
+func (double *cancelDouble) answer(_ context.Context, command psapplication.CancelParcelCommand) (string, string, string, error) {
+	double.called++
+	double.command = command
+	return double.outcome, double.kind, double.undecided, nil
+}
+
+// Covers: 已接受的委托走现有的包裹取消。成立才放行；拒绝、待处置与既有终局不放行；授权没登记答未配置。缺包裹标识不调用取消。
+func TestAnAcceptedShipmentUsesParcelCancellation(t *testing.T) {
+	withdraw := &withdrawDouble{
+		outcome: psapplication.WithdrawalDecisionAlreadyFormed.String(),
+		state:   psdomain.ShipmentRequestAccepted.String(),
+	}
+	cancel := &cancelDouble{outcome: psapplication.ParcelCancelled.String(), kind: psports.RecordParcelCancelled.String()}
+	releaser := releaserOf(requestDouble{request: shipmentAt(t, psdomain.ShipmentRequestSubmitted), found: true}, withdraw, true)
+	releaser.cancel = cancel.answer
+	word, err := releaser.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "parcel-1", "OBR-1", 1)
+	if err != nil || word != warehouseapp.ShipmentReleased || cancel.called != 1 || withdraw.called != 1 {
+		t.Fatalf("word %s err %v cancel %d withdraw %d", word, err, cancel.called, withdraw.called)
+	}
+	owner, err := psdomain.NewCustomerAccountID("SYN-OWNER-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cancel.command.Requester.IsCustomerAccount(owner) || cancel.command.Reason.String() != psdomain.OutboundCutoffReason ||
+		cancel.command.Parcel.String() != "parcel-1" || cancel.command.ShipmentRequestID.String() != "SHR-1" ||
+		cancel.command.Identity.RequestKey().String() != "OBR-1/1" || !cancel.command.RequestedAt.Equal(time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC)) {
+		t.Fatalf("command requester %s reason %s parcel %s key %s at %s", cancel.command.Requester, cancel.command.Reason, cancel.command.Parcel, cancel.command.Identity.RequestKey(), cancel.command.RequestedAt)
+	}
+	cancel.outcome = psapplication.CancellationRefused.String()
+	refused, err := releaser.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "parcel-1", "OBR-1", 1)
+	if err != nil || refused != warehouseapp.ShipmentRefused {
+		t.Fatalf("refused %s err %v", refused, err)
+	}
+	cancel.outcome = psapplication.CancellationUndecided.String()
+	cancel.undecided = psapplication.CancelAuthorityUnconfigured.String()
+	unconfigured, err := releaser.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "parcel-1", "OBR-1", 1)
+	if err != nil || unconfigured != warehouseapp.ShipmentNotConfigured {
+		t.Fatalf("unconfigured %s err %v", unconfigured, err)
+	}
+	before := cancel.called
+	if _, err := releaser.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "", "OBR-1", 1); err == nil || cancel.called != before {
+		t.Fatalf("缺包裹标识 err %v called %d", err, cancel.called)
+	}
+	word, err = cancellationWord(psapplication.CancellationExistingResult.String(), psports.RecordParcelCancelled.String(), "")
+	if err != nil || word != warehouseapp.ShipmentReleased {
+		t.Fatalf("replay %s err %v", word, err)
+	}
+	word, err = cancellationWord(psapplication.DispositionPending.String(), "", "")
+	if err != nil || word != warehouseapp.ShipmentRefused {
+		t.Fatalf("pending %s err %v", word, err)
+	}
+	unwired := releaserOf(requestDouble{request: shipmentAt(t, psdomain.ShipmentRequestSubmitted), found: true}, withdraw, true)
+	held, err := unwired.Release(t.Context(), "SYN-TENANT-01", "SYN-OWNER-01", "SHR-1", "parcel-1", "OBR-1", 1)
+	if err != nil || held != warehouseapp.ShipmentNotConfigured {
+		t.Fatalf("没接上取消 %s err %v", held, err)
 	}
 }
