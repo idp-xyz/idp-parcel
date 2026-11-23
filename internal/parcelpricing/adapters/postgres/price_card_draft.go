@@ -39,7 +39,8 @@ func NewPriceCardDrafts(db *bentopg.DB) (*PriceCardDrafts, error) {
 // priceCardDraftColumns 是写回与读回共用的列面，次序与 scanPriceCardDraftRow 对齐。
 const priceCardDraftColumns = `plan_id, plan_version, status, source_file_name, source_file_sha256,
 		        canonicalization, content_digest, authorization_id, authorization_version,
-		        content_document, submitter, submitted_at, approver, approved_at, published_at`
+		        content_document, submitter, submitted_at, approver, approved_at, published_at,
+		        withdrawn_by, withdrawn_at, withdrawal_reason`
 
 // SubmitDraft 录入一版。只收新录入（`草稿`或`已校验`）：后两格只从推进而来。
 func (drafts *PriceCardDrafts) SubmitDraft(ctx context.Context, draft domain.PriceCardDraft) (ports.PriceCardDraftSubmitOutcome, error) {
@@ -98,6 +99,8 @@ func (drafts *PriceCardDrafts) SubmitDraft(ctx context.Context, draft domain.Pri
 		return ports.PriceCardDraftReplayed, nil
 	case domain.PriceCardDraftResubmissionContentFixed:
 		return ports.PriceCardDraftContentFixed, nil
+	case domain.PriceCardDraftResubmissionWithdrawn:
+		return ports.PriceCardDraftWithdrawn, nil
 	case domain.PriceCardDraftResubmissionRevision:
 		return revisePriceCardDraft(ctx, executor, draft, document, content)
 	default:
@@ -243,9 +246,9 @@ func (drafts *PriceCardDrafts) LoadPriceCardDraft(
 	return draft, true, nil
 }
 
-// AdvancePriceCardDraft 把领域推进后的那一份写回：只改状态与批准、发布三格痕迹，不重写内容文档。「还是读到时那一行」
-// 由 WHERE 判——前一格、录入者、录入时刻与内容摘要都对得上，推进成发布时连批准者与批准时刻也要对得上；修订会换掉录入
-// 痕迹，别人先推进会换掉状态，两者都落成`已被替换`、行一字不动。不在这里加锁：批准与发布各在自己的一笔事务里读、判、
+// AdvancePriceCardDraft 把领域推进后的那一份写回：只改状态与批准、发布、撤下的痕迹，不重写内容文档。「还是读到时那一行」
+// 由 WHERE 判——前一格、录入者、录入时刻与内容摘要都对得上，从已批准推进时连批准者与批准时刻也要对得上；修订会换掉录入
+// 痕迹，别人先推进会换掉状态，两者都落成`已被替换`、行一字不动。不在这里加锁：批准、发布与撤下各在自己的一笔事务里读、判、
 // 写，判不上的那一笔由调用方按答案或回滚处置。
 func (drafts *PriceCardDrafts) AdvancePriceCardDraft(ctx context.Context, draft domain.PriceCardDraft) (ports.PriceCardDraftAdvanceOutcome, error) {
 	executor, err := drafts.db.RequireExecutor(ctx)
@@ -256,10 +259,10 @@ func (drafts *PriceCardDrafts) AdvancePriceCardDraft(ctx context.Context, draft 
 	switch draft.Status() {
 	case domain.PriceCardDraftStatusApproved:
 		previous = domain.PriceCardDraftStatusValidated
-	case domain.PriceCardDraftStatusPublished:
+	case domain.PriceCardDraftStatusPublished, domain.PriceCardDraftStatusWithdrawn:
 		previous = domain.PriceCardDraftStatusApproved
 	default:
-		return ports.PriceCardDraftAdvanceOutcomeInvalid, fmt.Errorf("advance price card draft: only an approval or a publication advances a draft, got %q", draft.Status())
+		return ports.PriceCardDraftAdvanceOutcomeInvalid, fmt.Errorf("advance price card draft: only an approval, a publication or a withdrawal advances a draft, got %q", draft.Status())
 	}
 	content, has := draft.Content()
 	approver, hasApprover := draft.Approver()
@@ -271,16 +274,26 @@ func (drafts *PriceCardDrafts) AdvancePriceCardDraft(ctx context.Context, draft 
 	if at, published := draft.PublishedAt(); published {
 		publishedAt = &at
 	}
+	var withdrawnBy *string
+	var withdrawnAt *time.Time
+	var withdrawalReason *string
+	if who, withdrawn := draft.Withdrawer(); withdrawn {
+		at, _ := draft.WithdrawnAt()
+		reason, _ := draft.WithdrawalReason()
+		withdrawnBy, withdrawnAt, withdrawalReason = &who, &at, &reason
+	}
 
 	tag, err := executor.Exec(ctx,
 		`UPDATE parcel_pricing.price_card_draft
-		    SET status = $4, approver = $5, approved_at = $6, published_at = $7
+		    SET status = $4, approver = $5, approved_at = $6, published_at = $7,
+		        withdrawn_by = $12, withdrawn_at = $13, withdrawal_reason = $14
 		  WHERE tenant_id = $1 AND plan_id = $2 AND plan_version = $3
 		    AND status = $8 AND submitter = $9 AND submitted_at = $10 AND content_digest = $11
 		    AND ($8 <> 'APPROVED' OR (approver = $5 AND approved_at = $6))`,
 		draft.Tenant().String(), draft.Plan().ID(), draft.Plan().Version(),
 		draft.Status().String(), approver, approvedAt.UTC(), publishedAt,
 		previous.String(), draft.Submitter(), draft.SubmittedAt().UTC(), content.Plan.ContentDigest(),
+		withdrawnBy, withdrawnAt, withdrawalReason,
 	)
 	if err != nil {
 		return ports.PriceCardDraftAdvanceOutcomeInvalid, fmt.Errorf("advance price card draft: %w", err)
@@ -344,13 +357,17 @@ type priceCardDraftRow struct {
 	submittedAt                 time.Time
 	approver                    *string
 	approvedAt, publishedAt     *time.Time
+	withdrawnBy                 *string
+	withdrawnAt                 *time.Time
+	withdrawalReason            *string
 }
 
 func scanPriceCardDraftRow(scanner interface{ Scan(dest ...any) error }) (priceCardDraftRow, error) {
 	var row priceCardDraftRow
 	err := scanner.Scan(&row.planID, &row.planVersion, &row.status, &row.sourceName, &row.sourceSHA,
 		&row.content.canonicalization, &row.content.digest, &row.content.authorizationID, &row.content.authorizationVersion,
-		&row.document, &row.submitter, &row.submittedAt, &row.approver, &row.approvedAt, &row.publishedAt)
+		&row.document, &row.submitter, &row.submittedAt, &row.approver, &row.approvedAt, &row.publishedAt,
+		&row.withdrawnBy, &row.withdrawnAt, &row.withdrawalReason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return priceCardDraftRow{}, fmt.Errorf("草稿行不在：%w", err)
 	}
@@ -362,7 +379,7 @@ func scanPriceCardDraftRow(scanner interface{ Scan(dest ...any) error }) (priceC
 func (row priceCardDraftRow) draft(tenant domain.TenantID) (domain.PriceCardDraft, error) {
 	status, known := domain.ParsePriceCardDraftStatus(row.status)
 	if !known {
-		return domain.PriceCardDraft{}, fmt.Errorf("%s/%s：状态 %q 不在四格里", row.planID, row.planVersion, row.status)
+		return domain.PriceCardDraft{}, fmt.Errorf("%s/%s：状态 %q 不是草稿册认得的一格", row.planID, row.planVersion, row.status)
 	}
 	plan, err := domain.NewVersionReferenceIdentity(domain.ArtifactPricingPlan, row.planID, row.planVersion)
 	if err != nil {
@@ -384,6 +401,15 @@ func (row priceCardDraftRow) draft(tenant domain.TenantID) (domain.PriceCardDraf
 	}
 	if row.publishedAt != nil {
 		spec.PublishedAt = *row.publishedAt
+	}
+	if row.withdrawnBy != nil {
+		spec.Withdrawer = *row.withdrawnBy
+	}
+	if row.withdrawnAt != nil {
+		spec.WithdrawnAt = *row.withdrawnAt
+	}
+	if row.withdrawalReason != nil {
+		spec.WithdrawalReason = *row.withdrawalReason
 	}
 	draft, err := domain.RehydratePriceCardDraft(spec)
 	if err != nil {

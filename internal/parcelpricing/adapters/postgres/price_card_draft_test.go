@@ -325,6 +325,11 @@ func TestTheDraftTableRefusesRowsNoPathCouldWrite(t *testing.T) {
 			 canonicalization, content_digest, authorization_id, authorization_version, content_document, submitter, submitted_at, approved_at)
 			VALUES ('SYN-TENANT-01', 'SYN-PLAN-Y', 'v1', 'APPROVED', 'card.xlsx', '` + catalogSourceSHA + `',
 			 'PPC-5', 'sha256:x', 'SYN-AUTH', 'v1', '{}', 'SYN-OPERATOR', now(), now())`,
+		"已撤下缺原因": `INSERT INTO parcel_pricing.price_card_draft
+			(tenant_id, plan_id, plan_version, status, source_file_name, source_file_sha256,
+			 canonicalization, content_digest, authorization_id, authorization_version, content_document, submitter, submitted_at, approver, approved_at)
+			VALUES ('SYN-TENANT-01', 'SYN-PLAN-Z', 'v1', 'WITHDRAWN', 'card.xlsx', '` + catalogSourceSHA + `',
+			 'PPC-5', 'sha256:x', 'SYN-AUTH', 'v1', '{}', 'SYN-OPERATOR', now(), 'SYN-APPROVER', now())`,
 	} {
 		if _, err := store.pool.Exec(t.Context(), statement); err == nil {
 			t.Errorf("%s: 写进去了", name)
