@@ -1,0 +1,6 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "accountId": "SYN-SETTLEMENT-ACCOUNT-23",
+  "billingMoment": "SHIPMENT_MEMBERS_INTAKE_ADOPTED",
+  "pricingScopeId": "SYN-SCOPE-SHIP-23"
+}

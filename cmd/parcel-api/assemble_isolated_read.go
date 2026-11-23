@@ -30,7 +30,8 @@ const (
 //
 // SYN-ACCOUNT-21、-22 是合同上声明销售价格来源的两位演示客户（票 commercial-four-module-requirements/21）：它们的委托
 // 要走到预估客户费用形成，动线按委托查阅等接受，页面上也要看得见。
-var isolatedReadCustomerAccounts = []string{"SYN-ACCOUNT-01", "SYN-ACCOUNT-21", "SYN-ACCOUNT-22"}
+// SYN-ACCOUNT-23 是逐委托销售那一户（票 07），同一条理由。
+var isolatedReadCustomerAccounts = []string{"SYN-ACCOUNT-01", "SYN-ACCOUNT-21", "SYN-ACCOUNT-22", "SYN-ACCOUNT-23"}
 
 // isolatedReadIntakes 携带 ADR-0078 放行面的注入式 Intake：委托查阅及其子集视图共用的那个变量。它们的读口按可见客户
 // 账户切，操作者信封给不出，换口与开关整体退场归票 operator-channel/53。nil 指针表示未启用。

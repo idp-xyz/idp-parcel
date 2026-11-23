@@ -67,13 +67,14 @@ fi
 integration_issuer="http://127.0.0.1:5558/dex"
 integration_jwks="http://127.0.0.1:5558/dex/keys"
 private_container=""
-probe_ok() { # 各台集成/客户端凭据都取得到才算共享发行方可用；配置里后加的客户端（段六的 21、22 两台）也在内
+probe_ok() { # 各台集成/客户端凭据都取得到才算共享发行方可用；配置里后加的客户端（21、22，以及逐委托的 23）也在内
   integration_token syn-integration-customs-broker-01 syn-customs-broker-secret >/dev/null 2>&1 &&
     integration_token syn-integration-carrier-trunk-01 syn-carrier-trunk-secret >/dev/null 2>&1 &&
     integration_token syn-integration-bank-01 syn-bank-secret >/dev/null 2>&1 &&
     customer_token >/dev/null 2>&1 &&
     "$SEEDS_DIR/operator-channel/customer-token.sh" syn-customer-client-21 syn-customer-client-21-secret >/dev/null 2>&1 &&
-    "$SEEDS_DIR/operator-channel/customer-token.sh" syn-customer-client-22 syn-customer-client-22-secret >/dev/null 2>&1
+    "$SEEDS_DIR/operator-channel/customer-token.sh" syn-customer-client-22 syn-customer-client-22-secret >/dev/null 2>&1 &&
+    "$SEEDS_DIR/operator-channel/customer-token.sh" syn-customer-client-23 syn-customer-client-23-secret >/dev/null 2>&1
 }
 if probe_ok; then
   echo "共享集成客户端发行方可用（5558）"

@@ -1,0 +1,10 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "accountId": "SYN-SETTLEMENT-ACCOUNT-23",
+  "legalEntityId": "SYN-LE-01",
+  "counterpartyId": "SYN-PARTY-SHIPPER-23",
+  "direction": "RECEIVABLE",
+  "currency": "CNY",
+  "settlementPolicyId": "SYN-SETTLEMENT-PREPAID-23",
+  "responsibilityBasis": "SYN-CONTRACT-23"
+}

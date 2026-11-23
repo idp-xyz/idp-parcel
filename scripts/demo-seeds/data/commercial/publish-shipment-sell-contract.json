@@ -1,0 +1,80 @@
+{
+  "items": [
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "CUSTOMER_CONTRACT",
+      "objectId": "SYN-CONTRACT-23",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "PCC-3:56cdbe1c608bb529dc11ed808a0b9182ee46804d2c2b20897747b41309247990",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "ACCEPTANCE_RULE_PACKAGE": "SYN-RULEPKG-01"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-040",
+        "source": "SYN-SOURCE-DEMO-SHIPMENT-SELL-2026-11",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "contractContent": {
+          "customerAccount": "SYN-ACCOUNT-23",
+          "rulePackage": "SYN-RULEPKG-01",
+          "bindings": [
+            {
+              "chargeScope": "SYN-CHARGE-PREPAID",
+              "policy": "SYN-FIN-CONTROL-01"
+            },
+            {
+              "chargeScope": "SYN-CHARGE-COD",
+              "inapplicabilityBasis": "SYN-BASIS-COD-NA-23"
+            }
+          ]
+        },
+        "preAcceptanceControl": {
+          "requirement": "REQUIRED"
+        },
+        "sellPriceArrangement": {
+          "sources": [
+            {
+              "pricingScope": "SYN-SCOPE-SHIP-23"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "SETTLEMENT_POLICY",
+      "objectId": "SYN-SETTLEMENT-PREPAID-23",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "PCC-1:180148dbb12df99c8f71e1e6cc5e69aec4c165976cf682aef924f2f481d4336d",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "CUSTOMER_CONTRACT": "SYN-CONTRACT-23"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-041",
+        "source": "SYN-SOURCE-DEMO-SHIPMENT-SELL-2026-11",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "settlementPolicyBody": {
+          "method": "PREPAID",
+          "legalEntity": "SYN-LE-01",
+          "counterparty": "SYN-PARTY-SHIPPER-23",
+          "contract": {
+            "objectId": "SYN-CONTRACT-23",
+            "version": "v1"
+          },
+          "chargeScope": "SYN-CHARGE-PREPAID",
+          "currency": "CNY",
+          "effectiveStartsAt": "2026-01-01T00:00:00Z"
+        }
+      }
+    }
+  ]
+}

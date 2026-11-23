@@ -76,6 +76,8 @@ func main() {
 	// 专属售价卡（范围 SYN-SCOPE-EXCL-01，见 exclusive_card.go）：只写谈下来的 Z1，绑上面已登记并复核的分区目录与燃油序列。
 	// 与上面各份互不改动，重跑 seedgen 时上面各份逐字节不变。
 	write(outDir, "price-card-cn-sg-exclusive.json", exclusiveSellCardSnapshot())
+	// 逐委托售价卡（范围 SYN-SCOPE-SHIP-23，见 shipment_card.go）：只给票级销售那一户。不改上面任何一张逐包裹卡。
+	write(outDir, "price-card-cn-sg-shipment.json", shipmentSellCardSnapshot())
 }
 
 // reviewDutyRuleDocument 产出 parcel-pricing-register -kind reference-review-duty-rule 吃的规则文档：演示租户要求复核者

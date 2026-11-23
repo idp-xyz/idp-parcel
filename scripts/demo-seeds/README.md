@@ -547,3 +547,16 @@ C 字典序逐个 `source`。步骤文件里直接写 `"$BIN/<CLI>" … "$SEEDS/
 - **`demo-run/60-sell-price-sources.sh`**（要 `up.sh` 起好的环境）：两位客户各自的客户端真提交三件，走到预估客户费用形成，对受理前估价与费用同额、费用的主要计费范围、评价解释里逐个来源的那几行。走 Z2 的那一件不等初始路由：演示网络的成本卡只有 Z1，Z2 的候选路线算不出成本；受理、收寄与销售计费不等路由。
 
 专属卡 `SYN-PLAN-CN-SG-EXCL-01` v1 的内容在这张票的后续修订里换过（原先是手改的 JSON、不绑燃油序列、价与公共卡相同），版本号没换。在 `560b00fde` 上灌过的库重跑会答版本内容冲突、`seed.sh` 中止，库里仍是旧卡；用 `--reset`。
+
+## 逐委托销售
+
+票 07。演示租户另开一户，合同从开户起只声明计价范围 `SYN-SCOPE-SHIP-23`，这个范围上只有一张逐委托销售卡。不改 `SYN-SETTLEMENT-ACCOUNT-01` 的包裹计费时点，也不把已有的逐包裹卡改成逐委托。取值都是合成的，证据记 `S`。
+
+| 步骤 | 灌什么 |
+|---|---|
+| `119-shipment-sell-contract.sh` | 合同 `SYN-CONTRACT-23`、结算政策 `SYN-SETTLEMENT-PREPAID-23`、解析键、参与方 `SYN-PARTY-SHIPPER-23` 与客户账户 `SYN-ACCOUNT-23` |
+| `178-pricing-shipment-sell-card.sh` | 逐委托卡 `SYN-PLAN-CN-SG-SHIP-23`（`seedgen/shipment_card.go` 生成）。分区目录与燃油序列和公共卡绑同一份 |
+| `490-access-shipment-sell-customer-client.sh` | 首方客户端 `syn-customer-client-23` 与提交、预报、查追踪的授予。发行方配置在 `operator-channel/integration-dex.yaml` |
+| `506-shipment-sell-settlement.sh` | 结算账户 `SYN-SETTLEMENT-ACCOUNT-23`、不带范围的受理前估价采用、委托级计费时点采用 `SHIPMENT_MEMBERS_INTAKE_ADOPTED`（范围 `SYN-SCOPE-SHIP-23`） |
+
+`demo-run/75-shipment-sell.sh`（要 `up.sh` 起好的环境）用这一户交一份两件委托。少一件时不形成客户费用；两件都完成有效网络收寄之后，形成一份委托级销售请求和一笔客户费用，不另起逐包裹的销售请求。
