@@ -182,27 +182,37 @@ func TestDocumentNumberingRegisterRoundTrip(t *testing.T) {
 	body := documentNumberingBody(t, documentNumberingRequest(t, readHandlers.read, http.MethodGet, docnumberhttp.RulesPath, token, ""))
 	zone, _ := body["numberingTimeZone"].(map[string]any)
 	types, _ := body["documentTypes"].([]any)
-	// ADR-0355 决定二的十一类仍在，入库预报与出库请求是后来加的。只数长度会把丢了哪一类也看成过。
-	if zone["status"] != "NOT_CONFIGURED" || len(types) != 13 {
+	// ADR-0355 决定二的十一类仍在，入库预报、出库请求与退货预报是后来加的。只数长度会把丢了哪一类也看成过。
+	if zone["status"] != "NOT_CONFIGURED" || len(types) != 14 {
 		t.Fatalf("empty register: %v", body)
 	}
 	sawInboundPreAdvice := false
+	sawReturnPreAdvice := false
 	for _, raw := range types {
 		row, _ := raw.(map[string]any)
 		if row["source"] != "PRODUCT_DEFAULT" || row["sample"] != nil {
 			t.Fatalf("%v should be the product default without a sample", row)
 		}
-		if row["documentType"] != "INBOUND_PRE_ADVICE" {
-			continue
-		}
-		sawInboundPreAdvice = true
-		dateZone, _ := row["dateTimeZone"].(map[string]any)
-		if dateZone == nil || row["defaultTemplate"] != "IB-{yyyy}{mm}{dd}-{seq:5}" || row["resetPeriod"] != "DAILY" || dateZone["source"] != "ISSUER_BUSINESS_TIME_ZONE" {
-			t.Fatalf("inbound pre-advice: %v", row)
+		switch row["documentType"] {
+		case "INBOUND_PRE_ADVICE":
+			sawInboundPreAdvice = true
+			dateZone, _ := row["dateTimeZone"].(map[string]any)
+			if dateZone == nil || row["defaultTemplate"] != "IB-{yyyy}{mm}{dd}-{seq:5}" || row["resetPeriod"] != "DAILY" || dateZone["source"] != "ISSUER_BUSINESS_TIME_ZONE" {
+				t.Fatalf("inbound pre-advice: %v", row)
+			}
+		case "RETURN_PRE_ADVICE":
+			sawReturnPreAdvice = true
+			dateZone, _ := row["dateTimeZone"].(map[string]any)
+			if dateZone == nil || row["defaultTemplate"] != "RT-{yyyy}{mm}{dd}-{seq:5}" || row["resetPeriod"] != "DAILY" || dateZone["source"] != "ISSUER_BUSINESS_TIME_ZONE" {
+				t.Fatalf("return pre-advice: %v", row)
+			}
 		}
 	}
 	if !sawInboundPreAdvice {
 		t.Fatal("INBOUND_PRE_ADVICE missing from the empty register")
+	}
+	if !sawReturnPreAdvice {
+		t.Fatal("RETURN_PRE_ADVICE missing from the empty register")
 	}
 
 	zoneBody := `{"timeZone":"Asia/Shanghai","effectiveFrom":"2026-01-01T00:00:00+08:00"}`

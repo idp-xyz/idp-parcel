@@ -22,6 +22,11 @@ import (
 // 各类标识的前缀。取值只是日志与工单里的可读性约定，不承载业务含义，也不参与任何判断：
 // 领域侧各 ID 已是互不相通的 Go 类型，张冠李戴在编译期就被拦住，前缀是给人看的那一份。
 const (
+	// ShipmentRequestPrefix、SubmissionBatchPrefix、DeclaredParcelPrefix 是委托、批次与声明包裹的前缀。
+	// 首方提交与仓配代交签的是同一类标识，前缀只在这里声明一次。
+	ShipmentRequestPrefix          = "SHR"
+	SubmissionBatchPrefix          = "SBAT"
+	DeclaredParcelPrefix           = "DPCL"
 	submissionVersionPrefix        = "SUBV"
 	acceptanceDecisionTaskPrefix   = "ADTK"
 	acceptanceDecisionPrefix       = "ADEC"

@@ -29,9 +29,17 @@ func NewRegisterWarehousePlanEndpoint(intake WarehousePlanIntake, registrar Ware
 			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
 			return
 		}
+		if intake == nil {
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
 		tenant, plan, err := intake.IntakeWarehousePlan(request.Context(), request)
 		if err != nil {
 			writeRegistrationIntakeProblem(response, err)
+			return
+		}
+		if registrar == nil {
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 		outcome, err := registrar.Register(request.Context(), tenant, plan)
@@ -64,6 +72,10 @@ func decodeWarehousePlan(reader io.Reader) (domain.WarehousePlan, error) {
 	if err := json.NewDecoder(reader).Decode(&document); err != nil {
 		return domain.WarehousePlan{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
+	if document.TenantID != nil || document.ID == "" || document.Version == "" || document.Scope == "" ||
+		document.Currency == "" || document.DeclaredValue == "" || document.EffectiveFrom.IsZero() {
+		return domain.WarehousePlan{}, fmt.Errorf("%w: warehouse plan", ErrMalformedRequest)
+	}
 	plan := domain.WarehousePlan{
 		ID: document.ID, Version: document.Version, Scope: document.Scope, Currency: document.Currency,
 		DeclaredValue: document.DeclaredValue, EffectiveFrom: document.EffectiveFrom,
@@ -84,6 +96,7 @@ func decodeWarehousePlan(reader io.Reader) (domain.WarehousePlan, error) {
 }
 
 type warehousePlanDocument struct {
+	TenantID      *string                  `json:"tenantId"`
 	ID            string                   `json:"id"`
 	Version       string                   `json:"version"`
 	Scope         string                   `json:"scope"`

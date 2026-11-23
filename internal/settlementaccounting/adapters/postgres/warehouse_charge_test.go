@@ -93,17 +93,17 @@ func TestWarehouseChargesFollowTheSyntheticOccurrence(t *testing.T) {
 			return err
 		}
 		if outcome, err := pricing.handler.Register(ctx, tenant.String(), warehouseSettlementPlan()); err != nil || outcome != pricingapp.WarehousePlanRecorded {
-			t.Fatalf("方案 %s %v", outcome, err)
+			return fmt.Errorf("方案 %s %v", outcome, err)
 		}
 		adopted, err := handler.Adopt(ctx, tenant, application.WarehouseAdoption{
 			Owner: "SYN-OWNER-01", Warehouse: "SYN-WH-01", Revision: 1, Effective: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
 			Account: account.ID().String(), Scope: "SYN-SCOPE-WH", Basis: "SYN-BASIS", Registrant: "operator-1",
 		})
 		if err != nil || adopted != application.WarehouseChargeFormed {
-			t.Fatalf("采用 %s %v", adopted, err)
+			return fmt.Errorf("采用 %s %v", adopted, err)
 		}
 		if outcome, _, err := handler.Settle(ctx, tenant, inboundFact("CHO-MISS", 1)); err != nil || outcome != application.WarehouseChargePending {
-			t.Fatalf("没映射 %s %v", outcome, err)
+			return fmt.Errorf("没映射 %s %v", outcome, err)
 		}
 		mapping, err := domain.NewFeeItemMapping(
 			mustAccountRef(t, domain.NewPricingChargeCode, "INBOUND_PIECE"),
@@ -118,7 +118,7 @@ func TestWarehouseChargesFollowTheSyntheticOccurrence(t *testing.T) {
 		}
 		formed, chargeID, err := handler.Settle(ctx, tenant, inboundFact("CHO-IN", 1))
 		if err != nil || formed != application.WarehouseChargeFormed || chargeID == "" {
-			t.Fatalf("没确认时点 %s %s %v", formed, chargeID, err)
+			return fmt.Errorf("没确认时点 %s %s %v", formed, chargeID, err)
 		}
 		if _, err := conditions.RegisterCondition(ctx, tenant, mustAccountRef(t, domain.NewFeeItemReference, "SYN-FEE-WH"), "WAREHOUSE_WORK_OCCURRED", clock.Now()); err != nil {
 			return err
@@ -128,11 +128,11 @@ func TestWarehouseChargesFollowTheSyntheticOccurrence(t *testing.T) {
 		}
 		confirmed, confirmedID, err := handler.Settle(ctx, tenant, inboundFact("CHO-IN-2", 1))
 		if err != nil || confirmed != application.WarehouseChargeConfirmed {
-			t.Fatalf("确认 %s %v", confirmed, err)
+			return fmt.Errorf("确认 %s %v", confirmed, err)
 		}
 		again, _, err := handler.Settle(ctx, tenant, inboundFact("CHO-IN-2", 1))
 		if err != nil || again != application.WarehouseChargeExisting {
-			t.Fatalf("重放 %s %v", again, err)
+			return fmt.Errorf("重放 %s %v", again, err)
 		}
 		storageMapping, err := domain.NewFeeItemMapping(
 			mustAccountRef(t, domain.NewPricingChargeCode, "STORAGE_DAY"),
@@ -147,26 +147,26 @@ func TestWarehouseChargesFollowTheSyntheticOccurrence(t *testing.T) {
 		}
 		storedRent, rentID, err := handler.Settle(ctx, tenant, storageFact())
 		if err != nil || storedRent != application.WarehouseChargeConfirmed {
-			t.Fatalf("仓租 %s %v", storedRent, err)
+			return fmt.Errorf("仓租 %s %v", storedRent, err)
 		}
 		rent, foundRent, err := charges.FindByID(ctx, tenant, mustAccountRef(t, domain.NewCustomerChargeID, rentID))
 		if err != nil || !foundRent {
 			return err
 		}
 		if _, minor := rent.OriginalAmount(); minor != 100 {
-			t.Fatalf("仓租金额 %d", minor)
+			return fmt.Errorf("仓租金额 %d", minor)
 		}
 		waiting, _, err := handler.Settle(ctx, tenant, inboundFact("CHO-IN-2", 2))
 		if err != nil || waiting != application.WarehouseChargeAwaitingPerson {
-			t.Fatalf("已确认上的更正 %s %v", waiting, err)
+			return fmt.Errorf("已确认上的更正 %s %v", waiting, err)
 		}
 		stored, found, err := charges.FindByID(ctx, tenant, mustAccountRef(t, domain.NewCustomerChargeID, confirmedID))
 		if err != nil || !found || stored.Stage() != domain.ChargeConfirmed {
-			t.Fatalf("费用 %v %s", err, stored.Stage())
+			return fmt.Errorf("费用 %v %s", err, stored.Stage())
 		}
 		_, minor := stored.OriginalAmount()
 		if minor != 400 {
-			t.Fatalf("金额 %d", minor)
+			return fmt.Errorf("金额 %d", minor)
 		}
 		return nil
 	})

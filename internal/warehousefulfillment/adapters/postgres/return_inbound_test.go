@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -62,7 +63,7 @@ func TestAReturnIsAdvisedCountedAndDisposedWithoutReversingTheOriginalShipment(t
 			return claimErr
 		}
 		if claimed.Outcome() != application.ClaimUnclaimedClaimed {
-			t.Fatalf("认领 %s", claimed.Outcome())
+			return fmt.Errorf("认领 %s", claimed.Outcome())
 		}
 		return nil
 	})

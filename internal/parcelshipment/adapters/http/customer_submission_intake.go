@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -80,14 +81,6 @@ type CustomerSubmissionIntake struct {
 
 var _ SubmissionIntake = (*CustomerSubmissionIntake)(nil)
 
-// 本包现签内部标识用的前缀。前缀属标识的类、不属入口：委托、批次与声明包裹从哪个接入口进来都是同一类标识，按入口另起前缀，
-// 库里就有同一类标识的两种写法。
-const (
-	submissionRequestPrefix = "SHR"
-	submissionBatchPrefix   = "SBAT"
-	submissionParcelPrefix  = "DPCL"
-)
-
 // NewCustomerSubmissionIntake 由装配点构造。立不起来的依赖在这里拒：装配错误要在启动时暴露，不该等到第一个请求。
 func NewCustomerSubmissionIntake(
 	authenticator CustomerClientAuthenticator,
@@ -100,15 +93,15 @@ func NewCustomerSubmissionIntake(
 	if authenticator == nil || ownership == nil || clock == nil {
 		return fail(errors.New("needs an authenticator, an ownership authority and a clock"))
 	}
-	requests, err := platformidentity.NewMinter(submissionRequestPrefix)
+	requests, err := platformidentity.NewMinter(identity.ShipmentRequestPrefix)
 	if err != nil {
 		return fail(err)
 	}
-	batches, err := platformidentity.NewMinter(submissionBatchPrefix)
+	batches, err := platformidentity.NewMinter(identity.SubmissionBatchPrefix)
 	if err != nil {
 		return fail(err)
 	}
-	parcels, err := platformidentity.NewMinter(submissionParcelPrefix)
+	parcels, err := platformidentity.NewMinter(identity.DeclaredParcelPrefix)
 	if err != nil {
 		return fail(err)
 	}

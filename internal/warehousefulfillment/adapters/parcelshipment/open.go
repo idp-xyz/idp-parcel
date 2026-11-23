@@ -7,17 +7,11 @@ import (
 	"strings"
 	"time"
 
+	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/identity"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
-)
-
-// 与首方提交现签的内部标识同一类前缀。另起前缀会让同一类标识在库里有两种写法。
-const (
-	shipmentRequestPrefix = "SHR"
-	submissionBatchPrefix = "SBAT"
-	declaredParcelPrefix  = "DPCL"
 )
 
 type agencyAllowance interface {
@@ -57,15 +51,15 @@ func NewOpener(
 	if agency == nil || shipments == nil || ownership == nil || clock == nil {
 		return nil, fmt.Errorf("warehouse fulfillment parcel shipment: opener needs an agency allowance, a submission handler, an ownership authority and a clock")
 	}
-	requests, err := identity.NewMinter(shipmentRequestPrefix)
+	requests, err := identity.NewMinter(psidentity.ShipmentRequestPrefix)
 	if err != nil {
 		return nil, err
 	}
-	batches, err := identity.NewMinter(submissionBatchPrefix)
+	batches, err := identity.NewMinter(psidentity.SubmissionBatchPrefix)
 	if err != nil {
 		return nil, err
 	}
-	parcels, err := identity.NewMinter(declaredParcelPrefix)
+	parcels, err := identity.NewMinter(psidentity.DeclaredParcelPrefix)
 	if err != nil {
 		return nil, err
 	}
