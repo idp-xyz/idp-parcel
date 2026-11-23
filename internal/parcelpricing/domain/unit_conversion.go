@@ -15,7 +15,7 @@ import (
 //   - 单位本来就一致的评价不产生换算：EvaluatePricing 先走原函数，不构造换算器，没有换算步骤、没有解释行，
 //     既有评价的字节一个不动。（读回门 validUnitConversions 与访问口 UnitConversions 对每个评价都会被调到，
 //     换算记录为空时是空操作。）
-//   - 换算只发生在 EvaluatePricing 里（calculatePricingWeight 带着 converter 才换）；直接调用
+//   - 换算只发生在评价带着 converter 的路上（合计的 calculatePricingWeight，以及逐件求和）；直接调用
 //     CalculatePricingWeight 的人仍然得到单位不一致，换算与否是评价这一层的事。
 //   - 换算所用的系数记在评价上（UnitConversionStep），重放只认记下的系数、不再查目录——目录随发版会变，
 //     而重放要重现的是当初那次评价。
@@ -24,7 +24,7 @@ import (
 type ConvertedQuantity string
 
 const (
-	// ConvertedActualWeight 是输入实重；票级 / 主单级主体上是成员清单的合计实重。
+	// ConvertedActualWeight 是输入实重。合计路在票级 / 主单级主体上是成员清单的合计实重；逐件求和时每一件各记一条。
 	ConvertedActualWeight ConvertedQuantity = "ACTUAL_WEIGHT"
 	// ConvertedTotalVolumetricWeight 是票级 / 主单级主体由调用方声明的合计体积重。
 	ConvertedTotalVolumetricWeight ConvertedQuantity = "TOTAL_VOLUMETRIC_WEIGHT"
@@ -193,6 +193,15 @@ func (converter *unitConverter) recordedFor(quantity ConvertedQuantity, from, to
 	return UnitConversionStep{}, false
 }
 
+func (converter *unitConverter) recordedForOriginal(quantity ConvertedQuantity, from, to string, original Decimal) (UnitConversionStep, bool) {
+	for _, step := range converter.recorded {
+		if step.quantity == quantity && step.from == from && step.to == to && len(step.original) == 1 && step.original[0].Equal(original) {
+			return step, true
+		}
+	}
+	return UnitConversionStep{}, false
+}
+
 func (converter *unitConverter) record(step UnitConversionStep) {
 	converter.steps = append(converter.steps, step)
 }
@@ -206,6 +215,8 @@ func (converter *unitConverter) recordedSteps() []UnitConversionStep {
 // 冻结模式（重放、同标识重复请求）连截断位数也只认记下的：摘要里的实重、进位前重量是截断后的十进制串，
 // 日后调整 guardPlaces 或 conversionBoundaryScale，不能让既有评价重放出另一串。记下的位数不得小于当前公式推出的
 // 下限——小于就是记录与当前对不上，不静默改用较小位数，按答不出处理；大于下限无妨（论证只要求不小于下限）。
+// 同一对单位可以记下多条：截断位数随原值变，只取第一条会把第一件的位数用到下一件上，
+// 所以按原值对上那一条；同一原值的位数相同，取第一条。
 // 答不出一律是原来的单位不一致，不另起一个错：错误文字进评价的问题项和语义摘要，冻结模式的重放必须得出同一句。
 func (converter *unitConverter) convertWeight(quantity ConvertedQuantity, weight Weight, to WeightUnit, boundaryScale uint32, allowInexact bool) (Weight, error) {
 	factor, text, ok := converter.factorFor(weight.unit.String(), to.String())
@@ -229,7 +240,7 @@ func (converter *unitConverter) convertWeight(quantity ConvertedQuantity, weight
 		}
 		places := guardPlaces(product, boundaryScale)
 		if converter.frozen {
-			recorded, found := converter.recordedFor(quantity, weight.unit.String(), to.String())
+			recorded, found := converter.recordedForOriginal(quantity, weight.unit.String(), to.String(), weight.value)
 			if !found || recorded.exact || recorded.places < places {
 				return Weight{}, ErrWeightUnitMismatch
 			}
@@ -476,19 +487,15 @@ func (request EvaluationRequest) WithRecordedUnitConversions(steps []UnitConvers
 	return copyOfRequest
 }
 
-// validUnitConversions 是评价读回时对换算记录的整体验：每条自洽，每个量至多换一次，同一对单位只有一个系数，
-// 记录的原值与输入对得上，换算后的实重与计价重量里的实重对得上。
+// validUnitConversions 是评价读回时对换算记录的整体验：每条自洽，同一对单位只有一个系数，记录的原值与输入对得上。
+// 合计路每个量一条，对上主体上的那一个量；逐件求和的实重与尺寸按件各一条，对上那一件。换算后的实重与计价重量里的实重对得上。
 func (evaluation PricingEvaluation) validUnitConversions() bool {
-	seenQuantities := make(map[ConvertedQuantity]struct{}, len(evaluation.unitConversions))
 	factors := make(map[[2]string]string, len(evaluation.unitConversions))
+	var actuals, dimensions, volumetrics []UnitConversionStep
 	for _, step := range evaluation.unitConversions {
 		if !step.valid() {
 			return false
 		}
-		if _, repeated := seenQuantities[step.quantity]; repeated {
-			return false
-		}
-		seenQuantities[step.quantity] = struct{}{}
 		pair := [2]string{step.from, step.to}
 		if prior, exists := factors[pair]; exists && prior != step.factor {
 			return false
@@ -496,32 +503,127 @@ func (evaluation PricingEvaluation) validUnitConversions() bool {
 		factors[pair] = step.factor
 		switch step.quantity {
 		case ConvertedActualWeight:
-			actual := evaluation.input.actualWeight
-			if step.from != actual.unit.String() || !step.original[0].Equal(actual.value) {
-				return false
-			}
-			if evaluation.pricingWeight != nil {
-				converted := evaluation.pricingWeight.actual
-				if step.to != converted.unit.String() || !step.converted[0].Equal(converted.value) {
-					return false
-				}
-			}
+			actuals = append(actuals, step)
 		case ConvertedDimensions:
-			sides, declared := evaluation.input.Dimensions()
-			if !declared || step.from != sides.unit.String() ||
-				!step.original[0].Equal(sides.longest) || !step.original[1].Equal(sides.second) || !step.original[2].Equal(sides.shortest) {
-				return false
-			}
+			dimensions = append(dimensions, step)
 		case ConvertedTotalVolumetricWeight:
-			members, declared := evaluation.input.Members()
-			if !declared {
-				return false
-			}
-			total, declared := members.TotalVolumetricWeight()
-			if !declared || step.from != total.unit.String() || !step.original[0].Equal(total.value) {
-				return false
-			}
+			volumetrics = append(volumetrics, step)
+		default:
+			return false
 		}
 	}
-	return true
+	if len(volumetrics) > 1 || (len(volumetrics) == 1 && !totalVolumetricStepMatches(evaluation, volumetrics[0])) {
+		return false
+	}
+	return evaluation.actualConversionsHold(actuals) && evaluation.dimensionConversionsHold(dimensions)
+}
+
+func totalVolumetricStepMatches(evaluation PricingEvaluation, step UnitConversionStep) bool {
+	members, declared := evaluation.input.Members()
+	if !declared {
+		return false
+	}
+	total, declared := members.TotalVolumetricWeight()
+	return declared && step.from == total.unit.String() && step.original[0].Equal(total.value)
+}
+
+func actualStepMatchesSubject(evaluation PricingEvaluation, step UnitConversionStep) bool {
+	actual := evaluation.input.actualWeight
+	if step.from != actual.unit.String() || !step.original[0].Equal(actual.value) {
+		return false
+	}
+	if evaluation.pricingWeight == nil {
+		return true
+	}
+	converted := evaluation.pricingWeight.actual
+	return step.to == converted.unit.String() && step.converted[0].Equal(converted.value)
+}
+
+func (evaluation PricingEvaluation) actualConversionsHold(steps []UnitConversionStep) bool {
+	if len(steps) == 0 {
+		return true
+	}
+	if len(steps) == 1 && actualStepMatchesSubject(evaluation, steps[0]) {
+		return true
+	}
+	manifest, ok := evaluation.input.Members()
+	if !ok {
+		return false
+	}
+	pieces, declared := manifest.Pieces()
+	if !declared || len(steps) > len(pieces) {
+		return false
+	}
+	for index, step := range steps {
+		actual := pieces[index].ActualWeight()
+		if step.from != actual.Unit().String() || !step.original[0].Equal(actual.Value()) {
+			return false
+		}
+	}
+	if evaluation.pricingWeight == nil {
+		return true
+	}
+	if len(steps) != len(pieces) {
+		return false
+	}
+	sum := steps[0].converted[0]
+	unit := steps[0].to
+	for _, step := range steps[1:] {
+		if step.to != unit {
+			return false
+		}
+		added, err := sum.Add(step.converted[0])
+		if err != nil {
+			return false
+		}
+		sum = added
+	}
+	got := evaluation.pricingWeight.actual
+	return unit == got.unit.String() && sum.Equal(got.value)
+}
+
+func dimensionStepMatchesSubject(evaluation PricingEvaluation, step UnitConversionStep) bool {
+	sides, declared := evaluation.input.Dimensions()
+	return declared && step.from == sides.unit.String() &&
+		step.original[0].Equal(sides.longest) && step.original[1].Equal(sides.second) && step.original[2].Equal(sides.shortest)
+}
+
+func (evaluation PricingEvaluation) dimensionConversionsHold(steps []UnitConversionStep) bool {
+	if len(steps) == 0 {
+		return true
+	}
+	if len(steps) == 1 && dimensionStepMatchesSubject(evaluation, steps[0]) {
+		return true
+	}
+	manifest, ok := evaluation.input.Members()
+	if !ok {
+		return false
+	}
+	pieces, declared := manifest.Pieces()
+	if !declared {
+		return false
+	}
+	matched := 0
+	for _, piece := range pieces {
+		sides, measured := piece.Dimensions()
+		if !measured {
+			if matched != len(steps) || evaluation.pricingWeight != nil {
+				return false
+			}
+			return true
+		}
+		if matched == len(steps) {
+			if evaluation.pricingWeight != nil {
+				return false
+			}
+			return true
+		}
+		step := steps[matched]
+		if step.from != sides.unit.String() ||
+			!step.original[0].Equal(sides.longest) || !step.original[1].Equal(sides.second) || !step.original[2].Equal(sides.shortest) {
+			return false
+		}
+		matched++
+	}
+	return matched == len(steps)
 }

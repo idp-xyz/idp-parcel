@@ -2,10 +2,13 @@ package domain_test
 
 import (
 	"errors"
+	"fmt"
+	"math/big"
 	"strings"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
 )
 
 // 本文件证 ADR-0364 决定三与决定五里票级计价重量的聚合方式：合计后派生与逐件求和各得各的计价重量，
@@ -30,11 +33,36 @@ func shipmentPieces(t testing.TB, total string, volumetric *string, pieces ...do
 
 func piece(t testing.TB, id, actual string, sides *domain.Dimensions) domain.MemberPiece {
 	t.Helper()
-	made, err := domain.NewMemberPiece(mustValue(t, domain.NewPackageID, id), weight(t, actual, domain.WeightUnitKilogram), sides)
+	return pieceIn(t, id, actual, domain.WeightUnitKilogram, sides)
+}
+
+func pieceIn(t testing.TB, id, actual string, unit domain.WeightUnit, sides *domain.Dimensions) domain.MemberPiece {
+	t.Helper()
+	made, err := domain.NewMemberPiece(mustValue(t, domain.NewPackageID, id), weight(t, actual, unit), sides)
 	if err != nil {
 		t.Fatalf("一件：%v", err)
 	}
 	return made
+}
+
+func manifestIn(t testing.TB, total string, unit domain.WeightUnit, volumetric *domain.Weight, pieces ...domain.MemberPiece) domain.MemberManifest {
+	t.Helper()
+	ids := make([]domain.PackageID, 0, len(pieces))
+	for _, item := range pieces {
+		ids = append(ids, item.ID())
+	}
+	manifest, err := domain.NewMemberManifest(ids, weight(t, total, unit), volumetric)
+	if err != nil {
+		t.Fatalf("清单：%v", err)
+	}
+	if len(pieces) == 0 {
+		return manifest
+	}
+	withPieces, err := manifest.WithPieces(pieces)
+	if err != nil {
+		t.Fatalf("逐件：%v", err)
+	}
+	return withPieces
 }
 
 func segmentedShipmentPlan(t testing.TB, method domain.PricingWeightMethod) domain.PricingPlanVersion {
@@ -294,29 +322,168 @@ func TestShipmentWeightAggregationCanonicalizationAndWhoMayDeclareIt(t *testing.
 	}
 }
 
-// Covers: 逐件实重的单位与价表不一致时答单位不一致，不把合计实重换算后当成逐件的和。
-func TestPerPieceWeightsInAnotherUnitDoNotFallBackToTheTotal(t *testing.T) {
-	plan := declareShipmentWeight(t, segmentedShipmentPlan(t, domain.PricingWeightActualOnly), domain.ShipmentWeightPerPieceThenSum, domain.ShipmentWeightSumThenRoundOnce)
-	pound, err := domain.NewMemberPiece(mustValue(t, domain.NewPackageID, "pkg-a"), weight(t, "10", domain.WeightUnitPound), nil)
+func poundActualPlan(t testing.TB) domain.PricingPlanVersion {
+	t.Helper()
+	currency := usd(t)
+	entry, err := domain.NewRateEntry(mustValue(t, domain.NewRateEntryID, "entry-ship-lb"), "Z1",
+		weight(t, "0", domain.WeightUnitPound), weight(t, "100", domain.WeightUnitPound), money(t, "10", currency))
 	if err != nil {
-		t.Fatalf("一件：%v", err)
+		t.Fatalf("价表行：%v", err)
 	}
-	other, err := domain.NewMemberPiece(mustValue(t, domain.NewPackageID, "pkg-b"), weight(t, "10", domain.WeightUnitPound), nil)
+	table, err := domain.NewRateTableVersion(versionReference(t, domain.ArtifactRateTable, "table-ship-lb", "v1"),
+		domain.RateTableFamilyWeightZone, currency, domain.WeightUnitPound, effectivePeriod(t), []domain.RateEntry{entry})
 	if err != nil {
-		t.Fatalf("另一件：%v", err)
+		t.Fatalf("价表：%v", err)
 	}
-	packages := []domain.PackageID{pound.ID(), other.ID()}
-	total := weight(t, "20", domain.WeightUnitPound)
-	manifest, err := domain.NewMemberManifest(packages, total, nil)
+	rounding, err := domain.NewWeightRoundingPolicy(domain.RoundingCeiling, weight(t, "0.5", domain.WeightUnitPound))
 	if err != nil {
-		t.Fatalf("清单：%v", err)
+		t.Fatalf("进位：%v", err)
 	}
-	manifest, err = manifest.WithPieces([]domain.MemberPiece{pound, other})
+	policy, err := domain.NewPricingWeightPolicy(versionReference(t, domain.ArtifactWeightPolicy, "weight-ship-lb", "v1"),
+		domain.PricingWeightActualOnly, rounding, nil)
 	if err != nil {
-		t.Fatalf("逐件：%v", err)
+		t.Fatalf("重量策略：%v", err)
 	}
-	evaluation := evaluate(t, "eval-agg-pounds", plan, aggregateInput(t, shipmentSubject(t, "SR-LB"), manifest))
-	if evaluation.Status() != domain.EvaluationConflict || issueCodes(evaluation)[0] != "WEIGHT_UNIT_MISMATCH" {
-		t.Fatalf("磅对千克：%s %v", evaluation.Status(), issueCodes(evaluation))
+	plan, err := domain.NewAggregatePricingPlanVersion(domain.AggregationPerShipment,
+		versionReference(t, domain.ArtifactPricingPlan, "plan-ship-lb", "v1"),
+		mustValue(t, domain.NewPricingScopeID, "scope-1"),
+		domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost,
+		mustValue(t, domain.NewChargeCode, "BASE_FREIGHT"), effectivePeriod(t), table, policy, nil, domain.PricingPlanStructures{})
+	if err != nil {
+		t.Fatalf("方案：%v", err)
+	}
+	return plan
+}
+
+func conversionText(step domain.UnitConversionStep) string {
+	originals := make([]string, 0, len(step.Original()))
+	for _, value := range step.Original() {
+		originals = append(originals, value.String())
+	}
+	converted := make([]string, 0, len(step.Converted()))
+	for _, value := range step.Converted() {
+		converted = append(converted, value.String())
+	}
+	return fmt.Sprintf("%s %s %s -> %s %s factor %s exact %v places %d",
+		step.Quantity(), strings.Join(originals, " x "), step.FromUnit(),
+		strings.Join(converted, " x "), step.ToUnit(), step.Factor(), step.Exact(), step.Places())
+}
+
+func sameConversions(t testing.TB, left, right []domain.UnitConversionStep) {
+	t.Helper()
+	if len(left) != len(right) {
+		t.Fatalf("换算步骤 %d 条对 %d 条", len(left), len(right))
+	}
+	for index := range left {
+		if conversionText(left[index]) != conversionText(right[index]) {
+			t.Fatalf("换算步骤 %d\n%s\n%s", index, conversionText(left[index]), conversionText(right[index]))
+		}
+	}
+}
+
+func samePricingWeight(t testing.TB, left, right domain.PricingEvaluation) {
+	t.Helper()
+	first, ok := left.PricingWeight()
+	second, other := right.PricingWeight()
+	if !ok || !other || first.Explanation() != second.Explanation() ||
+		first.ActualWeight().Value().String() != second.ActualWeight().Value().String() ||
+		first.ActualWeight().Unit() != second.ActualWeight().Unit() ||
+		first.RawWeight().Value().String() != second.RawWeight().Value().String() ||
+		first.RoundedWeight().Value().String() != second.RoundedWeight().Value().String() {
+		t.Fatalf("计价重量\n%s\n%s", first.Explanation(), second.Explanation())
+	}
+}
+
+// Covers: 逐件求和的件单位与卡不同时，评价按目录逐件换算再进原来的派生与进位。
+// 合计实重另报 9 千克，不是两件之和，换算结果对得上逐件而不是合计。两件原值不同，截断位数可以不同；冻结重放按原值对上那一条。
+func TestPerPieceSumConvertsEachPieceOnTheCatalogueAndReplaysByOriginalValue(t *testing.T) {
+	plan := declareShipmentWeight(t, poundActualPlan(t), domain.ShipmentWeightPerPieceThenSum, domain.ShipmentWeightSumThenRoundOnce)
+	input := aggregateInput(t, shipmentSubject(t, "SR-LB"), manifestIn(t, "9", domain.WeightUnitKilogram, nil,
+		pieceIn(t, "pkg-a", "1", domain.WeightUnitKilogram, nil),
+		pieceIn(t, "pkg-b", "1.1", domain.WeightUnitKilogram, nil)))
+	converted := evaluate(t, "eval-piece-convert", plan, input)
+	if converted.Status() != domain.EvaluationCompleted {
+		t.Fatalf("逐件换算：%s %v", converted.Status(), issueCodes(converted))
+	}
+	steps := converted.UnitConversions()
+	factor, err := refdata.Convert(big.NewRat(1, 1), "KG", "LB")
+	if err != nil {
+		t.Fatalf("目录：%v", err)
+	}
+	if len(steps) != 2 || steps[0].Factor() != factor.String() || steps[1].Factor() != factor.String() ||
+		steps[0].Original()[0].String() != "1" || steps[1].Original()[0].String() != "1.1" ||
+		steps[0].Places() == steps[1].Places() || steps[0].Exact() || steps[1].Exact() {
+		texts := make([]string, 0, len(steps))
+		for _, step := range steps {
+			texts = append(texts, conversionText(step))
+		}
+		t.Fatalf("换算步骤 %s，目录系数 %s", strings.Join(texts, " | "), factor)
+	}
+	already := aggregateInput(t, shipmentSubject(t, "SR-LB"), manifestIn(t, "9", domain.WeightUnitPound, nil,
+		pieceIn(t, "pkg-a", steps[0].Converted()[0].String(), domain.WeightUnitPound, nil),
+		pieceIn(t, "pkg-b", steps[1].Converted()[0].String(), domain.WeightUnitPound, nil)))
+	direct := evaluate(t, "eval-piece-already", plan, already)
+	if direct.Status() != domain.EvaluationCompleted {
+		t.Fatalf("先换成卡的单位：%s %v", direct.Status(), issueCodes(direct))
+	}
+	samePricingWeight(t, converted, direct)
+	if len(direct.UnitConversions()) != 0 {
+		t.Fatalf("已经是卡的单位仍有换算：%s", conversionText(direct.UnitConversions()[0]))
+	}
+
+	replay, err := domain.ReplayPricingEvaluation(mustValue(t, domain.NewEvaluationID, "eval-piece-replay"), converted, plan, domain.EvidenceSynthetic)
+	if err != nil || replay.Status() != domain.EvaluationCompleted {
+		t.Fatalf("冻结重放：%v %s %v", err, replay.Status(), issueCodes(replay))
+	}
+	samePricingWeight(t, converted, replay)
+	sameConversions(t, converted.UnitConversions(), replay.UnitConversions())
+
+	raw, err := domain.MarshalEvaluationSnapshot(converted)
+	if err != nil {
+		t.Fatalf("折快照：%v", err)
+	}
+	rebuilt, err := domain.RehydrateEvaluationSnapshot(raw)
+	if err != nil {
+		t.Fatalf("读回：%v", err)
+	}
+	again, err := domain.ReplayPricingEvaluation(mustValue(t, domain.NewEvaluationID, "eval-piece-replay-2"), rebuilt, plan, domain.EvidenceSynthetic)
+	if err != nil || again.Status() != domain.EvaluationCompleted {
+		t.Fatalf("读回后重放：%v %s %v", err, again.Status(), issueCodes(again))
+	}
+	samePricingWeight(t, converted, again)
+	sameConversions(t, converted.UnitConversions(), again.UnitConversions())
+}
+
+// Covers: 合计后派生与单位已经一致的逐件求和都不产生换算步骤。
+func TestMatchingUnitsLeaveShipmentConversionStepsEmpty(t *testing.T) {
+	base := segmentedShipmentPlan(t, domain.PricingWeightActualOnly)
+	input := aggregateInput(t, shipmentSubject(t, "SR-AGG"), shipmentPieces(t, "20", nil, piece(t, "pkg-a", "10.3", nil), piece(t, "pkg-b", "10.7", nil)))
+	plans := []domain.PricingPlanVersion{
+		base,
+		declareShipmentWeight(t, base, domain.ShipmentWeightTotalsThenDerive, ""),
+		declareShipmentWeight(t, base, domain.ShipmentWeightPerPieceThenSum, domain.ShipmentWeightSumThenRoundOnce),
+	}
+	for index, plan := range plans {
+		evaluation := evaluate(t, fmt.Sprintf("eval-agg-same-unit-%d", index), plan, input)
+		if evaluation.Status() != domain.EvaluationCompleted || len(evaluation.UnitConversions()) != 0 || explanationMentions(evaluation, "unit conversion") {
+			t.Fatalf("单位一致 %d：%s 换算 %d %v", index, evaluation.Status(), len(evaluation.UnitConversions()), evaluation.Explanation())
+		}
+	}
+}
+
+// Covers: 卡要体积重而件的单位与卡不同时，缺任一件尺寸仍待判断，不退回合计体积重。
+func TestPerPieceVolumetricStaysPendingWhenAnotherUnitLacksDimensions(t *testing.T) {
+	plan := declareShipmentWeight(t, segmentedShipmentPlan(t, domain.PricingWeightMax), domain.ShipmentWeightPerPieceThenSum, domain.ShipmentWeightRoundEachThenSum)
+	box := dimensions(t, "10", "10", "10", domain.LengthUnitInch)
+	volumetric := weight(t, "50", domain.WeightUnitPound)
+	manifest := manifestIn(t, "20", domain.WeightUnitPound, &volumetric,
+		pieceIn(t, "pkg-a", "10", domain.WeightUnitPound, &box),
+		pieceIn(t, "pkg-b", "10", domain.WeightUnitPound, nil))
+	evaluation := evaluate(t, "eval-agg-lb-missing-side", plan, aggregateInput(t, shipmentSubject(t, "SR-LB"), manifest))
+	if evaluation.Status() != domain.EvaluationPending || issueCodes(evaluation)[0] != "DIMENSIONS_REQUIRED" {
+		t.Fatalf("缺一件尺寸：%s %v", evaluation.Status(), issueCodes(evaluation))
+	}
+	if _, ok := evaluation.Total(); ok {
+		t.Fatal("缺尺寸却给出了合计，等于退回了合计体积重")
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"math/big"
 	"testing"
+
+	"go.idp.xyz/idp-parcel/internal/platform/refdata"
 )
 
 // 本文件从包内钉 ADR-0346 里外部测试够不着的几处：冻结模式只认记下的系数、不查目录；
@@ -177,6 +179,64 @@ func TestFrozenInexactConversionNeedsARecordWithAtLeastTheFloorPlaces(t *testing
 			t.Errorf("%s：err = %v，want ErrWeightUnitMismatch", name, err)
 		}
 	}
+}
+
+// Covers: 旧评价每个量只有一条。冻结的单条 ACTUAL_WEIGHT 按记下的位数与系数重放，不查当前目录。
+func TestFrozenSingleActualWeightReplaysTheRecordedPlacesNotTheCatalogue(t *testing.T) {
+	weight := Weight{value: mustDecimal(t, "1"), unit: WeightUnitKilogram}
+	recorded := []UnitConversionStep{{
+		quantity: ConvertedActualWeight, from: "KG", to: "LB", factor: "1/3",
+		original: []Decimal{mustDecimal(t, "1")}, converted: []Decimal{mustDecimal(t, "0.33333333333333333333")},
+		exact: false, places: 20,
+	}}
+	converter := newUnitConverter(true, recorded)
+	converted, err := converter.convertWeight(ConvertedActualWeight, weight, WeightUnitPound, 0, true)
+	want, ok := ratTruncate(big.NewRat(1, 3), 20)
+	if err != nil || !ok || converted.value.String() != want.String() {
+		t.Fatalf("冻结单条 = %s %v，want %s", converted.value, err, want)
+	}
+	if steps := converter.recordedSteps(); len(steps) != 1 || steps[0].Places() != 20 || steps[0].Factor() != "1/3" {
+		t.Fatalf("重放步骤 %+v", converter.recordedSteps())
+	}
+	catalogue, err := refdata.Convert(big.NewRat(1, 1), "KG", "LB")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromCatalogue, ok := ratTruncate(catalogue, 20)
+	if !ok || converted.value.String() == fromCatalogue.String() {
+		t.Fatalf("重放结果 %s 与目录截断 %s 相同", converted.value, fromCatalogue)
+	}
+}
+
+// Covers: 同一对单位的两条重量换算，截断位数随原值变。冻结模式取原值对得上的那一条，不把第一条的位数用到下一件。
+func TestFrozenWeightPlacesFollowTheOriginalValue(t *testing.T) {
+	light := Weight{value: mustDecimal(t, "1"), unit: WeightUnitKilogram}
+	heavy := Weight{value: mustDecimal(t, "1.1"), unit: WeightUnitKilogram}
+	fresh := newUnitConverter(false, nil)
+	if _, err := fresh.convertWeight(ConvertedActualWeight, light, WeightUnitPound, 2, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fresh.convertWeight(ConvertedActualWeight, heavy, WeightUnitPound, 2, true); err != nil {
+		t.Fatal(err)
+	}
+	recorded := fresh.recordedSteps()
+	if len(recorded) != 2 || recorded[0].Places() == recorded[1].Places() {
+		t.Fatalf("两条位数应不同：%d %d", recorded[0].Places(), recorded[1].Places())
+	}
+	frozen := newUnitConverter(true, recorded)
+	converted, err := frozen.convertWeight(ConvertedActualWeight, heavy, WeightUnitPound, 2, true)
+	replayed := frozen.recordedSteps()
+	if err != nil || len(replayed) != 1 || converted.value.String() != recorded[1].Converted()[0].String() || replayed[0].Places() != recorded[1].Places() {
+		t.Fatalf("第二件重放 %s places %v，want %s places %d，err %v", converted.value, placesOf(replayed), recorded[1].Converted()[0], recorded[1].Places(), err)
+	}
+}
+
+func placesOf(steps []UnitConversionStep) []uint32 {
+	places := make([]uint32, 0, len(steps))
+	for _, step := range steps {
+		places = append(places, step.Places())
+	}
+	return places
 }
 
 func mustRat(t testing.TB, text string) *big.Rat {

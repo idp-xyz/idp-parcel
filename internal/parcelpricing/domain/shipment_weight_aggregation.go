@@ -167,13 +167,23 @@ func calculatePerPiecePricingWeight(input PricingInputSnapshot, policy PricingWe
 	actuals := make([]Weight, 0, len(pieces))
 	var volumetrics []Weight
 	derived := make([]Weight, 0, len(pieces))
+	boundaryScale := uint32(0)
+	allowTruncation := false
+	if converter != nil {
+		boundaryScale = conversionBoundaryScale(input, policy, floors)
+		allowTruncation = policy.rounding.allowsTruncation()
+	}
 	for _, piece := range pieces {
 		actual := piece.ActualWeight()
 		if actual.Unit() != expectedUnit {
-			// 逐件实重的换算记录今天还没有单独的一格（合计实重那一格对得上的是快照上的合计，不是逐件）。
-			// 单位对不上答不一致，不把合计实重当成逐件的和。converter 留给与合计路同一套「先不换算、再换算」的调用形，这里两条都拒。
-			_ = converter
-			return PricingWeightResult{}, ErrWeightUnitMismatch
+			if converter == nil {
+				return PricingWeightResult{}, ErrWeightUnitMismatch
+			}
+			converted, err := converter.convertWeight(ConvertedActualWeight, actual, expectedUnit, boundaryScale, allowTruncation)
+			if err != nil {
+				return PricingWeightResult{}, err
+			}
+			actual = converted
 		}
 		raw := actual
 		switch policy.Method() {
@@ -238,8 +248,8 @@ func calculatePerPiecePricingWeight(input PricingInputSnapshot, policy PricingWe
 	}
 }
 
-// pieceVolumetric 用卡的体积系数算一件的体积重。长度单位与系数不一致时答不一致：换算记录里的尺寸一格对的是包裹主体上的一组尺寸，
-// 逐件尺寸对不上那一格，不拿合计体积重顶上。
+// pieceVolumetric 用卡的体积系数算一件的体积重。长度单位与系数不一致且没有换算器时答不一致；
+// 有换算器时走已有的尺寸换算，精确体积一次算完，不先把三边截成十进制。缺尺寸由调用方答，不退回合计体积重。
 func pieceVolumetric(sides Dimensions, policy PricingWeightPolicy, converter *unitConverter) (Weight, error) {
 	factor, declared := policy.VolumetricFactor()
 	if !declared {
@@ -249,7 +259,7 @@ func pieceVolumetric(sides Dimensions, policy PricingWeightPolicy, converter *un
 		if converter == nil {
 			return Weight{}, ErrLengthUnitMismatch
 		}
-		return Weight{}, ErrLengthUnitMismatch
+		return converter.volumetricWeightFromDimensions(sides, factor)
 	}
 	volume, err := sides.Volume()
 	if err != nil {
