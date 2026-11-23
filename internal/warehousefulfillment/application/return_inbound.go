@@ -132,6 +132,8 @@ type ReturnHandler struct {
 	unclaimed *RegisterUnclaimedArrivalHandler
 	arrivals  ports.UnclaimedArrivalCatalogueRead
 	clock     ports.Clock
+	// charges 缺席时退货入库与处置照样成立。
+	charges chargeFormer
 }
 
 func NewReturnHandler(
@@ -300,6 +302,9 @@ func (handler *ReturnHandler) Receive(ctx context.Context, command ReceiveReturn
 	if err := handler.returns.SaveReceipt(ctx, command.Tenant, receipt); err != nil {
 		return ReturnResult{}, fmt.Errorf("receive return: %w", err)
 	}
+	if err := handler.formReturnReceiptCharge(ctx, command, owner, occurred); err != nil {
+		return ReturnResult{}, err
+	}
 	return ReturnResult{outcome: ReturnCounted}, nil
 }
 
@@ -318,6 +323,9 @@ func (handler *ReturnHandler) receiveClaimed(ctx context.Context, command Receiv
 	receipt := receiptOf(command, claim.Owner().String(), "", command.Arrival.String(), "COUNTED", occurred)
 	if err := handler.returns.SaveReceipt(ctx, command.Tenant, receipt); err != nil {
 		return ReturnResult{}, fmt.Errorf("receive return: %w", err)
+	}
+	if err := handler.formReturnReceiptCharge(ctx, command, claim.Owner(), occurred); err != nil {
+		return ReturnResult{}, err
 	}
 	return ReturnResult{outcome: ReturnCounted, arrival: command.Arrival.String()}, nil
 }
@@ -408,11 +416,15 @@ func (handler *ReturnHandler) Dispose(ctx context.Context, command DisposeReturn
 	if held < receipt.Quantity {
 		return ReturnResult{outcome: ReturnContentInvalid}, nil
 	}
+	decided := handler.clock.Now()
 	if err := handler.returns.SaveDisposition(ctx, command.Tenant, ports.ReturnDisposition{
 		Decision: command.Decision, Fact: command.Fact, Destination: command.Destination, Basis: command.Basis,
-		Operator: command.Operator.String(), Origin: command.Origin, Decided: handler.clock.Now(),
+		Operator: command.Operator.String(), Origin: command.Origin, Decided: decided,
 	}); err != nil {
 		return ReturnResult{}, fmt.Errorf("dispose return: %w", err)
+	}
+	if err := handler.formDispositionCharge(ctx, command, receipt, decided); err != nil {
+		return ReturnResult{}, err
 	}
 	return ReturnResult{outcome: ReturnDisposed}, nil
 }

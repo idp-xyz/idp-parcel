@@ -87,6 +87,9 @@ func (handler *ConfirmReceiptHandler) confirmCarton(
 	if err != nil {
 		return ConfirmReceiptResult{}, err
 	}
+	if err := handler.formInboundCharge(ctx, command, advice, nil, lines); err != nil {
+		return ConfirmReceiptResult{}, err
+	}
 	return confirmReceiptEcho(ConfirmReceiptConfirmed, receipt), nil
 }
 

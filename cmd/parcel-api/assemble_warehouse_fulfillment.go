@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -21,6 +22,7 @@ import (
 	whpostgres "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/postgres"
 	warehouseapp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	warehousedomain "go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	whports "go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
 // 仓配履约各册的生产装配（ADR-0375 决定四）。只在部署开关打开时调用：关着时特性的 build 不走到这里，仓配的适配器与编排
@@ -174,6 +176,8 @@ type warehouseFulfillmentOrchestration struct {
 	waves              transactionalWave
 	followUps          transactionalFollowUp
 	returns            transactionalReturn
+	agents             transactionalAgent
+	charges            transactionalCharge
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -624,11 +628,25 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	if err != nil {
 		return none, err
 	}
+	chargeStore, err := whpostgres.NewCharges(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: charge occurrences: %w", err)
+	}
+	chargeIDs, err := whidentity.NewChargeIdentities()
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: charge occurrences: %w", err)
+	}
+	chargeHandoff, err := whpostgres.NewOutboxChargeHandoff(db, outboxStore, systemClock{})
+	if err != nil {
+		return none, err
+	}
+	chargeHandler := warehouseapp.NewChargeHandler(chargeStore, chargeIDs, chargeHandoff, warehouses, systemClock{}).WithStock(stock)
+	receiptConfirm.inner = receiptConfirm.inner.WithCharges(chargeHandler)
 	waves := transactionalWave{
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewWaveHandler(
 			waveStore, outboundStore, pickTaskIDs, discrepancyIDs, poster, stock, locations, zones, goods, holds, systemClock{}, warehouses,
-		).WithConfirmationHandoff(confirmationHandoff).WithApprovalDuties(countStore).WithShipmentReleaser(releaser),
+		).WithConfirmationHandoff(confirmationHandoff).WithApprovalDuties(countStore).WithShipmentReleaser(releaser).WithCharges(chargeHandler),
 		commissions: warehouseapp.NewCommissionHandler(outboundStore, waveStore, opener, warehouses),
 	}
 	followUps := transactionalFollowUp{
@@ -647,14 +665,23 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: return identities: %w", err)
 	}
+	agentStore, err := whpostgres.NewAgents(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: agents: %w", err)
+	}
+	agents := transactionalAgent{
+		transactor: db.Transactor(),
+		inner:      warehouseapp.NewAgentHandler(agentStore, outboundStore, waveStore, warehouses, opener, systemClock{}).WithCharges(chargeHandler),
+	}
 	returns := transactionalReturn{
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewReturnHandler(
 			returnStore, returnIDs, returnNumbers, warehouses, locations, zones, warehouses, owners, poster, stock,
 			warehouseapp.NewRegisterUnclaimedArrivalHandler(arrivals, arrivalIDs, warehouses, systemClock{}),
 			arrivals, systemClock{},
-		),
+		).WithCharges(chargeHandler),
 	}
+	charges := transactionalCharge{transactor: db.Transactor(), inner: chargeHandler}
 	jobDiscrepancies := transactionalJobDiscrepancy{
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewJobDiscrepancyHandler(
@@ -672,7 +699,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		inner: warehouseapp.NewInstructionHandler(
 			instructionStore, instructionIDs, poster, stock, stock, warehouses, locations, zones, goods, goods,
 			owners, holds, systemClock{}, warehouses, instructionStore, cartons, cartonIDs, stockIDs,
-		),
+		).WithCharges(chargeHandler),
 	}
 	internalJobs := transactionalInternalJob{
 		transactor: db.Transactor(),
@@ -739,12 +766,84 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		waves:                    waves,
 		followUps:                followUps,
 		returns:                  returns,
+		agents:                   agents,
+		charges:                  charges,
 	}, nil
+}
+
+type transactionalCharge struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.ChargeHandler
+}
+
+func (registration transactionalCharge) RegisterUnits(ctx context.Context, tenant warehousedomain.TenantID, warehouse warehousedomain.WarehouseCode, weight, volume string) (warehouseapp.ChargeResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ChargeResult, error) {
+		return registration.inner.RegisterUnits(txCtx, tenant, warehouse, weight, volume)
+	})
+}
+
+func (registration transactionalCharge) RegisterAging(ctx context.Context, tenant warehousedomain.TenantID, warehouse warehousedomain.WarehouseCode, basis string) (warehouseapp.ChargeResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ChargeResult, error) {
+		return registration.inner.RegisterAging(txCtx, tenant, warehouse, basis)
+	})
+}
+
+func (registration transactionalCharge) RegisterProject(ctx context.Context, tenant warehousedomain.TenantID, warehouse warehousedomain.WarehouseCode, name string) (warehouseapp.ChargeResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ChargeResult, error) {
+		return registration.inner.RegisterProject(txCtx, tenant, warehouse, name)
+	})
+}
+
+func (registration transactionalCharge) CloseStorageDay(ctx context.Context, tenant warehousedomain.TenantID, owner warehousedomain.OwnerAccountID, warehouse warehousedomain.WarehouseCode, day time.Time) (warehouseapp.ChargeResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ChargeResult, error) {
+		return registration.inner.CloseStorageDay(txCtx, tenant, owner, warehouse, day)
+	})
+}
+
+func (registration transactionalCharge) Void(ctx context.Context, tenant warehousedomain.TenantID, id string, version int) (warehouseapp.ChargeResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ChargeResult, error) {
+		return registration.inner.Void(txCtx, tenant, id, version)
+	})
+}
+
+func (registration transactionalCharge) Restate(ctx context.Context, tenant warehousedomain.TenantID, id string, version int, draft warehouseapp.ChargeDraft) (warehouseapp.ChargeResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ChargeResult, error) {
+		return registration.inner.Restate(txCtx, tenant, id, version, draft)
+	})
 }
 
 type transactionalReturn struct {
 	transactor bentoapp.Transactor
 	inner      *warehouseapp.ReturnHandler
+}
+
+type transactionalAgent struct {
+	transactor bentoapp.Transactor
+	inner      *warehouseapp.AgentHandler
+}
+
+func (registration transactionalAgent) RegisterConnector(ctx context.Context, tenant warehousedomain.TenantID, warehouse warehousedomain.WarehouseCode) (warehouseapp.AgentResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.AgentResult, error) {
+		return registration.inner.RegisterConnector(txCtx, tenant, warehouse)
+	})
+}
+
+func (registration transactionalAgent) RecordStatement(ctx context.Context, tenant warehousedomain.TenantID, statement whports.AgentStatement) (warehouseapp.AgentResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.AgentResult, error) {
+		return registration.inner.RecordStatement(txCtx, tenant, statement)
+	})
+}
+
+func (registration transactionalAgent) Forward(ctx context.Context, tenant warehousedomain.TenantID, request warehousedomain.OutboundRequestID) (warehouseapp.AgentResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.AgentResult, error) {
+		return registration.inner.Forward(txCtx, tenant, request)
+	})
+}
+
+func (registration transactionalAgent) RecordResult(ctx context.Context, tenant warehousedomain.TenantID, result whports.AgentResult) (warehouseapp.AgentResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.AgentResult, error) {
+		return registration.inner.RecordResult(txCtx, tenant, result)
+	})
 }
 
 func (registration transactionalReturn) Accept(ctx context.Context, command warehouseapp.AcceptReturnCommand) (warehouseapp.ReturnResult, error) {

@@ -216,6 +216,7 @@ var declaredPartitionSubjects = map[string]string{
 	// —— warehouse-fulfillment ——
 	// 出库确认按包裹排队，键带 /outbound-confirmation/ 段，与全程追踪的「租户/包裹」不是同一字符串。
 	"internal/warehousefulfillment/adapters/postgres/outbound_confirmation_handoff.go": partitionSubjectPrefix + "租户/出库确认",
+	"internal/warehousefulfillment/adapters/postgres/charge_handoff.go":                partitionSubjectPrefix + "租户/收费发生项",
 
 	// —— visibility-exception ——
 	"internal/visibilityexception/adapters/postgres/customer_view_handoff.go":  partitionSubjectPrefix + "租户/客户",

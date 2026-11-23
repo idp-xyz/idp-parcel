@@ -10,6 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
 // OperatorIdentity 是一次登记册配置写出示认证出的身份：操作者绑定的租户，与登记责任方——取操作者的主体引用，不取自载荷
@@ -45,6 +46,8 @@ var (
 	_ PackagingMaterialRegistrationIntake = (*OperatorRegistryIntake)(nil)
 	_ ApprovalDutyIntake                  = (*OperatorRegistryIntake)(nil)
 	_ ShortagePolicyIntake                = (*OperatorRegistryIntake)(nil)
+	_ AgentIntake                         = (*OperatorRegistryIntake)(nil)
+	_ ChargeIntake                        = (*OperatorRegistryIntake)(nil)
 	_ AllocationStrategyIntake            = (*OperatorRegistryIntake)(nil)
 	_ DisposalRuleRegistrationIntake      = (*OperatorRegistryIntake)(nil)
 )
@@ -98,7 +101,93 @@ func (intake *OperatorRegistryIntake) IntakeDisposalRuleRegistration(
 	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.UnclaimedDisposalRuleCommand)
 }
 
+// AgentIntake 是代理仓连接器、声明与结果的登记 Intake。凭据不进载荷。
+type AgentIntake interface {
+	IntakeAgentConnector(ctx context.Context, request *http.Request) (domain.TenantID, domain.WarehouseCode, error)
+	IntakeAgentStatement(ctx context.Context, request *http.Request) (domain.TenantID, ports.AgentStatement, error)
+	IntakeAgentResult(ctx context.Context, request *http.Request) (domain.TenantID, ports.AgentResult, error)
+}
+
 // IntakeApprovalDuty 先认证再读批准职责规则。登记不判准入范围。
+func (intake *OperatorRegistryIntake) IntakeAgentConnector(ctx context.Context, request *http.Request) (domain.TenantID, domain.WarehouseCode, error) {
+	var none domain.WarehouseCode
+	identity, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return domain.TenantID{}, none, err
+	}
+	warehouse, err := registrationjson.AgentConnectorWarehouse(bodyOrEmpty(request), identity.Tenant, identity.Registrant)
+	if err != nil {
+		return domain.TenantID{}, none, asMalformed(err)
+	}
+	return identity.Tenant, warehouse, nil
+}
+
+func (intake *OperatorRegistryIntake) IntakeAgentStatement(ctx context.Context, request *http.Request) (domain.TenantID, ports.AgentStatement, error) {
+	identity, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return domain.TenantID{}, ports.AgentStatement{}, err
+	}
+	statement, err := registrationjson.AgentStatement(bodyOrEmpty(request), identity.Tenant, identity.Registrant)
+	if err != nil {
+		return domain.TenantID{}, ports.AgentStatement{}, asMalformed(err)
+	}
+	return identity.Tenant, statement, nil
+}
+
+func (intake *OperatorRegistryIntake) IntakeAgentResult(ctx context.Context, request *http.Request) (domain.TenantID, ports.AgentResult, error) {
+	identity, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return domain.TenantID{}, ports.AgentResult{}, err
+	}
+	result, err := registrationjson.AgentResult(bodyOrEmpty(request), identity.Tenant, identity.Registrant)
+	if err != nil {
+		return domain.TenantID{}, ports.AgentResult{}, asMalformed(err)
+	}
+	return identity.Tenant, result, nil
+}
+
+func (intake *OperatorRegistryIntake) IntakeChargeUnits(ctx context.Context, request *http.Request) (domain.TenantID, application.RegisterChargeUnitsCommand, error) {
+	return intakeCharge(ctx, request, intake.authenticator, registrationjson.ChargeUnits)
+}
+
+func (intake *OperatorRegistryIntake) IntakeChargeAging(ctx context.Context, request *http.Request) (domain.TenantID, application.RegisterChargeAgingCommand, error) {
+	return intakeCharge(ctx, request, intake.authenticator, registrationjson.ChargeAging)
+}
+
+func (intake *OperatorRegistryIntake) IntakeChargeProject(ctx context.Context, request *http.Request) (domain.TenantID, application.RegisterChargeProjectCommand, error) {
+	return intakeCharge(ctx, request, intake.authenticator, registrationjson.ChargeProject)
+}
+
+func (intake *OperatorRegistryIntake) IntakeStorageDay(ctx context.Context, request *http.Request) (domain.TenantID, application.CloseStorageDayCommand, error) {
+	return intakeCharge(ctx, request, intake.authenticator, registrationjson.StorageDay)
+}
+
+func (intake *OperatorRegistryIntake) IntakeChargeVoid(ctx context.Context, request *http.Request) (domain.TenantID, application.ChargeCorrectionCommand, error) {
+	return intakeCharge(ctx, request, intake.authenticator, registrationjson.ChargeVoid)
+}
+
+func (intake *OperatorRegistryIntake) IntakeChargeRestate(ctx context.Context, request *http.Request) (domain.TenantID, application.ChargeCorrectionCommand, error) {
+	return intakeCharge(ctx, request, intake.authenticator, registrationjson.ChargeRestate)
+}
+
+func intakeCharge[Command any](
+	ctx context.Context,
+	request *http.Request,
+	authenticator OperatorRegistryAuthenticator,
+	translate func(io.Reader, domain.TenantID, domain.Registrant) (Command, error),
+) (domain.TenantID, Command, error) {
+	var none Command
+	identity, err := authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return domain.TenantID{}, none, err
+	}
+	command, err := translate(bodyOrEmpty(request), identity.Tenant, identity.Registrant)
+	if err != nil {
+		return domain.TenantID{}, none, asMalformed(err)
+	}
+	return identity.Tenant, command, nil
+}
+
 func (intake *OperatorRegistryIntake) IntakeApprovalDuty(ctx context.Context, request *http.Request) (application.RegisterApprovalDutyCommand, error) {
 	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.ApprovalDutyCommand)
 }

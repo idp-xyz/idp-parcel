@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
 // UnconfiguredIntake 是「接入渠道未配置」的如实答复：对每个请求不读业务内容、不采信任何自报身份、不构造命令或查询，一律交回
@@ -24,6 +26,8 @@ var (
 	_ CatalogueIntake                     = UnconfiguredIntake{}
 	_ ApprovalDutyIntake                  = UnconfiguredIntake{}
 	_ ShortagePolicyIntake                = UnconfiguredIntake{}
+	_ AgentIntake                         = UnconfiguredIntake{}
+	_ ChargeIntake                        = UnconfiguredIntake{}
 	_ AllocationStrategyIntake            = UnconfiguredIntake{}
 	_ GoodsOnBehalfIntake                 = UnconfiguredIntake{}
 	_ PreAdviceOnBehalfIntake             = UnconfiguredIntake{}
@@ -100,6 +104,42 @@ func (UnconfiguredIntake) IntakeDisposalRuleRegistration(
 	context.Context, *http.Request,
 ) (application.RegisterDisposalRuleCommand, error) {
 	return application.RegisterDisposalRuleCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeAgentConnector(context.Context, *http.Request) (domain.TenantID, domain.WarehouseCode, error) {
+	return domain.TenantID{}, domain.WarehouseCode{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeAgentStatement(context.Context, *http.Request) (domain.TenantID, ports.AgentStatement, error) {
+	return domain.TenantID{}, ports.AgentStatement{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeAgentResult(context.Context, *http.Request) (domain.TenantID, ports.AgentResult, error) {
+	return domain.TenantID{}, ports.AgentResult{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeChargeUnits(context.Context, *http.Request) (domain.TenantID, application.RegisterChargeUnitsCommand, error) {
+	return domain.TenantID{}, application.RegisterChargeUnitsCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeChargeAging(context.Context, *http.Request) (domain.TenantID, application.RegisterChargeAgingCommand, error) {
+	return domain.TenantID{}, application.RegisterChargeAgingCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeChargeProject(context.Context, *http.Request) (domain.TenantID, application.RegisterChargeProjectCommand, error) {
+	return domain.TenantID{}, application.RegisterChargeProjectCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeStorageDay(context.Context, *http.Request) (domain.TenantID, application.CloseStorageDayCommand, error) {
+	return domain.TenantID{}, application.CloseStorageDayCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeChargeVoid(context.Context, *http.Request) (domain.TenantID, application.ChargeCorrectionCommand, error) {
+	return domain.TenantID{}, application.ChargeCorrectionCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeChargeRestate(context.Context, *http.Request) (domain.TenantID, application.ChargeCorrectionCommand, error) {
+	return domain.TenantID{}, application.ChargeCorrectionCommand{}, ErrAccessChannelNotConfigured
 }
 
 func (UnconfiguredIntake) IntakeClaimUnclaimedArrival(

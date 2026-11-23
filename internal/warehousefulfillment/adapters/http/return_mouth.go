@@ -9,6 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
 // ReturnService 是退货预报、到仓与处置的编排。
@@ -201,6 +202,73 @@ type UnconfiguredReturnReceiptIntake struct{}
 
 func (UnconfiguredReturnReceiptIntake) Intake(context.Context, *http.Request) (application.ReceiveReturnCommand, error) {
 	return application.ReceiveReturnCommand{}, ErrAccessChannelNotConfigured
+}
+
+// AgentService 是代理仓库存声明与转出的编排。
+type AgentService interface {
+	RegisterConnector(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode) (application.AgentResult, error)
+	RecordStatement(ctx context.Context, tenant domain.TenantID, statement ports.AgentStatement) (application.AgentResult, error)
+	Forward(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (application.AgentResult, error)
+	RecordResult(ctx context.Context, tenant domain.TenantID, result ports.AgentResult) (application.AgentResult, error)
+}
+
+func NewRegisterAgentConnectorEndpoint(intake AgentIntake, agents AgentService) http.Handler {
+	return agentEndpoint(func(request *http.Request) (application.AgentResult, error) {
+		tenant, warehouse, err := intake.IntakeAgentConnector(request.Context(), request)
+		if err != nil {
+			return application.AgentResult{}, err
+		}
+		return agents.RegisterConnector(request.Context(), tenant, warehouse)
+	})
+}
+
+func NewRecordAgentStatementEndpoint(intake AgentIntake, agents AgentService) http.Handler {
+	return agentEndpoint(func(request *http.Request) (application.AgentResult, error) {
+		tenant, statement, err := intake.IntakeAgentStatement(request.Context(), request)
+		if err != nil {
+			return application.AgentResult{}, err
+		}
+		return agents.RecordStatement(request.Context(), tenant, statement)
+	})
+}
+
+func NewRecordAgentResultEndpoint(intake AgentIntake, agents AgentService) http.Handler {
+	return agentEndpoint(func(request *http.Request) (application.AgentResult, error) {
+		tenant, result, err := intake.IntakeAgentResult(request.Context(), request)
+		if err != nil {
+			return application.AgentResult{}, err
+		}
+		if result.Kind == "FORWARDED" {
+			return agents.Forward(request.Context(), tenant, result.Request)
+		}
+		return agents.RecordResult(request.Context(), tenant, result)
+	})
+}
+
+func agentEndpoint(run func(*http.Request) (application.AgentResult, error)) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		result, err := run(request)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		name := result.Outcome().String()
+		if name == "" {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeUnnamedOutcome)
+			return
+		}
+		status := http.StatusOK
+		switch result.Outcome() {
+		case application.AgentRegistered, application.AgentValid, application.AgentForwarded, application.AgentRejected, application.AgentPacked, application.AgentConfirmed:
+			status = http.StatusCreated
+		}
+		writeJSON(response, status, returnAnswer{Outcome: name})
+	})
 }
 
 func NewAcceptCustomerReturnEndpoint(intake CustomerReturnPorts, returns ReturnService) http.Handler {

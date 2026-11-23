@@ -564,6 +564,20 @@ func (channels endpointChannels) outboundOnBehalf() warehousehttp.OutboundOnBeha
 	return warehousehttp.UnconfiguredOutboundIntake{}
 }
 
+func (channels endpointChannels) agentIntake() warehousehttp.AgentIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
+func (channels endpointChannels) chargeIntake() warehousehttp.ChargeIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
 func (channels endpointChannels) shortagePolicy() warehousehttp.ShortagePolicyIntake {
 	if channels.operatorRegistries.warehouse != nil {
 		return channels.operatorRegistries.warehouse

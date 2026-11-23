@@ -38,6 +38,7 @@ type receiptWorld struct {
 	discrepancy   *whidentity.ReceiptDiscrepancyIdentities
 	arrivals      *adapter.UnclaimedArrivals
 	arrivalIDs    *whidentity.UnclaimedArrivalIdentities
+	charges       *application.ChargeHandler
 }
 
 func newReceiptWorld(t *testing.T) receiptWorld {
@@ -108,12 +109,16 @@ func newReceiptWorld(t *testing.T) receiptWorld {
 }
 
 func (world receiptWorld) confirmer() *application.ConfirmReceiptHandler {
-	return application.NewConfirmReceiptHandler(
+	handler := application.NewConfirmReceiptHandler(
 		world.receipts, world.preAdvices, world.handler(), world.poster(),
 		world.cartons, world.cartonIDs,
 		world.warehouses, world.locations, world.zones, world.catalogue, world.goods,
 		world.discrepancy, world.arrivals, world.arrivalIDs, world.clock,
 	)
+	if world.charges != nil {
+		handler = handler.WithCharges(world.charges)
+	}
+	return handler
 }
 
 func (world receiptWorld) poster() *application.PostStockMovementHandler {

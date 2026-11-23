@@ -337,6 +337,9 @@ func (handler *InstructionHandler) Execute(ctx context.Context, command ExecuteI
 	if err := handler.instructions.SaveExecution(ctx, execution); err != nil {
 		return InstructionResult{}, fmt.Errorf("execute instruction: %w", err)
 	}
+	if err := handler.formProcessingCharge(ctx, command, instruction); err != nil {
+		return InstructionResult{}, err
+	}
 	return InstructionResult{outcome: InstructionPosted, instruction: done, has: true}, nil
 }
 

@@ -162,6 +162,8 @@ type InstructionHandler struct {
 	cartons      ports.CartonLedger
 	cartonIDs    ports.CartonIdentities
 	stockIDs     ports.StockIdentities
+	// charges 缺席时加工执行照样入账。换标不在这里形成增值服务。
+	charges chargeFormer
 }
 
 func NewInstructionHandler(

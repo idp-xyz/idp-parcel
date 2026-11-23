@@ -371,6 +371,44 @@ func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := numbers.IssueReturnNumber(ctx, tenant, domain.BusinessTimeZone{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("IssueReturnNumber：%v", err)
 	}
+	agents, err := adapter.NewAgents(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := agents.SaveConnector(ctx, tenant, valueOf(t, domain.NewWarehouseCode, "SYN-WH-AGENT"), preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveConnector：%v", err)
+	}
+	if err := agents.SaveStatement(ctx, tenant, ports.AgentStatement{Source: "SRC", StatedAt: preAdviceNumberingInstant, ValidUntil: preAdviceNumberingInstant, Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-AGENT"), Owner: valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"), Goods: valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), Unit: valueOf(t, domain.NewGoodsUnitName, "件")}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveStatement：%v", err)
+	}
+	if err := agents.SaveResult(ctx, tenant, ports.AgentResult{ID: "RES", Request: valueOf(t, domain.NewOutboundRequestID, "OBR-1"), Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-AGENT"), Kind: "FORWARDED", Reported: preAdviceNumberingInstant}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveResult：%v", err)
+	}
+	if err := agents.SaveReportedParcel(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), ports.AgentResult{Weight: "1", WeightUnit: "KG", Length: "1", Width: "1", Height: "1", Dimension: "CM"}, valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), valueOf(t, domain.NewGoodsUnitName, "件"), 1); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveReportedParcel：%v", err)
+	}
+	if err := agents.MarkReportedShipment(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), "SHR-1", "DPCL-1"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("MarkReportedShipment：%v", err)
+	}
+	charges, err := adapter.NewCharges(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := charges.SaveOriginal(ctx, tenant, ports.ChargeVersion{ID: "CHO-1", Version: 1, Correction: "ORIGINAL", Kind: "STORAGE", Owner: "SYN-OWNER-01", Warehouse: "SYN-WH-01", Source: "storage:1", Occurred: preAdviceNumberingInstant}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveOriginal：%v", err)
+	}
+	if err := charges.SaveCorrection(ctx, tenant, ports.ChargeVersion{ID: "CHO-1", Version: 2, Supersedes: 1, Correction: "VOID", Kind: "STORAGE", Owner: "SYN-OWNER-01", Warehouse: "SYN-WH-01", Source: "storage:1", Occurred: preAdviceNumberingInstant}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveCorrection：%v", err)
+	}
+	if err := charges.SaveUnits(ctx, tenant, valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), "KG", "M3", preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveUnits：%v", err)
+	}
+	if err := charges.SaveAging(ctx, tenant, valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), "ACTUAL_BATCH", preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveAging：%v", err)
+	}
+	if err := charges.SaveProject(ctx, tenant, valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), "LABEL", preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveProject：%v", err)
+	}
 }
 
 func (world receiptWorld) waves(t *testing.T) *application.WaveHandler {

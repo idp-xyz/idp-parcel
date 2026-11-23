@@ -95,6 +95,8 @@ type warehouseFulfillmentWiring struct {
 	waves                     warehousehttp.WaveService
 	followUps                 warehousehttp.FollowUpService
 	returns                   warehousehttp.ReturnService
+	agents                    warehousehttp.AgentService
+	charges                   warehousehttp.ChargeService
 	customerReturn            *warehousehttp.CustomerReturnIntake
 	returnReceiptIntake       *warehousehttp.ReturnReceiptIntake
 	countEntryIntake          *warehousehttp.CountEntryIntake
@@ -462,6 +464,33 @@ func init() {
 			"/warehouse-fulfillment-shortage-policies": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-agent-connectors": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-agent-stock-statements": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-agent-outbound-results": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-charge-measure-units": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-charge-aging-bases": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-charge-service-projects": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-storage-day-closes": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-charge-occurrence-voids": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-charge-occurrence-restates": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-allocation-strategy-adoptions": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
@@ -710,6 +739,8 @@ func init() {
 				waves:                     orchestration.waves,
 				followUps:                 orchestration.followUps,
 				returns:                   orchestration.returns,
+				agents:                    orchestration.agents,
+				charges:                   orchestration.charges,
 				countEntryIntake:          countEntryIntake,
 				pickIntake:                pickIntake,
 				checkIntake:               checkIntake,
@@ -827,6 +858,15 @@ func init() {
 			returnAdvice := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			returnDisposition := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			shortagePolicy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			agentConnector := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			agentStatement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			agentResult := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			chargeUnits := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			chargeAging := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			chargeProject := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			storageDay := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			chargeVoid := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			chargeRestate := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			allocationStrategy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveRelease := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			pick := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -1003,6 +1043,15 @@ func init() {
 				outboundSplit = warehousehttp.NewSplitOutboundEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
 				outboundCancellation = warehousehttp.NewCancelOutboundEndpoint(channels.outboundOnBehalf(), wiring.waves)
 				shortagePolicy = warehousehttp.NewRegisterShortagePolicyEndpoint(channels.shortagePolicy(), wiring.outbounds)
+				agentConnector = warehousehttp.NewRegisterAgentConnectorEndpoint(channels.agentIntake(), wiring.agents)
+				agentStatement = warehousehttp.NewRecordAgentStatementEndpoint(channels.agentIntake(), wiring.agents)
+				agentResult = warehousehttp.NewRecordAgentResultEndpoint(channels.agentIntake(), wiring.agents)
+				chargeUnits = warehousehttp.NewRegisterChargeUnitsEndpoint(channels.chargeIntake(), wiring.charges)
+				chargeAging = warehousehttp.NewRegisterChargeAgingEndpoint(channels.chargeIntake(), wiring.charges)
+				chargeProject = warehousehttp.NewRegisterChargeProjectEndpoint(channels.chargeIntake(), wiring.charges)
+				storageDay = warehousehttp.NewCloseStorageDayEndpoint(channels.chargeIntake(), wiring.charges)
+				chargeVoid = warehousehttp.NewVoidChargeOccurrenceEndpoint(channels.chargeIntake(), wiring.charges)
+				chargeRestate = warehousehttp.NewRestateChargeOccurrenceEndpoint(channels.chargeIntake(), wiring.charges)
 				allocationStrategy = warehousehttp.NewAdoptAllocationStrategyEndpoint(channels.allocationStrategy(), wiring.waves)
 				waveRelease = warehousehttp.NewReleaseWaveEndpoint(channels.waveRelease(), wiring.waves)
 				plainPick := warehousehttp.UnconfiguredPickIntake{}
@@ -1166,6 +1215,15 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-return-pre-advices", Handler: returnAdvice},
 				{Pattern: "/warehouse-fulfillment-return-dispositions", Handler: returnDisposition},
 				{Pattern: "/warehouse-fulfillment-shortage-policies", Handler: shortagePolicy},
+				{Pattern: "/warehouse-fulfillment-agent-connectors", Handler: agentConnector},
+				{Pattern: "/warehouse-fulfillment-agent-stock-statements", Handler: agentStatement},
+				{Pattern: "/warehouse-fulfillment-agent-outbound-results", Handler: agentResult},
+				{Pattern: "/warehouse-fulfillment-charge-measure-units", Handler: chargeUnits},
+				{Pattern: "/warehouse-fulfillment-charge-aging-bases", Handler: chargeAging},
+				{Pattern: "/warehouse-fulfillment-charge-service-projects", Handler: chargeProject},
+				{Pattern: "/warehouse-fulfillment-storage-day-closes", Handler: storageDay},
+				{Pattern: "/warehouse-fulfillment-charge-occurrence-voids", Handler: chargeVoid},
+				{Pattern: "/warehouse-fulfillment-charge-occurrence-restates", Handler: chargeRestate},
 				{Pattern: "/warehouse-fulfillment-allocation-strategy-adoptions", Handler: allocationStrategy},
 				{Pattern: "/warehouse-fulfillment-waves", Handler: waveRelease},
 				{Pattern: "/warehouse-fulfillment-picks", Handler: pick},

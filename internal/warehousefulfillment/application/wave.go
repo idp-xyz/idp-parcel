@@ -165,6 +165,8 @@ type WaveHandler struct {
 	duties ports.ApprovalDutyStore
 	// releaser 缺席时，已经提交委托的截单答未配置，不先拆包。
 	releaser shipmentReleaser
+	// charges 缺席时出库确认照样成立。重量体积单位没登记时出库作业发生项不形成。
+	charges chargeFormer
 }
 
 func NewWaveHandler(

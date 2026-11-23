@@ -146,6 +146,8 @@ type ConfirmReceiptHandler struct {
 	arrivals   ports.UnclaimedArrivalStore
 	arrivalIDs ports.UnclaimedArrivalIdentities
 	clock      ports.Clock
+	// charges 缺席时收货照样成立。重量体积单位没登记时入库作业发生项不形成。
+	charges chargeFormer
 }
 
 func NewConfirmReceiptHandler(
@@ -309,6 +311,9 @@ func (handler *ConfirmReceiptHandler) Confirm(ctx context.Context, command Confi
 	}
 	receipt, err := handler.record(ctx, command, receivedAt, domain.RecordedReceiptConfirmed, lines, nil, discrepancyID, differences)
 	if err != nil {
+		return ConfirmReceiptResult{}, err
+	}
+	if err := handler.formInboundCharge(ctx, command, advice, lines, nil); err != nil {
 		return ConfirmReceiptResult{}, err
 	}
 	return confirmReceiptEcho(ConfirmReceiptConfirmed, receipt), nil

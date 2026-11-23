@@ -180,6 +180,9 @@ func (handler *WaveHandler) Confirm(ctx context.Context, command ConfirmCommand)
 			return WaveResult{}, fmt.Errorf("confirm outbound: %w", err)
 		}
 	}
+	if err := handler.formOutboundCharge(ctx, command, request, parcel); err != nil {
+		return WaveResult{}, err
+	}
 	return WaveResult{outcome: outcome}, nil
 }
 

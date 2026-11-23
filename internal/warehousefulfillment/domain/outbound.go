@@ -81,6 +81,7 @@ const (
 	OutboundRejected
 	OutboundPendingPolicy
 	OutboundHandedOff
+	OutboundForwarded
 	OutboundSplit
 	OutboundAllocated
 	OutboundPicked
@@ -104,6 +105,8 @@ func (status OutboundStatus) String() string {
 		return "PENDING_POLICY"
 	case OutboundHandedOff:
 		return "HANDED_OFF"
+	case OutboundForwarded:
+		return "FORWARDED"
 	case OutboundSplit:
 		return "SPLIT"
 	case OutboundAllocated:
@@ -128,7 +131,7 @@ func (status OutboundStatus) String() string {
 }
 
 func NewOutboundStatus(word string) (OutboundStatus, error) {
-	for _, status := range []OutboundStatus{OutboundReserved, OutboundPartiallyReserved, OutboundRejected, OutboundPendingPolicy, OutboundHandedOff, OutboundSplit, OutboundAllocated, OutboundPicked, OutboundChecked, OutboundPacked, OutboundShipped, OutboundCancelled, OutboundAwaitingReturn, OutboundPartiallyCancelled} {
+	for _, status := range []OutboundStatus{OutboundReserved, OutboundPartiallyReserved, OutboundRejected, OutboundPendingPolicy, OutboundHandedOff, OutboundForwarded, OutboundSplit, OutboundAllocated, OutboundPicked, OutboundChecked, OutboundPacked, OutboundShipped, OutboundCancelled, OutboundAwaitingReturn, OutboundPartiallyCancelled} {
 		if status.String() == word {
 			return status, nil
 		}
