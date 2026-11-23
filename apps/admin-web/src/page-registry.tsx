@@ -38,6 +38,7 @@ const loadWorkDevices = domain(() => import('./pages/work-devices'));
 const loadOperatorAccess = domain(() => import('./pages/operator-access'));
 const loadReferenceData = domain(() => import('./pages/reference-data'));
 const loadDocumentNumbering = domain(() => import('./pages/document-numbering'));
+const loadWarehouse = domain(() => import('./pages/warehouse'));
 
 const domainLoaders = [
   loadMyWork,
@@ -56,6 +57,7 @@ const domainLoaders = [
   loadWorkDevices,
   loadReferenceData,
   loadDocumentNumbering,
+  loadWarehouse,
 ];
 
 // 导出名经属性访问取（`(m) => m.XxxPage`），拼错仍是 tsc 错误——不用字符串名查表。
@@ -141,6 +143,8 @@ export const pageById: Record<string, ComponentType> = {
   'operator-access': page(loadOperatorAccess, (m) => m.OperatorAccessPage),
   'reference-data': page(loadReferenceData, (m) => m.ReferenceDataPage),
   'document-numbering': page(loadDocumentNumbering, (m) => m.DocumentNumberingPage),
+  'warehouse-catalogues': page(loadWarehouse, (m) => m.WarehouseCataloguesPage),
+  'stock-imports': page(loadWarehouse, (m) => m.StockImportsPage),
 };
 
 /**
@@ -203,6 +207,8 @@ export const liveIds: ReadonlySet<string> = new Set([
   'operator-access',
   'reference-data',
   'document-numbering',
+  'warehouse-catalogues',
+  'stock-imports',
   // 「我的工作」：来源是本机 localStorage 而非 parcel-api，理由见上方头注。
   'recent-objects',
   'saved-views',

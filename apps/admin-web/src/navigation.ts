@@ -142,6 +142,13 @@ export const navigationSections: NavigationSection[] = [
     ],
   },
   {
+    title: '仓配',
+    items: [
+      { id: 'warehouse-catalogues', label: '仓库与库位', icon: 'warehouse-catalogues' },
+      { id: 'stock-imports', label: '建账导入', icon: 'stock-imports' },
+    ],
+  },
+  {
     title: '清关',
     items: [
       { id: 'customs-cases', label: '清关单', icon: 'customs-cases' },
@@ -228,6 +235,8 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'customs-cases': Stamp,
   'compliance-rules': Library,
   'customs-ports-paths': Anchor,
+  'warehouse-catalogues': Warehouse,
+  'stock-imports': PackagePlus,
   'customs-restrictions': ShieldAlert,
   'tracking-judgment-rules': Milestone,
   'disclosure-policies': Eye,
@@ -439,6 +448,20 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     summary: '可用的口岸与申报路径。',
     owner: '关务与贸易合规（customs-compliance）',
     source: 'docs/domain/CONTEXT-MAP.md customs-compliance ↔ network-routing：关务提供合规候选区域、口岸、申报路径、限制及解除结果，路由只在合格候选中选择',
+  },
+
+  // —— 仓配（warehouse-fulfillment）——
+  'warehouse-catalogues': {
+    title: '仓库与库位',
+    summary: '本公司的仓、库区、库位类型、库位和包材，按当前修订查阅和登记。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 主数据登记',
+  },
+  'stock-imports': {
+    title: '建账导入',
+    summary: '把已有库存做成一笔导入，待批的可以批准入账或驳回。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 建账导入',
   },
 
   // —— 设置 · 作业设备册（共享接入身份；不是限界上下文）——

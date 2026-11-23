@@ -2,13 +2,14 @@ import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
 import { moduleInfoById, navigationSections, pageTitleById } from './navigation';
 
-// 本文件钉改版后的导航与页名（设计源「三、新的信息架构」）：十组按运营工作排；每页有运营叫法的标题与一句 summary；
+// 本文件钉改版后的导航与页名（设计源「三、新的信息架构」）：分组按运营工作排；每页有运营叫法的标题与一句 summary；
 // 导航条目与 pageTitleById 一一对上。页 id 不在这里钉——page-registry 的 liveIds 与 pageById 守着它们。
+// 仓配是后加的一组，插在线路与运力之后、清关之前。
 
-test('导航分十组、按运营工作排序', () => {
+test('导航按运营工作排序', () => {
   deepEqual(
     navigationSections.map((section) => section.title),
-    ['工作台', '运单', '客户', '合作伙伴', '产品与价格', '线路与运力', '清关', '异常与索赔', '账务', '设置'],
+    ['工作台', '运单', '客户', '合作伙伴', '产品与价格', '线路与运力', '仓配', '清关', '异常与索赔', '账务', '设置'],
   );
 });
 
