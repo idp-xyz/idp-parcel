@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -53,7 +54,7 @@ func TestAnUnconfiguredPublicationRuleDoesNotNameAScope(t *testing.T) {
 	if err != nil || found {
 		t.Fatalf("未登记 = found %v %v", found, err)
 	}
-	named, err := view.ContractNamesPricingScope(t.Context(), tenant, "SYN-PARTY-SHIPPER-01", "SYN-SCOPE-NONE")
+	named, err := view.ContractNamesPricingScope(t.Context(), tenant, "SYN-PARTY-SHIPPER-01", "SYN-SCOPE-NONE", time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
 	if err != nil || named {
 		t.Fatalf("没指名 = %v %v", named, err)
 	}

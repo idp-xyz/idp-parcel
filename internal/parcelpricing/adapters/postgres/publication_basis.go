@@ -58,6 +58,19 @@ func (records *PublicationBases) SavePublicationBasis(ctx context.Context, tenan
 	return fmt.Errorf("save publication basis: recorded basis %s differs from %s", existing, basis)
 }
 
+// ReadPublicationBasis 读这一版发布时记下的不透明依据。没有行就是没记下，不是错误。
+func (records *PublicationBases) ReadPublicationBasis(ctx context.Context, tenant domain.TenantID, planID, planVersion string) (string, bool, error) {
+	querier, err := records.db.ReadExecutor(ctx)
+	if err != nil {
+		return "", false, fmt.Errorf("read publication basis: %w", err)
+	}
+	basis, found, err := ReadPublicationBasis(ctx, querier, tenant.String(), planID, planVersion)
+	if err != nil {
+		return "", false, fmt.Errorf("read publication basis: %w", err)
+	}
+	return basis, found, nil
+}
+
 func ReadPublicationBasis(ctx context.Context, querier interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }, tenant, planID, planVersion string) (string, bool, error) {

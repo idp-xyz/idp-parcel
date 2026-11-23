@@ -403,6 +403,10 @@ func (catalog *PriceCards) ReadPriceCardContent(
 	if err := json.Unmarshal(row.snapshot, &snapshot); err != nil || len(snapshot.Plan) == 0 {
 		return ports.PriceCardContent{}, false, fmt.Errorf("read price card content: snapshot of %s/%s has no plan document", row.planID, row.planVersion)
 	}
+	basis, hasBasis, err := ReadPublicationBasis(ctx, querier, tenant.String(), reference.ID(), reference.Version())
+	if err != nil {
+		return ports.PriceCardContent{}, false, fmt.Errorf("read price card content: %w", err)
+	}
 	return ports.PriceCardContent{
 		PlanID:              row.planID,
 		PlanVersion:         row.planVersion,
@@ -411,6 +415,8 @@ func (catalog *PriceCards) ReadPriceCardContent(
 		PublicationApprover: approver,
 		RegisteredAt:        registeredAt,
 		Document:            snapshot.Plan,
+		PublicationBasis:    basis,
+		HasPublicationBasis: hasBasis,
 	}, true, nil
 }
 
