@@ -1,6 +1,6 @@
 # 参与方与商业（`party-commercial`）
 
-代码在 `internal/partycommercial`。签署证据那一句对照 `7f45dd2ef`；报价发出那一句对照 `0be72767a`；报价答复那一句对照 `f75a94597`；其余对照 main `99fc0037d`（2026-11-12）。
+代码在 `internal/partycommercial`。签署证据那一句对照 `7f45dd2ef`；报价发出那一句对照 `0be72767a`；报价答复那一句对照 `f75a94597`；发布要不要以接受为前提那一句对照 `74ea37851`；其余对照 main `99fc0037d`（2026-11-12）。
 
 **这份文件核到什么程度**：取值表、解析结果、发布与登记结果、入口四节是从代码里读出来的。「规则」与「生命周期」两节的句子是从旧 `docs/domain/party-commercial/CONTEXT.md` 提炼的，每条只用 grep 确认了代码里有对应的机制（类型、函数、错误或结果码），没有逐条跑测试验证行为；旧文档写了而代码里没有的，单列在最后一节。
 
@@ -165,7 +165,7 @@
 - **参与方关系**：候选 → 已生效 → 已到期、已撤销或已替代。
 - **商业版本**：草稿 → 已发布 → 到生效边界即已生效 → 已到期或已退役。被截止只收窄可选区间，不是状态迁移。`SUPERSEDED` 一格在集合里，换版目前走截止或同起点退役。
 - **待批准发布**：待批准 → 已批准 → 已发布。待批准的可以按同一版本重新录入替换；已批准的内容已固定，要改就换版本号。
-- **产品—渠道映射、启用范围、注册号类型**：只增修订，旧修订保留。**渠道账号使用授权**：建立 → 撤销或自然到期；换范围是另一笔授权，不是第二版。**报价发出**：只增不改，没有状态列；再导出不另插一行，送达不在这里记。**报价答复**：只增不改，一条发出至多一条；状态在读的时候派生，不另存。
+- **产品—渠道映射、启用范围、注册号类型**：只增修订，旧修订保留。**渠道账号使用授权**：建立 → 撤销或自然到期；换范围是另一笔授权，不是第二版。**报价发出**：只增不改，没有状态列；再导出不另插一行，送达不在这里记。**报价答复**：只增不改，一条发出至多一条；状态在读的时候派生，不另存。有发出记录的草稿，发布要不要以一条有效接受为前提由租户登记，没登记不设门。合同还没指名这个计价范围时，不在这里发布新合同。
 
 ## 入口
 
@@ -183,7 +183,7 @@
 | 待批准发布 | `/commercial-publication-vocabularies` `/commercial-publication-previews` `/commercial-publication-drafts` `/commercial-open-publication-drafts` `/commercial-publication-draft-readbacks/{kind}/{objectId}/{version}` `/commercial-publication-draft-approvals` `/commercial-publication-draft-publications` |
 | 受控发布与收尾 | `/commercial-publications` `/commercial-version-successor-cuts` `/commercial-version-retirements` |
 | 签署证据 | `/commercial-signing-evidence-registrations` `/commercial-signing-evidence-requirement-registrations` `/commercial-signing-evidences/{kind}/{objectId}/{version}` |
-| 报价发出 | `/commercial-quotation-send-registrations` `/commercial-quotation-reply-registrations` `/commercial-quotation-sends` `/commercial-quotation-sends/{quotationId}` `/commercial-quotation-sends/{quotationId}/workbook` |
+| 报价发出 | `/commercial-quotation-send-registrations` `/commercial-quotation-reply-registrations` `/commercial-quotation-publication-requirements` `/commercial-quotation-sends` `/commercial-quotation-sends/{quotationId}` `/commercial-quotation-sends/{quotationId}/workbook` |
 | 商业版本读口 | `/commercial-version-readbacks/{kind}/{objectId}/{version}` `/commercial-customer-contracts` `/commercial-supplier-agreements` `/commercial-policies` |
 
 离线口：`cmd/parcel-commercial`，运营在数据库网络内手跑，不监听端口，内容全部来自 `-input` 文件。子命令：`publish` `register-resolution-key` `register-parties` `deactivate-party-identity` `end-party-relationships` `register-products` `register-registration-number-types` `register-legal-entity-profiles` `register-version-closures` `register-approval-duty-rule` `register-quotation-send` `register-quotation-reply`。退出码 0 全部落定，1 技术失败，2 有未决或冲突要商业责任方看。 商业依据解析、授权裁定、交付条件读取没有 HTTP 口，由其他上下文在进程内调用。
