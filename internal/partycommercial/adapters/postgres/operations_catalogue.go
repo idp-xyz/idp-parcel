@@ -929,6 +929,7 @@ var authorizationRuleListed = `WITH listed AS (
                    AND declaration.object_kind   = version.object_kind
                    AND declaration.object_id     = version.object_id
                    AND declaration.version_label = version.version_label) AS authorities,
+               ` + namedPricePolicyID + ` AS price_policy_id,
                ` + versionStatusCode + ` AS status_code
           FROM party_commercial.commercial_version AS version
           LEFT JOIN party_commercial.cancellation_authority_content AS content
@@ -941,8 +942,21 @@ var authorizationRuleListed = `WITH listed AS (
            AND version.object_kind = $2
      )`
 
+// namedPricePolicyID 从版本快照的指名引用里取出商业价格政策的对象标识。引用存在快照里，目录行不另存一列；
+// 种类是领域枚举的数值，与写下快照时的 kind 同一处。没有这条引用时子查询答 NULL，按价格政策筛选就筛不中。
+var namedPricePolicyID = fmt.Sprintf(`(SELECT ref->>'objectId'
+          FROM jsonb_array_elements(COALESCE(version.snapshot->'references', '[]'::jsonb)) AS ref
+         WHERE ref->>'kind' = '%d'
+         LIMIT 1)`, domain.PriceRuleObject)
+
+func authorizationRuleColumns() cataloguepage.Columns {
+	columns := versionShellColumns()
+	columns.Filters["pricePolicy"] = "price_policy_id"
+	return columns
+}
+
 var authorizationRuleRead = catalogueRead[ports.AuthorizationRuleRow]{
-	binding:   ports.AuthorizationRulePages.MustBind(versionShellColumns()),
+	binding:   ports.AuthorizationRulePages.MustBind(authorizationRuleColumns()),
 	listed:    authorizationRuleListed,
 	selection: versionShellSelection + `, authority_declared_at, authorities`,
 	scan: func(rows pgx.Rows) (ports.AuthorizationRuleRow, error) {

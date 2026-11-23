@@ -210,8 +210,22 @@ var AsOfPolicyPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Selectors: []string{"kind"},
 })
 
-// AuthorizationRulePages 是 kind=AUTHORIZATION_RULE 的查询声明。
-var AuthorizationRulePages = versionShellPages("commercial-policies/AUTHORIZATION_RULE", "kind")
+// AuthorizationRulePages 是 kind=AUTHORIZATION_RULE 的查询声明。pricePolicy 是开放对象标识：筛出壳上指名这份
+// 商业价格政策的授权规则，价格政策对象页据此列出引用它的价卡。不设词表。
+var AuthorizationRulePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "commercial-policies/AUTHORIZATION_RULE",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "publishedAt", Kind: cataloguepage.Instant},
+		{Name: "objectId", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "publishedAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "status", Vocabulary: versionStatuses},
+		{Name: "pricePolicy"},
+	},
+	Selectors: []string{"kind"},
+})
 
 // CustomerServiceRulePages 是 kind=CUSTOMER_SERVICE_RULE 的查询声明。
 var CustomerServiceRulePages = versionShellPages("commercial-policies/CUSTOMER_SERVICE_RULE", "kind")
