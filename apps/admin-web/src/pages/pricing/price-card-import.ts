@@ -100,6 +100,8 @@ export const priceCardPublicationOutcomeLabels: Record<string, string> = {
   DRAFT_ALREADY_PUBLISHED: '这一版已经发布了',
   DRAFT_WITHDRAWN: '这一版已经撤下，不能发布，也不会进价卡册',
   DRAFT_NOT_FOUND: '找不到这一版草稿，刷新后再看',
+  ACCEPTANCE_REQUIRED: '发布要以一条有效接受为依据，这次没有带上，草稿仍是已批准',
+  CITATION_REJECTED: '所带的依据不是这一版的一条有效接受，没有发布，草稿仍是已批准',
 };
 
 /** 撤下口的答案代数（`application.WithdrawPriceCardDraftOutcome` 原名）。 */

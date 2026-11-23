@@ -660,6 +660,7 @@ export interface PriceCardContentFoundBody {
   publicationApprover: string;
   registeredAt: string;
   document: unknown;
+  publicationBasis?: string;
 }
 
 export interface PriceCardContentMissingBody {

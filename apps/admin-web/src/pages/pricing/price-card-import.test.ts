@@ -81,6 +81,8 @@ const publicationOutcomes = [
   'DRAFT_ALREADY_PUBLISHED',
   'DRAFT_WITHDRAWN',
   'PUBLICATION_NOT_LANDED',
+  'ACCEPTANCE_REQUIRED',
+  'CITATION_REJECTED',
 ];
 const withdrawalOutcomes = [
   'DRAFT_WITHDRAWN',

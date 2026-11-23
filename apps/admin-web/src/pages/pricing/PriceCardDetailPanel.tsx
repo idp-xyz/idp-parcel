@@ -181,6 +181,7 @@ function Content({ body, view }: { body: PriceCardContentFoundBody; view: PriceC
     ...view.references.map((reference) => ({ label: reference.kindLabel, value: reference.name })),
     { label: '登记时间', value: formatInstant(body.registeredAt) },
     { label: '登记责任方', value: body.publicationApprover },
+    ...(body.publicationBasis ? [{ label: '发布依据', value: body.publicationBasis }] : []),
   ];
   return (
     <div className="space-y-5">

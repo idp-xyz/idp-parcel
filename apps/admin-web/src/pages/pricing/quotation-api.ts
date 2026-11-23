@@ -5,6 +5,7 @@ import type { QuotationReplyPayload } from './quotation-reply';
 
 export const quotationSendRegistrationPath = '/commercial-quotation-send-registrations';
 export const quotationSendListPath = '/commercial-quotation-sends';
+export const quotationPublicationRequirementPath = '/commercial-quotation-publication-requirement-registrations';
 
 export interface QuotationSendResponseBody {
   outcome: string;
@@ -67,12 +68,19 @@ export interface QuotationSendDetailBody {
   referencedDraftWithdrawn?: boolean;
   reply?: QuotationReplyBody;
   priceOnRegister?: boolean;
+  selectsNow?: boolean;
   scopeNamed?: boolean;
   publicationRequirement?: string;
+  validAcceptance?: boolean;
+  recordedPublicationBasis?: boolean;
   effectivenessNextStep?: string;
 }
 
 export const quotationReplyRegistrationPath = '/commercial-quotation-reply-registrations';
+
+export function registerQuotationPublicationRequirement(requires: boolean): Promise<ApiResult<QuotationReplyResponseBody>> {
+  return postMasterData<QuotationReplyResponseBody>(quotationPublicationRequirementPath, { requires });
+}
 
 export function recordQuotationReply(payload: QuotationReplyPayload): Promise<ApiResult<QuotationReplyResponseBody>> {
   return postMasterData<QuotationReplyResponseBody>(quotationReplyRegistrationPath, payload);

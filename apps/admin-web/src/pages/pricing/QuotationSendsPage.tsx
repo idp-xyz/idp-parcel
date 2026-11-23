@@ -1,25 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import { downloadQuotationWorkbook, listQuotationSends, readQuotationSend, recordQuotationReply, type QuotationSendBody, type QuotationSendDetailBody } from './quotation-api';
+import { useMayWriteRegistry } from '../use-operator-grants';
+import { downloadQuotationWorkbook, listQuotationSends, readQuotationSend, recordQuotationReply, registerQuotationPublicationRequirement, type QuotationSendBody, type QuotationSendDetailBody } from './quotation-api';
 import { publishPriceCardDraft } from './api';
+import { priceCardPublicationOutcomeLabels } from './price-card-import';
+import { labelOf } from './presentation';
 import { quotationDeliveryNote } from './quotation-send';
 import { quotationReadingLabels, quotationReplyOutcomeLabels, quotationReplyPayload } from './quotation-reply';
+import {
+  quotationCanPublish,
+  quotationEffectivenessLines,
+  quotationNextStepText,
+  quotationPublicationRequirementOutcomeLabels,
+  quotationPublicationRequirementText,
+} from './quotation-effectiveness';
 
 const info = moduleInfoById['quotation-sends'];
-
-function effectivenessLabel(step: string): string {
-  switch (step) {
-    case 'PUBLISH_CARD':
-      return '合同已经指名这个计价范围。下一步是发布这张价卡。';
-    case 'ALREADY_EFFECTIVE':
-      return '价卡已在册，合同已经指名这个范围。';
-    case 'CANNOT_PUBLISH':
-      return '所引草稿已撤下，不能发布。';
-    default:
-      return '合同还没指名这个计价范围。给已登记客户换来源列表还不能做，这里不发布新合同。';
-  }
-}
 
 /** 发出记录的列表与详情。详情上再下载同一份文件，不新增记录。 */
 export function QuotationSendsPage() {
@@ -32,6 +29,8 @@ export function QuotationSendsPage() {
   const [repliedAt, setRepliedAt] = useState('');
   const [evidenceIndex, setEvidenceIndex] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
+  const [requiresAcceptance, setRequiresAcceptance] = useState(false);
+  const mayWrite = useMayWriteRegistry();
 
   const load = useCallback(async () => {
     const answer = await listQuotationSends();
@@ -112,8 +111,46 @@ export function QuotationSendsPage() {
             <p>条款 {selected.terms === '' ? '没有另加条款' : selected.terms}</p>
             <p className="type-caption text-idpxyz-textMuted">{quotationDeliveryNote}</p>
             <p>读法 {quotationReadingLabels[detail?.reading ?? ''] ?? '待读'}</p>
-            {detail?.effectivenessNextStep ? <p>生效 {effectivenessLabel(detail.effectivenessNextStep)}</p> : null}
-            {detail?.effectivenessNextStep === 'PUBLISH_CARD' && selected.lane === 'APPROVED_DRAFT' ? (
+            <p>{quotationPublicationRequirementText(detail?.publicationRequirement)}</p>
+            {detail ? (
+              <ul>
+                {quotationEffectivenessLines(detail).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
+            {detail?.effectivenessNextStep ? <p>生效 {quotationNextStepText(detail.effectivenessNextStep)}</p> : null}
+            {mayWrite && detail?.publicationRequirement !== 'REQUIRED' && detail?.publicationRequirement !== 'NOT_REQUIRED' ? (
+              <div className="space-y-2">
+                <label className="inline-flex items-center gap-2">
+                  <input type="checkbox" checked={requiresAcceptance} onChange={(event) => setRequiresAcceptance(event.target.checked)} />
+                  有发出记录的草稿，发布要以一条有效接受为前提
+                </label>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    void registerQuotationPublicationRequirement(requiresAcceptance).then((answer) => {
+                      setMessage(
+                        answer.kind === 'outcome'
+                          ? (quotationPublicationRequirementOutcomeLabels[answer.body.outcome] ?? answer.body.outcome)
+                          : answer.kind === 'transport'
+                            ? answer.message
+                            : '没有登记',
+                      );
+                      void open(selected.quotationId);
+                    });
+                  }}
+                >
+                  登记要求
+                </Button>
+              </div>
+            ) : null}
+            {detail && quotationCanPublish({
+              lane: selected.lane,
+              scopeNamed: detail.scopeNamed,
+              priceOnRegister: detail.priceOnRegister,
+              referencedDraftWithdrawn: detail.referencedDraftWithdrawn,
+            }) ? (
               <Button
                 size="sm"
                 onClick={() => {
@@ -122,7 +159,13 @@ export function QuotationSendsPage() {
                     planVersion: selected.planVersion,
                     publicationBasis: selected.quotationId,
                   }).then((answer) => {
-                    setMessage(answer.kind === 'outcome' ? answer.body.outcome : answer.kind === 'transport' ? answer.message : '没有发布');
+                    setMessage(
+                      answer.kind === 'outcome'
+                        ? `发布：${labelOf(priceCardPublicationOutcomeLabels, answer.body.outcome)}`
+                        : answer.kind === 'transport'
+                          ? answer.message
+                          : '没有发布',
+                    );
                     void open(selected.quotationId);
                   });
                 }}
