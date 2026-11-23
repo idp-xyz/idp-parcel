@@ -188,7 +188,7 @@
 ## 旧文档写了、代码里还没有的
 
 - **有编排、没有生产入口**：下列用例方法在 `application/` 里有实现和测试，`cmd/` 下没有任何端点、消费者或子命令调用它们——共享成本分摊（`AllocateCostsHandler` 的 `Allocate` 与 `ApportionCostsHandler`）；赔付、应追偿、追偿认可及其调整（`SettleClaimAmountsHandler`）；实际代垫判断与客户代垫回收（`AssessAdvanceRecoveryHandler` 的 `Assess`、`FormRecovery`、`Adjust`）；供应商费用贷项（`Credit`）。面单渠道包裹的直接成本经营结果已由四个事实编排在成功之后调用 `Derive` 与 `Rederive`。
-- **仓储作业收费发生项那一路**（SELL 请求、仓储计费采用登记、`仓储作业已发生`确认依据、更正版本引起的计价纠错与全额贷记）：搜 `Warehouse`、`仓储` 无对应类型。属可选的仓配履约。
+- **仓储收费**：采用登记、预计与确认在 `WarehouseChargeHandler`。确认依据 `WAREHOUSE_WORK_OCCURRED`，确认时点没登记只记依据。已确认费用上的更正答待人处理，不写调整分录。这一路不生成 SELL 请求。采用册读不动上抛，不当成链头。
 - **低毛利提示**：搜 `Margin`、`毛利提示` 无对应。
 - **自动核销**（未指定范围时先精确匹配、再按到期日与账期顺序）：核销只按命令写全的分配形成。
 - **对账维度与结清维度的状态**：不记相对方确认，对账单上没有这两维状态；替代单与原单之间也没有可读的替代关系。

@@ -28,10 +28,11 @@ func basesEqual(leftQty, leftFactor, rightQty, rightFactor int64) bool {
 }
 
 type poolCell struct {
-	cell domain.StockCell
-	at   time.Time
-	qty  int64
-	hold int64
+	cell      domain.StockCell
+	at        time.Time
+	qty       int64
+	hold      int64
+	allocated int64
 }
 
 func (cell poolCell) free() int64 {
@@ -188,7 +189,11 @@ func (handler *RegisterInternalJobHandler) loadBook(ctx context.Context, tenant 
 		if hold < 0 {
 			return nil, fmt.Errorf("占用为负")
 		}
-		book.cells = append(book.cells, poolCell{cell: cell, at: batch.InboundAt(), qty: row.Quantity, hold: hold})
+		allocated, err := handler.holds.Allocated(ctx, tenant, owner, warehouse, cell)
+		if err != nil {
+			return nil, err
+		}
+		book.cells = append(book.cells, poolCell{cell: cell, at: batch.InboundAt(), qty: row.Quantity, hold: hold, allocated: allocated})
 	}
 	slices.SortFunc(book.cells, func(left, right poolCell) int {
 		if left.at.Before(right.at) {
@@ -266,25 +271,38 @@ func (handler *RegisterInternalJobHandler) goodsLine(
 	if reservation < 0 {
 		return domain.InternalJobLineResult{}, nil, fmt.Errorf("预占为负")
 	}
+	var unnamed int64
+	if line.Batch().Given() || line.Expiry().Given() {
+		unnamed, err = handler.holds.UnassignedReservation(ctx, command.Tenant, line.Owner(), command.Warehouse, line.Goods(), line.State(), line.Alias(), domain.BatchNumber{}, domain.ExpiryDate{})
+		if err != nil {
+			return domain.InternalJobLineResult{}, nil, err
+		}
+		if unnamed < 0 {
+			return domain.InternalJobLineResult{}, nil, fmt.Errorf("预占为负")
+		}
+	}
 	match := matchLine(line)
 	allocatable := func(cell domain.StockCell) bool {
 		info, found := places[cell.Location().String()]
 		return found && cell.State() == domain.StockStateGood && (info.usage == domain.ZoneUsageStorage || info.usage == domain.ZoneUsagePicking)
 	}
 	natural := book.plan(match, fromFactor, toFactor, line.Quantity(), wantTo, math.MaxInt64, false, allocatable, destLocation, destUnit, destState)
-	var allocFree int64
-	for _, cell := range book.cells {
-		if match(cell.cell) && allocatable(cell.cell) {
-			allocFree += cell.free()
-		}
+	if err := handler.ensurePlaces(ctx, command.Tenant, command.Warehouse, book, places); err != nil {
+		return domain.InternalJobLineResult{}, nil, err
 	}
-	headroom := allocFree - reservation
-	if !leave || headroom < 0 {
-		if !leave {
-			headroom = math.MaxInt64
-		} else if headroom < 0 {
-			headroom = 0
-		}
+	sliceFree, sliceAllocated, outsideExact := reservationCover(book, line, allocatable, match, true)
+	// 没点名的预占落在全部可分配库存上。这一行只动其中一部分时，别处盖得住的不从这一行扣：
+	// 每小批都扣整笔会一笔都取不走，每小批各自留下「总数减预占」又会每小批都取走那一截。
+	mustKeep := overflowOnto(reservation, outsideExact)
+	if unnamed > 0 {
+		_, _, outsideUnnamed := reservationCover(book, line, allocatable, match, false)
+		mustKeep += overflowOnto(unnamed, outsideUnnamed)
+	}
+	headroom := sliceFree + sliceAllocated - mustKeep
+	if !leave {
+		headroom = math.MaxInt64
+	} else if headroom < 0 {
+		headroom = 0
 	}
 	actual := book.plan(match, fromFactor, toFactor, line.Quantity(), wantTo, headroom, true, allocatable, destLocation, destUnit, destState)
 	heldFromCells := min64(line.Quantity(), actual.onBook) - actual.freeSum
@@ -578,6 +596,53 @@ func (handler *RegisterInternalJobHandler) discrepancy(
 		Location: location, Goods: line.Goods(), Unit: unit, State: state, Alias: line.Alias(), Batch: line.Batch(), Expiry: line.Expiry(),
 		InboundBatch: inbound, Source: source, Carton: carton, Note: note, Quantity: quantity, ShortOnBook: short, Held: held, CartonMissing: missing,
 	})
+}
+
+// reservationCover 把能盖住这份预占的可分配库存分成这一行会动的和别处的。
+// narrow 为真时只算点了名的批号与效期；为假时任一小批都能盖住没点名的预占。
+func (handler *RegisterInternalJobHandler) ensurePlaces(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, book *stockBook, places map[string]placeInfo) error {
+	for _, cell := range book.cells {
+		if _, found := places[cell.cell.Location().String()]; found {
+			continue
+		}
+		if _, _, err := handler.place(ctx, tenant, warehouse, cell.cell.Location(), places); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func reservationCover(book *stockBook, line domain.InternalJobLine, allocatable func(domain.StockCell) bool, inSlice func(domain.StockCell) bool, narrow bool) (sliceFree, sliceAllocated, outside int64) {
+	for _, cell := range book.cells {
+		if cell.cell.Goods() != line.Goods() || cell.cell.State() != line.State() || cell.cell.Alias() != line.Alias() {
+			continue
+		}
+		if !allocatable(cell.cell) {
+			continue
+		}
+		if narrow {
+			if line.Batch().Given() && cell.cell.BatchNumber() != line.Batch() {
+				continue
+			}
+			if line.Expiry().Given() && cell.cell.Expiry() != line.Expiry() {
+				continue
+			}
+		}
+		payback := cell.allocated
+		if payback > cell.hold {
+			payback = cell.hold
+		}
+		if payback < 0 {
+			payback = 0
+		}
+		if inSlice(cell.cell) {
+			sliceFree += cell.free()
+			sliceAllocated += payback
+			continue
+		}
+		outside += cell.free() + payback
+	}
+	return sliceFree, sliceAllocated, outside
 }
 
 func matchLine(line domain.InternalJobLine) func(domain.StockCell) bool {

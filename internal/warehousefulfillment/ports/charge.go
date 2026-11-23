@@ -8,12 +8,16 @@ import (
 )
 
 // ChargeMeasure 是发生项某一层的一个计量。未测量不给数量。没有金额。
+// 计数类的 Class 留空。重量与体积不换算：仓测单位与该仓登记的单位不同时这一格仍是未测量，原值与原单位另记。
 type ChargeMeasure struct {
 	Unit         string `json:"unit"`
 	Quantity     string `json:"quantity,omitempty"`
 	Unmeasured   bool   `json:"unmeasured,omitempty"`
 	Declared     string `json:"declared,omitempty"`
 	DeclaredUnit string `json:"declaredUnit,omitempty"`
+	Class        string `json:"class,omitempty"`
+	Original     string `json:"original,omitempty"`
+	OriginalUnit string `json:"originalUnit,omitempty"`
 }
 
 // ChargeAttribute 是作业属性。没有的取值是「无」。
@@ -43,6 +47,9 @@ type ChargeVersion struct {
 	Measures   []ChargeMeasure
 	Attributes []ChargeAttribute
 	Lines      []ChargeLine
+	// WeightUnit 与 VolumeUnit 是形成这一版时该仓生效的单位。更正版本照抄，不读此后的登记。
+	WeightUnit string
+	VolumeUnit string
 }
 
 // ChargeStore 记下发生项与更正版本。写入在没有环境事务时拒绝。
@@ -53,7 +60,11 @@ type ChargeStore interface {
 	SaveOriginal(ctx context.Context, tenant domain.TenantID, version ChargeVersion) error
 	SaveCorrection(ctx context.Context, tenant domain.TenantID, version ChargeVersion) error
 	LoadUnits(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode) (weight, volume string, found bool, err error)
+	LoadUnitsAt(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, at time.Time) (weight, volume string, found bool, err error)
 	SaveUnits(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, weight, volume string, at time.Time) error
+	ListStorageDeltas(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, at time.Time) ([]StorageDelta, error)
+	ListStorageFreezes(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, at time.Time) ([]StorageFreeze, error)
+	PlaceAt(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, location string, at time.Time) (usage, locationType string, found bool, err error)
 	LoadAging(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode) (basis string, at time.Time, found bool, err error)
 	SaveAging(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, basis string, at time.Time) error
 	LoadProject(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, name string) (bool, error)
@@ -68,4 +79,30 @@ type ChargeHandoff interface {
 // ChargeIdentities 签发发生项标识。
 type ChargeIdentities interface {
 	NextChargeOccurrenceID() (string, error)
+}
+
+// StorageDelta 是截至某一刻的一笔库存增减。余额由这些增减现算。
+type StorageDelta struct {
+	Posted    time.Time
+	Location  string
+	Goods     string
+	Unit      string
+	State     string
+	Batch     string
+	Form      string
+	Carton    string
+	Delta     int64
+	InboundAt time.Time
+}
+
+// StorageFreeze 是截至某一刻仍冻着的数量。冻结不减在库。
+type StorageFreeze struct {
+	Target   string
+	Location string
+	Goods    string
+	Unit     string
+	State    string
+	Batch    string
+	Carton   string
+	Quantity int64
 }

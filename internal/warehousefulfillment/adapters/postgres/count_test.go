@@ -205,6 +205,14 @@ func (holds countLockHolds) CellHold(ctx context.Context, tenant domain.TenantID
 	return holds.counts.CellLock(ctx, tenant, owner, warehouse, cell)
 }
 
+func (countLockHolds) Allocated(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.StockCell) (int64, error) {
+	return 0, nil
+}
+
+func (holds countLockHolds) CellLock(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, cell domain.StockCell) (int64, error) {
+	return holds.counts.CellLock(ctx, tenant, owner, warehouse, cell)
+}
+
 func (countLockHolds) UnassignedReservation(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.GoodsCode, domain.StockState, domain.GoodsAliasCode, domain.BatchNumber, domain.ExpiryDate) (int64, error) {
 	return 0, nil
 }

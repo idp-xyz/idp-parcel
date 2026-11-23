@@ -280,6 +280,8 @@ func (handler *WaveHandler) Release(ctx context.Context, command ReleaseWaveComm
 	}
 	var tasks []ports.PickTask
 	owners := map[string]domain.OwnerAccountID{}
+	// 同一波次里先分走的数量还没落成拣货任务，后一份请求再读占用账看不见。
+	taken := map[string]int64{}
 	for _, id := range command.Requests {
 		request, found, err := handler.requests.LoadByID(ctx, command.Tenant, id)
 		if err != nil {
@@ -292,7 +294,7 @@ func (handler *WaveHandler) Release(ctx context.Context, command ReleaseWaveComm
 			return WaveResult{outcome: WaveStatusMismatch}, nil
 		}
 		owners[request.Owner().String()] = request.Owner()
-		allocated, err := handler.allocate(ctx, command, request)
+		allocated, err := handler.allocate(ctx, command, request, taken)
 		if err != nil {
 			return WaveResult{}, fmt.Errorf("release wave: %w", err)
 		}
@@ -587,7 +589,7 @@ func parcelsConserve(parcels []PackParcelCommand, picked int64) bool {
 	return total == picked
 }
 
-func (handler *WaveHandler) allocate(ctx context.Context, command ReleaseWaveCommand, request domain.OutboundRequest) ([]ports.PickTask, error) {
+func (handler *WaveHandler) allocate(ctx context.Context, command ReleaseWaveCommand, request domain.OutboundRequest, taken map[string]int64) ([]ports.PickTask, error) {
 	if err := handler.ledger.SerializePosting(ctx, command.Tenant, request.Owner(), command.Warehouse); err != nil {
 		return nil, err
 	}
@@ -598,7 +600,7 @@ func (handler *WaveHandler) allocate(ctx context.Context, command ReleaseWaveCom
 	var tasks []ports.PickTask
 	for _, reserved := range request.Reservations() {
 		need := reserved.Quantity
-		cells, err := handler.rankedCells(ctx, command, request, rows, reserved)
+		cells, err := handler.rankedCells(ctx, command, request, rows, reserved, taken)
 		if err != nil {
 			return nil, err
 		}
@@ -619,10 +621,10 @@ func (handler *WaveHandler) allocate(ctx context.Context, command ReleaseWaveCom
 			}
 			tasks = append(tasks, ports.PickTask{
 				ID: id, WaveID: command.ID, Request: request.ID(), Location: cell.location, Goods: reserved.Goods,
-				Unit: cell.unit, State: reserved.State, Inbound: cell.inbound, Quantity: take, Status: "OPEN",
+				Unit: cell.unit, State: reserved.State, Alias: cell.alias, Inbound: cell.inbound, Quantity: take, Status: "OPEN",
 			})
 			need -= take
-			cell.free -= take
+			taken[allocationKey(cell.location, reserved.Goods, cell.unit, reserved.State, cell.alias, cell.inbound)] += take
 		}
 		if need != 0 {
 			return nil, nil
@@ -634,13 +636,20 @@ func (handler *WaveHandler) allocate(ctx context.Context, command ReleaseWaveCom
 type rankedCell struct {
 	location domain.LocationCode
 	unit     domain.GoodsUnitName
+	alias    domain.GoodsAliasCode
 	inbound  domain.InboundBatchID
+	expiry   string
 	at       time.Time
 	picking  bool
+	priority domain.LocationPriority
 	free     int64
 }
 
-func (handler *WaveHandler) rankedCells(ctx context.Context, command ReleaseWaveCommand, request domain.OutboundRequest, rows []ports.StockBalanceRow, reserved domain.OutboundReservation) ([]rankedCell, error) {
+func allocationKey(location domain.LocationCode, goods domain.GoodsCode, unit domain.GoodsUnitName, state domain.StockState, alias domain.GoodsAliasCode, inbound domain.InboundBatchID) string {
+	return location.String() + "\x1f" + goods.String() + "\x1f" + unit.String() + "\x1f" + state.String() + "\x1f" + alias.String() + "\x1f" + inbound.String()
+}
+
+func (handler *WaveHandler) rankedCells(ctx context.Context, command ReleaseWaveCommand, request domain.OutboundRequest, rows []ports.StockBalanceRow, reserved domain.OutboundReservation, taken map[string]int64) ([]rankedCell, error) {
 	revision, found, err := handler.goods.LoadLatestGoods(ctx, command.Tenant, request.Owner(), reserved.Goods)
 	if err != nil || !found {
 		return nil, err
@@ -651,6 +660,12 @@ func (handler *WaveHandler) rankedCells(ctx context.Context, command ReleaseWave
 			continue
 		}
 		if textOrEmpty(row.Alias) != reserved.Alias.String() {
+			continue
+		}
+		if reserved.Batch.Given() && textOrEmpty(row.BatchNumber) != reserved.Batch.String() {
+			continue
+		}
+		if reserved.Expiry.Given() && textOrEmpty(row.Expiry) != reserved.Expiry.String() {
 			continue
 		}
 		unit, err := domain.NewGoodsUnitName(row.Unit)
@@ -681,39 +696,111 @@ func (handler *WaveHandler) rankedCells(ctx context.Context, command ReleaseWave
 		if err != nil {
 			return nil, err
 		}
-		free := row.Quantity - held
-		if free <= 0 {
-			continue
-		}
 		inbound, err := domain.NewInboundBatchID(row.InboundBatchID)
 		if err != nil {
 			return nil, err
+		}
+		var alias domain.GoodsAliasCode
+		if row.Alias != nil {
+			alias, err = domain.NewGoodsAliasCode(*row.Alias)
+			if err != nil {
+				return nil, err
+			}
+		}
+		free := row.Quantity - held - taken[allocationKey(location, reserved.Goods, unit, reserved.State, alias, inbound)]
+		if free <= 0 {
+			continue
 		}
 		batch, found, err := handler.ledger.LoadInboundBatch(ctx, command.Tenant, inbound)
 		if err != nil || !found {
 			return nil, err
 		}
 		cells = append(cells, rankedCell{
-			location: location, unit: unit, inbound: inbound, at: batch.InboundAt(),
-			picking: zone.Content().Usage() == domain.ZoneUsagePicking, free: free,
+			location: location, unit: unit, alias: alias, inbound: inbound, expiry: batch.Expiry().String(), at: batch.InboundAt(),
+			picking: zone.Content().Usage() == domain.ZoneUsagePicking, priority: place.Content().Priority(), free: free,
 		})
 	}
+	// 参考配置：当前修订跟踪效期的先到期先出，其余按入库时间先进先出。批次顺序在库区与库位优先级之前。
+	tracksExpiry := revision.Content().TrackExpiry()
 	slices.SortFunc(cells, func(left, right rankedCell) int {
-		if left.picking != right.picking {
-			if left.picking {
-				return -1
-			}
-			return 1
-		}
-		if left.at.Before(right.at) {
-			return -1
-		}
-		if right.at.Before(left.at) {
-			return 1
-		}
-		return 0
+		return compareRankedCells(left, right, tracksExpiry)
 	})
 	return cells, nil
+}
+
+func compareRankedCells(left, right rankedCell, tracksExpiry bool) int {
+	if tracksExpiry {
+		if order := compareExpiry(left.expiry, right.expiry); order != 0 {
+			return order
+		}
+	}
+	if order := compareInbound(left.at, right.at); order != 0 {
+		return order
+	}
+	if left.picking != right.picking {
+		if left.picking {
+			return -1
+		}
+		return 1
+	}
+	if order := compareLocationPriority(left.priority, right.priority); order != 0 {
+		return order
+	}
+	if left.location.String() != right.location.String() {
+		if left.location.String() < right.location.String() {
+			return -1
+		}
+		return 1
+	}
+	if left.inbound.String() < right.inbound.String() {
+		return -1
+	}
+	if left.inbound.String() > right.inbound.String() {
+		return 1
+	}
+	return 0
+}
+
+func compareExpiry(left, right string) int {
+	switch {
+	case left == "" && right != "":
+		return 1
+	case right == "" && left != "":
+		return -1
+	case left == right:
+		return 0
+	case left < right:
+		return -1
+	default:
+		return 1
+	}
+}
+
+func compareInbound(left, right time.Time) int {
+	if left.Before(right) {
+		return -1
+	}
+	if right.Before(left) {
+		return 1
+	}
+	return 0
+}
+
+// 没给优先级不当成任何数字，只排在每一条写明的优先级之后：不给就是没有，不是 0。
+func compareLocationPriority(left, right domain.LocationPriority) int {
+	if left.Given() != right.Given() {
+		if left.Given() {
+			return -1
+		}
+		return 1
+	}
+	if !left.Given() || left.Value() == right.Value() {
+		return 0
+	}
+	if left.Value() > right.Value() {
+		return -1
+	}
+	return 1
 }
 
 func (handler *WaveHandler) postPick(ctx context.Context, request domain.OutboundRequest, task ports.PickTask, command PickCommand) error {
@@ -727,7 +814,8 @@ func (handler *WaveHandler) postPick(ctx context.Context, request domain.Outboun
 	var source domain.StockCell
 	found := false
 	for _, row := range rows {
-		if row.LocationCode != task.Location.String() || row.InboundBatchID != task.Inbound.String() || row.GoodsCode != task.Goods.String() {
+		if row.LocationCode != task.Location.String() || row.InboundBatchID != task.Inbound.String() || row.GoodsCode != task.Goods.String() ||
+			row.Unit != task.Unit.String() || row.State != task.State.String() || textOrEmpty(row.Alias) != task.Alias.String() {
 			continue
 		}
 		source, err = cellFromBalance(row)

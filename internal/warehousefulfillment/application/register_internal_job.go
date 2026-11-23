@@ -123,6 +123,7 @@ type RegisterInternalJobHandler struct {
 	holds         ports.StockHolds
 	discrepancies ports.StockDiscrepancyIdentities
 	clock         ports.Clock
+	charges       *ChargeHandler
 }
 
 func NewRegisterInternalJobHandler(
@@ -146,6 +147,11 @@ func NewRegisterInternalJobHandler(
 		warehouses: warehouses, locations: locations, zones: zones, goods: goods, holds: holds,
 		discrepancies: discrepancies, clock: clock,
 	}
+}
+
+func (handler *RegisterInternalJobHandler) WithCharges(charges *ChargeHandler) *RegisterInternalJobHandler {
+	handler.charges = charges
+	return handler
 }
 
 func (handler *RegisterInternalJobHandler) Register(ctx context.Context, command RegisterInternalJobCommand) (RegisterInternalJobResult, error) {
@@ -195,6 +201,9 @@ func (handler *RegisterInternalJobHandler) Register(ctx context.Context, command
 	}
 	if err := handler.jobs.Save(ctx, job, discrepancies); err != nil {
 		return RegisterInternalJobResult{}, fmt.Errorf("register internal job: %w", err)
+	}
+	if err := handler.noteJobCharges(ctx, command, recorded, places); err != nil {
+		return RegisterInternalJobResult{}, err
 	}
 	outcome := RegisterInternalJobRegistered
 	if command.Kind == domain.InternalJobShortage {

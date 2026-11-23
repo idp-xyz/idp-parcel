@@ -171,10 +171,14 @@ func (world receiptWorld) internalJobsHeld(t *testing.T, holds ports.StockHolds)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return application.NewRegisterInternalJobHandler(
+	handler := application.NewRegisterInternalJobHandler(
 		jobs, jobs, world.poster(), world.ledger, world.ledger, world.cartons, world.cartonIDs,
 		world.warehouses, world.locations, world.zones, world.goods, holds, identities, world.clock,
 	)
+	if world.charges != nil {
+		handler = handler.WithCharges(world.charges)
+	}
+	return handler
 }
 
 func (world receiptWorld) registerJob(t *testing.T, handler *application.RegisterInternalJobHandler, command application.RegisterInternalJobCommand) application.RegisterInternalJobResult {

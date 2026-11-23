@@ -24,6 +24,7 @@ type PickTask struct {
 	Goods    domain.GoodsCode
 	Unit     domain.GoodsUnitName
 	State    domain.StockState
+	Alias    domain.GoodsAliasCode
 	Inbound  domain.InboundBatchID
 	Quantity int64
 	Picked   int64

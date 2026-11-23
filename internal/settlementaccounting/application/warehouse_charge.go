@@ -40,11 +40,14 @@ type WarehouseOccurrenceFact struct {
 	Lines      []WarehouseFactLine
 }
 
+// WarehouseFactMeasure 把计价要读的计量带过去。Class 区分重量与体积；声明值只在单位相同（计数类可以不带单位）时采用，所以单位必须跟着走。
 type WarehouseFactMeasure struct {
-	Unit       string
-	Quantity   string
-	Unmeasured bool
-	Declared   string
+	Unit         string
+	Quantity     string
+	Unmeasured   bool
+	Declared     string
+	DeclaredUnit string
+	Class        string
 }
 
 type WarehouseFactAttribute struct {
@@ -191,7 +194,11 @@ func (handler *WarehouseChargeHandler) Settle(ctx context.Context, tenant domain
 	if found {
 		return WarehouseChargeExisting, existing.ChargeID, nil
 	}
-	if !handler.isHead(ctx, tenant, fact) {
+	head, err := handler.isHead(ctx, tenant, fact)
+	if err != nil {
+		return "", "", err
+	}
+	if !head {
 		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "SUPERSEDED"}); err != nil {
 			return "", "", err
 		}
@@ -274,23 +281,24 @@ func (handler *WarehouseChargeHandler) Settle(ctx context.Context, tenant domain
 	return outcome, charge.ID().String(), nil
 }
 
-func (handler *WarehouseChargeHandler) isHead(ctx context.Context, tenant domain.TenantID, fact WarehouseOccurrenceFact) bool {
+// 读不动不是链头。当成链头会让这一版接着形成费用；这里上抛，调用方回滚后重投。
+func (handler *WarehouseChargeHandler) isHead(ctx context.Context, tenant domain.TenantID, fact WarehouseOccurrenceFact) (bool, error) {
 	rows, err := handler.adoptions.LoadCharges(ctx, tenant, fact.ID)
 	if err != nil {
-		return true
+		return false, fmt.Errorf("settle warehouse charge: %w", err)
 	}
 	for _, row := range rows {
 		if row.Version > fact.Version {
-			return false
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
 
 func (handler *WarehouseChargeHandler) priorCharge(ctx context.Context, tenant domain.TenantID, occurrence string, version int) (WarehouseChargeRequest, domain.CustomerCharge, error) {
 	rows, err := handler.adoptions.LoadCharges(ctx, tenant, occurrence)
 	if err != nil {
-		return WarehouseChargeRequest{}, domain.CustomerCharge{}, err
+		return WarehouseChargeRequest{}, domain.CustomerCharge{}, fmt.Errorf("settle warehouse charge: %w", err)
 	}
 	var prior WarehouseChargeRequest
 	for _, row := range rows {
@@ -303,11 +311,15 @@ func (handler *WarehouseChargeHandler) priorCharge(ctx context.Context, tenant d
 	}
 	id, err := domain.NewCustomerChargeID(prior.ChargeID)
 	if err != nil {
-		return prior, domain.CustomerCharge{}, err
+		return prior, domain.CustomerCharge{}, fmt.Errorf("settle warehouse charge: %w", err)
 	}
 	charge, found, err := handler.charges.FindByID(ctx, tenant, id)
-	if err != nil || !found {
-		return prior, domain.CustomerCharge{}, err
+	if err != nil {
+		return prior, domain.CustomerCharge{}, fmt.Errorf("settle warehouse charge: %w", err)
+	}
+	// 请求册点了费用标识，费用册却没有这一行：两册矛盾，上抛。不是「此前没有费用」。
+	if !found {
+		return prior, domain.CustomerCharge{}, fmt.Errorf("settle warehouse charge: charge %s named by %s/%d is not on the register", prior.ChargeID, occurrence, prior.Version)
 	}
 	return prior, charge, nil
 }
@@ -364,8 +376,12 @@ func (handler *WarehouseChargeHandler) form(ctx context.Context, tenant domain.T
 		return domain.CustomerCharge{}, err
 	}
 	account, found, err := handler.accounts.FindByID(ctx, tenant, accountID)
-	if err != nil || !found {
-		return domain.CustomerCharge{}, fmt.Errorf("settle warehouse charge: account")
+	if err != nil {
+		return domain.CustomerCharge{}, fmt.Errorf("settle warehouse charge: %w", err)
+	}
+	// 采用行点名的账户不在册上是两册矛盾。读失败同样上抛，不换成未配置。
+	if !found {
+		return domain.CustomerCharge{}, fmt.Errorf("settle warehouse charge: account %s named by the adoption is not on the register", adoption.Account)
 	}
 	if account.Key().Currency().String() != price.Currency {
 		return domain.CustomerCharge{}, fmt.Errorf("settle warehouse charge: currency")
@@ -434,20 +450,33 @@ func (handler *WarehouseChargeHandler) confirm(ctx context.Context, tenant domai
 		return false, err
 	}
 	moment, err := handler.moments.Admit(ctx, tenant, domain.SettlementMomentConfirm)
-	if err != nil || moment != SettlementMomentAdmitted {
+	if err != nil {
 		return false, err
 	}
+	// 没登记确认时点是答案：费用形成、当场不确认。读册失败在 Admit 里不带 error，收成另一种结果；那一格必须上抛。
+	if moment == SettlementMomentUnconfigured {
+		return false, nil
+	}
+	if moment != SettlementMomentAdmitted {
+		return false, fmt.Errorf("settle warehouse charge: confirmation moment %s", moment)
+	}
 	condition, found, err := handler.conditions.LoadConfirmationCondition(ctx, tenant, charge.ID(), charge.FeeItem())
-	if err != nil || !found || !condition.Met {
+	if err != nil {
 		return false, err
+	}
+	if !found || !condition.Met {
+		return false, nil
 	}
 	accountID, err := domain.NewSettlementAccountID(adoption.Account)
 	if err != nil {
 		return false, err
 	}
-	account, _, err := handler.accounts.FindByID(ctx, tenant, accountID)
+	account, accountFound, err := handler.accounts.FindByID(ctx, tenant, accountID)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("settle warehouse charge: %w", err)
+	}
+	if !accountFound {
+		return false, fmt.Errorf("settle warehouse charge: account %s named by the adoption is not on the register", adoption.Account)
 	}
 	contract, err := domain.NewContractBasisReference(account.Responsibility().String())
 	if err != nil {

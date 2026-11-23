@@ -565,7 +565,13 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: outbound identities: %w", err)
 	}
-	holds := whpostgres.LedgerHolds{Freezes: whpostgres.NewFreezeHolds(freezeStore), Counts: countStore, Reservations: outboundStore}
+	waveStore, err := whpostgres.NewWaves(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: waves: %w", err)
+	}
+	holds := whpostgres.LedgerHolds{
+		Freezes: whpostgres.NewFreezeHolds(freezeStore), Counts: countStore, Reservations: outboundStore, Allocations: waveStore,
+	}
 	freezeIDs, err := whidentity.NewFreezeIdentities()
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: freeze identities: %w", err)
@@ -606,10 +612,6 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 			holds, owners, systemClock{}, warehouses,
 		),
 	}
-	waveStore, err := whpostgres.NewWaves(db)
-	if err != nil {
-		return none, fmt.Errorf("parcel-api: waves: %w", err)
-	}
 	pickTaskIDs, err := whidentity.NewPickTaskIdentities()
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: pick tasks: %w", err)
@@ -642,7 +644,9 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	if err != nil {
 		return none, err
 	}
-	chargeHandler := warehouseapp.NewChargeHandler(chargeStore, chargeIDs, chargeHandoff, warehouses, systemClock{}).WithStock(stock)
+	chargeHandler := warehouseapp.NewChargeHandler(chargeStore, chargeIDs, chargeHandoff, warehouses, systemClock{}).WithReadings(goods, measurementStore)
+	counts.inner = counts.inner.WithCharges(chargeHandler)
+	adjustments.inner = adjustments.inner.WithCharges(chargeHandler)
 	receiptConfirm.inner = receiptConfirm.inner.WithCharges(chargeHandler)
 	waves := transactionalWave{
 		transactor: db.Transactor(),
@@ -692,7 +696,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewJobDiscrepancyHandler(
 			internalJobStore, countStore, poster, stock, holds, systemClock{}, warehouses,
-		),
+		).WithAllocationFollow(waveStore, pickTaskIDs, locations, zones),
 	}
 	freezes := transactionalFreeze{
 		transactor: db.Transactor(),
@@ -712,7 +716,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		inner: warehouseapp.NewRegisterInternalJobHandler(
 			internalJobStore, internalJobStore, poster, stock, stock, cartons, cartonIDs,
 			warehouses, locations, zones, goods, holds, discrepancyIDs, systemClock{},
-		),
+		).WithCharges(chargeHandler),
 	}
 	return warehouseFulfillmentOrchestration{
 		registration: transactionalWarehouseRegistration{
@@ -804,18 +808,6 @@ func (registration transactionalCharge) RegisterProject(ctx context.Context, ten
 func (registration transactionalCharge) CloseStorageDay(ctx context.Context, tenant warehousedomain.TenantID, owner warehousedomain.OwnerAccountID, warehouse warehousedomain.WarehouseCode, day time.Time) (warehouseapp.ChargeResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ChargeResult, error) {
 		return registration.inner.CloseStorageDay(txCtx, tenant, owner, warehouse, day)
-	})
-}
-
-func (registration transactionalCharge) Void(ctx context.Context, tenant warehousedomain.TenantID, id string, version int) (warehouseapp.ChargeResult, error) {
-	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ChargeResult, error) {
-		return registration.inner.Void(txCtx, tenant, id, version)
-	})
-}
-
-func (registration transactionalCharge) Restate(ctx context.Context, tenant warehousedomain.TenantID, id string, version int, draft warehouseapp.ChargeDraft) (warehouseapp.ChargeResult, error) {
-	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.ChargeResult, error) {
-		return registration.inner.Restate(txCtx, tenant, id, version, draft)
 	})
 }
 

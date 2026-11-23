@@ -178,14 +178,6 @@ func (intake *OperatorRegistryIntake) IntakeStorageDay(ctx context.Context, requ
 	return intakeCharge(ctx, request, intake.authenticator, registrationjson.StorageDay)
 }
 
-func (intake *OperatorRegistryIntake) IntakeChargeVoid(ctx context.Context, request *http.Request) (domain.TenantID, application.ChargeCorrectionCommand, error) {
-	return intakeCharge(ctx, request, intake.authenticator, registrationjson.ChargeVoid)
-}
-
-func (intake *OperatorRegistryIntake) IntakeChargeRestate(ctx context.Context, request *http.Request) (domain.TenantID, application.ChargeCorrectionCommand, error) {
-	return intakeCharge(ctx, request, intake.authenticator, registrationjson.ChargeRestate)
-}
-
 func intakeCharge[Command any](
 	ctx context.Context,
 	request *http.Request,

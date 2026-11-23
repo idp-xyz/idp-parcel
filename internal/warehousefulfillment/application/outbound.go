@@ -410,7 +410,21 @@ func (handler *OutboundHandler) plan(ctx context.Context, command AcceptOutbound
 		if err != nil {
 			return nil, err
 		}
-		labeledUsed, unlabeledUsed := usedOf(append(existing, plannedAsStored(planned)...), demand)
+		booked := append(existing, plannedAsStored(planned)...)
+		labeledUsed, unlabeledUsed := usedOf(booked, demand)
+		if demand.batch.Given() || demand.expiry.Given() {
+			open := demand
+			open.batch = domain.BatchNumber{}
+			open.expiry = domain.ExpiryDate{}
+			allLabeled, allUnlabeled, err := handler.pool(ctx, command, rows, open)
+			if err != nil {
+				return nil, err
+			}
+			// 没点名的预占可以落到任一小批。点名这一格时，只再扣别的格子装不下的部分，总数才不会超过在库。
+			unnamedLabeled, unnamedUnlabeled := usedOf(unnamedReservations(booked), open)
+			labeledUsed += overflowOnto(unnamedLabeled, allLabeled-labeled)
+			unlabeledUsed += overflowOnto(unnamedUnlabeled, allUnlabeled-unlabeled)
+		}
 		var takeLabeled, takeUnlabeled int64
 		if demand.alias.String() == "" {
 			room := unlabeled - unlabeledUsed
@@ -459,9 +473,33 @@ func plannedAsStored(planned []domain.OutboundReservation) []ports.StoredReserva
 	return stored
 }
 
+func unnamedReservations(rows []ports.StoredReservation) []ports.StoredReservation {
+	var unnamed []ports.StoredReservation
+	for _, row := range rows {
+		if row.Batch.Given() || row.Expiry.Given() {
+			continue
+		}
+		unnamed = append(unnamed, row)
+	}
+	return unnamed
+}
+
+func overflowOnto(claimed, elsewhere int64) int64 {
+	if elsewhere < 0 {
+		elsewhere = 0
+	}
+	if claimed <= elsewhere {
+		return 0
+	}
+	return claimed - elsewhere
+}
+
 func usedOf(rows []ports.StoredReservation, demand expandedDemand) (labeled, unlabeled int64) {
 	for _, row := range rows {
-		if row.Goods != demand.goods || row.State != demand.state || row.Batch != demand.batch || row.Expiry != demand.expiry {
+		if row.Goods != demand.goods || row.State != demand.state {
+			continue
+		}
+		if (demand.batch.Given() || demand.expiry.Given()) && (row.Batch != demand.batch || row.Expiry != demand.expiry) {
 			continue
 		}
 		unlabeled += row.FromUnlabeled
@@ -482,7 +520,11 @@ func (handler *OutboundHandler) pool(ctx context.Context, command AcceptOutbound
 		if row.GoodsCode != demand.goods.String() || row.State != demand.state.String() {
 			continue
 		}
-		if textOrEmpty(row.BatchNumber) != demand.batch.String() || textOrEmpty(row.Expiry) != demand.expiry.String() {
+		// 没点名批号或效期时不收成「只要空的那一格」：点名了才只看满足条件的部分，先到期先出才选得到各批次。
+		if demand.batch.Given() && textOrEmpty(row.BatchNumber) != demand.batch.String() {
+			continue
+		}
+		if demand.expiry.Given() && textOrEmpty(row.Expiry) != demand.expiry.String() {
 			continue
 		}
 		alias := textOrEmpty(row.Alias)
@@ -534,7 +576,12 @@ func (handler *OutboundHandler) pool(ctx context.Context, command AcceptOutbound
 		if err != nil {
 			return 0, 0, err
 		}
-		free := row.Quantity - held
+		allocated, err := handler.holds.Allocated(ctx, command.Tenant, command.Owner, command.Warehouse, cell)
+		if err != nil {
+			return 0, 0, err
+		}
+		// 分配是已经落到格上的预占，下面按出库请求再扣，这里只留下冻结和作业锁定。
+		free := row.Quantity - holdWithoutAllocation(held, allocated)
 		if free <= 0 {
 			continue
 		}

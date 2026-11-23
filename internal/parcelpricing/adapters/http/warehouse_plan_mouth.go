@@ -86,11 +86,19 @@ func decodeWarehousePlan(reader io.Reader) (domain.WarehousePlan, error) {
 		})
 	}
 	for _, rule := range document.Rules {
-		plan.Rules = append(plan.Rules, domain.WarehouseChargeRule{
+		decoded := domain.WarehouseChargeRule{
 			Code: rule.Code, Kind: rule.Kind, Level: rule.Level, Line: rule.Line, Group: rule.Group, Priority: rule.Priority,
-			Method: rule.Method, Unit: rule.Unit, UnitQuantity: rule.UnitQuantity, UnitPrice: rule.UnitPrice,
-			BaseFee: rule.BaseFee, Allowance: rule.Allowance, Rounding: rule.Rounding,
-		})
+			Method: rule.Method, Unit: rule.Unit, MeasureClass: rule.MeasureClass, UnitQuantity: rule.UnitQuantity,
+			UnitPrice: rule.UnitPrice, BaseFee: rule.BaseFee, Allowance: rule.Allowance, Rounding: rule.Rounding,
+		}
+		for _, condition := range rule.When {
+			decoded.When = append(decoded.When, domain.WarehouseCondition{
+				Name: condition.Name, Equals: condition.Equals,
+				MeasureUnit: condition.MeasureUnit, MeasureClass: condition.MeasureClass,
+				Operator: condition.Operator, Threshold: condition.Threshold,
+			})
+		}
+		plan.Rules = append(plan.Rules, decoded)
 	}
 	return plan, nil
 }
@@ -116,17 +124,28 @@ type warehouseGroupDocument struct {
 }
 
 type warehouseRuleDocument struct {
-	Code         string `json:"code"`
-	Kind         string `json:"kind"`
-	Level        string `json:"level"`
-	Line         string `json:"line"`
-	Group        string `json:"group"`
-	Priority     int    `json:"priority"`
-	Method       string `json:"method"`
-	Unit         string `json:"unit"`
-	UnitQuantity string `json:"unitQuantity"`
-	UnitPrice    int64  `json:"unitPriceMinor"`
-	BaseFee      int64  `json:"baseFeeMinor"`
-	Allowance    string `json:"allowance"`
-	Rounding     string `json:"rounding"`
+	Code         string                       `json:"code"`
+	Kind         string                       `json:"kind"`
+	Level        string                       `json:"level"`
+	Line         string                       `json:"line"`
+	Group        string                       `json:"group"`
+	Priority     int                          `json:"priority"`
+	Method       string                       `json:"method"`
+	Unit         string                       `json:"unit"`
+	UnitQuantity string                       `json:"unitQuantity"`
+	UnitPrice    int64                        `json:"unitPriceMinor"`
+	BaseFee      int64                        `json:"baseFeeMinor"`
+	Allowance    string                       `json:"allowance"`
+	Rounding     string                       `json:"rounding"`
+	MeasureClass string                       `json:"measureClass"`
+	When         []warehouseConditionDocument `json:"when"`
+}
+
+type warehouseConditionDocument struct {
+	Name         string `json:"name"`
+	Equals       string `json:"equals"`
+	MeasureUnit  string `json:"measureUnit"`
+	MeasureClass string `json:"measureClass"`
+	Operator     string `json:"operator"`
+	Threshold    string `json:"threshold"`
 }

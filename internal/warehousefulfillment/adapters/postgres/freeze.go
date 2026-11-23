@@ -262,12 +262,23 @@ func (holds FreezeHolds) CellHold(ctx context.Context, tenant domain.TenantID, o
 	return holds.freezes.CellFreeze(ctx, tenant, owner, warehouse, cell)
 }
 
-// LedgerHolds 把冻结、还在盘点中的作业锁定和未分配的预占加在一起。
+func (FreezeHolds) Allocated(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.StockCell) (int64, error) {
+	return 0, nil
+}
+
+func (FreezeHolds) CellLock(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.StockCell) (int64, error) {
+	return 0, nil
+}
+
+// LedgerHolds 把冻结、还在盘点中的作业锁定和还没拣的分配加在一起。
 type LedgerHolds struct {
 	Freezes      FreezeHolds
 	Counts       *Counts
 	Reservations interface {
 		UnassignedReservation(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.GoodsCode, domain.StockState, domain.GoodsAliasCode, domain.BatchNumber, domain.ExpiryDate) (int64, error)
+	}
+	Allocations interface {
+		OpenAllocation(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.StockCell) (int64, error)
 	}
 }
 
@@ -280,7 +291,25 @@ func (holds LedgerHolds) CellHold(ctx context.Context, tenant domain.TenantID, o
 	if err != nil {
 		return 0, err
 	}
-	return frozen + locked, nil
+	allocated, err := holds.Allocated(ctx, tenant, owner, warehouse, cell)
+	if err != nil {
+		return 0, err
+	}
+	return frozen + locked + allocated, nil
+}
+
+func (holds LedgerHolds) Allocated(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, cell domain.StockCell) (int64, error) {
+	if holds.Allocations == nil {
+		return 0, nil
+	}
+	return holds.Allocations.OpenAllocation(ctx, tenant, owner, warehouse, cell)
+}
+
+func (holds LedgerHolds) CellLock(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, cell domain.StockCell) (int64, error) {
+	if holds.Counts == nil {
+		return 0, nil
+	}
+	return holds.Counts.CellLock(ctx, tenant, owner, warehouse, cell)
 }
 
 func (holds LedgerHolds) UnassignedReservation(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, goods domain.GoodsCode, state domain.StockState, alias domain.GoodsAliasCode, batch domain.BatchNumber, expiry domain.ExpiryDate) (int64, error) {

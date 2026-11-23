@@ -149,7 +149,12 @@ func (handler *CountHandler) Start(ctx context.Context, command CountCommand) (C
 		if err != nil {
 			return CountResult{}, fmt.Errorf("start count: %w", err)
 		}
-		free := row.Quantity - frozen
+		allocated, err := handler.holds.Allocated(ctx, command.Tenant, owner, count.Warehouse(), cell)
+		if err != nil {
+			return CountResult{}, fmt.Errorf("start count: %w", err)
+		}
+		// 分配已经含在预占里。锁的数量若再减去它，和预占相加时会把同一份占用算两遍。
+		free := row.Quantity - holdWithoutAllocation(frozen, allocated)
 		if free < 0 {
 			free = 0
 		}

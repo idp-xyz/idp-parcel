@@ -220,6 +220,9 @@ func (handler *RegisterInternalJobHandler) Restore(ctx context.Context, command 
 	if err := handler.restores.SaveDecision(ctx, restore); err != nil {
 		return RestoreConditionResult{}, fmt.Errorf("restore condition: %w", err)
 	}
+	if err := handler.noteRestoreCharge(ctx, command); err != nil {
+		return RestoreConditionResult{}, err
+	}
 	return RestoreConditionResult{outcome: RestoreConditionRestored, restore: restore, has: true}, nil
 }
 

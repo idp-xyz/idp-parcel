@@ -72,6 +72,9 @@ func (handler *WaveHandler) Correct(ctx context.Context, command CorrectConfirma
 	if err := handler.handOffCorrection(ctx, command.Tenant, confirmation, occurred); err != nil {
 		return WaveResult{}, err
 	}
+	if err := handler.noteConfirmationVoid(ctx, command.Tenant, command.FactID.String(), command.Invalidate); err != nil {
+		return WaveResult{}, err
+	}
 	return WaveResult{outcome: outcome}, nil
 }
 

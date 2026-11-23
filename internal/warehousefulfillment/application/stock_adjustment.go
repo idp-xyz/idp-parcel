@@ -51,6 +51,7 @@ type AdjustmentHandler struct {
 	holds        ports.StockHolds
 	clock        ports.Clock
 	anyWarehouse ports.TenantWarehouseLookup
+	charges      *ChargeHandler
 }
 
 func NewAdjustmentHandler(
@@ -75,6 +76,11 @@ func NewAdjustmentHandler(
 		adjustments: adjustments, duties: duties, poster: poster, ledger: ledger, warehouses: warehouses,
 		locations: locations, zones: zones, goods: goods, owners: owners, holds: holds, clock: clock, anyWarehouse: anyWarehouse,
 	}
+}
+
+func (handler *AdjustmentHandler) WithCharges(charges *ChargeHandler) *AdjustmentHandler {
+	handler.charges = charges
+	return handler
 }
 
 func (handler *AdjustmentHandler) Submit(ctx context.Context, command SubmitAdjustmentCommand) (AdjustmentResult, error) {
@@ -268,6 +274,11 @@ func (handler *AdjustmentHandler) postLine(ctx context.Context, tenant domain.Te
 	if posted.Outcome() != PostStockPosted && posted.Outcome() != PostStockAlreadyPosted {
 		return fmt.Errorf("approve adjustment: 入账没有成立")
 	}
+	if line.Kind == ports.AdjustmentDestruction {
+		if err := handler.formDestructionCharge(ctx, tenant, adjustment, index, line); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -364,7 +375,108 @@ func (handler *AdjustmentHandler) screen(ctx context.Context, command SubmitAdju
 			issues = append(issues, domain.NewFreezeIssue(domain.FreezeIssueInboundBatchNotOnCell))
 		}
 	}
+	if approving {
+		issue, blocked, err := handler.decreasesLeaveReservation(ctx, command, lines)
+		if err != nil {
+			return nil, nil, err
+		}
+		if blocked {
+			issues = append(issues, issue)
+		}
+	}
 	return lines, issues, nil
+}
+
+// 调减离开可分配库存。没点名的预占落在全部小批上，剩下的可分配数量不得少于这一笔。
+func (handler *AdjustmentHandler) decreasesLeaveReservation(ctx context.Context, command SubmitAdjustmentCommand, lines []ports.AdjustmentLine) (domain.FreezeIssue, bool, error) {
+	type key struct{ goods, unit, state, alias string }
+	cut := map[key]int64{}
+	for _, line := range lines {
+		if line.Kind == ports.AdjustmentIncrease {
+			continue
+		}
+		place, found, err := handler.locations.LoadLatestLocation(ctx, command.Tenant, command.Warehouse, line.Location)
+		if err != nil {
+			return domain.FreezeIssue{}, false, err
+		}
+		if !found {
+			continue
+		}
+		zone, found, err := handler.zones.LoadLatestZone(ctx, command.Tenant, command.Warehouse, place.Content().ZoneCode())
+		if err != nil {
+			return domain.FreezeIssue{}, false, err
+		}
+		if !found || !domain.AllocatableGoods(line.State, zone.Content().Usage()) {
+			continue
+		}
+		revision, found, err := handler.goods.LoadLatestGoods(ctx, command.Tenant, command.Owner, line.Goods)
+		if err != nil {
+			return domain.FreezeIssue{}, false, err
+		}
+		factor, ok := unitFactor(revision, line.Unit)
+		if !found || !ok || factor != 1 {
+			continue
+		}
+		cut[key{line.Goods.String(), line.Unit.String(), line.State.String(), line.Alias.String()}] += line.Quantity
+	}
+	if len(cut) == 0 {
+		return domain.FreezeIssue{}, false, nil
+	}
+	rows, err := handler.ledger.ListOnHandCells(ctx, command.Tenant, command.Owner, command.Warehouse)
+	if err != nil {
+		return domain.FreezeIssue{}, false, err
+	}
+	onHand := map[key]int64{}
+	for _, row := range rows {
+		location, err := domain.NewLocationCode(row.LocationCode)
+		if err != nil {
+			return domain.FreezeIssue{}, false, err
+		}
+		place, found, err := handler.locations.LoadLatestLocation(ctx, command.Tenant, command.Warehouse, location)
+		if err != nil {
+			return domain.FreezeIssue{}, false, err
+		}
+		if !found {
+			continue
+		}
+		zone, found, err := handler.zones.LoadLatestZone(ctx, command.Tenant, command.Warehouse, place.Content().ZoneCode())
+		if err != nil {
+			return domain.FreezeIssue{}, false, err
+		}
+		state, err := domain.NewStockState(row.State)
+		if err != nil {
+			return domain.FreezeIssue{}, false, err
+		}
+		if !found || !domain.AllocatableGoods(state, zone.Content().Usage()) {
+			continue
+		}
+		onHand[key{row.GoodsCode, row.Unit, row.State, textOrEmpty(row.Alias)}] += row.Quantity
+	}
+	for id, removed := range cut {
+		goods, err := domain.NewGoodsCode(id.goods)
+		if err != nil {
+			return domain.FreezeIssue{}, false, err
+		}
+		state, err := domain.NewStockState(id.state)
+		if err != nil {
+			return domain.FreezeIssue{}, false, err
+		}
+		var alias domain.GoodsAliasCode
+		if id.alias != "" {
+			alias, err = domain.NewGoodsAliasCode(id.alias)
+			if err != nil {
+				return domain.FreezeIssue{}, false, err
+			}
+		}
+		reserved, err := handler.holds.UnassignedReservation(ctx, command.Tenant, command.Owner, command.Warehouse, goods, state, alias, domain.BatchNumber{}, domain.ExpiryDate{})
+		if err != nil {
+			return domain.FreezeIssue{}, false, err
+		}
+		if onHand[id]-removed < reserved {
+			return domain.NewFreezeIssue(domain.FreezeIssueInboundBatchNotOnCell), true, nil
+		}
+	}
+	return domain.FreezeIssue{}, false, nil
 }
 
 func (handler *AdjustmentHandler) latestBatch(ctx context.Context, command SubmitAdjustmentCommand, line ports.AdjustmentLine) (domain.InboundBatchID, bool, error) {

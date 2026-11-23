@@ -39,7 +39,8 @@ go build -o "$BIN/" \
   ./cmd/parcel-transport-register \
   ./cmd/parcel-node-operations-register \
   ./cmd/parcel-document-numbering-register \
-  ./scripts/demo-seeds/migrate
+  ./scripts/demo-seeds/migrate \
+  ./scripts/demo-seeds/warehousewalk
 
 echo "== 施加迁移计划（${RESET_FLAG:-不重置}） =="
 "$BIN/migrate" $RESET_FLAG

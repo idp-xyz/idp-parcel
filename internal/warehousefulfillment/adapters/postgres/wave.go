@@ -140,10 +140,11 @@ func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id dom
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO warehouse_fulfillment.pick_task (
 			    tenant_id, task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state,
-			    inbound_batch_id, quantity, picked, status, fact_id
-			 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,'OPEN',NULL)`,
+			    inbound_batch_id, quantity, picked, status, fact_id, label_alias
+			 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,'OPEN',NULL,$11)`,
 			tenant.String(), task.ID.String(), task.WaveID.String(), task.Request.String(), task.Location.String(),
-			task.Goods.String(), task.Unit.String(), task.State.String(), task.Inbound.String(), task.Quantity); err != nil {
+			task.Goods.String(), task.Unit.String(), task.State.String(), task.Inbound.String(), task.Quantity,
+			optionalText(task.Alias.String(), task.Alias.String() != "")); err != nil {
 			return fmt.Errorf("save pick task: %w", err)
 		}
 	}
@@ -156,7 +157,7 @@ func (store *Waves) LoadTask(ctx context.Context, tenant domain.TenantID, id dom
 		return ports.PickTask{}, false, err
 	}
 	task, err := scanPickTask(querier.QueryRow(ctx,
-		`SELECT task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state, inbound_batch_id, quantity, picked, status, fact_id, staging_location
+		`SELECT task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state, inbound_batch_id, quantity, picked, status, fact_id, staging_location, label_alias
 		   FROM warehouse_fulfillment.pick_task
 		  WHERE tenant_id = $1 AND task_id = $2`, tenant.String(), id.String()))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -174,7 +175,7 @@ func (store *Waves) TasksOf(ctx context.Context, tenant domain.TenantID, request
 		return nil, err
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state, inbound_batch_id, quantity, picked, status, fact_id, staging_location
+		`SELECT task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state, inbound_batch_id, quantity, picked, status, fact_id, staging_location, label_alias
 		   FROM warehouse_fulfillment.pick_task
 		  WHERE tenant_id = $1 AND request_id = $2
 		  ORDER BY task_id`, tenant.String(), request.String())
@@ -191,6 +192,108 @@ func (store *Waves) TasksOf(ctx context.Context, tenant domain.TenantID, request
 		tasks = append(tasks, task)
 	}
 	return tasks, rows.Err()
+}
+
+// OpenAllocation 是这一格上状态仍为 OPEN 的拣货任务还没拣走的数量。拣完、短拣、取消与迟到都不再占。
+func (store *Waves) OpenAllocation(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, cell domain.StockCell) (int64, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("open allocation: %w", err)
+	}
+	var quantity int64
+	err = querier.QueryRow(ctx,
+		`SELECT COALESCE(SUM(task.quantity - task.picked), 0)::bigint
+		   FROM warehouse_fulfillment.pick_task task
+		   JOIN warehouse_fulfillment.outbound_request request
+		     ON request.tenant_id = task.tenant_id AND request.request_id = task.request_id
+		   JOIN warehouse_fulfillment.wave wave
+		     ON wave.tenant_id = task.tenant_id AND wave.wave_id = task.wave_id
+		  WHERE task.tenant_id = $1 AND request.owner_account_id = $2 AND wave.warehouse_code = $3
+		    AND task.status = 'OPEN'
+		    AND task.location_code = $4 AND task.goods_code = $5 AND task.unit_name = $6 AND task.stock_state = $7
+		    AND task.label_alias IS NOT DISTINCT FROM $8 AND task.inbound_batch_id = $9`,
+		tenant.String(), owner.String(), warehouse.String(),
+		cell.Location().String(), cell.Goods().String(), cell.Unit().String(), cell.State().String(),
+		optionalText(cell.Alias().String(), cell.Alias().String() != ""), cell.InboundBatch().String(),
+	).Scan(&quantity)
+	if err != nil {
+		return 0, fmt.Errorf("open allocation: %w", err)
+	}
+	return quantity, nil
+}
+
+func (store *Waves) OpenTasksOn(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, cell domain.StockCell) ([]ports.PickTask, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("open pick tasks: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT task.task_id, task.wave_id, task.request_id, task.location_code, task.goods_code, task.unit_name, task.stock_state,
+		        task.inbound_batch_id, task.quantity, task.picked, task.status, task.fact_id, task.staging_location, task.label_alias
+		   FROM warehouse_fulfillment.pick_task task
+		   JOIN warehouse_fulfillment.outbound_request request
+		     ON request.tenant_id = task.tenant_id AND request.request_id = task.request_id
+		   JOIN warehouse_fulfillment.wave wave
+		     ON wave.tenant_id = task.tenant_id AND wave.wave_id = task.wave_id
+		  WHERE task.tenant_id = $1 AND request.owner_account_id = $2 AND wave.warehouse_code = $3
+		    AND task.status = 'OPEN'
+		    AND task.location_code = $4 AND task.goods_code = $5 AND task.unit_name = $6 AND task.stock_state = $7
+		    AND task.label_alias IS NOT DISTINCT FROM $8 AND task.inbound_batch_id = $9
+		  ORDER BY task.task_id`,
+		tenant.String(), owner.String(), warehouse.String(),
+		cell.Location().String(), cell.Goods().String(), cell.Unit().String(), cell.State().String(),
+		optionalText(cell.Alias().String(), cell.Alias().String() != ""), cell.InboundBatch().String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("open pick tasks: %w", err)
+	}
+	defer rows.Close()
+	var tasks []ports.PickTask
+	for rows.Next() {
+		task, err := scanPickTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	return tasks, rows.Err()
+}
+
+func (store *Waves) SaveOpenTask(ctx context.Context, tenant domain.TenantID, task ports.PickTask) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save open pick: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.pick_task
+		    SET location_code = $3, quantity = $4
+		  WHERE tenant_id = $1 AND task_id = $2 AND status = 'OPEN'`,
+		tenant.String(), task.ID.String(), task.Location.String(), task.Quantity)
+	if err != nil {
+		return fmt.Errorf("save open pick: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("save open pick: %s was not open", task.ID.String())
+	}
+	return nil
+}
+
+func (store *Waves) InsertOpenTask(ctx context.Context, tenant domain.TenantID, task ports.PickTask) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("insert open pick: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.pick_task (
+		    tenant_id, task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state,
+		    inbound_batch_id, quantity, picked, status, fact_id, label_alias
+		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,'OPEN',NULL,$11)`,
+		tenant.String(), task.ID.String(), task.WaveID.String(), task.Request.String(), task.Location.String(),
+		task.Goods.String(), task.Unit.String(), task.State.String(), task.Inbound.String(), task.Quantity,
+		optionalText(task.Alias.String(), task.Alias.String() != "")); err != nil {
+		return fmt.Errorf("insert open pick: %w", err)
+	}
+	return nil
 }
 
 func (store *Waves) SavePick(ctx context.Context, tenant domain.TenantID, task ports.PickTask, requestStatus domain.OutboundStatus, differenceID, factID string, short int64) error {
@@ -679,9 +782,9 @@ type pickRowScanner interface {
 
 func scanPickTask(row pickRowScanner) (ports.PickTask, error) {
 	var task, wave, request, location, goods, unit, state, inbound, status string
-	var fact, staging *string
+	var fact, staging, alias *string
 	var quantity, picked int64
-	if err := row.Scan(&task, &wave, &request, &location, &goods, &unit, &state, &inbound, &quantity, &picked, &status, &fact, &staging); err != nil {
+	if err := row.Scan(&task, &wave, &request, &location, &goods, &unit, &state, &inbound, &quantity, &picked, &status, &fact, &staging, &alias); err != nil {
 		return ports.PickTask{}, err
 	}
 	parsedTask, err := domain.NewPickTaskID(task)
@@ -723,9 +826,16 @@ func scanPickTask(row pickRowScanner) (ports.PickTask, error) {
 			return ports.PickTask{}, err
 		}
 	}
+	var parsedAlias domain.GoodsAliasCode
+	if alias != nil && *alias != "" {
+		parsedAlias, err = domain.NewGoodsAliasCode(*alias)
+		if err != nil {
+			return ports.PickTask{}, err
+		}
+	}
 	return ports.PickTask{
 		ID: parsedTask, WaveID: parsedWave, Request: parsedRequest, Location: parsedLocation, Staging: parsedStaging, Goods: parsedGoods,
-		Unit: parsedUnit, State: parsedState, Inbound: parsedInbound, Quantity: quantity, Picked: picked, Status: status,
+		Unit: parsedUnit, State: parsedState, Alias: parsedAlias, Inbound: parsedInbound, Quantity: quantity, Picked: picked, Status: status,
 		Fact: valueOrEmpty(fact),
 	}, nil
 }

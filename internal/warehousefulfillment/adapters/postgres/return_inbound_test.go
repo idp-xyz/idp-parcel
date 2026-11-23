@@ -125,10 +125,14 @@ func (world receiptWorld) returns(t *testing.T) *application.ReturnHandler {
 		t.Fatal(err)
 	}
 	unclaimed := application.NewRegisterUnclaimedArrivalHandler(world.arrivals, world.arrivalIDs, world.warehouses, world.clock)
-	return application.NewReturnHandler(
+	handler := application.NewReturnHandler(
 		store, identities, numbers, world.warehouses, world.locations, world.zones, world.warehouses, alwaysOwner{},
 		world.poster(), world.ledger, unclaimed, world.arrivals, world.clock,
 	)
+	if world.charges != nil {
+		handler = handler.WithCharges(world.charges)
+	}
+	return handler
 }
 
 func (world receiptWorld) acceptReturn(t *testing.T, handler *application.ReturnHandler, key, tracking string) application.ReturnResult {

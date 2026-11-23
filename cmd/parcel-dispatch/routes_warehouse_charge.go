@@ -37,7 +37,7 @@ func init() {
 type warehouseChargeConsumer struct {
 	occurrences *whpostgres.Charges
 	settlement  *settlementapp.WarehouseChargeHandler
-	transactor bentoapp.Transactor
+	transactor  bentoapp.Transactor
 }
 
 func newWarehouseChargeConsumer(sources dispatchSources) (*warehouseChargeConsumer, error) {
@@ -133,9 +133,7 @@ func warehouseFact(version whports.ChargeVersion) settlementapp.WarehouseOccurre
 		Occurred: version.Occurred, Correction: version.Correction,
 	}
 	for _, measure := range version.Measures {
-		fact.Measures = append(fact.Measures, settlementapp.WarehouseFactMeasure{
-			Unit: measure.Unit, Quantity: measure.Quantity, Unmeasured: measure.Unmeasured, Declared: measure.Declared,
-		})
+		fact.Measures = append(fact.Measures, factMeasure(measure))
 	}
 	for _, attribute := range version.Attributes {
 		fact.Attributes = append(fact.Attributes, settlementapp.WarehouseFactAttribute{Name: attribute.Name, Value: attribute.Value})
@@ -143,9 +141,7 @@ func warehouseFact(version whports.ChargeVersion) settlementapp.WarehouseOccurre
 	for _, line := range version.Lines {
 		mapped := settlementapp.WarehouseFactLine{Kind: line.Kind}
 		for _, measure := range line.Measures {
-			mapped.Measures = append(mapped.Measures, settlementapp.WarehouseFactMeasure{
-				Unit: measure.Unit, Quantity: measure.Quantity, Unmeasured: measure.Unmeasured, Declared: measure.Declared,
-			})
+			mapped.Measures = append(mapped.Measures, factMeasure(measure))
 		}
 		for _, attribute := range line.Attributes {
 			mapped.Attributes = append(mapped.Attributes, settlementapp.WarehouseFactAttribute{Name: attribute.Name, Value: attribute.Value})
@@ -186,10 +182,21 @@ func (pricing dispatchPricing) Price(ctx context.Context, tenant, scope string, 
 	}, nil
 }
 
+// 原值与原单位是给人看的证据，不到计价。计价按类找重量与体积，并只在声明单位对得上时采用声明值。
+func factMeasure(measure whports.ChargeMeasure) settlementapp.WarehouseFactMeasure {
+	return settlementapp.WarehouseFactMeasure{
+		Unit: measure.Unit, Quantity: measure.Quantity, Unmeasured: measure.Unmeasured,
+		Declared: measure.Declared, DeclaredUnit: measure.DeclaredUnit, Class: measure.Class,
+	}
+}
+
 func pricingMeasures(measures []settlementapp.WarehouseFactMeasure) []pricingdomain.WarehouseMeasure {
 	mapped := make([]pricingdomain.WarehouseMeasure, 0, len(measures))
 	for _, measure := range measures {
-		mapped = append(mapped, pricingdomain.WarehouseMeasure{Unit: measure.Unit, Quantity: measure.Quantity, Unmeasured: measure.Unmeasured, Declared: measure.Declared})
+		mapped = append(mapped, pricingdomain.WarehouseMeasure{
+			Unit: measure.Unit, Quantity: measure.Quantity, Unmeasured: measure.Unmeasured,
+			Declared: measure.Declared, DeclaredUnit: measure.DeclaredUnit, Class: measure.Class,
+		})
 	}
 	return mapped
 }

@@ -44,6 +44,7 @@ type WarehouseChargeRule struct {
 	Priority     int
 	Method       string
 	Unit         string
+	MeasureClass string
 	UnitQuantity string
 	UnitPrice    int64
 	BaseFee      int64
@@ -52,10 +53,15 @@ type WarehouseChargeRule struct {
 	When         []WarehouseCondition
 }
 
-// WarehouseCondition 是作业属性相等。空条件是无条件。
+// WarehouseCondition 要么是作业属性相等，要么是计量与阈值的次序比较。
+// 一个条件只读一类特征：两种形状写在同一条上，或者哪一种都没写，方案不立。
 type WarehouseCondition struct {
-	Name   string
-	Equals string
+	Name         string
+	Equals       string
+	MeasureUnit  string
+	MeasureClass string
+	Operator     string
+	Threshold    string
 }
 
 // WarehouseOccurrenceSnapshot 是计价读到的一版发生项。身份归仓配履约，这里只留下算价要的内容。
@@ -73,11 +79,14 @@ type WarehouseOccurrenceSnapshot struct {
 }
 
 // WarehouseMeasure 是一个计量。未测量可以另附货主声明值。
+// Class 为空是计数类；重量与体积带 WEIGHT 或 VOLUME。DeclaredUnit 与这一计量的单位不同时不折算。
 type WarehouseMeasure struct {
-	Unit       string
-	Quantity   string
-	Unmeasured bool
-	Declared   string
+	Unit         string
+	Quantity     string
+	Unmeasured   bool
+	Declared     string
+	DeclaredUnit string
+	Class        string
 }
 
 // WarehouseAttribute 是一个作业属性。
@@ -142,6 +151,14 @@ func NewWarehousePlan(plan WarehousePlan) (WarehousePlan, string) {
 		}
 		if rule.Method == "CHARGE" && rule.Rounding == "EXACT" && rule.UnitQuantity != "1" {
 			return WarehousePlan{}, "CONTENT_INVALID"
+		}
+		if !knownMeasureClass(rule.MeasureClass) {
+			return WarehousePlan{}, "CONTENT_INVALID"
+		}
+		for _, condition := range rule.When {
+			if !validWarehouseCondition(condition) {
+				return WarehousePlan{}, "CONTENT_INVALID"
+			}
 		}
 	}
 	sort.Slice(plan.Groups, func(i, j int) bool { return plan.Groups[i].Name < plan.Groups[j].Name })
@@ -224,11 +241,25 @@ func instancesOf(occurrence WarehouseOccurrenceSnapshot, group WarehouseChargeGr
 }
 
 func chargeInstance(plan WarehousePlan, group WarehouseChargeGroup, instance chargeInstanceView, shared []WarehouseAttribute) (int64, string, string, string) {
+	// 条件点名的作业属性在这一层和发生项本身都没有时，整份评价待判断。
+	// 点名的计量缺、未测量而不能采用、或重量体积的单位对不上，同样不当条件不成立。
+	// 组的未命中行为也不在这里用：另一条规则命中不能把这一格盖过去。
+	for _, rule := range plan.Rules {
+		if rule.Group != group.Name {
+			continue
+		}
+		if missing := missingAttribute(rule.When, instance.attributes, shared); missing != "" {
+			return 0, "", "PENDING", "ATTRIBUTE:" + group.Name + ":" + missing
+		}
+		if status, reason := unresolvedMeasure(plan, rule.When, instance.measures); status != "" {
+			return 0, "", status, reason
+		}
+	}
 	var winners []WarehouseChargeRule
 	best := 0
 	seen := false
 	for _, rule := range plan.Rules {
-		if rule.Group != group.Name || !conditionsHold(rule.When, instance.attributes, shared) {
+		if rule.Group != group.Name || !conditionsHold(plan, rule.When, instance.attributes, shared, instance.measures) {
 			continue
 		}
 		if !seen || rule.Priority > best {
@@ -254,7 +285,7 @@ func chargeInstance(plan WarehousePlan, group WarehouseChargeGroup, instance cha
 	if rule.Method == "WAIVE" {
 		return 0, "", "", ""
 	}
-	quantity, status, reason := measureQuantity(plan, rule.Unit, instance.measures)
+	quantity, status, reason := measureQuantity(plan, rule.Unit, rule.MeasureClass, instance.measures)
 	if status != "" {
 		return 0, "", status, reason
 	}
@@ -268,46 +299,170 @@ func chargeInstance(plan WarehousePlan, group WarehouseChargeGroup, instance cha
 	return amount, rule.Code, "", ""
 }
 
-func conditionsHold(conditions []WarehouseCondition, own, shared []WarehouseAttribute) bool {
+func conditionsHold(plan WarehousePlan, conditions []WarehouseCondition, own, shared []WarehouseAttribute, measures []WarehouseMeasure) bool {
 	for _, condition := range conditions {
-		if attributeOf(own, condition.Name) != condition.Equals && attributeOf(shared, condition.Name) != condition.Equals {
+		if condition.Name != "" {
+			value, found := resolveAttribute(own, shared, condition.Name)
+			if !found || value != condition.Equals {
+				return false
+			}
+			continue
+		}
+		quantity, status, _ := measureQuantity(plan, condition.MeasureUnit, condition.MeasureClass, measures)
+		if status != "" || !measureHolds(quantity, condition.Operator, condition.Threshold) {
 			return false
 		}
 	}
 	return true
 }
 
-func attributeOf(attributes []WarehouseAttribute, name string) string {
-	for _, attribute := range attributes {
-		if attribute.Name == name {
-			return attribute.Value
+func missingAttribute(conditions []WarehouseCondition, own, shared []WarehouseAttribute) string {
+	for _, condition := range conditions {
+		if condition.Name == "" {
+			continue
+		}
+		if _, found := resolveAttribute(own, shared, condition.Name); !found {
+			return condition.Name
 		}
 	}
 	return ""
 }
 
-func measureQuantity(plan WarehousePlan, unit string, measures []WarehouseMeasure) (*big.Rat, string, string) {
-	for _, measure := range measures {
-		if measure.Unit != unit {
+func unresolvedMeasure(plan WarehousePlan, conditions []WarehouseCondition, measures []WarehouseMeasure) (string, string) {
+	for _, condition := range conditions {
+		if condition.Name != "" {
 			continue
 		}
-		if measure.Unmeasured {
-			if plan.DeclaredValue == "USE" && measure.Declared != "" {
-				quantity, ok := parseRat(measure.Declared)
-				if !ok {
-					return nil, "CONFLICT", "QUANTITY:" + unit
-				}
-				return quantity, "", ""
-			}
-			return nil, "PENDING", "UNMEASURED:" + unit
+		if _, status, reason := measureQuantity(plan, condition.MeasureUnit, condition.MeasureClass, measures); status != "" {
+			return status, reason
 		}
-		quantity, ok := parseRat(measure.Quantity)
-		if !ok {
-			return nil, "CONFLICT", "QUANTITY:" + unit
-		}
-		return quantity, "", ""
 	}
-	return nil, "PENDING", "MISSING:" + unit
+	return "", ""
+}
+
+// 这一层已经写下的值优先。发生项上的同名属性只补这一层没有的，不把这一层的另一个值改成命中。
+func resolveAttribute(own, shared []WarehouseAttribute, name string) (string, bool) {
+	if value, found := attributeValue(own, name); found {
+		return value, true
+	}
+	return attributeValue(shared, name)
+}
+
+func attributeValue(attributes []WarehouseAttribute, name string) (string, bool) {
+	for _, attribute := range attributes {
+		if attribute.Name == name {
+			return attribute.Value, true
+		}
+	}
+	return "", false
+}
+
+func measureQuantity(plan WarehousePlan, unit, class string, measures []WarehouseMeasure) (*big.Rat, string, string) {
+	measure, status, reason := selectMeasure(unit, class, measures)
+	if status != "" {
+		return nil, status, reason
+	}
+	return readMeasure(plan, measure, unit, class)
+}
+
+// 重量与体积按类找，不按单位名碰。规则点名的单位与这一类计量的单位不同是冲突，缺这一类是待判断。计数类仍按单位名找。
+func selectMeasure(unit, class string, measures []WarehouseMeasure) (WarehouseMeasure, string, string) {
+	if class != "" {
+		for _, measure := range measures {
+			if measure.Class != class {
+				continue
+			}
+			if measure.Unit != unit {
+				return WarehouseMeasure{}, "CONFLICT", "UNIT:" + class
+			}
+			return measure, "", ""
+		}
+		return WarehouseMeasure{}, "PENDING", "MISSING:" + class
+	}
+	for _, measure := range measures {
+		if measure.Unit == unit {
+			return measure, "", ""
+		}
+	}
+	return WarehouseMeasure{}, "PENDING", "MISSING:" + unit
+}
+
+// 声明值只在单位与这一计量相同（计数类可以不带单位）时采用。另一个单位不折算，整份评价待判断。
+func readMeasure(plan WarehousePlan, measure WarehouseMeasure, unit, class string) (*big.Rat, string, string) {
+	name := unit
+	if class != "" {
+		name = class
+	}
+	if measure.Unmeasured {
+		if plan.DeclaredValue == "USE" && measure.Declared != "" {
+			if !declaredUnitAccepted(measure) {
+				return nil, "PENDING", "DECLARED:" + name
+			}
+			quantity, ok := parseRat(measure.Declared)
+			if !ok {
+				return nil, "CONFLICT", "QUANTITY:" + name
+			}
+			return quantity, "", ""
+		}
+		return nil, "PENDING", "UNMEASURED:" + name
+	}
+	quantity, ok := parseRat(measure.Quantity)
+	if !ok {
+		return nil, "CONFLICT", "QUANTITY:" + name
+	}
+	return quantity, "", ""
+}
+
+func declaredUnitAccepted(measure WarehouseMeasure) bool {
+	if measure.DeclaredUnit == measure.Unit {
+		return true
+	}
+	return measure.DeclaredUnit == "" && measure.Class == ""
+}
+
+func knownMeasureClass(class string) bool {
+	return class == "" || class == "WEIGHT" || class == "VOLUME"
+}
+
+func validWarehouseCondition(condition WarehouseCondition) bool {
+	attribute := condition.Name != "" || condition.Equals != ""
+	measure := condition.MeasureUnit != "" || condition.MeasureClass != "" || condition.Operator != "" || condition.Threshold != ""
+	if attribute == measure {
+		return false
+	}
+	if attribute {
+		return condition.Name != ""
+	}
+	if condition.MeasureUnit == "" || !knownMeasureClass(condition.MeasureClass) || !measureOperator(condition.Operator) {
+		return false
+	}
+	_, ok := parseRat(condition.Threshold)
+	return ok
+}
+
+// 次序比较沿用 LT、LE、GT、GE。计量上的恰好等于不在这张卡的文法里。
+func measureOperator(operator string) bool {
+	switch operator {
+	case "LT", "LE", "GT", "GE":
+		return true
+	default:
+		return false
+	}
+}
+
+func measureHolds(quantity *big.Rat, operator, threshold string) bool {
+	bound, ok := parseRat(threshold)
+	if !ok || quantity == nil || !measureOperator(operator) {
+		return false
+	}
+	switch quantity.Cmp(bound) {
+	case -1:
+		return operator == "LT" || operator == "LE"
+	case 0:
+		return operator == "LE" || operator == "GE"
+	default:
+		return operator == "GT" || operator == "GE"
+	}
 }
 
 func chargeAmount(rule WarehouseChargeRule, quantity *big.Rat) (int64, bool) {

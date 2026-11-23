@@ -123,6 +123,9 @@ func (handler *InstructionHandler) Unbox(ctx context.Context, command UnboxComma
 	if err := handler.unboxes.SaveUnbox(ctx, fact); err != nil {
 		return InstructionResult{}, fmt.Errorf("unbox: %w", err)
 	}
+	if err := handler.noteUnboxCharge(ctx, command); err != nil {
+		return InstructionResult{}, err
+	}
 	return InstructionResult{outcome: InstructionPosted}, nil
 }
 

@@ -19,7 +19,6 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// 入库作业与仓租各走到预估客户费用；确认时点与确认条件都登记后才确认。已确认上的更正答待人处理。
 func TestWarehouseChargeWritersRefuseToRunOutsideATransaction(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -40,6 +39,7 @@ func TestWarehouseChargeWritersRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 }
 
+// 仓租卡把体积类写进计收条件：桥如果丢掉 Class，这一行会待判断而不是确认。
 func TestWarehouseChargesFollowTheSyntheticOccurrence(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -135,7 +135,7 @@ func TestWarehouseChargesFollowTheSyntheticOccurrence(t *testing.T) {
 			return fmt.Errorf("重放 %s %v", again, err)
 		}
 		storageMapping, err := domain.NewFeeItemMapping(
-			mustAccountRef(t, domain.NewPricingChargeCode, "STORAGE_DAY"),
+			mustAccountRef(t, domain.NewPricingChargeCode, "STORAGE_PIECE"),
 			mustAccountRef(t, domain.NewFeeItemReference, "SYN-FEE-WH"),
 			mustAccountRef(t, domain.NewFeeItemMappingBasisReference, "SYN-BASIS"),
 		)
@@ -179,9 +179,18 @@ func storageFact() application.WarehouseOccurrenceFact {
 	return application.WarehouseOccurrenceFact{
 		ID: "CHO-STORE", Version: 1, Kind: "STORAGE", Owner: "SYN-OWNER-01", Warehouse: "SYN-WH-01",
 		Occurred: time.Date(2026, 11, 20, 1, 0, 0, 0, time.UTC), Correction: "ORIGINAL",
-		Lines: []application.WarehouseFactLine{{
-			Kind: "STORAGE_CELL", Measures: []application.WarehouseFactMeasure{{Unit: "PIECE", Quantity: "2"}},
-		}},
+		Lines: []application.WarehouseFactLine{
+			{Kind: "INBOUND_BATCH", Measures: []application.WarehouseFactMeasure{
+				{Unit: "PIECE", Quantity: "9"},
+				{Class: "VOLUME", Unit: "M3", Quantity: "1.2"},
+				{Unit: "DAY", Quantity: "10"},
+			}},
+			{Kind: "INBOUND_BATCH", Measures: []application.WarehouseFactMeasure{
+				{Unit: "PIECE", Quantity: "2"},
+				{Class: "VOLUME", Unit: "M3", Quantity: "0.4"},
+				{Unit: "DAY", Quantity: "30"},
+			}},
+		},
 	}
 }
 
@@ -199,11 +208,17 @@ func warehouseSettlementPlan() pricingdomain.WarehousePlan {
 		EffectiveFrom: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
 		Groups: []pricingdomain.WarehouseChargeGroup{
 			{Name: "INBOUND", Kind: "INBOUND_HANDLING", Level: "OCCURRENCE", OnMiss: "PENDING"},
-			{Name: "STORAGE", Kind: "STORAGE", Level: "LINE", Line: "STORAGE_CELL", OnMiss: "PENDING"},
+			{Name: "STORAGE", Kind: "STORAGE", Level: "LINE", Line: "INBOUND_BATCH", OnMiss: "PENDING"},
 		},
 		Rules: []pricingdomain.WarehouseChargeRule{
 			{Code: "INBOUND_PIECE", Kind: "INBOUND_HANDLING", Level: "OCCURRENCE", Group: "INBOUND", Priority: 1, Method: "CHARGE", Unit: "PIECE", UnitQuantity: "1", UnitPrice: 100, Rounding: "EXACT"},
-			{Code: "STORAGE_DAY", Kind: "STORAGE", Level: "LINE", Line: "STORAGE_CELL", Group: "STORAGE", Priority: 1, Method: "CHARGE", Unit: "PIECE", UnitQuantity: "1", UnitPrice: 50, Rounding: "EXACT"},
+			{Code: "STORAGE_FREE", Kind: "STORAGE", Level: "LINE", Line: "INBOUND_BATCH", Group: "STORAGE", Priority: 1, Method: "WAIVE", When: []pricingdomain.WarehouseCondition{
+				{MeasureUnit: "DAY", Operator: "LT", Threshold: "30"},
+			}},
+			{Code: "STORAGE_PIECE", Kind: "STORAGE", Level: "LINE", Line: "INBOUND_BATCH", Group: "STORAGE", Priority: 1, Method: "CHARGE", Unit: "PIECE", UnitQuantity: "1", UnitPrice: 50, Rounding: "EXACT", When: []pricingdomain.WarehouseCondition{
+				{MeasureUnit: "DAY", Operator: "GE", Threshold: "30"},
+				{MeasureClass: "VOLUME", MeasureUnit: "M3", Operator: "GT", Threshold: "0"},
+			}},
 		},
 	}
 }
@@ -241,12 +256,12 @@ func (bridge applicationBridge) Price(ctx context.Context, tenant, scope string,
 		Correction: fact.Correction,
 	}
 	for _, measure := range fact.Measures {
-		snapshot.Measures = append(snapshot.Measures, pricingdomain.WarehouseMeasure{Unit: measure.Unit, Quantity: measure.Quantity, Unmeasured: measure.Unmeasured, Declared: measure.Declared})
+		snapshot.Measures = append(snapshot.Measures, bridgeMeasure(measure))
 	}
 	for _, line := range fact.Lines {
 		mapped := pricingdomain.WarehouseOccurrenceLine{Kind: line.Kind}
 		for _, measure := range line.Measures {
-			mapped.Measures = append(mapped.Measures, pricingdomain.WarehouseMeasure{Unit: measure.Unit, Quantity: measure.Quantity})
+			mapped.Measures = append(mapped.Measures, bridgeMeasure(measure))
 		}
 		snapshot.Lines = append(snapshot.Lines, mapped)
 	}
@@ -270,6 +285,13 @@ func (bridge applicationBridge) Price(ctx context.Context, tenant, scope string,
 	return application.WarehouseChargePrice{
 		EvaluationID: id, Status: status, TotalMinor: evaluation.TotalMinor, Currency: evaluation.Currency, Codes: evaluation.Codes,
 	}, nil
+}
+
+func bridgeMeasure(measure application.WarehouseFactMeasure) pricingdomain.WarehouseMeasure {
+	return pricingdomain.WarehouseMeasure{
+		Unit: measure.Unit, Quantity: measure.Quantity, Unmeasured: measure.Unmeasured,
+		Declared: measure.Declared, DeclaredUnit: measure.DeclaredUnit, Class: measure.Class,
+	}
 }
 
 type countingIDs struct {

@@ -15,6 +15,29 @@ func (ZeroStockHolds) CellHold(context.Context, domain.TenantID, domain.OwnerAcc
 	return 0, nil
 }
 
+func (ZeroStockHolds) Allocated(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.StockCell) (int64, error) {
+	return 0, nil
+}
+
+func (ZeroStockHolds) CellLock(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.StockCell) (int64, error) {
+	return 0, nil
+}
+
+// holdWithoutAllocation 从格占用里去掉还没拣的分配。分配是预占落到这一格的部分，
+// 调用方已经按预占扣过时再减一次，同一份占用会被算两遍。
+func holdWithoutAllocation(held, allocated int64) int64 {
+	if held <= 0 {
+		return 0
+	}
+	if allocated <= 0 {
+		return held
+	}
+	if allocated >= held {
+		return 0
+	}
+	return held - allocated
+}
+
 func (ZeroStockHolds) UnassignedReservation(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.GoodsCode, domain.StockState, domain.GoodsAliasCode, domain.BatchNumber, domain.ExpiryDate) (int64, error) {
 	return 0, nil
 }

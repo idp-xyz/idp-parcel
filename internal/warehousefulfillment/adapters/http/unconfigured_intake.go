@@ -139,14 +139,6 @@ func (UnconfiguredIntake) IntakeStorageDay(context.Context, *http.Request) (doma
 	return domain.TenantID{}, application.CloseStorageDayCommand{}, ErrAccessChannelNotConfigured
 }
 
-func (UnconfiguredIntake) IntakeChargeVoid(context.Context, *http.Request) (domain.TenantID, application.ChargeCorrectionCommand, error) {
-	return domain.TenantID{}, application.ChargeCorrectionCommand{}, ErrAccessChannelNotConfigured
-}
-
-func (UnconfiguredIntake) IntakeChargeRestate(context.Context, *http.Request) (domain.TenantID, application.ChargeCorrectionCommand, error) {
-	return domain.TenantID{}, application.ChargeCorrectionCommand{}, ErrAccessChannelNotConfigured
-}
-
 func (UnconfiguredIntake) IntakeClaimUnclaimedArrival(
 	context.Context, *http.Request,
 ) (application.ClaimUnclaimedArrivalCommand, error) {

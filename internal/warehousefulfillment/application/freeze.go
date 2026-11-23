@@ -252,6 +252,14 @@ func (handler *FreezeHandler) freezeGoods(ctx context.Context, command FreezeCom
 	if err != nil {
 		return FreezeResult{}, fmt.Errorf("freeze stock: %w", err)
 	}
+	// 点名批号或效期的查询对不上没点名的预占，那一笔仍然靠这一格上的货。
+	if command.Cell.BatchNumber().Given() || command.Cell.Expiry().Given() {
+		unnamed, err := handler.holds.UnassignedReservation(ctx, command.Tenant, command.Owner, command.Warehouse, command.Cell.Goods(), command.Cell.State(), command.Cell.Alias(), domain.BatchNumber{}, domain.ExpiryDate{})
+		if err != nil {
+			return FreezeResult{}, fmt.Errorf("freeze stock: %w", err)
+		}
+		reserved += unnamed
+	}
 	allocatable, err := handler.allocatable(ctx, command.Tenant, command.Owner, command.Warehouse, command.Cell.Goods(), command.Cell.Unit(), command.Cell.State())
 	if err != nil {
 		return FreezeResult{}, fmt.Errorf("freeze stock: %w", err)

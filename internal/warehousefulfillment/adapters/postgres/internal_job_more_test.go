@@ -255,6 +255,14 @@ func (holds scriptedHolds) CellHold(context.Context, domain.TenantID, domain.Own
 	return holds.cell, nil
 }
 
+func (scriptedHolds) Allocated(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.StockCell) (int64, error) {
+	return 0, nil
+}
+
+func (scriptedHolds) CellLock(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.StockCell) (int64, error) {
+	return 0, nil
+}
+
 func (holds scriptedHolds) UnassignedReservation(context.Context, domain.TenantID, domain.OwnerAccountID, domain.WarehouseCode, domain.GoodsCode, domain.StockState, domain.GoodsAliasCode, domain.BatchNumber, domain.ExpiryDate) (int64, error) {
 	return holds.reservation, nil
 }

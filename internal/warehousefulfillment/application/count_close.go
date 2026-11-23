@@ -70,7 +70,11 @@ func frozenOf(ctx context.Context, handler *CountHandler, tenant domain.TenantID
 		if err != nil {
 			return 0, err
 		}
-		total += held
+		allocated, err := handler.holds.Allocated(ctx, tenant, owner, warehouse, cell)
+		if err != nil {
+			return 0, err
+		}
+		total += holdWithoutAllocation(held, allocated)
 	}
 	return total, nil
 }
@@ -210,6 +214,9 @@ func (handler *CountHandler) Complete(ctx context.Context, command CountCommand)
 	}
 	if err := handler.counts.SaveFinish(ctx, finished, differences); err != nil {
 		return CountResult{}, fmt.Errorf("complete count: %w", err)
+	}
+	if err := handler.noteCountCharge(ctx, finished, current); err != nil {
+		return CountResult{}, err
 	}
 	return CountResult{outcome: CountCounted, count: finished, has: true}, nil
 }

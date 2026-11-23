@@ -29,15 +29,17 @@ func NewCharges(db *bentopg.DB) (*Charges, error) {
 
 var _ ports.ChargeStore = (*Charges)(nil)
 
+const chargeVersionColumns = `SELECT occurrence.occurrence_id, version.version, version.supersedes, version.correction, occurrence.kind,
+		        occurrence.owner_account_id, occurrence.warehouse_code, occurrence.source_fact, version.business_time,
+		        version.measures, version.attributes, version.lines, version.weight_unit, version.volume_unit`
+
 func (store *Charges) LoadBySource(ctx context.Context, tenant domain.TenantID, kind, source string) (ports.ChargeVersion, bool, error) {
 	executor, err := store.db.ReadExecutor(ctx)
 	if err != nil {
 		return ports.ChargeVersion{}, false, fmt.Errorf("load charge occurrence: %w", err)
 	}
 	version, err := scanCharge(executor.QueryRow(ctx,
-		`SELECT occurrence.occurrence_id, version.version, version.supersedes, version.correction, occurrence.kind,
-		        occurrence.owner_account_id, occurrence.warehouse_code, occurrence.source_fact, version.business_time,
-		        version.measures, version.attributes, version.lines
+		chargeVersionColumns+`
 		   FROM warehouse_fulfillment.charge_occurrence occurrence
 		   JOIN warehouse_fulfillment.charge_occurrence_version version
 		     ON version.tenant_id = occurrence.tenant_id AND version.occurrence_id = occurrence.occurrence_id
@@ -59,9 +61,7 @@ func (store *Charges) LoadVersion(ctx context.Context, tenant domain.TenantID, i
 		return ports.ChargeVersion{}, false, fmt.Errorf("load charge version: %w", err)
 	}
 	version, err := scanCharge(executor.QueryRow(ctx,
-		`SELECT occurrence.occurrence_id, version.version, version.supersedes, version.correction, occurrence.kind,
-		        occurrence.owner_account_id, occurrence.warehouse_code, occurrence.source_fact, version.business_time,
-		        version.measures, version.attributes, version.lines
+		chargeVersionColumns+`
 		   FROM warehouse_fulfillment.charge_occurrence occurrence
 		   JOIN warehouse_fulfillment.charge_occurrence_version version
 		     ON version.tenant_id = occurrence.tenant_id AND version.occurrence_id = occurrence.occurrence_id
@@ -82,9 +82,7 @@ func (store *Charges) Successor(ctx context.Context, tenant domain.TenantID, id 
 		return ports.ChargeVersion{}, false, fmt.Errorf("load charge successor: %w", err)
 	}
 	version, err := scanCharge(executor.QueryRow(ctx,
-		`SELECT occurrence.occurrence_id, version.version, version.supersedes, version.correction, occurrence.kind,
-		        occurrence.owner_account_id, occurrence.warehouse_code, occurrence.source_fact, version.business_time,
-		        version.measures, version.attributes, version.lines
+		chargeVersionColumns+`
 		   FROM warehouse_fulfillment.charge_occurrence occurrence
 		   JOIN warehouse_fulfillment.charge_occurrence_version version
 		     ON version.tenant_id = occurrence.tenant_id AND version.occurrence_id = occurrence.occurrence_id
@@ -138,9 +136,30 @@ func (store *Charges) LoadUnits(ctx context.Context, tenant domain.TenantID, war
 	}
 	var weight, volume string
 	err = executor.QueryRow(ctx,
-		`SELECT weight_unit, volume_unit FROM warehouse_fulfillment.charge_measure_unit
-		  WHERE tenant_id = $1 AND warehouse_code = $2`,
+		`SELECT weight_unit, volume_unit FROM warehouse_fulfillment.charge_measure_unit_revision
+		  WHERE tenant_id = $1 AND warehouse_code = $2
+		  ORDER BY revision DESC LIMIT 1`,
 		tenant.String(), warehouse.String()).Scan(&weight, &volume)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, fmt.Errorf("load charge units: %w", err)
+	}
+	return weight, volume, true, nil
+}
+
+func (store *Charges) LoadUnitsAt(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, at time.Time) (string, string, bool, error) {
+	executor, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return "", "", false, fmt.Errorf("load charge units: %w", err)
+	}
+	var weight, volume string
+	err = executor.QueryRow(ctx,
+		`SELECT weight_unit, volume_unit FROM warehouse_fulfillment.charge_measure_unit_revision
+		  WHERE tenant_id = $1 AND warehouse_code = $2 AND registered_at < $3
+		  ORDER BY revision DESC LIMIT 1`,
+		tenant.String(), warehouse.String(), at).Scan(&weight, &volume)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", false, nil
 	}
@@ -156,8 +175,11 @@ func (store *Charges) SaveUnits(ctx context.Context, tenant domain.TenantID, war
 		return fmt.Errorf("save charge units: %w", err)
 	}
 	if _, err := executor.Exec(ctx,
-		`INSERT INTO warehouse_fulfillment.charge_measure_unit (
-		    tenant_id, warehouse_code, weight_unit, volume_unit, registered_at) VALUES ($1,$2,$3,$4,$5)`,
+		`INSERT INTO warehouse_fulfillment.charge_measure_unit_revision (
+		    tenant_id, warehouse_code, revision, weight_unit, volume_unit, registered_at)
+		 SELECT $1, $2, COALESCE(MAX(revision), 0) + 1, $3, $4, $5
+		   FROM warehouse_fulfillment.charge_measure_unit_revision
+		  WHERE tenant_id = $1 AND warehouse_code = $2`,
 		tenant.String(), warehouse.String(), weight, volume, at); err != nil {
 		return fmt.Errorf("save charge units: %w", err)
 	}
@@ -261,11 +283,14 @@ func insertChargeVersion(ctx context.Context, executor chargeExec, tenant domain
 	if version.Supersedes > 0 {
 		supersedes = &version.Supersedes
 	}
+	weight := nullableText(version.WeightUnit)
+	volume := nullableText(version.VolumeUnit)
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO warehouse_fulfillment.charge_occurrence_version (
-		    tenant_id, occurrence_id, version, supersedes, correction, business_time, measures, attributes, lines)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		tenant.String(), version.ID, version.Version, supersedes, version.Correction, version.Occurred, measures, attributes, lines); err != nil {
+		    tenant_id, occurrence_id, version, supersedes, correction, business_time, measures, attributes, lines,
+		    weight_unit, volume_unit)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		tenant.String(), version.ID, version.Version, supersedes, version.Correction, version.Occurred, measures, attributes, lines, weight, volume); err != nil {
 		return fmt.Errorf("save charge version: %w", err)
 	}
 	return nil
@@ -278,13 +303,20 @@ type chargeScanner interface {
 func scanCharge(row chargeScanner) (ports.ChargeVersion, error) {
 	var version ports.ChargeVersion
 	var supersedes *int
+	var weight, volume *string
 	var measures, attributes, lines []byte
-	err := row.Scan(&version.ID, &version.Version, &supersedes, &version.Correction, &version.Kind, &version.Owner, &version.Warehouse, &version.Source, &version.Occurred, &measures, &attributes, &lines)
+	err := row.Scan(&version.ID, &version.Version, &supersedes, &version.Correction, &version.Kind, &version.Owner, &version.Warehouse, &version.Source, &version.Occurred, &measures, &attributes, &lines, &weight, &volume)
 	if err != nil {
 		return ports.ChargeVersion{}, err
 	}
 	if supersedes != nil {
 		version.Supersedes = *supersedes
+	}
+	if weight != nil {
+		version.WeightUnit = *weight
+	}
+	if volume != nil {
+		version.VolumeUnit = *volume
 	}
 	if err := json.Unmarshal(measures, &version.Measures); err != nil {
 		return ports.ChargeVersion{}, err

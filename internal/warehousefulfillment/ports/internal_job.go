@@ -83,10 +83,25 @@ type CartonPlace struct {
 	Found    bool
 }
 
-// StockHolds 回答库内入账取不走的数量。冻结与盘点锁定按格，未分配的预占按出库请求的条件。
-// 分配还没有账。取不走的减法已经写在入账里。
+// StockHolds 回答库内入账取不走的数量。冻结、作业锁定与还没拣的分配按格，未分配的预占按出库请求的条件。
+// CellHold 是这三项按格的和。Allocated 只答其中还没拣的分配，给已经按预占扣过的调用方加回去。
+// CellLock 只答作业锁定。锁定还在时，库内作业差额的补入账不成立。
 type StockHolds interface {
 	CellHold(
+		ctx context.Context,
+		tenant domain.TenantID,
+		owner domain.OwnerAccountID,
+		warehouse domain.WarehouseCode,
+		cell domain.StockCell,
+	) (int64, error)
+	Allocated(
+		ctx context.Context,
+		tenant domain.TenantID,
+		owner domain.OwnerAccountID,
+		warehouse domain.WarehouseCode,
+		cell domain.StockCell,
+	) (int64, error)
+	CellLock(
 		ctx context.Context,
 		tenant domain.TenantID,
 		owner domain.OwnerAccountID,

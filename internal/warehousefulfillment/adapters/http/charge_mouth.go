@@ -12,24 +12,20 @@ import (
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 )
 
-// ChargeService 登记收费取值、日结仓租，并作废或重述已经形成的发生项。形成本身跟着来源事实走，不在这些口上填写。
+// ChargeService 登记收费取值并日结仓租。形成、作废与重述跟着来源事实走，不在这些口上填写。
 type ChargeService interface {
 	RegisterUnits(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, weight, volume string) (application.ChargeResult, error)
 	RegisterAging(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, basis string) (application.ChargeResult, error)
 	RegisterProject(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, name string) (application.ChargeResult, error)
 	CloseStorageDay(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, day time.Time) (application.ChargeResult, error)
-	Void(ctx context.Context, tenant domain.TenantID, id string, version int) (application.ChargeResult, error)
-	Restate(ctx context.Context, tenant domain.TenantID, id string, version int, draft application.ChargeDraft) (application.ChargeResult, error)
 }
 
-// ChargeIntake 是单位、库龄、增值项目、仓租日结与更正的登记 Intake。
+// ChargeIntake 是单位、库龄、增值项目与仓租日结的登记 Intake。作废与重述跟着来源事实走，不在这里收。
 type ChargeIntake interface {
 	IntakeChargeUnits(ctx context.Context, request *http.Request) (domain.TenantID, application.RegisterChargeUnitsCommand, error)
 	IntakeChargeAging(ctx context.Context, request *http.Request) (domain.TenantID, application.RegisterChargeAgingCommand, error)
 	IntakeChargeProject(ctx context.Context, request *http.Request) (domain.TenantID, application.RegisterChargeProjectCommand, error)
 	IntakeStorageDay(ctx context.Context, request *http.Request) (domain.TenantID, application.CloseStorageDayCommand, error)
-	IntakeChargeVoid(ctx context.Context, request *http.Request) (domain.TenantID, application.ChargeCorrectionCommand, error)
-	IntakeChargeRestate(ctx context.Context, request *http.Request) (domain.TenantID, application.ChargeCorrectionCommand, error)
 }
 
 func NewRegisterChargeUnitsEndpoint(intake ChargeIntake, charges ChargeService) http.Handler {
@@ -69,26 +65,6 @@ func NewCloseStorageDayEndpoint(intake ChargeIntake, charges ChargeService) http
 			return application.ChargeResult{}, err
 		}
 		return charges.CloseStorageDay(request.Context(), tenant, command.Owner, command.Warehouse, command.Day)
-	})
-}
-
-func NewVoidChargeOccurrenceEndpoint(intake ChargeIntake, charges ChargeService) http.Handler {
-	return chargeEndpoint(func(request *http.Request) (application.ChargeResult, error) {
-		tenant, command, err := intake.IntakeChargeVoid(request.Context(), request)
-		if err != nil {
-			return application.ChargeResult{}, err
-		}
-		return charges.Void(request.Context(), tenant, command.Occurrence, command.Version)
-	})
-}
-
-func NewRestateChargeOccurrenceEndpoint(intake ChargeIntake, charges ChargeService) http.Handler {
-	return chargeEndpoint(func(request *http.Request) (application.ChargeResult, error) {
-		tenant, command, err := intake.IntakeChargeRestate(request.Context(), request)
-		if err != nil {
-			return application.ChargeResult{}, err
-		}
-		return charges.Restate(request.Context(), tenant, command.Occurrence, command.Version, command.Draft)
 	})
 }
 

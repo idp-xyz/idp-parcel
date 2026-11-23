@@ -6,7 +6,6 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
-	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
 type chargeUnitsDocument struct {
@@ -132,69 +131,4 @@ func StorageDay(reader io.Reader, _ domain.TenantID, _ domain.Registrant) (appli
 		return none, malformed("day must be a calendar date")
 	}
 	return application.CloseStorageDayCommand{Owner: owner, Warehouse: warehouse, Day: day}, nil
-}
-
-type chargeCorrectionDocument struct {
-	carriedIdentity
-	Occurrence *string                 `json:"occurrenceId"`
-	Version    *int                    `json:"version"`
-	Measures   []chargeMeasureDocument `json:"measures"`
-}
-
-type chargeMeasureDocument struct {
-	Unit       *string `json:"unit"`
-	Quantity   *string `json:"quantity"`
-	Unmeasured *bool   `json:"unmeasured"`
-}
-
-// ChargeVoid 点名要作废的那一版。作废不收计量。
-func ChargeVoid(reader io.Reader, tenant domain.TenantID, registrant domain.Registrant) (application.ChargeCorrectionCommand, error) {
-	command, err := chargeCorrection(reader, tenant, registrant, "charge void")
-	if err != nil {
-		return application.ChargeCorrectionCommand{}, err
-	}
-	if len(command.Draft.Measures) > 0 {
-		return application.ChargeCorrectionCommand{}, malformed("void does not carry measures")
-	}
-	return command, nil
-}
-
-// ChargeRestate 点名要重述的那一版，并带上整份计量。
-func ChargeRestate(reader io.Reader, tenant domain.TenantID, registrant domain.Registrant) (application.ChargeCorrectionCommand, error) {
-	return chargeCorrection(reader, tenant, registrant, "charge restate")
-}
-
-func chargeCorrection(reader io.Reader, _ domain.TenantID, _ domain.Registrant, name string) (application.ChargeCorrectionCommand, error) {
-	var none application.ChargeCorrectionCommand
-	document, err := decodeDocument[chargeCorrectionDocument](reader, name)
-	if err != nil {
-		return none, err
-	}
-	if err := document.refuseCarriedIdentity(); err != nil {
-		return none, err
-	}
-	occurrence, err := requiredText("occurrenceId", document.Occurrence, nonBlank("occurrenceId"))
-	if err != nil {
-		return none, err
-	}
-	if document.Version == nil || *document.Version < 1 {
-		return none, malformed("version is required")
-	}
-	measures := make([]ports.ChargeMeasure, 0, len(document.Measures))
-	for _, measure := range document.Measures {
-		unit, err := requiredText("unit", measure.Unit, nonBlank("unit"))
-		if err != nil {
-			return none, err
-		}
-		item := ports.ChargeMeasure{Unit: unit}
-		if measure.Unmeasured != nil && *measure.Unmeasured {
-			item.Unmeasured = true
-		} else if measure.Quantity == nil || *measure.Quantity == "" {
-			return none, malformed("quantity is required")
-		} else {
-			item.Quantity = *measure.Quantity
-		}
-		measures = append(measures, item)
-	}
-	return application.ChargeCorrectionCommand{Occurrence: occurrence, Version: *document.Version, Draft: application.ChargeDraft{Measures: measures}}, nil
 }

@@ -97,7 +97,7 @@ type warehouseFulfillmentWiring struct {
 	returns                   warehousehttp.ReturnService
 	agents                    warehousehttp.AgentService
 	charges                   warehousehttp.ChargeService
-	warehouseAdoptions       warehousehttp.WarehouseAdoptionService
+	warehouseAdoptions        warehousehttp.WarehouseAdoptionService
 	customerReturn            *warehousehttp.CustomerReturnIntake
 	returnReceiptIntake       *warehousehttp.ReturnReceiptIntake
 	countEntryIntake          *warehousehttp.CountEntryIntake
@@ -489,12 +489,6 @@ func init() {
 			"/warehouse-fulfillment-storage-day-closes": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
-			"/warehouse-fulfillment-charge-occurrence-voids": {
-				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
-			},
-			"/warehouse-fulfillment-charge-occurrence-restates": {
-				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
-			},
 			"/warehouse-fulfillment-allocation-strategy-adoptions": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
@@ -871,8 +865,6 @@ func init() {
 			chargeAging := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			chargeProject := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			storageDay := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
-			chargeVoid := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
-			chargeRestate := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			allocationStrategy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveRelease := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			pick := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -1057,8 +1049,6 @@ func init() {
 				chargeAging = warehousehttp.NewRegisterChargeAgingEndpoint(channels.chargeIntake(), wiring.charges)
 				chargeProject = warehousehttp.NewRegisterChargeProjectEndpoint(channels.chargeIntake(), wiring.charges)
 				storageDay = warehousehttp.NewCloseStorageDayEndpoint(channels.chargeIntake(), wiring.charges)
-				chargeVoid = warehousehttp.NewVoidChargeOccurrenceEndpoint(channels.chargeIntake(), wiring.charges)
-				chargeRestate = warehousehttp.NewRestateChargeOccurrenceEndpoint(channels.chargeIntake(), wiring.charges)
 				allocationStrategy = warehousehttp.NewAdoptAllocationStrategyEndpoint(channels.allocationStrategy(), wiring.waves)
 				waveRelease = warehousehttp.NewReleaseWaveEndpoint(channels.waveRelease(), wiring.waves)
 				plainPick := warehousehttp.UnconfiguredPickIntake{}
@@ -1230,8 +1220,6 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-charge-aging-bases", Handler: chargeAging},
 				{Pattern: "/warehouse-fulfillment-charge-service-projects", Handler: chargeProject},
 				{Pattern: "/warehouse-fulfillment-storage-day-closes", Handler: storageDay},
-				{Pattern: "/warehouse-fulfillment-charge-occurrence-voids", Handler: chargeVoid},
-				{Pattern: "/warehouse-fulfillment-charge-occurrence-restates", Handler: chargeRestate},
 				{Pattern: "/warehouse-fulfillment-allocation-strategy-adoptions", Handler: allocationStrategy},
 				{Pattern: "/warehouse-fulfillment-waves", Handler: waveRelease},
 				{Pattern: "/warehouse-fulfillment-picks", Handler: pick},

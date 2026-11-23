@@ -67,17 +67,20 @@ type ChargeDraft struct {
 	Measures   []ports.ChargeMeasure
 	Attributes []ports.ChargeAttribute
 	Lines      []ports.ChargeLine
+	// WeightUnit 与 VolumeUnit 非空时，这一版就用它们，不再读登记册的当前修订。
+	WeightUnit string
+	VolumeUnit string
 }
 
 // ChargeHandler 形成发生项并追加更正版本。重量体积单位、库龄口径与业务时区没登记时，要带它们的不形成。
 type ChargeHandler struct {
-	charges    ports.ChargeStore
-	identities ports.ChargeIdentities
-	handoff    ports.ChargeHandoff
-	warehouses ports.WarehouseLookup
-	clock      ports.Clock
-	// stock 缺席时仓租仍形成，只是没有在库格。库区用途不在余额行上，行上这一格记「无」。
-	stock ports.StockOnHandRead
+	charges      ports.ChargeStore
+	identities   ports.ChargeIdentities
+	handoff      ports.ChargeHandoff
+	warehouses   ports.WarehouseLookup
+	clock        ports.Clock
+	goods        ports.StockGoodsLookup
+	measurements ports.WarehouseMeasurementRead
 }
 
 func NewChargeHandler(
@@ -90,8 +93,9 @@ func NewChargeHandler(
 	return &ChargeHandler{charges: charges, identities: identities, handoff: handoff, warehouses: warehouses, clock: clock}
 }
 
-func (handler *ChargeHandler) WithStock(stock ports.StockOnHandRead) *ChargeHandler {
-	handler.stock = stock
+func (handler *ChargeHandler) WithReadings(goods ports.StockGoodsLookup, measurements ports.WarehouseMeasurementRead) *ChargeHandler {
+	handler.goods = goods
+	handler.measurements = measurements
 	return handler
 }
 
@@ -99,14 +103,12 @@ func (handler *ChargeHandler) Form(ctx context.Context, tenant domain.TenantID, 
 	if draft.Kind == "" || draft.Source == "" || draft.Occurred.IsZero() {
 		return ChargeResult{outcome: ChargeContentInvalid}, nil
 	}
-	if needsMeasureUnits(draft) {
-		_, _, found, err := handler.charges.LoadUnits(ctx, tenant, draft.Warehouse)
-		if err != nil {
-			return ChargeResult{}, fmt.Errorf("form charge occurrence: %w", err)
-		}
-		if !found {
-			return ChargeResult{outcome: ChargeNotConfigured}, nil
-		}
+	weightUnit, volumeUnit, err := handler.unitsFor(ctx, tenant, draft)
+	if err != nil {
+		return ChargeResult{}, fmt.Errorf("form charge occurrence: %w", err)
+	}
+	if weightUnit == "\x00" {
+		return ChargeResult{outcome: ChargeNotConfigured}, nil
 	}
 	existing, found, err := handler.charges.LoadBySource(ctx, tenant, draft.Kind, draft.Source)
 	if err != nil {
@@ -122,6 +124,7 @@ func (handler *ChargeHandler) Form(ctx context.Context, tenant domain.TenantID, 
 	version := ports.ChargeVersion{
 		ID: id, Version: 1, Correction: "ORIGINAL", Kind: draft.Kind, Owner: draft.Owner.String(), Warehouse: draft.Warehouse.String(),
 		Source: draft.Source, Occurred: draft.Occurred, Measures: draft.Measures, Attributes: blankAttributes(draft.Attributes), Lines: draft.Lines,
+		WeightUnit: weightUnit, VolumeUnit: volumeUnit,
 	}
 	if err := handler.charges.SaveOriginal(ctx, tenant, version); err != nil {
 		return ChargeResult{}, fmt.Errorf("form charge occurrence: %w", err)
@@ -136,6 +139,27 @@ func (handler *ChargeHandler) Void(ctx context.Context, tenant domain.TenantID, 
 	return handler.correct(ctx, tenant, id, version, "VOID", ChargeDraft{})
 }
 
+// VoidSource 作废某一来源事实的现行版本。没有形成过，或现行版已经是作废，都不再写。
+func (handler *ChargeHandler) VoidSource(ctx context.Context, tenant domain.TenantID, kind, source string) error {
+	version, found, err := handler.charges.LoadBySource(ctx, tenant, kind, source)
+	if err != nil {
+		return err
+	}
+	if !found || version.Correction == "VOID" {
+		return nil
+	}
+	result, err := handler.Void(ctx, tenant, version.ID, version.Version)
+	if err != nil {
+		return err
+	}
+	switch result.Outcome() {
+	case ChargeVoided, ChargeExisting:
+		return nil
+	default:
+		return fmt.Errorf("void charge occurrence: %s", result.Outcome())
+	}
+}
+
 func (handler *ChargeHandler) Restate(ctx context.Context, tenant domain.TenantID, id string, version int, draft ChargeDraft) (ChargeResult, error) {
 	return handler.correct(ctx, tenant, id, version, "RESTATE", draft)
 }
@@ -148,11 +172,12 @@ func (handler *ChargeHandler) RegisterUnits(ctx context.Context, tenant domain.T
 	if weight == "" || volume == "" {
 		return ChargeResult{outcome: ChargeContentInvalid}, nil
 	}
-	_, _, found, err := handler.charges.LoadUnits(ctx, tenant, warehouse)
+	// 同一对单位再登记是重放。换了词就追加一版，只作用于此后形成的发生项。
+	currentWeight, currentVolume, found, err := handler.charges.LoadUnits(ctx, tenant, warehouse)
 	if err != nil {
 		return ChargeResult{}, fmt.Errorf("register charge units: %w", err)
 	}
-	if found {
+	if found && currentWeight == weight && currentVolume == volume {
 		return ChargeResult{outcome: ChargeExisting}, nil
 	}
 	if err := handler.charges.SaveUnits(ctx, tenant, warehouse, weight, volume, handler.clock.Now()); err != nil {
@@ -188,6 +213,7 @@ func (handler *ChargeHandler) FormValueAdded(ctx context.Context, tenant domain.
 		return ChargeResult{outcome: ChargeNotConfigured}, nil
 	}
 	draft.Kind = "VALUE_ADDED"
+	draft.Attributes = withAttribute(draft.Attributes, "PROJECT", name)
 	return handler.Form(ctx, tenant, draft)
 }
 
@@ -221,67 +247,37 @@ func (handler *ChargeHandler) CloseStorageDay(ctx context.Context, tenant domain
 	if err != nil {
 		return ChargeResult{}, fmt.Errorf("close storage day: %w", err)
 	}
-	_, _, unitsFound, err := handler.charges.LoadUnits(ctx, tenant, warehouse)
-	if err != nil {
-		return ChargeResult{}, fmt.Errorf("close storage day: %w", err)
-	}
-	if !agingFound || !unitsFound {
-		return ChargeResult{outcome: ChargeNotConfigured}, nil
-	}
 	location, err := time.LoadLocation(revision.Content().BusinessTimeZone().String())
 	if err != nil {
 		return ChargeResult{outcome: ChargeNotConfigured}, nil
 	}
 	start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, location)
-	if !handler.clock.Now().After(start.Add(24 * time.Hour)) {
+	dayEnd := start.Add(24 * time.Hour)
+	if !handler.clock.Now().After(dayEnd) {
 		return ChargeResult{outcome: ChargeContentInvalid}, nil
 	}
-	if !ready.Before(start.Add(24 * time.Hour)) {
+	// 理论先进先出只写了「把在库量归到最近的几次入库」，没写按什么切开、一次入库指哪一笔、
+	// 重归之后行上的库存状态、库区用途与有无冻结跟哪一格。这一口径不猜，不形成。
+	if !agingFound || !ready.Before(dayEnd) || basis == "THEORETICAL_FIFO" {
 		return ChargeResult{outcome: ChargeNotConfigured}, nil
 	}
-	lines, err := handler.storageLines(ctx, tenant, owner, warehouse)
+	weightUnit, volumeUnit, unitsFound, err := handler.charges.LoadUnitsAt(ctx, tenant, warehouse, dayEnd)
+	if err != nil {
+		return ChargeResult{}, fmt.Errorf("close storage day: %w", err)
+	}
+	if !unitsFound || volumeUnit == "" {
+		return ChargeResult{outcome: ChargeNotConfigured}, nil
+	}
+	lines, err := handler.storageLines(ctx, tenant, owner, warehouse, start, dayEnd, location, volumeUnit)
 	if err != nil {
 		return ChargeResult{}, err
 	}
 	return handler.Form(ctx, tenant, ChargeDraft{
 		Kind: "STORAGE", Source: "storage:" + owner.String() + "/" + warehouse.String() + "/" + start.Format("2006-01-02"),
 		Owner: owner, Warehouse: warehouse, Occurred: start, Lines: lines,
+		WeightUnit: weightUnit, VolumeUnit: volumeUnit,
 		Attributes: []ports.ChargeAttribute{{Name: "AGING_BASIS", Value: basis}},
 	})
-}
-
-func (handler *ChargeHandler) storageLines(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) ([]ports.ChargeLine, error) {
-	if handler.stock == nil {
-		return nil, nil
-	}
-	rows, err := handler.stock.ListOnHandCells(ctx, tenant, owner, warehouse)
-	if err != nil {
-		return nil, fmt.Errorf("close storage day: %w", err)
-	}
-	lines := make([]ports.ChargeLine, 0, len(rows))
-	for _, row := range rows {
-		if row.Quantity <= 0 {
-			continue
-		}
-		state := row.State
-		if state == "" {
-			state = "无"
-		}
-		lines = append(lines, ports.ChargeLine{
-			Kind: "STORAGE_CELL",
-			Measures: []ports.ChargeMeasure{
-				{Unit: "PIECE", Quantity: fmt.Sprintf("%d", row.Quantity)},
-				{Unit: "CUBIC_METRE", Unmeasured: true},
-			},
-			Attributes: []ports.ChargeAttribute{
-				{Name: "STOCK_STATE", Value: state},
-				{Name: "STOCK_FORM", Value: "GOODS"},
-				{Name: "ZONE_USAGE", Value: "无"},
-				{Name: "INBOUND_BATCH", Value: row.InboundBatchID},
-			},
-		})
-	}
-	return lines, nil
 }
 
 func (handler *ChargeHandler) correct(ctx context.Context, tenant domain.TenantID, id string, version int, correction string, draft ChargeDraft) (ChargeResult, error) {
@@ -306,6 +302,7 @@ func (handler *ChargeHandler) correct(ctx context.Context, tenant domain.TenantI
 		ID: id, Version: version + 1, Supersedes: version, Correction: correction, Kind: target.Kind,
 		Owner: target.Owner, Warehouse: target.Warehouse, Source: target.Source, Occurred: target.Occurred,
 		Measures: []ports.ChargeMeasure{}, Attributes: []ports.ChargeAttribute{}, Lines: []ports.ChargeLine{},
+		WeightUnit: target.WeightUnit, VolumeUnit: target.VolumeUnit,
 	}
 	if correction == "RESTATE" {
 		next.Measures = draft.Measures
@@ -327,29 +324,46 @@ func (handler *ChargeHandler) correct(ctx context.Context, tenant domain.TenantI
 	return ChargeResult{outcome: ChargeRestated, occurrence: id, version: next.Version}, nil
 }
 
-func needsMeasureUnits(draft ChargeDraft) bool {
+// unitsFor 按种类决定要不要重量单位、体积单位。没登记时第一个返回值是 \x00，调用方答未配置。
+// 退货入库带明细行，要重量和体积；处置执行那一份不带。加工与增值服务不带。
+func (handler *ChargeHandler) unitsFor(ctx context.Context, tenant domain.TenantID, draft ChargeDraft) (string, string, error) {
+	needWeight, needVolume := false, false
 	switch draft.Kind {
-	case "INBOUND_HANDLING", "OUTBOUND_HANDLING", "STORAGE", "PROCESSING", "DESTRUCTION":
-		return true
-	}
-	if measureUsesMass(draft.Measures) {
-		return true
-	}
-	for _, line := range draft.Lines {
-		if measureUsesMass(line.Measures) {
-			return true
+	case "INBOUND_HANDLING", "OUTBOUND_HANDLING", "DESTRUCTION":
+		needWeight, needVolume = true, true
+	case "STORAGE":
+		needVolume = true
+	case "RETURN_HANDLING":
+		if len(draft.Lines) > 0 {
+			needWeight, needVolume = true, true
 		}
 	}
-	return false
-}
-
-func measureUsesMass(measures []ports.ChargeMeasure) bool {
-	for _, measure := range measures {
-		if measure.Unit == "KILOGRAM" || measure.Unit == "CUBIC_METRE" {
-			return true
+	weight, volume := draft.WeightUnit, draft.VolumeUnit
+	if (needWeight && weight == "") || (needVolume && volume == "") {
+		loadedWeight, loadedVolume, found, err := handler.charges.LoadUnits(ctx, tenant, draft.Warehouse)
+		if err != nil || !found {
+			if !found && err == nil && (needWeight || needVolume) {
+				return "\x00", "", nil
+			}
+			return "", "", err
+		}
+		if weight == "" {
+			weight = loadedWeight
+		}
+		if volume == "" {
+			volume = loadedVolume
 		}
 	}
-	return false
+	if (needWeight && weight == "") || (needVolume && volume == "") {
+		return "\x00", "", nil
+	}
+	if !needWeight {
+		weight = draft.WeightUnit
+	}
+	if !needVolume {
+		volume = draft.VolumeUnit
+	}
+	return weight, volume, nil
 }
 
 // RegisterChargeUnitsCommand 登记一个仓的重量单位与体积单位。不给生产默认。

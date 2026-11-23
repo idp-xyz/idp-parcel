@@ -122,11 +122,15 @@ func (world receiptWorld) instructions(t *testing.T) *application.InstructionHan
 	if err != nil {
 		t.Fatal(err)
 	}
-	return application.NewInstructionHandler(
+	handler := application.NewInstructionHandler(
 		store, identities, world.poster(), world.ledger, world.ledger, world.warehouses, world.locations, world.zones,
 		world.goods, world.goods, alwaysOwner{}, application.ZeroStockHolds{}, world.clock, world.warehouses,
 		store, world.cartons, world.cartonIDs, world.stockIDs,
 	)
+	if world.charges != nil {
+		handler = handler.WithCharges(world.charges)
+	}
+	return handler
 }
 
 func (world receiptWorld) acceptInstruction(t *testing.T, handler *application.InstructionHandler, command application.AcceptInstructionCommand) application.InstructionResult {

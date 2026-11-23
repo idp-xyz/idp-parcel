@@ -285,6 +285,12 @@ func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
 	if err := waves.SavePick(ctx, tenant, ports.PickTask{ID: valueOf(t, domain.NewPickTaskID, "PKT-1"), Request: valueOf(t, domain.NewOutboundRequestID, "OBR-1")}, domain.OutboundPicked, "", "", 0); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SavePick：%v", err)
 	}
+	if err := waves.SaveOpenTask(ctx, tenant, ports.PickTask{ID: valueOf(t, domain.NewPickTaskID, "PKT-1")}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveOpenTask：%v", err)
+	}
+	if err := waves.InsertOpenTask(ctx, tenant, ports.PickTask{ID: valueOf(t, domain.NewPickTaskID, "PKT-1"), WaveID: valueOf(t, domain.NewWaveID, "WAVE"), Request: valueOf(t, domain.NewOutboundRequestID, "OBR-1"), Location: valueOf(t, domain.NewLocationCode, "SYN-LOC-STORE"), Goods: valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), Unit: valueOf(t, domain.NewGoodsUnitName, "件"), State: domain.StockStateGood, Inbound: valueOf(t, domain.NewInboundBatchID, "IB-1"), Quantity: 1}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("InsertOpenTask：%v", err)
+	}
 	if err := waves.SaveCheck(ctx, tenant, valueOf(t, domain.NewPickFactID, "SYN-FACT-CHK"), valueOf(t, domain.NewOutboundRequestID, "OBR-1"), 10, true, preAdviceNumberingInstant, domain.OutboundChecked); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveCheck：%v", err)
 	}
@@ -429,9 +435,20 @@ func (world receiptWorld) waves(t *testing.T) *application.WaveHandler {
 	if err != nil {
 		t.Fatal(err)
 	}
+	freezes, err := adapter.NewFreezes(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts, err := adapter.NewCounts(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	holds := adapter.LedgerHolds{
+		Freezes: adapter.NewFreezeHolds(freezes), Counts: counts, Reservations: requests, Allocations: waves,
+	}
 	return application.NewWaveHandler(
 		waves, requests, tasks, differences, world.poster(), world.ledger, world.locations, world.zones,
-		world.goods, application.ZeroStockHolds{}, world.clock, world.warehouses,
+		world.goods, holds, world.clock, world.warehouses,
 	)
 }
 

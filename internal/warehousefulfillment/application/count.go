@@ -161,6 +161,7 @@ type CountHandler struct {
 	}
 	clock        ports.Clock
 	anyWarehouse ports.TenantWarehouseLookup
+	charges      *ChargeHandler
 }
 
 func NewCountHandler(
@@ -183,4 +184,9 @@ func NewCountHandler(
 		locations: locations, zones: zones, goods: goods, holds: holds, posting: posting,
 		clock: clock, anyWarehouse: anyWarehouse,
 	}
+}
+
+func (handler *CountHandler) WithCharges(charges *ChargeHandler) *CountHandler {
+	handler.charges = charges
+	return handler
 }

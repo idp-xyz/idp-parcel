@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
@@ -533,7 +534,54 @@ func (handler *InstructionHandler) allocateExecution(ctx context.Context, comman
 			return nil, true, nil
 		}
 	}
+	// 取走之后，可分配库存仍不得少于没点名的预占。点名批号或效期的预占不在这一笔空条件里。
+	left := map[string]int64{}
+	places := map[string]placeInfo{}
+	for _, item := range book {
+		usage, found, err := handler.executionPlace(ctx, command.Tenant, instruction.Warehouse(), item.cell.Location(), places)
+		if err != nil {
+			return nil, false, err
+		}
+		if !found || !domain.AllocatableGoods(item.cell.State(), usage) {
+			continue
+		}
+		left[item.cell.Goods().String()+"\x1f"+item.cell.State().String()+"\x1f"+item.cell.Alias().String()] += item.row.Quantity
+	}
+	for id, quantity := range left {
+		goods, state, alias, err := splitHoldKey(id)
+		if err != nil {
+			return nil, false, err
+		}
+		reserved, err := handler.holds.UnassignedReservation(ctx, command.Tenant, instruction.Owner(), instruction.Warehouse(), goods, state, alias, domain.BatchNumber{}, domain.ExpiryDate{})
+		if err != nil {
+			return nil, false, err
+		}
+		if quantity < reserved {
+			return nil, true, nil
+		}
+	}
 	return requests, false, nil
+}
+
+func splitHoldKey(id string) (domain.GoodsCode, domain.StockState, domain.GoodsAliasCode, error) {
+	goodsText, rest, _ := strings.Cut(id, "\x1f")
+	stateText, aliasText, _ := strings.Cut(rest, "\x1f")
+	goods, err := domain.NewGoodsCode(goodsText)
+	if err != nil {
+		return domain.GoodsCode{}, 0, domain.GoodsAliasCode{}, err
+	}
+	state, err := domain.NewStockState(stateText)
+	if err != nil {
+		return domain.GoodsCode{}, 0, domain.GoodsAliasCode{}, err
+	}
+	var alias domain.GoodsAliasCode
+	if aliasText != "" {
+		alias, err = domain.NewGoodsAliasCode(aliasText)
+		if err != nil {
+			return domain.GoodsCode{}, 0, domain.GoodsAliasCode{}, err
+		}
+	}
+	return goods, state, alias, nil
 }
 
 func executionCellMatches(cell domain.StockCell, line InstructionExecutionLine) bool {
