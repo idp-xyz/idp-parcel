@@ -20,6 +20,7 @@ const (
 	WarehouseChargeNotConfigured  WarehouseChargeOutcome = "NOT_CONFIGURED"
 	WarehouseChargePending        WarehouseChargeOutcome = "PENDING"
 	WarehouseChargeZero           WarehouseChargeOutcome = "ZERO"
+	WarehouseChargeDifference     WarehouseChargeOutcome = "DIFFERENCE"
 	WarehouseChargeAwaitingPerson WarehouseChargeOutcome = "AWAITING_PERSON"
 	WarehouseChargeSuperseded     WarehouseChargeOutcome = "SUPERSEDED"
 	WarehouseChargeNotAccepted    WarehouseChargeOutcome = "NOT_ACCEPTED"
@@ -122,6 +123,11 @@ type WarehouseChargeHandler struct {
 	supersede  ports.ChargeSupersessionStore
 	identities interface{ Next() (string, error) }
 	clock      ports.Clock
+	// reweighAdoptions 与 reweigh 一起才结已确认费用的差额。缺一截答未配置，不写调整。
+	reweighAdoptions ports.ReweighAdjustmentAdoptionView
+	reweigh          interface {
+		SettleReweigh(context.Context, ReweighDifferenceCommand) (ReweighDifferenceOutcome, error)
+	}
 }
 
 func NewWarehouseChargeHandler(
@@ -145,6 +151,18 @@ func NewWarehouseChargeHandler(
 		adoptions: adoptions, pricing: pricing, accounts: accounts, mappings: mappings, charges: charges,
 		bases: bases, conditions: conditions, moments: moments, supersede: supersede, identities: identities, clock: clock,
 	}
+}
+
+// WithConfirmedDifference 接上已确认费用的差额。采用册与调整用例都要有；只装一半仍答未配置。
+func (handler *WarehouseChargeHandler) WithConfirmedDifference(
+	adoptions ports.ReweighAdjustmentAdoptionView,
+	reweigh interface {
+		SettleReweigh(context.Context, ReweighDifferenceCommand) (ReweighDifferenceOutcome, error)
+	},
+) *WarehouseChargeHandler {
+	handler.reweighAdoptions = adoptions
+	handler.reweigh = reweigh
+	return handler
 }
 
 func (handler *WarehouseChargeHandler) Adopt(ctx context.Context, tenant domain.TenantID, adoption WarehouseAdoption) (WarehouseChargeOutcome, error) {
@@ -182,7 +200,7 @@ func (handler *WarehouseChargeHandler) Adopt(ctx context.Context, tenant domain.
 	return WarehouseChargeFormed, nil
 }
 
-// Settle 处理一版已形成的发生项。没有适用的采用行答未配置。已确认费用上的更正答待人处理。
+// Settle 处理一版已形成的发生项。没有适用的采用行答未配置。已确认费用上的更正按差额结清；这一户没采用实测差异自动调整答未配置。贷记会让费用为负时答待人处理，不重投。
 func (handler *WarehouseChargeHandler) Settle(ctx context.Context, tenant domain.TenantID, fact WarehouseOccurrenceFact) (WarehouseChargeOutcome, string, error) {
 	if fact.ID == "" || fact.Version < 1 || fact.Occurred.IsZero() {
 		return WarehouseChargeNotAccepted, "", nil
@@ -238,7 +256,7 @@ func (handler *WarehouseChargeHandler) Settle(ctx context.Context, tenant domain
 		return WarehouseChargePending, "", nil
 	case "ZERO":
 		if priorCharge.ID().String() != "" && priorCharge.Stage() == domain.ChargeConfirmed {
-			return handler.awaitPerson(ctx, tenant, fact)
+			return handler.settleConfirmed(ctx, tenant, fact, prior, price)
 		}
 		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "ZERO", EvaluationID: price.EvaluationID}); err != nil {
 			return "", "", err
@@ -246,7 +264,7 @@ func (handler *WarehouseChargeHandler) Settle(ctx context.Context, tenant domain
 		return WarehouseChargeZero, "", nil
 	}
 	if priorCharge.ID().String() != "" && priorCharge.Stage() == domain.ChargeConfirmed {
-		return handler.awaitPerson(ctx, tenant, fact)
+		return handler.settleConfirmed(ctx, tenant, fact, prior, price)
 	}
 	charge, err := handler.form(ctx, tenant, fact, adoption, price)
 	if errors.Is(err, errPendingMapping) {
@@ -332,7 +350,13 @@ func (handler *WarehouseChargeHandler) voidPrior(ctx context.Context, tenant dom
 		return WarehouseChargeZero, "", nil
 	}
 	if charge.Stage() == domain.ChargeConfirmed {
-		return handler.awaitPerson(ctx, tenant, fact)
+		currency, _ := charge.SettlementAmount()
+		return handler.settleConfirmed(ctx, tenant, fact, prior, WarehouseChargePrice{
+			EvaluationID: fact.ID + "/" + fmt.Sprint(fact.Version),
+			Status:       "ZERO",
+			TotalMinor:   0,
+			Currency:     currency.String(),
+		})
 	}
 	if err := handler.supersede.SaveSupersessionWithoutSuccessor(ctx, tenant, charge.ID(), handler.clock.Now()); err != nil {
 		return "", "", err
@@ -344,11 +368,71 @@ func (handler *WarehouseChargeHandler) voidPrior(ctx context.Context, tenant dom
 	return WarehouseChargeZero, "", nil
 }
 
-func (handler *WarehouseChargeHandler) awaitPerson(ctx context.Context, tenant domain.TenantID, fact WarehouseOccurrenceFact) (WarehouseChargeOutcome, string, error) {
-	if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "AWAITING_PERSON"}); err != nil {
-		return "", "", err
+// settleConfirmed 对已确认费用记差额，不另形成一笔费用，也不改原确认。没采用实测差异自动调整答未配置。
+// 贷记会使费用为负时记下待人处理：那是确定性的，重投也不会变。
+func (handler *WarehouseChargeHandler) settleConfirmed(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact WarehouseOccurrenceFact,
+	prior WarehouseChargeRequest,
+	price WarehouseChargePrice,
+) (WarehouseChargeOutcome, string, error) {
+	chargeID, err := domain.NewCustomerChargeID(prior.ChargeID)
+	if err != nil {
+		return "", "", fmt.Errorf("settle warehouse charge: %w", err)
 	}
-	return WarehouseChargeAwaitingPerson, "", nil
+	charge, found, err := handler.charges.FindByID(ctx, tenant, chargeID)
+	if err != nil {
+		return "", "", fmt.Errorf("settle warehouse charge: %w", err)
+	}
+	if !found {
+		return "", "", fmt.Errorf("settle warehouse charge: charge %s named by %s/%d is not on the register", prior.ChargeID, fact.ID, prior.Version)
+	}
+	facts, confirmed := charge.ConfirmedFacts()
+	if !confirmed || handler.reweighAdoptions == nil || handler.reweigh == nil {
+		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "NOT_CONFIGURED"}); err != nil {
+			return "", "", err
+		}
+		return WarehouseChargeNotConfigured, "", nil
+	}
+	adopted, err := handler.reweighAdoptions.ReweighAdjustmentAdopted(ctx, tenant, facts.SettlementAccount)
+	if err != nil {
+		return "", "", fmt.Errorf("settle warehouse charge: %w", err)
+	}
+	if !adopted {
+		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{Occurrence: fact.ID, Version: fact.Version, Status: "NOT_CONFIGURED"}); err != nil {
+			return "", "", err
+		}
+		return WarehouseChargeNotConfigured, "", nil
+	}
+	outcome, err := handler.reweigh.SettleReweigh(ctx, ReweighDifferenceCommand{
+		TenantID: tenant, ChargeID: prior.ChargeID, Evaluation: price.EvaluationID,
+		OriginalCurrency: price.Currency, OriginalMinor: price.TotalMinor,
+		SettlementCurrency: price.Currency, SettlementMinor: price.TotalMinor,
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("settle warehouse charge: %w", err)
+	}
+	switch outcome {
+	case ReweighDifferenceNone, ReweighDifferenceRecorded, ReweighDifferenceReplayed:
+		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{
+			Occurrence: fact.ID, Version: fact.Version, Status: "DIFFERENCE", ChargeID: prior.ChargeID, EvaluationID: price.EvaluationID,
+		}); err != nil {
+			return "", "", err
+		}
+		return WarehouseChargeDifference, prior.ChargeID, nil
+	case ReweighDifferenceExceedsCharge:
+		if err := handler.adoptions.SaveRequest(ctx, tenant, WarehouseChargeRequest{
+			Occurrence: fact.ID, Version: fact.Version, Status: "AWAITING_PERSON", ChargeID: prior.ChargeID, EvaluationID: price.EvaluationID,
+		}); err != nil {
+			return "", "", err
+		}
+		return WarehouseChargeAwaitingPerson, prior.ChargeID, nil
+	case ReweighDifferenceUndecided:
+		return "", "", fmt.Errorf("settle warehouse charge: reweigh undecided")
+	default:
+		return "", "", fmt.Errorf("settle warehouse charge: reweigh %s", outcome)
+	}
 }
 
 func (handler *WarehouseChargeHandler) adoptionAt(ctx context.Context, tenant domain.TenantID, fact WarehouseOccurrenceFact) (WarehouseAdoption, bool, error) {

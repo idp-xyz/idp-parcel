@@ -174,7 +174,7 @@
 没有发现的：
 
 - 拒绝接受拆包：已拣出的生成回库任务，这一笔装箱记录标成已截单。整票一份委托时按请求回一次。操作者提交的库存调整仍不收待出库库区。
-- 仓储计费方案在 `internal/parcelpricing`，采用、预计与确认在 `internal/settlementaccounting`。评价不进包裹那四种对象。确认依据 `WAREHOUSE_WORK_OCCURRED`。已确认费用的更正答待人处理。这一路不生成 SELL 请求。
+- 仓储计费方案在 `internal/parcelpricing`，采用、预计与确认在 `internal/settlementaccounting`。评价不进包裹那四种对象。确认依据 `WAREHOUSE_WORK_OCCURRED`。已确认费用的更正按差额结清；没采用实测差异自动调整答未配置，贷记会使费用为负时仍答待人处理。这一路不生成 SELL 请求。
 - 全程追踪已能收下 `warehouse-outbound-confirmed`。里程碑映射没登记，不编默认。
 - 回补走批准口，不走库存调整那个提交口。
 

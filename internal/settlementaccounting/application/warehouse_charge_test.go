@@ -283,6 +283,8 @@ func (book *accountBook) FindByID(context.Context, domain.TenantID, domain.Settl
 type chargeBook struct {
 	estimated int
 	confirmed int
+	held      domain.CustomerCharge
+	hasHeld   bool
 }
 
 func (book *chargeBook) SaveEstimated(context.Context, domain.TenantID, domain.CustomerCharge) (ports.ChargeSaveOutcome, error) {
@@ -295,8 +297,83 @@ func (book *chargeBook) SaveConfirmed(context.Context, domain.TenantID, domain.C
 	return ports.ChargeSaved, nil
 }
 
-func (book *chargeBook) FindByID(context.Context, domain.TenantID, domain.CustomerChargeID) (domain.CustomerCharge, bool, error) {
+func (book *chargeBook) FindByID(_ context.Context, _ domain.TenantID, id domain.CustomerChargeID) (domain.CustomerCharge, bool, error) {
+	if book.hasHeld && book.held.ID() == id {
+		return book.held, true, nil
+	}
 	return domain.CustomerCharge{}, false, nil
+}
+
+type scriptedDifference struct {
+	adopted bool
+	outcome application.ReweighDifferenceOutcome
+	seen    application.ReweighDifferenceCommand
+	calls   int
+}
+
+func (script *scriptedDifference) ReweighAdjustmentAdopted(context.Context, domain.TenantID, domain.SettlementAccountID) (bool, error) {
+	return script.adopted, nil
+}
+
+func (script *scriptedDifference) SettleReweigh(_ context.Context, command application.ReweighDifferenceCommand) (application.ReweighDifferenceOutcome, error) {
+	script.calls++
+	script.seen = command
+	return script.outcome, nil
+}
+
+func TestAConfirmedWarehouseCorrectionSettlesTheDifferenceWhenAdopted(t *testing.T) {
+	world := &settleWorld{
+		adoptions: []application.WarehouseAdoption{settleAdoption()},
+		price:     settlePrice(), account: settleAccount(t), accountFound: true,
+		mapping: settleMapping(t), mappingFound: true,
+	}
+	handler := world.handler(t)
+	charge := confirmedWarehouseCharge(t)
+	world.charges.held = charge
+	world.charges.hasHeld = true
+	world.rows = []application.WarehouseChargeRequest{{
+		Occurrence: "CHO-1", Version: 1, Status: "CONFIRMED", ChargeID: charge.ID().String(),
+	}}
+	script := &scriptedDifference{adopted: true, outcome: application.ReweighDifferenceRecorded}
+	handler.WithConfirmedDifference(script, script)
+	outcome, id, err := handler.Settle(context.Background(), settleTenant(t), settleFact(2))
+	if err != nil || outcome != application.WarehouseChargeDifference || id != charge.ID().String() || script.calls != 1 || script.seen.SettlementMinor != 400 {
+		t.Fatalf("差额 %s %s 调用 %d 金额 %d err %v", outcome, id, script.calls, script.seen.SettlementMinor, err)
+	}
+	script.adopted = false
+	again, _, err := handler.Settle(context.Background(), settleTenant(t), settleFact(3))
+	world.rows = append(world.rows, application.WarehouseChargeRequest{Occurrence: "CHO-1", Version: 2, Status: "DIFFERENCE", ChargeID: charge.ID().String()})
+	if err != nil || again != application.WarehouseChargeNotConfigured || script.calls != 1 {
+		t.Fatalf("没采用 %s 调用 %d err %v", again, script.calls, err)
+	}
+}
+
+func confirmedWarehouseCharge(t *testing.T) domain.CustomerCharge {
+	t.Helper()
+	formed, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
+		ID:               mustValue(t, domain.NewCustomerChargeID, "CHG-CONFIRMED"),
+		FeeItem:          mustValue(t, domain.NewFeeItemReference, "SYN-FEE-WH"),
+		Evaluation:       mustValue(t, domain.NewSellEvaluationReference, "WEV-0"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "CNY"), OriginalMinor: 100,
+		SettlementCurrency: mustValue(t, domain.NewCurrencyCode, "CNY"), SettlementMinor: 100,
+		Stage: domain.ChargeEstimated, FormedAt: time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirmed, err := formed.Confirm(domain.ConfirmedChargeFacts{
+		ResponsibleEntity:    mustValue(t, domain.NewLegalEntityReference, "SYN-LE"),
+		Counterparty:         mustValue(t, domain.NewSettlementCounterpartyReference, "SYN-OWNER-01"),
+		Direction:            domain.ChargeReceivable,
+		SettlementAccount:    mustValue(t, domain.NewSettlementAccountID, "SYN-ACCT-WH"),
+		ContractBasis:        mustValue(t, domain.NewContractBasisReference, "SYN-CONTRACT"),
+		PrimaryChargingScope: mustValue(t, domain.NewChargingScopeReference, "SYN-SCOPE-WH"),
+		SourceFact:           mustValue(t, domain.NewSourceFactReference, "CHO-1/1"),
+	}, mustValue(t, domain.NewConfirmationBasisReference, "WAREHOUSE_WORK_OCCURRED/CHO-1/1"), time.Date(2026, 11, 20, 3, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return confirmed
 }
 
 type idSource struct{}

@@ -157,8 +157,8 @@ func TestWarehouseChargesFollowTheSyntheticOccurrence(t *testing.T) {
 			return fmt.Errorf("仓租金额 %d", minor)
 		}
 		waiting, _, err := handler.Settle(ctx, tenant, inboundFact("CHO-IN-2", 2))
-		if err != nil || waiting != application.WarehouseChargeAwaitingPerson {
-			return fmt.Errorf("已确认上的更正 %s %v", waiting, err)
+		if err != nil || waiting != application.WarehouseChargeNotConfigured {
+			return fmt.Errorf("没采用差额时的更正 %s %v", waiting, err)
 		}
 		stored, found, err := charges.FindByID(ctx, tenant, mustAccountRef(t, domain.NewCustomerChargeID, confirmedID))
 		if err != nil || !found || stored.Stage() != domain.ChargeConfirmed {

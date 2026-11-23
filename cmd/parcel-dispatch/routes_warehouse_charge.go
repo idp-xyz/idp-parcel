@@ -90,10 +90,25 @@ func newWarehouseChargeConsumer(sources dispatchSources) (*warehouseChargeConsum
 		return nil, err
 	}
 	pricing := dispatchPricing{handler: pricingapp.NewWarehousePlanHandler(plans, true, evaluations)}
+	reweighAdoptions, err := sapostgres.NewReweighAdjustmentAdoptions(sources.db)
+	if err != nil {
+		return nil, err
+	}
+	adjustments, err := sapostgres.NewChargeAdjustments(sources.db)
+	if err != nil {
+		return nil, err
+	}
+	postings, err := sapostgres.NewCustomerReceiptPostings(sources.db)
+	if err != nil {
+		return nil, err
+	}
+	reweigh := settlementapp.NewRecordChargeAdjustmentHandler(settlementapp.RecordChargeAdjustmentDeps{
+		Charges: customerCharges, Adjustments: adjustments, Clock: sources.clock, Balances: postings, Books: postings,
+	})
 	handler := settlementapp.NewWarehouseChargeHandler(
 		store, pricing, accounts, mappings, customerCharges, conditions, conditions,
 		momentHandler, supersessions, charges, sources.clock,
-	)
+	).WithConfirmedDifference(reweighAdoptions, reweigh)
 	return &warehouseChargeConsumer{occurrences: occurrences, settlement: handler, transactor: sources.db.Transactor()}, nil
 }
 
