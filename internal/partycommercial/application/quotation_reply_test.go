@@ -54,6 +54,9 @@ func TestQuotationReplyRefusalsDoNotAppend(t *testing.T) {
 		{name: "没有这条发出", mutate: func(command *application.RecordQuotationReplyCommand) {
 			command.QuotationID = commercialAppValue(t, domain.NewQuotationID, "QTS-MISSING")
 		}, outcome: application.QuotationReplyNotFound},
+		{name: "代录人首尾空白", mutate: func(command *application.RecordQuotationReplyCommand) {
+			command.Recorder = commercialAppValue(t, domain.NewOperatorSubjectReference, "  op-reply  ")
+		}, outcome: application.QuotationReplyNotAccepted},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {

@@ -109,6 +109,9 @@ func (handler *RecordQuotationReplyHandler) Handle(ctx context.Context, command 
 	if command.RepliedAt.IsZero() {
 		return replyRefused(QuotationReplyNotAccepted, "未受理：客户答复时刻要有"), nil
 	}
+	if command.Recorder.String() != strings.TrimSpace(command.Recorder.String()) {
+		return replyRefused(QuotationReplyNotAccepted, "未受理：代录人不能带首尾空白"), nil
+	}
 
 	send, found, err := handler.sends.GetQuotationSend(ctx, command.Tenant, command.QuotationID)
 	if err != nil {
