@@ -14,6 +14,18 @@ type AllocationStrategy struct {
 	RegisteredAt time.Time
 }
 
+// PrefetchRecord 是放波次预取交出的估算委托与估算测量。打包称重与它相同时直接沿用，不同时按资料修订更正。
+type PrefetchRecord struct {
+	ShipmentID       string
+	DeclaredParcelID string
+	Weight           string
+	WeightUnit       string
+	Length           string
+	Width            string
+	Height           string
+	Dimension        string
+}
+
 // PickTask 是一条已经落到库位的拣货任务。数量按基本单位。
 type PickTask struct {
 	ID       domain.PickTaskID
@@ -62,8 +74,8 @@ type WaveStore interface {
 	CancelOpenTasks(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) error
 	SaveReturnTask(ctx context.Context, tenant domain.TenantID, task ReturnTask) error
 	SetRequestStatus(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, status domain.OutboundStatus) error
-	SavePrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, shipmentID, declaredParcelID string) error
-	LoadPrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (shipmentID, declaredParcelID string, found bool, err error)
+	SavePrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, record PrefetchRecord) error
+	LoadPrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (PrefetchRecord, bool, error)
 	MarkParcelCutoff(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int) (domain.OutboundStatus, error)
 	SaveLatePick(ctx context.Context, tenant domain.TenantID, task PickTask, factID string) error
 	LoadReturnTask(ctx context.Context, tenant domain.TenantID, id string) (ReturnTask, bool, error)

@@ -2,6 +2,7 @@ package parcelshipment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -30,6 +31,10 @@ type versionFormer interface {
 	Handle(ctx context.Context, command psapplication.FormNewSubmissionVersionCommand) (psapplication.FormNewSubmissionVersionResult, error)
 }
 
+type sourceDataAmender interface {
+	Handle(ctx context.Context, command psapplication.AmendCustomerSourceDataCommand) (psapplication.AmendCustomerSourceDataResult, error)
+}
+
 // Opener 把一份出库包裹交给小包托运。代办没获准时不调用提交编排。
 type Opener struct {
 	agency    agencyAllowance
@@ -40,6 +45,7 @@ type Opener struct {
 	batches   identity.Minter
 	parcels   identity.Minter
 	versions  versionFormer
+	amender   sourceDataAmender
 }
 
 func NewOpener(
@@ -70,6 +76,50 @@ func NewOpener(
 func (opener *Opener) WithVersionFormer(former versionFormer) *Opener {
 	opener.versions = former
 	return opener
+}
+
+// WithSourceDataAmender 接上已接受委托的客户资料修订。没接时预取称重差异答未配置。
+func (opener *Opener) WithSourceDataAmender(amender sourceDataAmender) *Opener {
+	opener.amender = amender
+	return opener
+}
+
+// AmendMeasurement 在预取委托打包后称重与估算不同时，以货主名义提出声明测量资料修订。
+func (opener *Opener) AmendMeasurement(ctx context.Context, amendment ports.MeasurementAmendment) (ports.MeasurementAmendmentAnswer, error) {
+	if opener.amender == nil {
+		return ports.MeasurementAmendmentAnswer{Outcome: ports.MeasurementNotConfiguredWord}, nil
+	}
+	granted, err := opener.agency.Allow(ctx, amendment.Tenant, amendment.Owner)
+	if err != nil {
+		return ports.MeasurementAmendmentAnswer{}, err
+	}
+	if !granted {
+		return ports.MeasurementAmendmentAnswer{Outcome: ports.MeasurementNotConfiguredWord}, nil
+	}
+	command, err := opener.measurementAmendment(amendment)
+	if err != nil {
+		return ports.MeasurementAmendmentAnswer{}, err
+	}
+	result, err := opener.amender.Handle(ctx, command)
+	if err != nil {
+		if errors.Is(err, psapplication.ErrAmendedRequestNotAccepted) {
+			return ports.MeasurementAmendmentAnswer{Outcome: ports.MeasurementNotAcceptedWord}, nil
+		}
+		return ports.MeasurementAmendmentAnswer{}, err
+	}
+	switch result.Outcome() {
+	case psapplication.AmendmentRecorded, psapplication.AmendmentAlreadyHandled:
+		if adoption, ok := result.Adoption(); ok && adoption.Outcome() == psdomain.SourceDataAdopted {
+			return ports.MeasurementAmendmentAnswer{Outcome: ports.MeasurementAdoptedWord}, nil
+		}
+		return ports.MeasurementAmendmentAnswer{Outcome: ports.MeasurementAwaitingReviewWord}, nil
+	case psapplication.AmendmentAwaitingReview, psapplication.AmendmentUndecided:
+		return ports.MeasurementAmendmentAnswer{Outcome: ports.MeasurementAwaitingReviewWord}, nil
+	case psapplication.AmendmentDisallowed, psapplication.AmendmentNotAuthorized, psapplication.AmendmentSourceConflict:
+		return ports.MeasurementAmendmentAnswer{Outcome: ports.MeasurementDisallowedWord}, nil
+	default:
+		return ports.MeasurementAmendmentAnswer{}, fmt.Errorf("amend warehouse measurement: unexpected outcome %s", result.Outcome())
+	}
 }
 
 func (opener *Opener) Revise(ctx context.Context, revision ports.CommissionRevision) (ports.CommissionAnswer, error) {
@@ -293,13 +343,104 @@ func (opener *Opener) revision(ctx context.Context, revision ports.CommissionRev
 	}, nil
 }
 
-func measurementProfile(parcel psdomain.DeclaredParcelID, packed ports.CommissionParcel) (psdomain.DeclaredParcelProfile, error) {
-	var none psdomain.DeclaredParcelProfile
-	weightValue, err := psdomain.NewMeasurementValue(packed.Weight)
+func (opener *Opener) measurementAmendment(amendment ports.MeasurementAmendment) (psapplication.AmendCustomerSourceDataCommand, error) {
+	var none psapplication.AmendCustomerSourceDataCommand
+	tenant, err := psdomain.NewTenantID(amendment.Tenant)
 	if err != nil {
 		return none, err
 	}
-	weightUnit, err := psdomain.NewMeasurementUnitReference(packed.WeightUnit)
+	owner, err := psdomain.NewCustomerAccountID(amendment.Owner)
+	if err != nil {
+		return none, err
+	}
+	source, err := psdomain.NewSource(psdomain.SourceWarehouseOutbound)
+	if err != nil {
+		return none, err
+	}
+	originalKeyText := amendment.Request + "/" + strconv.Itoa(amendment.Sequence)
+	originalKey, err := psdomain.NewSourceRequestKey(originalKeyText)
+	if err != nil {
+		return none, err
+	}
+	identityValue, err := psdomain.NewSourceIdentity(tenant, owner, source, originalKey)
+	if err != nil {
+		return none, err
+	}
+	amendKey, err := psdomain.NewSourceRequestKey(originalKeyText + "/pack-measurement")
+	if err != nil {
+		return none, err
+	}
+	amendIdentity, err := psdomain.NewSourceIdentity(tenant, owner, source, amendKey)
+	if err != nil {
+		return none, err
+	}
+	shipmentID, err := psdomain.NewShipmentRequestID(amendment.ShipmentRequest)
+	if err != nil {
+		return none, err
+	}
+	parcelID, err := psdomain.NewDeclaredParcelID(amendment.DeclaredParcelID)
+	if err != nil {
+		return none, err
+	}
+	scope, err := psdomain.NewParcelScopedSourceData(shipmentID, parcelID, psdomain.DeclaredMeasurementDataGroup())
+	if err != nil {
+		return none, err
+	}
+	reason, err := psdomain.NewAmendmentReasonReference("WAREHOUSE_PACK_MEASUREMENT")
+	if err != nil {
+		return none, err
+	}
+	requester, err := psdomain.NewRequesterReference(amendment.Owner)
+	if err != nil {
+		return none, err
+	}
+	measurement, err := declaredMeasurement(amendment.Weight, amendment.WeightUnit, amendment.Length, amendment.Width, amendment.Height, amendment.Dimension)
+	if err != nil {
+		return none, err
+	}
+	basis := psdomain.NewSupplementOnAcceptanceBaseline()
+	canonical, err := psdomain.CanonicalizeCustomerSourceDataAmendment(psdomain.SourceDataAmendmentPayloadSpec{
+		OriginalAccessRequestID: originalKeyText,
+		Scope:                   scope,
+		Basis:                   basis,
+		Intent:                  psdomain.SupplementIntent,
+		Reason:                  reason,
+		Measurement:             measurement,
+	})
+	if err != nil {
+		return none, err
+	}
+	now := opener.clock.Now().UTC()
+	return psapplication.AmendCustomerSourceDataCommand{
+		Identity:          identityValue,
+		AmendmentIdentity: amendIdentity,
+		PayloadDigest:     canonical.Digest(),
+		OccurredAt:        now,
+		ReceivedAt:        now,
+		Scope:             scope,
+		Basis:             basis,
+		Intent:            psdomain.SupplementIntent,
+		Reason:            reason,
+		Requester:         requester,
+		Content:           canonical.Content(),
+	}, nil
+}
+
+func measurementProfile(parcel psdomain.DeclaredParcelID, packed ports.CommissionParcel) (psdomain.DeclaredParcelProfile, error) {
+	measurement, err := declaredMeasurement(packed.Weight, packed.WeightUnit, packed.Length, packed.Width, packed.Height, packed.Dimension)
+	if err != nil {
+		return psdomain.DeclaredParcelProfile{}, err
+	}
+	return psdomain.NewDeclaredParcelProfile(parcel, measurement)
+}
+
+func declaredMeasurement(weightText, weightUnitText, lengthText, widthText, heightText, dimensionUnitText string) (psdomain.DeclaredMeasurement, error) {
+	var none psdomain.DeclaredMeasurement
+	weightValue, err := psdomain.NewMeasurementValue(weightText)
+	if err != nil {
+		return none, err
+	}
+	weightUnit, err := psdomain.NewMeasurementUnitReference(weightUnitText)
 	if err != nil {
 		return none, err
 	}
@@ -307,19 +448,19 @@ func measurementProfile(parcel psdomain.DeclaredParcelID, packed ports.Commissio
 	if err != nil {
 		return none, err
 	}
-	length, err := psdomain.NewMeasurementValue(packed.Length)
+	length, err := psdomain.NewMeasurementValue(lengthText)
 	if err != nil {
 		return none, err
 	}
-	width, err := psdomain.NewMeasurementValue(packed.Width)
+	width, err := psdomain.NewMeasurementValue(widthText)
 	if err != nil {
 		return none, err
 	}
-	height, err := psdomain.NewMeasurementValue(packed.Height)
+	height, err := psdomain.NewMeasurementValue(heightText)
 	if err != nil {
 		return none, err
 	}
-	dimensionUnit, err := psdomain.NewMeasurementUnitReference(packed.Dimension)
+	dimensionUnit, err := psdomain.NewMeasurementUnitReference(dimensionUnitText)
 	if err != nil {
 		return none, err
 	}
@@ -327,11 +468,7 @@ func measurementProfile(parcel psdomain.DeclaredParcelID, packed ports.Commissio
 	if err != nil {
 		return none, err
 	}
-	measurement, err := psdomain.NewDeclaredMeasurement(weight, dimensions)
-	if err != nil {
-		return none, err
-	}
-	return psdomain.NewDeclaredParcelProfile(parcel, measurement)
+	return psdomain.NewDeclaredMeasurement(weight, dimensions)
 }
 
 func goodsSpec(packed ports.CommissionParcel) psdomain.GoodsDetailsSpec {

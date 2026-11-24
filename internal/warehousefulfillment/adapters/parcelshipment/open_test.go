@@ -126,6 +126,57 @@ func TestAPlatformStockingRoundSubmitsEveryParcelUnderOneKey(t *testing.T) {
 	}
 }
 
+type amenderDouble struct {
+	called  int
+	command psapplication.AmendCustomerSourceDataCommand
+	result  psapplication.AmendCustomerSourceDataResult
+	err     error
+}
+
+func (double *amenderDouble) Handle(_ context.Context, command psapplication.AmendCustomerSourceDataCommand) (psapplication.AmendCustomerSourceDataResult, error) {
+	double.called++
+	double.command = command
+	return double.result, double.err
+}
+
+func TestOpenerAmendsDeclaredMeasurementUnderTheParcelScope(t *testing.T) {
+	amender := &amenderDouble{err: psapplication.ErrAmendedRequestNotAccepted}
+	opener, err := NewOpener(allowanceDouble{}, &shipmentDouble{}, ownershipDouble{}, frozenClock{at: time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opener.WithSourceDataAmender(amender)
+	amendment := ports.MeasurementAmendment{
+		Tenant: "SYN-TENANT-01", Owner: "SYN-OWNER-01", Request: "OBR-1", Sequence: 1,
+		ShipmentRequest: "SHR-1", DeclaredParcelID: "DPCL-1",
+		Weight: "11.5", WeightUnit: "KG", Length: "30", Width: "20", Height: "15.5", Dimension: "CM",
+	}
+	ungranted, err := opener.AmendMeasurement(t.Context(), amendment)
+	if err != nil || ungranted.Outcome != ports.MeasurementNotConfiguredWord || amender.called != 0 {
+		t.Fatalf("未授权 %s err %v called %d", ungranted.Outcome, err, amender.called)
+	}
+	grantedOpener, err := NewOpener(allowanceDouble{granted: true}, &shipmentDouble{}, ownershipDouble{}, frozenClock{at: time.Date(2026, 11, 20, 2, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grantedOpener.WithSourceDataAmender(amender)
+	notAccepted, err := grantedOpener.AmendMeasurement(t.Context(), amendment)
+	if err != nil || notAccepted.Outcome != ports.MeasurementNotAcceptedWord || amender.called != 1 {
+		t.Fatalf("未接受 %s err %v called %d", notAccepted.Outcome, err, amender.called)
+	}
+	if amender.command.Identity.RequestKey().String() != "OBR-1/1" ||
+		amender.command.AmendmentIdentity.RequestKey().String() != "OBR-1/1/pack-measurement" ||
+		amender.command.Scope.DataGroup() != psdomain.DeclaredMeasurementDataGroup() ||
+		amender.command.Intent != psdomain.SupplementIntent ||
+		!amender.command.Basis.OnAcceptanceBaseline() {
+		t.Fatalf("修订命令不对 %+v", amender.command)
+	}
+	measured, ok := amender.command.Content.Measurement()
+	if !ok || measured.Weight().Value().String() != "11.5" || measured.Weight().Unit().String() != "KG" {
+		t.Fatalf("测量内容 %+v %v", measured, ok)
+	}
+}
+
 type frozenClock struct{ at time.Time }
 
 func (clock frozenClock) Now() time.Time { return clock.at }

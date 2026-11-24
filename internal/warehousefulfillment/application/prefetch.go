@@ -77,7 +77,11 @@ func (handler *WaveHandler) prefetchRequests(ctx context.Context, command Releas
 		if answer.ShipmentRequestID == "" {
 			return fmt.Errorf("release wave: prefetch named no shipment request")
 		}
-		if err := handler.waves.SavePrefetch(ctx, command.Tenant, id, answer.ShipmentRequestID, answer.DeclaredParcelID); err != nil {
+		if err := handler.waves.SavePrefetch(ctx, command.Tenant, id, ports.PrefetchRecord{
+			ShipmentID: answer.ShipmentRequestID, DeclaredParcelID: answer.DeclaredParcelID,
+			Weight: parcel.Weight, WeightUnit: parcel.WeightUnit,
+			Length: parcel.Length, Width: parcel.Width, Height: parcel.Height, Dimension: parcel.Dimension,
+		}); err != nil {
 			return fmt.Errorf("release wave: %w", err)
 		}
 	}

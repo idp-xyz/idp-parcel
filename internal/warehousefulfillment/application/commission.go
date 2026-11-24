@@ -102,16 +102,18 @@ type commissionRequests interface {
 type commissionParcels interface {
 	ParcelsOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) ([]ports.PackParcel, error)
 	MarkShipment(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, shipmentRequestID, declaredParcelID string) error
-	LoadPrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (shipmentID, declaredParcelID string, found bool, err error)
+	LoadPrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (ports.PrefetchRecord, bool, error)
+	SetCorrection(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, state string) error
 }
 
 // CommissionHandler 在出库请求打包之后提交委托。没标平台备货时每个包裹一份，来源请求键是（出库请求，包裹序号）。
 // 标了平台备货则等全部包裹都已打包，按（出库请求，提交轮次）交一份。代办授予没登记时答未配置，不建委托。
-// 预取过的包裹序号 1 沿用放波次交出去的那份委托，不再另交。
+// 预取过的包裹序号 1 沿用放波次交出去的那份委托，不再另交；打包称重与估算不同时提出声明测量修订，未采用前停在待复核。
 type CommissionHandler struct {
 	requests     commissionRequests
 	parcels      commissionParcels
 	commissioner ports.OutboundCommissioner
+	amender      ports.MeasurementAmender
 	anyWarehouse ports.TenantWarehouseLookup
 }
 
@@ -122,6 +124,12 @@ func NewCommissionHandler(
 	anyWarehouse ports.TenantWarehouseLookup,
 ) *CommissionHandler {
 	return &CommissionHandler{requests: requests, parcels: parcels, commissioner: commissioner, anyWarehouse: anyWarehouse}
+}
+
+// WithMeasurementAmender 接上预取包裹打包称重不同时的资料修订口。没接时遇差异标待复核，不出库确认。
+func (handler *CommissionHandler) WithMeasurementAmender(amender ports.MeasurementAmender) *CommissionHandler {
+	handler.amender = amender
+	return handler
 }
 
 func (handler *CommissionHandler) Submit(ctx context.Context, tenant domain.TenantID, requestID domain.OutboundRequestID) (CommissionResult, error) {
@@ -165,7 +173,7 @@ func (handler *CommissionHandler) Submit(ctx context.Context, tenant domain.Tena
 	if !pending {
 		return CommissionResult{outcome: CommissionExisting}, nil
 	}
-	prefetched, declared, foundPrefetch, err := handler.parcels.LoadPrefetch(ctx, tenant, requestID)
+	prefetched, foundPrefetch, err := handler.parcels.LoadPrefetch(ctx, tenant, requestID)
 	if err != nil {
 		return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
 	}
@@ -174,8 +182,13 @@ func (handler *CommissionHandler) Submit(ctx context.Context, tenant domain.Tena
 			continue
 		}
 		if foundPrefetch && parcel.Sequence == 1 {
-			if err := handler.parcels.MarkShipment(ctx, tenant, requestID, parcel.Sequence, prefetched, declared); err != nil {
+			if err := handler.parcels.MarkShipment(ctx, tenant, requestID, parcel.Sequence, prefetched.ShipmentID, prefetched.DeclaredParcelID); err != nil {
 				return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
+			}
+			if !samePrefetchMeasurement(prefetched, parcel) {
+				if err := handler.revisePrefetchMeasurement(ctx, tenant, request, requestID, prefetched, parcel); err != nil {
+					return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
+				}
 			}
 			continue
 		}
@@ -267,6 +280,57 @@ func commissionParcelOf(parcel ports.PackParcel) ports.CommissionParcel {
 		Length: parcel.Length, Width: parcel.Width, Height: parcel.Height, Dimension: parcel.Dimension,
 		Goods: parcel.Goods.String(), Unit: parcel.Unit.String(), Quantity: parcel.Quantity,
 	}
+}
+
+func (handler *CommissionHandler) revisePrefetchMeasurement(
+	ctx context.Context,
+	tenant domain.TenantID,
+	request domain.OutboundRequest,
+	requestID domain.OutboundRequestID,
+	prefetched ports.PrefetchRecord,
+	parcel ports.PackParcel,
+) error {
+	// 没接资料修订口或预取没留下包裹标识时，称重差异不能假装已采用，停在待复核挡住在线出库确认。
+	state := ports.MeasurementAwaitingReviewWord
+	if handler.amender != nil && prefetched.DeclaredParcelID != "" {
+		answer, err := handler.amender.AmendMeasurement(ctx, ports.MeasurementAmendment{
+			Tenant: tenant.String(), Owner: request.Owner().String(), Request: requestID.String(), Sequence: parcel.Sequence,
+			ShipmentRequest: prefetched.ShipmentID, DeclaredParcelID: prefetched.DeclaredParcelID,
+			Weight: parcel.Weight, WeightUnit: parcel.WeightUnit,
+			Length: parcel.Length, Width: parcel.Width, Height: parcel.Height, Dimension: parcel.Dimension,
+		})
+		if err != nil {
+			return err
+		}
+		if answer.Outcome == ports.MeasurementAdoptedWord {
+			state = ports.MeasurementAdoptedWord
+		}
+	}
+	return handler.parcels.SetCorrection(ctx, tenant, requestID, parcel.Sequence, state)
+}
+
+func samePrefetchMeasurement(prefetched ports.PrefetchRecord, parcel ports.PackParcel) bool {
+	if prefetched.Weight == "" {
+		return true
+	}
+	return prefetched.WeightUnit == parcel.WeightUnit &&
+		prefetched.Dimension == parcel.Dimension &&
+		sameMeasureText(prefetched.Weight, parcel.Weight) &&
+		sameMeasureText(prefetched.Length, parcel.Length) &&
+		sameMeasureText(prefetched.Width, parcel.Width) &&
+		sameMeasureText(prefetched.Height, parcel.Height)
+}
+
+func sameMeasureText(left, right string) bool {
+	if left == right {
+		return true
+	}
+	a, errA := domain.NewMeasure(left)
+	b, errB := domain.NewMeasure(right)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return a == b
 }
 
 func commissionOutcomeOf(word string) CommissionOutcome {

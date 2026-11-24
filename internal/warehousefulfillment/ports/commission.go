@@ -70,3 +70,38 @@ type CommissionRevision struct {
 type OutboundCommissioner interface {
 	Submit(ctx context.Context, submission CommissionSubmission) (CommissionAnswer, error)
 }
+
+// 预取委托打包后称重与估算不同时，声明测量资料修订的答案词。
+const (
+	MeasurementAdoptedWord        = "ADOPTED"
+	MeasurementAwaitingReviewWord = "AWAITING_REVIEW"
+	MeasurementDisallowedWord     = "DISALLOWED"
+	MeasurementNotAcceptedWord    = "NOT_ACCEPTED"
+	MeasurementNotConfiguredWord  = "NOT_CONFIGURED"
+)
+
+// MeasurementAmendment 是预取委托打包称重后，以货主名义提出的声明测量资料修订。
+type MeasurementAmendment struct {
+	Tenant           string
+	Owner            string
+	Request          string
+	Sequence         int
+	ShipmentRequest  string
+	DeclaredParcelID string
+	Weight           string
+	WeightUnit       string
+	Length           string
+	Width            string
+	Height           string
+	Dimension        string
+}
+
+// MeasurementAmendmentAnswer 是小包托运对声明测量资料修订的答复。
+type MeasurementAmendmentAnswer struct {
+	Outcome string
+}
+
+// MeasurementAmender 以货主名义把打包后的实际测量交成已接受委托上的资料修订。
+type MeasurementAmender interface {
+	AmendMeasurement(ctx context.Context, amendment MeasurementAmendment) (MeasurementAmendmentAnswer, error)
+}

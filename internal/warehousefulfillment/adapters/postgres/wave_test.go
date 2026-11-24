@@ -3,7 +3,9 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -101,6 +103,147 @@ func TestAPrefetchedWaveSubmitsOneEstimatedCommission(t *testing.T) {
 		`SELECT prefetch_shipment_id FROM warehouse_fulfillment.outbound_request WHERE tenant_id = 'SYN-TENANT-01' AND request_id = $1`,
 		request.ID().String()).Scan(&shipment); err != nil || shipment != "SHR-PRE-1" {
 		t.Fatalf("记下的委托 %s err %v", shipment, err)
+	}
+}
+
+func TestAPrefetchedPackRevisesOnlyWhenMeasuredWeightDiffers(t *testing.T) {
+	measured := newMeasurementWorld(t)
+	measured.seedStorageStock(t, 30)
+	measured.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-OUT", 1, func(spec *domain.ZoneContentSpec) {
+		spec.Usage = domain.ZoneUsageOutboundStaging
+	}))
+	measured.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-OUT", 1, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-OUT")
+	}))
+	if measured.record(t, measured.clock.Now(), goodsLevelMeasureCommand(
+		t, "SYN-FACT-M-REV", "DEV-1", measured.clock.Now(), 1, "SYN-WH-01", "SYN-OWNER-01", "SYN-GOODS-01", "件",
+		"10", "10", "10", "CM", "1", "KG",
+	)).Outcome().String() == "" {
+		t.Fatal("仓测没有记下")
+	}
+	materials, err := adapter.NewPackagingMaterials(measured.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if savePackagingMaterial(t, packagingMaterialStores{transactor: measured.transactor, pool: measured.pool, packagingMaterials: materials}, packagingMaterialFixture(t, "SYN-TENANT-01", "SYN-BOX-PRE", 1, nil)) != ports.RegistryRevisionSaved {
+		t.Fatal("包材没有记下")
+	}
+	commissioner := &scriptedCommissioner{outcome: ports.CommissionSubmittedWord, id: "SHR-REV"}
+	handler := measured.waves(t).WithPrefetch(commissioner, measured.measurements, materials)
+	if measured.adoptStrategy(t, handler).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("策略没有采用")
+	}
+	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
+	wavesStore, err := adapter.NewWaves(measured.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outStore, err := adapter.NewOutboundRequests(measured.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	warehouses, err := adapter.NewWarehouses(measured.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runPack := func(key, waveID, weight string, amender ports.MeasurementAmender) (domain.OutboundRequestID, string) {
+		t.Helper()
+		accepted := measured.acceptOutbound(t, measured.outbound(t), outboundCommand(t, key, 10))
+		req, ok := accepted.Request()
+		if !ok {
+			t.Fatalf("预占失败 %s", accepted.Outcome())
+		}
+		var released application.WaveResult
+		if err := measured.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+			var runErr error
+			released, runErr = handler.Release(ctx, application.ReleaseWaveCommand{
+				Tenant: tenant, ID: valueOf(t, domain.NewWaveID, waveID),
+				Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), Operator: valueOf(t, domain.NewRegistrant, "operator-1"),
+				Requests: []domain.OutboundRequestID{req.ID()}, Prefetch: true,
+				Packaging: valueOf(t, domain.NewPackagingMaterialCode, "SYN-BOX-PRE"),
+			})
+			return runErr
+		}); err != nil || released.Outcome() != application.WaveAllocated {
+			t.Fatalf("放波次 %s %v", released.Outcome(), err)
+		}
+		if measured.pick(t, handler, released.Tasks()[0].ID, 10).Outcome() != application.WavePicked {
+			t.Fatal("拣货失败")
+		}
+		if err := measured.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+			res, runErr := handler.Check(ctx, application.CheckCommand{
+				Tenant: tenant, FactID: valueOf(t, domain.NewPickFactID, "CHK-"+waveID), Request: req.ID(), Observed: 10,
+			})
+			if runErr != nil {
+				return runErr
+			}
+			if res.Outcome() != application.WaveChecked {
+				return fmt.Errorf("check %s", res.Outcome())
+			}
+			packRes, runErr := handler.Pack(ctx, application.PackCommand{
+				Tenant: tenant, FactID: valueOf(t, domain.NewPickFactID, "PACK-"+waveID), Request: req.ID(),
+				Parcels: []application.PackParcelCommand{{
+					Sequence: 1, Packaging: "SYN-BOX-PRE", Weight: weight, WeightUnit: "KG",
+					Length: "30", Width: "20", Height: "15.5", Dimension: "CM",
+					Goods: valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), Unit: valueOf(t, domain.NewGoodsUnitName, "件"), Quantity: 10,
+				}},
+			})
+			if runErr != nil {
+				return runErr
+			}
+			if packRes.Outcome() != application.WavePacked {
+				return fmt.Errorf("pack %s", packRes.Outcome())
+			}
+			submitter := application.NewCommissionHandler(outStore, wavesStore, commissioner, warehouses).WithMeasurementAmender(amender)
+			subRes, runErr := submitter.Submit(ctx, tenant, req.ID())
+			if runErr != nil {
+				return runErr
+			}
+			if subRes.Outcome() != application.CommissionSubmitted {
+				return fmt.Errorf("submit %s", subRes.Outcome())
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		var state string
+		if err := measured.pool.QueryRow(t.Context(),
+			`SELECT coalesce(correction_state, '') FROM warehouse_fulfillment.outbound_parcel WHERE tenant_id = 'SYN-TENANT-01' AND request_id = $1 AND parcel_sequence = 1`,
+			req.ID().String()).Scan(&state); err != nil {
+			t.Fatal(err)
+		}
+		return req.ID(), state
+	}
+
+	// 称重相同（10.250 == 10.25）：不发资料修订，不改更正态。
+	sameAmender := &scriptedMeasurementAmender{outcome: ports.MeasurementAdoptedWord}
+	_, sameState := runPack("REQ-PRE-SAME", "WAVE-PRE-SAME", "10.250", sameAmender)
+	if sameAmender.called != 0 || sameState != "" || commissioner.called != 1 {
+		t.Fatalf("相同称重不应修订 called=%d state=%q submit=%d", sameAmender.called, sameState, commissioner.called)
+	}
+
+	// 称重不同且修订已采用：发资料修订，记 ADOPTED。
+	adoptedAmender := &scriptedMeasurementAmender{outcome: ports.MeasurementAdoptedWord}
+	_, adoptedState := runPack("REQ-PRE-DIFF-OK", "WAVE-PRE-DIFF-OK", "11.5", adoptedAmender)
+	if adoptedAmender.called != 1 || adoptedAmender.last.Weight != "11.5" || adoptedState != "ADOPTED" || commissioner.called != 2 {
+		t.Fatalf("称重不同已采用 called=%d weight=%s state=%q submit=%d", adoptedAmender.called, adoptedAmender.last.Weight, adoptedState, commissioner.called)
+	}
+
+	// 称重不同且待复核：记 AWAITING_REVIEW，离线确认留下 CORRECTION_ADOPTED 缺口。
+	reviewAmender := &scriptedMeasurementAmender{outcome: ports.MeasurementAwaitingReviewWord}
+	reviewReq, reviewState := runPack("REQ-PRE-DIFF-HOLD", "WAVE-PRE-DIFF-HOLD", "12.0", reviewAmender)
+	if reviewAmender.called != 1 || reviewState != "AWAITING_REVIEW" {
+		t.Fatalf("称重不同待复核 called=%d state=%q", reviewAmender.called, reviewState)
+	}
+	offline := measured.confirmOutbound(t, handler, reviewReq, "SYN-FACT-PRE-OFF", application.ConfirmKindOutbound, true)
+	if offline.Outcome() != application.WaveRecorded {
+		t.Fatalf("离线确认 %s", offline.Outcome())
+	}
+	var missing string
+	if err := measured.pool.QueryRow(t.Context(),
+		`SELECT coalesce(missing, '') FROM warehouse_fulfillment.outbound_confirmation WHERE tenant_id = 'SYN-TENANT-01' AND fact_id = 'SYN-FACT-PRE-OFF'`,
+	).Scan(&missing); err != nil || !strings.Contains(missing, "CORRECTION_ADOPTED") {
+		t.Fatalf("缺口应含 CORRECTION_ADOPTED got=%q err=%v", missing, err)
 	}
 }
 
@@ -458,7 +601,7 @@ func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
 	if err := waves.SaveReturnTask(ctx, tenant, ports.ReturnTask{ID: "RET-1", Request: valueOf(t, domain.NewOutboundRequestID, "OBR-1"), Location: valueOf(t, domain.NewLocationCode, "SYN-LOC-OUT"), Goods: valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), Unit: valueOf(t, domain.NewGoodsUnitName, "件"), State: domain.StockStateGood, Inbound: valueOf(t, domain.NewInboundBatchID, "IB-1"), Quantity: 1}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveReturnTask：%v", err)
 	}
-	if err := waves.SavePrefetch(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), "SHR-1", "DPCL-1"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+	if err := waves.SavePrefetch(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), ports.PrefetchRecord{ShipmentID: "SHR-1", DeclaredParcelID: "DPCL-1"}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SavePrefetch：%v", err)
 	}
 	if err := waves.SetRequestStatus(ctx, tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"), domain.OutboundCancelled); !errors.Is(err, bentopg.ErrTransactionRequired) {
@@ -861,8 +1004,22 @@ func (commissioner *scriptedCommissioner) Submit(_ context.Context, submission p
 	}
 	if len(answer.Members) == 1 {
 		answer.DeclaredParcelID = answer.Members[0].DeclaredParcelID
+	} else if commissioner.id != "" && submission.Sequence > 0 {
+		answer.DeclaredParcelID = "DCL-" + strconv.Itoa(commissioner.called)
 	}
 	return answer, nil
+}
+
+type scriptedMeasurementAmender struct {
+	outcome string
+	called  int
+	last    ports.MeasurementAmendment
+}
+
+func (amender *scriptedMeasurementAmender) AmendMeasurement(_ context.Context, amendment ports.MeasurementAmendment) (ports.MeasurementAmendmentAnswer, error) {
+	amender.called++
+	amender.last = amendment
+	return ports.MeasurementAmendmentAnswer{Outcome: amender.outcome}, nil
 }
 
 func (world receiptWorld) submitCommission(t *testing.T, commissioner ports.OutboundCommissioner, request domain.OutboundRequestID) application.CommissionOutcome {

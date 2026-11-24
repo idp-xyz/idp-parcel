@@ -1170,16 +1170,24 @@ func (store *Waves) SaveReturnTask(ctx context.Context, tenant domain.TenantID, 
 	return nil
 }
 
-func (store *Waves) SavePrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, shipmentID, declaredParcelID string) error {
+func (store *Waves) SavePrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, record ports.PrefetchRecord) error {
 	executor, err := store.db.RequireExecutor(ctx)
 	if err != nil {
 		return fmt.Errorf("save prefetch: %w", err)
 	}
 	tag, err := executor.Exec(ctx,
 		`UPDATE warehouse_fulfillment.outbound_request
-		    SET prefetch_shipment_id = $3, prefetch_declared_parcel_id = NULLIF($4, '')
+		    SET prefetch_shipment_id = $3,
+		        prefetch_declared_parcel_id = NULLIF($4, ''),
+		        prefetch_weight = NULLIF($5, ''),
+		        prefetch_weight_unit = NULLIF($6, ''),
+		        prefetch_length = NULLIF($7, ''),
+		        prefetch_width = NULLIF($8, ''),
+		        prefetch_height = NULLIF($9, ''),
+		        prefetch_dimension_unit = NULLIF($10, '')
 		  WHERE tenant_id = $1 AND request_id = $2 AND prefetch_shipment_id IS NULL`,
-		tenant.String(), request.String(), shipmentID, declaredParcelID)
+		tenant.String(), request.String(), record.ShipmentID, record.DeclaredParcelID,
+		record.Weight, record.WeightUnit, record.Length, record.Width, record.Height, record.Dimension)
 	if err != nil {
 		return fmt.Errorf("save prefetch: %w", err)
 	}
@@ -1189,31 +1197,43 @@ func (store *Waves) SavePrefetch(ctx context.Context, tenant domain.TenantID, re
 	return nil
 }
 
-func (store *Waves) LoadPrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (string, string, bool, error) {
+func (store *Waves) LoadPrefetch(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (ports.PrefetchRecord, bool, error) {
 	querier, err := store.db.ReadExecutor(ctx)
 	if err != nil {
-		return "", "", false, err
+		return ports.PrefetchRecord{}, false, err
 	}
-	var shipment, declared *string
+	var shipment, declared, weight, weightUnit, length, width, height, dimension *string
 	err = querier.QueryRow(ctx,
-		`SELECT prefetch_shipment_id, prefetch_declared_parcel_id
+		`SELECT prefetch_shipment_id, prefetch_declared_parcel_id,
+		        prefetch_weight, prefetch_weight_unit, prefetch_length, prefetch_width, prefetch_height, prefetch_dimension_unit
 		   FROM warehouse_fulfillment.outbound_request
 		  WHERE tenant_id = $1 AND request_id = $2`,
-		tenant.String(), request.String()).Scan(&shipment, &declared)
+		tenant.String(), request.String()).Scan(&shipment, &declared, &weight, &weightUnit, &length, &width, &height, &dimension)
 	if errors.Is(err, pgx.ErrNoRows) || shipment == nil || *shipment == "" {
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return "", "", false, fmt.Errorf("load prefetch: %w", err)
+			return ports.PrefetchRecord{}, false, fmt.Errorf("load prefetch: %w", err)
 		}
-		return "", "", false, nil
+		return ports.PrefetchRecord{}, false, nil
 	}
 	if err != nil {
-		return "", "", false, fmt.Errorf("load prefetch: %w", err)
+		return ports.PrefetchRecord{}, false, fmt.Errorf("load prefetch: %w", err)
 	}
-	declaredID := ""
-	if declared != nil {
-		declaredID = *declared
+	stringOf := func(ptr *string) string {
+		if ptr == nil {
+			return ""
+		}
+		return *ptr
 	}
-	return *shipment, declaredID, true, nil
+	return ports.PrefetchRecord{
+		ShipmentID:       *shipment,
+		DeclaredParcelID: stringOf(declared),
+		Weight:           stringOf(weight),
+		WeightUnit:       stringOf(weightUnit),
+		Length:           stringOf(length),
+		Width:            stringOf(width),
+		Height:           stringOf(height),
+		Dimension:        stringOf(dimension),
+	}, true, nil
 }
 
 func (store *Waves) SetRequestStatus(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, status domain.OutboundStatus) error {

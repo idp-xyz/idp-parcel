@@ -148,6 +148,72 @@ func buildCustomerAmendmentOrchestration(db *bentopg.DB) (shipmenthttp.Amendment
 	return assembleCustomerAmendmentOrchestration(db, authorizer, rules, customs, consolidation)
 }
 
+// buildInnerCustomerAmendmentOrchestration 是事务内用的资料修订编排：仓配打包提交已经在事务里，
+// 不套外层的三层事务壳，让资料版本、委托保存与出站意图进同一笔事务。
+func buildInnerCustomerAmendmentOrchestration(db *bentopg.DB) (*shipmentapp.AmendCustomerSourceDataHandler, error) {
+	customs, consolidation, err := buildAmendmentStageFactViews(db)
+	if err != nil {
+		return nil, err
+	}
+	rules, err := buildSourceDataAmendmentAllowance(db)
+	if err != nil {
+		return nil, err
+	}
+	authorizer, err := buildSourceDataAmendmentAuthorizer(db)
+	if err != nil {
+		return nil, err
+	}
+	sources, err := pspostgres.NewSourceSubmissions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: source submissions: %w", err)
+	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
+	}
+	identities, err := psidentity.NewSourceDataVersions()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: source data version identities: %w", err)
+	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: outbox store: %w", err)
+	}
+	clock := systemClock{}
+	handoff, err := pspostgres.NewOutboxSourceDataHandoff(db, store, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: source data version handoff: %w", err)
+	}
+	adoptions, err := pspostgres.NewIntakeAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: intake adoptions: %w", err)
+	}
+	labelTransactions, err := pspostgres.NewLabelTransactions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: label transactions: %w", err)
+	}
+	finals, err := pspostgres.NewFinalOutcomes(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: final outcomes: %w", err)
+	}
+	return shipmentapp.NewAmendCustomerSourceDataHandler(shipmentapp.AmendCustomerSourceDataDeps{
+		Sources:    sources,
+		Requests:   requests,
+		Authorizer: authorizer,
+		Rules:      rules,
+		Identities: identities,
+		Downstream: handoff,
+		Stage: shipmentapp.AmendmentStageDeps{
+			ResponsibilityStarts: adoptions,
+			LabelTransactions:    labelTransactions,
+			Finals:               finals,
+			Customs:              customs,
+			Consolidation:        consolidation,
+		},
+		Clock: clock,
+	}), nil
+}
+
 // buildSourceDataAmendmentAuthorizer 装资料修订授权那一口的真适配器：PC 裁定编排接满两个读口（授权治理册 +
 // 合同委派册——运营角色代录那一格没有委派读口答不出实际决定方，旧构造器在那一格报错），套 PS 的
 // SourceDataAmendmentAuthorizationAdapter。RequestSource 是首方直客的坐标映射，理由见 buildCustomerAmendmentOrchestration。

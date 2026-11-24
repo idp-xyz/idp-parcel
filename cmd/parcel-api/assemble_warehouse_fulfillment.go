@@ -691,7 +691,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		inner: warehouseapp.NewWaveHandler(
 			waveStore, outboundStore, pickTaskIDs, discrepancyIDs, poster, stock, locations, zones, goods, holds, systemClock{}, warehouses,
 		).WithConfirmationHandoff(confirmationHandoff).WithApprovalDuties(countStore).WithShipmentReleaser(releaser).WithCharges(chargeHandler).WithPrefetch(opener, measurementStore, packagingMaterials),
-		commissions: warehouseapp.NewCommissionHandler(outboundStore, waveStore, opener, warehouses),
+		commissions: warehouseapp.NewCommissionHandler(outboundStore, waveStore, opener, warehouses).WithMeasurementAmender(opener),
 	}
 	followUps := transactionalFollowUp{
 		transactor: db.Transactor(),
@@ -1091,9 +1091,13 @@ func buildWarehouseOutboundOpener(db *bentopg.DB, isolated *isolatedWriteAdmissi
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: warehouse supplement identities: %w", err)
 	}
+	amender, err := buildInnerCustomerAmendmentOrchestration(db)
+	if err != nil {
+		return nil, err
+	}
 	return opener.WithVersionFormer(psapplication.NewFormNewSubmissionVersionHandler(psapplication.FormNewSubmissionVersionDeps{
 		Sources: sourceSubmissions, Requests: shipmentRequests, Identities: identities, Clock: systemClock{},
-	})), nil
+	})).WithSourceDataAmender(amender), nil
 }
 
 func (registration transactionalWave) Release(ctx context.Context, command warehouseapp.ReleaseWaveCommand) (warehouseapp.WaveResult, error) {
