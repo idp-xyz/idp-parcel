@@ -22,7 +22,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 # 显式片的片名，顺序即矩阵顺序。`rest` 不在此表，由 list_rest 现算。
-EXPLICIT_SHARDS=(main-chain network-visibility customs-transport)
+EXPLICIT_SHARDS=(main-chain network-visibility customs-transport entrypoints)
 
 # 片名 → 目录前缀（相对模块根，空白分隔）。一个前缀覆盖该目录及其全部子包。
 prefixes_of() {
@@ -33,6 +33,10 @@ prefixes_of() {
     network-visibility) echo internal/networkrouting internal/nodeoperations internal/visibilityexception ;;
     # 关务与运输履行：两个最重的真库包各占一半，再塞任何上下文都会让它先撞上限。
     customs-transport)  echo internal/customscompliance internal/transportfulfillment ;;
+    # 各部署入口不是一个上下文，单列是因为 parcel-api、parcel-dispatch 的装配用例跨全部上下文、又最重：
+    # 2026-11-24 run 45355427950 的 rest 片里 cmd/ 下 20 个包合计 257 秒，占全片 565 秒近一半，
+    # 留在兜底片时 rest 当天两次撞上 15 分钟上限。
+    entrypoints)        echo cmd ;;
     *) echo "未知片名：$1" >&2; exit 2 ;;
   esac
 }
