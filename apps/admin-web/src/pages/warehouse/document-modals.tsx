@@ -182,7 +182,7 @@ export function OutboundDetailModal({
               { id: 'task', header: '任务', mono: true, render: (line) => line.taskId },
               { id: 'loc', header: '库位', mono: true, render: (line) => line.locationCode },
               { id: 'goods', header: '商品', mono: true, render: (line) => line.goodsCode },
-              { id: 'qty', header: '应拣 / 已拣', align: 'right', mono: true, render: (line) => `${line.picked} / ${line.quantity}` },
+              { id: 'qty', header: '已拣 / 应拣', align: 'right', mono: true, render: (line) => `${line.picked} / ${line.quantity}` },
               { id: 'status', header: '状态', render: (line) => <WmsBadge code={line.status} /> },
             ]}
           />
