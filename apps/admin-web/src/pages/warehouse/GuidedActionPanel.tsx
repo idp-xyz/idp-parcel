@@ -28,6 +28,8 @@ export interface GuidedActionPanelProps {
   problemNote: (code: string) => string;
   /** 从列表行快速动作带入的预填种子；每次 nonce 变化时切到对应动作并重填。 */
   seed?: GuidedFormSeed | null;
+  /** 切换动作或重置时按动作生成初始值（如模拟扫码端自动填设备绑定仓与端侧事实号）。 */
+  defaultValuesFor?: (targetId: string) => GuidedFormValues;
 }
 
 const selectClass =
@@ -244,7 +246,7 @@ function SingleGuidedForm({
   };
 
   const reset = () => {
-    setValues(initialGuidedValues(target.form.fields));
+    setValues(initialGuidedValues(target.form.fields, prefill));
     setErrors({});
     setFormError(null);
     setRawDraft('');
@@ -364,7 +366,7 @@ function SingleGuidedForm({
 /**
  * 仓配六页共用的引导式表单面板：按动作切换表单，换动作清草稿，列表行快速动作可带出预填值。
  */
-export function GuidedActionPanel({ moduleId, targets, problemNote, seed }: GuidedActionPanelProps) {
+export function GuidedActionPanel({ moduleId, targets, problemNote, seed, defaultValuesFor }: GuidedActionPanelProps) {
   const [selectedId, setSelectedId] = useState(seed?.targetId ?? targets[0]?.id ?? '');
   const [activeSeed, setActiveSeed] = useState<GuidedFormSeed | null>(seed ?? null);
 
@@ -386,7 +388,10 @@ export function GuidedActionPanel({ moduleId, targets, problemNote, seed }: Guid
 
   const selected = targets.find((target) => target.id === selectedId) ?? targets[0];
   const seedMatches = activeSeed !== null && activeSeed.targetId === selected.id;
-  const formKey = seedMatches ? `${selected.id}:${activeSeed.nonce}` : selected.id;
+  const computedPrefill = seedMatches ? activeSeed.values : defaultValuesFor?.(selected.id);
+  const formKey = seedMatches
+    ? `${selected.id}:${activeSeed.nonce}`
+    : `${selected.id}:${seed?.nonce ?? 0}`;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -411,7 +416,7 @@ export function GuidedActionPanel({ moduleId, targets, problemNote, seed }: Guid
         moduleId={moduleId}
         target={selected}
         problemNote={problemNote}
-        prefill={seedMatches ? activeSeed.values : undefined}
+        prefill={computedPrefill}
       />
     </div>
   );

@@ -159,7 +159,7 @@
 | 做什么 | 路径 | 守口的能力面 |
 |---|---|---|
 | 查本租户操作者册、产品词表与信任的发行方 | `/operators` | 操作者接入管理 |
-| 登操作者、登授予、撤授予 | `/operator-registrations` `/operator-grant-registrations` `/operator-grant-revocations` | 操作者接入管理 |
+| 登操作者、登授予、撤授予；登作业设备、停用作业设备 | `/operator-registrations` `/operator-grant-registrations` `/operator-grant-revocations` `/work-device-registrations` `/work-device-deactivations` | 操作者接入管理 |
 | 本会话操作者绑在哪个租户、持有哪几格授予 | `/operator-binding` `/operator-grants` | 主数据与运营查阅读 |
 | 查作业设备册 | `/work-devices` | 主数据与运营查阅读 |
 
@@ -169,7 +169,7 @@
 
 离线口 `cmd/parcel-access-register`（受控批量登记，批文每一格来自输入文件，不内置默认；退出码 0 全部落定、1 技术失败、2 有冲突或被拒）：`operator-register` `operator-grant` `operator-revoke` `integration-client-register` `integration-client-grant` `integration-client-revoke` `device-register` `device-deactivate` `admission-scope-mapping-register` `admission-scope-mapping-end` `push-source-register` `push-signing-key-register` `push-signing-key-retire` `customer-client-register` `customer-client-grant` `customer-client-revoke`。
 
-设备、集成客户端、首方客户端、推送源、准入范围对照只有离线登记口，没有在线登记口。
+集成客户端、首方客户端、推送源、准入范围对照只有离线登记口，没有在线登记口。作业设备既有离线口也有在线登记与停用口。
 
 ## 有代码、但没有生产入口的
 

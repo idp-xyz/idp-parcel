@@ -24,6 +24,7 @@ func TestOperatorAccessAdministrationAnswersFromTheOperatorChannel(t *testing.T)
 	for path, constant := range map[string]string{
 		"/operators": identityhttp.OperatorsPath, "/operator-registrations": identityhttp.OperatorRegistrationsPath,
 		"/operator-grant-registrations": identityhttp.OperatorGrantRegistrationsPath, "/operator-grant-revocations": identityhttp.OperatorGrantRevocationsPath,
+		"/work-device-registrations": identityhttp.WorkDeviceRegistrationsPath, "/work-device-deactivations": identityhttp.WorkDeviceDeactivationsPath,
 	} {
 		if constant != path {
 			t.Fatalf("路径常量 = %s，端点表字面量 %s 对不上", constant, path)
@@ -110,6 +111,12 @@ func TestOperatorAccessAdministrationAnswersFromTheOperatorChannel(t *testing.T)
 		func() (http.Handler, error) {
 			return buildOperatorGrantRevocation(writer, transactor, unusedRegistrar{}, emptyOperatorCatalogue{})
 		},
+		func() (http.Handler, error) {
+			return buildWorkDeviceRegistration(writer, transactor, unusedDeviceRegistrar{})
+		},
+		func() (http.Handler, error) {
+			return buildWorkDeviceDeactivation(writer, transactor, unusedDeviceRegistrar{})
+		},
 	} {
 		handler, err := build()
 		if err != nil {
@@ -191,5 +198,15 @@ func (unusedRegistrar) RegisterGrant(context.Context, accessidentity.OperatorGra
 }
 
 func (unusedRegistrar) RegisterRevocation(context.Context, accessidentity.GrantRevocation) (accessidentity.OperatorRegistrationOutcome, error) {
+	return "", errors.New("unused")
+}
+
+type unusedDeviceRegistrar struct{}
+
+func (unusedDeviceRegistrar) RegisterDevice(context.Context, accessidentity.DeviceRegistration) (accessidentity.DeviceRegistrationOutcome, error) {
+	return "", errors.New("unused")
+}
+
+func (unusedDeviceRegistrar) RegisterDeactivation(context.Context, accessidentity.DeviceDeactivation) (accessidentity.DeviceRegistrationOutcome, error) {
 	return "", errors.New("unused")
 }

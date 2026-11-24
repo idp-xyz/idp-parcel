@@ -277,6 +277,7 @@ export const statusVocabulary: Record<string, StatusEntry> = {
   // —— 扫描设备与试点治理的作业范围种类 ——
   NODE: muted('网点'),
   OFFSITE: muted('场外'),
+  WAREHOUSE: muted('仓库'),
 
   // —— 试点治理 · 生产权威区间与接管上的能力与事实种类（ADR-0083；码取各命令面的事实名，词按一线叫法）——
   OPERATION_DECISION: muted('运营决定'),

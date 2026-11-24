@@ -3,7 +3,8 @@
 // 读口已迁到 ADR-0144（票 catalogue-read-pagination-rollout/13）：翻页走游标，答复带 page；status 一维与 q 下推，各维与 q 覆盖
 // 的列以读口的声明为准（accessidentity 的 DeviceCataloguePages），这里不抄一份。
 
-import { exchangeMasterData, type ApiResult } from '../catalogue-api';
+import type { RegistrationResponseBody } from '../../components/registration';
+import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
 import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 
 export type { ApiResult } from '../catalogue-api';
@@ -32,4 +33,12 @@ export function listWorkDevices(
   after: string | null = null,
 ): Promise<ApiResult<WorkDeviceListResponseBody>> {
   return exchangeMasterData<WorkDeviceListResponseBody>(catalogueRequestPath('/work-devices', conditions, after));
+}
+
+export function registerWorkDevice(payload: unknown): Promise<ApiResult<RegistrationResponseBody>> {
+  return postMasterData<RegistrationResponseBody>('/work-device-registrations', payload);
+}
+
+export function deactivateWorkDevice(payload: unknown): Promise<ApiResult<RegistrationResponseBody>> {
+  return postMasterData<RegistrationResponseBody>('/work-device-deactivations', payload);
 }

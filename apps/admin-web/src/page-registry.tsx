@@ -149,6 +149,7 @@ export const pageById: Record<string, ComponentType> = {
   'warehouse-internal-ops': page(loadWarehouse, (m) => m.WarehouseInternalOpsPage),
   'warehouse-outbound': page(loadWarehouse, (m) => m.WarehouseOutboundPage),
   'warehouse-pricing': page(loadWarehouse, (m) => m.WarehousePricingPage),
+  'warehouse-workstation': page(loadWarehouse, (m) => m.WarehouseWorkstationPage),
 };
 
 /**
@@ -217,6 +218,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'warehouse-internal-ops',
   'warehouse-outbound',
   'warehouse-pricing',
+  'warehouse-workstation',
   // 「我的工作」：来源是本机 localStorage 而非 parcel-api，理由见上方头注。
   'recent-objects',
   'saved-views',

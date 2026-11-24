@@ -150,6 +150,7 @@ export const navigationSections: NavigationSection[] = [
       { id: 'warehouse-internal-ops', label: '库内作业与盘点', icon: 'warehouse-internal-ops' },
       { id: 'warehouse-outbound', label: '出库与波次', icon: 'warehouse-outbound' },
       { id: 'warehouse-pricing', label: '仓储计价与收费', icon: 'warehouse-pricing' },
+      { id: 'warehouse-workstation', label: '仓内作业台', icon: 'warehouse-workstation' },
     ],
   },
   {
@@ -245,6 +246,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'warehouse-internal-ops': Boxes,
   'warehouse-outbound': Send,
   'warehouse-pricing': BadgeDollarSign,
+  'warehouse-workstation': TabletSmartphone,
   'customs-restrictions': ShieldAlert,
   'tracking-judgment-rules': Milestone,
   'disclosure-policies': Eye,
@@ -494,6 +496,12 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     summary: '仓储计费方案、计费采用、重量体积单位、库龄口径、增值项目与仓租日结。',
     owner: '仓配履约（warehouse-fulfillment）与小包计价、结算核算',
     source: 'dox/contexts/warehouse-fulfillment.md 仓储计费',
+  },
+  'warehouse-workstation': {
+    title: '仓内作业台',
+    summary: '网页模拟扫码终端：绑定已登记仓库设备后，在页面直接完成收货、仓测、移库、盘点、拣货、打包与出库确认。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 一线作业事实登记；docs/adr/0149 作业事实登记能力面',
   },
 
   // —— 设置 · 作业设备册（共享接入身份；不是限界上下文）——

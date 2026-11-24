@@ -19,6 +19,8 @@ type operatorIdentityWiring struct {
 	operatorRegistrations      http.Handler
 	operatorGrantRegistrations http.Handler
 	operatorGrantRevocations   http.Handler
+	workDeviceRegistrations    http.Handler
+	workDeviceDeactivations    http.Handler
 }
 
 func init() {
@@ -31,6 +33,8 @@ func init() {
 			"/operator-registrations":       {method: http.MethodPost, face: operatorAccessAdministrationFace(), ownIntake: true},
 			"/operator-grant-registrations": {method: http.MethodPost, face: operatorAccessAdministrationFace(), ownIntake: true},
 			"/operator-grant-revocations":   {method: http.MethodPost, face: operatorAccessAdministrationFace(), ownIntake: true},
+			"/work-device-registrations":    {method: http.MethodPost, face: operatorAccessAdministrationFace(), ownIntake: true},
+			"/work-device-deactivations":    {method: http.MethodPost, face: operatorAccessAdministrationFace(), ownIntake: true},
 		},
 		build: func(sources endpointSources) (operatorIdentityWiring, error) {
 			workDevices, err := buildWorkDeviceCatalogue(sources.operatorMinter, sources.deviceRegistry)
@@ -70,10 +74,23 @@ func init() {
 			if err != nil {
 				return operatorIdentityWiring{}, err
 			}
+			deviceBooks, err := aipg.NewDeviceRegistry(sources.db)
+			if err != nil {
+				return operatorIdentityWiring{}, err
+			}
+			workDeviceRegistrations, err := buildWorkDeviceRegistration(sources.operatorMinter, sources.db.Transactor(), deviceBooks)
+			if err != nil {
+				return operatorIdentityWiring{}, err
+			}
+			workDeviceDeactivations, err := buildWorkDeviceDeactivation(sources.operatorMinter, sources.db.Transactor(), deviceBooks)
+			if err != nil {
+				return operatorIdentityWiring{}, err
+			}
 			return operatorIdentityWiring{
 				workDevices: workDevices, operatorBinding: operatorBinding, operatorGrants: operatorGrants,
 				operators: operators, operatorRegistrations: operatorRegistrations,
 				operatorGrantRegistrations: operatorGrantRegistrations, operatorGrantRevocations: operatorGrantRevocations,
+				workDeviceRegistrations: workDeviceRegistrations, workDeviceDeactivations: workDeviceDeactivations,
 			}, nil
 		},
 		mount: func(_ endpointChannels, wiring operatorIdentityWiring) []httpapi.BusinessEndpoint {
@@ -94,6 +111,8 @@ func init() {
 				{Pattern: "/operator-registrations", Handler: identityhttp.OperatorRegistrationsHandler(wiring.operatorRegistrations)},
 				{Pattern: "/operator-grant-registrations", Handler: identityhttp.OperatorGrantRegistrationsHandler(wiring.operatorGrantRegistrations)},
 				{Pattern: "/operator-grant-revocations", Handler: identityhttp.OperatorGrantRevocationsHandler(wiring.operatorGrantRevocations)},
+				{Pattern: "/work-device-registrations", Handler: identityhttp.WorkDeviceRegistrationsHandler(wiring.workDeviceRegistrations)},
+				{Pattern: "/work-device-deactivations", Handler: identityhttp.WorkDeviceDeactivationsHandler(wiring.workDeviceDeactivations)},
 			}
 		},
 	})

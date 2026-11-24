@@ -90,6 +90,55 @@ export async function postMasterData<Body>(
   return classifyMasterDataResponse<Body>(response, body);
 }
 
+/** 作业事实请求头（ADR-0149 决定二）：设备号、作业范围种类与作业范围引用。 */
+export interface WorkFactHeaders {
+  deviceId: string;
+  scopeKind: string;
+  scopeReference: string;
+}
+
+/**
+ * 模拟一线作业端发送作业事实：走操作者 Bearer 令牌并附带设备与作业范围三格请求头。
+ * 后端按 MintWorkFact 核操作者该范围的 WORK_FACT_REGISTRATION 授予与设备在用状态，前端不绕过任何门禁。
+ */
+export async function postWorkFact<Body>(
+  path: string,
+  payload: unknown,
+  headers: WorkFactHeaders,
+): Promise<ApiResult<Body>> {
+  let response: Response;
+  try {
+    response = await fetch(requestUrl(path), {
+      method: 'POST',
+      headers: await withBearer({
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'Parcel-Device-Id': headers.deviceId,
+        'Parcel-Work-Scope-Kind': headers.scopeKind,
+        'Parcel-Work-Scope-Reference': headers.scopeReference,
+      }),
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    return {
+      kind: 'transport',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return {
+      kind: 'transport',
+      message: `响应不是 JSON（HTTP ${response.status}），请求可能未到达 parcel-api`,
+    };
+  }
+
+  return classifyMasterDataResponse<Body>(response, body);
+}
+
 // 上传写面与 JSON 写面分开：价卡导入的表单恰有一个文件格（ADR-0101），Content-Type 必须由
 // 浏览器带上 multipart 边界。这里若写死 application/json，服务端会把整份字节当成坏的表单拒掉，
 // 而页面会把那一格 400 读成「文件有问题」。

@@ -65,3 +65,25 @@ func buildOperatorGrantRevocation(
 	}
 	return identityhttp.NewRegisterOperatorGrantRevocationEndpoint(authenticator, transactor, registrar, catalogue, time.Now)
 }
+
+func buildWorkDeviceRegistration(minter *accessidentity.OperatorMinter, transactor bentoapp.Transactor, registrar accessidentity.DeviceRegistrar) (http.Handler, error) {
+	if minter == nil || transactor == nil || registrar == nil {
+		return nil, errors.New("work device registration needs a minter, a transactor and a device registrar")
+	}
+	authenticator, err := identityhttp.NewOperatorAccessAdministrationAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return identityhttp.NewRegisterWorkDeviceEndpoint(authenticator, transactor, registrar)
+}
+
+func buildWorkDeviceDeactivation(minter *accessidentity.OperatorMinter, transactor bentoapp.Transactor, registrar accessidentity.DeviceRegistrar) (http.Handler, error) {
+	if minter == nil || transactor == nil || registrar == nil {
+		return nil, errors.New("work device deactivation needs a minter, a transactor and a device registrar")
+	}
+	authenticator, err := identityhttp.NewOperatorAccessAdministrationAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return identityhttp.NewDeactivateWorkDeviceEndpoint(authenticator, transactor, registrar)
+}

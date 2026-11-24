@@ -35,6 +35,8 @@ export interface GuidedFieldSpec {
   omitWhenFalse?: boolean;
   /** kind 为 integer 时是否允许 0（如商品首版 basisRevision=0、代理仓库存声明 quantity=0）。 */
   allowZero?: boolean;
+  /** kind 为 rows 且允许空数组（如空库位清点 lines: []）时，无行仍输出 [] 而不是省略该键。 */
+  emitEmptyArray?: boolean;
 }
 
 export type GuidedFormValues = Record<string, unknown>;
@@ -150,6 +152,7 @@ function parseField(
     });
     if (builtRows.length === 0) {
       if (field.required) errors[errorKey] = `请至少填写一行${field.rowLabel ?? field.label}`;
+      if (field.emitEmptyArray) return { present: true, value: [] };
       return { present: false, value: undefined };
     }
     return { present: true, value: builtRows };
