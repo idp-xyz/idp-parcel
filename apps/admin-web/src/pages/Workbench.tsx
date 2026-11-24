@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { History, RefreshCw, Star } from 'lucide-react';
 import { Button, Tag } from '@idpxyz/ui-primitives';
-import { navigationSections, pageTitleById } from '../navigation';
+import { parcelNavigationSections, pageTitleById } from '../navigation';
 import { statusToneText } from '../components/status-tone';
 import { listRecentObjects, recentObjectHash, type RecentObject } from './my-work/recent-objects';
 import { listSavedViews, savedViewHash, type SavedView } from './my-work/saved-views';
@@ -239,8 +239,8 @@ function MyWorkCard({
 
 const myWorkRowClass = 'w-full flex items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-idpxyz-hover';
 
-// 全部功能入口按导航分区原序排，名字取导航；跳过工作台自己这一组（左栏第一组就是它）。
-const entrySections = navigationSections.filter((section) => !section.items.some((item) => item.id === 'workbench'));
+// 全部功能入口按国际小包导航分区原序排，名字取导航；跳过工作台自己这一组（左栏第一组就是它）。
+const entrySections = parcelNavigationSections.filter((section) => !section.items.some((item) => item.id === 'workbench'));
 
 export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void }) {
   // 一次读进 state：工作台每次从别页回来都重挂载，重读即最新；本页只读不写这两份存储，写方是外壳（记）与两页（清 / 删）。

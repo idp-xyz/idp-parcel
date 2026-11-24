@@ -4,7 +4,15 @@ import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { EditorGroup, Sidebar, useResize } from '@idpxyz/ui-workspace';
 import { useDensity } from '@idpxyz/ui-theme-runtime';
 import { Button, Tooltip } from '@idpxyz/ui-primitives';
-import { navigationSections, sidebarIconMap, pageTitleById } from './navigation';
+import { parcelNavigationSections, warehouseNavigationSections, sidebarIconMap, pageTitleById } from './navigation';
+import {
+  isWarehouseModule,
+  loadWorkspaceMode,
+  resolveWorkspaceMode,
+  saveWorkspaceMode,
+  workspaceHomeModule,
+  type WorkspaceMode,
+} from './shell/workspace-mode';
 import {
   InspectorPanel,
   InspectorProvider,
@@ -263,6 +271,29 @@ export function Layout() {
   const activeTab = workspace.tabs.find((tab) => tab.id === workspace.activeTabId) ?? null;
   const activeModuleId = activeTab ? moduleIdOfTab(activeTab.id) : WORKBENCH_MODULE_ID;
 
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(() =>
+    loadWorkspaceMode(window.localStorage, activeModuleId),
+  );
+  useEffect(() => {
+    setWorkspaceMode((current) => {
+      const next = resolveWorkspaceMode(activeModuleId, current);
+      if (next !== current) saveWorkspaceMode(window.localStorage, next);
+      return next;
+    });
+  }, [activeModuleId]);
+
+  const handleWorkspaceModeChange = (nextMode: WorkspaceMode) => {
+    setWorkspaceMode(nextMode);
+    saveWorkspaceMode(window.localStorage, nextMode);
+    if (nextMode === 'warehouse' && !isWarehouseModule(activeModuleId)) {
+      setActive(workspaceHomeModule.warehouse);
+    } else if (nextMode === 'parcel' && isWarehouseModule(activeModuleId)) {
+      setActive(workspaceHomeModule.parcel);
+    }
+  };
+  const activeNavigationSections =
+    workspaceMode === 'warehouse' ? warehouseNavigationSections : parcelNavigationSections;
+
   // 检查器：内容由列表页经 useInspector 交进来；控制口 useMemo 住，Provider 值不随每次渲染换引用。
   const [inspectorContent, setInspectorContent] = useState<InspectorContent | null>(null);
   // 主区里有几个供内容的列表在声明——标签保活后藏着的页也挂着，但只有活动标签声明（ListPageTemplate），实际是零个或一个；
@@ -388,6 +419,8 @@ export function Layout() {
         tenantName={boundTenant}
         onSignOut={logout}
         onOpenCommandPalette={openCommandPalette}
+        workspaceMode={workspaceMode}
+        onWorkspaceModeChange={handleWorkspaceModeChange}
       />
       <CommandPaletteHost
         open={commandPaletteOpen}
@@ -402,7 +435,7 @@ export function Layout() {
           width={sidebarResize.size}
           onFileClick={setActive}
           activeFile={activeModuleId}
-          navigationSections={navigationSections}
+          navigationSections={activeNavigationSections}
           iconMap={sidebarIconMap}
         />
         <div className="resize-handle-h" onMouseDown={sidebarResize.handleMouseDown} />

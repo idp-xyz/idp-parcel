@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { Building2, ChevronDown, CircleUser, Moon, Package, Rows3, Rows4, Search, Sun } from 'lucide-react';
+import { Building2, ChevronDown, CircleUser, Moon, Package, Rows3, Rows4, Search, Sun, Warehouse } from 'lucide-react';
 import { Button, DropdownMenu, MenuItem, MenuLabel, MenuSeparator, Tag, Tooltip } from '@idpxyz/ui-primitives';
 import { useDensity, useTheme } from '@idpxyz/ui-theme-runtime';
+import { workspaceModeLabels, type WorkspaceMode } from './workspace-mode';
 import {
   ATTRIBUTION_SEPARATOR,
   COMMAND_PALETTE_ARIA_KEYSHORTCUTS,
@@ -52,12 +53,27 @@ export interface TopBarProps {
    * 可选是为了让 Layout 在接线前也能编译；没接时这一位退回留位（aria-disabled + 说明），不做一个点了没反应的按钮。
    */
   onOpenCommandPalette?: () => void;
+  /** 业务工作区切换：国际小包 | 仓配系统。两个工作区各自使用独立的左侧菜单。 */
+  workspaceMode?: WorkspaceMode;
+  onWorkspaceModeChange?: (mode: WorkspaceMode) => void;
 }
 
-export function TopBar({ moduleTitle, principal, tenantName, onSignOut, onOpenCommandPalette }: TopBarProps) {
+export function TopBar({
+  moduleTitle,
+  principal,
+  tenantName,
+  onSignOut,
+  onOpenCommandPalette,
+  workspaceMode = 'parcel',
+  onWorkspaceModeChange,
+}: TopBarProps) {
   return (
     <header className="h-12 flex items-center gap-2 px-4 border-b border-idpxyz-border bg-idpxyz-titleBar shrink-0">
-      <Package className="h-5 w-5 shrink-0 text-idpxyz-accent" aria-hidden="true" />
+      {workspaceMode === 'warehouse' ? (
+        <Warehouse className="h-5 w-5 shrink-0 text-idpxyz-accent" aria-hidden="true" />
+      ) : (
+        <Package className="h-5 w-5 shrink-0 text-idpxyz-accent" aria-hidden="true" />
+      )}
       <div className="flex min-w-0 items-baseline gap-1.5">
         <span className="whitespace-nowrap type-body text-idpxyz-textMuted">{PRODUCT_ATTRIBUTION}</span>
         {/* 分隔符只是视觉断句，读屏念「Parcel / IDP 工作台」比念出一个间隔号清楚。 */}
@@ -66,6 +82,33 @@ export function TopBar({ moduleTitle, principal, tenantName, onSignOut, onOpenCo
         </span>
         <span className="truncate type-section font-bold text-idpxyz-textBright">{moduleTitle}</span>
       </div>
+
+      {onWorkspaceModeChange ? (
+        <div
+          role="group"
+          aria-label="切换业务工作区"
+          className="ml-3 inline-flex items-center rounded-md border border-idpxyz-border bg-idpxyz-bg p-0.5 shrink-0"
+        >
+          {(['parcel', 'warehouse'] as const).map((mode) => {
+            const active = workspaceMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onWorkspaceModeChange(mode)}
+                className={
+                  active
+                    ? 'rounded px-2.5 py-0.5 type-body font-medium bg-idpxyz-accent text-white transition-colors'
+                    : 'rounded px-2.5 py-0.5 type-body text-idpxyz-textMuted hover:text-idpxyz-text transition-colors'
+                }
+              >
+                {workspaceModeLabels[mode]}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <GlobalSearchSlot onOpen={onOpenCommandPalette} />

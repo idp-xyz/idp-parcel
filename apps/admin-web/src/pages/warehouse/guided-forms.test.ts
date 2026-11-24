@@ -192,3 +192,27 @@ test('跨字段与明细行校验在提交前拦住不完整输入', () => {
     });
   }
 });
+
+test('增强后的仓配表单自动附带名册下拉（lookup）与可读单据号前缀（autoIdPrefix），且不覆盖列表预填', () => {
+  const waveDef = allWarehouseGuidedForms['wave-release'];
+  const waveIdField = waveDef.fields.find((f) => f.path === 'waveId');
+  const whField = waveDef.fields.find((f) => f.path === 'warehouse');
+  const pkgField = waveDef.fields.find((f) => f.path === 'packagingMaterial');
+  equal(waveIdField?.autoIdPrefix, 'WAVE');
+  equal(whField?.lookup, 'warehouse');
+  equal(pkgField?.lookup, 'packaging');
+
+  const generated = initialGuidedValues(waveDef.fields, { warehouse: 'SYN-WH-01', requests: 'OBR-1' });
+  ok(typeof generated.waveId === 'string' && generated.waveId.startsWith('WAVE-'), '未指定波次号时自动生成可读波次号');
+  equal(generated.warehouse, 'SYN-WH-01');
+
+  const explicit = initialGuidedValues(waveDef.fields, { waveId: 'CUSTOM-W1', warehouse: 'SYN-WH-01' });
+  equal(explicit.waveId, 'CUSTOM-W1');
+
+  // 新建仓/库区/库位自身编码不挂 lookup，防止建档时只能选旧码
+  equal(allWarehouseGuidedForms.warehouse.fields.find((f) => f.path === 'warehouseCode')?.lookup, undefined);
+  equal(allWarehouseGuidedForms.zone.fields.find((f) => f.path === 'warehouseCode')?.lookup, 'warehouse');
+  equal(allWarehouseGuidedForms.zone.fields.find((f) => f.path === 'zoneCode')?.lookup, undefined);
+  equal(allWarehouseGuidedForms.location.fields.find((f) => f.path === 'zoneCode')?.lookup, 'zone');
+  equal(allWarehouseGuidedForms.location.fields.find((f) => f.path === 'locationCode')?.lookup, undefined);
+});

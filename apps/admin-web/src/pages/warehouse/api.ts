@@ -232,8 +232,13 @@ export interface StockReadBody {
     goodsCode: string;
     unit: string;
     stockState: string;
+    labelAlias?: string;
+    batchNumber?: string;
+    expiryDate?: string;
     inboundBatchId: string;
+    inboundAt?: string;
     quantity: number;
+    allocatable?: boolean;
     frozen: number;
     available: number;
     ageDays?: number;
@@ -245,6 +250,7 @@ export interface StockReadBody {
     location?: string;
     inboundAt: string;
     held: boolean;
+    bill?: ReadonlyArray<{ goodsCode: string; quantity: number }>;
     ageDays?: number;
     age?: string;
   }>;
@@ -264,11 +270,14 @@ export interface StockReadBody {
     kind: string;
     warehouse: string;
     goodsCode?: string;
+    unit?: string;
+    stockState?: string;
     location?: string;
     cartonNumber?: string;
     quantity: number;
     reason?: string;
     operator?: string;
+    frozenAt?: string;
   }>;
   movements?: ReadonlyArray<{
     warehouse: string;

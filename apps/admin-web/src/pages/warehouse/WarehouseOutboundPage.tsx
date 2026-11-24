@@ -1,223 +1,59 @@
-import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { useMemo, useState } from 'react';
+import { Plus, Send } from 'lucide-react';
+import { Button } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
-import type { InspectorAction, InspectorContent, InspectorField } from '../../templates/inspector';
+import type { InspectorAction, InspectorContent } from '../../templates/inspector';
+import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
-import { catalogueConditionsNarrow, type CatalogueConditions } from '../catalogue-query';
+import type { CatalogueConditions } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
-import {
-  listOutboundRequests,
-  listWaves,
-  type OutboundRequestRecord,
-  type WaveRecord,
-} from './api';
+import { listOutboundRequests, type OutboundRequestRecord } from './api';
 import { outboundWaveActionSpecs } from './actions';
-import { WarehouseActionPanel, useWarehouseActionTargets } from './ActionPanel';
-import type { GuidedFormSeed, GuidedFormValues } from './guided-forms';
+import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
+import { useWarehouseTargetMap } from './ActionPanel';
+import type { GuidedFormValues } from './guided-forms';
+import { useWarehouseLookups } from './use-catalogues';
 
 const info = moduleInfoById['warehouse-outbound'];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
 
-const dispatchLabels: Record<string, string> = {
-  PRODUCT_NETWORK: '本产品网络',
-  OWNER_LABEL: '自备面单',
-  PICKUP: '自提',
-};
-
-const outboundStatusLabels: Record<string, string> = {
+const statusLabels: Record<string, string> = {
   RESERVED: '已预占',
-  PARTIALLY_RESERVED: '部分预占',
-  REJECTED: '已拒单',
-  PENDING_POLICY: '待预占',
-  HANDED_OFF: '待代理仓转出',
-  FORWARDED: '已转出代理仓',
-  SPLIT: '已拆单',
-  ALLOCATED: '已分配',
+  WAVED: '已放波次',
   PICKED: '已拣货',
   CHECKED: '已复核',
   PACKED: '已打包',
-  SHIPPED: '已出库确认',
+  SHIPPED: '已出库',
+  HOLD: '缺货挂起',
   CANCELLED: '已取消',
-  AWAITING_RETURN: '待回库',
-  PARTIALLY_CANCELLED: '部分取消',
+  HANDED_OFF: '待代理仓处理',
+  FORWARDED: '已转出代理仓',
 };
 
-const taskStatusLabels: Record<string, string> = {
-  OPEN: '待拣',
-  DONE: '已拣完',
-  SHORT: '短拣',
-  CANCELLED: '已取消',
-  LATE: '迟到拣货',
-};
+const statusFilters = ['ALL', 'RESERVED', 'WAVED', 'PICKED', 'CHECKED', 'PACKED', 'SHIPPED', 'HOLD', 'CANCELLED'] as const;
 
-const outboundColumns: ListColumn<OutboundRequestRecord>[] = [
-  { id: 'id', header: '请求标识', className: mono, render: (row) => row.requestId },
-  { id: 'number', header: '单据号', className: mono, render: (row) => row.documentNumber ?? '—' },
+const columns: ListColumn<OutboundRequestRecord>[] = [
+  { id: 'id', header: '出库单号', className: mono, render: (row) => row.documentNumber ?? row.requestId },
   { id: 'owner', header: '货主', className: mono, render: (row) => row.ownerAccount },
   { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
-  { id: 'dispatch', header: '发运方式', render: (row) => dispatchLabels[row.dispatch] ?? row.dispatch },
-  { id: 'status', header: '状态', render: (row) => outboundStatusLabels[row.status] ?? row.status },
+  { id: 'status', header: '状态', render: (row) => statusLabels[row.status] ?? row.status },
+  { id: 'dispatch', header: '发货途径', render: (row) => (row.dispatch === 'OWNER_LABEL' ? '货主面单' : row.service || '走发运') },
+  { id: 'qty', header: '预占 / 需求', className: mono, render: (row) => `${row.reservedQuantity} / ${row.wantedQuantity}` },
   { id: 'received', header: '受理时刻', className: mono, render: (row) => formatInstant(row.receivedAt) },
 ];
 
-export function buildOutboundInspector(
-  row: OutboundRequestRecord,
-  available: ReadonlySet<string>,
-  onPrefill: (targetId: string, values: GuidedFormValues) => void,
-): InspectorContent {
-  // 概要严格不超过 8 格（INSPECTOR_SUMMARY_LIMIT）。
-  const lineSummary =
-    row.lines.length === 0
-      ? '—'
-      : row.lines
-          .slice(0, 3)
-          .map((line) => `${line.goodsCode}×${line.quantity}${line.unit}`)
-          .join('；') + (row.lines.length > 3 ? ` 等 ${row.lines.length} 行` : '');
-  const fields: InspectorField[] = [
-    { label: '单据号', value: row.documentNumber ?? row.numberingAbsence ?? '—', mono: true },
-    { label: '货主 / 仓', value: `${row.ownerAccount} · ${row.warehouseCode}`, mono: true },
-    {
-      label: '发运与产品',
-      value: `${dispatchLabels[row.dispatch] ?? row.dispatch}${row.service ? ` · ${row.service}` : ''}${row.platformStocking ? ' · 平台备货' : ''}`,
-    },
-    { label: '收件人与地址', value: `${row.recipient}（${row.address}）` },
-    { label: '预占 / 需求', value: `${row.reservedQuantity} / ${row.wantedQuantity}`, mono: true },
-    { label: '商品明细', value: lineSummary },
-  ];
-  if (row.prefetchShipmentId) {
-    fields.push({
-      label: '预取委托',
-      value: row.prefetchDeclaredParcelId
-        ? `${row.prefetchShipmentId}（包裹 ${row.prefetchDeclaredParcelId}）`
-        : row.prefetchShipmentId,
-      mono: true,
-    });
-  }
-  if (row.parentRequestId) {
-    fields.push({ label: '拆分原请求', value: row.parentRequestId, mono: true });
-  }
+/** 出库订单页：支持勾选多张「已预占」订单一键合并释放波次；右上角代录出库单；右栏直接单票放波次、拆单、截单取消与登记货主面单。 */
+export function WarehouseOutboundPage() {
+  const lookups = useWarehouseLookups();
+  const targetMap = useWarehouseTargetMap(outboundWaveActionSpecs);
 
-  const actions: InspectorAction[] = [];
-  if (row.status === 'RESERVED' && available.has('wave-release')) {
-    actions.push({
-      label: '放波次分配',
-      onRun: () => onPrefill('wave-release', { warehouse: row.warehouseCode, requests: row.requestId }),
-    });
-  }
-  if ((row.status === 'RESERVED' || row.status === 'PARTIALLY_RESERVED' || row.status === 'PENDING_POLICY') && available.has('outbound-split')) {
-    actions.push({
-      label: '拆单',
-      onRun: () => onPrefill('outbound-split', { requestId: row.requestId }),
-    });
-  }
-  if (row.status === 'HANDED_OFF' && available.has('agent-result')) {
-    actions.push({
-      label: '转出给代理仓',
-      onRun: () => onPrefill('agent-result', { requestId: row.requestId, kind: 'FORWARDED' }),
-    });
-  }
-  if (row.status === 'FORWARDED' && available.has('agent-result')) {
-    actions.push({
-      label: '登记代理仓结果',
-      onRun: () => onPrefill('agent-result', { requestId: row.requestId }),
-    });
-  }
-  if (row.dispatch === 'OWNER_LABEL' && available.has('owner-label')) {
-    actions.push({
-      label: '登记货主面单',
-      onRun: () => onPrefill('owner-label', { requestId: row.requestId, parcelSequence: '1' }),
-    });
-  }
-  if (row.status !== 'SHIPPED' && row.status !== 'CANCELLED' && row.status !== 'REJECTED' && row.status !== 'SPLIT' && available.has('outbound-cutoff')) {
-    actions.push({
-      label: '截单取消',
-      onRun: () => onPrefill('outbound-cutoff', { requestId: row.requestId }),
-    });
-  }
-
-  return {
-    title: row.requestId,
-    subtitle: outboundStatusLabels[row.status] ?? row.status,
-    sections: [
-      { kind: 'summary', fields },
-      { kind: 'status', items: [{ label: '状态', word: outboundStatusLabels[row.status] ?? row.status }] },
-      ...(actions.length > 0 ? [{ kind: 'actions' as const, actions }] : []),
-      {
-        kind: 'audit',
-        fields: [
-          { label: '来源', value: `${row.origin} · ${row.requestKey}`, mono: true },
-          { label: '受理时刻', value: formatInstant(row.receivedAt), mono: true },
-        ],
-      },
-    ],
-  };
-}
-
-const waveColumns: ListColumn<WaveRecord>[] = [
-  { id: 'wave', header: '波次号', className: mono, render: (row) => row.waveId },
-  { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
-  { id: 'prefetch', header: '预取', render: (row) => (row.prefetch ? '是' : '否') },
-  { id: 'requests', header: '请求数', className: mono, render: (row) => String(row.requests.length) },
-  { id: 'tasks', header: '拣货任务', className: mono, render: (row) => String(row.tasks.length) },
-  { id: 'released', header: '放波时刻', className: mono, render: (row) => formatInstant(row.releasedAt) },
-];
-
-export function buildWaveInspector(
-  row: WaveRecord,
-  available: ReadonlySet<string>,
-  onPrefill: (targetId: string, values: GuidedFormValues) => void,
-): InspectorContent {
-  // 概要严格不超过 8 格（INSPECTOR_SUMMARY_LIMIT）：头部 3 格 + 最多 5 格任务（超出汇总）。
-  const fields: InspectorField[] = [
-    { label: '仓', value: row.warehouseCode, mono: true },
-    { label: '预取估算委托', value: row.prefetch ? '是' : '否' },
-    { label: '包含请求', value: row.requests.join('、') || '—', mono: true },
-  ];
-  const visible = row.tasks.length > 5 ? row.tasks.slice(0, 4) : row.tasks;
-  visible.forEach((task) => {
-    fields.push({
-      label: task.taskId,
-      value: `${task.requestId} · ${task.locationCode} · ${task.goodsCode} ${task.picked}/${task.quantity}${task.unit}（${taskStatusLabels[task.status] ?? task.status}）`,
-    });
-  });
-  if (row.tasks.length > 5) {
-    fields.push({ label: '其余任务', value: `另有 ${row.tasks.length - 4} 条拣货任务` });
-  }
-
-  const actions: InspectorAction[] = available.has('wave-release')
-    ? [{ label: '同仓再放一波次', onRun: () => onPrefill('wave-release', { warehouse: row.warehouseCode }) }]
-    : [];
-
-  return {
-    title: row.waveId,
-    subtitle: `${row.warehouseCode} · ${row.tasks.length} 条拣货任务`,
-    sections: [
-      { kind: 'summary', fields },
-      ...(actions.length > 0 ? [{ kind: 'actions' as const, actions }] : []),
-      {
-        kind: 'audit',
-        fields: [
-          { label: '操作者', value: row.operator, mono: true },
-          { label: '放波时刻', value: formatInstant(row.releasedAt), mono: true },
-        ],
-      },
-    ],
-  };
-}
-
-const statusChips = ['ALL', 'RESERVED', 'ALLOCATED', 'PICKED', 'PACKED', 'SHIPPED', 'HANDED_OFF', 'CANCELLED'] as const;
-
-function OutboundTable({
-  available,
-  onPrefill,
-}: {
-  available: ReadonlySet<string>;
-  onPrefill: (targetId: string, values: GuidedFormValues) => void;
-}) {
   const [keyword, setKeyword] = useState('');
-  const [status, setStatus] = useState<(typeof statusChips)[number]>('ALL');
+  const [status, setStatus] = useState<string>('ALL');
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+
   const settled = useSettledKeyword(keyword);
   const conditions: CatalogueConditions = {
     q: settled,
@@ -226,135 +62,156 @@ function OutboundTable({
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listOutboundRequests);
   const rows = answer?.kind === 'outcome' ? answer.body.requests : [];
 
-  return (
-    <ListPageTemplate<OutboundRequestRecord>
-      moduleId="warehouse-outbound"
-      title={info.title}
-      description="已受理的出库请求列表。单击行可从右栏直接带出请求号去放波次、拆单、截单、登面单或代理仓转出。"
-      search={{ value: keyword, onChange: setKeyword, placeholder: '搜请求标识、单据号、货主、仓或收件人' }}
-      filters={
-        <>
-          {statusChips.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={chipClass(item === status)}
-              aria-pressed={item === status}
-              onClick={() => setStatus(item)}
-            >
-              {item === 'ALL' ? '全部' : outboundStatusLabels[item]}
-            </button>
-          ))}
-        </>
-      }
-      columns={outboundColumns}
-      rows={rows}
-      rowKey={(row) => row.requestId}
-      inspector={(row) => buildOutboundInspector(row, available, onPrefill)}
-      pagination={pagination}
-      emptyRowsNote="当前条件下没有匹配的出库请求"
-      viewState={catalogueViewState(answer, rows.length, retry, {
-        module: info,
-        endpoint: 'GET /warehouse-fulfillment-outbound-request-list',
-        emptyTitle: '还没有出库请求',
-        emptyDescription: '货主提交或在「处理」签代录出库请求后，会在这里出现。',
-        narrowed: catalogueConditionsNarrow(conditions),
-      })}
-    />
-  );
-}
-
-function WavesTable({
-  available,
-  onPrefill,
-}: {
-  available: ReadonlySet<string>;
-  onPrefill: (targetId: string, values: GuidedFormValues) => void;
-}) {
-  const [keyword, setKeyword] = useState('');
-  const [prefetch, setPrefetch] = useState<'all' | 'true' | 'false'>('all');
-  const settled = useSettledKeyword(keyword);
-  const conditions: CatalogueConditions = {
-    q: settled,
-    filters: prefetch === 'all' ? undefined : { prefetch: [prefetch] },
+  const openAction = (id: string, prefill?: GuidedFormValues) => {
+    const target = targetMap.get(id);
+    if (!target) return;
+    setDrawer((current) => ({ target, prefill, nonce: (current?.nonce ?? 0) + 1 }));
   };
-  const { answer, pagination, retry } = useCatalogueCursor(conditions, listWaves);
-  const rows = answer?.kind === 'outcome' ? answer.body.waves : [];
 
-  return (
-    <ListPageTemplate<WaveRecord>
-      moduleId="warehouse-outbound"
-      title="波次与拣货任务"
-      description="已放出的波次及其分配的拣货任务。放波次前须先采用参考分配策略。"
-      search={{ value: keyword, onChange: setKeyword, placeholder: '搜波次号、仓或操作者' }}
-      filters={
-        <>
-          {([
-            ['all', '全部'],
-            ['true', '标了预取'],
-            ['false', '未标预取'],
-          ] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className={chipClass(value === prefetch)}
-              aria-pressed={value === prefetch}
-              onClick={() => setPrefetch(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </>
+  const selectedRecords = useMemo(() => rows.filter((r) => selected.has(r.requestId)), [rows, selected]);
+  const selectedWarehouses = useMemo(() => new Set(selectedRecords.map((r) => r.warehouseCode)), [selectedRecords]);
+  const allSelectedReserved = selectedRecords.length > 0 && selectedRecords.every((r) => r.status === 'RESERVED');
+  const canBulkWave =
+    targetMap.has('wave-release') && selectedRecords.length > 0 && selectedWarehouses.size === 1 && allSelectedReserved;
+
+  const bulkWaveButton = targetMap.has('wave-release') ? (
+    <Button
+      type="button"
+      size="sm"
+      className={primaryActionClass}
+      disabled={!canBulkWave}
+      title={
+        canBulkWave
+          ? '将所选已预占订单合并为一个波次释放'
+          : '仅支持勾选同一仓库、状态为「已预占」的出库单合并放波次'
       }
-      columns={waveColumns}
-      rows={rows}
-      rowKey={(row) => row.waveId}
-      inspector={(row) => buildWaveInspector(row, available, onPrefill)}
-      pagination={pagination}
-      emptyRowsNote="当前条件下没有匹配的波次"
-      viewState={catalogueViewState(answer, rows.length, retry, {
-        module: info,
-        endpoint: 'GET /warehouse-fulfillment-wave-list',
-        emptyTitle: '还没有放出的波次',
-        emptyDescription: '采用分配策略并在「处理」签放波次后，波次与拣货任务会出现在这里。',
-        narrowed: catalogueConditionsNarrow(conditions),
-      })}
-    />
-  );
-}
+      onClick={() => {
+        const warehouse = selectedRecords[0]?.warehouseCode ?? '';
+        const requests = selectedRecords.map((r) => r.requestId).join(', ');
+        openAction('wave-release', { warehouse, requests });
+      }}
+    >
+      <Send className="h-3.5 w-3.5 mr-1" />
+      {`合并释放波次（${selectedRecords.length} 单）`}
+    </Button>
+  ) : undefined;
 
-/** 出库、波次与代理仓页：出库请求列表、波次列表与引导式运营决定面板。 */
-export function WarehouseOutboundPage() {
-  const targets = useWarehouseActionTargets(outboundWaveActionSpecs);
-  const available = new Set(targets.map((target) => target.id));
-  const [tab, setTab] = useState('requests');
-  const [seed, setSeed] = useState<GuidedFormSeed | null>(null);
+  const inspectorOf = (row: OutboundRequestRecord): InspectorContent => {
+    const actions: InspectorAction[] = [];
+    if (row.status === 'RESERVED' && targetMap.has('wave-release')) {
+      actions.push({
+        label: '单票释放波次',
+        onRun: () => openAction('wave-release', { warehouse: row.warehouseCode, requests: row.requestId }),
+      });
+    }
+    if ((row.status === 'RESERVED' || row.status === 'HOLD') && targetMap.has('outbound-split')) {
+      actions.push({
+        label: '拆分出库单',
+        onRun: () => openAction('outbound-split', { requestId: row.requestId }),
+      });
+    }
+    if (row.status !== 'SHIPPED' && row.status !== 'CANCELLED' && targetMap.has('outbound-cutoff')) {
+      actions.push({
+        label: '截单取消',
+        onRun: () => openAction('outbound-cutoff', { requestId: row.requestId }),
+      });
+    }
+    if (row.dispatch === 'OWNER_LABEL' && targetMap.has('owner-label')) {
+      actions.push({
+        label: '登记货主面单',
+        onRun: () => openAction('owner-label', { requestId: row.requestId }),
+      });
+    }
+    if (row.status === 'WAVED' || row.status === 'PICKED' || row.status === 'CHECKED' || row.status === 'PACKED') {
+      actions.push({
+        label: '去作业台执行下一步',
+        onRun: () => {
+          window.location.hash = '#/warehouse-workstation';
+        },
+      });
+    }
 
-  const openPrefill = (targetId: string, values: GuidedFormValues) => {
-    setSeed((current) => ({ targetId, values, nonce: (current?.nonce ?? 0) + 1 }));
-    setTab('act');
+    return {
+      title: row.documentNumber ?? row.requestId,
+      subtitle: `${row.requestId} · ${statusLabels[row.status] ?? row.status}`,
+      sections: [
+        {
+          kind: 'summary',
+          fields: [
+            { label: '货主 / 仓库', value: `${row.ownerAccount} · ${row.warehouseCode}`, mono: true },
+            { label: '发货途径', value: row.dispatch === 'OWNER_LABEL' ? '货主面单' : row.service || '走发运' },
+            { label: '收件人', value: row.recipient },
+            { label: '收件地址', value: row.address },
+            { label: '预占 / 需求', value: `${row.reservedQuantity} / ${row.wantedQuantity}（${row.lines.length} 行）`, mono: true },
+            { label: '单据号状态', value: row.documentNumber ?? row.numberingAbsence ?? '—', mono: true },
+            ...(row.prefetchShipmentId ? [{ label: '预取面单运单', value: row.prefetchShipmentId, mono: true }] : []),
+          ],
+        },
+        { kind: 'status', items: [{ label: '状态', word: statusLabels[row.status] ?? row.status }] },
+        ...(actions.length > 0 ? [{ kind: 'actions' as const, actions }] : []),
+        { kind: 'audit', fields: [{ label: '来源 / 受理时刻', value: `${row.origin} · ${formatInstant(row.receivedAt)}`, mono: true }] },
+      ],
+    };
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
-        <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="requests">出库请求</TabsTrigger>
-          <TabsTrigger value="waves">波次与拣货</TabsTrigger>
-          {targets.length > 0 ? <TabsTrigger value="act">处理</TabsTrigger> : null}
-        </TabsList>
-        <TabsContent value="requests" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <OutboundTable available={available} onPrefill={openPrefill} />
-        </TabsContent>
-        <TabsContent value="waves" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <WavesTable available={available} onPrefill={openPrefill} />
-        </TabsContent>
-        {targets.length > 0 ? (
-          <TabsContent value="act" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-            <WarehouseActionPanel moduleId="warehouse-outbound" targets={targets} seed={seed} />
-          </TabsContent>
-        ) : null}
-      </Tabs>
-    </div>
+    <>
+      <ListPageTemplate<OutboundRequestRecord>
+        moduleId="warehouse-outbound"
+        title={info.title}
+        description="出库请求台账。勾选多张同仓「已预占」订单即可批量合并释放波次；单击行可拆单、截单或登记面单。"
+        headerActions={
+          <div className="flex flex-wrap gap-2">
+            {targetMap.has('outbound-request') ? (
+              <Button type="button" className={primaryActionClass} onClick={() => openAction('outbound-request')}>
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                代录出库单
+              </Button>
+            ) : null}
+          </div>
+        }
+        search={{ value: keyword, onChange: setKeyword, placeholder: '搜出库单号、货主、仓或收件人' }}
+        filters={
+          <>
+            {statusFilters.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={chipClass(item === status)}
+                aria-pressed={item === status}
+                onClick={() => setStatus(item)}
+              >
+                {item === 'ALL' ? '全部' : statusLabels[item] ?? item}
+              </button>
+            ))}
+          </>
+        }
+        selection={{ selected, onChange: setSelected }}
+        bulkActions={{ extra: bulkWaveButton }}
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.requestId}
+        inspector={inspectorOf}
+        pagination={pagination}
+        emptyRowsNote="当前条件下没有匹配的出库单"
+        viewState={catalogueViewState(answer, rows.length, retry, {
+          module: info,
+          endpoint: 'GET /warehouse-fulfillment-outbound-request-list',
+          emptyTitle: '还没有出库订单',
+          emptyDescription: '点右上角「代录出库单」创建测试或运营代录单，或等待货主经客户接口提交。',
+          narrowed: settled.trim() !== '' || status !== 'ALL',
+        })}
+      />
+      <ActionDrawer
+        moduleId="warehouse-outbound"
+        active={drawer}
+        lookups={lookups}
+        onClose={() => setDrawer(null)}
+        onSubmitted={() => {
+          setSelected(new Set());
+          retry();
+        }}
+      />
+    </>
   );
 }

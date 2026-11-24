@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { Plus } from 'lucide-react';
+import { Button } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { InspectorAction, InspectorContent } from '../../templates/inspector';
+import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
@@ -9,17 +11,17 @@ import { hiddenDecisionHint } from '../operator-grants';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { useMayMakeDecision } from '../use-operator-grants';
 import { approveStockImport, listStockImports, rejectStockImport, submitStockImport, type StockImportRecord } from './api';
-import { GuidedActionPanel, type GuidedActionTarget } from './GuidedActionPanel';
-import type { GuidedFormSeed, GuidedFormValues } from './guided-forms';
-import { stockImportGuidedForms } from './guided-schemas';
-import { problemNote, stockImportOutcomeLabels, stockImportSnapshotHints } from './presentation';
+import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
+import type { GuidedActionTarget } from './GuidedActionPanel';
+import type { GuidedFormValues } from './guided-forms';
+import { enrichedStockImportForms } from './guided-schemas';
+import { stockImportOutcomeLabels, stockImportSnapshotHints } from './presentation';
 import { stockImportConditions, stockImportStatusLabel, type StockImportStatusFilter } from './rows';
+import { useWarehouseLookups } from './use-catalogues';
 
 const info = moduleInfoById['stock-imports'];
-
 const submitDecision = 'STOCK_IMPORT_SUBMISSION';
 const approvalDecision = 'STOCK_ADJUSTMENT_APPROVAL';
-
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
 
 const columns: ListColumn<StockImportRecord>[] = [
@@ -31,30 +33,73 @@ const columns: ListColumn<StockImportRecord>[] = [
 ];
 
 const statusFilters: ReadonlyArray<{ id: StockImportStatusFilter; label: string }> = [
-  { id: 'ALL', label: '全部' },
   { id: 'PENDING', label: '待批' },
   { id: 'POSTED', label: '已入账' },
   { id: 'REJECTED', label: '已驳回' },
+  { id: 'ALL', label: '全部' },
 ];
 
-function ImportTable({
-  maySubmit,
-  mayDecide,
-  onPrefill,
-}: {
-  maySubmit: boolean;
-  mayDecide: boolean;
-  onPrefill: (targetId: string, values: GuidedFormValues) => void;
-}) {
+/** 建账导入页：单表呈现全部状态，右上角弹窗提交，单击待批行从右栏批准入账或驳回，完成后自动刷新列表。 */
+export function StockImportsPage() {
+  const maySubmit = useMayMakeDecision(submitDecision);
+  const mayDecide = useMayMakeDecision(approvalDecision);
+  const lookups = useWarehouseLookups();
+
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<StockImportStatusFilter>('PENDING');
+  const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
   const settled = useSettledKeyword(keyword);
   const conditions = stockImportConditions(settled, status);
-  // 打开页就落在待批上：没有待批是这一页的空态，不是筛空。换到已入账或已驳回再答零行，才说当前条件没有。
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listStockImports);
   const rows = answer?.kind === 'outcome' ? answer.body.imports : [];
+
+  const targets = useMemo(() => {
+    const map = new Map<string, GuidedActionTarget>();
+    if (maySubmit) {
+      map.set('submit', {
+        id: 'submit',
+        label: '提交建账导入',
+        title: '提交建账导入',
+        endpoint: 'POST /warehouse-fulfillment-stock-import-submissions',
+        snapshotHint: stockImportSnapshotHints.submit,
+        submit: submitStockImport,
+        outcomeLabels: stockImportOutcomeLabels,
+        form: enrichedStockImportForms.submit,
+      });
+    }
+    if (mayDecide) {
+      map.set('approve', {
+        id: 'approve',
+        label: '批准入账',
+        title: '批准建账导入并入账',
+        endpoint: 'POST /warehouse-fulfillment-stock-import-approvals',
+        snapshotHint: stockImportSnapshotHints.approve,
+        submit: approveStockImport,
+        outcomeLabels: stockImportOutcomeLabels,
+        form: enrichedStockImportForms.approve,
+      });
+      map.set('reject', {
+        id: 'reject',
+        label: '驳回导入',
+        title: '驳回建账导入',
+        endpoint: 'POST /warehouse-fulfillment-stock-import-rejections',
+        snapshotHint: stockImportSnapshotHints.reject,
+        submit: rejectStockImport,
+        outcomeLabels: stockImportOutcomeLabels,
+        form: enrichedStockImportForms.reject,
+      });
+    }
+    return map;
+  }, [maySubmit, mayDecide]);
+
+  const openAction = (id: string, prefill?: GuidedFormValues) => {
+    const target = targets.get(id);
+    if (!target) return;
+    setDrawer((current) => ({ target, prefill, nonce: (current?.nonce ?? 0) + 1 }));
+  };
+
   const emptyDescription = maySubmit
-    ? '在「处理」签里提交后，待批的会在这里出现。批准才入账。'
+    ? '点右上角「新建建账导入」提交期初库存，批准后才真正入账。'
     : hiddenDecisionHint('提交', '建账导入提交');
 
   const inspectorOf = (row: StockImportRecord): InspectorContent => {
@@ -72,8 +117,8 @@ function ImportTable({
     if (mayDecide) {
       if (row.status === 'PENDING') {
         actions.push(
-          { label: '批准并入账', onRun: () => onPrefill('approve', { importId: row.importId }) },
-          { label: '驳回导入', onRun: () => onPrefill('reject', { importId: row.importId }) },
+          { label: '批准并入账', onRun: () => openAction('approve', { importId: row.importId }) },
+          { label: '驳回导入', onRun: () => openAction('reject', { importId: row.importId }) },
         );
       } else {
         actions.push({ label: '批准 / 驳回', disabledReason: '只有待批状态的建账导入才能批准或驳回' });
@@ -92,115 +137,56 @@ function ImportTable({
   };
 
   return (
-    <ListPageTemplate<StockImportRecord>
-      moduleId="stock-imports"
-      title={info.title}
-      description="已提交的建账导入。单击待批行可从右栏直接带出导入号批准入账或驳回；提交本身不改账。"
-      search={{ value: keyword, onChange: setKeyword, placeholder: '搜导入号、货主、仓或原因' }}
-      filters={
-        <>
-          {statusFilters.map((filter) => (
-            <button
-              key={filter.id}
-              type="button"
-              className={chipClass(filter.id === status)}
-              aria-pressed={filter.id === status}
-              onClick={() => setStatus(filter.id)}
-            >
-              {filter.label}
-            </button>
-          ))}
-        </>
-      }
-      columns={columns}
-      rows={rows}
-      rowKey={(row) => row.importId}
-      inspector={inspectorOf}
-      pagination={pagination}
-      emptyRowsNote="当前条件下没有匹配的导入"
-      viewState={catalogueViewState(answer, rows.length, retry, {
-        module: info,
-        endpoint: 'GET /warehouse-fulfillment-stock-imports',
-        emptyTitle: status === 'PENDING' ? '没有待批的建账导入' : '还没有建账导入',
-        emptyDescription,
-        narrowed: settled.trim() !== '' || (status !== 'PENDING' && status !== 'ALL'),
-      })}
-    />
-  );
-}
-
-/**
- * 建账导入的查阅，以及引导式提交、批准、驳回。
- * 提交与批准不是同一种授予：没有哪一种，对应的那一册就不摆。
- */
-export function StockImportsPage() {
-  const maySubmit = useMayMakeDecision(submitDecision);
-  const mayDecide = useMayMakeDecision(approvalDecision);
-  const [tab, setTab] = useState('list');
-  const [seed, setSeed] = useState<GuidedFormSeed | null>(null);
-
-  const targets = useMemo<GuidedActionTarget[]>(() => {
-    const built: GuidedActionTarget[] = [];
-    if (maySubmit) {
-      built.push({
-        id: 'submit',
-        label: '提交',
-        title: '提交建账导入',
-        endpoint: 'POST /warehouse-fulfillment-stock-import-submissions',
-        snapshotHint: stockImportSnapshotHints.submit,
-        submit: submitStockImport,
-        outcomeLabels: stockImportOutcomeLabels,
-        form: stockImportGuidedForms.submit,
-      });
-    }
-    if (mayDecide) {
-      built.push(
-        {
-          id: 'approve',
-          label: '批准',
-          title: '批准建账导入',
-          endpoint: 'POST /warehouse-fulfillment-stock-import-approvals',
-          snapshotHint: stockImportSnapshotHints.approve,
-          submit: approveStockImport,
-          outcomeLabels: stockImportOutcomeLabels,
-          form: stockImportGuidedForms.approve,
-        },
-        {
-          id: 'reject',
-          label: '驳回',
-          title: '驳回建账导入',
-          endpoint: 'POST /warehouse-fulfillment-stock-import-rejections',
-          snapshotHint: stockImportSnapshotHints.reject,
-          submit: rejectStockImport,
-          outcomeLabels: stockImportOutcomeLabels,
-          form: stockImportGuidedForms.reject,
-        },
-      );
-    }
-    return built;
-  }, [maySubmit, mayDecide]);
-
-  const openPrefill = (targetId: string, values: GuidedFormValues) => {
-    setSeed((current) => ({ targetId, values, nonce: (current?.nonce ?? 0) + 1 }));
-    setTab('act');
-  };
-
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
-        <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="list">建账导入</TabsTrigger>
-          {targets.length > 0 ? <TabsTrigger value="act">处理</TabsTrigger> : null}
-        </TabsList>
-        <TabsContent value="list" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <ImportTable maySubmit={maySubmit} mayDecide={mayDecide} onPrefill={openPrefill} />
-        </TabsContent>
-        {targets.length > 0 ? (
-          <TabsContent value="act" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-            <GuidedActionPanel moduleId="stock-imports" targets={targets} problemNote={problemNote} seed={seed} />
-          </TabsContent>
-        ) : null}
-      </Tabs>
-    </div>
+    <>
+      <ListPageTemplate<StockImportRecord>
+        moduleId="stock-imports"
+        title={info.title}
+        description="期初建账导入台账。提交本身不改账；点待批行从右栏批准入账或驳回，批准人受租户批准职责规则约束。"
+        headerActions={
+          maySubmit ? (
+            <Button type="button" className={primaryActionClass} onClick={() => openAction('submit')}>
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              新建建账导入
+            </Button>
+          ) : undefined
+        }
+        search={{ value: keyword, onChange: setKeyword, placeholder: '搜导入号、货主、仓或原因' }}
+        filters={
+          <>
+            {statusFilters.map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                className={chipClass(filter.id === status)}
+                aria-pressed={filter.id === status}
+                onClick={() => setStatus(filter.id)}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </>
+        }
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.importId}
+        inspector={inspectorOf}
+        pagination={pagination}
+        emptyRowsNote="当前条件下没有匹配的建账导入"
+        viewState={catalogueViewState(answer, rows.length, retry, {
+          module: info,
+          endpoint: 'GET /warehouse-fulfillment-stock-imports',
+          emptyTitle: status === 'PENDING' ? '没有待批的建账导入' : '还没有建账导入',
+          emptyDescription,
+          narrowed: settled.trim() !== '' || (status !== 'PENDING' && status !== 'ALL'),
+        })}
+      />
+      <ActionDrawer
+        moduleId="stock-imports"
+        active={drawer}
+        lookups={lookups}
+        onClose={() => setDrawer(null)}
+        onSubmitted={() => retry()}
+      />
+    </>
   );
 }

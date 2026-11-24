@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { InspectorAction, InspectorContent } from '../../templates/inspector';
+import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
 import { catalogueConditionsNarrow } from '../catalogue-query';
@@ -19,20 +21,19 @@ import {
   type WarehouseRecord,
   type ZoneRecord,
 } from './api';
-import { GuidedActionPanel, type GuidedActionTarget } from './GuidedActionPanel';
-import type { GuidedFormSeed, GuidedFormValues } from './guided-forms';
-import { catalogueGuidedForms } from './guided-schemas';
+import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
+import type { GuidedActionTarget } from './GuidedActionPanel';
+import type { GuidedFormValues } from './guided-forms';
+import { enrichedCatalogueForms } from './guided-schemas';
 import {
   catalogueOutcomeLabels,
   catalogueRefusalLabels,
   familyLabels,
-  problemNote,
   registrationSnapshotHints,
   registrationTitles,
 } from './presentation';
 import {
   activityLabel,
-  catalogueConditions,
   catalogueFamilies,
   catalogueReadPaths,
   catalogueWritePaths,
@@ -41,6 +42,7 @@ import {
   type ActivityFilter,
   type CatalogueFamily,
 } from './rows';
+import { useWarehouseLookups, type WarehouseLookups } from './use-catalogues';
 
 const info = moduleInfoById['warehouse-catalogues'];
 
@@ -56,6 +58,7 @@ interface CatalogueRow {
   registrant: string;
   registeredAt: string;
   nextRevisionSeed: GuidedFormValues;
+  toggleActiveSeed: GuidedFormValues;
   childAction?: { label: string; targetId: CatalogueFamily; values: GuidedFormValues };
 }
 
@@ -77,28 +80,30 @@ function rowsOf(family: CatalogueFamily, body: CatalogueListBody): CatalogueRow[
 }
 
 function warehouseRow(row: WarehouseRecord): CatalogueRow {
+  const base: GuidedFormValues = {
+    warehouseCode: row.warehouseCode,
+    revision: String(row.revision + 1),
+    name: row.name,
+    kind: row.kind,
+    'address.country': row.address.country,
+    'address.text': row.address.text,
+    businessTimeZone: row.businessTimeZone ?? '',
+    colocatedNode: row.colocatedNode ?? '',
+    deactivated: row.deactivated,
+  };
   return {
     key: row.warehouseCode,
     family: 'warehouse',
     code: row.warehouseCode,
     name: row.name,
     place: row.address.country,
-    note: warehouseKindLabel(row.kind),
+    note: `${warehouseKindLabel(row.kind)}${row.businessTimeZone ? ` · ${row.businessTimeZone}` : ' · 时区未配置'}`,
     deactivated: row.deactivated,
     revision: row.revision,
     registrant: row.registrant,
     registeredAt: row.registeredAt,
-    nextRevisionSeed: {
-      warehouseCode: row.warehouseCode,
-      revision: String(row.revision + 1),
-      name: row.name,
-      kind: row.kind,
-      'address.country': row.address.country,
-      'address.text': row.address.text,
-      businessTimeZone: row.businessTimeZone ?? '',
-      colocatedNode: row.colocatedNode ?? '',
-      deactivated: row.deactivated,
-    },
+    nextRevisionSeed: base,
+    toggleActiveSeed: { ...base, deactivated: !row.deactivated },
     childAction: {
       label: '在此仓新增库区',
       targetId: 'zone',
@@ -108,6 +113,14 @@ function warehouseRow(row: WarehouseRecord): CatalogueRow {
 }
 
 function zoneRow(row: ZoneRecord): CatalogueRow {
+  const base: GuidedFormValues = {
+    warehouseCode: row.warehouseCode,
+    zoneCode: row.zoneCode,
+    revision: String(row.revision + 1),
+    name: row.name,
+    usage: row.usage,
+    deactivated: row.deactivated,
+  };
   return {
     key: `${row.warehouseCode}/${row.zoneCode}`,
     family: 'zone',
@@ -119,14 +132,8 @@ function zoneRow(row: ZoneRecord): CatalogueRow {
     revision: row.revision,
     registrant: row.registrant,
     registeredAt: row.registeredAt,
-    nextRevisionSeed: {
-      warehouseCode: row.warehouseCode,
-      zoneCode: row.zoneCode,
-      revision: String(row.revision + 1),
-      name: row.name,
-      usage: row.usage,
-      deactivated: row.deactivated,
-    },
+    nextRevisionSeed: base,
+    toggleActiveSeed: { ...base, deactivated: !row.deactivated },
     childAction: {
       label: '在此库区新增库位',
       targetId: 'location',
@@ -136,29 +143,40 @@ function zoneRow(row: ZoneRecord): CatalogueRow {
 }
 
 function locationTypeRow(row: LocationTypeRecord): CatalogueRow {
+  const base: GuidedFormValues = {
+    locationTypeCode: row.locationTypeCode,
+    revision: String(row.revision + 1),
+    name: row.name,
+    deactivated: row.deactivated,
+  };
   return {
     key: row.locationTypeCode,
     family: 'location-type',
     code: row.locationTypeCode,
     name: row.name,
-    place: '',
+    place: '全租户共用',
     note: '',
     deactivated: row.deactivated,
     revision: row.revision,
     registrant: row.registrant,
     registeredAt: row.registeredAt,
-    nextRevisionSeed: {
-      locationTypeCode: row.locationTypeCode,
-      revision: String(row.revision + 1),
-      name: row.name,
-      deactivated: row.deactivated,
-    },
+    nextRevisionSeed: base,
+    toggleActiveSeed: { ...base, deactivated: !row.deactivated },
   };
 }
 
 function locationRow(row: LocationRecord): CatalogueRow {
   const type = row.locationTypeCode ?? '未指定类型';
   const priority = row.priority === undefined ? '' : ` · 优先级 ${row.priority}`;
+  const base: GuidedFormValues = {
+    warehouseCode: row.warehouseCode,
+    locationCode: row.locationCode,
+    revision: String(row.revision + 1),
+    zoneCode: row.zoneCode,
+    locationTypeCode: row.locationTypeCode ?? '',
+    priority: row.priority === undefined ? '' : String(row.priority),
+    deactivated: row.deactivated,
+  };
   return {
     key: `${row.warehouseCode}/${row.locationCode}`,
     family: 'location',
@@ -170,53 +188,48 @@ function locationRow(row: LocationRecord): CatalogueRow {
     revision: row.revision,
     registrant: row.registrant,
     registeredAt: row.registeredAt,
-    nextRevisionSeed: {
-      warehouseCode: row.warehouseCode,
-      locationCode: row.locationCode,
-      revision: String(row.revision + 1),
-      zoneCode: row.zoneCode,
-      locationTypeCode: row.locationTypeCode ?? '',
-      priority: row.priority === undefined ? '' : String(row.priority),
-      deactivated: row.deactivated,
-    },
+    nextRevisionSeed: base,
+    toggleActiveSeed: { ...base, deactivated: !row.deactivated },
   };
 }
 
 function packagingRow(row: PackagingRecord): CatalogueRow {
   const size = row.dimensions;
+  const base: GuidedFormValues = {
+    packagingMaterialCode: row.packagingMaterialCode,
+    revision: String(row.revision + 1),
+    name: row.name,
+    'dimensions.length': size.length,
+    'dimensions.width': size.width,
+    'dimensions.height': size.height,
+    'dimensions.unit': size.unit,
+    'weight.value': row.weight.value,
+    'weight.unit': row.weight.unit,
+    deactivated: row.deactivated,
+  };
   return {
     key: row.packagingMaterialCode,
     family: 'packaging',
     code: row.packagingMaterialCode,
     name: row.name,
-    place: '',
+    place: '全租户共用',
     note: `${size.length}×${size.width}×${size.height} ${size.unit} · ${row.weight.value} ${row.weight.unit}`,
     deactivated: row.deactivated,
     revision: row.revision,
     registrant: row.registrant,
     registeredAt: row.registeredAt,
-    nextRevisionSeed: {
-      packagingMaterialCode: row.packagingMaterialCode,
-      revision: String(row.revision + 1),
-      name: row.name,
-      'dimensions.length': size.length,
-      'dimensions.width': size.width,
-      'dimensions.height': size.height,
-      'dimensions.unit': size.unit,
-      'weight.value': row.weight.value,
-      'weight.unit': row.weight.unit,
-      deactivated: row.deactivated,
-    },
+    nextRevisionSeed: base,
+    toggleActiveSeed: { ...base, deactivated: !row.deactivated },
   };
 }
 
 const columns: ListColumn<CatalogueRow>[] = [
-  { id: 'name', header: '名称', render: (row) => row.name },
   { id: 'code', header: '编码', className: mono, render: (row) => row.code },
-  { id: 'place', header: '所在', className: mono, render: (row) => row.place },
-  { id: 'note', header: '说明', render: (row) => row.note },
+  { id: 'name', header: '名称', render: (row) => row.name },
+  { id: 'place', header: '所属', className: mono, render: (row) => row.place },
+  { id: 'note', header: '规格 / 说明', render: (row) => row.note || '—' },
   { id: 'activity', header: '状态', render: (row) => activityLabel(row.deactivated) },
-  { id: 'revision', header: '修订', className: mono, render: (row) => String(row.revision) },
+  { id: 'revision', header: '修订', className: mono, render: (row) => `r${row.revision}` },
 ];
 
 const activityFilters: ReadonlyArray<{ id: ActivityFilter; label: string }> = [
@@ -225,47 +238,76 @@ const activityFilters: ReadonlyArray<{ id: ActivityFilter; label: string }> = [
   { id: 'deactivated', label: '已停用' },
 ];
 
-const registrationTargets: GuidedActionTarget[] = catalogueFamilies.map((family) => ({
-  id: family,
-  label: familyLabels[family],
-  title: registrationTitles[family],
-  endpoint: `POST ${catalogueWritePaths[family]}`,
-  snapshotHint: registrationSnapshotHints[family],
-  submit: (snapshot) => registerCatalogue(family, snapshot),
-  outcomeLabels: catalogueOutcomeLabels,
-  refusalReasonLabels: catalogueRefusalLabels,
-  form: catalogueGuidedForms[family],
-}));
+const targetsByFamily: Record<CatalogueFamily, GuidedActionTarget> = Object.fromEntries(
+  catalogueFamilies.map((family) => [
+    family,
+    {
+      id: family,
+      label: familyLabels[family],
+      title: registrationTitles[family],
+      endpoint: `POST ${catalogueWritePaths[family]}`,
+      snapshotHint: registrationSnapshotHints[family],
+      submit: (snapshot: unknown) => registerCatalogue(family, snapshot),
+      outcomeLabels: catalogueOutcomeLabels,
+      refusalReasonLabels: catalogueRefusalLabels,
+      form: enrichedCatalogueForms[family],
+    },
+  ]),
+) as Record<CatalogueFamily, GuidedActionTarget>;
 
-function CatalogueTable({
+function FamilyTable({
+  family,
   mayWrite,
-  onPrefill,
+  lookups,
+  refreshKey,
+  onOpenForm,
 }: {
+  family: CatalogueFamily;
   mayWrite: boolean;
-  onPrefill: (targetId: CatalogueFamily, values: GuidedFormValues) => void;
+  lookups: WarehouseLookups;
+  refreshKey: number;
+  onOpenForm: (targetId: CatalogueFamily, values?: GuidedFormValues) => void;
 }) {
-  const [family, setFamily] = useState<CatalogueFamily>('warehouse');
   const [keyword, setKeyword] = useState('');
   const [activity, setActivity] = useState<ActivityFilter>('all');
+  const [warehouseFilter, setWarehouseFilter] = useState('');
   const settled = useSettledKeyword(keyword);
-  const conditions = catalogueConditions(family, settled, activity);
+  const supportsWarehouseFilter = family === 'zone' || family === 'location';
+
+  const conditions = useMemo(() => {
+    const filters: Record<string, readonly string[]> = {};
+    if (activity !== 'all') filters.deactivated = [activity === 'deactivated' ? 'true' : 'false'];
+    if (supportsWarehouseFilter && warehouseFilter !== '') filters.warehouseCode = [warehouseFilter];
+    return {
+      selectors: { family },
+      q: settled,
+      filters: Object.keys(filters).length > 0 ? filters : undefined,
+    };
+  }, [family, settled, activity, supportsWarehouseFilter, warehouseFilter]);
+
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listWarehouseCatalogue);
+  const [lastRefresh, setLastRefresh] = useState(refreshKey);
+  if (refreshKey !== lastRefresh) {
+    setLastRefresh(refreshKey);
+    retry();
+  }
+
   const rows = answer?.kind === 'outcome' ? rowsOf(family, answer.body) : [];
   const label = familyLabels[family];
 
   const inspectorOf = (row: CatalogueRow): InspectorContent => {
     const actions: InspectorAction[] = [];
     if (mayWrite) {
-      actions.push({
-        label: `登记下一修订（r${row.revision + 1}）`,
-        onRun: () => onPrefill(row.family, row.nextRevisionSeed),
-      });
+      actions.push(
+        { label: `修改资料（登 r${row.revision + 1}）`, onRun: () => onOpenForm(row.family, row.nextRevisionSeed) },
+        {
+          label: row.deactivated ? `重新启用（登 r${row.revision + 1}）` : `停用（登 r${row.revision + 1}）`,
+          onRun: () => onOpenForm(row.family, row.toggleActiveSeed),
+        },
+      );
       if (row.childAction) {
         const child = row.childAction;
-        actions.push({
-          label: child.label,
-          onRun: () => onPrefill(child.targetId, child.values),
-        });
+        actions.push({ label: child.label, onRun: () => onOpenForm(child.targetId, child.values) });
       }
     }
     return {
@@ -275,9 +317,9 @@ function CatalogueTable({
         {
           kind: 'summary',
           fields: [
-            { label: '所在', value: row.place || '—' },
+            { label: '所属', value: row.place || '—', mono: true },
             { label: '说明', value: row.note || '—' },
-            { label: '修订', value: String(row.revision), mono: true },
+            { label: '修订', value: `r${row.revision}`, mono: true },
             { label: '登记时刻', value: formatInstant(row.registeredAt), mono: true },
           ],
         },
@@ -291,16 +333,42 @@ function CatalogueTable({
   return (
     <ListPageTemplate<CatalogueRow>
       moduleId="warehouse-catalogues"
-      title={info.title}
-      description="各仓、库区、库位类型、库位和包材的当前修订。单击行可从右栏直接带出资料登记下一修订。"
-      search={{ value: keyword, onChange: setKeyword, placeholder: `搜${label}的编码或名称` }}
+      title={`${label}名册`}
+      description={`本租户已登记的${label}当前修订。点右上角「新增${label}」原地弹窗登记；单击行可从右栏修改修订、停用或新增下级。`}
+      headerActions={
+        mayWrite ? (
+          <Button
+            type="button"
+            className={primaryActionClass}
+            onClick={() =>
+              onOpenForm(family, {
+                revision: '1',
+                ...(supportsWarehouseFilter && warehouseFilter ? { warehouseCode: warehouseFilter } : {}),
+              })
+            }
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            {`新增${label}`}
+          </Button>
+        ) : undefined
+      }
+      search={{ value: keyword, onChange: setKeyword, placeholder: `搜${label}编码或名称` }}
       filters={
         <>
-          {catalogueFamilies.map((item) => (
-            <button key={item} type="button" className={chipClass(item === family)} aria-pressed={item === family} onClick={() => setFamily(item)}>
-              {familyLabels[item]}
-            </button>
-          ))}
+          {supportsWarehouseFilter && lookups.warehouses.length > 0 ? (
+            <select
+              className="h-6 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-caption text-idpxyz-text"
+              value={warehouseFilter}
+              onChange={(event) => setWarehouseFilter(event.target.value)}
+            >
+              <option value="">全部仓库</option>
+              {lookups.warehouses.map((w) => (
+                <option key={w.warehouseCode} value={w.warehouseCode}>
+                  {`${w.warehouseCode} · ${w.name}`}
+                </option>
+              ))}
+            </select>
+          ) : null}
           {activityFilters.map((filter) => (
             <button
               key={filter.id}
@@ -326,7 +394,7 @@ function CatalogueTable({
         emptyTitle: `还没有登记${label}`,
         emptyDescription: entryHint(
           mayWrite,
-          `可以在「新增或更新」签逐格填写登记${label}，也可以用受控批量命令行 parcel-warehouse-register 一次登记多条。`,
+          `点右上角「新增${label}」即可逐格填写登记，也可以用受控批量命令行 parcel-warehouse-register 导入。`,
         ),
         narrowed: catalogueConditionsNarrow(conditions),
       })}
@@ -334,38 +402,56 @@ function CatalogueTable({
   );
 }
 
-/** 仓库与库位五册的查阅与引导式登记。没有登记册配置写授予的操作者只看查阅签。 */
+/** 仓库与库位五册：仓库 / 库区 / 库位 / 库位类型 / 包材 分签查阅，右上角弹窗新增、右栏快捷修订与级联新增。 */
 export function WarehouseCataloguesPage() {
   const mayWrite = useMayWriteRegistry();
-  const [tab, setTab] = useState('catalog');
-  const [seed, setSeed] = useState<GuidedFormSeed | null>(null);
+  const lookups = useWarehouseLookups();
+  const [family, setFamily] = useState<CatalogueFamily>('warehouse');
+  const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const openPrefill = (targetId: CatalogueFamily, values: GuidedFormValues) => {
-    setSeed((current) => ({ targetId, values, nonce: (current?.nonce ?? 0) + 1 }));
-    setTab('register');
+  const openForm = (targetId: CatalogueFamily, values?: GuidedFormValues) => {
+    setDrawer((current) => ({
+      target: targetsByFamily[targetId],
+      prefill: values,
+      nonce: (current?.nonce ?? 0) + 1,
+    }));
   };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs
+        value={family}
+        onValueChange={(next) => setFamily(next as CatalogueFamily)}
+        className="flex-1 flex flex-col overflow-hidden gap-0"
+      >
         <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="catalog">仓库与库位</TabsTrigger>
-          {mayWrite ? <TabsTrigger value="register">新增或更新</TabsTrigger> : null}
+          <TabsTrigger value="warehouse">仓库</TabsTrigger>
+          <TabsTrigger value="zone">库区</TabsTrigger>
+          <TabsTrigger value="location">库位</TabsTrigger>
+          <TabsTrigger value="location-type">库位类型</TabsTrigger>
+          <TabsTrigger value="packaging">包材</TabsTrigger>
         </TabsList>
-        <TabsContent value="catalog" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CatalogueTable mayWrite={mayWrite} onPrefill={openPrefill} />
+        <TabsContent value={family} className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <FamilyTable
+            family={family}
+            mayWrite={mayWrite}
+            lookups={lookups}
+            refreshKey={refreshKey}
+            onOpenForm={openForm}
+          />
         </TabsContent>
-        {mayWrite ? (
-          <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-            <GuidedActionPanel
-              moduleId="warehouse-catalogues"
-              targets={registrationTargets}
-              problemNote={problemNote}
-              seed={seed}
-            />
-          </TabsContent>
-        ) : null}
       </Tabs>
+      <ActionDrawer
+        moduleId="warehouse-catalogues"
+        active={drawer}
+        lookups={lookups}
+        onClose={() => setDrawer(null)}
+        onSubmitted={() => {
+          setRefreshKey((n) => n + 1);
+          lookups.reload();
+        }}
+      />
     </div>
   );
 }

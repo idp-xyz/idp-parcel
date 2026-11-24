@@ -16,14 +16,14 @@ export const registrationTitles: Record<CatalogueFamily, string> = {
   packaging: '登记包材',
 };
 
-const commandHint = '报文不要带租户和登记人。格式与命令行 parcel-warehouse-register 的同一册相同。修订从 1 起，改资料用下一个修订号，同一修订重投内容必须相同。';
+const commandHint = '租户与登记人由登录身份自动记下；修订从 1 起连续，改资料或停用用下一修订号。';
 
 export const registrationSnapshotHints: Record<CatalogueFamily, string> = {
-  warehouse: `请粘贴一份 JSON。写明 warehouseCode、revision、name、kind（SELF_OPERATED 自营，AGENT 代理）、address.country 与 address.text。业务时区、同址网点、是否停用可以不填。${commandHint}`,
-  zone: `请粘贴一份 JSON。写明 warehouseCode、zoneCode、revision、name、usage（RECEIVING_STAGING 收货暂存，STORAGE 存储，PICKING 拣货，DEFECTIVE 不良，RETURN_STAGING 退货暂存，OUTBOUND_STAGING 出库暂存）。是否停用可以不填。${commandHint}`,
-  'location-type': `请粘贴一份 JSON。写明 locationTypeCode、revision、name。是否停用可以不填。本租户还没有仓时答未配置。${commandHint}`,
-  location: `请粘贴一份 JSON。写明 warehouseCode、locationCode、revision、zoneCode。库位类型与优先级可以不填；优先级是整数。${commandHint}`,
-  packaging: `请粘贴一份 JSON。写明 packagingMaterialCode、revision、name、dimensions（length、width、height、unit，数值用字符串）与 weight（value、unit，数值用字符串）。是否停用可以不填。本租户还没有仓时答未配置。${commandHint}`,
+  warehouse: `逐格填写仓库基础档案。业务时区、同址物流节点可留空（未登记按未配置处理）。${commandHint}`,
+  zone: `选择所属仓库与库区用途（收货暂存、存储、拣货、不良、退货暂存、出库暂存）。${commandHint}`,
+  'location-type': `登记全租户共用的库位类型。本租户还没有仓时答未配置。${commandHint}`,
+  location: `先选仓库再选所属库区（已按仓库级联过滤）；库位类型与拣选优先级可选。${commandHint}`,
+  packaging: `登记全租户共用的包材尺寸与自重，供打包与预取面单引用。本租户还没有仓时答未配置。${commandHint}`,
 };
 
 export const catalogueOutcomeLabels: Record<string, string> = {
@@ -60,9 +60,9 @@ export const stockImportOutcomeLabels: Record<string, string> = {
 
 export const stockImportSnapshotHints = {
   submit:
-    '请粘贴一份 JSON。写明 importId、ownerAccount、warehouseCode、reason，以及 goodsLines 或 cartonLines 至少一组。数量要是正整数。报文不要带租户和提交人。提交不改账。',
-  approve: '请粘贴一份 JSON，只写 importId。货主与内容取册上那一份，报文里不要再带。没登记批准职责时答未配置。提交人不能批自己的。',
-  reject: '请粘贴一份 JSON。写明 importId 与 reason。驳回不改账，也不比批准职责。',
+    '选择货主与仓库，填写原因并至少添加一组商品或整箱明细。提交本身不改库存账，批准后才真正入账。',
+  approve: '确认建账导入号后批准入账；如尚未登记批准职责规则则答未配置，提交人受分离规则约束时不能自批。',
+  reject: '确认建账导入号并填写驳回原因；驳回不改动库存账。',
 };
 
 export function problemNote(code: string): string {

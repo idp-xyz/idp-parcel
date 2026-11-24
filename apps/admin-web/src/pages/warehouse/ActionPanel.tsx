@@ -9,6 +9,7 @@ import type { GuidedFormSeed } from './guided-forms';
 import { allWarehouseGuidedForms } from './guided-schemas';
 import { GuidedActionPanel, type GuidedActionTarget } from './GuidedActionPanel';
 import { problemNote } from './presentation';
+import type { WarehouseLookups } from './use-catalogues';
 
 /**
  * 按操作者持有的授予筛选仓配页上的引导式写动作。明确没有那一种授予的动作不摆出。
@@ -112,14 +113,34 @@ export function useWarehouseActionTargets(specs: readonly WarehouseActionSpec[])
   ]);
 }
 
+export function useWarehouseTargetMap(
+  specs: readonly WarehouseActionSpec[],
+): ReadonlyMap<string, GuidedActionTarget> {
+  const targets = useWarehouseActionTargets(specs);
+  return useMemo(() => new Map(targets.map((target) => [target.id, target])), [targets]);
+}
+
 export function WarehouseActionPanel({
   moduleId,
   targets,
   seed,
+  lookups,
+  onSubmitted,
 }: {
   moduleId: string;
   targets: readonly GuidedActionTarget[];
   seed?: GuidedFormSeed | null;
+  lookups?: WarehouseLookups;
+  onSubmitted?: (outcome: string) => void;
 }) {
-  return <GuidedActionPanel moduleId={moduleId} targets={targets} problemNote={problemNote} seed={seed} />;
+  return (
+    <GuidedActionPanel
+      moduleId={moduleId}
+      targets={targets}
+      problemNote={problemNote}
+      seed={seed}
+      lookups={lookups}
+      onSubmitted={onSubmitted}
+    />
+  );
 }

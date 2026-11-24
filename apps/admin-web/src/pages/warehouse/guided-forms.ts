@@ -14,6 +14,20 @@ export type GuidedFieldKind =
   | 'rows'
   | 'json';
 
+export type WarehouseLookupKind =
+  | 'warehouse'
+  | 'self-warehouse'
+  | 'agent-warehouse'
+  | 'zone'
+  | 'location-type'
+  | 'location'
+  | 'outbound-staging-location'
+  | 'receiving-location'
+  | 'return-staging-location'
+  | 'packaging'
+  | 'owner'
+  | 'service-product';
+
 export interface GuidedSelectOption {
   value: string;
   label: string;
@@ -28,6 +42,10 @@ export interface GuidedFieldSpec {
   placeholder?: string;
   hint?: string;
   options?: readonly GuidedSelectOption[];
+  /** 从实时名册加载候选下拉列表（仍允许手输），库区与库位按同表单已选仓库联动过滤。 */
+  lookup?: WarehouseLookupKind;
+  /** 新开表单时自动生成可读单据/决定标识的前缀（保留可手动改写）。 */
+  autoIdPrefix?: string;
   /** kind 为 rows 时每一行的列定义。 */
   rowFields?: readonly GuidedFieldSpec[];
   rowLabel?: string;
@@ -62,6 +80,16 @@ const signedIntPattern = /^-?\d+$/;
 const decimalPattern = /^\d{1,9}(\.\d{1,6})?$/;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
+/** 生成易读且不撞号的决定/单据标识（如 DEC-20261124-120835-42）。不替代租户业务取值。 */
+export function generateReadableId(prefix: string, now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp =
+    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-` +
+    `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const tail = String(Math.floor(Math.random() * 90) + 10);
+  return `${prefix}-${stamp}-${tail}`;
+}
+
 /** 为一组字段生成初始表单值，并与列表行带出的预填值合并。不填任何租户业务默认值。 */
 export function initialGuidedValues(
   fields: readonly GuidedFieldSpec[],
@@ -78,6 +106,8 @@ export function initialGuidedValues(
       values[field.path] = false;
     } else if (field.kind === 'rows') {
       values[field.path] = field.required ? [emptyRowFor(field.rowFields ?? [])] : [];
+    } else if (field.autoIdPrefix) {
+      values[field.path] = generateReadableId(field.autoIdPrefix);
     } else {
       values[field.path] = '';
     }

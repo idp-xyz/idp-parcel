@@ -87,13 +87,13 @@ const commonHeaderFields = (usesOccurredAt: boolean, usesDeviceSequence: boolean
 ];
 
 const baseInternalLineFields: readonly GuidedFieldSpec[] = [
-  { path: 'ownerAccount', label: '货主客户账户', kind: 'text', required: true, placeholder: 'SYN-OWNER-01' },
+  { path: 'ownerAccount', label: '货主客户账户', kind: 'text', required: true, lookup: 'owner', placeholder: 'SYN-OWNER-01' },
   { path: 'goodsCode', label: '商品编码（整箱留空）', kind: 'text', placeholder: 'SYN-GOODS-01' },
   { path: 'unit', label: '计量单位（整箱留空）', kind: 'text', placeholder: '件' },
   { path: 'stockState', label: '库存状态（整箱留空）', kind: 'select', options: stockStateOptions },
   { path: 'quantity', label: '数量（整箱留空）', kind: 'integer', placeholder: '1' },
-  { path: 'sourceLocation', label: '源库位', kind: 'text', required: true, placeholder: 'SYN-LOC-RCV' },
-  { path: 'targetLocation', label: '目标库位', kind: 'text', required: true, placeholder: 'SYN-LOC-STORE' },
+  { path: 'sourceLocation', label: '源库位', kind: 'text', required: true, lookup: 'location', placeholder: 'SYN-LOC-RCV' },
+  { path: 'targetLocation', label: '目标库位', kind: 'text', required: true, lookup: 'location', placeholder: 'SYN-LOC-STORE' },
   { path: 'cartonNumber', label: '整箱箱号（移动整箱填）', kind: 'text', placeholder: '可选' },
   { path: 'toUnit', label: '转入单位（顺带折合可选）', kind: 'text', placeholder: '可选' },
   { path: 'toQuantity', label: '转入数量（可选）', kind: 'integer', placeholder: '可选' },
@@ -179,7 +179,7 @@ export const workFactSpecs: readonly WorkFactSpec[] = [
             { path: 'unit', label: '计量单位', kind: 'text', required: true, placeholder: '件' },
             { path: 'stockState', label: '收货状态', kind: 'select', required: true, options: stockStateOptions },
             { path: 'quantity', label: '实收数量', kind: 'integer', required: true, placeholder: '10' },
-            { path: 'locationCode', label: '收货暂存库位', kind: 'text', required: true, placeholder: 'SYN-LOC-RCV' },
+            { path: 'locationCode', label: '收货暂存库位', kind: 'text', required: true, lookup: 'receiving-location', placeholder: 'SYN-LOC-RCV' },
             { path: 'batchNumber', label: '批号（跟踪批号必填）', kind: 'text' },
             { path: 'expiryDate', label: '失效日（跟踪效期必填）', kind: 'date' },
             { path: 'labelAlias', label: '贴标别名（可选）', kind: 'text' },
@@ -211,7 +211,7 @@ export const workFactSpecs: readonly WorkFactSpec[] = [
           required: true,
           rowFields: [
             { path: 'cartonNumber', label: '预报箱号', kind: 'text', required: true, placeholder: 'SYN-CARTON-01' },
-            { path: 'locationCode', label: '收货暂存库位', kind: 'text', required: true, placeholder: 'SYN-LOC-RCV' },
+            { path: 'locationCode', label: '收货暂存库位', kind: 'text', required: true, lookup: 'receiving-location', placeholder: 'SYN-LOC-RCV' },
             { path: 'warehouseCartonNumber', label: '仓贴箱号（可选）', kind: 'text' },
             { path: 'damaged', label: '外箱破损', kind: 'boolean', omitWhenFalse: true },
           ],
@@ -304,7 +304,7 @@ export const workFactSpecs: readonly WorkFactSpec[] = [
     form: {
       fields: [
         ...commonHeaderFields(true, false),
-        { path: 'location', label: '退货暂存库位', kind: 'text', required: true, placeholder: 'SYN-LOC-RET' },
+        { path: 'location', label: '退货暂存库位', kind: 'text', required: true, lookup: 'return-staging-location', placeholder: 'SYN-LOC-RET' },
         { path: 'trackingNumber', label: '退件单号 / 物流单号', kind: 'text', required: true, placeholder: 'TRK-RET-01' },
         { path: 'goodsCode', label: '商品编码', kind: 'text', required: true, placeholder: 'SYN-GOODS-01' },
         { path: 'unit', label: '计量单位', kind: 'text', required: true, placeholder: '件' },
@@ -550,7 +550,7 @@ export const workFactSpecs: readonly WorkFactSpec[] = [
       fields: [
         ...commonHeaderFields(true, true),
         { path: 'countId', label: '盘点单号', kind: 'text', required: true, placeholder: 'CNT-01' },
-        { path: 'locationCode', label: '清点库位', kind: 'text', required: true, placeholder: 'SYN-LOC-STORE' },
+        { path: 'locationCode', label: '清点库位', kind: 'text', required: true, lookup: 'location', placeholder: 'SYN-LOC-STORE' },
         {
           path: 'lines',
           label: '实点明细（空库位可不加行）',
@@ -588,7 +588,7 @@ export const workFactSpecs: readonly WorkFactSpec[] = [
         ...commonHeaderFields(false, false),
         { path: 'taskId', label: '拣货任务号', kind: 'text', required: true, placeholder: 'PKT-01', hint: '可从「出库与波次」波次右栏复制' },
         { path: 'quantity', label: '实拣数量', kind: 'integer', required: true, placeholder: '4' },
-        { path: 'targetLocation', label: '目标待出库库位', kind: 'text', required: true, placeholder: 'SYN-LOC-OUT' },
+        { path: 'targetLocation', label: '目标待出库库位', kind: 'text', required: true, lookup: 'outbound-staging-location', placeholder: 'SYN-LOC-OUT' },
       ],
     },
   },
@@ -630,7 +630,7 @@ export const workFactSpecs: readonly WorkFactSpec[] = [
           required: true,
           rowFields: [
             { path: 'sequence', label: '包裹序号', kind: 'integer', required: true, placeholder: '1' },
-            { path: 'packagingMaterial', label: '包材编码', kind: 'text', required: true, placeholder: 'SYN-BOX-01' },
+            { path: 'packagingMaterial', label: '包材编码', kind: 'text', required: true, lookup: 'packaging', placeholder: 'SYN-BOX-01' },
             { path: 'weight', label: '称重重量', kind: 'decimal', required: true, placeholder: '1.25' },
             { path: 'weightUnit', label: '重量单位', kind: 'text', required: true, placeholder: 'KG' },
             { path: 'length', label: '长', kind: 'decimal', required: true, placeholder: '30' },
@@ -699,7 +699,7 @@ export const workFactSpecs: readonly WorkFactSpec[] = [
       fields: [
         ...commonHeaderFields(false, false),
         { path: 'returnId', label: '回库任务号', kind: 'text', required: true, placeholder: 'OBR-01/PKT-01' },
-        { path: 'target', label: '目标可分配库位（须在用）', kind: 'text', required: true, placeholder: 'SYN-LOC-STORE' },
+        { path: 'target', label: '目标可分配库位（须在用）', kind: 'text', required: true, lookup: 'location', placeholder: 'SYN-LOC-STORE' },
       ],
     },
   },

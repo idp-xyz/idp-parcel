@@ -64,7 +64,7 @@ import type { NavigationSection } from '@idpxyz/ui-workspace';
 // 页 id 一律不动：page-registry 的登记、hash 地址、保存视图、最近对象都按 id 认页。
 // 不虚构无文档出处的模块；新增条目前先确认它有同等级出处。实时现场作业（扫描 / 点验 / 装卸）不在本管理台：那属一线作业端
 // （ADR-0021），这里的作业类条目只是治理与查阅面。
-export const navigationSections: NavigationSection[] = [
+export const parcelNavigationSections: NavigationSection[] = [
   {
     // 「我的工作」两条目（最近打开、保存的视图）并进工作台一组：三条都是管理台自身的事实，不发请求（黄金标准 Rule 6
     // 要 My Work 在业务导航之上，并进第一组仍满足）。
@@ -142,18 +142,6 @@ export const navigationSections: NavigationSection[] = [
     ],
   },
   {
-    title: '仓配',
-    items: [
-      { id: 'warehouse-catalogues', label: '仓库与库位', icon: 'warehouse-catalogues' },
-      { id: 'stock-imports', label: '建账导入', icon: 'stock-imports' },
-      { id: 'warehouse-receiving', label: '收货与待认领', icon: 'warehouse-receiving' },
-      { id: 'warehouse-internal-ops', label: '库内作业与盘点', icon: 'warehouse-internal-ops' },
-      { id: 'warehouse-outbound', label: '出库与波次', icon: 'warehouse-outbound' },
-      { id: 'warehouse-pricing', label: '仓储计价与收费', icon: 'warehouse-pricing' },
-      { id: 'warehouse-workstation', label: '仓内作业台', icon: 'warehouse-workstation' },
-    ],
-  },
-  {
     title: '清关',
     items: [
       { id: 'customs-cases', label: '清关单', icon: 'customs-cases' },
@@ -204,6 +192,79 @@ export const navigationSections: NavigationSection[] = [
   },
 ];
 
+// 仓配系统专属导航（按专业仓配岗位与业务流分区）：切到顶栏「仓配系统」工作区时，左侧只显示这八组，
+// 不与国际小包网络菜单混在一起。
+const warehouseOnlyNavigationSections: NavigationSection[] = [
+  {
+    title: '仓配概览',
+    items: [{ id: 'warehouse-dashboard', label: '仓配工作台', icon: 'warehouse-dashboard' }],
+  },
+  {
+    title: '基础资料',
+    items: [
+      { id: 'warehouse-catalogues', label: '仓库与库位', icon: 'warehouse-catalogues' },
+      { id: 'warehouse-goods', label: '货主与商品', icon: 'warehouse-goods' },
+    ],
+  },
+  {
+    title: '入库管理',
+    items: [
+      { id: 'warehouse-pre-advices', label: '入库预报', icon: 'warehouse-pre-advices' },
+      { id: 'warehouse-unclaimed', label: '待认领到货', icon: 'warehouse-unclaimed' },
+      { id: 'warehouse-returns', label: '退货管理', icon: 'warehouse-returns' },
+    ],
+  },
+  {
+    title: '库存管理',
+    items: [
+      { id: 'warehouse-stock', label: '实时库存', icon: 'warehouse-stock' },
+      { id: 'stock-imports', label: '建账导入', icon: 'stock-imports' },
+      { id: 'warehouse-counts-adjustments', label: '盘点与调整', icon: 'warehouse-counts-adjustments' },
+      { id: 'warehouse-processing', label: '加工与换标', icon: 'warehouse-processing' },
+    ],
+  },
+  {
+    title: '出库履约',
+    items: [
+      { id: 'warehouse-outbound', label: '出库订单', icon: 'warehouse-outbound' },
+      { id: 'warehouse-waves', label: '波次与拣货', icon: 'warehouse-waves' },
+      { id: 'warehouse-agents', label: '代理仓履约', icon: 'warehouse-agents' },
+    ],
+  },
+  {
+    title: '现场扫码',
+    items: [{ id: 'warehouse-workstation', label: '仓内作业台', icon: 'warehouse-workstation' }],
+  },
+  {
+    title: '仓储计费',
+    items: [{ id: 'warehouse-pricing', label: '仓储计费', icon: 'warehouse-pricing' }],
+  },
+  {
+    title: '仓配配置',
+    items: [{ id: 'warehouse-settings', label: '仓配规则设置', icon: 'warehouse-settings' }],
+  },
+];
+
+/** 仓配系统工作区左侧栏：八个专业仓配分组，并在仓配配置末尾挂出共享的扫描设备与操作者授权。 */
+export const warehouseNavigationSections: NavigationSection[] = warehouseOnlyNavigationSections.map((section) =>
+  section.title === '仓配配置'
+    ? {
+        ...section,
+        items: [
+          ...section.items,
+          { id: 'work-devices', label: '扫描设备', icon: 'work-devices' },
+          { id: 'operator-access', label: '操作者与授予', icon: 'operator-access' },
+        ],
+      }
+    : section,
+);
+
+/** 全站唯一模块分区表（供面包屑反查与测试守门用）：国际小包十组 + 仓配八组，每个模块只出现一次。 */
+export const navigationSections: NavigationSection[] = [
+  ...parcelNavigationSections,
+  ...warehouseOnlyNavigationSections,
+];
+
 export const sidebarIconMap: Record<string, ElementType> = {
   'recent-objects': History,
   'saved-views': Star,
@@ -240,13 +301,22 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'customs-cases': Stamp,
   'compliance-rules': Library,
   'customs-ports-paths': Anchor,
+  'warehouse-dashboard': LayoutDashboard,
   'warehouse-catalogues': Warehouse,
+  'warehouse-goods': PackageOpen,
+  'warehouse-pre-advices': ClipboardCheck,
+  'warehouse-unclaimed': AlertTriangle,
+  'warehouse-returns': PackageX,
+  'warehouse-stock': Boxes,
   'stock-imports': PackagePlus,
-  'warehouse-receiving': PackageCheck,
-  'warehouse-internal-ops': Boxes,
+  'warehouse-counts-adjustments': Scale,
+  'warehouse-processing': SlidersHorizontal,
   'warehouse-outbound': Send,
-  'warehouse-pricing': BadgeDollarSign,
+  'warehouse-waves': Route,
+  'warehouse-agents': Truck,
   'warehouse-workstation': TabletSmartphone,
+  'warehouse-pricing': BadgeDollarSign,
+  'warehouse-settings': Library,
   'customs-restrictions': ShieldAlert,
   'tracking-judgment-rules': Milestone,
   'disclosure-policies': Eye,
@@ -460,48 +530,102 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     source: 'docs/domain/CONTEXT-MAP.md customs-compliance ↔ network-routing：关务提供合规候选区域、口岸、申报路径、限制及解除结果，路由只在合格候选中选择',
   },
 
-  // —— 仓配（warehouse-fulfillment）——
+  // —— 仓配系统（warehouse-fulfillment）——
+  'warehouse-dashboard': {
+    title: '仓配工作台',
+    summary: '仓配待办总览：待批建账导入、待认领到货、待放波次出库单、在途波次与作业设备状态。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 仓配概览',
+  },
   'warehouse-catalogues': {
     title: '仓库与库位',
-    summary: '本公司的仓、库区、库位类型、库位和包材，按当前修订查阅和登记。',
+    summary: '管理本公司的仓库、库区、库位、库位类型与包材的当前修订。',
     owner: '仓配履约（warehouse-fulfillment）',
     source: 'dox/contexts/warehouse-fulfillment.md 主数据登记',
   },
+  'warehouse-goods': {
+    title: '货主与商品',
+    summary: '按货主查阅商品档案、包装层级与仓测记录，并代录商品修订。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 商品与仓测',
+  },
+  'warehouse-pre-advices': {
+    title: '入库预报',
+    summary: '管理货主入库预报单的代录、更新告知、撤回、收货完结与收货差异结论。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 入库预报与收货差异结论',
+  },
+  'warehouse-unclaimed': {
+    title: '待认领到货',
+    summary: '处理无主到货与逾期收货转入的待认领队列：认领、撤销认领与按规则处置。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 待认领到货',
+  },
+  'warehouse-returns': {
+    title: '退货管理',
+    summary: '管理退货预报代录与退件到仓后的回库处置：良品上架、转次品或退还货主。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 退货入库与处置',
+  },
+  'warehouse-stock': {
+    title: '实时库存',
+    summary: '按货主与仓库查阅商品库存格、整箱库存、库存汇总、占用明细与库存流水。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 库存账与库存查阅',
+  },
   'stock-imports': {
     title: '建账导入',
-    summary: '把已有库存做成一笔导入，待批的可以批准入账或驳回。',
+    summary: '提交期初建账导入并审批入账或驳回；提交本身不改库存账。',
     owner: '仓配履约（warehouse-fulfillment）',
     source: 'dox/contexts/warehouse-fulfillment.md 建账导入',
   },
-  'warehouse-receiving': {
-    title: '收货与待认领',
-    summary: '待认领到货、处置规则、入库预报与商品的查阅、代录、认领与处置。',
+  'warehouse-counts-adjustments': {
+    title: '盘点与调整',
+    summary: '组织盘点任务并审批盘点差额、库存调整与库内作业差异。',
     owner: '仓配履约（warehouse-fulfillment）',
-    source: 'dox/contexts/warehouse-fulfillment.md 入库预报与待认领到货',
+    source: 'dox/contexts/warehouse-fulfillment.md 盘点与库存调整',
   },
-  'warehouse-internal-ops': {
-    title: '库内作业与盘点',
-    summary: '库内作业事实与库存查阅，以及冻结、盘点、加工换标、差异批准和库存调整。',
+  'warehouse-processing': {
+    title: '加工与换标',
+    summary: '查阅库内作业记录，管理加工拆分指令、商品换标指令以及库存冻结与状态恢复。',
     owner: '仓配履约（warehouse-fulfillment）',
-    source: 'dox/contexts/warehouse-fulfillment.md 库内作业与冻结',
+    source: 'dox/contexts/warehouse-fulfillment.md 加工、换标与冻结',
   },
   'warehouse-outbound': {
-    title: '出库与波次',
-    summary: '出库代录、拆单截单、放波次、缺货处置、分配策略、确认更正与代理仓结果。',
+    title: '出库订单',
+    summary: '管理出库请求、拆单截单、货主面单登记，并支持多选已预占订单一键合并放波次。',
     owner: '仓配履约（warehouse-fulfillment）',
-    source: 'dox/contexts/warehouse-fulfillment.md 出库与波次',
+    source: 'dox/contexts/warehouse-fulfillment.md 出库请求与截单',
   },
-  'warehouse-pricing': {
-    title: '仓储计价与收费',
-    summary: '仓储计费方案、计费采用、重量体积单位、库龄口径、增值项目与仓租日结。',
-    owner: '仓配履约（warehouse-fulfillment）与小包计价、结算核算',
-    source: 'dox/contexts/warehouse-fulfillment.md 仓储计费',
+  'warehouse-waves': {
+    title: '波次与拣货',
+    summary: '查看已放出的波次与拣货任务进度，处理出库确认更正与回补批准。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 波次与出库确认',
+  },
+  'warehouse-agents': {
+    title: '代理仓履约',
+    summary: '跟进代理仓出库转出、打包与交接结果回传，并登记代理仓库存声明。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 代理仓',
   },
   'warehouse-workstation': {
     title: '仓内作业台',
-    summary: '网页模拟扫码终端：绑定已登记仓库设备后，在页面直接完成收货、仓测、移库、盘点、拣货、打包与出库确认。',
+    summary: '网页模拟扫码终端：绑定已登记仓库设备并拉取当前仓待办，直接完成收货、拣货、复核、打包、发货与库内作业。',
     owner: '仓配履约（warehouse-fulfillment）',
     source: 'dox/contexts/warehouse-fulfillment.md 一线作业事实登记；docs/adr/0149 作业事实登记能力面',
+  },
+  'warehouse-pricing': {
+    title: '仓储计费',
+    summary: '管理仓储计费方案、计费采用、收费发生项、销售计费请求台账与仓租日结。',
+    owner: '仓配履约（warehouse-fulfillment）与小包计价、结算核算',
+    source: 'dox/contexts/warehouse-fulfillment.md 仓储计费',
+  },
+  'warehouse-settings': {
+    title: '仓配规则设置',
+    summary: '集中配置分配策略、缺货处置、批准职责、待认领处置规则、计费单位口径与代理仓连接器。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 租户规则与配置',
   },
 
   // —— 设置 · 作业设备册（共享接入身份；不是限界上下文）——

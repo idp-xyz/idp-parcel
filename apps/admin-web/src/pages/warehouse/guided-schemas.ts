@@ -1,7 +1,7 @@
 // 仓配六页全部 57 个写动作的逐字段引导式表单定义。
 // 键名与 internal/warehousefulfillment/adapters/registrationjson、charge_mouth.go、warehouse_plan_mouth.go 一一对齐。
 
-import type { GuidedFieldSpec, GuidedFormDefinition, GuidedSelectOption } from './guided-forms';
+import type { GuidedFieldSpec, GuidedFormDefinition, GuidedSelectOption, WarehouseLookupKind } from './guided-forms';
 
 const stockStateOptions: readonly GuidedSelectOption[] = [
   { value: 'GOOD', label: '良品（GOOD）' },
@@ -836,11 +836,68 @@ export const pricingGuidedForms: Record<string, GuidedFormDefinition> = {
   },
 };
 
+/** 为仓配表单字段自动补齐实时名册下拉（lookup）与可读单据号生成前缀（autoIdPrefix），新建主数据自身编码不强制下拉。 */
+function inferLookup(formId: string, path: string): WarehouseLookupKind | undefined {
+  if (path === 'ownerAccount') return 'owner';
+  if (path === 'service') return 'service-product';
+  if (path === 'packagingMaterial') return 'packaging';
+  if (path === 'locationTypeCode' && formId !== 'location-type') return 'location-type';
+  if (path === 'zoneCode' && formId !== 'zone') return 'zone';
+  if (path === 'warehouseCode' || path === 'warehouse') {
+    if (formId === 'warehouse') return undefined;
+    if (formId === 'agent-connector' || formId === 'agent-statement') return 'agent-warehouse';
+    return 'warehouse';
+  }
+  if (path === 'locationCode' || path === 'sourceLocation' || path === 'targetLocation' || path === 'location' || path === 'target') {
+    if (formId === 'location') return undefined;
+    return 'location';
+  }
+  return undefined;
+}
+
+function inferAutoIdPrefix(formId: string, path: string): string | undefined {
+  if (path === 'decisionId') return 'DEC';
+  if (path === 'importId' && formId === 'submit') return 'IMP';
+  if (path === 'waveId' && formId === 'wave-release') return 'WAVE';
+  if (path === 'adjustmentId' && formId === 'adjustment-submit') return 'ADJ';
+  return undefined;
+}
+
+function enrichField(formId: string, field: GuidedFieldSpec): GuidedFieldSpec {
+  const next: GuidedFieldSpec = {
+    ...field,
+    ...(field.lookup ? {} : inferLookup(formId, field.path) ? { lookup: inferLookup(formId, field.path) } : {}),
+    ...(field.autoIdPrefix ? {} : inferAutoIdPrefix(formId, field.path) ? { autoIdPrefix: inferAutoIdPrefix(formId, field.path) } : {}),
+  };
+  if (next.rowFields) {
+    next.rowFields = next.rowFields.map((sub) => enrichField(formId, sub));
+  }
+  return next;
+}
+
+function enrichFormMap(map: Record<string, GuidedFormDefinition>): Record<string, GuidedFormDefinition> {
+  const out: Record<string, GuidedFormDefinition> = {};
+  for (const [id, def] of Object.entries(map)) {
+    out[id] = {
+      ...def,
+      fields: def.fields.map((field) => enrichField(id, field)),
+    };
+  }
+  return out;
+}
+
+export const enrichedCatalogueForms = enrichFormMap(catalogueGuidedForms);
+export const enrichedStockImportForms = enrichFormMap(stockImportGuidedForms);
+export const enrichedReceivingForms = enrichFormMap(receivingGuidedForms);
+export const enrichedInternalOpsForms = enrichFormMap(internalOpsGuidedForms);
+export const enrichedOutboundWaveForms = enrichFormMap(outboundWaveGuidedForms);
+export const enrichedPricingForms = enrichFormMap(pricingGuidedForms);
+
 export const allWarehouseGuidedForms: Record<string, GuidedFormDefinition> = {
-  ...catalogueGuidedForms,
-  ...stockImportGuidedForms,
-  ...receivingGuidedForms,
-  ...internalOpsGuidedForms,
-  ...outboundWaveGuidedForms,
-  ...pricingGuidedForms,
+  ...enrichedCatalogueForms,
+  ...enrichedStockImportForms,
+  ...enrichedReceivingForms,
+  ...enrichedInternalOpsForms,
+  ...enrichedOutboundWaveForms,
+  ...enrichedPricingForms,
 };
