@@ -184,6 +184,7 @@ type warehouseFulfillmentOrchestration struct {
 	outboundRequestQueries  *whpostgres.OutboundRequests
 	waveQueries             *whpostgres.Waves
 	chargeOccurrenceQueries *whpostgres.Charges
+	workspaceQueries        *whpostgres.WorkspaceReads
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -758,6 +759,10 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 			warehouses, locations, zones, goods, holds, discrepancyIDs, systemClock{},
 		).WithCharges(chargeHandler),
 	}
+	workspaceReads, err := whpostgres.NewWorkspaceReads(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: workspace reads: %w", err)
+	}
 	return warehouseFulfillmentOrchestration{
 		registration: transactionalWarehouseRegistration{
 			transactor: db.Transactor(),
@@ -829,6 +834,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		outboundRequestQueries:  outboundStore,
 		waveQueries:             waveStore,
 		chargeOccurrenceQueries: chargeStore,
+		workspaceQueries:        workspaceReads,
 	}, nil
 }
 

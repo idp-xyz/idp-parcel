@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BadgeDollarSign,
   Building2,
@@ -14,7 +14,8 @@ import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { formatInstant } from '../catalogue-view';
 import { useCatalogueCursor } from '../use-catalogue-cursor';
-import { listDisposalRules } from './api';
+import { getSettingsOverview, listDisposalRules, type SettingsOverviewBody } from './api';
+import type { ApiResult } from '../catalogue-api';
 import {
   internalOpsActionSpecs,
   outboundWaveActionSpecs,
@@ -24,6 +25,7 @@ import {
 import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import { useWarehouseLookups } from './use-catalogues';
+import { labelOf, WmsBadge } from './wms-ui';
 
 const info = moduleInfoById['warehouse-settings'];
 
@@ -94,7 +96,56 @@ const ruleCards: readonly RuleCardSpec[] = [
   },
 ];
 
-/** 仓配规则设置中心：把原先散落在 4 个业务页里的 8 项租户级规则集中收口，并内联展示已登记的待认领处置规则名册。 */
+function ruleLive(overview: SettingsOverviewBody | null, actionId: string): { configured: boolean; note: string } | null {
+  if (!overview) return null;
+  switch (actionId) {
+    case 'allocation-strategy':
+      return overview.allocationStrategy.configured
+        ? { configured: true, note: `当前修订 r${overview.allocationStrategy.revision ?? '—'} · ${overview.allocationStrategy.operator ?? ''}` }
+        : { configured: false, note: '未登记时，出库分配答未配置' };
+    case 'shortage-policy':
+      return overview.shortagePolicies.length > 0
+        ? {
+            configured: true,
+            note: overview.shortagePolicies.map((item) => `${item.ownerAccount} ${labelOf(item.kind)}`).join('；'),
+          }
+        : { configured: false, note: '还没有货主登记缺货处置' };
+    case 'approval-duty':
+      return overview.approvalDuty.configured
+        ? {
+            configured: true,
+            note: overview.approvalDuty.distinctSubjects ? '要求提交人与批准人分离' : '不要求提交人与批准人分离',
+          }
+        : { configured: false, note: '未登记时，批准类操作答未配置' };
+    case 'disposal-rule':
+      return overview.disposalRules.length > 0
+        ? { configured: true, note: `${overview.disposalRules.length} 个仓已登记` }
+        : { configured: false, note: '未登记的仓，无主到货不能处置' };
+    case 'charge-units':
+      return overview.chargeUnits.length > 0
+        ? {
+            configured: true,
+            note: overview.chargeUnits.map((item) => `${item.warehouseCode} ${item.weightUnit}/${item.volumeUnit}`).join('；'),
+          }
+        : { configured: false, note: '未登记重量与体积单位' };
+    case 'charge-aging':
+      return overview.chargeAging.length > 0
+        ? { configured: true, note: overview.chargeAging.map((item) => `${item.warehouseCode} ${labelOf(item.basis)}`).join('；') }
+        : { configured: false, note: '未登记库龄口径' };
+    case 'charge-project':
+      return overview.chargeProjects.length > 0
+        ? { configured: true, note: overview.chargeProjects.map((item) => `${item.warehouseCode} ${item.projectName}`).join('；') }
+        : { configured: false, note: '还没有增值服务项目' };
+    case 'agent-connector':
+      return overview.agentConnectors.length > 0
+        ? { configured: true, note: overview.agentConnectors.map((item) => item.warehouseCode).join('、') }
+        : { configured: false, note: '还没有代理仓连接器' };
+    default:
+      return null;
+  }
+}
+
+/** 仓配规则设置中心：把原先散落在 4 个业务页里的 8 项租户级规则集中收口，并按当前登记显示已配置或未配置。 */
 export function WarehouseSettingsPage() {
   const lookups = useWarehouseLookups();
   const allSpecs = useMemo(
@@ -103,8 +154,21 @@ export function WarehouseSettingsPage() {
   );
   const targetMap = useWarehouseTargetMap(allSpecs);
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [overviewAnswer, setOverviewAnswer] = useState<ApiResult<SettingsOverviewBody> | null>(null);
+  const [overviewTick, setOverviewTick] = useState(0);
   const { answer: rulesAnswer, retry: reloadRules } = useCatalogueCursor({}, listDisposalRules);
   const disposalRules = rulesAnswer?.kind === 'outcome' ? rulesAnswer.body.disposalRules : [];
+  const overview = overviewAnswer?.kind === 'outcome' ? overviewAnswer.body : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    void getSettingsOverview().then((next) => {
+      if (!cancelled) setOverviewAnswer(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [overviewTick]);
 
   const openRule = (actionId: string) => {
     const target = targetMap.get(actionId);
@@ -132,6 +196,16 @@ export function WarehouseSettingsPage() {
                     <CardTitle className="type-section">{item.title}</CardTitle>
                   </div>
                   <p className="mt-1 type-body text-idpxyz-textMuted">{item.desc}</p>
+                  {(() => {
+                    const live = ruleLive(overview, item.actionId);
+                    if (!live) return null;
+                    return (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <WmsBadge code={live.configured ? 'CONFIGURED' : 'UNCONFIGURED'} />
+                        <span className="type-caption text-idpxyz-textMuted">{live.note}</span>
+                      </div>
+                    );
+                  })()}
                 </CardHeader>
                 <CardContent>
                   {target ? (
@@ -197,7 +271,7 @@ export function WarehouseSettingsPage() {
                       <td className="px-3 py-2 font-mono type-body">{rule.warehouseCode}</td>
                       <td className="px-3 py-2 font-mono type-body">{`r${rule.revision}`}</td>
                       <td className="px-3 py-2 font-mono type-body">{`${Math.round(rule.claimWindowSeconds / 86400)} 天（${rule.claimWindowSeconds}s）`}</td>
-                      <td className="px-3 py-2 type-body">{rule.disposalMethods.join('、')}</td>
+                      <td className="px-3 py-2 type-body">{rule.disposalMethods.map((method) => labelOf(method)).join('、')}</td>
                       <td className="px-3 py-2 font-mono type-caption text-idpxyz-textMuted">
                         {`${rule.registrant} · ${formatInstant(rule.registeredAt)}`}
                       </td>
@@ -218,6 +292,7 @@ export function WarehouseSettingsPage() {
         onSubmitted={() => {
           reloadRules();
           lookups.reload();
+          setOverviewTick((n) => n + 1);
         }}
       />
     </div>

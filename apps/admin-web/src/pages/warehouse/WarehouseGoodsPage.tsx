@@ -12,6 +12,7 @@ import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { useWarehouseLookups } from './use-catalogues';
+import { GoodsDetailModal } from './document-modals';
 
 const info = moduleInfoById['warehouse-goods'];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
@@ -36,6 +37,7 @@ export function WarehouseGoodsPage() {
   const [keyword, setKeyword] = useState('');
   const [answer, setAnswer] = useState<ApiResult<GoodsListBody> | null>(null);
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [detailCode, setDetailCode] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -72,7 +74,9 @@ export function WarehouseGoodsPage() {
   const rows = answer?.kind === 'outcome' ? answer.body.goods : [];
 
   const inspectorOf = (row: GoodsRecord): InspectorContent => {
-    const actions: InspectorAction[] = goodsTarget
+    const actions: InspectorAction[] = [
+      { label: '查看商品档案', onRun: () => setDetailCode(row.goodsCode) },
+      ...(goodsTarget
       ? [
           {
             label: `代录新修订（基于 r${row.revision}）`,
@@ -88,7 +92,8 @@ export function WarehouseGoodsPage() {
               }),
           },
         ]
-      : [];
+      : []),
+    ];
     return {
       title: row.name,
       subtitle: row.goodsCode,
@@ -121,7 +126,7 @@ export function WarehouseGoodsPage() {
       <ListPageTemplate<GoodsRecord>
         moduleId="warehouse-goods"
         title={info.title}
-        description="按货主查阅商品档案当前修订。货主也可经客户接口自助维护；运营代录须带依据引用。"
+        description="按货主查阅商品当前修订。双击看包装、别名、组合组件和尺寸重量。"
         headerActions={
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" onClick={() => setTick((n) => n + 1)}>
@@ -167,6 +172,7 @@ export function WarehouseGoodsPage() {
         rows={rows}
         rowKey={(row) => `${row.ownerAccount}/${row.goodsCode}`}
         inspector={inspectorOf}
+        onRowOpen={(row) => setDetailCode(row.goodsCode)}
         emptyRowsNote="该货主名下没有匹配的商品"
         viewState={
           owner.trim() === ''
@@ -182,6 +188,27 @@ export function WarehouseGoodsPage() {
                 emptyDescription: '点右上角「代录新商品」为该货主建立首个商品修订。',
                 narrowed: keyword.trim() !== '',
               })
+        }
+      />
+      <GoodsDetailModal
+        ownerAccount={owner.trim()}
+        goodsCode={detailCode}
+        onClose={() => setDetailCode(null)}
+        onRevise={
+          goodsTarget
+            ? (goods) => {
+                setDetailCode(null);
+                openGoodsForm({
+                  ownerAccount: goods.ownerAccount,
+                  goodsCode: goods.goodsCode,
+                  basisRevision: String(goods.revision),
+                  name: goods.name,
+                  baseUnit: goods.baseUnit,
+                  trackBatch: goods.trackBatch,
+                  trackExpiry: goods.trackExpiry,
+                });
+              }
+            : undefined
         }
       />
       <ActionDrawer

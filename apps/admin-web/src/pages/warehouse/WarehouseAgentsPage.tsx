@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Settings } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
@@ -9,12 +9,14 @@ import { chipClass } from '../../components/registration';
 import type { CatalogueConditions } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
-import { listOutboundRequests, type OutboundRequestRecord } from './api';
+import { getAgentOverview, listOutboundRequests, type AgentOverviewBody, type OutboundRequestRecord } from './api';
+import type { ApiResult } from '../catalogue-api';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { useWarehouseLookups } from './use-catalogues';
+import { labelOf, WmsBadge, WmsDetailModal, WmsKpiStrip, WmsSubTable } from './wms-ui';
 
 const info = moduleInfoById['warehouse-agents'];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
@@ -32,7 +34,7 @@ const columns: ListColumn<OutboundRequestRecord>[] = [
   { id: 'id', header: '出库单号', className: mono, render: (row) => row.documentNumber ?? row.requestId },
   { id: 'warehouse', header: '代理仓', className: mono, render: (row) => row.warehouseCode },
   { id: 'owner', header: '货主', className: mono, render: (row) => row.ownerAccount },
-  { id: 'status', header: '履约进展', render: (row) => statusLabels[row.status] ?? row.status },
+  { id: 'status', header: '履约进展', render: (row) => <WmsBadge code={row.status} label={statusLabels[row.status]} /> },
   { id: 'recipient', header: '收件人', render: (row) => row.recipient },
   { id: 'received', header: '受理时刻', className: mono, render: (row) => formatInstant(row.receivedAt) },
 ];
@@ -45,6 +47,8 @@ export function WarehouseAgentsPage() {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<string>('HANDED_OFF');
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [ledger, setLedger] = useState<ApiResult<AgentOverviewBody> | null>(null);
   const settled = useSettledKeyword(keyword);
 
   const conditions: CatalogueConditions = {
@@ -65,6 +69,18 @@ export function WarehouseAgentsPage() {
     if (!target) return;
     setDrawer((current) => ({ target, prefill, nonce: (current?.nonce ?? 0) + 1 }));
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAgentOverview().then((next) => {
+      if (!cancelled) setLedger(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const overview = ledger?.kind === 'outcome' ? ledger.body : null;
 
   const inspectorOf = (row: OutboundRequestRecord): InspectorContent => {
     const actions: InspectorAction[] = [];
@@ -114,6 +130,15 @@ export function WarehouseAgentsPage() {
             <Button
               type="button"
               variant="outline"
+              onClick={() => setLedgerOpen(true)}
+            >
+              {overview
+                ? `连接器 ${overview.connectors.length} · 声明 ${overview.statements.length} · 回传 ${overview.results.length}`
+                : '连接器、声明与回传'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
               onClick={() => {
                 window.location.hash = '#/warehouse-settings';
               }}
@@ -159,6 +184,59 @@ export function WarehouseAgentsPage() {
           narrowed: settled.trim() !== '',
         })}
       />
+      <WmsDetailModal
+        open={ledgerOpen}
+        title="代理仓台账"
+        subtitle="连接器、库存声明和履约回传"
+        onClose={() => setLedgerOpen(false)}
+      >
+        <WmsKpiStrip
+          items={[
+            { label: '连接器', value: overview?.connectors.length ?? '—', tone: (overview?.connectors.length ?? 0) > 0 ? 'success' : 'warning' },
+            { label: '库存声明', value: overview?.statements.length ?? '—' },
+            { label: '履约回传', value: overview?.results.length ?? '—' },
+          ]}
+        />
+        <WmsSubTable
+          title="连接器"
+          count={overview?.connectors.length ?? 0}
+          emptyText="还没有代理仓连接器。到仓配规则设置里登记。"
+          rows={overview?.connectors ?? []}
+          rowKey={(row) => row.warehouseCode}
+          columns={[
+            { id: 'wh', header: '代理仓', mono: true, render: (row) => row.warehouseCode },
+            { id: 'at', header: '登记时刻', mono: true, render: (row) => formatInstant(row.registeredAt) },
+          ]}
+        />
+        <WmsSubTable
+          title="库存声明"
+          count={overview?.statements.length ?? 0}
+          emptyText="还没有代理仓库存声明。"
+          rows={overview?.statements ?? []}
+          rowKey={(row) => row.sourceId}
+          columns={[
+            { id: 'wh', header: '仓', mono: true, render: (row) => row.warehouseCode },
+            { id: 'owner', header: '货主', mono: true, render: (row) => row.ownerAccount },
+            { id: 'goods', header: '商品', mono: true, render: (row) => row.goodsCode },
+            { id: 'qty', header: '数量', align: 'right', mono: true, render: (row) => `${row.quantity} ${row.unit}` },
+            { id: 'fresh', header: '新鲜度', render: (row) => <WmsBadge code={row.freshness} /> },
+            { id: 'until', header: '有效至', mono: true, render: (row) => formatInstant(row.validUntil) },
+          ]}
+        />
+        <WmsSubTable
+          title="履约回传"
+          count={overview?.results.length ?? 0}
+          emptyText="还没有代理仓回传打包、交接或拒单。"
+          rows={overview?.results ?? []}
+          rowKey={(row) => row.resultId}
+          columns={[
+            { id: 'req', header: '出库单', mono: true, render: (row) => row.requestId },
+            { id: 'kind', header: '结果', render: (row) => labelOf(row.kind) },
+            { id: 'wh', header: '仓', mono: true, render: (row) => row.warehouseCode },
+            { id: 'at', header: '回传时刻', mono: true, render: (row) => formatInstant(row.reportedAt) },
+          ]}
+        />
+      </WmsDetailModal>
       <ActionDrawer
         moduleId="warehouse-agents"
         active={drawer}

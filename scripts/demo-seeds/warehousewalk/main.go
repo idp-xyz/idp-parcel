@@ -570,6 +570,15 @@ func walkOperations(ctx context.Context, db *bentopg.DB) error {
 				whdomain.PlatformName{},
 				whdomain.AliasValidity{},
 			)
+			aliases := []whdomain.GoodsAlias{alias}
+			if g.code == "SYN-SKU-EARBUD-01" {
+				aliases = append(aliases, whdomain.NewGoodsAlias(
+					mustRef(whdomain.NewGoodsAliasCode, "AMZ-FBA-EARBUD-01"),
+					whdomain.GoodsAliasPlatformCode,
+					mustRef(whdomain.NewPlatformName, "AMAZON"),
+					whdomain.AliasValidity{},
+				))
+			}
 			content, err := whdomain.NewGoodsContent(whdomain.GoodsContentSpec{
 				Name:        mustRef(whdomain.NewGoodsName, g.name),
 				BaseUnit:    mustRef(whdomain.NewGoodsUnitName, "件"),
@@ -579,7 +588,7 @@ func walkOperations(ctx context.Context, db *bentopg.DB) error {
 					whdomain.NewPackagingLevel(mustRef(whdomain.NewGoodsUnitName, "件"), 1),
 					whdomain.NewPackagingLevel(mustRef(whdomain.NewGoodsUnitName, "箱"), g.boxFactor),
 				},
-				Aliases:              []whdomain.GoodsAlias{alias},
+				Aliases:              aliases,
 				Declaration:          decl,
 				DeclaredMeasurements: []whdomain.DeclaredMeasurement{dm},
 			})
@@ -1064,6 +1073,159 @@ func walkOperations(ctx context.Context, db *bentopg.DB) error {
 			return err
 		} else if dayRes.Outcome() != whapp.ChargeFormed && dayRes.Outcome() != whapp.ChargeExisting {
 			return fmt.Errorf("仓租日结：%s", dayRes.Outcome())
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// 8. 补齐退货预报与到仓、盘点任务、待批库存调整、库内短少差异与待执行换标指令，使全部 16 个 WMS 页面均有真实可操作的台账和明细
+	countIDs, err := whidentity.NewCountIdentities()
+	if err != nil {
+		return err
+	}
+	countHandler := whapp.NewCountHandler(countStore, countIDs, stockDiscIDs, warehouses, locations, zones, goods, holds, stock, opClock, warehouses).WithCharges(chargeHandler)
+	adjustmentStore, err := whpostgres.NewAdjustments(db)
+	if err != nil {
+		return err
+	}
+	adjustmentHandler := whapp.NewAdjustmentHandler(adjustmentStore, countStore, poster, stock, warehouses, locations, zones, goods, ownerLookup, holds, opClock, warehouses).WithCharges(chargeHandler)
+	instructionStore, err := whpostgres.NewInstructions(db)
+	if err != nil {
+		return err
+	}
+	instructionIDs, err := whidentity.NewInstructionIdentities()
+	if err != nil {
+		return err
+	}
+	instructionHandler := whapp.NewInstructionHandler(
+		instructionStore, instructionIDs, poster, stock, stock, warehouses, locations, zones, goods, goods,
+		ownerLookup, holds, opClock, warehouses, instructionStore, cartons, cartonIDs, stockIDs,
+	).WithCharges(chargeHandler)
+	returnStore, err := whpostgres.NewReturns(db)
+	if err != nil {
+		return err
+	}
+	returnIDs, err := whidentity.NewReturnIdentities()
+	if err != nil {
+		return err
+	}
+	returnNums, err := whpostgres.NewReturnNumbers(db, assigner)
+	if err != nil {
+		return err
+	}
+	returnHandler := whapp.NewReturnHandler(
+		returnStore, returnIDs, returnNums, warehouses, locations, zones, warehouses, ownerLookup, poster, stock,
+		unclaimedHandler, arrivals, opClock,
+	).WithCharges(chargeHandler)
+
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		// 8.1 退货预报 + 一件已到仓待回库处置的退件（供「退货管理」直接查看预报明细与一键回库处置）
+		retAdv, err := returnHandler.Accept(txCtx, whapp.AcceptReturnCommand{
+			Tenant: tenant, Owner: owner1, Warehouse: whSelf, Origin: whdomain.ReturnOriginOperator,
+			Key: "DEC-SEED-RET-01", Tracking: "SYN-TRK-RET-9001", Basis: "SYN-RET-BASIS-01", Operator: regOp,
+			Lines: []whports.ReturnLine{{Goods: mustRef(whdomain.NewGoodsCode, "SYN-SKU-EARBUD-01"), Unit: mustRef(whdomain.NewGoodsUnitName, "件"), Quantity: 2}},
+		})
+		if err != nil {
+			return err
+		}
+		if retAdv.Outcome() != whapp.ReturnAccepted && retAdv.Outcome() != whapp.ReturnExisting {
+			return fmt.Errorf("退货预报 01：%s", retAdv.Outcome())
+		}
+		retRec, err := returnHandler.Receive(txCtx, whapp.ReceiveReturnCommand{
+			Tenant: tenant, FactID: mustRef(whdomain.NewReturnFactID, "SYN-FACT-SEED-RET-01"),
+			Warehouse: whSelf, Location: mustRef(whdomain.NewLocationCode, "SYN-LOC-RET-01"),
+			Tracking: "SYN-TRK-RET-9001", Goods: mustRef(whdomain.NewGoodsCode, "SYN-SKU-EARBUD-01"),
+			Unit: mustRef(whdomain.NewGoodsUnitName, "件"), State: whdomain.StockStatePendingInspection,
+			Quantity: 2, OccurredAt: opTime.Add(30 * time.Minute), Operator: pdaOp, Device: pdaDevice,
+		})
+		if err != nil {
+			return err
+		}
+		if retRec.Outcome() != whapp.ReturnCounted && retRec.Outcome() != whapp.ReturnExisting {
+			return fmt.Errorf("退件到仓 01：%s", retRec.Outcome())
+		}
+
+		// 8.2 一张已开始进行中的盘点任务（供「盘点与调整」与作业台录清点）+ 一张已完结带差额待审的盘点任务
+		cnt1, err := countHandler.Create(txCtx, whapp.CreateCountCommand{
+			Tenant: tenant, DecisionID: mustRef(whdomain.NewRequestKey, "DEC-SEED-CNT-01"),
+			Warehouse: whSelf, Locations: []whdomain.LocationCode{mustRef(whdomain.NewLocationCode, "SYN-LOC-STORE-A02")},
+			Owner: owner1, Note: "标准存储区 A02 周度抽盘（演示）", Operator: regOp,
+		})
+		if err != nil {
+			return err
+		}
+		if c1, ok := cnt1.Count(); ok && c1.Status() == whdomain.CountPending {
+			if st, err := countHandler.Start(txCtx, whapp.CountCommand{Tenant: tenant, ID: c1.ID(), Operator: regOp}); err != nil {
+				return err
+			} else if st.Outcome() != whapp.CountStarted && st.Outcome() != whapp.CountExisting {
+				return fmt.Errorf("开始盘点 01：%s", st.Outcome())
+			}
+		}
+
+		// 8.3 一笔待批库存调整申请（由 approverOp 提交，演示配置员可直接点批准过账或驳回）
+		var defBatch whdomain.InboundBatchID
+		if defCells, err := stock.ListOnHandCells(txCtx, tenant, owner1, whSelf); err == nil {
+			for _, row := range defCells {
+				if row.LocationCode == "SYN-LOC-DEF-01" && row.GoodsCode == "SYN-SKU-CHARGER-02" {
+					defBatch = mustRef(whdomain.NewInboundBatchID, row.InboundBatchID)
+					break
+				}
+			}
+		}
+		adjRes, err := adjustmentHandler.Submit(txCtx, whapp.SubmitAdjustmentCommand{
+			Tenant: tenant, ID: mustRef(whdomain.NewRequestKey, "SYN-ADJ-SEED-01"),
+			Owner: owner1, Warehouse: whSelf, Reason: "库位复核发现外包装破损调减 1 件（演示待批）", Operator: approverOp,
+			Lines: []whports.AdjustmentLine{{
+				Kind: "DECREASE", Location: mustRef(whdomain.NewLocationCode, "SYN-LOC-DEF-01"),
+				Goods: mustRef(whdomain.NewGoodsCode, "SYN-SKU-CHARGER-02"), Unit: mustRef(whdomain.NewGoodsUnitName, "件"),
+				State: whdomain.StockStateDefective, Inbound: defBatch, Quantity: 1,
+			}},
+		})
+		if err != nil {
+			return err
+		}
+		if adjRes.Outcome() != whapp.ApprovalSubmitted && adjRes.Outcome() != whapp.ApprovalExisting {
+			return fmt.Errorf("提交库存调整 01：%s", adjRes.Outcome())
+		}
+
+		// 8.4 一条库内短少作业事实（自动生成 1 条待审批的 stock_discrepancy 差异记录）
+		shortLine, err := whdomain.NewInternalJobLine(whdomain.InternalJobLineSpec{
+			Owner: owner1, Goods: mustRef(whdomain.NewGoodsCode, "SYN-SKU-CHARGER-02"),
+			Unit: mustRef(whdomain.NewGoodsUnitName, "件"), State: whdomain.StockStateGood,
+			Quantity: 1, Source: mustRef(whdomain.NewLocationCode, "SYN-LOC-PICK-B02"),
+			Note: "巡检发现拣货位实物少 1 件（演示作业差异）",
+		})
+		if err != nil {
+			return err
+		}
+		shortRes, err := internalJobHandler.Register(txCtx, whapp.RegisterInternalJobCommand{
+			Tenant: tenant, FactID: mustRef(whdomain.NewInternalJobFactID, "SYN-FACT-SEED-SHORT-01"),
+			Kind: whdomain.InternalJobShortage, Device: pdaDevice, Operator: pdaOp,
+			OccurredAt: opTime.Add(35 * time.Minute), DeviceSequence: 4, Warehouse: whSelf,
+			Lines: []whdomain.InternalJobLine{shortLine},
+		})
+		if err != nil {
+			return err
+		}
+		if shortRes.Outcome() != whapp.RegisterInternalJobShortageRegistered && shortRes.Outcome() != whapp.RegisterInternalJobExisting {
+			return fmt.Errorf("库内短少 01：%s", shortRes.Outcome())
+		}
+
+		// 8.5 一条待执行的换标指令（供「加工与换标」列表查阅与作业台执行）
+		relRes, err := instructionHandler.Accept(txCtx, whapp.AcceptInstructionCommand{
+			Tenant: tenant, Owner: owner1, Warehouse: whSelf, Kind: whdomain.InstructionRelabel,
+			Origin: whdomain.InstructionOriginOperator, Goods: mustRef(whdomain.NewGoodsCode, "SYN-SKU-EARBUD-01"),
+			Unit: mustRef(whdomain.NewGoodsUnitName, "件"), Quantity: 10,
+			ToAlias:    mustRef(whdomain.NewGoodsAliasCode, "AMZ-FBA-EARBUD-01"),
+			DecisionID: mustRef(whdomain.NewRequestKey, "DEC-SEED-REL-01"),
+			Operator:   regOp, Reason: "备货转贴平台 FNSKU 标签（演示）", Basis: "SYN-REL-BASIS-01",
+		})
+		if err != nil {
+			return err
+		}
+		if relRes.Outcome() != whapp.InstructionAccepted && relRes.Outcome() != whapp.InstructionExisting {
+			return fmt.Errorf("换标指令 01：%s", relRes.Outcome())
 		}
 		return nil
 	}); err != nil {

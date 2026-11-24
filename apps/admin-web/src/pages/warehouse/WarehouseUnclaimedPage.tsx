@@ -13,6 +13,8 @@ import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { useWarehouseLookups } from './use-catalogues';
+import { UnclaimedDetailModal } from './document-modals';
+import { WmsBadge } from './wms-ui';
 
 const info = moduleInfoById['warehouse-unclaimed'];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
@@ -34,7 +36,7 @@ const columns: ListColumn<UnclaimedArrivalRecord>[] = [
   { id: 'id', header: '到货号', className: mono, render: (row) => row.arrivalId },
   { id: 'warehouse', header: '仓库', className: mono, render: (row) => row.warehouseCode },
   { id: 'kind', header: '种类', render: (row) => kindLabels[row.kind] ?? row.kind },
-  { id: 'status', header: '状态', render: (row) => statusLabels[row.status] ?? row.status },
+  { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} label={statusLabels[row.status]} /> },
   { id: 'obs', header: '现场观察', render: (row) => row.observation || '—' },
   { id: 'received', header: '登记时刻', className: mono, render: (row) => formatInstant(row.receivedAt) },
 ];
@@ -47,6 +49,7 @@ export function WarehouseUnclaimedPage() {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<ArrivalStatusFilter>('UNCLAIMED');
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [opened, setOpened] = useState<UnclaimedArrivalRecord | null>(null);
   const settled = useSettledKeyword(keyword);
 
   const conditions: CatalogueConditions = {
@@ -78,7 +81,7 @@ export function WarehouseUnclaimedPage() {
       );
     }
 
-    const actions: InspectorAction[] = [];
+    const actions: InspectorAction[] = [{ label: '查看到货明细', onRun: () => setOpened(row) }];
     if (row.status === 'UNCLAIMED') {
       if (targetMap.has('unclaimed-claim')) {
         actions.push({
@@ -121,7 +124,7 @@ export function WarehouseUnclaimedPage() {
       <ListPageTemplate<UnclaimedArrivalRecord>
         moduleId="warehouse-unclaimed"
         title={info.title}
-        description="一线登记的无主到货与逾期到达转入的待认领队列。单击行即可在右栏认领、撤销认领或按仓处置规则处置。"
+        description="无主到货与逾期到达。双击看现场观察和线索；单击行在右栏认领或按规则处置。"
         headerActions={
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => { window.location.hash = '#/warehouse-settings'; }}>
@@ -152,6 +155,7 @@ export function WarehouseUnclaimedPage() {
         rows={rows}
         rowKey={(row) => row.arrivalId}
         inspector={inspectorOf}
+        onRowOpen={setOpened}
         pagination={pagination}
         emptyRowsNote="当前条件下没有匹配的待认领到货"
         viewState={catalogueViewState(answer, rows.length, retry, {
@@ -162,6 +166,7 @@ export function WarehouseUnclaimedPage() {
           narrowed: settled.trim() !== '' || (status !== 'UNCLAIMED' && status !== 'ALL'),
         })}
       />
+      <UnclaimedDetailModal row={opened} onClose={() => setOpened(null)} />
       <ActionDrawer
         moduleId="warehouse-unclaimed"
         active={drawer}

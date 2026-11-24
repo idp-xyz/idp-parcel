@@ -6,10 +6,12 @@ import type { InspectorAction, InspectorContent } from '../../templates/inspecto
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
+import { WmsBadge } from './wms-ui';
 import type { CatalogueConditions } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { listOutboundRequests, type OutboundRequestRecord } from './api';
+import { OutboundDetailModal } from './document-modals';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
@@ -41,7 +43,7 @@ const columns: ListColumn<OutboundRequestRecord>[] = [
   { id: 'id', header: '出库单号', className: mono, render: (row) => row.documentNumber ?? row.requestId },
   { id: 'owner', header: '货主', className: mono, render: (row) => row.ownerAccount },
   { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
-  { id: 'status', header: '状态', render: (row) => statusLabels[row.status] ?? row.status },
+  { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} label={statusLabels[row.status]} /> },
   { id: 'dispatch', header: '发货途径', render: (row) => (row.dispatch === 'OWNER_LABEL' ? '货主面单' : row.service || '走发运') },
   { id: 'qty', header: '预占 / 需求', className: mono, render: (row) => `${row.reservedQuantity} / ${row.wantedQuantity}` },
   { id: 'received', header: '受理时刻', className: mono, render: (row) => formatInstant(row.receivedAt) },
@@ -56,6 +58,7 @@ export function WarehouseOutboundPage() {
   const [status, setStatus] = useState<string>('ALL');
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const settled = useSettledKeyword(keyword);
   const conditions: CatalogueConditions = {
@@ -100,7 +103,7 @@ export function WarehouseOutboundPage() {
   ) : undefined;
 
   const inspectorOf = (row: OutboundRequestRecord): InspectorContent => {
-    const actions: InspectorAction[] = [];
+    const actions: InspectorAction[] = [{ label: '查看完整明细', onRun: () => setDetailId(row.requestId) }];
     if (row.status === 'RESERVED' && targetMap.has('wave-release')) {
       actions.push({
         label: '单票释放波次',
@@ -162,7 +165,7 @@ export function WarehouseOutboundPage() {
       <ListPageTemplate<OutboundRequestRecord>
         moduleId="warehouse-outbound"
         title={info.title}
-        description="出库请求台账。勾选多张同仓「已预占」订单即可批量合并释放波次；单击行可拆单、截单或登记面单。"
+        description="出库请求台账。勾选同仓已预占订单可合并放波次。单击行做拆单、截单；双击打开预占、拣货、复核、包裹和确认。"
         headerActions={
           <div className="flex flex-wrap gap-2">
             {targetMap.has('outbound-request') ? (
@@ -195,6 +198,7 @@ export function WarehouseOutboundPage() {
         rows={rows}
         rowKey={(row) => row.requestId}
         inspector={inspectorOf}
+        onRowOpen={(row) => setDetailId(row.requestId)}
         pagination={pagination}
         emptyRowsNote="当前条件下没有匹配的出库单"
         viewState={catalogueViewState(answer, rows.length, retry, {
@@ -204,6 +208,18 @@ export function WarehouseOutboundPage() {
           emptyDescription: '点右上角「代录出库单」创建测试或运营代录单，或等待货主经客户接口提交。',
           narrowed: settled.trim() !== '' || status !== 'ALL',
         })}
+      />
+      <OutboundDetailModal
+        requestId={detailId}
+        canWave={targetMap.has('wave-release')}
+        canSplit={targetMap.has('outbound-split')}
+        canCutoff={targetMap.has('outbound-cutoff')}
+        canLabel={targetMap.has('owner-label')}
+        onClose={() => setDetailId(null)}
+        onAction={(id, prefill) => {
+          setDetailId(null);
+          openAction(id, prefill);
+        }}
       />
       <ActionDrawer
         moduleId="warehouse-outbound"

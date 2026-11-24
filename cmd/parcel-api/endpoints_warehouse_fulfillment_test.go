@@ -229,7 +229,41 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		chargeOccurrenceQueries:   unwiredChargeOccurrenceQueries{},
 		warehouseAdoptionQueries:  unwiredWarehouseChargeReads{},
 		warehouseChargeReqQueries: unwiredWarehouseChargeReads{},
+		workspaceQueries:          unwiredWorkspaceQueries{},
 	}
+}
+
+type unwiredWorkspaceQueries struct{}
+
+func (unwiredWorkspaceQueries) SettingsOverview(context.Context, warehousedomain.TenantID) (warehouseports.SettingsOverview, error) {
+	return warehouseports.SettingsOverview{}, errOrchestrationNotWired
+}
+func (unwiredWorkspaceQueries) OutboundRequestDetail(context.Context, warehousedomain.TenantID, string) (warehouseports.OutboundRequestDetail, bool, error) {
+	return warehouseports.OutboundRequestDetail{}, false, errOrchestrationNotWired
+}
+func (unwiredWorkspaceQueries) ListFreezes(context.Context, warehousedomain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[warehouseports.StockFreezeListRow], error) {
+	return cataloguepage.Result[warehouseports.StockFreezeListRow]{}, errOrchestrationNotWired
+}
+func (unwiredWorkspaceQueries) ListCounts(context.Context, warehousedomain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[warehouseports.StockCountRow], error) {
+	return cataloguepage.Result[warehouseports.StockCountRow]{}, errOrchestrationNotWired
+}
+func (unwiredWorkspaceQueries) CountDetail(context.Context, warehousedomain.TenantID, string) (warehouseports.StockCountDetail, bool, error) {
+	return warehouseports.StockCountDetail{}, false, errOrchestrationNotWired
+}
+func (unwiredWorkspaceQueries) ListAdjustments(context.Context, warehousedomain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[warehouseports.StockAdjustmentRow], error) {
+	return cataloguepage.Result[warehouseports.StockAdjustmentRow]{}, errOrchestrationNotWired
+}
+func (unwiredWorkspaceQueries) ListJobDiscrepancies(context.Context, warehousedomain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[warehouseports.JobDiscrepancyRow], error) {
+	return cataloguepage.Result[warehouseports.JobDiscrepancyRow]{}, errOrchestrationNotWired
+}
+func (unwiredWorkspaceQueries) ListInstructions(context.Context, warehousedomain.TenantID, int, cataloguepage.Query) (cataloguepage.Result[warehouseports.InstructionRow], error) {
+	return cataloguepage.Result[warehouseports.InstructionRow]{}, errOrchestrationNotWired
+}
+func (unwiredWorkspaceQueries) ReturnsOverview(context.Context, warehousedomain.TenantID) (warehouseports.ReturnsOverview, error) {
+	return warehouseports.ReturnsOverview{}, errOrchestrationNotWired
+}
+func (unwiredWorkspaceQueries) AgentOverview(context.Context, warehousedomain.TenantID, time.Time) (warehouseports.AgentOverview, error) {
+	return warehouseports.AgentOverview{}, errOrchestrationNotWired
 }
 
 type unwiredChargeOccurrenceQueries struct{}
@@ -770,6 +804,16 @@ const (
 	chargeOccurrenceListLine    = "/warehouse-fulfillment-charge-occurrences"
 	warehouseAdoptionListLine   = "/warehouse-fulfillment-charge-adoption-list"
 	warehouseChargeRequestsLine = "/warehouse-fulfillment-charge-requests"
+	settingsOverviewLine        = "/warehouse-fulfillment-settings-overview"
+	outboundRequestDetailLine   = "/warehouse-fulfillment-outbound-request"
+	freezeListLine              = "/warehouse-fulfillment-freezes"
+	countListLine               = "/warehouse-fulfillment-counts"
+	countDetailLine             = "/warehouse-fulfillment-count"
+	adjustmentListLine          = "/warehouse-fulfillment-adjustments"
+	jobDiscrepancyListLine      = "/warehouse-fulfillment-job-discrepancies"
+	instructionListLine         = "/warehouse-fulfillment-instructions"
+	returnsOverviewLine         = "/warehouse-fulfillment-returns-overview"
+	agentOverviewLine           = "/warehouse-fulfillment-agent-overview"
 
 	customerGoodsWriteLine         = "/v1/warehouse/goods"
 	customerGoodsListLine          = "/v1/warehouse/reads/goods"
@@ -988,6 +1032,16 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		chargeOccurrenceListLine:                                      {http.MethodGet, faceOperationsRead},
 		warehouseAdoptionListLine:                                     {http.MethodGet, faceOperationsRead},
 		warehouseChargeRequestsLine:                                   {http.MethodGet, faceOperationsRead},
+		settingsOverviewLine:                                          {http.MethodGet, faceOperationsRead},
+		outboundRequestDetailLine:                                     {http.MethodGet, faceOperationsRead},
+		freezeListLine:                                                {http.MethodGet, faceOperationsRead},
+		countListLine:                                                 {http.MethodGet, faceOperationsRead},
+		countDetailLine:                                               {http.MethodGet, faceOperationsRead},
+		adjustmentListLine:                                            {http.MethodGet, faceOperationsRead},
+		jobDiscrepancyListLine:                                        {http.MethodGet, faceOperationsRead},
+		instructionListLine:                                           {http.MethodGet, faceOperationsRead},
+		returnsOverviewLine:                                           {http.MethodGet, faceOperationsRead},
+		agentOverviewLine:                                             {http.MethodGet, faceOperationsRead},
 
 		customerGoodsWriteLine:         {http.MethodPost, faceCustomerClient},
 		customerGoodsListLine:          {http.MethodGet, faceCustomerClient},
@@ -1240,6 +1294,16 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			chargeOccurrenceListLine:                               {status, code},
 			warehouseAdoptionListLine:                              {status, code},
 			warehouseChargeRequestsLine:                            {status, code},
+			settingsOverviewLine:                                   {status, code},
+			outboundRequestDetailLine:                              {status, code},
+			freezeListLine:                                         {status, code},
+			countListLine:                                          {status, code},
+			countDetailLine:                                        {status, code},
+			adjustmentListLine:                                     {status, code},
+			jobDiscrepancyListLine:                                 {status, code},
+			instructionListLine:                                    {status, code},
+			returnsOverviewLine:                                    {status, code},
+			agentOverviewLine:                                      {status, code},
 		}
 	}
 	cases := []struct {
@@ -1363,6 +1427,16 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			chargeOccurrenceListLine:                               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseAdoptionListLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseChargeRequestsLine:                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			settingsOverviewLine:                                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			outboundRequestDetailLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			freezeListLine:                                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			countListLine:                                          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			countDetailLine:                                        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			adjustmentListLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			jobDiscrepancyListLine:                                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			instructionListLine:                                    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			returnsOverviewLine:                                    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			agentOverviewLine:                                      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		}},
 		{"read grant only", operationsReaderRegister{}, presentedOperatorToken, map[string]answer{
 			warehouseRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1479,6 +1553,16 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			chargeOccurrenceListLine:                               {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseAdoptionListLine:                              {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseChargeRequestsLine:                            {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			settingsOverviewLine:                                   {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			outboundRequestDetailLine:                              {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			freezeListLine:                                         {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			countListLine:                                          {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			countDetailLine:                                        {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			adjustmentListLine:                                     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			jobDiscrepancyListLine:                                 {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			instructionListLine:                                    {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			returnsOverviewLine:                                    {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			agentOverviewLine:                                      {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 		}},
 		{"no bearer token", everyOperatorGrant{}, "", same(http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED")},
 		{"register is down", failingRegister{}, presentedOperatorToken, same(http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE")},

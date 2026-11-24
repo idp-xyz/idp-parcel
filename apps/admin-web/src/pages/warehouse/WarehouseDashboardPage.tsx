@@ -4,9 +4,11 @@ import {
   BadgeDollarSign,
   Boxes,
   ClipboardCheck,
+  Lock,
   PackagePlus,
   RefreshCw,
   Route,
+  Scale,
   Send,
   TabletSmartphone,
   Warehouse,
@@ -22,6 +24,9 @@ import {
   listWarehouseChargeRequests,
   listWarehousePlans,
   listWaves,
+  listCounts,
+  listAdjustments,
+  listFreezes,
 } from './api';
 
 const info = moduleInfoById['warehouse-dashboard'];
@@ -49,6 +54,9 @@ export function WarehouseDashboardPage() {
     reservedOutbound: '—',
     waves: '—',
     openTasks: '—',
+    counting: '—',
+    pendingAdjustments: '—',
+    frozen: '—',
     warehouses: '—',
     whDevices: '—',
     plans: '—',
@@ -66,7 +74,10 @@ export function WarehouseDashboardPage() {
       listWorkDevices({ filters: { status: ['REGISTERED'] } }),
       listWarehousePlans({}),
       listWarehouseChargeRequests({}),
-    ]).then(([imp, unc, out, wav, wh, dev, pln, req]) => {
+      listCounts({ filters: { status: ['PENDING', 'COUNTING'] } }),
+      listAdjustments({ filters: { status: ['PENDING'] } }),
+      listFreezes({ filters: { status: ['FROZEN'] } }),
+    ]).then(([imp, unc, out, wav, wh, dev, pln, req, counting, adjustments, freezes]) => {
       const openTasks =
         wav.kind === 'outcome'
           ? wav.body.waves.reduce((sum, w) => sum + w.tasks.filter((t) => t.status === 'OPEN').length, 0)
@@ -81,6 +92,9 @@ export function WarehouseDashboardPage() {
         reservedOutbound: out.kind === 'outcome' ? String(out.body.page.total ?? out.body.requests.length) : '—',
         waves: wav.kind === 'outcome' ? String(wav.body.page.total ?? wav.body.waves.length) : '—',
         openTasks: openTasks === null ? '—' : String(openTasks),
+        counting: counting.kind === 'outcome' ? String(counting.body.page.total ?? counting.body.counts.length) : '—',
+        pendingAdjustments: adjustments.kind === 'outcome' ? String(adjustments.body.page.total ?? adjustments.body.adjustments.length) : '—',
+        frozen: freezes.kind === 'outcome' ? String(freezes.body.page.total ?? freezes.body.freezes.length) : '—',
         warehouses: wh.kind === 'outcome' ? String(wh.body.page.total ?? (wh.body.warehouses?.length ?? 0)) : '—',
         whDevices: whDevices === null ? '—' : String(whDevices),
         plans: pln.kind === 'outcome' ? String(pln.body.page.total ?? pln.body.plans.length) : '—',
@@ -99,6 +113,9 @@ export function WarehouseDashboardPage() {
     { label: '待认领到货', value: counts.unclaimed, note: '无主到货与逾期到达', target: 'warehouse-unclaimed', icon: AlertTriangle },
     { label: '待放波次出库单', value: counts.reservedOutbound, note: '已预占，可合并释放波次', target: 'warehouse-outbound', icon: Send },
     { label: '待拣货任务', value: counts.openTasks, note: `共 ${counts.waves} 个已放波次`, target: 'warehouse-waves', icon: Route },
+    { label: '盘点进行中', value: counts.counting, note: '待开始或正在清点', target: 'warehouse-counts-adjustments', icon: ClipboardCheck },
+    { label: '待批库存调整', value: counts.pendingAdjustments, note: '提交后尚未入账', target: 'warehouse-counts-adjustments', icon: Scale },
+    { label: '冻结中', value: counts.frozen, note: '不可被出库分配', target: 'warehouse-processing', icon: Lock },
     { label: '在用仓库', value: counts.warehouses, note: '自营仓与代理仓', target: 'warehouse-catalogues', icon: Warehouse },
     { label: '在用仓库扫码设备', value: counts.whDevices, note: '实体终端与网页工位', target: 'warehouse-workstation', icon: TabletSmartphone },
     { label: '仓储计费方案', value: counts.plans, note: `累计 ${counts.chargeRequests} 笔计费请求`, target: 'warehouse-pricing', icon: BadgeDollarSign },

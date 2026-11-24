@@ -12,6 +12,8 @@ import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { useWarehouseLookups } from './use-catalogues';
+import { PreAdviceDetailModal } from './document-modals';
+import { WmsBadge } from './wms-ui';
 
 const info = moduleInfoById['warehouse-pre-advices'];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
@@ -33,7 +35,7 @@ const columns: ListColumn<PreAdviceRecord>[] = [
   { id: 'number', header: '入库单号', className: mono, render: (row) => row.documentNumber ?? '—' },
   { id: 'warehouse', header: '仓库', className: mono, render: (row) => row.warehouseCode },
   { id: 'mode', header: '入库形态', render: (row) => inboundModeLabels[row.inboundMode] ?? row.inboundMode },
-  { id: 'status', header: '状态', render: (row) => statusLabels[row.status] ?? row.status },
+  { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} label={statusLabels[row.status]} /> },
   { id: 'at', header: '受理时刻', className: mono, render: (row) => formatInstant(row.acceptedAt) },
 ];
 
@@ -46,6 +48,7 @@ export function WarehousePreAdvicesPage() {
   const [keyword, setKeyword] = useState('');
   const [answer, setAnswer] = useState<ApiResult<PreAdviceListBody> | null>(null);
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -79,7 +82,7 @@ export function WarehousePreAdvicesPage() {
   const rows = answer?.kind === 'outcome' ? answer.body.preAdvices : [];
 
   const inspectorOf = (row: PreAdviceRecord): InspectorContent => {
-    const actions: InspectorAction[] = [];
+    const actions: InspectorAction[] = [{ label: '查看完整明细', onRun: () => setDetailId(row.preAdviceId) }];
     if (row.status === 'ADVISED' || row.status === 'RECEIVING') {
       actions.push({
         label: '去作业台扫码收货',
@@ -138,7 +141,7 @@ export function WarehousePreAdvicesPage() {
       <ListPageTemplate<PreAdviceRecord>
         moduleId="warehouse-pre-advices"
         title={info.title}
-        description="管理货主入库预报单。收货确认在「仓内作业台」完成；收货中可在此完结计算少收，差异可代录结论。"
+        description="管理货主入库预报。双击看商品行、整箱、已收进度和收货事实；收货本身在作业台完成。"
         headerActions={
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" onClick={() => setTick((n) => n + 1)}>
@@ -193,6 +196,7 @@ export function WarehousePreAdvicesPage() {
         rows={rows}
         rowKey={(row) => row.preAdviceId}
         inspector={inspectorOf}
+        onRowOpen={(row) => setDetailId(row.preAdviceId)}
         emptyRowsNote="该货主名下没有匹配的入库预报"
         viewState={
           owner.trim() === ''
@@ -209,6 +213,18 @@ export function WarehousePreAdvicesPage() {
                 narrowed: keyword.trim() !== '',
               })
         }
+      />
+      <PreAdviceDetailModal
+        ownerAccount={owner.trim()}
+        preAdviceId={detailId}
+        canNotice={targetMap.has('pre-advice-notice')}
+        canWithdraw={targetMap.has('pre-advice-withdrawal')}
+        canClose={targetMap.has('pre-advice-close')}
+        onClose={() => setDetailId(null)}
+        onAction={(id, prefill) => {
+          setDetailId(null);
+          openAction(id, prefill);
+        }}
       />
       <ActionDrawer
         moduleId="warehouse-pre-advices"

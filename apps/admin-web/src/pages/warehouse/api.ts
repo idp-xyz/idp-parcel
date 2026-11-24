@@ -77,6 +77,25 @@ export interface CatalogueListBody {
   page: CataloguePage;
 }
 
+export interface StockImportGoodsLineRecord {
+  locationCode: string;
+  goodsCode: string;
+  unit: string;
+  stockState: string;
+  quantity: number;
+  batchNumber?: string;
+  expiryDate?: string;
+  labelAlias?: string;
+  declaredInboundAt?: string;
+}
+
+export interface StockImportCartonLineRecord {
+  locationCode: string;
+  cartonNumber: string;
+  contents: ReadonlyArray<{ goodsCode: string; quantity: number }>;
+  declaredInboundAt?: string;
+}
+
 export interface StockImportRecord {
   importId: string;
   ownerAccount: string;
@@ -85,10 +104,13 @@ export interface StockImportRecord {
   status: string;
   submitter: string;
   submittedAt: string;
-  goodsLines: readonly unknown[];
-  cartonLines: readonly unknown[];
+  goodsLines: readonly StockImportGoodsLineRecord[];
+  cartonLines: readonly StockImportCartonLineRecord[];
   poster?: string;
+  dutyRevision?: number;
   postedAt?: string;
+  goodsMovementId?: string;
+  cartonMovementId?: string;
   rejector?: string;
   rejectedAt?: string;
   rejectionNote?: string;
@@ -179,6 +201,65 @@ export interface InternalJobListBody {
   page: CataloguePage;
 }
 
+export interface PreAdviceGoodsLineRecord {
+  goodsCode: string;
+  unit: string;
+  quantity: number;
+  batchNumber?: string;
+  expiryDate?: string;
+  cartonCount?: number;
+}
+
+export interface PreAdviceCartonRecord {
+  cartonNumber: string;
+  lines: ReadonlyArray<{ goodsCode: string; quantity: number }>;
+}
+
+export interface PreAdviceNoticeRecord {
+  version: number;
+  expectedAt: string;
+  arrivalClue?: string;
+  ownerReference?: string;
+  submissionPath: string;
+  evidenceReference?: string;
+  registrant: string;
+  recordedAt: string;
+}
+
+export interface PreAdviceReceiptRecord {
+  factId: string;
+  shape: string;
+  outcome: string;
+  device: string;
+  operator: string;
+  occurredAt: string;
+  receivedAt: string;
+  unclaimedArrivalId?: string;
+  lines?: ReadonlyArray<{
+    observed: string;
+    goodsCode?: string;
+    unit: string;
+    stockState: string;
+    quantity: number;
+    locationCode: string;
+    result?: string;
+    unpostedReason?: string;
+  }>;
+  cartonLines?: ReadonlyArray<{
+    cartonNumber: string;
+    warehouseCartonNumber?: string;
+    damaged?: boolean;
+    locationCode: string;
+    result?: string;
+    unpostedReason?: string;
+  }>;
+  discrepancy?: {
+    discrepancyId: string;
+    lines: ReadonlyArray<{ kind: string; quantity?: number; goodsCode?: string; observed?: string; cartonNumber?: string }>;
+    conclusion?: { verdict: string; note?: string; concludedAt: string; operator?: string };
+  };
+}
+
 export interface PreAdviceRecord {
   preAdviceId: string;
   ownerAccount: string;
@@ -189,10 +270,31 @@ export interface PreAdviceRecord {
   documentNumber?: string;
   numberingAbsence?: string;
   submissionPath: string;
+  evidenceReference?: string;
   registrant: string;
   acceptedAt: string;
-  goodsLines?: readonly unknown[];
-  cartons?: readonly unknown[];
+  goodsLines?: readonly PreAdviceGoodsLineRecord[];
+  cartons?: readonly PreAdviceCartonRecord[];
+  currentNotice?: PreAdviceNoticeRecord;
+  notices?: readonly PreAdviceNoticeRecord[];
+  cumulativeReceived?: ReadonlyArray<{ goodsCode?: string; cartonNumber?: string; quantity: number }>;
+  receipts?: readonly PreAdviceReceiptRecord[];
+  closure?: {
+    closedAt: string;
+    operator?: string;
+    note?: string;
+    discrepancyId?: string;
+    shortages?: ReadonlyArray<{ goodsCode?: string; cartonNumber?: string; quantity?: number }>;
+  };
+  unclaimedArrival?: boolean;
+}
+
+export interface PreAdviceOneBody {
+  outcome: string;
+  ownerAccount: string;
+  preAdviceId: string;
+  found: boolean;
+  preAdvice?: PreAdviceRecord;
 }
 
 export interface PreAdviceListBody {
@@ -202,17 +304,58 @@ export interface PreAdviceListBody {
   page: CataloguePage;
 }
 
+export interface GoodsDimensionsRecord {
+  length: string;
+  width: string;
+  height: string;
+  unit: string;
+}
+
+export interface GoodsWeightRecord {
+  value: string;
+  unit: string;
+}
+
 export interface GoodsRecord {
   ownerAccount: string;
   goodsCode: string;
   revision: number;
   name: string;
   baseUnit: string;
+  packagingLevels?: ReadonlyArray<{ name: string; factor: number }>;
   trackBatch: boolean;
   trackExpiry: boolean;
+  aliases?: ReadonlyArray<{ code: string; type: string; platform?: string; validity?: { from?: string; to?: string } }>;
   composite: boolean;
+  composition?: { outboundMode: string; components: ReadonlyArray<{ code: string; quantity: number }> };
+  declaration?: { name?: string; hsCode?: string; originCountry?: string; unitPrice?: string; currency?: string };
+  declaredMeasurements?: ReadonlyArray<{ level: string; dimensions?: GoodsDimensionsRecord; weight?: GoodsWeightRecord }>;
+  warehouseMeasurements?: ReadonlyArray<{
+    level: string;
+    measured: boolean;
+    current?: {
+      factId: string;
+      warehouseCode: string;
+      device: string;
+      operator: string;
+      occurredAt: string;
+      dimensions: GoodsDimensionsRecord;
+      weight: GoodsWeightRecord;
+    };
+    declared?: { source: string; dimensions?: GoodsDimensionsRecord; weight?: GoodsWeightRecord };
+  }>;
+  submissionPath?: string;
+  evidenceReference?: string;
   registrant: string;
   registeredAt: string;
+}
+
+export interface GoodsCurrentBody {
+  outcome: string;
+  ownerAccount: string;
+  goodsCode: string;
+  found: boolean;
+  goods?: GoodsRecord;
 }
 
 export interface GoodsListBody {
@@ -581,4 +724,465 @@ export function approveStockImport(snapshot: unknown): Promise<ApiResult<Registr
 
 export function rejectStockImport(snapshot: unknown): Promise<ApiResult<RegistrationResponseBody>> {
   return postStockImport('/warehouse-fulfillment-stock-import-rejections', snapshot);
+}
+
+// ============================================================================
+// 仓配 360° 详情与全模块台账读口
+// ============================================================================
+
+export function getPreAdviceDetail(ownerAccount: string, preAdviceId: string): Promise<ApiResult<PreAdviceOneBody>> {
+  const params = new URLSearchParams({ ownerAccount, preAdviceId });
+  return exchangeMasterData<PreAdviceOneBody>(`/warehouse-fulfillment-inbound-pre-advice?${params.toString()}`);
+}
+
+export function getGoodsCurrent(ownerAccount: string, goodsCode: string): Promise<ApiResult<GoodsCurrentBody>> {
+  const params = new URLSearchParams({ ownerAccount, goodsCode });
+  return exchangeMasterData<GoodsCurrentBody>(`/warehouse-fulfillment-goods-current?${params.toString()}`);
+}
+
+export interface SettingsOverviewBody {
+  outcome: string;
+  allocationStrategy: { configured: boolean; revision?: number; operator?: string; registeredAt?: string };
+  shortagePolicies: ReadonlyArray<{ ownerAccount: string; revision: number; kind: string; operator: string; registeredAt: string }>;
+  approvalDuty: { configured: boolean; revision?: number; distinctSubjects?: boolean; operator?: string; registeredAt?: string };
+  disposalRules: ReadonlyArray<DisposalRuleRecord>;
+  chargeUnits: ReadonlyArray<{ warehouseCode: string; revision: number; weightUnit: string; volumeUnit: string; registeredAt: string }>;
+  chargeAging: ReadonlyArray<{ warehouseCode: string; basis: string; registeredAt: string }>;
+  chargeProjects: ReadonlyArray<{ warehouseCode: string; projectName: string; registeredAt: string }>;
+  agentConnectors: ReadonlyArray<{ warehouseCode: string; registeredAt: string }>;
+}
+
+export function getSettingsOverview(): Promise<ApiResult<SettingsOverviewBody>> {
+  return exchangeMasterData<SettingsOverviewBody>('/warehouse-fulfillment-settings-overview');
+}
+
+export interface OutboundRequestDetailBody {
+  outcome: string;
+  request?: OutboundRequestRecord;
+  lines?: ReadonlyArray<{
+    lineIndex: number;
+    goodsCode: string;
+    unit: string;
+    stockState: string;
+    labelAlias?: string;
+    batchNumber?: string;
+    expiryDate?: string;
+    quantity: number;
+  }>;
+  reservations?: ReadonlyArray<{
+    lineIndex: number;
+    goodsCode: string;
+    stockState: string;
+    labelAlias?: string;
+    batchNumber?: string;
+    expiryDate?: string;
+    quantity: number;
+    fromUnlabeled: number;
+    wanted: number;
+  }>;
+  waves?: readonly string[];
+  pickTasks?: ReadonlyArray<{
+    taskId: string;
+    waveId: string;
+    locationCode: string;
+    stagingLocation?: string;
+    goodsCode: string;
+    unit: string;
+    stockState: string;
+    inboundBatchId: string;
+    quantity: number;
+    picked: number;
+    status: string;
+    factId?: string;
+  }>;
+  checks?: ReadonlyArray<{ factId: string; observed: number; matched: boolean; checkedAt: string }>;
+  parcels?: ReadonlyArray<{
+    parcelSequence: number;
+    packagingMaterial: string;
+    weightValue: string;
+    weightUnit: string;
+    lengthValue: string;
+    widthValue: string;
+    heightValue: string;
+    dimensionUnit: string;
+    shipmentRequestId?: string;
+    confirmationState?: string;
+    cutoffState?: string;
+    ownerLabel?: string;
+    lines: ReadonlyArray<{ goodsCode: string; unit: string; quantity: number }>;
+  }>;
+  confirmations?: ReadonlyArray<{
+    factId: string;
+    parcelSequence: number;
+    kind: string;
+    offline: boolean;
+    missing: string;
+    externalNumber?: string;
+    pickupParty?: string;
+    pickupCredential?: string;
+    occurredAt: string;
+    correctionKind?: string;
+    correctionStatus?: string;
+  }>;
+  returnTasks?: ReadonlyArray<{
+    returnId: string;
+    parcelSequence?: number;
+    locationCode: string;
+    goodsCode: string;
+    unit: string;
+    stockState: string;
+    inboundBatchId: string;
+    quantity: number;
+    status: string;
+    factId?: string;
+  }>;
+}
+
+export function getOutboundRequestDetail(requestId: string): Promise<ApiResult<OutboundRequestDetailBody>> {
+  const params = new URLSearchParams({ requestId });
+  return exchangeMasterData<OutboundRequestDetailBody>(`/warehouse-fulfillment-outbound-request?${params.toString()}`);
+}
+
+export interface StockFreezeRecord {
+  freezeId: string;
+  decisionId: string;
+  ownerAccount: string;
+  warehouseCode: string;
+  target: string;
+  locationCode?: string;
+  goodsCode?: string;
+  unit?: string;
+  stockState?: string;
+  labelAlias?: string;
+  inboundBatchId?: string;
+  batchNumber?: string;
+  expiryDate?: string;
+  cartonNumber?: string;
+  quantity: number;
+  reason: string;
+  operator: string;
+  frozenAt: string;
+  status: string;
+  unfreezeOperator?: string;
+  unfrozenAt?: string;
+  unfreezeNote?: string;
+}
+
+export interface StockFreezeListBody {
+  outcome: string;
+  freezes: StockFreezeRecord[];
+  page: CataloguePage;
+}
+
+export function listFreezes(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<StockFreezeListBody>> {
+  return exchangeMasterData<StockFreezeListBody>(catalogueRequestPath('/warehouse-fulfillment-freezes', conditions, after));
+}
+
+export interface StockCountRecord {
+  countId: string;
+  decisionId: string;
+  warehouseCode: string;
+  ownerAccount?: string;
+  note?: string;
+  operator: string;
+  createdAt: string;
+  status: string;
+  startedBy?: string;
+  startedAt?: string;
+  completedBy?: string;
+  completedAt?: string;
+  voidedBy?: string;
+  voidedAt?: string;
+  voidReason?: string;
+  locations: string[];
+  goods: string[];
+  entryCount: number;
+  differenceCount: number;
+  pendingDifferences: number;
+}
+
+export interface StockCountListBody {
+  outcome: string;
+  counts: StockCountRecord[];
+  page: CataloguePage;
+}
+
+export interface StockCountDetailBody {
+  outcome: string;
+  count?: StockCountRecord;
+  entries?: ReadonlyArray<{
+    factId: string;
+    locationCode: string;
+    occurredAt: string;
+    deviceSequence: number;
+    deviceId: string;
+    operatorId: string;
+    receivedAt: string;
+    lines: ReadonlyArray<{
+      ownerAccount?: string;
+      goodsCode?: string;
+      unit?: string;
+      stockState?: string;
+      labelAlias?: string;
+      batchNumber?: string;
+      expiryDate?: string;
+      quantity: number;
+      observed?: string;
+    }>;
+  }>;
+  differences?: ReadonlyArray<{
+    differenceId: string;
+    countId: string;
+    ownerAccount: string;
+    warehouseCode: string;
+    locationCode: string;
+    goodsCode: string;
+    unit: string;
+    stockState: string;
+    labelAlias?: string;
+    batchNumber?: string;
+    expiryDate?: string;
+    bookQuantity: number;
+    countedQuantity: number;
+    status: string;
+    approvedBy?: string;
+    approvedAt?: string;
+    approvalNote?: string;
+    rejectedBy?: string;
+    rejectedAt?: string;
+    rejectReason?: string;
+  }>;
+}
+
+export function listCounts(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<StockCountListBody>> {
+  return exchangeMasterData<StockCountListBody>(catalogueRequestPath('/warehouse-fulfillment-counts', conditions, after));
+}
+
+export function getCountDetail(countId: string): Promise<ApiResult<StockCountDetailBody>> {
+  const params = new URLSearchParams({ countId });
+  return exchangeMasterData<StockCountDetailBody>(`/warehouse-fulfillment-count?${params.toString()}`);
+}
+
+export interface StockAdjustmentLineRecord {
+  lineIndex: number;
+  kind: string;
+  locationCode: string;
+  goodsCode: string;
+  unit: string;
+  stockState: string;
+  labelAlias?: string;
+  batchNumber?: string;
+  expiryDate?: string;
+  inboundBatchId?: string;
+  quantity: number;
+  basis?: string;
+}
+
+export interface StockAdjustmentRecord {
+  adjustmentId: string;
+  ownerAccount: string;
+  warehouseCode: string;
+  reason: string;
+  operator: string;
+  submittedAt: string;
+  status: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  approvalNote?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectReason?: string;
+  lines: StockAdjustmentLineRecord[];
+}
+
+export interface StockAdjustmentListBody {
+  outcome: string;
+  adjustments: StockAdjustmentRecord[];
+  page: CataloguePage;
+}
+
+export function listAdjustments(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<StockAdjustmentListBody>> {
+  return exchangeMasterData<StockAdjustmentListBody>(catalogueRequestPath('/warehouse-fulfillment-adjustments', conditions, after));
+}
+
+export interface JobDiscrepancyRecord {
+  discrepancyId: string;
+  factId: string;
+  linePosition: number;
+  ownerAccount: string;
+  warehouseCode: string;
+  sourceLocation?: string;
+  locationCode?: string;
+  goodsCode?: string;
+  unit?: string;
+  stockState?: string;
+  labelAlias?: string;
+  batchNumber?: string;
+  expiryDate?: string;
+  inboundBatchId?: string;
+  cartonNumber?: string;
+  note?: string;
+  quantity: number;
+  shortOnBook: number;
+  heldQuantity: number;
+  cartonMissing: boolean;
+  status: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  approvalNote?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectReason?: string;
+}
+
+export interface JobDiscrepancyListBody {
+  outcome: string;
+  discrepancies: JobDiscrepancyRecord[];
+  page: CataloguePage;
+}
+
+export function listJobDiscrepancies(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<JobDiscrepancyListBody>> {
+  return exchangeMasterData<JobDiscrepancyListBody>(
+    catalogueRequestPath('/warehouse-fulfillment-job-discrepancies', conditions, after),
+  );
+}
+
+export interface InstructionRecord {
+  instructionId: string;
+  ownerAccount: string;
+  warehouseCode: string;
+  kind: string;
+  status: string;
+  origin: string;
+  goodsCode: string;
+  unit?: string;
+  quantity: number;
+  doneQuantity: number;
+  fromAlias?: string;
+  toAlias?: string;
+  batchNumber?: string;
+  expiryDate?: string;
+  reason?: string;
+  basis?: string;
+  operator?: string;
+  fixedRevision: number;
+  voidReason?: string;
+  voidedAt?: string;
+  receivedAt: string;
+  components: ReadonlyArray<{ goodsCode: string; quantity: number }>;
+  executions: ReadonlyArray<{
+    factId: string;
+    deviceId: string;
+    operatorId: string;
+    occurredAt: string;
+    deviceSequence: number;
+    doneQuantity: number;
+    movementId: string;
+  }>;
+}
+
+export interface InstructionListBody {
+  outcome: string;
+  instructions: InstructionRecord[];
+  page: CataloguePage;
+}
+
+export function listInstructions(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<InstructionListBody>> {
+  return exchangeMasterData<InstructionListBody>(catalogueRequestPath('/warehouse-fulfillment-instructions', conditions, after));
+}
+
+export interface ReturnPreAdviceRecord {
+  adviceId: string;
+  documentNumber?: string;
+  numberingAbsence?: string;
+  ownerAccount: string;
+  warehouseCode: string;
+  origin: string;
+  trackingNumber: string;
+  basis?: string;
+  operator?: string;
+  receivedAt: string;
+  lines: ReadonlyArray<{ goodsCode: string; unit: string; quantity: number }>;
+}
+
+export interface ReturnReceiptRecord {
+  factId: string;
+  warehouseCode: string;
+  locationCode: string;
+  trackingNumber: string;
+  ownerAccount?: string;
+  adviceId?: string;
+  arrivalId?: string;
+  goodsCode: string;
+  unit: string;
+  stockState: string;
+  quantity: number;
+  outcome: string;
+  occurredAt: string;
+  disposition?: {
+    decisionId: string;
+    destination: string;
+    basis?: string;
+    operator?: string;
+    origin: string;
+    decidedAt: string;
+  };
+}
+
+export interface ReturnsOverviewBody {
+  outcome: string;
+  preAdvices: ReturnPreAdviceRecord[];
+  receipts: ReturnReceiptRecord[];
+}
+
+export function getReturnsOverview(): Promise<ApiResult<ReturnsOverviewBody>> {
+  return exchangeMasterData<ReturnsOverviewBody>('/warehouse-fulfillment-returns-overview');
+}
+
+export interface AgentOverviewBody {
+  outcome: string;
+  connectors: ReadonlyArray<{ warehouseCode: string; registeredAt: string }>;
+  statements: ReadonlyArray<{
+    sourceId: string;
+    statedAt: string;
+    validUntil: string;
+    warehouseCode: string;
+    ownerAccount: string;
+    goodsCode: string;
+    unit: string;
+    quantity: number;
+    freshness: string;
+  }>;
+  results: ReadonlyArray<{
+    resultId: string;
+    requestId: string;
+    warehouseCode: string;
+    kind: string;
+    weightValue?: string;
+    weightUnit?: string;
+    lengthValue?: string;
+    widthValue?: string;
+    heightValue?: string;
+    dimensionUnit?: string;
+    reportedAt: string;
+  }>;
+}
+
+export function getAgentOverview(): Promise<ApiResult<AgentOverviewBody>> {
+  return exchangeMasterData<AgentOverviewBody>('/warehouse-fulfillment-agent-overview');
 }

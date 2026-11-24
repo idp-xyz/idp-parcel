@@ -18,6 +18,8 @@ import { enrichedStockImportForms } from './guided-schemas';
 import { stockImportOutcomeLabels, stockImportSnapshotHints } from './presentation';
 import { stockImportConditions, stockImportStatusLabel, type StockImportStatusFilter } from './rows';
 import { useWarehouseLookups } from './use-catalogues';
+import { ImportDetailModal } from './document-modals';
+import { WmsBadge } from './wms-ui';
 
 const info = moduleInfoById['stock-imports'];
 const submitDecision = 'STOCK_IMPORT_SUBMISSION';
@@ -28,7 +30,7 @@ const columns: ListColumn<StockImportRecord>[] = [
   { id: 'import', header: '导入号', className: mono, render: (row) => row.importId },
   { id: 'owner', header: '货主', className: mono, render: (row) => row.ownerAccount },
   { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
-  { id: 'status', header: '状态', render: (row) => stockImportStatusLabel(row.status) },
+  { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} label={stockImportStatusLabel(row.status)} /> },
   { id: 'submitted', header: '提交时刻', className: mono, render: (row) => formatInstant(row.submittedAt) },
 ];
 
@@ -48,6 +50,7 @@ export function StockImportsPage() {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<StockImportStatusFilter>('PENDING');
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [opened, setOpened] = useState<StockImportRecord | null>(null);
   const settled = useSettledKeyword(keyword);
   const conditions = stockImportConditions(settled, status);
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listStockImports);
@@ -113,7 +116,7 @@ export function StockImportsPage() {
     if (row.rejector) fields.push({ label: '驳回人', value: row.rejector, mono: true });
     if (row.rejectionNote) fields.push({ label: '驳回原因', value: row.rejectionNote });
 
-    const actions: InspectorAction[] = [];
+    const actions: InspectorAction[] = [{ label: '查看导入明细', onRun: () => setOpened(row) }];
     if (mayDecide) {
       if (row.status === 'PENDING') {
         actions.push(
@@ -141,7 +144,7 @@ export function StockImportsPage() {
       <ListPageTemplate<StockImportRecord>
         moduleId="stock-imports"
         title={info.title}
-        description="期初建账导入台账。提交本身不改账；点待批行从右栏批准入账或驳回，批准人受租户批准职责规则约束。"
+        description="期初建账导入台账。双击看商品行和整箱行；待批单可在明细里批准入账或驳回。"
         headerActions={
           maySubmit ? (
             <Button type="button" className={primaryActionClass} onClick={() => openAction('submit')}>
@@ -170,6 +173,7 @@ export function StockImportsPage() {
         rows={rows}
         rowKey={(row) => row.importId}
         inspector={inspectorOf}
+        onRowOpen={setOpened}
         pagination={pagination}
         emptyRowsNote="当前条件下没有匹配的建账导入"
         viewState={catalogueViewState(answer, rows.length, retry, {
@@ -179,6 +183,15 @@ export function StockImportsPage() {
           emptyDescription,
           narrowed: settled.trim() !== '' || (status !== 'PENDING' && status !== 'ALL'),
         })}
+      />
+      <ImportDetailModal
+        row={opened}
+        canDecide={mayDecide}
+        onClose={() => setOpened(null)}
+        onAction={(id, prefill) => {
+          setOpened(null);
+          openAction(id, prefill);
+        }}
       />
       <ActionDrawer
         moduleId="stock-imports"

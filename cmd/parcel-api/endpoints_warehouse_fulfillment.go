@@ -118,6 +118,7 @@ type warehouseFulfillmentWiring struct {
 	chargeOccurrenceQueries   warehousehttp.ChargeOccurrenceQueries
 	warehouseAdoptionQueries  warehousehttp.WarehouseAdoptionQueries
 	warehouseChargeReqQueries warehousehttp.WarehouseChargeRequestQueries
+	workspaceQueries          warehousehttp.WorkspaceQueries
 }
 
 func init() {
@@ -598,6 +599,38 @@ func init() {
 			"/warehouse-fulfillment-charge-requests": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-settings-overview": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-outbound-request": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-outbound-request?requestId=OBR-01",
+			},
+			"/warehouse-fulfillment-freezes": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-counts": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-count": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-count?countId=CNT-01",
+			},
+			"/warehouse-fulfillment-adjustments": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-job-discrepancies": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-instructions": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-returns-overview": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-agent-overview": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
 		},
 		build: func(sources endpointSources) (warehouseFulfillmentWiring, error) {
 			if !sources.warehouseFulfillment {
@@ -802,6 +835,7 @@ func init() {
 				chargeOccurrenceQueries:   orchestration.chargeOccurrenceQueries,
 				warehouseAdoptionQueries:  orchestration.warehouseAdoptions,
 				warehouseChargeReqQueries: orchestration.warehouseAdoptions,
+				workspaceQueries:          orchestration.workspaceQueries,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring warehouseFulfillmentWiring) []httpapi.BusinessEndpoint {
@@ -942,6 +976,16 @@ func init() {
 			chargeOccurrenceList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			warehouseAdoptionList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			warehouseChargeRequestList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			settingsOverview := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			outboundRequestDetail := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			freezeList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			countList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			countDetail := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			adjustmentList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			jobDiscrepancyList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			instructionList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			returnsOverview := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			agentOverview := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			// 开着：与别的登记写行、查阅行行为一致——渠道没配答「接入渠道未配置」，配了走真编排。各读口共用一个 Intake，各册的
 			// 登记口共用同一个认证器。
 			if wiring.enabled {
@@ -1183,6 +1227,16 @@ func init() {
 				chargeOccurrenceList = warehousehttp.NewQueryChargeOccurrencesEndpoint(catalogueIntake, wiring.chargeOccurrenceQueries)
 				warehouseAdoptionList = warehousehttp.NewQueryWarehouseAdoptionsEndpoint(catalogueIntake, wiring.warehouseAdoptionQueries)
 				warehouseChargeRequestList = warehousehttp.NewQueryWarehouseChargeRequestsEndpoint(catalogueIntake, wiring.warehouseChargeReqQueries)
+				settingsOverview = warehousehttp.NewQuerySettingsOverviewEndpoint(catalogueIntake, wiring.workspaceQueries)
+				outboundRequestDetail = warehousehttp.NewQueryOutboundRequestDetailEndpoint(catalogueIntake, wiring.workspaceQueries)
+				freezeList = warehousehttp.NewQueryFreezesEndpoint(catalogueIntake, wiring.workspaceQueries)
+				countList = warehousehttp.NewQueryCountsEndpoint(catalogueIntake, wiring.workspaceQueries)
+				countDetail = warehousehttp.NewQueryCountDetailEndpoint(catalogueIntake, wiring.workspaceQueries)
+				adjustmentList = warehousehttp.NewQueryAdjustmentsEndpoint(catalogueIntake, wiring.workspaceQueries)
+				jobDiscrepancyList = warehousehttp.NewQueryJobDiscrepanciesEndpoint(catalogueIntake, wiring.workspaceQueries)
+				instructionList = warehousehttp.NewQueryInstructionsEndpoint(catalogueIntake, wiring.workspaceQueries)
+				returnsOverview = warehousehttp.NewQueryReturnsOverviewEndpoint(catalogueIntake, wiring.workspaceQueries)
+				agentOverview = warehousehttp.NewQueryAgentOverviewEndpoint(catalogueIntake, wiring.workspaceQueries)
 			}
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/warehouse-fulfillment-warehouse-registrations", Handler: registration},
@@ -1319,6 +1373,16 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-charge-occurrences", Handler: chargeOccurrenceList},
 				{Pattern: "/warehouse-fulfillment-charge-adoption-list", Handler: warehouseAdoptionList},
 				{Pattern: "/warehouse-fulfillment-charge-requests", Handler: warehouseChargeRequestList},
+				{Pattern: "/warehouse-fulfillment-settings-overview", Handler: settingsOverview},
+				{Pattern: "/warehouse-fulfillment-outbound-request", Handler: outboundRequestDetail},
+				{Pattern: "/warehouse-fulfillment-freezes", Handler: freezeList},
+				{Pattern: "/warehouse-fulfillment-counts", Handler: countList},
+				{Pattern: "/warehouse-fulfillment-count", Handler: countDetail},
+				{Pattern: "/warehouse-fulfillment-adjustments", Handler: adjustmentList},
+				{Pattern: "/warehouse-fulfillment-job-discrepancies", Handler: jobDiscrepancyList},
+				{Pattern: "/warehouse-fulfillment-instructions", Handler: instructionList},
+				{Pattern: "/warehouse-fulfillment-returns-overview", Handler: returnsOverview},
+				{Pattern: "/warehouse-fulfillment-agent-overview", Handler: agentOverview},
 			}
 		},
 	})

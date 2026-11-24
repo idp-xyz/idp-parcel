@@ -14,6 +14,7 @@ import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { useWarehouseLookups } from './use-catalogues';
+import { WaveDetailModal } from './document-modals';
 
 const info = moduleInfoById['warehouse-waves'];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
@@ -43,6 +44,7 @@ export function WarehouseWavesPage() {
 
   const [keyword, setKeyword] = useState('');
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [opened, setOpened] = useState<WaveRecord | null>(null);
   const settled = useSettledKeyword(keyword);
   const conditions: CatalogueConditions = { q: settled };
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listWaves);
@@ -62,6 +64,7 @@ export function WarehouseWavesPage() {
       .join('；');
 
     const actions: InspectorAction[] = [
+      { label: '查看拣货明细', onRun: () => setOpened(row) },
       {
         label: openTasks.length > 0 ? `去作业台拣货车（余 ${openTasks.length} 项）` : '去作业台复核打包',
         onRun: () => {
@@ -100,7 +103,7 @@ export function WarehouseWavesPage() {
       <ListPageTemplate<WaveRecord>
         moduleId="warehouse-waves"
         title={info.title}
-        description="已释放波次与拣货任务进度。建议在「出库订单」勾选多单合并放波次，再进「仓内作业台 → 拣货车」逐笔扫码完成。"
+        description="已释放波次与拣货任务。双击看每一条拣货任务的库位、应拣和已拣。"
         headerActions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -136,6 +139,7 @@ export function WarehouseWavesPage() {
         rows={rows}
         rowKey={(row) => row.waveId}
         inspector={inspectorOf}
+        onRowOpen={setOpened}
         pagination={pagination}
         emptyRowsNote="当前条件下没有匹配的波次"
         viewState={catalogueViewState(answer, rows.length, retry, {
@@ -146,6 +150,7 @@ export function WarehouseWavesPage() {
           narrowed: settled.trim() !== '',
         })}
       />
+      <WaveDetailModal row={opened} onClose={() => setOpened(null)} />
       <ActionDrawer
         moduleId="warehouse-waves"
         active={drawer}
