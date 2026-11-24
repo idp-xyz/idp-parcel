@@ -1,0 +1,7 @@
+{
+  "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+  "capability": "INBOUND_PRE_ADVICE_CLOSE",
+  "factKind": "INBOUND_PRE_ADVICE_CLOSE",
+  "authority": "SYN-AUTH/idp-parcel-pilot",
+  "fromAt": "2026-01-01T00:00:00Z"
+}

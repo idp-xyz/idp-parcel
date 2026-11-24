@@ -1,0 +1,7 @@
+{
+  "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+  "capability": "UNCLAIMED_ARRIVAL_DISPOSITION",
+  "factKind": "UNCLAIMED_ARRIVAL_DISPOSITION",
+  "authority": "SYN-AUTH/idp-parcel-pilot",
+  "fromAt": "2026-01-01T00:00:00Z"
+}

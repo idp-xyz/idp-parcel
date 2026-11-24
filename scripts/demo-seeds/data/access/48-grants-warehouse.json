@@ -1,0 +1,179 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WORK-FACT-WH01-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "WORK_FACT_REGISTRATION",
+      "workScope": {
+        "kind": "WAREHOUSE",
+        "reference": "SYN-WH-01"
+      },
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WF-WH01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-GOODS-ON-BEHALF-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "GOODS_RECORD_ON_BEHALF",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-PRE-ADVICE-ON-BEHALF-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "INBOUND_PRE_ADVICE_RECORD_ON_BEHALF",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-02"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-PRE-ADVICE-CLOSE-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "INBOUND_PRE_ADVICE_CLOSE",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-03"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-RECEIPT-DISCREPANCY-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "RECEIPT_DISCREPANCY_RECORD_ON_BEHALF",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-04"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-UNCLAIMED-CLAIM-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "UNCLAIMED_ARRIVAL_CLAIM",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-05"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-UNCLAIMED-DISPOSITION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "UNCLAIMED_ARRIVAL_DISPOSITION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-06"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-CONDITION-RESTORE-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "CONDITION_RESTORE",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-07"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-PROCESSING-INSTRUCTION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "PROCESSING_INSTRUCTION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-08"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-RELABEL-INSTRUCTION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "RELABEL_INSTRUCTION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-09"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-STOCK-FREEZE-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "STOCK_FREEZE",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-10"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-STOCK-COUNT-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "STOCK_COUNT",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-11"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-STOCK-ADJUSTMENT-APPROVAL-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "STOCK_ADJUSTMENT_APPROVAL",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-12"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-STOCK-ADJUSTMENT-SUBMISSION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "STOCK_ADJUSTMENT_SUBMISSION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-13"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-OUTBOUND-ON-BEHALF-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "OUTBOUND_REQUEST_RECORD_ON_BEHALF",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-14"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-WAVE-RELEASE-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "WAVE_RELEASE",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-15"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-OUTBOUND-CORRECTION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "OUTBOUND_CONFIRMATION_CORRECTION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-16"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-RETURN-ON-BEHALF-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "RETURN_RECORD_ON_BEHALF",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-17"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WH-STOCK-IMPORT-SUBMISSION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "STOCK_IMPORT_SUBMISSION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WH-18"
+    }
+  ]
+}

@@ -120,6 +120,26 @@ func TestAnAdmissionScopeMappingTakesOnlyRequirementsAFaceAsksFor(t *testing.T) 
 			Capability: accessidentity.DecisionStockImportSubmission.String(),
 			FactKind:   accessidentity.DecisionStockImportSubmission.String(),
 		},
+		"wave release": {
+			Capability: accessidentity.DecisionWaveRelease.String(),
+			FactKind:   accessidentity.DecisionWaveRelease.String(),
+		},
+		"outbound request on behalf": {
+			Capability: accessidentity.DecisionOutboundRequestRecordOnBehalf.String(),
+			FactKind:   accessidentity.DecisionOutboundRequestRecordOnBehalf.String(),
+		},
+		"stock adjustment approval": {
+			Capability: accessidentity.DecisionStockAdjustmentApproval.String(),
+			FactKind:   accessidentity.DecisionStockAdjustmentApproval.String(),
+		},
+		"customer outbound submission": {
+			Capability: accessidentity.CustomerCapabilityOutboundRequestSubmission.String(),
+			FactKind:   accessidentity.CustomerCapabilityOutboundRequestSubmission.String(),
+		},
+		"customer return pre-advice": {
+			Capability: accessidentity.CustomerCapabilityReturnPreAdviceSubmission.String(),
+			FactKind:   accessidentity.CustomerCapabilityReturnPreAdviceSubmission.String(),
+		},
 	} {
 		if _, err := accessidentity.NewAdmissionScopeMapping("SYN-TENANT-01", "SYN-MAP-1", requirement, "SYN-PILOT-SCOPE/x@v1", interval, "SYN-BASIS"); err != nil {
 			t.Fatalf("%s: %v", name, err)

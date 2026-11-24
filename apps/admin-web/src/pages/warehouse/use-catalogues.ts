@@ -62,7 +62,9 @@ export function useWarehouseLookups(): WarehouseLookups {
         locationTypes: lt.kind === 'outcome' ? lt.body.locationTypes ?? [] : [],
         locations: loc.kind === 'outcome' ? loc.body.locations ?? [] : [],
         packaging: pkg.kind === 'outcome' ? pkg.body.packagingMaterials ?? [] : [],
-        owners: acct.kind === 'outcome' ? acct.body.accounts ?? [] : [],
+        owners: acct.kind === 'outcome'
+          ? [...(acct.body.accounts ?? [])].sort((a, b) => a.accountId.localeCompare(b.accountId))
+          : [],
         serviceProducts: prod.kind === 'outcome' ? prod.body.products ?? [] : [],
         loaded: true,
       });

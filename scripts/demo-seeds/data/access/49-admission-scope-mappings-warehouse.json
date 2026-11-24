@@ -1,0 +1,285 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-WH-OD-GOODS-RECORD-ON-BEHALF-01",
+      "capability": "GOODS_RECORD_ON_BEHALF",
+      "factKind": "GOODS_RECORD_ON_BEHALF",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-INBOUND-PRE-ADVICE-RECORD-ON-BEHALF-01",
+      "capability": "INBOUND_PRE_ADVICE_RECORD_ON_BEHALF",
+      "factKind": "INBOUND_PRE_ADVICE_RECORD_ON_BEHALF",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-INBOUND-PRE-ADVICE-CLOSE-01",
+      "capability": "INBOUND_PRE_ADVICE_CLOSE",
+      "factKind": "INBOUND_PRE_ADVICE_CLOSE",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-RECEIPT-DISCREPANCY-RECORD-ON-BEHALF-01",
+      "capability": "RECEIPT_DISCREPANCY_RECORD_ON_BEHALF",
+      "factKind": "RECEIPT_DISCREPANCY_RECORD_ON_BEHALF",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-UNCLAIMED-ARRIVAL-CLAIM-01",
+      "capability": "UNCLAIMED_ARRIVAL_CLAIM",
+      "factKind": "UNCLAIMED_ARRIVAL_CLAIM",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-UNCLAIMED-ARRIVAL-DISPOSITION-01",
+      "capability": "UNCLAIMED_ARRIVAL_DISPOSITION",
+      "factKind": "UNCLAIMED_ARRIVAL_DISPOSITION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-CONDITION-RESTORE-01",
+      "capability": "CONDITION_RESTORE",
+      "factKind": "CONDITION_RESTORE",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-PROCESSING-INSTRUCTION-01",
+      "capability": "PROCESSING_INSTRUCTION",
+      "factKind": "PROCESSING_INSTRUCTION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-RELABEL-INSTRUCTION-01",
+      "capability": "RELABEL_INSTRUCTION",
+      "factKind": "RELABEL_INSTRUCTION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-STOCK-FREEZE-01",
+      "capability": "STOCK_FREEZE",
+      "factKind": "STOCK_FREEZE",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-STOCK-COUNT-01",
+      "capability": "STOCK_COUNT",
+      "factKind": "STOCK_COUNT",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-STOCK-ADJUSTMENT-APPROVAL-01",
+      "capability": "STOCK_ADJUSTMENT_APPROVAL",
+      "factKind": "STOCK_ADJUSTMENT_APPROVAL",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-STOCK-ADJUSTMENT-SUBMISSION-01",
+      "capability": "STOCK_ADJUSTMENT_SUBMISSION",
+      "factKind": "STOCK_ADJUSTMENT_SUBMISSION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-OUTBOUND-REQUEST-RECORD-ON-BEHALF-01",
+      "capability": "OUTBOUND_REQUEST_RECORD_ON_BEHALF",
+      "factKind": "OUTBOUND_REQUEST_RECORD_ON_BEHALF",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-WAVE-RELEASE-01",
+      "capability": "WAVE_RELEASE",
+      "factKind": "WAVE_RELEASE",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-OUTBOUND-CONFIRMATION-CORRECTION-01",
+      "capability": "OUTBOUND_CONFIRMATION_CORRECTION",
+      "factKind": "OUTBOUND_CONFIRMATION_CORRECTION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-RETURN-RECORD-ON-BEHALF-01",
+      "capability": "RETURN_RECORD_ON_BEHALF",
+      "factKind": "RETURN_RECORD_ON_BEHALF",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-OD-STOCK-IMPORT-SUBMISSION-01",
+      "capability": "STOCK_IMPORT_SUBMISSION",
+      "factKind": "STOCK_IMPORT_SUBMISSION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-01"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-RECEIPT-CONFIRMATION-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "RECEIPT_CONFIRMATION",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-WAREHOUSE-MEASUREMENT-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "WAREHOUSE_MEASUREMENT",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-UNCLAIMED-ARRIVAL-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "UNCLAIMED_ARRIVAL",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-INTERNAL-MOVE-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "INTERNAL_MOVE",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-FORM-CONVERSION-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "FORM_CONVERSION",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-CONDITION-CONVERSION-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "CONDITION_CONVERSION",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-SHORTAGE-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "SHORTAGE",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-PROCESSING-EXECUTION-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "PROCESSING_EXECUTION",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-RELABEL-EXECUTION-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "RELABEL_EXECUTION",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-UNBOXING-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "UNBOXING",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-COUNT-ENTRY-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "COUNT_ENTRY",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-PICK-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "PICK",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-OUTBOUND-CHECK-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "OUTBOUND_CHECK",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-PACK-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "PACK",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-OUTBOUND-CONFIRMATION-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "OUTBOUND_CONFIRMATION",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-PICKUP-HANDOVER-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "PICKUP_HANDOVER",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    },
+    {
+      "mappingId": "SYN-MAP-WH-WF-RETURN-RECEIPT-01",
+      "capability": "WORK_FACT_REGISTRATION",
+      "factKind": "RETURN_RECEIPT",
+      "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-WH-02"
+    }
+  ]
+}

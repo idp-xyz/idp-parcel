@@ -1,0 +1,7 @@
+{
+  "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+  "capability": "RECEIPT_DISCREPANCY_RECORD_ON_BEHALF",
+  "factKind": "RECEIPT_DISCREPANCY_RECORD_ON_BEHALF",
+  "authority": "SYN-AUTH/idp-parcel-pilot",
+  "fromAt": "2026-01-01T00:00:00Z"
+}

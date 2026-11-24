@@ -21,18 +21,21 @@ const mono = 'whitespace-nowrap font-mono type-body leading-4';
 
 const statusLabels: Record<string, string> = {
   RESERVED: '已预占',
-  WAVED: '已放波次',
+  PARTIALLY_RESERVED: '部分预占',
+  PENDING_POLICY: '待定缺货策略',
+  ALLOCATED: '已放波次',
   PICKED: '已拣货',
   CHECKED: '已复核',
   PACKED: '已打包',
   SHIPPED: '已出库',
-  HOLD: '缺货挂起',
+  SPLIT: '已拆单',
+  REJECTED: '已拒单',
   CANCELLED: '已取消',
   HANDED_OFF: '待代理仓处理',
   FORWARDED: '已转出代理仓',
 };
 
-const statusFilters = ['ALL', 'RESERVED', 'WAVED', 'PICKED', 'CHECKED', 'PACKED', 'SHIPPED', 'HOLD', 'CANCELLED'] as const;
+const statusFilters = ['ALL', 'RESERVED', 'ALLOCATED', 'PICKED', 'CHECKED', 'PACKED', 'SHIPPED', 'PARTIALLY_RESERVED', 'CANCELLED'] as const;
 
 const columns: ListColumn<OutboundRequestRecord>[] = [
   { id: 'id', header: '出库单号', className: mono, render: (row) => row.documentNumber ?? row.requestId },
@@ -104,7 +107,7 @@ export function WarehouseOutboundPage() {
         onRun: () => openAction('wave-release', { warehouse: row.warehouseCode, requests: row.requestId }),
       });
     }
-    if ((row.status === 'RESERVED' || row.status === 'HOLD') && targetMap.has('outbound-split')) {
+    if ((row.status === 'RESERVED' || row.status === 'PARTIALLY_RESERVED' || row.status === 'PENDING_POLICY') && targetMap.has('outbound-split')) {
       actions.push({
         label: '拆分出库单',
         onRun: () => openAction('outbound-split', { requestId: row.requestId }),
@@ -122,7 +125,7 @@ export function WarehouseOutboundPage() {
         onRun: () => openAction('owner-label', { requestId: row.requestId }),
       });
     }
-    if (row.status === 'WAVED' || row.status === 'PICKED' || row.status === 'CHECKED' || row.status === 'PACKED') {
+    if (row.status === 'ALLOCATED' || row.status === 'PICKED' || row.status === 'CHECKED' || row.status === 'PACKED') {
       actions.push({
         label: '去作业台执行下一步',
         onRun: () => {

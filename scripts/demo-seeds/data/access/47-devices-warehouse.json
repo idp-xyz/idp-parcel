@@ -1,0 +1,21 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "devices": [
+    {
+      "deviceId": "SYN-PDA-WH01-01",
+      "workScope": {
+        "kind": "WAREHOUSE",
+        "reference": "SYN-WH-01"
+      },
+      "basis": "SYN-DEVICE-BASIS-WH-01"
+    },
+    {
+      "deviceId": "SYN-PDA-WH01-02",
+      "workScope": {
+        "kind": "WAREHOUSE",
+        "reference": "SYN-WH-01"
+      },
+      "basis": "SYN-DEVICE-BASIS-WH-02"
+    }
+  ]
+}

@@ -52,39 +52,40 @@ func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 		if _, err := ParseWorkFactKind(requirement.FactKind); err == nil {
 			return nil
 		}
-	case DecisionGoodsRecordOnBehalf.String():
-		if requirement.FactKind == DecisionGoodsRecordOnBehalf.String() {
-			return nil
-		}
-	case DecisionInboundPreAdviceRecordOnBehalf.String():
-		if requirement.FactKind == DecisionInboundPreAdviceRecordOnBehalf.String() {
-			return nil
-		}
-	case DecisionInboundPreAdviceClose.String():
-		if requirement.FactKind == DecisionInboundPreAdviceClose.String() {
-			return nil
-		}
-	case DecisionReceiptDiscrepancyRecordOnBehalf.String():
-		if requirement.FactKind == DecisionReceiptDiscrepancyRecordOnBehalf.String() {
-			return nil
-		}
-	case DecisionUnclaimedArrivalClaim.String():
-		if requirement.FactKind == DecisionUnclaimedArrivalClaim.String() {
-			return nil
-		}
-	case DecisionUnclaimedArrivalDisposition.String():
-		if requirement.FactKind == DecisionUnclaimedArrivalDisposition.String() {
-			return nil
-		}
-	case DecisionStockImportSubmission.String():
-		if requirement.FactKind == DecisionStockImportSubmission.String() {
+	case DecisionGoodsRecordOnBehalf.String(),
+		DecisionInboundPreAdviceRecordOnBehalf.String(),
+		DecisionInboundPreAdviceClose.String(),
+		DecisionReceiptDiscrepancyRecordOnBehalf.String(),
+		DecisionUnclaimedArrivalClaim.String(),
+		DecisionUnclaimedArrivalDisposition.String(),
+		DecisionStockImportSubmission.String(),
+		DecisionConditionRestore.String(),
+		DecisionProcessingInstruction.String(),
+		DecisionRelabelInstruction.String(),
+		DecisionStockFreeze.String(),
+		DecisionStockCount.String(),
+		DecisionStockAdjustmentApproval.String(),
+		DecisionStockAdjustmentSubmission.String(),
+		DecisionOutboundRequestRecordOnBehalf.String(),
+		DecisionWaveRelease.String(),
+		DecisionOutboundConfirmationCorrection.String(),
+		DecisionReturnRecordOnBehalf.String():
+		if requirement.FactKind == requirement.Capability {
 			return nil
 		}
 	case CustomerCapabilityGoodsMaintenance.String(),
 		CustomerCapabilityInboundPreAdviceSubmission.String(),
 		CustomerCapabilityInboundPreAdviceArrivalNotice.String(),
 		CustomerCapabilityInboundPreAdviceWithdrawal.String(),
-		CustomerCapabilityReceiptDiscrepancyConclusion.String():
+		CustomerCapabilityReceiptDiscrepancyConclusion.String(),
+		CustomerCapabilityProcessingInstructionSubmission.String(),
+		CustomerCapabilityProcessingInstructionWithdrawal.String(),
+		CustomerCapabilityRelabelInstructionSubmission.String(),
+		CustomerCapabilityRelabelInstructionWithdrawal.String(),
+		CustomerCapabilityOutboundRequestSubmission.String(),
+		CustomerCapabilityOutboundCancellation.String(),
+		CustomerCapabilityReturnPreAdviceSubmission.String(),
+		CustomerCapabilityReturnDisposition.String():
 		if requirement.FactKind == requirement.Capability {
 			return nil
 		}
