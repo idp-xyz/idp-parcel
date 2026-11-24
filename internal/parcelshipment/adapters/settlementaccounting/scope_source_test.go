@@ -15,13 +15,15 @@ type resolverDouble struct {
 	resolution psports.CommercialBasisResolution
 	err        error
 	asked      int
+	lastQuery  psports.CommercialBasisQuery
 }
 
 func (double *resolverDouble) ResolveCommercialBasis(
 	_ context.Context,
-	_ psports.CommercialBasisQuery,
+	query psports.CommercialBasisQuery,
 ) (psports.CommercialBasisResolution, error) {
 	double.asked++
+	double.lastQuery = query
 	if double.err != nil {
 		return psports.CommercialBasisResolution{}, double.err
 	}
@@ -139,6 +141,12 @@ func TestAControlScopeIsDerivedFromTheAdoptedSettlementPolicy(t *testing.T) {
 
 	if gap != adapter.ControlScopeFormed {
 		t.Fatalf("gap = %d; 回显与目录都在，作用域却没形成", gap)
+	}
+	if !resolver.lastQuery.AcceptanceFix ||
+		resolver.lastQuery.ShipmentRequestID.String() != "request-1" ||
+		resolver.lastQuery.SubmissionVersion.String() != "version-1" {
+		t.Fatalf("查询 = %+v，want 这次委托的 request-1/version-1 且 AcceptanceFix——不置会按账户行旧锚点另固定一份",
+			resolver.lastQuery)
 	}
 	settlement := scope.Settlement
 	if settlement.LegalEntity().String() != "legal-1" ||

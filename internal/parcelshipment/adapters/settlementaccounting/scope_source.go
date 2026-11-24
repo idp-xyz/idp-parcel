@@ -63,6 +63,9 @@ func (source *PolicyBackedControlScopeSource) FormControlScope(
 		Identity:          identity,
 		ShipmentRequestID: shipmentRequestID,
 		SubmissionVersion: submissionVersion,
+		// 接受前财务控制的作用域与这次接受判断、形成决定前的重解共用这一次解析。
+		// 锚点时刻同样取该版提交的来源发生时间；不置的话会按账户行上的旧锚点另固定一份。
+		AcceptanceFix: true,
 	})
 	if err != nil {
 		return ControlScope{}, ControlScopeGapInvalid, fmt.Errorf("resolve commercial basis for control scope: %w", err)
