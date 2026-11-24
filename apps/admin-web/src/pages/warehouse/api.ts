@@ -100,6 +100,186 @@ export interface StockImportListBody {
   page: CataloguePage;
 }
 
+export interface UnclaimedArrivalRecord {
+  arrivalId: string;
+  factId: string;
+  origin: string;
+  kind: string;
+  status: string;
+  warehouseCode: string;
+  device: string;
+  operator: string;
+  occurredAt: string;
+  receivedAt: string;
+  observation?: string;
+  ownerClue?: string;
+  preAdviceClue?: string;
+  storageLocation?: string;
+  postingReferences?: string[];
+  disposition?: {
+    method: string;
+    ruleWarehouseCode: string;
+    ruleRevision: number;
+    note?: string;
+    operator: string;
+    disposedAt: string;
+  };
+}
+
+export interface UnclaimedArrivalListBody {
+  outcome: string;
+  arrivals: UnclaimedArrivalRecord[];
+  page: CataloguePage;
+}
+
+export interface DisposalRuleRecord {
+  warehouseCode: string;
+  revision: number;
+  claimWindowSeconds: number;
+  disposalMethods: string[];
+  registrant: string;
+  registeredAt: string;
+}
+
+export interface DisposalRuleListBody {
+  outcome: string;
+  disposalRules: DisposalRuleRecord[];
+  page: CataloguePage;
+}
+
+export interface InternalJobLineRecord {
+  ownerAccount: string;
+  goodsCode?: string;
+  unit?: string;
+  stockState?: string;
+  quantity?: number;
+  sourceLocation?: string;
+  targetLocation?: string;
+  cartonNumber?: string;
+  posted: number;
+  postedInbound: number;
+  shortOnBook: number;
+  held: number;
+  cartonMissing?: boolean;
+}
+
+export interface InternalJobRecord {
+  factId: string;
+  kind: string;
+  warehouse: string;
+  occurredAt: string;
+  deviceSequence: number;
+  receivedAt: string;
+  lines: InternalJobLineRecord[];
+}
+
+export interface InternalJobListBody {
+  outcome: string;
+  jobs: InternalJobRecord[];
+  page: CataloguePage;
+}
+
+export interface PreAdviceRecord {
+  preAdviceId: string;
+  ownerAccount: string;
+  warehouseCode: string;
+  arrivalMode: string;
+  inboundMode: string;
+  status: string;
+  documentNumber?: string;
+  numberingAbsence?: string;
+  submissionPath: string;
+  registrant: string;
+  acceptedAt: string;
+  goodsLines?: readonly unknown[];
+  cartons?: readonly unknown[];
+}
+
+export interface PreAdviceListBody {
+  outcome: string;
+  ownerAccount: string;
+  preAdvices: PreAdviceRecord[];
+  page: CataloguePage;
+}
+
+export interface GoodsRecord {
+  ownerAccount: string;
+  goodsCode: string;
+  revision: number;
+  name: string;
+  baseUnit: string;
+  trackBatch: boolean;
+  trackExpiry: boolean;
+  composite: boolean;
+  registrant: string;
+  registeredAt: string;
+}
+
+export interface GoodsListBody {
+  outcome: string;
+  ownerAccount: string;
+  goods: GoodsRecord[];
+  page: CataloguePage;
+}
+
+export type StockViewKind = 'cells' | 'cartons' | 'summary' | 'holds' | 'movements';
+
+export interface StockReadBody {
+  outcome: string;
+  cells?: ReadonlyArray<{
+    warehouse: string;
+    location?: string;
+    goodsCode: string;
+    unit: string;
+    stockState: string;
+    inboundBatchId: string;
+    quantity: number;
+    frozen: number;
+    available: number;
+    ageDays?: number;
+    age?: string;
+  }>;
+  cartons?: ReadonlyArray<{
+    warehouse: string;
+    cartonNumber: string;
+    location?: string;
+    inboundAt: string;
+    held: boolean;
+    ageDays?: number;
+    age?: string;
+  }>;
+  summary?: ReadonlyArray<{
+    warehouse: string;
+    goodsCode: string;
+    unit: string;
+    stockState: string;
+    onHand: number;
+    allocatable: number;
+    frozen: number;
+    reserved: number;
+    locked: number;
+    available: number;
+  }>;
+  holds?: ReadonlyArray<{
+    kind: string;
+    warehouse: string;
+    goodsCode?: string;
+    location?: string;
+    cartonNumber?: string;
+    quantity: number;
+    reason?: string;
+    operator?: string;
+  }>;
+  movements?: ReadonlyArray<{
+    warehouse: string;
+    reason: string;
+    source?: string;
+    occurredAt: string;
+    postedAt?: string;
+    lines?: ReadonlyArray<{ location?: string; goodsCode: string; unit: string; stockState: string; delta: number }>;
+  }>;
+}
+
 /** 册别在条件的选择器里，请求路径按它选；选择器本身不进查询串。 */
 export function listWarehouseCatalogue(
   conditions: CatalogueConditions,
@@ -115,6 +295,58 @@ export function listStockImports(
   return exchangeMasterData<StockImportListBody>(
     catalogueRequestPath('/warehouse-fulfillment-stock-imports', conditions, after),
   );
+}
+
+export function listUnclaimedArrivals(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<UnclaimedArrivalListBody>> {
+  return exchangeMasterData<UnclaimedArrivalListBody>(
+    catalogueRequestPath('/warehouse-fulfillment-unclaimed-arrivals', conditions, after),
+  );
+}
+
+export function listDisposalRules(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<DisposalRuleListBody>> {
+  return exchangeMasterData<DisposalRuleListBody>(
+    catalogueRequestPath('/warehouse-fulfillment-unclaimed-disposal-rules', conditions, after),
+  );
+}
+
+export function listInternalJobs(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<InternalJobListBody>> {
+  return exchangeMasterData<InternalJobListBody>(
+    catalogueRequestPath('/warehouse-fulfillment-internal-jobs', conditions, after),
+  );
+}
+
+export function listOwnerPreAdvices(
+  ownerAccount: string,
+  keyword: string,
+): Promise<ApiResult<PreAdviceListBody>> {
+  const params = new URLSearchParams({ ownerAccount });
+  if (keyword.trim() !== '') params.set('q', keyword.trim());
+  return exchangeMasterData<PreAdviceListBody>(`/warehouse-fulfillment-inbound-pre-advices?${params.toString()}`);
+}
+
+export function listOwnerGoods(ownerAccount: string, keyword: string): Promise<ApiResult<GoodsListBody>> {
+  const params = new URLSearchParams({ ownerAccount });
+  if (keyword.trim() !== '') params.set('q', keyword.trim());
+  return exchangeMasterData<GoodsListBody>(`/warehouse-fulfillment-goods?${params.toString()}`);
+}
+
+export function queryOwnerStock(
+  ownerAccount: string,
+  warehouseCode: string,
+  view: StockViewKind,
+): Promise<ApiResult<StockReadBody>> {
+  const params = new URLSearchParams({ ownerAccount, view });
+  if (warehouseCode.trim() !== '') params.set('warehouseCode', warehouseCode.trim());
+  return exchangeMasterData<StockReadBody>(`/warehouse-fulfillment-stock?${params.toString()}`);
 }
 
 async function postRegistration(path: string, snapshot: unknown): Promise<ApiResult<RegistrationResponseBody>> {

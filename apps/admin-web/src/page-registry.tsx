@@ -145,6 +145,10 @@ export const pageById: Record<string, ComponentType> = {
   'document-numbering': page(loadDocumentNumbering, (m) => m.DocumentNumberingPage),
   'warehouse-catalogues': page(loadWarehouse, (m) => m.WarehouseCataloguesPage),
   'stock-imports': page(loadWarehouse, (m) => m.StockImportsPage),
+  'warehouse-receiving': page(loadWarehouse, (m) => m.WarehouseReceivingPage),
+  'warehouse-internal-ops': page(loadWarehouse, (m) => m.WarehouseInternalOpsPage),
+  'warehouse-outbound': page(loadWarehouse, (m) => m.WarehouseOutboundPage),
+  'warehouse-pricing': page(loadWarehouse, (m) => m.WarehousePricingPage),
 };
 
 /**
@@ -209,6 +213,10 @@ export const liveIds: ReadonlySet<string> = new Set([
   'document-numbering',
   'warehouse-catalogues',
   'stock-imports',
+  'warehouse-receiving',
+  'warehouse-internal-ops',
+  'warehouse-outbound',
+  'warehouse-pricing',
   // 「我的工作」：来源是本机 localStorage 而非 parcel-api，理由见上方头注。
   'recent-objects',
   'saved-views',

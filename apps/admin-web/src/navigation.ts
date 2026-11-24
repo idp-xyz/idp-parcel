@@ -146,6 +146,10 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { id: 'warehouse-catalogues', label: '仓库与库位', icon: 'warehouse-catalogues' },
       { id: 'stock-imports', label: '建账导入', icon: 'stock-imports' },
+      { id: 'warehouse-receiving', label: '收货与待认领', icon: 'warehouse-receiving' },
+      { id: 'warehouse-internal-ops', label: '库内作业与盘点', icon: 'warehouse-internal-ops' },
+      { id: 'warehouse-outbound', label: '出库与波次', icon: 'warehouse-outbound' },
+      { id: 'warehouse-pricing', label: '仓储计价与收费', icon: 'warehouse-pricing' },
     ],
   },
   {
@@ -237,6 +241,10 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'customs-ports-paths': Anchor,
   'warehouse-catalogues': Warehouse,
   'stock-imports': PackagePlus,
+  'warehouse-receiving': PackageCheck,
+  'warehouse-internal-ops': Boxes,
+  'warehouse-outbound': Send,
+  'warehouse-pricing': BadgeDollarSign,
   'customs-restrictions': ShieldAlert,
   'tracking-judgment-rules': Milestone,
   'disclosure-policies': Eye,
@@ -462,6 +470,30 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     summary: '把已有库存做成一笔导入，待批的可以批准入账或驳回。',
     owner: '仓配履约（warehouse-fulfillment）',
     source: 'dox/contexts/warehouse-fulfillment.md 建账导入',
+  },
+  'warehouse-receiving': {
+    title: '收货与待认领',
+    summary: '待认领到货、处置规则、入库预报与商品的查阅、代录、认领与处置。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 入库预报与待认领到货',
+  },
+  'warehouse-internal-ops': {
+    title: '库内作业与盘点',
+    summary: '库内作业事实与库存查阅，以及冻结、盘点、加工换标、差异批准和库存调整。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 库内作业与冻结',
+  },
+  'warehouse-outbound': {
+    title: '出库与波次',
+    summary: '出库代录、拆单截单、放波次、缺货处置、分配策略、确认更正与代理仓结果。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 出库与波次',
+  },
+  'warehouse-pricing': {
+    title: '仓储计价与收费',
+    summary: '仓储计费方案、计费采用、重量体积单位、库龄口径、增值项目与仓租日结。',
+    owner: '仓配履约（warehouse-fulfillment）与小包计价、结算核算',
+    source: 'dox/contexts/warehouse-fulfillment.md 仓储计费',
   },
 
   // —— 设置 · 作业设备册（共享接入身份；不是限界上下文）——
