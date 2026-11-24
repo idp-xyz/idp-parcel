@@ -9,6 +9,7 @@ import {
   DialogHeader,
 } from '@idpxyz/ui-primitives';
 import { chipClass } from '../../components/registration';
+import { useCloseOnHashChange } from './use-close-on-hash';
 
 export type WmsTone = 'success' | 'info' | 'warning' | 'danger' | 'neutral';
 
@@ -295,6 +296,8 @@ export function WmsDetailModal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  // Layout 标签保活：换 hash 不卸载本页，门户会盖到下一页——开着就听 hashchange 关。
+  useCloseOnHashChange(open, onClose);
   return (
     <Dialog
       open={open}

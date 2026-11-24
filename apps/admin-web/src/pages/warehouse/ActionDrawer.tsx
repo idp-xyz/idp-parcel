@@ -12,6 +12,7 @@ import { GuidedFormBody, type GuidedActionTarget } from './GuidedActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { problemNote } from './presentation';
 import type { WarehouseLookups } from './use-catalogues';
+import { useCloseOnHashChange } from './use-close-on-hash';
 
 export interface ActiveDrawerAction {
   target: GuidedActionTarget;
@@ -36,6 +37,8 @@ export function ActionDrawer({
   onClose: () => void;
   onSubmitted?: (outcome: string) => void;
 }) {
+  // 与 WmsDetailModal 同因：标签保活下换页不卸载，开着的抽屉会盖到下一页。
+  useCloseOnHashChange(active !== null, onClose);
   return (
     <Dialog open={active !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
