@@ -58,7 +58,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "仓储收费种子：%v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("== 仓配全链路演示数据：五册主数据、八项规则、商品、库存、入库、待认领、出库波次与仓储计费均已灌入 ==")
+	fmt.Println("== 仓配全链路演示数据：五册主数据、八项规则、商品、库存、入库、待认领、退货、盘点与调整、换标、出库波次与仓储计费均已灌入 ==")
 }
 
 // walkOperations 灌入仓配履约全部核心业务对象，使管理台 16 页与模拟 PDA 作业台开箱即有真实可操作的待办数据。
@@ -1146,7 +1146,7 @@ func walkOperations(ctx context.Context, db *bentopg.DB) error {
 			return fmt.Errorf("退件到仓 01：%s", retRec.Outcome())
 		}
 
-		// 8.2 一张已开始进行中的盘点任务（供「盘点与调整」与作业台录清点）+ 一张已完结带差额待审的盘点任务
+		// 8.2 一张已开始进行中的盘点任务（供「盘点与调整」与作业台录清点）
 		cnt1, err := countHandler.Create(txCtx, whapp.CreateCountCommand{
 			Tenant: tenant, DecisionID: mustRef(whdomain.NewRequestKey, "DEC-SEED-CNT-01"),
 			Warehouse: whSelf, Locations: []whdomain.LocationCode{mustRef(whdomain.NewLocationCode, "SYN-LOC-STORE-A02")},
