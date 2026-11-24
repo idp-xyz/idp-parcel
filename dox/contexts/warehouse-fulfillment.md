@@ -52,7 +52,7 @@
 - **包材**。内容：名称、外廓的长宽高与一个长度单位、重量与一个重量单位、是否停用。各仓共用。四个数值在报文里是字符串，只认 `12` 或 `12.50` 这种写法，整数部分至多 9 位、小数部分至多 6 位，按写出来的位数数；写法不对是坏载荷。数值为零、单位不在内置目录或类别不对，答 `CONTENT_INVALID`。数值按数值比，`12.5` 与 `12.50` 是同一内容。不折算单位，`30 CM` 与 `0.3 M` 是两份内容。
 - **库位类型与包材**在本租户一个仓都没登记时答 `NOT_CONFIGURED`，不落册；登记仓之后原样重交照常受理。
 - **库位**。内容：所属库区、库位类型（可缺）、优先级（可缺的 32 位整数，数字越大越优先）、是否停用。没有与有是不同的内容，优先级 0 与没有优先级是两份内容。所属库区登记后不改。仓、同一个仓下的库区、库位类型须已登记，否则 `REFERENCE_NOT_FOUND`。新指名的库位类型已停用答 `REFERENCE_DEACTIVATED`；沿用上一笔修订里的同一个类型、它后来被停用了，照常受理。不核仓与库区是否停用。
-- 停用的库区与库位不作移入目标。收货确认、整箱收货、库内移入与退货入库碰到停用的库位或库区时不入账；从停用库位移出仍可以。停用的仓另按各口自己的规则。
+- 停用的库区与库位不作移入目标。收货确认、整箱收货、库内移入、加工产出入库、开箱、拣货暂存、回库、退货入库、调增与建账导入碰到停用的库位或库区时不入账；从停用库位移出仍可以。停用的仓另按各口自己的规则。
 
 ## 已实现：商品与仓测
 
@@ -90,7 +90,7 @@
 `POST /warehouse-fulfillment-receipt-confirmations`。挂作业事实登记，作业范围种类 `WAREHOUSE`，引用须等于载荷里的仓。铸造侧准入的能力词是 `WORK_FACT_REGISTRATION`，事实类型是 `RECEIPT_CONFIRMATION`。商品入库与整箱入库走同一口，按预报的入库方式分。
 
 - 答复：`CONFIRMED`（201），其余 200：`EXISTING_RESULT`、`CONTENT_CONFLICT`、`CONTENT_INVALID`、`WAREHOUSE_NOT_FOUND`、`PRE_ADVICE_NOT_FOUND`、`DIVERTED_TO_UNCLAIMED`。
-- 判定：先按事实身份认重放，重放不再入账。仓没登记、预报查不到、仓或行的形态与预报不符，整条不落。然后锁预报：已取消或已完结的，不核行上库位与别名，直接把原事实转成待认领到货、不入账。还能收货才整条核，有不合答 `CONTENT_INVALID` 并逐行指出全部不合（`issues`），一行都不落。形态相符且是整箱入库时改走整箱账，不进商品库存。商品入库核库位（须属于收货暂存，停用的库位仍可入账）；识别码与贴标别名按事实发生时刻生效的修订与有效区间解析，认得出的商品的计量单位、批号与效期按入账时的当前修订核。成立的行以收货流水入账，并形成这一次的差异：多收 `OVERAGE`、错货 `WRONG_GOODS`、破损 `DAMAGE`。待检不记差异。少收不在这一次。认不出的行不入账。没有任何成立的行也答 `CONFIRMED`，预报进入收货中。
+- 判定：先按事实身份认重放，重放不再入账。仓没登记、预报查不到、仓或行的形态与预报不符，整条不落。然后锁预报：已取消或已完结的，不核行上库位与别名，直接把原事实转成待认领到货、不入账。还能收货才整条核，有不合答 `CONTENT_INVALID` 并逐行指出全部不合（`issues`），一行都不落。形态相符且是整箱入库时改走整箱账，不进商品库存。商品入库核库位（须属于在用的收货暂存且库位未停用）；识别码与贴标别名按事实发生时刻生效的修订与有效区间解析，认得出的商品的计量单位、批号与效期按入账时的当前修订核。成立的行以收货流水入账，并形成这一次的差异：多收 `OVERAGE`、错货 `WRONG_GOODS`、破损 `DAMAGE`。待检不记差异。少收不在这一次。认不出的行不入账。没有任何成立的行也答 `CONFIRMED`，预报进入收货中。
 - 并发：先锁事实身份，再锁预报，再让商品入账去拿货主锁与记数锁。同一份预报上的两次收货串行。
 - 没有：不带预报的到货另立登记；上架。
 
@@ -127,7 +127,7 @@
 - **直接登记**：`POST /warehouse-fulfillment-unclaimed-arrival-registrations`，挂作业事实登记（范围种类 `WAREHOUSE`，引用等于载荷仓；准入 `WORK_FACT_REGISTRATION` + `UNCLAIMED_ARRIVAL`；先认证再读载荷）。种分 `INBOUND`、`RETURN`，答复 `REGISTERED`（201）、`EXISTING_RESULT`、`CONTENT_CONFLICT`、`WAREHOUSE_NOT_FOUND`、`WAREHOUSE_NOT_ACCEPTING`（`AGENT`；停用自营仓照记）。观察与存放处逐字保存，线索不作认定，不向货主预报读口透出 `unclaimedArrival`。
 - **收货转来**：取消或完结后到达的收货走收货确认口同笔落成 `DIVERTED_TO_UNCLAIMED` 与一件待认领到货；预报读口只对这类转来标 `unclaimedArrival`，不带内容与数量。收货确认载荷另带可选 `unclaimedArrivalId`：引用的到货须在 `CLAIMED` 且认给该预报，预报不能收货或对不上均答 `CONTENT_INVALID`、不另建新到货。
 - **认领与撤销**：`POST /warehouse-fulfillment-unclaimed-arrival-claims`、`claim-revocations`，挂运营决定 `UNCLAIMED_ARRIVAL_CLAIM`（准入两格同字面量），按各自决定标识判重；认领向 `party-commercial` 核货主（查不到答 `404 OWNER_ACCOUNT_NOT_VISIBLE`），入库到货须指名同货主同仓可收货预报，退件不带预报；已有确认收货引用的认领答 `REVOCATION_NOT_ALLOWED`。
-- **处置规则与处置**：规则修订走登记册配置写 `POST /warehouse-fulfillment-unclaimed-disposal-rule-registrations`（不判准入）与查阅 `GET /warehouse-fulfillment-unclaimed-disposal-rules`、`rule-revisions`，按（租户，仓）只追加，认领期限按经过秒数算、不依赖仓业务时区，方式逐字保存。处置走 `POST /warehouse-fulfillment-unclaimed-arrival-dispositions`（运营决定 `UNCLAIMED_ARRIVAL_DISPOSITION`），无规则答 `NOT_CONFIGURED`、不借用别仓，期限未到或方式不在规则答 `DISPOSITION_NOT_ALLOWED`，同方式重放答 `EXISTING_RESULT`，换方式答 `STATUS_MISMATCH` 并回显原处置。运营查阅：`GET /warehouse-fulfillment-unclaimed-arrivals`、`unclaimed-arrival`。没有：更正观察、向货主公开、退货入库引用（等退货包）。
+- **处置规则与处置**：规则修订走登记册配置写 `POST /warehouse-fulfillment-unclaimed-disposal-rule-registrations`（不判准入）与查阅 `GET /warehouse-fulfillment-unclaimed-disposal-rules`、`rule-revisions`，按（租户，仓）只追加，认领期限按经过秒数算、不依赖仓业务时区，方式逐字保存。处置走 `POST /warehouse-fulfillment-unclaimed-arrival-dispositions`（运营决定 `UNCLAIMED_ARRIVAL_DISPOSITION`），无规则答 `NOT_CONFIGURED`、不借用别仓，期限未到或方式不在规则答 `DISPOSITION_NOT_ALLOWED`，同方式重放答 `EXISTING_RESULT`，换方式答 `STATUS_MISMATCH` 并回显原处置。运营查阅：`GET /warehouse-fulfillment-unclaimed-arrivals`、`unclaimed-arrival`。没有：更正观察、向货主公开。退货入库已可引用已认领的待认领到货。
 
 ## 设计意图：管什么，不管什么
 

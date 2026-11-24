@@ -383,6 +383,9 @@ func (handler *InstructionHandler) screenExecution(ctx context.Context, command 
 		if usage == domain.ZoneUsageOutboundStaging {
 			issues = append(issues, domain.NewInternalJobIssue(index, domain.InternalJobIssueOutboundStaging))
 		}
+		if line.Direction == domain.StockIn && places[line.Location.String()].deactivated {
+			issues = append(issues, domain.NewInternalJobIssue(index, domain.InternalJobIssueMoveInDeactivated))
+		}
 		if line.Direction == domain.StockIn && usage == domain.ZoneUsageDefective {
 			issues = append(issues, domain.NewInternalJobIssue(index, domain.InternalJobIssueZoneIncompatible))
 		}

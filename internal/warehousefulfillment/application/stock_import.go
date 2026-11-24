@@ -737,6 +737,10 @@ func (handler *StockImportHandler) screenZone(
 	if !found {
 		return fmt.Errorf("库位已登记，它的库区 %s 读不到", zoneCode)
 	}
+	if zone.Content().Deactivated() {
+		add(StockImportIssueLocationDeactivated)
+		return nil
+	}
 	usage := zone.Content().Usage()
 	if carton {
 		if !domain.CartonStockZoneAllowed(usage) {

@@ -314,7 +314,7 @@ func (handler *AdjustmentHandler) screen(ctx context.Context, command SubmitAdju
 			issues = append(issues, domain.NewFreezeIssue(domain.FreezeIssueLocationNotFound))
 			continue
 		}
-		if line.Kind == ports.AdjustmentIncrease && (location.Content().Deactivated() || !line.State.AllowedIn(zone.Content().Usage())) {
+		if line.Kind == ports.AdjustmentIncrease && (location.Content().Deactivated() || zone.Content().Deactivated() || !line.State.AllowedIn(zone.Content().Usage())) {
 			issues = append(issues, domain.NewFreezeIssue(domain.FreezeIssueLocationNotFound))
 			continue
 		}

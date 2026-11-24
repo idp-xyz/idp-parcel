@@ -66,6 +66,57 @@ func TestRelabelAndUnboxPostWholeFacts(t *testing.T) {
 	}
 }
 
+func TestInstructionOutputAndUnboxRefuseDeactivatedDestinations(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedReceiving(t)
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-STORE", 1, nil))
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-STORE", 1, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-STORE")
+		spec.Deactivated = true
+	}))
+	world.saveGoodsRevision(t, goodsRevisionFixture(t, "SYN-OWNER-01", "SYN-KIT-01", 1, "REQ-KIT-OFF", func(spec *domain.GoodsContentSpec) {
+		spec.Name = valueOf(t, domain.NewGoodsName, "停用目标套装")
+		spec.Aliases = nil
+		spec.Composite = true
+		spec.OutboundMode = domain.GoodsOutboundAsFinishedGoods
+		spec.Components = []domain.GoodsComponent{domain.NewGoodsComponent(valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), 2)}
+	}))
+	advice := world.adviseGoods(t, "REQ-PART-OFF", "SYN-GOODS-01", "件", 2)
+	if world.confirm(t, receiptCommand(t, "SYN-FACT-PART-OFF", advice.ID().String(), mustReceiptLine(t, receiptLineSpec{
+		observed: "SYN-GOODS-01", quantity: 2,
+	}))).Outcome() != application.ConfirmReceiptConfirmed {
+		t.Fatal("组件没有入账")
+	}
+	handler := world.instructions(t)
+	accepted := world.acceptInstruction(t, handler, processCommand(t, "REQ-PROC-OFF", 1))
+	instruction, _ := accepted.Instruction()
+	refused := world.executeInstruction(t, handler, executeProcess(t, "SYN-FACT-PROC-OFF", instruction.ID().String(), 1, 2))
+	if refused.Outcome() != application.InstructionContentInvalid || len(refused.Issues()) != 1 || refused.Issues()[0].Kind() != domain.InternalJobIssueMoveInDeactivated {
+		t.Fatalf("停用库位产出 %s %+v", refused.Outcome(), refused.Issues())
+	}
+	if world.stockUnitAt(t, "SYN-LOC-STORE", "件") != 0 || world.stockUnitAt(t, "SYN-LOC-RCV", "件") != 2 {
+		t.Fatalf("停用库位不应改账 store=%d rcv=%d", world.stockUnitAt(t, "SYN-LOC-STORE", "件"), world.stockUnitAt(t, "SYN-LOC-RCV", "件"))
+	}
+
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-STORE", 2, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-STORE")
+	}))
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-STORE", 2, func(spec *domain.ZoneContentSpec) {
+		spec.Deactivated = true
+	}))
+	cartonAdvice := world.adviseCartons(t, "REQ-UNBOX-OFF", "SYN-CARTON-OFF")
+	if world.confirm(t, cartonReceiptCommand(t, "SYN-FACT-UNBOX-OFF-RCV", cartonAdvice.ID().String(), mustCartonLine(t, "SYN-CARTON-OFF", "", false))).Outcome() != application.ConfirmReceiptConfirmed {
+		t.Fatal("整箱收货没有入账")
+	}
+	unboxRefused := world.unbox(t, handler, unboxCommand(t, "SYN-FACT-UNBOX-OFF", "SYN-CARTON-OFF", 3))
+	if unboxRefused.Outcome() != application.InstructionContentInvalid || len(unboxRefused.Issues()) != 1 || unboxRefused.Issues()[0].Kind() != domain.InternalJobIssueMoveInDeactivated {
+		t.Fatalf("停用库区开箱 %s %+v", unboxRefused.Outcome(), unboxRefused.Issues())
+	}
+	if world.cartonBalance(t, "SYN-CARTON-OFF") != 1 || world.stockUnitAt(t, "SYN-LOC-STORE", "件") != 0 {
+		t.Fatalf("停用库区开箱不应出箱或入账 carton=%d store=%d", world.cartonBalance(t, "SYN-CARTON-OFF"), world.stockUnitAt(t, "SYN-LOC-STORE", "件"))
+	}
+}
+
 func relabelCommand(t *testing.T) application.AcceptInstructionCommand {
 	t.Helper()
 	return application.AcceptInstructionCommand{

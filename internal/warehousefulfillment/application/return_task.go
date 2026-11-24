@@ -52,11 +52,11 @@ func (handler *WaveHandler) Return(ctx context.Context, command ReturnCommand) (
 		return WaveResult{outcome: WaveContentInvalid}, nil
 	}
 	place, found, err := handler.locations.LoadLatestLocation(ctx, command.Tenant, request.Warehouse(), command.Target)
-	if err != nil || !found {
+	if err != nil || !found || place.Content().Deactivated() {
 		return WaveResult{outcome: WaveContentInvalid}, nil
 	}
 	zone, found, err := handler.zones.LoadLatestZone(ctx, command.Tenant, request.Warehouse(), place.Content().ZoneCode())
-	if err != nil || !found || !domain.AllocatableGoods(task.State, zone.Content().Usage()) {
+	if err != nil || !found || zone.Content().Deactivated() || !domain.AllocatableGoods(task.State, zone.Content().Usage()) {
 		return WaveResult{outcome: WaveContentInvalid}, nil
 	}
 	if err := handler.moveReturn(ctx, request, task, command); err != nil {

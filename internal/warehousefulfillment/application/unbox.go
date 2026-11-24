@@ -223,6 +223,9 @@ func (handler *InstructionHandler) screenUnbox(ctx context.Context, command Unbo
 			issues = append(issues, domain.NewInternalJobIssue(index, domain.InternalJobIssueLocationNotFound))
 			continue
 		}
+		if places[line.Location.String()].deactivated {
+			issues = append(issues, domain.NewInternalJobIssue(index, domain.InternalJobIssueMoveInDeactivated))
+		}
 		if usage == domain.ZoneUsageOutboundStaging {
 			issues = append(issues, domain.NewInternalJobIssue(index, domain.InternalJobIssueOutboundStaging))
 		}

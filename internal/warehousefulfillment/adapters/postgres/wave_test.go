@@ -1114,6 +1114,49 @@ func TestAReturnMovesPickedGoodsBackAndARefusedShipmentStaysPacked(t *testing.T)
 	}
 }
 
+func TestPickAndReturnRefuseDeactivatedTargets(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedStorageStock(t, 4)
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-OUT", 1, func(spec *domain.ZoneContentSpec) {
+		spec.Usage = domain.ZoneUsageOutboundStaging
+	}))
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-OUT", 1, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-OUT")
+		spec.Deactivated = true
+	}))
+	accepted := world.acceptOutbound(t, world.outbound(t), outboundCommand(t, "REQ-PICK-OFF", 4))
+	request, _ := accepted.Request()
+	handler := world.waves(t)
+	if world.adoptStrategy(t, handler).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("策略没有采用")
+	}
+	released := world.releaseWave(t, handler, "WAVE-PICK-OFF", request.ID())
+	if world.pick(t, handler, released.Tasks()[0].ID, 4).Outcome() != application.WaveContentInvalid {
+		t.Fatal("停用暂存库位不应拣入")
+	}
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-OUT", 2, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-OUT")
+	}))
+	if world.pick(t, handler, released.Tasks()[0].ID, 4).Outcome() != application.WavePicked {
+		t.Fatal("启用后应能拣入")
+	}
+	if world.cutoff(t, handler, request.ID(), 0, "cutoff-pick-off").Outcome() != application.CutoffReturnRequired {
+		t.Fatal("截单没有生成回库")
+	}
+	var returnID string
+	if err := world.pool.QueryRow(t.Context(),
+		`SELECT return_id FROM warehouse_fulfillment.return_task WHERE tenant_id = $1 AND status = 'OPEN'`,
+		"SYN-TENANT-01").Scan(&returnID); err != nil {
+		t.Fatal(err)
+	}
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-STORE", 2, func(spec *domain.ZoneContentSpec) {
+		spec.Deactivated = true
+	}))
+	if world.completeReturn(t, handler, returnID, "SYN-FACT-RET-OFF", "SYN-LOC-STORE").Outcome() != application.WaveContentInvalid || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 4 {
+		t.Fatal("停用存储库区不应回库入账")
+	}
+}
+
 type scriptedReleaser struct{ word string }
 
 func (releaser scriptedReleaser) Release(context.Context, string, string, string, string, string, int) (string, error) {

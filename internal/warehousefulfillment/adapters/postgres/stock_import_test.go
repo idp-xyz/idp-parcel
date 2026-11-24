@@ -195,6 +195,18 @@ func TestStockImportSubmitPostAndReject(t *testing.T) {
 	if result := post(pendingBefore.ID, baseInstant.Add(3*time.Hour)); result.Outcome() != application.StockImportNoLongerValid || !hasIssue(result, application.StockImportIssueLocationDeactivated) {
 		t.Fatalf("批准时库位已停用 = %s %+v", result.Outcome(), result.Issues())
 	}
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-STORE", 5, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-STORE")
+	}))
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-STORE", 2, func(spec *domain.ZoneContentSpec) {
+		spec.Deactivated = true
+	}))
+	staleZone := command
+	staleZone.ID = valueOf(t, domain.NewStockImportID, "SYN-IMP-ZONE-OFF")
+	if result := submit(staleZone); result.Outcome() != application.StockImportContentInvalid || !hasIssue(result, application.StockImportIssueLocationDeactivated) {
+		t.Fatalf("停用库区的新提交 = %s %+v", result.Outcome(), result.Issues())
+	}
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-STORE", 3, nil))
 
 	rejectID := valueOf(t, domain.NewStockImportID, "SYN-IMP-REJ")
 	rejectCmd := command
