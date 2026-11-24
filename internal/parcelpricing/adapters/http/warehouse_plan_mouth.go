@@ -10,7 +10,80 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
+
+// WarehousePlanCatalogueReader 是运营查阅仓储计费方案列表的读口。
+type WarehousePlanCatalogueReader interface {
+	ListPlans(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.WarehousePlanCatalogueRow], error)
+}
+
+// NewQueryWarehousePlansEndpoint 交回运营分页查阅仓储计费方案的入口（GET /pricing-warehouse-plan-list）。
+func NewQueryWarehousePlansEndpoint(intake PricingCatalogueIntake, reader WarehousePlanCatalogueReader) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			response.Header().Set("Allow", http.MethodGet)
+			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeCatalogueIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := ports.WarehousePlanPages.DecodeRaw(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		page, err := reader.ListPlans(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
+		if err != nil {
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		items := make([]warehousePlanRowBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
+			items = append(items, warehousePlanRowBody{
+				ID:            row.ID,
+				Version:       row.Version,
+				Scope:         row.Scope,
+				Currency:      row.Currency,
+				DeclaredValue: row.DeclaredValue,
+				EffectiveFrom: row.EffectiveFrom.UTC().Format(time.RFC3339Nano),
+				GroupCount:    row.GroupCount,
+				RuleCount:     row.RuleCount,
+			})
+		}
+		writeJSON(response, http.StatusOK, warehousePlanListResponse{
+			Outcome: "WAREHOUSE_PLANS_LISTED",
+			Plans:   items,
+			Page:    page.Page(query.Limit),
+		})
+	})
+}
+
+type warehousePlanListResponse struct {
+	Outcome string                 `json:"outcome"`
+	Plans   []warehousePlanRowBody `json:"plans"`
+	Page    cataloguepage.Page     `json:"page"`
+}
+
+type warehousePlanRowBody struct {
+	ID            string `json:"id"`
+	Version       string `json:"version"`
+	Scope         string `json:"scope"`
+	Currency      string `json:"currency"`
+	DeclaredValue string `json:"declaredValue"`
+	EffectiveFrom string `json:"effectiveFrom"`
+	GroupCount    int    `json:"groupCount"`
+	RuleCount     int    `json:"ruleCount"`
+}
 
 // WarehousePlanIntake 把已认证的请求译成一张仓储计费方案。租户不从载荷取。
 type WarehousePlanIntake interface {

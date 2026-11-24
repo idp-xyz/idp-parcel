@@ -1,6 +1,8 @@
 package ports
 
 import (
+	"time"
+
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
@@ -124,4 +126,32 @@ var referenceSeriesKinds = []string{
 	domain.ReferenceSeriesFuelRate.String(),
 	domain.ReferenceSeriesExchangeRate.String(),
 	domain.ReferenceSeriesPublishedAmount.String(),
+}
+
+// WarehousePlanPages 是运营查阅仓储计费方案列表（GET /pricing-warehouse-plan-list）的声明。
+// 方案主键是（方案标识、版本），缺省按生效时刻倒序排。
+var WarehousePlanPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "pricing-warehouse-plan-list",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "effectiveFrom", Kind: cataloguepage.Instant},
+		{Name: "id", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "effectiveFrom", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "scope"},
+		{Name: "currency"},
+	},
+})
+
+// WarehousePlanCatalogueRow 是仓储计费方案列表的一行。
+type WarehousePlanCatalogueRow struct {
+	ID            string
+	Version       string
+	Scope         string
+	Currency      string
+	DeclaredValue string
+	EffectiveFrom time.Time
+	GroupCount    int
+	RuleCount     int
 }

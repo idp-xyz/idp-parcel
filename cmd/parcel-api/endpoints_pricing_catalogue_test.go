@@ -11,5 +11,6 @@ func init() {
 		referenceSeriesCoverage:  unwiredReferenceSeriesCoverage{},
 		pendingSeriesEvaluations: unwiredPendingSeriesEvaluations{},
 		pricingEvaluations:       unwiredPricingEvaluations{},
+		warehousePlans:           unwiredWarehousePlans{},
 	})
 }

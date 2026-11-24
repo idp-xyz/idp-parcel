@@ -177,6 +177,18 @@ func TestConfirmingAReceiptStandsWhenChargeUnitsAreNotRegistered(t *testing.T) {
 	if attributeValue(version.Attributes, "ARRIVAL_MODE") == "" {
 		t.Fatal("到仓方式没有留下")
 	}
+	chargeStore, err := adapter.NewCharges(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	occQuery, err := ports.ChargeOccurrencePages.DecodeRaw("kind=INBOUND_HANDLING")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listedOcc, err := chargeStore.ListOccurrences(t.Context(), tenant, 20, occQuery)
+	if err != nil || len(listedOcc.Rows) != 1 || listedOcc.Rows[0].Kind != "INBOUND_HANDLING" || listedOcc.Rows[0].LineCount != 1 {
+		t.Fatalf("发生项列表 %+v err %v", listedOcc.Rows, err)
+	}
 }
 
 func (world receiptWorld) chargeHandler(t *testing.T, at time.Time) *application.ChargeHandler {

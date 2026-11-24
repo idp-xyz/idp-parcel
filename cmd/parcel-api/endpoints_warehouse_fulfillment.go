@@ -113,6 +113,11 @@ type warehouseFulfillmentWiring struct {
 	internalJobs              warehousehttp.InternalJobRegistrar
 	conditionRestore          warehousehttp.ConditionRestorer
 	internalJobQueries        warehousehttp.InternalJobQueries
+	outboundRequestQueries    warehousehttp.OutboundRequestQueries
+	waveQueries               warehousehttp.WaveQueries
+	chargeOccurrenceQueries   warehousehttp.ChargeOccurrenceQueries
+	warehouseAdoptionQueries  warehousehttp.WarehouseAdoptionQueries
+	warehouseChargeReqQueries warehousehttp.WarehouseChargeRequestQueries
 }
 
 func init() {
@@ -578,6 +583,21 @@ func init() {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-condition-restore?decisionId=SYN-DEC-01",
 			},
+			"/warehouse-fulfillment-outbound-request-list": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-wave-list": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-charge-occurrences": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-charge-adoption-list": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-charge-requests": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
 		},
 		build: func(sources endpointSources) (warehouseFulfillmentWiring, error) {
 			if !sources.warehouseFulfillment {
@@ -777,6 +797,11 @@ func init() {
 				internalJobs:              orchestration.internalJobs,
 				conditionRestore:          orchestration.internalJobs,
 				internalJobQueries:        orchestration.internalJobQueries,
+				outboundRequestQueries:    orchestration.outboundRequestQueries,
+				waveQueries:               orchestration.waveQueries,
+				chargeOccurrenceQueries:   orchestration.chargeOccurrenceQueries,
+				warehouseAdoptionQueries:  orchestration.warehouseAdoptions,
+				warehouseChargeReqQueries: orchestration.warehouseAdoptions,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring warehouseFulfillmentWiring) []httpapi.BusinessEndpoint {
@@ -912,6 +937,11 @@ func init() {
 			internalJobList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			internalJobOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			conditionRestoreOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			outboundRequestList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			waveList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			chargeOccurrenceList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			warehouseAdoptionList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			warehouseChargeRequestList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			// 开着：与别的登记写行、查阅行行为一致——渠道没配答「接入渠道未配置」，配了走真编排。各读口共用一个 Intake，各册的
 			// 登记口共用同一个认证器。
 			if wiring.enabled {
@@ -1148,6 +1178,11 @@ func init() {
 				internalJobList = warehousehttp.NewQueryInternalJobsEndpoint(catalogueIntake, wiring.internalJobQueries)
 				internalJobOne = warehousehttp.NewQueryInternalJobEndpoint(catalogueIntake, wiring.internalJobQueries)
 				conditionRestoreOne = warehousehttp.NewQueryConditionRestoreEndpoint(catalogueIntake, wiring.internalJobQueries)
+				outboundRequestList = warehousehttp.NewQueryOutboundRequestsEndpoint(catalogueIntake, wiring.outboundRequestQueries)
+				waveList = warehousehttp.NewQueryWavesEndpoint(catalogueIntake, wiring.waveQueries)
+				chargeOccurrenceList = warehousehttp.NewQueryChargeOccurrencesEndpoint(catalogueIntake, wiring.chargeOccurrenceQueries)
+				warehouseAdoptionList = warehousehttp.NewQueryWarehouseAdoptionsEndpoint(catalogueIntake, wiring.warehouseAdoptionQueries)
+				warehouseChargeRequestList = warehousehttp.NewQueryWarehouseChargeRequestsEndpoint(catalogueIntake, wiring.warehouseChargeReqQueries)
 			}
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/warehouse-fulfillment-warehouse-registrations", Handler: registration},
@@ -1279,6 +1314,11 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-internal-jobs", Handler: internalJobList},
 				{Pattern: "/warehouse-fulfillment-internal-job", Handler: internalJobOne},
 				{Pattern: "/warehouse-fulfillment-condition-restore", Handler: conditionRestoreOne},
+				{Pattern: "/warehouse-fulfillment-outbound-request-list", Handler: outboundRequestList},
+				{Pattern: "/warehouse-fulfillment-wave-list", Handler: waveList},
+				{Pattern: "/warehouse-fulfillment-charge-occurrences", Handler: chargeOccurrenceList},
+				{Pattern: "/warehouse-fulfillment-charge-adoption-list", Handler: warehouseAdoptionList},
+				{Pattern: "/warehouse-fulfillment-charge-requests", Handler: warehouseChargeRequestList},
 			}
 		},
 	})

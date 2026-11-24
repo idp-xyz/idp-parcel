@@ -12,6 +12,8 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // WarehousePlans 记下仓储计费方案与评价。方案文档不含金额以外的租户默认。
@@ -102,4 +104,86 @@ func (store *WarehousePlans) SaveEvaluation(ctx context.Context, tenant, id, occ
 		return fmt.Errorf("save warehouse evaluation: %w", err)
 	}
 	return nil
+}
+
+const warehousePlanListColumns = `plan_id, version, scope, currency, effective_from, document`
+
+const warehousePlanListed = `WITH listed AS (
+	SELECT ` + warehousePlanListColumns + `
+	  FROM parcel_pricing.warehouse_plan
+	 WHERE tenant_id = $1
+)`
+
+var warehousePlanListBinding = ports.WarehousePlanPages.MustBind(cataloguepage.Columns{
+	Sorts: map[string]string{
+		"effectiveFrom": "effective_from",
+		"id":            "plan_id",
+	},
+	Identity: []string{"plan_id", "version"},
+	Filters: map[string]string{
+		"scope":    "scope",
+		"currency": "currency",
+	},
+	Keyword: []string{"plan_id", "version", "scope", "currency"},
+})
+
+// ListPlans 按分页条件列出本租户已登记的仓储计费方案。
+func (store *WarehousePlans) ListPlans(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.WarehousePlanCatalogueRow], error) {
+	const operation = "list warehouse plans"
+	fail := func(err error) (cataloguepage.Result[ports.WarehousePlanCatalogueRow], error) {
+		return cataloguepage.Result[ports.WarehousePlanCatalogueRow]{}, fmt.Errorf("%s: %w", operation, err)
+	}
+	if tenant.String() == "" || limit < 1 {
+		return fail(errors.New("tenant and a positive limit are required"))
+	}
+	plan, err := warehousePlanListBinding.Plan(query, "", []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
+	}
+	executor, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	var total int64
+	if err := executor.QueryRow(ctx, warehousePlanListed+" "+plan.CountSQL("listed"), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
+	}
+	rows, err := executor.Query(ctx, warehousePlanListed+" "+plan.PageSQL(warehousePlanListColumns, "listed"), plan.PageArgs...)
+	if err != nil {
+		return fail(err)
+	}
+	defer rows.Close()
+	var items []ports.WarehousePlanCatalogueRow
+	for rows.Next() {
+		var (
+			item ports.WarehousePlanCatalogueRow
+			raw  []byte
+		)
+		if err := rows.Scan(&item.ID, &item.Version, &item.Scope, &item.Currency, &item.EffectiveFrom, &raw); err != nil {
+			return fail(err)
+		}
+		var doc domain.WarehousePlan
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return fail(err)
+		}
+		item.DeclaredValue = doc.DeclaredValue
+		item.GroupCount = len(doc.Groups)
+		item.RuleCount = len(doc.Rules)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return fail(err)
+	}
+	return cataloguepage.Finish(query, items, limit, total, func(item ports.WarehousePlanCatalogueRow, sortField string) cataloguepage.Position {
+		identity := []string{item.ID, item.Version}
+		if sortField == "id" {
+			return cataloguepage.Position{Value: item.ID, Identity: identity}
+		}
+		return cataloguepage.Position{Value: cataloguepage.FormatInstant(item.EffectiveFrom), Identity: identity}
+	})
 }

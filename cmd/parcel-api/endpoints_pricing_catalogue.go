@@ -22,6 +22,7 @@ type pricingCatalogueWiring struct {
 	referenceSeriesCoverage  pricinghttp.ReferenceSeriesCoverageReader
 	pendingSeriesEvaluations pricinghttp.PendingSeriesEvaluationReader
 	pricingEvaluations       pricinghttp.EvaluationCatalogueReader
+	warehousePlans           pricinghttp.WarehousePlanCatalogueReader
 }
 
 func init() {
@@ -47,6 +48,7 @@ func init() {
 			"/pricing-reference-series-coverage":  {method: http.MethodGet, face: operationsReadFace()},
 			"/pricing-pending-series-evaluations": {method: http.MethodGet, face: operationsReadFace()},
 			"/pricing-evaluations":                {method: http.MethodGet, face: operationsReadFace()},
+			"/pricing-warehouse-plan-list":        {method: http.MethodGet, face: operationsReadFace()},
 		},
 		build: func(sources endpointSources) (pricingCatalogueWiring, error) {
 			none := pricingCatalogueWiring{}
@@ -90,6 +92,10 @@ func init() {
 			if err != nil {
 				return none, err
 			}
+			warehousePlans, err := pppostgres.NewWarehousePlans(sources.db)
+			if err != nil {
+				return none, err
+			}
 			return pricingCatalogueWiring{
 				priceCards:               pricingCatalog,
 				priceCardContent:         priceCardContent,
@@ -100,6 +106,7 @@ func init() {
 				referenceSeriesCoverage:  referenceSeriesCoverage,
 				pendingSeriesEvaluations: pendingSeriesEvaluations,
 				pricingEvaluations:       pricingEvaluations,
+				warehousePlans:           warehousePlans,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring pricingCatalogueWiring) []httpapi.BusinessEndpoint {
@@ -122,6 +129,7 @@ func init() {
 				// 查阅与目录查阅同属租户内运营读面，各随本上下文既有的 Intake 变量换值，
 				// 不为事实册另立第二种准入形（裁决在各端点构造函数注释）。
 				{Pattern: "/pricing-evaluations", Handler: pricinghttp.NewQueryEvaluationsEndpoint(pricingCatalogueIntake, wiring.pricingEvaluations)},
+				{Pattern: "/pricing-warehouse-plan-list", Handler: pricinghttp.NewQueryWarehousePlansEndpoint(pricingCatalogueIntake, wiring.warehousePlans)},
 			}
 		},
 	})

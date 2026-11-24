@@ -7,6 +7,7 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber/docnumberpg"
 	whidentity "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/identity"
@@ -198,6 +199,19 @@ func TestStockReadSubtractsTheUnassignedReservation(t *testing.T) {
 	if len(holds.Holds) != 1 || holds.Holds[0].Kind != "RESERVATION" || holds.Holds[0].Quantity != 6 || holds.Holds[0].Location != "" {
 		t.Fatalf("占用 %+v", holds.Holds)
 	}
+	requests, err := adapter.NewOutboundRequests(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pageQuery, err := ports.OutboundRequestPages.DecodeRaw("status=RESERVED")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := requests.List(t.Context(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), 20, pageQuery)
+	if err != nil || len(listed.Rows) != 1 || listed.Rows[0].ReservedQuantity != 6 || len(listed.Rows[0].Lines) != 1 {
+		t.Fatalf("出库列表 %+v err %v", listed.Rows, err)
+	}
+	_ = cataloguepage.Page{}
 }
 
 func TestOutboundWritesRefuseToRunOutsideATransaction(t *testing.T) {

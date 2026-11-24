@@ -156,3 +156,37 @@ var AuditedPayablePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 	Selectors:   []string{"documentNumber", "claim", "supplier"},
 })
+
+// WarehouseAdoptionPages 是运营查阅仓储计费采用列表的查询声明（ADR-0144）。
+// 键是（货主、仓、修订），按生效时刻倒序排。
+var WarehouseAdoptionPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-charge-adoption-list",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "effectiveAt", Kind: cataloguepage.Instant},
+		{Name: "ownerAccount", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "effectiveAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text, cataloguepage.Integer},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "ownerAccount"},
+		{Name: "warehouseCode"},
+		{Name: "pricingScope"},
+	},
+})
+
+// WarehouseChargeRequestPages 是运营查阅仓储 SELL 计费请求列表的查询声明（ADR-0144）。
+// 键是（发生项、版本）。
+var WarehouseChargeRequestPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-charge-requests",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "occurrenceId", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "occurrenceId", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Integer},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "status", Vocabulary: []string{
+			"FORMED", "CONFIRMED", "ZERO", "PENDING", "NOT_CONFIGURED", "AWAITING_PERSON", "SUPERSEDED", "DIFFERENCE",
+		}},
+		{Name: "pricingScope"},
+	},
+})

@@ -11,6 +11,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -106,6 +107,18 @@ func TestWarehousePlanConditionsClassesAndDigestRoundTrip(t *testing.T) {
 	changed, issue := domain.NewWarehousePlan(classedWarehousePlan("31"))
 	if issue != "" || changed.Digest() == plan.Digest() {
 		t.Fatalf("条件变了摘要 %s %s", issue, changed.Digest())
+	}
+	tenantID, err := domain.NewTenantID("SYN-TENANT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	planQuery, err := ports.WarehousePlanPages.DecodeRaw("scope=SYN-SCOPE-WH")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listedPlans, err := store.ListPlans(t.Context(), tenantID, 20, planQuery)
+	if err != nil || len(listedPlans.Rows) != 1 || listedPlans.Rows[0].ID != "SYN-PLAN-WH-02" || listedPlans.Rows[0].RuleCount != 1 {
+		t.Fatalf("方案列表 %+v err %v", listedPlans.Rows, err)
 	}
 }
 

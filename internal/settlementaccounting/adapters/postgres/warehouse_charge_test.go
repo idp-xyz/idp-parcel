@@ -17,6 +17,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 func TestWarehouseChargeWritersRefuseToRunOutsideATransaction(t *testing.T) {
@@ -172,6 +173,22 @@ func TestWarehouseChargesFollowTheSyntheticOccurrence(t *testing.T) {
 		_, minor := stored.OriginalAmount()
 		if minor != 400 {
 			return fmt.Errorf("金额 %d", minor)
+		}
+		adoptQuery, err := ports.WarehouseAdoptionPages.DecodeRaw("pricingScope=SYN-SCOPE-WH")
+		if err != nil {
+			return err
+		}
+		listedAdoptions, err := store.ListAdoptions(ctx, tenant, 20, adoptQuery)
+		if err != nil || len(listedAdoptions.Rows) != 1 || listedAdoptions.Rows[0].Account != account.ID().String() {
+			return fmt.Errorf("采用列表 %+v %v", listedAdoptions.Rows, err)
+		}
+		reqQuery, err := ports.WarehouseChargeRequestPages.DecodeRaw("status=CONFIRMED")
+		if err != nil {
+			return err
+		}
+		listedReqs, err := store.ListRequests(ctx, tenant, 20, reqQuery)
+		if err != nil || len(listedReqs.Rows) != 2 {
+			return fmt.Errorf("计费请求列表 %+v %v", listedReqs.Rows, err)
 		}
 		return nil
 	})

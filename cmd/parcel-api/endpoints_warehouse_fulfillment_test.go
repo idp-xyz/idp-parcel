@@ -16,6 +16,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
 	warehouseapp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	warehousedomain "go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	warehouseports "go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
@@ -195,35 +196,71 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		goodsRevisions:    unwiredGoodsCatalogue{},
 		goodsFinder:       unwiredGoodsCatalogue{},
 
-		preAdviceOnBehalf:        unwiredPreAdvice{},
-		preAdviceQueries:         unwiredPreAdviceQueries{},
-		preAdviceClose:           unwiredPreAdviceClose{},
-		discrepancyConclusion:    unwiredDiscrepancyConclusion{},
-		receiptConfirm:           unwiredReceiptConfirmation{},
-		measurementRecord:        unwiredWarehouseMeasurement{},
-		measurementQueries:       unwiredWarehouseMeasurement{},
-		disposalRuleRegistration: unwiredDisposalRuleRegistration{},
-		disposalRuleCatalogue:    unwiredDisposalRuleCatalogue{},
-		disposalRuleRevisions:    unwiredDisposalRuleCatalogue{},
-		unclaimedArrivalRegister: unwiredUnclaimedArrival{},
-		unclaimedArrivalManage:   unwiredUnclaimedArrival{},
-		unclaimedArrivalQueries:  unwiredUnclaimedArrival{},
-		stockImportSubmit:        unwiredStockImport{},
-		stockImportDecisions:     unwiredStockImport{},
-		stockImportQueries:       unwiredStockImport{},
-		internalJobs:             unwiredInternalJob{},
-		conditionRestore:         unwiredInternalJob{},
-		internalJobQueries:       unwiredInternalJob{},
-		instructions:             unwiredInstruction{},
-		freezes:                  unwiredFreeze{},
-		stockQueries:             unwiredStockRead{},
-		counts:                   unwiredCount{},
-		approvals:                unwiredApproval{},
-		adjustments:              unwiredAdjustment{},
-		jobDiscrepancies:         unwiredJobDiscrepancy{},
-		outbounds:                unwiredOutbound{},
-		waves:                    unwiredWave{},
+		preAdviceOnBehalf:         unwiredPreAdvice{},
+		preAdviceQueries:          unwiredPreAdviceQueries{},
+		preAdviceClose:            unwiredPreAdviceClose{},
+		discrepancyConclusion:     unwiredDiscrepancyConclusion{},
+		receiptConfirm:            unwiredReceiptConfirmation{},
+		measurementRecord:         unwiredWarehouseMeasurement{},
+		measurementQueries:        unwiredWarehouseMeasurement{},
+		disposalRuleRegistration:  unwiredDisposalRuleRegistration{},
+		disposalRuleCatalogue:     unwiredDisposalRuleCatalogue{},
+		disposalRuleRevisions:     unwiredDisposalRuleCatalogue{},
+		unclaimedArrivalRegister:  unwiredUnclaimedArrival{},
+		unclaimedArrivalManage:    unwiredUnclaimedArrival{},
+		unclaimedArrivalQueries:   unwiredUnclaimedArrival{},
+		stockImportSubmit:         unwiredStockImport{},
+		stockImportDecisions:      unwiredStockImport{},
+		stockImportQueries:        unwiredStockImport{},
+		internalJobs:              unwiredInternalJob{},
+		conditionRestore:          unwiredInternalJob{},
+		internalJobQueries:        unwiredInternalJob{},
+		instructions:              unwiredInstruction{},
+		freezes:                   unwiredFreeze{},
+		stockQueries:              unwiredStockRead{},
+		counts:                    unwiredCount{},
+		approvals:                 unwiredApproval{},
+		adjustments:               unwiredAdjustment{},
+		jobDiscrepancies:          unwiredJobDiscrepancy{},
+		outbounds:                 unwiredOutbound{},
+		waves:                     unwiredWave{},
+		outboundRequestQueries:    unwiredOutbound{},
+		waveQueries:               unwiredWave{},
+		chargeOccurrenceQueries:   unwiredChargeOccurrenceQueries{},
+		warehouseAdoptionQueries:  unwiredWarehouseChargeReads{},
+		warehouseChargeReqQueries: unwiredWarehouseChargeReads{},
 	}
+}
+
+type unwiredChargeOccurrenceQueries struct{}
+
+func (unwiredChargeOccurrenceQueries) ListOccurrences(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.ChargeOccurrenceRow], error) {
+	return cataloguepage.Result[warehouseports.ChargeOccurrenceRow]{}, errOrchestrationNotWired
+}
+
+type unwiredWarehouseChargeReads struct{}
+
+func (unwiredWarehouseChargeReads) ListAdoptions(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	string,
+) (cataloguepage.Result[warehousehttp.WarehouseAdoptionReadRow], error) {
+	return cataloguepage.Result[warehousehttp.WarehouseAdoptionReadRow]{}, errOrchestrationNotWired
+}
+
+func (unwiredWarehouseChargeReads) ListRequests(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	string,
+) (cataloguepage.Result[warehousehttp.WarehouseChargeRequestReadRow], error) {
+	return cataloguepage.Result[warehousehttp.WarehouseChargeRequestReadRow]{}, errOrchestrationNotWired
 }
 
 type unwiredWave struct{}
@@ -261,6 +298,14 @@ func (unwiredWave) Cutoff(context.Context, warehouseapp.CutoffCommand) (warehous
 func (unwiredWave) Return(context.Context, warehouseapp.ReturnCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
 }
+func (unwiredWave) ListWaves(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.WaveRow], error) {
+	return cataloguepage.Result[warehouseports.WaveRow]{}, errOrchestrationNotWired
+}
 
 type unwiredOutbound struct{}
 
@@ -272,6 +317,14 @@ func (unwiredOutbound) RegisterPolicy(context.Context, warehouseapp.RegisterShor
 }
 func (unwiredOutbound) Split(context.Context, warehouseapp.SplitOutboundCommand) (warehouseapp.SplitResult, error) {
 	return warehouseapp.SplitResult{}, errOrchestrationNotWired
+}
+func (unwiredOutbound) List(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.OutboundRequestRow], error) {
+	return cataloguepage.Result[warehouseports.OutboundRequestRow]{}, errOrchestrationNotWired
 }
 
 type unwiredJobDiscrepancy struct{}
@@ -712,6 +765,11 @@ const (
 	internalJobsLine            = "/warehouse-fulfillment-internal-jobs"
 	internalJobLine             = "/warehouse-fulfillment-internal-job"
 	conditionRestoreReadLine    = "/warehouse-fulfillment-condition-restore"
+	outboundRequestListLine     = "/warehouse-fulfillment-outbound-request-list"
+	waveListLine                = "/warehouse-fulfillment-wave-list"
+	chargeOccurrenceListLine    = "/warehouse-fulfillment-charge-occurrences"
+	warehouseAdoptionListLine   = "/warehouse-fulfillment-charge-adoption-list"
+	warehouseChargeRequestsLine = "/warehouse-fulfillment-charge-requests"
 
 	customerGoodsWriteLine         = "/v1/warehouse/goods"
 	customerGoodsListLine          = "/v1/warehouse/reads/goods"
@@ -925,6 +983,11 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		internalJobsLine:                                              {http.MethodGet, faceOperationsRead},
 		internalJobLine:                                               {http.MethodGet, faceOperationsRead},
 		conditionRestoreReadLine:                                      {http.MethodGet, faceOperationsRead},
+		outboundRequestListLine:                                       {http.MethodGet, faceOperationsRead},
+		waveListLine:                                                  {http.MethodGet, faceOperationsRead},
+		chargeOccurrenceListLine:                                      {http.MethodGet, faceOperationsRead},
+		warehouseAdoptionListLine:                                     {http.MethodGet, faceOperationsRead},
+		warehouseChargeRequestsLine:                                   {http.MethodGet, faceOperationsRead},
 
 		customerGoodsWriteLine:         {http.MethodPost, faceCustomerClient},
 		customerGoodsListLine:          {http.MethodGet, faceCustomerClient},
@@ -1172,6 +1235,11 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			internalJobsLine:                                       {status, code},
 			internalJobLine:                                        {status, code},
 			conditionRestoreReadLine:                               {status, code},
+			outboundRequestListLine:                                {status, code},
+			waveListLine:                                           {status, code},
+			chargeOccurrenceListLine:                               {status, code},
+			warehouseAdoptionListLine:                              {status, code},
+			warehouseChargeRequestsLine:                            {status, code},
 		}
 	}
 	cases := []struct {
@@ -1290,6 +1358,11 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			internalJobsLine:                                       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			internalJobLine:                                        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			conditionRestoreReadLine:                               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			outboundRequestListLine:                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			waveListLine:                                           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			chargeOccurrenceListLine:                               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			warehouseAdoptionListLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			warehouseChargeRequestsLine:                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 		}},
 		{"read grant only", operationsReaderRegister{}, presentedOperatorToken, map[string]answer{
 			warehouseRegistrationsLine: {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1401,6 +1474,11 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			internalJobsLine:                                       {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			internalJobLine:                                        {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			conditionRestoreReadLine:                               {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			outboundRequestListLine:                                {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			waveListLine:                                           {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			chargeOccurrenceListLine:                               {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			warehouseAdoptionListLine:                              {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			warehouseChargeRequestsLine:                            {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 		}},
 		{"no bearer token", everyOperatorGrant{}, "", same(http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED")},
 		{"register is down", failingRegister{}, presentedOperatorToken, same(http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE")},

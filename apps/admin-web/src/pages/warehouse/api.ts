@@ -349,6 +349,203 @@ export function queryOwnerStock(
   return exchangeMasterData<StockReadBody>(`/warehouse-fulfillment-stock?${params.toString()}`);
 }
 
+export interface OutboundRequestLineRecord {
+  goodsCode: string;
+  unit: string;
+  stockState: string;
+  quantity: number;
+}
+
+export interface OutboundRequestRecord {
+  requestId: string;
+  documentNumber?: string;
+  numberingAbsence?: string;
+  ownerAccount: string;
+  warehouseCode: string;
+  origin: string;
+  requestKey: string;
+  dispatch: string;
+  service?: string;
+  recipient: string;
+  address: string;
+  basis?: string;
+  operator?: string;
+  status: string;
+  parentRequestId?: string;
+  platformStocking: boolean;
+  prefetchShipmentId?: string;
+  prefetchDeclaredParcelId?: string;
+  receivedAt: string;
+  lines: OutboundRequestLineRecord[];
+  reservedQuantity: number;
+  wantedQuantity: number;
+}
+
+export interface OutboundRequestListBody {
+  outcome: string;
+  requests: OutboundRequestRecord[];
+  page: CataloguePage;
+}
+
+export interface WaveTaskRecord {
+  taskId: string;
+  requestId: string;
+  locationCode: string;
+  stagingLocation?: string;
+  goodsCode: string;
+  unit: string;
+  stockState: string;
+  quantity: number;
+  picked: number;
+  status: string;
+}
+
+export interface WaveRecord {
+  waveId: string;
+  warehouseCode: string;
+  operator: string;
+  prefetch: boolean;
+  releasedAt: string;
+  requests: string[];
+  tasks: WaveTaskRecord[];
+}
+
+export interface WaveListBody {
+  outcome: string;
+  waves: WaveRecord[];
+  page: CataloguePage;
+}
+
+export interface ChargeOccurrenceRecord {
+  occurrenceId: string;
+  version: number;
+  supersedes?: number;
+  correction: string;
+  kind: string;
+  ownerAccount: string;
+  warehouseCode: string;
+  sourceFact: string;
+  businessTime: string;
+  weightUnit?: string;
+  volumeUnit?: string;
+  measures: ReadonlyArray<{ unit: string; quantity?: string; unmeasured?: boolean; class?: string }>;
+  attributes: ReadonlyArray<{ name: string; value: string }>;
+  lineCount: number;
+}
+
+export interface ChargeOccurrenceListBody {
+  outcome: string;
+  occurrences: ChargeOccurrenceRecord[];
+  page: CataloguePage;
+}
+
+export interface WarehouseAdoptionRecord {
+  ownerAccount: string;
+  warehouseCode: string;
+  revision: number;
+  effectiveAt: string;
+  account: string;
+  pricingScope: string;
+  basis: string;
+  registrant: string;
+}
+
+export interface WarehouseAdoptionListBody {
+  outcome: string;
+  adoptions: WarehouseAdoptionRecord[];
+  page: CataloguePage;
+}
+
+export interface WarehouseChargeRequestRecord {
+  occurrenceId: string;
+  version: number;
+  status: string;
+  chargeId?: string;
+  evaluationId?: string;
+  requestId?: string;
+  account?: string;
+  settlementCurrency?: string;
+  pricingScope?: string;
+  pricingBasisAt?: string;
+}
+
+export interface WarehouseChargeRequestListBody {
+  outcome: string;
+  requests: WarehouseChargeRequestRecord[];
+  page: CataloguePage;
+}
+
+export interface WarehousePlanRecord {
+  id: string;
+  version: string;
+  scope: string;
+  currency: string;
+  declaredValue: string;
+  effectiveFrom: string;
+  groupCount: number;
+  ruleCount: number;
+}
+
+export interface WarehousePlanListBody {
+  outcome: string;
+  plans: WarehousePlanRecord[];
+  page: CataloguePage;
+}
+
+export function listOutboundRequests(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<OutboundRequestListBody>> {
+  return exchangeMasterData<OutboundRequestListBody>(
+    catalogueRequestPath('/warehouse-fulfillment-outbound-request-list', conditions, after),
+  );
+}
+
+export function listWaves(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<WaveListBody>> {
+  return exchangeMasterData<WaveListBody>(
+    catalogueRequestPath('/warehouse-fulfillment-wave-list', conditions, after),
+  );
+}
+
+export function listChargeOccurrences(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<ChargeOccurrenceListBody>> {
+  return exchangeMasterData<ChargeOccurrenceListBody>(
+    catalogueRequestPath('/warehouse-fulfillment-charge-occurrences', conditions, after),
+  );
+}
+
+export function listWarehouseAdoptions(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<WarehouseAdoptionListBody>> {
+  return exchangeMasterData<WarehouseAdoptionListBody>(
+    catalogueRequestPath('/warehouse-fulfillment-charge-adoption-list', conditions, after),
+  );
+}
+
+export function listWarehouseChargeRequests(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<WarehouseChargeRequestListBody>> {
+  return exchangeMasterData<WarehouseChargeRequestListBody>(
+    catalogueRequestPath('/warehouse-fulfillment-charge-requests', conditions, after),
+  );
+}
+
+export function listWarehousePlans(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<WarehousePlanListBody>> {
+  return exchangeMasterData<WarehousePlanListBody>(
+    catalogueRequestPath('/pricing-warehouse-plan-list', conditions, after),
+  );
+}
+
 async function postRegistration(path: string, snapshot: unknown): Promise<ApiResult<RegistrationResponseBody>> {
   const answer = await postMasterData<CatalogueRegistrationBody>(path, snapshot);
   if (answer.kind !== 'outcome') return answer;

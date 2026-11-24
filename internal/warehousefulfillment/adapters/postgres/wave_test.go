@@ -104,6 +104,18 @@ func TestAPrefetchedWaveSubmitsOneEstimatedCommission(t *testing.T) {
 		request.ID().String()).Scan(&shipment); err != nil || shipment != "SHR-PRE-1" {
 		t.Fatalf("记下的委托 %s err %v", shipment, err)
 	}
+	wavesStore, err := adapter.NewWaves(measured.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waveQuery, err := ports.WavePages.DecodeRaw("prefetch=true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listedWaves, err := wavesStore.ListWaves(t.Context(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), 20, waveQuery)
+	if err != nil || len(listedWaves.Rows) != 1 || listedWaves.Rows[0].WaveID != "WAVE-PRE" || len(listedWaves.Rows[0].Requests) != 1 || len(listedWaves.Rows[0].Tasks) != 1 {
+		t.Fatalf("波次列表 %+v err %v", listedWaves.Rows, err)
+	}
 }
 
 func TestAPrefetchedPackRevisesOnlyWhenMeasuredWeightDiffers(t *testing.T) {

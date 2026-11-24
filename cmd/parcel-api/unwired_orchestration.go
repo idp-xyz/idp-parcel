@@ -831,6 +831,17 @@ func (unwiredPricingCatalogue) ListReferenceSeries(
 	return cataloguepage.Result[pricingports.ReferenceSeriesCatalogueRow]{}, errOrchestrationNotWired
 }
 
+type unwiredWarehousePlans struct{}
+
+func (unwiredWarehousePlans) ListPlans(
+	context.Context,
+	pricingdomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[pricingports.WarehousePlanCatalogueRow], error) {
+	return cataloguepage.Result[pricingports.WarehousePlanCatalogueRow]{}, errOrchestrationNotWired
+}
+
 // unwiredPriceCardContent 是价卡内容读口的占位。不并进 unwiredPricingCatalogue：生产装配点上它是另一只适配器
 // （价卡仓储，带整图重验的门；目录适配器只读列面），并成一个会让装配测试盖不住「这本册接错了适配器」这一格。
 type unwiredPriceCardContent struct{}

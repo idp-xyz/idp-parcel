@@ -16,7 +16,6 @@ import (
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/platform/docnumber"
-	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
 	whidentity "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/identity"
 	whparcel "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/parcelshipment"
 	whparty "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/partycommercial"
@@ -166,22 +165,25 @@ type warehouseFulfillmentOrchestration struct {
 	stockImportSubmit        transactionalStockImport
 	stockImportQueries       *whpostgres.StockImports
 
-	internalJobs       transactionalInternalJob
-	internalJobQueries *warehouseapp.QueryInternalJobsHandler
-	instructions       transactionalInstruction
-	freezes            transactionalFreeze
-	stockQueries       *warehouseapp.QueryStockHandler
-	counts             transactionalCount
-	approvals          transactionalApproval
-	adjustments        transactionalAdjustment
-	jobDiscrepancies   transactionalJobDiscrepancy
-	outbounds          transactionalOutbound
-	waves              transactionalWave
-	followUps          transactionalFollowUp
-	returns            transactionalReturn
-	agents             transactionalAgent
-	charges            transactionalCharge
-	warehouseAdoptions warehousehttp.WarehouseAdoptionService
+	internalJobs            transactionalInternalJob
+	internalJobQueries      *warehouseapp.QueryInternalJobsHandler
+	instructions            transactionalInstruction
+	freezes                 transactionalFreeze
+	stockQueries            *warehouseapp.QueryStockHandler
+	counts                  transactionalCount
+	approvals               transactionalApproval
+	adjustments             transactionalAdjustment
+	jobDiscrepancies        transactionalJobDiscrepancy
+	outbounds               transactionalOutbound
+	waves                   transactionalWave
+	followUps               transactionalFollowUp
+	returns                 transactionalReturn
+	agents                  transactionalAgent
+	charges                 transactionalCharge
+	warehouseAdoptions      warehouseAdoptionBridge
+	outboundRequestQueries  *whpostgres.OutboundRequests
+	waveQueries             *whpostgres.Waves
+	chargeOccurrenceQueries *whpostgres.Charges
 }
 
 // transactionalGoodsRegistration 是商品代录的事务壳。核货主客户账户、核「本租户有没有登记过仓」与商品的读写在同一个事务里。
@@ -807,23 +809,26 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 				stockImports, owners, warehouses, locations, zones, goods, cartons, cartonIDs, poster, systemClock{},
 			).WithApproval(countStore, warehouses),
 		},
-		stockImportQueries: stockImports,
-		internalJobs:       internalJobs,
-		internalJobQueries: warehouseapp.NewQueryInternalJobsHandler(internalJobStore, internalJobStore),
-		instructions:       instructions,
-		freezes:            freezes,
-		stockQueries:       stockQueries,
-		counts:             counts,
-		approvals:          approvals,
-		adjustments:        adjustments,
-		jobDiscrepancies:   jobDiscrepancies,
-		outbounds:          outbounds,
-		waves:              waves,
-		followUps:          followUps,
-		returns:            returns,
-		agents:             agents,
-		charges:            charges,
-		warehouseAdoptions: warehouseAdoptions,
+		stockImportQueries:      stockImports,
+		internalJobs:            internalJobs,
+		internalJobQueries:      warehouseapp.NewQueryInternalJobsHandler(internalJobStore, internalJobStore),
+		instructions:            instructions,
+		freezes:                 freezes,
+		stockQueries:            stockQueries,
+		counts:                  counts,
+		approvals:               approvals,
+		adjustments:             adjustments,
+		jobDiscrepancies:        jobDiscrepancies,
+		outbounds:               outbounds,
+		waves:                   waves,
+		followUps:               followUps,
+		returns:                 returns,
+		agents:                  agents,
+		charges:                 charges,
+		warehouseAdoptions:      warehouseAdoptions,
+		outboundRequestQueries:  outboundStore,
+		waveQueries:             waveStore,
+		chargeOccurrenceQueries: chargeStore,
 	}, nil
 }
 
