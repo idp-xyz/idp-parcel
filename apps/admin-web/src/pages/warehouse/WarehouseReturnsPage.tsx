@@ -14,6 +14,7 @@ import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { useWarehouseLookups } from './use-catalogues';
+import { returnReceiptOutcomeLabels } from './presentation';
 import { labelOf, WmsBadge, WmsDetailModal, WmsInfoGrid, WmsSubTable } from './wms-ui';
 
 const info = moduleInfoById['warehouse-returns'];
@@ -22,6 +23,27 @@ const mono = 'whitespace-nowrap font-mono type-body leading-4';
 function includes(value: string | undefined, keyword: string): boolean {
   if (keyword.trim() === '') return true;
   return (value ?? '').toLowerCase().includes(keyword.trim().toLowerCase());
+}
+
+// 转待认领的那一笔自己不入账，认领后另起一笔退货入库，处置落在那一笔上。
+function awaitsDisposition(row: ReturnReceiptRecord): boolean {
+  return !row.disposition && row.outcome === 'COUNTED';
+}
+
+function dispositionBadge(row: ReturnReceiptRecord) {
+  if (row.disposition) return <WmsBadge code={row.disposition.destination} />;
+  if (row.outcome === 'UNCLAIMED') return <WmsBadge label="转待认领" tone="neutral" />;
+  return <WmsBadge code="PENDING" label="待处置" />;
+}
+
+function dispositionText(row: ReturnReceiptRecord): string {
+  if (row.disposition) return labelOf(row.disposition.destination);
+  if (row.outcome === 'UNCLAIMED') return '认领后另起一笔入库再处置';
+  return '待处置';
+}
+
+function goUnclaimed() {
+  window.location.hash = '#/warehouse-unclaimed';
 }
 
 /** 退货：预报台账与到仓处置台账分开。到仓扫描仍去作业台，回库处置在到仓行上直接做。 */
@@ -93,7 +115,7 @@ export function WarehouseReturnsPage() {
     {
       id: 'disp',
       header: '回库处置',
-      render: (row) => (row.disposition ? <WmsBadge code={row.disposition.destination} /> : <WmsBadge code="PENDING" label="待处置" />),
+      render: dispositionBadge,
     },
     { id: 'at', header: '到仓时刻', className: mono, render: (row) => formatInstant(row.occurredAt) },
   ];
@@ -119,8 +141,11 @@ export function WarehouseReturnsPage() {
     const actions: InspectorAction[] = [
       { label: '查看到仓明细', onRun: () => setReceipt(row) },
     ];
-    if (!row.disposition && targetMap.has('return-disposition')) {
+    if (awaitsDisposition(row) && targetMap.has('return-disposition')) {
       actions.push({ label: '回库处置', onRun: () => openAction('return-disposition', { factId: row.factId }) });
+    }
+    if (row.outcome === 'UNCLAIMED') {
+      actions.push({ label: '去待认领到货', onRun: goUnclaimed });
     }
     return {
       title: row.trackingNumber || row.factId,
@@ -132,7 +157,7 @@ export function WarehouseReturnsPage() {
             { label: '仓 / 库位', value: `${row.warehouseCode} · ${row.locationCode}`, mono: true },
             { label: '数量', value: `${row.quantity} ${row.unit}`, mono: true },
             { label: '货主', value: row.ownerAccount || '未认出', mono: true },
-            { label: '处置', value: row.disposition ? labelOf(row.disposition.destination) : '待处置' },
+            { label: '处置', value: dispositionText(row) },
           ],
         },
         { kind: 'actions', actions },
@@ -191,7 +216,7 @@ export function WarehouseReturnsPage() {
           <ListPageTemplate<ReturnReceiptRecord>
             moduleId="warehouse-returns"
             title="到仓与回库处置"
-            description="退件扫进暂存位后出现在这里。还没处置的行可以直接做良品上架、转次品或退还货主。"
+            description="退件扫进暂存位后出现在这里。还没处置的行可以直接做良品上架、转次品或退还货主；认不出货主的转待认领，认领后另起一笔入库。"
             headerActions={
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" onClick={() => { window.location.hash = '#/warehouse-workstation'; }}>
@@ -258,15 +283,15 @@ export function WarehouseReturnsPage() {
         open={receipt !== null}
         title={receipt?.trackingNumber || receipt?.factId || ''}
         subtitle={receipt?.factId}
-        badge={
-          receipt ? (
-            receipt.disposition ? <WmsBadge code={receipt.disposition.destination} /> : <WmsBadge code="PENDING" label="待处置" />
-          ) : undefined
-        }
+        badge={receipt ? dispositionBadge(receipt) : undefined}
         actions={
-          receipt && !receipt.disposition && targetMap.has('return-disposition') ? (
+          receipt && awaitsDisposition(receipt) && targetMap.has('return-disposition') ? (
             <Button type="button" className={primaryActionClass} onClick={() => openAction('return-disposition', { factId: receipt.factId })}>
               回库处置
+            </Button>
+          ) : receipt?.outcome === 'UNCLAIMED' ? (
+            <Button type="button" variant="outline" onClick={goUnclaimed}>
+              去待认领到货
             </Button>
           ) : undefined
         }
@@ -283,9 +308,9 @@ export function WarehouseReturnsPage() {
               { label: '商品', value: receipt.goodsCode, mono: true },
               { label: '数量', value: `${receipt.quantity} ${receipt.unit}`, mono: true },
               { label: '入库状态', value: labelOf(receipt.stockState) },
-              { label: '到仓结果', value: labelOf(receipt.outcome) },
+              { label: '到仓结果', value: returnReceiptOutcomeLabels[receipt.outcome] ?? receipt.outcome },
               { label: '到仓时刻', value: formatInstant(receipt.occurredAt), mono: true },
-              { label: '处置去向', value: receipt.disposition ? labelOf(receipt.disposition.destination) : '待处置' },
+              { label: '处置去向', value: dispositionText(receipt) },
               { label: '处置时刻', value: receipt.disposition ? formatInstant(receipt.disposition.decidedAt) : '—', mono: true },
             ]}
           />

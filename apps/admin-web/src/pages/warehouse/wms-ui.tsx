@@ -91,7 +91,6 @@ export const wmsStatusMap: Record<string, StatusMeta> = {
   SHORT: { label: '短拣', tone: 'danger' },
   LATE: { label: '迟到取消', tone: 'neutral' },
   // 退货与代理声明
-  COUNTED_RETURN: { label: '已点收入库', tone: 'success' },
   PUTAWAY: { label: '良品上架', tone: 'success' },
   GOOD_PUTAWAY: { label: '良品上架', tone: 'success' },
   DESTROY: { label: '销毁', tone: 'danger' },
@@ -204,11 +203,16 @@ export interface StepItem {
 export function WmsStepper({
   steps,
   currentId,
+  currentLabel,
   failedLabel,
+  failedTone = 'danger',
 }: {
   steps: readonly StepItem[];
   currentId: string;
+  /** 卡在当前这一步、还没做完时的称呼；给了就按待办色标出。 */
+  currentLabel?: string;
   failedLabel?: string;
+  failedTone?: 'danger' | 'neutral';
 }) {
   const currentIdx = steps.findIndex((s) => s.id === currentId);
   return (
@@ -216,6 +220,7 @@ export function WmsStepper({
       {steps.map((step, index) => {
         const done = !failedLabel && currentIdx >= 0 && index < currentIdx;
         const active = !failedLabel && index === currentIdx;
+        const stuck = active && currentLabel !== undefined;
         return (
           <div key={step.id} className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
@@ -223,23 +228,27 @@ export function WmsStepper({
                 className={`inline-flex h-5 w-5 items-center justify-center rounded-full type-caption font-semibold ${
                   done
                     ? 'bg-emerald-500 text-white'
-                    : active
-                      ? 'bg-idpxyz-accent text-idpxyz-buttonFg ring-2 ring-idpxyz-accent/25'
-                      : 'border border-idpxyz-border bg-idpxyz-panel text-idpxyz-textMuted'
+                    : stuck
+                      ? 'bg-amber-500 text-white ring-2 ring-amber-500/25'
+                      : active
+                        ? 'bg-idpxyz-accent text-idpxyz-buttonFg ring-2 ring-idpxyz-accent/25'
+                        : 'border border-idpxyz-border bg-idpxyz-panel text-idpxyz-textMuted'
                 }`}
               >
                 {done ? <Check className="h-3 w-3" /> : index + 1}
               </span>
               <span
                 className={`type-caption whitespace-nowrap ${
-                  active
-                    ? 'font-semibold text-idpxyz-textBright'
-                    : done
-                      ? 'text-idpxyz-text'
-                      : 'text-idpxyz-textMuted'
+                  stuck
+                    ? 'font-semibold text-amber-700 dark:text-amber-300'
+                    : active
+                      ? 'font-semibold text-idpxyz-textBright'
+                      : done
+                        ? 'text-idpxyz-text'
+                        : 'text-idpxyz-textMuted'
                 }`}
               >
-                {step.label}
+                {stuck ? currentLabel : step.label}
               </span>
             </div>
             {index < steps.length - 1 ? <span className="h-px w-5 bg-idpxyz-border" aria-hidden="true" /> : null}
@@ -247,8 +256,14 @@ export function WmsStepper({
         );
       })}
       {failedLabel ? (
-        <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/12 px-2.5 py-0.5 type-caption font-medium text-rose-700 dark:text-rose-300">
-          <X className="h-3 w-3" />
+        <span
+          className={`ml-auto inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 type-caption font-medium ${
+            failedTone === 'neutral'
+              ? 'border-idpxyz-border bg-idpxyz-hover text-idpxyz-textMuted'
+              : 'border-rose-500/30 bg-rose-500/12 text-rose-700 dark:text-rose-300'
+          }`}
+        >
+          {failedTone === 'neutral' ? null : <X className="h-3 w-3" />}
           {failedLabel}
         </span>
       ) : null}

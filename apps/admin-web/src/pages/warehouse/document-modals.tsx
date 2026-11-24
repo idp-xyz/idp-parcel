@@ -12,43 +12,15 @@ import {
   type WaveRecord,
 } from './api';
 import type { GuidedFormValues } from './guided-forms';
+import { outboundTrack } from './outbound-track';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { labelOf, WmsBadge, WmsDetailModal, WmsInfoGrid, WmsStepper, WmsSubTable, type StepItem } from './wms-ui';
-
-const selfOutboundSteps: readonly StepItem[] = [
-  { id: 'RESERVED', label: '已预占' },
-  { id: 'ALLOCATED', label: '已放波次' },
-  { id: 'PICKED', label: '已拣货' },
-  { id: 'CHECKED', label: '已复核' },
-  { id: 'PACKED', label: '已打包' },
-  { id: 'SHIPPED', label: '已出库' },
-];
-
-const agentOutboundSteps: readonly StepItem[] = [
-  { id: 'HANDED_OFF', label: '待转出' },
-  { id: 'FORWARDED', label: '已转出' },
-  { id: 'PACKED', label: '已打包' },
-  { id: 'HANDED_OVER', label: '已交接' },
-];
 
 const preAdviceSteps: readonly StepItem[] = [
   { id: 'ADVISED', label: '已预报' },
   { id: 'RECEIVING', label: '收货中' },
   { id: 'CLOSED', label: '已完结' },
 ];
-
-function outboundTrack(status: string): { steps: readonly StepItem[]; currentId: string; failed?: string } {
-  if (status === 'CANCELLED' || status === 'REJECTED' || status === 'SPLIT' || status === 'PARTIALLY_CANCELLED') {
-    return { steps: selfOutboundSteps, currentId: 'RESERVED', failed: labelOf(status) };
-  }
-  if (status === 'HANDED_OFF' || status === 'FORWARDED' || status === 'HANDED_OVER') {
-    return { steps: agentOutboundSteps, currentId: status };
-  }
-  if (status === 'PARTIALLY_RESERVED' || status === 'PENDING_POLICY' || status === 'AWAITING_RETURN') {
-    return { steps: selfOutboundSteps, currentId: 'RESERVED' };
-  }
-  return { steps: selfOutboundSteps, currentId: status };
-}
 
 function loadPreAdvice(key: string) {
   const splitAt = key.indexOf('\n');
@@ -68,6 +40,7 @@ export function OutboundDetailModal({
   canSplit,
   canCutoff,
   canLabel,
+  isAgentWarehouse,
 }: {
   requestId: string | null;
   onClose: () => void;
@@ -76,13 +49,14 @@ export function OutboundDetailModal({
   canSplit: boolean;
   canCutoff: boolean;
   canLabel: boolean;
+  isAgentWarehouse: (warehouseCode: string) => boolean;
 }) {
   const { answer, loading } = useKeyedLoad(requestId, getOutboundRequestDetail);
   const failure = readFailureMessage(answer);
   const body: OutboundRequestDetailBody | undefined = answer?.kind === 'outcome' ? answer.body : undefined;
   const request = body?.request;
   const missing = body && !request ? '没有这张出库单' : null;
-  const track = request ? outboundTrack(request.status) : null;
+  const track = request ? outboundTrack(request.status, isAgentWarehouse(request.warehouseCode)) : null;
   const demandLines = (body?.lines ?? request?.lines ?? []).map((line) => ({
     goodsCode: line.goodsCode,
     unit: line.unit,
@@ -99,7 +73,17 @@ export function OutboundDetailModal({
       badge={request ? <WmsBadge code={request.status} /> : undefined}
       loading={loading}
       error={failure ?? missing}
-      stepper={track ? <WmsStepper steps={track.steps} currentId={track.currentId} failedLabel={track.failed} /> : undefined}
+      stepper={
+        track ? (
+          <WmsStepper
+            steps={track.steps}
+            currentId={track.currentId}
+            currentLabel={track.currentLabel}
+            failedLabel={track.halt?.label}
+            failedTone={track.halt?.tone}
+          />
+        ) : undefined
+      }
       actions={
         request ? (
           <>
@@ -638,20 +622,58 @@ export function UnclaimedDetailModal({ row, onClose }: { row: UnclaimedArrivalRe
       onClose={onClose}
     >
       {row ? (
-        <WmsInfoGrid
-          items={[
-            { label: '仓库', value: row.warehouseCode, mono: true },
-            { label: '种类', value: labelOf(row.kind) },
-            { label: '现场观察', value: row.observation || '—' },
-            { label: '货主线索', value: row.ownerClue || '—', mono: true },
-            { label: '预报线索', value: row.preAdviceClue || '—', mono: true },
-            { label: '暂存库位', value: row.storageLocation || '—', mono: true },
-            { label: '登记设备', value: row.device, mono: true },
-            { label: '登记人', value: row.operator, mono: true },
-            { label: '发生时刻', value: formatInstant(row.occurredAt), mono: true },
-            { label: '收到时刻', value: formatInstant(row.receivedAt), mono: true },
-          ]}
-        />
+        <>
+          <WmsInfoGrid
+            items={[
+              { label: '仓库', value: row.warehouseCode, mono: true },
+              { label: '种类', value: labelOf(row.kind) },
+              { label: '现场观察', value: row.observation || '—' },
+              { label: '货主线索', value: row.ownerClue || '—', mono: true },
+              { label: '预报线索', value: row.preAdviceClue || '—', mono: true },
+              { label: '暂存库位', value: row.storageLocation || '—', mono: true },
+              { label: '登记设备', value: row.device, mono: true },
+              { label: '登记人', value: row.operator, mono: true },
+              { label: '发生时刻', value: formatInstant(row.occurredAt), mono: true },
+              { label: '收到时刻', value: formatInstant(row.receivedAt), mono: true },
+              { label: '入账引用', value: row.postingReferences?.join('、') || '—', mono: true },
+            ]}
+          />
+          <WmsSubTable
+            title="认领记录"
+            count={row.claims?.length ?? 0}
+            emptyText="还没有人认领过这件到货。"
+            rows={row.claims ?? []}
+            rowKey={(entry) => entry.claim.decisionId}
+            columns={[
+              { id: 'owner', header: '认领货主', mono: true, render: (entry) => entry.claim.ownerAccount },
+              { id: 'advice', header: '认给预报', mono: true, render: (entry) => entry.claim.preAdviceId || '—' },
+              { id: 'who', header: '认领人', mono: true, render: (entry) => entry.claim.operator },
+              { id: 'at', header: '认领时刻', mono: true, render: (entry) => formatInstant(entry.claim.claimedAt) },
+              {
+                id: 'revoked',
+                header: '撤销',
+                render: (entry) =>
+                  entry.revocation
+                    ? `${entry.revocation.operator} · ${formatInstant(entry.revocation.revokedAt)}${entry.revocation.reason ? ` · ${entry.revocation.reason}` : ''}`
+                    : '—',
+              },
+            ]}
+          />
+          {row.disposition ? (
+            <section className="space-y-2">
+              <h3 className="type-body font-semibold text-idpxyz-textBright">处置</h3>
+              <WmsInfoGrid
+                items={[
+                  { label: '处置方式', value: labelOf(row.disposition.method) },
+                  { label: '依据规则', value: `${row.disposition.ruleWarehouseCode} r${row.disposition.ruleRevision}`, mono: true },
+                  { label: '处置人', value: row.disposition.operator, mono: true },
+                  { label: '处置时刻', value: formatInstant(row.disposition.disposedAt), mono: true },
+                  { label: '说明', value: row.disposition.note || '—' },
+                ]}
+              />
+            </section>
+          ) : null}
+        </>
       ) : null}
     </WmsDetailModal>
   );

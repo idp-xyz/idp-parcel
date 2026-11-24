@@ -138,6 +138,10 @@ export interface UnclaimedArrivalRecord {
   preAdviceClue?: string;
   storageLocation?: string;
   postingReferences?: string[];
+  claims?: ReadonlyArray<{
+    claim: { decisionId: string; ownerAccount: string; preAdviceId?: string; operator: string; claimedAt: string };
+    revocation?: { decisionId: string; reason?: string; operator: string; revokedAt: string };
+  }>;
   disposition?: {
     method: string;
     ruleWarehouseCode: string;

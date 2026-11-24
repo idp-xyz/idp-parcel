@@ -242,6 +242,7 @@ export function WarehouseAgentsPage() {
       </WmsDetailModal>
       <OutboundDetailModal
         requestId={detailId}
+        isAgentWarehouse={(code) => agentWarehouseCodes.has(code)}
         canWave={false}
         canSplit={targetMap.has('outbound-split')}
         canCutoff={targetMap.has('outbound-cutoff')}

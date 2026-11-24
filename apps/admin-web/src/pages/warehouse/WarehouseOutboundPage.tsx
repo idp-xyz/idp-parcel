@@ -211,6 +211,7 @@ export function WarehouseOutboundPage() {
       />
       <OutboundDetailModal
         requestId={detailId}
+        isAgentWarehouse={(code) => lookups.warehouses.some((w) => w.warehouseCode === code && w.kind === 'AGENT')}
         canWave={targetMap.has('wave-release')}
         canSplit={targetMap.has('outbound-split')}
         canCutoff={targetMap.has('outbound-cutoff')}

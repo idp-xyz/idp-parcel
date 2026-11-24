@@ -58,6 +58,12 @@ export const stockImportOutcomeLabels: Record<string, string> = {
   DUTY_BLOCKED: '提交人不能批准自己这一份',
 };
 
+// 退件到仓的结果词与盘点状态同名（COUNTED），不能走通用状态词表。
+export const returnReceiptOutcomeLabels: Record<string, string> = {
+  COUNTED: '已点收入暂存',
+  UNCLAIMED: '认不出货主，转待认领',
+};
+
 export const stockImportSnapshotHints = {
   submit:
     '选择货主与仓库，填写原因并至少添加一组商品或整箱明细。提交本身不改库存账，批准后才真正入账。',
