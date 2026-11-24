@@ -1398,7 +1398,7 @@ func (store *WorkspaceReads) ReturnsOverview(ctx context.Context, tenant domain.
 	return out, nil
 }
 
-// AgentOverview 读取代理仓连接器、库存声明（按时刻标出 VALID / UNKNOWN / SUPERSEDED）与回执记录。
+// AgentOverview 读取代理仓连接器、库存声明与回执。声明新鲜度与 AgentHandler.ReadStatement 同一套，见 statementFreshness。
 func (store *WorkspaceReads) AgentOverview(ctx context.Context, tenant domain.TenantID, now time.Time) (ports.AgentOverview, error) {
 	const op = "agent overview"
 	if tenant.String() == "" {
@@ -1434,33 +1434,29 @@ func (store *WorkspaceReads) AgentOverview(ctx context.Context, tenant domain.Te
 	// 库存声明
 	{
 		rows, err := querier.Query(ctx,
-			`SELECT source_id, stated_at, valid_until, warehouse_code, owner_account_id, goods_code, unit_name, quantity
-			   FROM warehouse_fulfillment.agent_statement
-			  WHERE tenant_id = $1
-			  ORDER BY stated_at DESC, source_id`,
+			`SELECT s.source_id, s.stated_at, s.valid_until, s.warehouse_code, s.owner_account_id, s.goods_code, s.unit_name, s.quantity,
+			        EXISTS (
+			          SELECT 1 FROM warehouse_fulfillment.agent_statement later
+			           WHERE later.tenant_id = s.tenant_id AND later.source_id = s.source_id
+			             AND later.warehouse_code = s.warehouse_code AND later.owner_account_id = s.owner_account_id
+			             AND later.goods_code = s.goods_code AND later.stated_at > s.stated_at
+			        )
+			   FROM warehouse_fulfillment.agent_statement s
+			  WHERE s.tenant_id = $1
+			  ORDER BY s.stated_at DESC, s.source_id`,
 			tenant.String(),
 		)
 		if err != nil {
 			return out, fmt.Errorf("%s: statements: %w", op, err)
 		}
-		latestSeen := make(map[string]bool)
 		for rows.Next() {
 			var item ports.AgentStatementRow
-			if err := rows.Scan(&item.SourceID, &item.StatedAt, &item.ValidUntil, &item.WarehouseCode, &item.OwnerAccount, &item.GoodsCode, &item.Unit, &item.Quantity); err != nil {
+			var superseded bool
+			if err := rows.Scan(&item.SourceID, &item.StatedAt, &item.ValidUntil, &item.WarehouseCode, &item.OwnerAccount, &item.GoodsCode, &item.Unit, &item.Quantity, &superseded); err != nil {
 				rows.Close()
 				return out, fmt.Errorf("%s: statements: %w", op, err)
 			}
-			key := item.WarehouseCode + "|" + item.OwnerAccount + "|" + item.GoodsCode + "|" + item.Unit
-			if latestSeen[key] {
-				item.Freshness = "SUPERSEDED"
-			} else {
-				latestSeen[key] = true
-				if now.After(item.ValidUntil) {
-					item.Freshness = "UNKNOWN"
-				} else {
-					item.Freshness = "VALID"
-				}
-			}
+			item.Freshness = statementFreshness(now, item.ValidUntil, superseded)
 			out.Statements = append(out.Statements, item)
 		}
 		rows.Close()
@@ -1500,4 +1496,15 @@ func (store *WorkspaceReads) AgentOverview(ctx context.Context, tenant domain.Te
 	}
 
 	return out, nil
+}
+
+// statementFreshness 与 AgentHandler.ReadStatement 同一套。被取代只看同一来源、仓、货主、商品且 stated_at 更晚；否则当前时刻不早于 validUntil 就是 UNKNOWN。
+func statementFreshness(now, validUntil time.Time, superseded bool) string {
+	if superseded {
+		return "SUPERSEDED"
+	}
+	if !now.Before(validUntil) {
+		return "UNKNOWN"
+	}
+	return "VALID"
 }

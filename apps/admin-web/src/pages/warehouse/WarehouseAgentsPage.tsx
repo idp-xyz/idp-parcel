@@ -16,6 +16,7 @@ import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { useWarehouseLookups } from './use-catalogues';
+import { OutboundDetailModal } from './document-modals';
 import { labelOf, WmsBadge, WmsDetailModal, WmsKpiStrip, WmsSubTable } from './wms-ui';
 
 const info = moduleInfoById['warehouse-agents'];
@@ -47,6 +48,7 @@ export function WarehouseAgentsPage() {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<string>('HANDED_OFF');
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [ledger, setLedger] = useState<ApiResult<AgentOverviewBody> | null>(null);
   const settled = useSettledKeyword(keyword);
@@ -83,7 +85,7 @@ export function WarehouseAgentsPage() {
   const overview = ledger?.kind === 'outcome' ? ledger.body : null;
 
   const inspectorOf = (row: OutboundRequestRecord): InspectorContent => {
-    const actions: InspectorAction[] = [];
+    const actions: InspectorAction[] = [{ label: '查看出库明细', onRun: () => setDetailId(row.requestId) }];
     if (row.status === 'HANDED_OFF' && targetMap.has('agent-result')) {
       actions.push({ label: '转出给代理仓', onRun: () => openAction('agent-result', { requestId: row.requestId, kind: 'FORWARDED' }) });
     }
@@ -174,6 +176,7 @@ export function WarehouseAgentsPage() {
         rows={rows}
         rowKey={(row) => row.requestId}
         inspector={inspectorOf}
+        onRowOpen={(row) => setDetailId(row.requestId)}
         pagination={pagination}
         emptyRowsNote="当前状态下没有代理仓履约订单"
         viewState={catalogueViewState(answer, rows.length, retry, {
@@ -237,6 +240,18 @@ export function WarehouseAgentsPage() {
           ]}
         />
       </WmsDetailModal>
+      <OutboundDetailModal
+        requestId={detailId}
+        canWave={false}
+        canSplit={targetMap.has('outbound-split')}
+        canCutoff={targetMap.has('outbound-cutoff')}
+        canLabel={targetMap.has('owner-label')}
+        onClose={() => setDetailId(null)}
+        onAction={(id, prefill) => {
+          setDetailId(null);
+          openAction(id, prefill);
+        }}
+      />
       <ActionDrawer
         moduleId="warehouse-agents"
         active={drawer}
