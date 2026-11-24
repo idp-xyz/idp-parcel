@@ -487,3 +487,125 @@ func TestPerPieceVolumetricStaysPendingWhenAnotherUnitLacksDimensions(t *testing
 		t.Fatal("缺尺寸却给出了合计，等于退回了合计体积重")
 	}
 }
+
+func twoPieceBox(t testing.TB, unit domain.LengthUnit) domain.MemberManifest {
+	t.Helper()
+	small := dimensions(t, "30", "20", "10", unit)
+	large := dimensions(t, "50", "40", "30", unit)
+	return shipmentPieces(t, "3", nil, piece(t, "pkg-a", "2", &small), piece(t, "pkg-b", "1", &large))
+}
+
+func volumetricOf(t testing.TB, evaluation domain.PricingEvaluation) string {
+	t.Helper()
+	if evaluation.Status() != domain.EvaluationCompleted {
+		t.Fatalf("状态 %s，问题 %v", evaluation.Status(), issueCodes(evaluation))
+	}
+	pricingWeight, ok := evaluation.PricingWeight()
+	if !ok {
+		t.Fatal("没有计价重量")
+	}
+	volumetric, derived := pricingWeight.VolumetricWeight()
+	if !derived {
+		t.Fatal("没有体积重")
+	}
+	return volumetric.Value().String()
+}
+
+// Covers: 未声明聚合与合计后派生的 MAX 票级卡，没声明合计体积重但各件尺寸齐全时，按总体积一次除体积系数。
+// 30×20×10 与 50×40×30 立方厘米合计 66000，除以 5000 是 13.2 千克；逐件取较大者再相加是 14，两条路必须分开。
+// 缺任一件尺寸仍待判断。调用方声明了合计体积重时仍用声明值，不改用各件尺寸。
+func TestTotalsThenDeriveUsesTheSummedPieceVolumeWhenTheTotalVolumetricWeightIsAbsent(t *testing.T) {
+	base := segmentedShipmentPlan(t, domain.PricingWeightMax)
+	input := aggregateInput(t, shipmentSubject(t, "SR-VOL"), twoPieceBox(t, domain.LengthUnitCentimeter))
+	totals := declareShipmentWeight(t, base, domain.ShipmentWeightTotalsThenDerive, "")
+
+	undeclared := evaluate(t, "eval-vol-old", base, input)
+	derived := evaluate(t, "eval-vol-totals", totals, input)
+	if got := volumetricOf(t, undeclared); got != "13.2" {
+		t.Fatalf("未声明票级卡体积重 %s，应是 66000/5000 = 13.2", got)
+	}
+	if got := volumetricOf(t, derived); got != "13.2" {
+		t.Fatalf("合计后派生体积极重 %s，应是 13.2", got)
+	}
+	if base.CanonicalizationVersion() != "PPC-5" || totals.CanonicalizationVersion() != "PPC-8" {
+		t.Fatalf("版本 %s / %s", base.CanonicalizationVersion(), totals.CanonicalizationVersion())
+	}
+	each := evaluate(t, "eval-vol-each", declareShipmentWeight(t, base, domain.ShipmentWeightPerPieceThenSum, domain.ShipmentWeightRoundEachThenSum), input)
+	if got := roundedPricingWeight(t, each); got != "14" {
+		t.Fatalf("逐件求和 %s，应是 2 与 12 之和 14，不能与合计体积重 13.2 混成同一个数", got)
+	}
+	if len(derived.UnitConversions()) != 0 {
+		t.Fatalf("尺寸单位与系数一致，不该记换算：%v", derived.UnitConversions())
+	}
+
+	small := dimensions(t, "30", "20", "10", domain.LengthUnitCentimeter)
+	missing := aggregateInput(t, shipmentSubject(t, "SR-VOL"), shipmentPieces(t, "3", nil, piece(t, "pkg-a", "2", &small), piece(t, "pkg-b", "1", nil)))
+	pending := evaluate(t, "eval-vol-missing", totals, missing)
+	if pending.Status() != domain.EvaluationPending || issueCodes(pending)[0] != "DIMENSIONS_REQUIRED" {
+		t.Fatalf("缺一件尺寸：%s %v", pending.Status(), issueCodes(pending))
+	}
+
+	declaredTotal := "9"
+	declared := aggregateInput(t, shipmentSubject(t, "SR-VOL"), shipmentPieces(t, "3", &declaredTotal, piece(t, "pkg-a", "2", &small), piece(t, "pkg-b", "1", dimensionsPtr(t, "50", "40", "30"))))
+	kept := evaluate(t, "eval-vol-declared", totals, declared)
+	if got := volumetricOf(t, kept); got != "9" {
+		t.Fatalf("声明了合计体积重却用了各件尺寸：%s", got)
+	}
+}
+
+func dimensionsPtr(t testing.TB, length, width, height string) *domain.Dimensions {
+	t.Helper()
+	sides := dimensions(t, length, width, height, domain.LengthUnitCentimeter)
+	return &sides
+}
+
+// Covers: 尺寸是英寸、体积系数按厘米时，各件三边换算后把精确体积加总再进位一次，每件各记一条尺寸换算。
+// 快照读回与冻结重放的换算记录、摘要与原评价一致。不另记一条调用方没声明的合计体积重换算。
+func TestPieceDimensionsInInchesDeriveOneShipmentVolumetricWeight(t *testing.T) {
+	base := segmentedShipmentPlan(t, domain.PricingWeightMax)
+	plan := declareShipmentWeight(t, base, domain.ShipmentWeightTotalsThenDerive, "")
+	first := dimensions(t, "10", "10", "10", domain.LengthUnitInch)
+	second := dimensions(t, "5", "5", "5", domain.LengthUnitInch)
+	input := aggregateInput(t, shipmentSubject(t, "SR-IN"), shipmentPieces(t, "3", nil, piece(t, "pkg-a", "2", &first), piece(t, "pkg-b", "1", &second)))
+	evaluation := evaluate(t, "eval-vol-in", plan, input)
+	if evaluation.Status() != domain.EvaluationCompleted {
+		t.Fatalf("状态 %s %v", evaluation.Status(), issueCodes(evaluation))
+	}
+	steps := evaluation.UnitConversions()
+	if len(steps) != 2 || steps[0].Quantity() != domain.ConvertedDimensions || steps[1].Quantity() != domain.ConvertedDimensions {
+		t.Fatalf("应各记一件尺寸换算：%v", steps)
+	}
+	if steps[0].FromUnit() != "IN" || steps[0].ToUnit() != "CM" || steps[0].Factor() != "2.54" || !steps[0].Exact() ||
+		steps[1].Factor() != "2.54" || !steps[1].Exact() {
+		t.Fatalf("换算记录：%+v %+v", steps[0], steps[1])
+	}
+	for _, step := range steps {
+		if step.Quantity() == domain.ConvertedTotalVolumetricWeight {
+			t.Fatalf("由系数派生的体积重不该记合计体积重换算：%+v", step)
+		}
+	}
+	raw, err := domain.MarshalEvaluationSnapshot(evaluation)
+	if err != nil {
+		t.Fatalf("快照：%v", err)
+	}
+	restored, err := domain.RehydrateEvaluationSnapshot(raw)
+	if err != nil {
+		t.Fatalf("读回：%v", err)
+	}
+	if restored.SemanticDigest() != evaluation.SemanticDigest() {
+		t.Fatal("快照读回的摘要与原评价不同")
+	}
+	sameConversions(t, evaluation.UnitConversions(), restored.UnitConversions())
+	replayed, err := domain.ReplayPricingEvaluation(mustValue(t, domain.NewEvaluationID, "eval-vol-in-2"), restored, plan, domain.EvidenceSynthetic)
+	if err != nil || replayed.Status() != domain.EvaluationCompleted || replayed.SemanticDigest() != evaluation.SemanticDigest() {
+		t.Fatalf("冻结重放：%v %s %v", err, replayed.Status(), issueCodes(replayed))
+	}
+	sameConversions(t, evaluation.UnitConversions(), replayed.UnitConversions())
+	if joinDecimalsForTest(evaluation.Explanation()) != joinDecimalsForTest(replayed.Explanation()) {
+		t.Fatalf("重放解释与原评价不同：\n%v\n%v", evaluation.Explanation(), replayed.Explanation())
+	}
+}
+
+func joinDecimalsForTest(lines []string) string {
+	return strings.Join(lines, "\n")
+}

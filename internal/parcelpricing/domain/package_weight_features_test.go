@@ -352,6 +352,22 @@ func TestAggregateSubjectsReadTheTotalsAsTheirOwnWeights(t *testing.T) {
 	}
 }
 
+// Covers: 条件读体积重时，票级主体没声明合计体积重但各件尺寸齐全，读到的是按总体积派生的那一个值。
+func TestAnAggregateConditionReadsVolumetricWeightDerivedFromPieceDimensions(t *testing.T) {
+	bulky := weightSurcharge(t, "bulky", "BULKY",
+		ownWeightTrigger(t, domain.FeatureVolumetricWeight, domain.ComparisonGreaterThan, "10", domain.WeightUnitKilogram), "7")
+	plan := declareShipmentWeight(t, mustOwnWeightPlan(t, ownWeightSpec{
+		method: domain.PricingWeightMax, aggregation: domain.AggregationPerShipment, structures: structuresOf(t, bulky),
+	}), domain.ShipmentWeightTotalsThenDerive, "")
+	evaluation := evaluate(t, "eval-aggregate-piece-volume", plan, aggregateInput(t, shipmentSubject(t, "shipment-1"), twoPieceBox(t, domain.LengthUnitCentimeter)))
+	if evaluation.Status() != domain.EvaluationCompleted || !hasChargeCode(evaluation, "BULKY") {
+		t.Fatalf("status=%s issues=%v，13.2 千克体积重应触发 > 10", evaluation.Status(), issueCodes(evaluation))
+	}
+	if !explanationMentions(evaluation, "volumetric=13.2 KG") {
+		t.Fatalf("解释 = %v", evaluation.Explanation())
+	}
+}
+
 // Covers: ADR-0346 决定三 + ADR-0347 决定一——输入按磅给、价卡按千克查表：自身计价重量读换算后的值（50 磅折 22.6796185 千克，
 // 进位 23.0），评价记下的换算记录只有一条、解释里的换算行只有一行（算条件读到的重量那一遍不重复记）；重放得同一个摘要。
 func TestChargeableWeightReadsTheConvertedWeightAndDoesNotRecordTheConversionTwice(t *testing.T) {

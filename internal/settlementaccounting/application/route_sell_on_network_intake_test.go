@@ -302,6 +302,135 @@ func TestAShipmentCardNamesTheFirstMemberWhileItIsNotIntaken(t *testing.T) {
 	}
 }
 
+func memberAt(id string, at time.Time) ports.ShipmentMemberIntake {
+	return ports.ShipmentMemberIntake{
+		Parcel: id, Adopted: true, ResponsibilityStart: at,
+		Source: "network-intake/" + id + "/NODE_INTAKE/v1",
+	}
+}
+
+func TestTheShipmentBasisIsTheEarliestResponsibilityStart(t *testing.T) {
+	t0 := time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC)
+	later := t0.Add(2 * time.Hour)
+	picture := ports.ShipmentIntakePicture{
+		Shipment: "SYN-SHIP-1",
+		Members:  []ports.ShipmentMemberIntake{memberAt("SYN-PARCEL-1", later), memberAt("SYN-PARCEL-2", t0)},
+	}
+	var asked time.Time
+	handler, parcel, registry := shipmentRouteAt(t, picture, true, "PER_SHIPMENT", &asked)
+	recognizeLaterMember(t, parcel)
+	result, err := handler.Handle(context.Background(), parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "network-intake/SYN-PARCEL-1/NODE_INTAKE/v1", later))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.SellEvaluationRequested || len(registry.saved) != 1 {
+		t.Fatalf("结果 = %s 请求 %d", result.Outcome(), len(registry.saved))
+	}
+	if got := registry.saved[0].Request.PricingBasisAt(); !got.Equal(t0) || !asked.Equal(t0) {
+		t.Fatalf("基准 %s 选卡 %s，第二件先收寄时都应是 %s", got, asked, t0)
+	}
+
+	asked = time.Time{}
+	forward := ports.ShipmentIntakePicture{
+		Shipment: "SYN-SHIP-1",
+		Members:  []ports.ShipmentMemberIntake{memberAt("SYN-PARCEL-1", t0), memberAt("SYN-PARCEL-2", later)},
+	}
+	handler, parcel, registry = shipmentRouteAt(t, forward, true, "PER_SHIPMENT", &asked)
+	recognizeLaterMember(t, parcel)
+	command := laterMemberCommand(t)
+	command.PricingBasisAt = later
+	result, err = handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("第一件先收寄：%v", err)
+	}
+	if result.Outcome() != application.SellEvaluationRequested || len(registry.saved) != 1 {
+		t.Fatalf("结果 = %s 请求 %d", result.Outcome(), len(registry.saved))
+	}
+	if got := registry.saved[0].Request.PricingBasisAt(); !got.Equal(t0) || !asked.Equal(t0) {
+		t.Fatalf("基准 %s 选卡 %s，凑齐时仍应是第一件的 %s，不能改用第二件", got, asked, t0)
+	}
+}
+
+func TestAMissingPieceOnAnUnadoptedShipmentMomentStaysUnconfigured(t *testing.T) {
+	handler, parcel, registry := shipmentRoute(t, twoMemberPicture(true, false), false, "PER_SHIPMENT")
+	result, err := handler.Handle(context.Background(), parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "network-intake/SYN-PARCEL-1/NODE_INTAKE/v1", parcelMomentNow))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.SellEvaluationRequestUnconfigured ||
+		result.UnconfiguredReason() != application.SellRequestBillingMomentNotAdopted {
+		t.Fatalf("结果 = %s/%s，少一件且没采用时应答未配置，不能答等齐", result.Outcome(), result.UnconfiguredReason())
+	}
+	if len(registry.saved) != 0 || parcel.registry.saves != 0 {
+		t.Fatal("没采用却发起了请求")
+	}
+}
+
+type listingCards struct {
+	single ports.SellPriceCardPath
+	list   ports.SellPriceCardPath
+	listed int
+}
+
+func (cards *listingCards) ResolveSellPriceCardPath(
+	context.Context, domain.TenantID, domain.EstimatePricingScope, time.Time, string,
+) (ports.SellPriceCardPath, error) {
+	return cards.single, nil
+}
+
+func (cards *listingCards) ResolveSellPriceCardList(
+	context.Context, domain.TenantID, domain.ShipmentReference, []domain.ParcelReference, domain.CurrencyCode, []domain.EstimatePricingScope, time.Time, string,
+) (ports.SellPriceCardPath, error) {
+	cards.listed++
+	return cards.list, nil
+}
+
+type orderedSellPrices struct {
+	scopes []domain.EstimatePricingScope
+}
+
+func (prices orderedSellPrices) LoadAdoptedSellPriceArrangement(
+	context.Context, domain.TenantID, domain.CommercialResolutionReference,
+) (domain.AdoptedSellPriceArrangement, error) {
+	return domain.NewOrderedSellPriceSources(prices.scopes)
+}
+
+func TestAMultiScopeListProbeChoosesTheShipmentCard(t *testing.T) {
+	parcel := newParcelMomentFixture(t, domain.BillingMomentNetworkIntakeAdopted)
+	account := value(t, domain.NewSettlementAccountID, "SYN-ACCT-1")
+	adoption, err := domain.NewShipmentBillingMomentAdoption(account, domain.ShipmentMembersIntakeAdopted,
+		value(t, domain.NewEstimatePricingScope, "SYN-SCOPE-A"))
+	if err != nil {
+		t.Fatalf("采用：%v", err)
+	}
+	cards := &listingCards{
+		single: ports.SellPriceCardPath{Outcome: ports.SellPriceCardInForce, Aggregation: "PER_PACKAGE"},
+		list:   ports.SellPriceCardPath{Outcome: ports.SellPriceCardInForce, Aggregation: "PER_SHIPMENT"},
+	}
+	registry := &shipmentRegistryDouble{}
+	handler, err := application.NewRouteSellOnNetworkIntakeHandler(application.RouteSellOnNetworkIntakeDeps{
+		Parcels: parcel.handler, Resolutions: parcel.resolutions, Terms: parcel.terms, Accounts: parcel.accounts,
+		SellPrices: orderedSellPrices{scopes: []domain.EstimatePricingScope{
+			value(t, domain.NewEstimatePricingScope, "SYN-SCOPE-A"),
+			value(t, domain.NewEstimatePricingScope, "SYN-SCOPE-B"),
+		}},
+		ParcelAdoptions: parcel.adoptions, ShipmentAdoptions: shipmentAdoptionDouble{adoption: adoption, found: true},
+		Pictures: shipmentPictureDouble{picture: twoMemberPicture(true, true), found: true},
+		Cards:    cards, Registry: registry, Identity: shipmentIdentityDouble{}, Downstream: &shipmentHandoffDouble{},
+		Clock: fixedClock{at: parcelMomentNow},
+	})
+	if err != nil {
+		t.Fatalf("构造：%v", err)
+	}
+	result, err := handler.Handle(context.Background(), parcelMomentCommand(t, domain.BillingMomentNetworkIntakeAdopted, "network-intake/SYN-PARCEL-1/NODE_INTAKE/v1", parcelMomentNow))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if cards.listed != 1 || result.Outcome() != application.SellEvaluationRequested || len(registry.saved) != 1 || parcel.registry.saves != 0 {
+		t.Fatalf("探路 %d 次，结果 %s，委托请求 %d，包裹请求 %d", cards.listed, result.Outcome(), len(registry.saved), parcel.registry.saves)
+	}
+}
+
 func TestRouteOutcomeNamesCoverTheNewAnswers(t *testing.T) {
 	for _, outcome := range []application.SellEvaluationRequestOutcome{
 		application.SellEvaluationMembersIncomplete, application.SellEvaluationPriceCardConflict,

@@ -85,8 +85,9 @@ func (handler *RouteSellOnNetworkIntakeHandler) Handle(
 	if len(valid) == 0 {
 		return RequestSellEvaluationOnParcelMomentResult{outcome: SellEvaluationMembersIncomplete}, nil
 	}
-	// 逐包裹按已经收寄的件计费。声明顺序里的第一件还没到就整单停住的话，靠后已经收寄的件会一直不计。
-	basis, known := responsibilityStartOf(valid, command.Parcel)
+	// 选卡与写进委托级请求的计价基准必须是同一刻，否则跨换卡时两边看到的卡不是一张。
+	// 这一刻是当前有效成员里已经收寄的最早责任起点：用触发这一拍的那一件，或声明位次的第一件，都会在两件收寄顺序不同时错开。
+	basis, known := earliestAdoptedResponsibilityStart(valid)
 	if !known {
 		return membersIncomplete(missing), nil
 	}
@@ -106,7 +107,7 @@ func (handler *RouteSellOnNetworkIntakeHandler) Handle(
 	if len(scopes) == 0 {
 		return handler.billParcels(ctx, command, valid)
 	}
-	path, err := handler.cardPath(ctx, command.TenantID, scopes, basis, picture.ServiceProduct)
+	path, err := handler.cardPath(ctx, command.TenantID, shipment, valid, currency, scopes, basis, picture.ServiceProduct)
 	if err != nil {
 		return sellRequestUndecided(SellRequestShipmentPriceCardUnavailable), nil
 	}
@@ -115,11 +116,9 @@ func (handler *RouteSellOnNetworkIntakeHandler) Handle(
 		return RequestSellEvaluationOnParcelMomentResult{outcome: SellEvaluationPriceCardConflict}, nil
 	case ports.SellPriceCardInForce:
 		if path.Aggregation == "PER_SHIPMENT" {
-			first := valid[0]
-			if len(missing) > 0 || first.ResponsibilityStart.IsZero() {
-				return membersIncomplete(missing), nil
-			}
-			return handler.billShipment(ctx, command, shipment, valid, missing, account, currency, scopes, first.ResponsibilityStart)
+			// 少一件与没采用都留给 billShipment：它先查账户是否采用委托级时点，再答等齐。
+			// 在这里因少一件提前返回，会把「没采用」说成「等齐」。
+			return handler.billShipment(ctx, command, shipment, valid, missing, account, currency, scopes, basis)
 		}
 	}
 	return handler.billParcels(ctx, command, valid)
@@ -360,13 +359,44 @@ func (handler *RouteSellOnNetworkIntakeHandler) accountOf(
 func (handler *RouteSellOnNetworkIntakeHandler) cardPath(
 	ctx context.Context,
 	tenant domain.TenantID,
+	shipment domain.ShipmentReference,
+	valid []ports.ShipmentMemberIntake,
+	currency domain.CurrencyCode,
+	scopes []domain.EstimatePricingScope,
+	at time.Time,
+	serviceProduct string,
+) (ports.SellPriceCardPath, error) {
+	// 单范围没有下一格可跳，只问这一格在用卡。只传选卡口的测试走的也是这一格。
+	if len(scopes) == 1 {
+		return handler.deps.Cards.ResolveSellPriceCardPath(ctx, tenant, scopes[0], at, serviceProduct)
+	}
+	if len(scopes) > 1 {
+		if listed, ok := handler.deps.Cards.(ports.SellPriceCardListView); ok {
+			members := make([]domain.ParcelReference, 0, len(valid))
+			for _, member := range valid {
+				reference, err := domain.NewParcelReference(member.Parcel)
+				if err != nil {
+					return ports.SellPriceCardPath{}, err
+				}
+				members = append(members, reference)
+			}
+			return listed.ResolveSellPriceCardList(ctx, tenant, shipment, members, currency, scopes, at, serviceProduct)
+		}
+	}
+	return firstInForceSellPriceCard(ctx, handler.deps.Cards, tenant, scopes, at, serviceProduct)
+}
+
+func firstInForceSellPriceCard(
+	ctx context.Context,
+	cards ports.SellPriceCardPathView,
+	tenant domain.TenantID,
 	scopes []domain.EstimatePricingScope,
 	at time.Time,
 	serviceProduct string,
 ) (ports.SellPriceCardPath, error) {
 	var last ports.SellPriceCardPath
 	for _, scope := range scopes {
-		path, err := handler.deps.Cards.ResolveSellPriceCardPath(ctx, tenant, scope, at, serviceProduct)
+		path, err := cards.ResolveSellPriceCardPath(ctx, tenant, scope, at, serviceProduct)
 		if err != nil {
 			return ports.SellPriceCardPath{}, err
 		}
@@ -385,17 +415,21 @@ func (handler *RouteSellOnNetworkIntakeHandler) cardPath(
 	return last, nil
 }
 
-func responsibilityStartOf(members []ports.ShipmentMemberIntake, parcel domain.ParcelReference) (time.Time, bool) {
+// earliestAdoptedResponsibilityStart 取当前未取消的有效成员里，已经采用有效网络收寄且责任起点非零的那一份里最早的时刻。
+// 并列就是同一刻。一件都还没收寄时第二个返回值为假，调用方答等齐，不拿零时刻去选卡。
+func earliestAdoptedResponsibilityStart(members []ports.ShipmentMemberIntake) (time.Time, bool) {
+	var earliest time.Time
+	found := false
 	for _, member := range members {
-		if member.Parcel != parcel.String() {
+		if !member.Adopted || member.ResponsibilityStart.IsZero() {
 			continue
 		}
-		if !member.Adopted || member.ResponsibilityStart.IsZero() {
-			return time.Time{}, false
+		if !found || member.ResponsibilityStart.Before(earliest) {
+			earliest = member.ResponsibilityStart
+			found = true
 		}
-		return member.ResponsibilityStart, true
 	}
-	return time.Time{}, false
+	return earliest, found
 }
 
 func classifyShipmentMembers(members []ports.ShipmentMemberIntake) (valid, missing []ports.ShipmentMemberIntake) {

@@ -266,13 +266,40 @@ func (converter *unitConverter) convertWeight(quantity ConvertedQuantity, weight
 // 精确商不一定是有限小数，先把三边各自换成十进制会给中间结果强加一个没人声明过的精度（CM 折 IN 就是
 // 无限小数）。取整模式与进位单位原样取自体积系数，取整的判法与 DivRoundToIncrement 共用 roundsUp。
 func (converter *unitConverter) volumetricWeightFromDimensions(sides Dimensions, factor VolumetricFactor) (Weight, error) {
+	volume, err := converter.convertedDimensionVolume(sides, factor)
+	if err != nil {
+		return Weight{}, err
+	}
+	return weightFromVolumeRat(volume, factor)
+}
+
+// totalVolumetricWeightFromPieceDimensions 把每一件的尺寸换到体积系数的长度单位，体积用精确有理数加总，
+// 再按系数进位一次。合计后派生是总体积除以除数，不是逐件体积重相加；每件仍各记一条尺寸换算，读回才能对上那一件。
+func (converter *unitConverter) totalVolumetricWeightFromPieceDimensions(pieces []MemberPiece, factor VolumetricFactor) (Weight, error) {
+	total := big.NewRat(0, 1)
+	for _, piece := range pieces {
+		sides, measured := piece.Dimensions()
+		if !measured {
+			return Weight{}, ErrMissingDimensions
+		}
+		volume, err := converter.convertedDimensionVolume(sides, factor)
+		if err != nil {
+			return Weight{}, err
+		}
+		total.Add(total, volume)
+	}
+	return weightFromVolumeRat(total, factor)
+}
+
+// convertedDimensionVolume 把一件的三边换到体积系数声明的长度单位，记下这一件的尺寸换算，交回精确体积。
+// 展示用的截断值不进体积：体积是三边有理数的积。冻结重放时展示位数只认记下的那一条，与单件尺寸换算同一条规则。
+func (converter *unitConverter) convertedDimensionVolume(sides Dimensions, factor VolumetricFactor) (*big.Rat, error) {
 	ratio, text, ok := converter.factorFor(sides.unit.String(), factor.lengthUnit.String())
 	if !ok {
-		return Weight{}, ErrLengthUnitMismatch
+		return nil, ErrLengthUnitMismatch
 	}
-	segment, sole := factor.rounding.sole()
-	if !sole {
-		return Weight{}, ErrInvalidVolumetricFactor
+	if _, sole := factor.rounding.sole(); !sole {
+		return nil, ErrInvalidVolumetricFactor
 	}
 	original := []Decimal{sides.longest, sides.second, sides.shortest}
 	volume := big.NewRat(1, 1)
@@ -305,22 +332,26 @@ func (converter *unitConverter) volumetricWeightFromDimensions(sides Dimensions,
 		for _, side := range original {
 			truncated, ok := ratTruncate(new(big.Rat).Mul(decimalRat(side), ratio), step.places)
 			if !ok {
-				return Weight{}, ErrLengthUnitMismatch
+				return nil, ErrLengthUnitMismatch
 			}
 			converted = append(converted, truncated)
 		}
 	}
 	step.converted = converted
+	converter.record(step)
+	return volume, nil
+}
+
+func weightFromVolumeRat(volume *big.Rat, factor VolumetricFactor) (Weight, error) {
+	segment, sole := factor.rounding.sole()
+	if !sole {
+		return Weight{}, ErrInvalidVolumetricFactor
+	}
 	value, err := roundRatToIncrement(volume, factor.divisor, segment.increment.value, segment.mode)
 	if err != nil {
 		return Weight{}, err
 	}
-	derived, err := NewWeight(value, segment.increment.unit)
-	if err != nil {
-		return Weight{}, err
-	}
-	converter.record(step)
-	return derived, nil
+	return NewWeight(value, segment.increment.unit)
 }
 
 // roundRatToIncrement 把精确有理数 quantity 除以 divisor 再落到 increment 的整数倍上。取整判法与

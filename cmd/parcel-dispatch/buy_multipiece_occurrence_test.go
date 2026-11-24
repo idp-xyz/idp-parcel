@@ -512,6 +512,103 @@ func registerScopedAgreement(t *testing.T, db *bentopg.DB, object, scope, plan s
 	})
 }
 
+func TestMultiPieceTotalsThenDeriveBuyCardPricesTheSummedPieceVolume(t *testing.T) {
+	const (
+		scope     = "SYN-SCOPE-CFMR14-TOTALS"
+		agreement = "SYN-AGR-CFMR14-TOTALS"
+		planID    = "SYN-PLAN-CFMR14-TOTALS"
+	)
+	fixture := newSYNVerticalFixture(t)
+	ctx := t.Context()
+	acceptPricedShipment(t, fixture, fixture.identity, fixture.requestID.String(), "SYN-DEC-TOTALS", "200001", "018956",
+		pricedProfile(t, "SYN-PARCEL-01", "2", "30", "20", "10"),
+		pricedProfile(t, "SYN-PARCEL-02", "1", "50", "40", "30"),
+	)
+	for step := 0; step < 4; step++ {
+		if _, err := fixture.beat.DispatchOnce(ctx); err != nil {
+			t.Fatalf("受理链第 %d 拍：%v", step, err)
+		}
+	}
+	registerDemoZoneCatalogue(t, fixture.db)
+	plan := registerTotalsDeriveBuyCard(t, fixture, planID, scope)
+	registerScopedAgreement(t, fixture.db, agreement, scope, planID)
+	registerBuyTriggers(t, fixture.db, demoTenant)
+	insertOccurrenceMembers(t, fixture, "SYN-OCC-TOTALS", agreement+"/v1", "SYN-PARCEL-01", "SYN-PARCEL-02")
+	store, err := outbox.NewStore(fixture.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enqueueForBeat(t, fixture.db, store, "formed-SYN-OCC-TOTALS", sainbox.ChargeOccurrenceFormedEventType,
+		`{"tenantId":"`+demoTenant+`","occurrence":"SYN-OCC-TOTALS","version":"V1"}`)
+	for step := 0; step < 8; step++ {
+		if _, err := fixture.beat.DispatchOnce(ctx); err != nil {
+			t.Fatalf("第 %d 拍：%v", step, err)
+		}
+	}
+	requestID, stop := buyRequestOf(t, fixture, "SYN-OCC-TOTALS")
+	if stop != "" {
+		t.Fatalf("合计后派生请求停在 %s", stop)
+	}
+	evaluation := evaluationOf(t, fixture, requestID)
+	if evaluation.Status() != ppdomain.EvaluationCompleted {
+		t.Fatalf("评价 = %s %v", evaluation.Status(), evaluation.Issues())
+	}
+	if evaluation.PlanReference().ID() != plan.Reference().ID() {
+		t.Fatalf("卡 = %s", evaluation.PlanReference().ID())
+	}
+	weight, weighed := evaluation.PricingWeight()
+	volumetric, derived := weight.VolumetricWeight()
+	if !weighed || !derived || volumetric.Value().String() != "13.2" || weight.RoundedWeight().Value().String() != "13.2" {
+		t.Fatalf("体积重 %s 计价重量 %s present=%v derived=%v，want 13.2", volumetric.Value(), weight.RoundedWeight().Value(), weighed, derived)
+	}
+	if n := costCount(t, fixture, "SYN-OCC-TOTALS"); n != 1 {
+		t.Fatalf("供应商预期成本 %d 笔, want 1", n)
+	}
+}
+
+func registerTotalsDeriveBuyCard(t *testing.T, fixture *synVerticalFixture, planID, scope string) ppdomain.PricingPlanVersion {
+	t.Helper()
+	base := buyCardBase(t, planID, scope)
+	factorRounding, err := ppdomain.NewWeightRoundingPolicy(ppdomain.RoundingCeiling, kilograms(t, "0.1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	factor, err := ppdomain.NewVolumetricFactor(ppValue(t, ppdomain.ParseDecimal, "5000"), ppdomain.LengthUnitCentimeter, factorRounding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rounding, err := ppdomain.NewWeightRoundingPolicy(ppdomain.RoundingNone, kilograms(t, "1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	weight, err := ppdomain.NewPricingWeightPolicy(
+		pptest.IdentityReference(t, ppdomain.ArtifactWeightPolicy, planID+"-WEIGHT", "v1"),
+		ppdomain.PricingWeightMax, rounding, &factor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := ppdomain.NewReferenceCatalogueLink(ppdomain.CatalogueKindZone, "SYN-CAT-ZONE-CN-SG")
+	if err != nil {
+		t.Fatal(err)
+	}
+	structures, err := base.Structures().WithReferenceCatalogues(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := ppdomain.NewAggregatePricingPlanVersion(ppdomain.AggregationPerShipment,
+		base.Reference(), base.Scope(), base.Direction(), base.Purpose(), base.BaseChargeCode(),
+		base.EffectivePeriod(), base.RateTable(), weight, nil, structures)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err = plan.WithShipmentWeightAggregation(ppdomain.ShipmentWeightTotalsThenDerive, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerNewerPriceCard(t, fixture.db, pricingResumeRegistration(t, planID, plan))
+	return plan
+}
+
 func registerPerShipmentBuyCard(t *testing.T, fixture *synVerticalFixture) ppdomain.PricingPlanVersion {
 	t.Helper()
 	base := buyCardBase(t, multiPlanID, multiBuyScope)

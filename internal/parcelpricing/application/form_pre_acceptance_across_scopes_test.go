@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -129,5 +130,158 @@ func TestAParcelThatFindsNoCardDoesNotMakeTheEstimateLookIncomplete(t *testing.T
 	if heavy.Answer == application.EstimateCandidateEvaluated || len(heavy.SourceTrail) != 2 ||
 		heavy.SourceTrail[1].Kind != application.SellPriceSourceNoCard {
 		t.Fatalf("重件 = %+v trail = %+v，想要基础运费表落空之后没有在用卡", heavy, heavy.SourceTrail)
+	}
+}
+
+func zonePairPlan(t *testing.T, scope, planID string, aggregate bool, zones []string) domain.PricingPlanVersion {
+	t.Helper()
+	currency := mustValue(t, domain.NewCurrency, "USD")
+	entries := make([]domain.RateEntry, 0, len(zones))
+	for index, zone := range zones {
+		entry, err := domain.NewRateEntry(
+			mustValue(t, domain.NewRateEntryID, fmt.Sprintf("%s-entry-%d", planID, index)),
+			zone, mustWeight(t, "0"), mustWeight(t, "10"), moneyOf(t, "12", currency),
+		)
+		if err != nil {
+			t.Fatalf("价表行：%v", err)
+		}
+		entries = append(entries, entry)
+	}
+	period, err := domain.NewEffectivePeriod(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("有效期：%v", err)
+	}
+	table, err := domain.NewRateTableVersion(
+		pptest.IdentityReference(t, domain.ArtifactRateTable, planID+"-table", "v1"),
+		domain.RateTableFamilyWeightZone, currency, domain.WeightUnitKilogram, period, entries,
+	)
+	if err != nil {
+		t.Fatalf("价表：%v", err)
+	}
+	rounding, err := domain.NewWeightRoundingPolicy(domain.RoundingCeiling, mustWeight(t, "0.5"))
+	if err != nil {
+		t.Fatalf("进位：%v", err)
+	}
+	policy, err := domain.NewPricingWeightPolicy(
+		pptest.IdentityReference(t, domain.ArtifactWeightPolicy, planID+"-weight", "v1"),
+		domain.PricingWeightActualOnly, rounding, nil,
+	)
+	if err != nil {
+		t.Fatalf("重量策略：%v", err)
+	}
+	reference := pptest.IdentityReference(t, domain.ArtifactPricingPlan, planID, "v1")
+	scopeID := mustValue(t, domain.NewPricingScopeID, scope)
+	charge := mustValue(t, domain.NewChargeCode, "BASE_FREIGHT")
+	if aggregate {
+		plan, err := domain.NewAggregatePricingPlanVersion(domain.AggregationPerShipment, reference, scopeID,
+			domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, charge, period, table, policy, nil, domain.PricingPlanStructures{})
+		if err != nil {
+			t.Fatalf("逐委托卡：%v", err)
+		}
+		return plan
+	}
+	plan, err := domain.NewPricingPlanVersion(reference, scopeID, domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge,
+		charge, period, table, policy, nil, domain.PricingPlanStructures{})
+	if err != nil {
+		t.Fatalf("逐包裹卡：%v", err)
+	}
+	return plan
+}
+
+func moneyOf(t *testing.T, amount string, currency domain.Currency) domain.Money {
+	t.Helper()
+	value, err := domain.NewMoney(mustValue(t, domain.ParseDecimal, amount), currency)
+	if err != nil {
+		t.Fatalf("金额：%v", err)
+	}
+	return value
+}
+
+func z2Declaration(t *testing.T) *submissionDeclarationDouble {
+	t.Helper()
+	one := mustWeight(t, "1")
+	route, err := domain.NewPostalRoute("200000", "238956")
+	if err != nil {
+		t.Fatalf("路线：%v", err)
+	}
+	return &submissionDeclarationDouble{found: true, declaration: ports.SubmissionDeclaration{
+		Parcels: []ports.DeclaredParcel{{Parcel: "SYN-PARCEL-1", Weight: &one}, {Parcel: "SYN-PARCEL-2", Weight: &one}},
+		Route:   &route,
+	}}
+}
+
+func acrossScopes(t *testing.T, cards map[string]ports.PriceCardInForceResolution) *application.FormPreAcceptanceEstimatesHandler {
+	t.Helper()
+	handler, err := application.NewFormPreAcceptanceEstimatesHandler(application.FormPreAcceptanceEstimatesDeps{
+		PriceCards:   &scopedPriceCards{byScope: cards},
+		Declarations: z2Declaration(t),
+		Estimates:    newPlanGivenHandler(t, application.FormPlanGivenEstimateEvaluationsDeps{}),
+		Evidence:     domain.EvidenceSynthetic,
+	})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	return handler
+}
+
+func z2Command(t *testing.T) application.FormPreAcceptanceEstimatesCommand {
+	t.Helper()
+	command := preAcceptanceCommand(t)
+	command.Scope = mustValue(t, domain.NewPricingScopeID, "SYN-SCOPE-A")
+	command.Scopes = []domain.PricingScopeID{
+		command.Scope,
+		mustValue(t, domain.NewPricingScopeID, "SYN-SCOPE-B"),
+	}
+	command.Zone = "Z2"
+	return command
+}
+
+// Covers: 逐包裹卡对整票都缺格时继续问下一张逐委托卡，整票按 Z2 试算成功。
+func TestAPerPackageMissFallsThroughToTheShipmentCard(t *testing.T) {
+	perPackage := zonePairPlan(t, "SYN-SCOPE-A", "SYN-PLAN-PKG", false, []string{"Z1"})
+	perShipment := zonePairPlan(t, "SYN-SCOPE-B", "SYN-PLAN-SHIP", true, []string{"Z1", "Z2"})
+	handler := acrossScopes(t, map[string]ports.PriceCardInForceResolution{
+		"SYN-SCOPE-A": inForceCard(perPackage),
+		"SYN-SCOPE-B": inForceCard(perShipment),
+	})
+	result, err := handler.Handle(context.Background(), z2Command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome != application.PreAcceptanceEstimatesFormed || len(result.Estimates) != 1 {
+		t.Fatalf("outcome = %s estimates = %d", result.Outcome, len(result.Estimates))
+	}
+	got := result.Estimates[0]
+	if got.Parcel != "SHR-SYN-01" || got.Scope.String() != "SYN-SCOPE-B" || got.Evaluation.Status() != domain.EvaluationCompleted ||
+		got.Evaluation.PlanReference().ID() != "SYN-PLAN-SHIP" {
+		t.Fatalf("整票 = %+v 状态 %s 卡 %s", got.Parcel, got.Evaluation.Status(), got.Evaluation.PlanReference().ID())
+	}
+	if len(got.SourceTrail) != 2 || got.SourceTrail[0].Kind != application.SellPriceSourceBaseRateMissing ||
+		got.SourceTrail[1].Kind != application.SellPriceSourceSelected {
+		t.Fatalf("轨迹 = %+v", got.SourceTrail)
+	}
+}
+
+// Covers: 逐委托卡对整票缺格时继续问下一张逐包裹卡，两件各自按 Z2 试算成功。
+func TestAShipmentMissFallsThroughToThePackageCard(t *testing.T) {
+	perShipment := zonePairPlan(t, "SYN-SCOPE-A", "SYN-PLAN-SHIP", true, []string{"Z1"})
+	perPackage := zonePairPlan(t, "SYN-SCOPE-B", "SYN-PLAN-PKG", false, []string{"Z1", "Z2"})
+	handler := acrossScopes(t, map[string]ports.PriceCardInForceResolution{
+		"SYN-SCOPE-A": inForceCard(perShipment),
+		"SYN-SCOPE-B": inForceCard(perPackage),
+	})
+	result, err := handler.Handle(context.Background(), z2Command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome != application.PreAcceptanceEstimatesFormed || len(result.Estimates) != 2 {
+		t.Fatalf("outcome = %s estimates = %d", result.Outcome, len(result.Estimates))
+	}
+	for _, estimate := range result.Estimates {
+		if estimate.Scope.String() != "SYN-SCOPE-B" || estimate.Evaluation.Status() != domain.EvaluationCompleted ||
+			len(estimate.SourceTrail) != 2 || estimate.SourceTrail[0].Kind != application.SellPriceSourceBaseRateMissing ||
+			estimate.SourceTrail[1].Kind != application.SellPriceSourceSelected {
+			t.Fatalf("件 %s 范围 %s 状态 %s 轨迹 %+v", estimate.Parcel, estimate.Scope, estimate.Evaluation.Status(), estimate.SourceTrail)
+		}
 	}
 }

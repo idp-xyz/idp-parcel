@@ -419,6 +419,184 @@ func TestAnUnresolvedCatalogueStopsOnTheScopeAsked(t *testing.T) {
 }
 
 // Covers: 探针补读数时依赖故障答未决并点名这一格，不上抛成硬失败，也不入册、不铸标识。
+type switchingInputs struct {
+	parcel   func(scope string) domain.PricingInputSnapshot
+	shipment func(scope string) domain.PricingInputSnapshot
+}
+
+func (double switchingInputs) ResolvePricingInput(_ context.Context, query ports.PricingInputQuery) (ports.PricingInputResolution, error) {
+	var input domain.PricingInputSnapshot
+	if query.Sources.ShipmentReferenced() {
+		input = double.shipment(query.Scope.String())
+	} else {
+		input = double.parcel(query.Scope.String())
+	}
+	return ports.PricingInputResolution{Outcome: ports.PricingInputResolved, Input: input}, nil
+}
+
+type shipmentMemberDouble struct {
+	picture ports.ShipmentMemberPicture
+	found   bool
+}
+
+func (double shipmentMemberDouble) LoadShipmentMembers(context.Context, domain.TenantID, string) (ports.ShipmentMemberPicture, bool, error) {
+	return double.picture, double.found, nil
+}
+
+func zonePackageInput(t *testing.T, scope, zone string) domain.PricingInputSnapshot {
+	t.Helper()
+	input := sellScopeInput(t, scope)
+	zoned, err := input.WithCallerZone(zone)
+	if err != nil {
+		t.Fatalf("分区：%v", err)
+	}
+	return zoned
+}
+
+func zoneShipmentInput(t *testing.T, scope, zone string) domain.PricingInputSnapshot {
+	t.Helper()
+	ids := []domain.PackageID{
+		mustValue(t, domain.NewPackageID, "SYN-PARCEL-1"),
+		mustValue(t, domain.NewPackageID, "SYN-PARCEL-2"),
+	}
+	manifest, err := domain.NewMemberManifest(ids, mustValue(t, func(raw string) (domain.Weight, error) {
+		return domain.NewWeight(mustValue(t, domain.ParseDecimal, raw), domain.WeightUnitKilogram)
+	}, "5"), nil)
+	if err != nil {
+		t.Fatalf("清单：%v", err)
+	}
+	subject, err := domain.NewShipmentSubject("SYN-SHIP-1")
+	if err != nil {
+		t.Fatalf("委托：%v", err)
+	}
+	input, err := domain.NewAggregatePricingInputSnapshot(
+		mustValue(t, domain.NewTenantID, "tenant-1"), mustValue(t, domain.NewPricingScopeID, scope),
+		subject, zone, manifest, requestBasisAt,
+	)
+	if err != nil {
+		t.Fatalf("输入：%v", err)
+	}
+	return input
+}
+
+func multiZonePlan(t *testing.T, scope, planID string, aggregate bool, zones []string) domain.PricingPlanVersion {
+	t.Helper()
+	base := sellScopePlan(t, scope, zones[0], planID)
+	if len(zones) == 1 && !aggregate {
+		return base
+	}
+	currency := mustValue(t, domain.NewCurrency, "USD")
+	entries := make([]domain.RateEntry, 0, len(zones))
+	for index, zone := range zones {
+		entry, err := domain.NewRateEntry(mustValue(t, domain.NewRateEntryID, planID+"-"+zone), zone,
+			mustValue(t, func(raw string) (domain.Weight, error) {
+				return domain.NewWeight(mustValue(t, domain.ParseDecimal, raw), domain.WeightUnitKilogram)
+			}, "0"),
+			mustValue(t, func(raw string) (domain.Weight, error) {
+				return domain.NewWeight(mustValue(t, domain.ParseDecimal, raw), domain.WeightUnitKilogram)
+			}, "10"),
+			mustValue(t, func(raw string) (domain.Money, error) {
+				return domain.NewMoney(mustValue(t, domain.ParseDecimal, raw), currency)
+			}, "12"),
+		)
+		if err != nil {
+			t.Fatalf("价表行：%v", err)
+		}
+		entries = append(entries, entry)
+		_ = index
+	}
+	table, err := domain.NewRateTableVersion(base.RateTable().Reference(), domain.RateTableFamilyWeightZone, currency,
+		domain.WeightUnitKilogram, base.EffectivePeriod(), entries)
+	if err != nil {
+		t.Fatalf("价表：%v", err)
+	}
+	if !aggregate {
+		plan, err := domain.NewPricingPlanVersion(base.Reference(), base.Scope(), base.Direction(), base.Purpose(),
+			base.BaseChargeCode(), base.EffectivePeriod(), table, base.WeightPolicy(), nil, domain.PricingPlanStructures{})
+		if err != nil {
+			t.Fatalf("逐包裹卡：%v", err)
+		}
+		return plan
+	}
+	plan, err := domain.NewAggregatePricingPlanVersion(domain.AggregationPerShipment, base.Reference(), base.Scope(),
+		base.Direction(), base.Purpose(), base.BaseChargeCode(), base.EffectivePeriod(), table, base.WeightPolicy(), nil, domain.PricingPlanStructures{})
+	if err != nil {
+		t.Fatalf("逐委托卡：%v", err)
+	}
+	return plan
+}
+
+func mismatchFixture(t *testing.T, cards map[string]ports.PriceCardInForceResolution, members *shipmentMemberDouble) *application.FormEvaluationFromRequestHandler {
+	t.Helper()
+	fixture := newFormFixture(t, nil)
+	inputs := switchingInputs{
+		parcel:   func(scope string) domain.PricingInputSnapshot { return zonePackageInput(t, scope, "Z2") },
+		shipment: func(scope string) domain.PricingInputSnapshot { return zoneShipmentInput(t, scope, "Z2") },
+	}
+	deps := application.FormEvaluationFromRequestDeps{
+		Evaluations:     fixture.byRequest,
+		PriceCards:      &scopedPriceCards{byScope: cards},
+		Identity:        fixture.identity,
+		Evaluate:        application.NewEvaluatePricingHandler(application.EvaluatePricingDeps{Store: fixture.store, Downstream: fixture.downstream, Clock: fixedClock{at: requestBasisAt}}),
+		Inputs:          inputs,
+		ServiceProducts: fixture.products,
+	}
+	if members != nil {
+		deps.ShipmentMembers = members
+	}
+	handler, err := application.NewFormEvaluationFromRequestHandler(deps)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	return handler
+}
+
+// Covers: 委托级请求撞上只写了 Z1 的逐包裹卡时，两件都缺格就继续问下一张逐委托卡。
+func TestAShipmentRequestSkipsAPackageCardThatMissesEveryMember(t *testing.T) {
+	perPackage := multiZonePlan(t, "SYN-SCOPE-A", "SYN-PLAN-PKG", false, []string{"Z1"})
+	perShipment := multiZonePlan(t, "SYN-SCOPE-B", "SYN-PLAN-SHIP", true, []string{"Z1", "Z2"})
+	handler := mismatchFixture(t, map[string]ports.PriceCardInForceResolution{
+		"SYN-SCOPE-A": inForce(perPackage),
+		"SYN-SCOPE-B": inForce(perShipment),
+	}, nil)
+	command := sellListCommand(t, "SYN-SCOPE-A", "SYN-SCOPE-B")
+	command.Sources = ports.EligibleSourceReferences{Shipment: "SYN-SHIP-1", Members: []string{"SYN-PARCEL-1", "SYN-PARCEL-2"}}
+	result, err := handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome != application.RequestEvaluationFormed || result.Evaluation.Status() != domain.EvaluationCompleted ||
+		result.Evaluation.PlanReference().ID() != "SYN-PLAN-SHIP" {
+		t.Fatalf("outcome = %s status = %s plan = %s issues = %v", result.Outcome, result.Evaluation.Status(), result.Evaluation.PlanReference().ID(), result.Evaluation.Issues())
+	}
+	if got := trailKinds(result.ScopeTrail); got != "SYN-SCOPE-A:BASE_RATE_NOT_IN_TABLE,SYN-SCOPE-B:SELECTED" {
+		t.Fatalf("trail = %s", got)
+	}
+}
+
+// Covers: 包裹级请求撞上只写了 Z1 的逐委托卡时，整票缺格就继续问下一张逐包裹卡。
+func TestAParcelRequestSkipsAShipmentCardThatMissesTheMembers(t *testing.T) {
+	perShipment := multiZonePlan(t, "SYN-SCOPE-A", "SYN-PLAN-SHIP", true, []string{"Z1"})
+	perPackage := multiZonePlan(t, "SYN-SCOPE-B", "SYN-PLAN-PKG", false, []string{"Z1", "Z2"})
+	handler := mismatchFixture(t, map[string]ports.PriceCardInForceResolution{
+		"SYN-SCOPE-A": inForce(perShipment),
+		"SYN-SCOPE-B": inForce(perPackage),
+	}, &shipmentMemberDouble{found: true, picture: ports.ShipmentMemberPicture{
+		Shipment: "SYN-SHIP-1", Members: []string{"SYN-PARCEL-1", "SYN-PARCEL-2"},
+	}})
+	result, err := handler.Handle(context.Background(), sellListCommand(t, "SYN-SCOPE-A", "SYN-SCOPE-B"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome != application.RequestEvaluationFormed || result.Evaluation.Status() != domain.EvaluationCompleted ||
+		result.Evaluation.PlanReference().ID() != "SYN-PLAN-PKG" {
+		t.Fatalf("outcome = %s status = %s plan = %s issues = %v", result.Outcome, result.Evaluation.Status(), result.Evaluation.PlanReference().ID(), result.Evaluation.Issues())
+	}
+	if got := trailKinds(result.ScopeTrail); got != "SYN-SCOPE-A:BASE_RATE_NOT_IN_TABLE,SYN-SCOPE-B:SELECTED" {
+		t.Fatalf("trail = %s", got)
+	}
+}
+
 func TestAReadingFailureDuringTheProbeAnswersUndecided(t *testing.T) {
 	first := catalogueBoundSellPlan(t, "SYN-SCOPE-A", "Z1", "SYN-PLAN-A")
 	second := catalogueBoundSellPlan(t, "SYN-SCOPE-B", "Z1", "SYN-PLAN-B")

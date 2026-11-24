@@ -174,6 +174,9 @@ type FormEvaluationFromRequestDeps struct {
 	Evaluate        *EvaluatePricingHandler
 	Inputs          ports.PricingInputResolver
 	ServiceProducts ports.AcceptedServiceProductView
+	// ShipmentMembers 只在有序列表上、包裹级请求撞上逐委托卡时用来探整票。可缺：缺了就不跳过这一格。
+	// 生产装配在包裹销售评价消费侧接上；漏接会把基础运费表缺格的逐委托卡停成聚合方式不符。
+	ShipmentMembers ports.ShipmentMemberView
 }
 
 // FormEvaluationFromRequestHandler 是「按评价请求形成评价」的编排。计算一步都不在这里；它只做解析、造快照、
@@ -200,6 +203,11 @@ func NewFormEvaluationFromRequestHandler(deps FormEvaluationFromRequestDeps) (*F
 		}
 	}
 	return &FormEvaluationFromRequestHandler{deps: deps}, nil
+}
+
+// UseShipmentMembers 接上按包裹读所属委托及当前有效成员的口。形成入口在包裹销售消费侧才需要它，BUY 那一路不接。
+func (handler *FormEvaluationFromRequestHandler) UseShipmentMembers(view ports.ShipmentMemberView) {
+	handler.deps.ShipmentMembers = view
 }
 
 // missingInputReadPorts 是调用方没装 Inputs 时的点名。生产装配已经装上消费侧解析器；这一格留给测试和仍缺席的调用方。

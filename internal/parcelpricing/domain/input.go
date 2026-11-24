@@ -422,6 +422,17 @@ func NewPostalAggregatePricingInputSnapshot(
 	return input, nil
 }
 
+// WithCallerZone 把调用方已经定下的分区记进快照。有序列表上的逐委托试算与逐件那一路读的是同一份分区；
+// 没绑分区目录的卡否则整票这一格上看不到它。绑了目录的卡不走这里：分区以目录读数为准，多写一格会改摘要。
+func (input PricingInputSnapshot) WithCallerZone(zone string) (PricingInputSnapshot, error) {
+	if !input.valid() || zone == "" || strings.TrimSpace(zone) != zone {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	updated := copyInputSnapshot(input)
+	updated.zone = zone
+	return updated, nil
+}
+
 // WithPostalRoute 给一份带调用方分区的输入补上邮编路线：绑了档位目录而分区仍由调用方给的卡要两者都有。
 func (input PricingInputSnapshot) WithPostalRoute(route PostalRoute) (PricingInputSnapshot, error) {
 	if !input.valid() || !route.valid() {
@@ -808,7 +819,8 @@ func calculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPoli
 			return PricingWeightResult{}, err
 		}
 		if derived.unit != expectedUnit && converter != nil && input.members != nil {
-			// 票级 / 主单级主体的合计体积重由调用方声明，单位随成员清单走，与合计实重同一对单位。
+			// 只有调用方声明的合计体积重才会落到另一个重量单位。按体积系数从尺寸派生的结果
+			// 单位就是系数进位的单位，与价表一致，不在这里再记一条合计体积重换算。
 			converted, err := converter.convertWeight(ConvertedTotalVolumetricWeight, derived, expectedUnit, boundaryScale, policy.rounding.allowsTruncation())
 			if err != nil {
 				return PricingWeightResult{}, err
@@ -890,18 +902,23 @@ func (result PricingWeightResult) valid() bool {
 // 补上的事实缺失，所以调用方让评价保持`待判断`，而不是退回实重、悄悄给另一件包裹计价。
 // 尺寸的长度单位与系数声明的不同时：没有换算器照旧答长度单位不一致，有换算器则把三边换算到系数声明的
 // 单位再算（除数只对它声明的那个单位成立，所以换的是尺寸，不是除数）。
+//
+// 聚合主体优先用调用方声明的合计体积重（ADR-0111）。没声明时，若清单带了逐件尺寸，按合计后派生
+// 把各件体积加总再除一次体积系数——输入层不知道除数，除数在卡上，不能在造清单时写死。
 func deriveVolumetricWeight(input PricingInputSnapshot, policy PricingWeightPolicy, converter *unitConverter) (Weight, error) {
 	factor, declared := policy.VolumetricFactor()
 	if !declared {
 		return Weight{}, ErrInvalidRoundingPolicy
 	}
-	// 聚合主体没有一组尺寸可算：合计体积重由调用方随成员清单声明（ADR-0111 Decision 二），缺了就是缺事实。
 	if input.members != nil {
-		total, declared := input.members.TotalVolumetricWeight()
-		if !declared {
+		if total, declared := input.members.TotalVolumetricWeight(); declared {
+			return total, nil
+		}
+		pieces, hasPieces := input.members.Pieces()
+		if !hasPieces {
 			return Weight{}, ErrMissingDimensions
 		}
-		return total, nil
+		return volumetricWeightFromMemberPieces(pieces, factor, converter)
 	}
 	sides, measured := input.Dimensions()
 	if !measured {
@@ -915,6 +932,57 @@ func deriveVolumetricWeight(input PricingInputSnapshot, policy PricingWeightPoli
 		return Weight{}, err
 	}
 	return factor.Apply(volume)
+}
+
+// volumetricWeightFromMemberPieces 在没声明合计体积重时，用各件尺寸按合计后派生算体积重。
+// 任一件没有尺寸就整票待判断：跳过它再把其余件的体积重相加，会把缺尺寸说成「这一件没有体积」。
+// 各件长度单位一致是 WithPieces 的门；对不上系数声明的单位时，没有换算器照旧答不一致，让评价先不换算再换算。
+func volumetricWeightFromMemberPieces(pieces []MemberPiece, factor VolumetricFactor, converter *unitConverter) (Weight, error) {
+	var unit LengthUnit
+	for index, piece := range pieces {
+		sides, measured := piece.Dimensions()
+		if !measured {
+			return Weight{}, ErrMissingDimensions
+		}
+		if index == 0 {
+			unit = sides.unit
+			continue
+		}
+		if sides.unit != unit {
+			return Weight{}, ErrLengthUnitMismatch
+		}
+	}
+	if len(pieces) == 0 {
+		return Weight{}, ErrMissingDimensions
+	}
+	if unit == factor.lengthUnit {
+		var total Decimal
+		for index, piece := range pieces {
+			sides, _ := piece.Dimensions()
+			volume, err := sides.Volume()
+			if err != nil {
+				return Weight{}, err
+			}
+			if index == 0 {
+				total = volume.value
+				continue
+			}
+			summed, err := total.Add(volume.value)
+			if err != nil {
+				return Weight{}, err
+			}
+			total = summed
+		}
+		combined, err := newVolume(total, unit)
+		if err != nil {
+			return Weight{}, err
+		}
+		return factor.Apply(combined)
+	}
+	if converter == nil {
+		return Weight{}, ErrLengthUnitMismatch
+	}
+	return converter.totalVolumetricWeightFromPieceDimensions(pieces, factor)
 }
 
 func optionalWeightCopy(value Weight, present bool) *Weight {

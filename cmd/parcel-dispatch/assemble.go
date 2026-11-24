@@ -2797,6 +2797,15 @@ func formEvaluationOnSellEvaluationRequestConsumer(
 	if err != nil {
 		return nil, err
 	}
+	cancellations, err := pspostgres.NewParcelCancellations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel cancellations for shipment members: %w", err)
+	}
+	members, err := ppshipment.NewShipmentMembers(shipments, shipments, cancellations)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment members for sell price probe: %w", err)
+	}
+	form.UseShipmentMembers(members)
 	requests, err := sapostgres.NewSellEvaluationRequests(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: settlement sell evaluation request view: %w", err)
@@ -3073,6 +3082,11 @@ func routeSellOnNetworkIntake(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: sell price card paths: %w", err)
 	}
+	probe, err := sellPriceCardListProbe(db, outboxStore, clock, cards)
+	if err != nil {
+		return nil, err
+	}
+	paths.UseListProbe(probe)
 	shipmentAdoptions, err := sapostgres.NewShipmentBillingMomentAdoptions(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: shipment billing moment adoptions: %w", err)
@@ -3102,6 +3116,63 @@ func routeSellOnNetworkIntake(
 		return nil, fmt.Errorf("parcel-dispatch: route sell on network intake: %w", err)
 	}
 	return router, nil
+}
+
+// sellPriceCardListProbe 装收寄改道在多范围上用的探路：在用价卡、按包裹造输入、补齐读数与按列表形成评价是同一套。
+// 探评不入册。补齐读数只装一半会在探的时候被拒，所以序列与目录两对和正式评价一样成对装齐。
+func sellPriceCardListProbe(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	clock systemClock,
+	cards ppports.PriceCardInForceResolver,
+) (*ppapplication.SellPriceCardProbe, error) {
+	shipments, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell price probe inputs: %w", err)
+	}
+	measured, err := actualMeasurements(db)
+	if err != nil {
+		return nil, err
+	}
+	inputs, err := pptransport.NewParcelResolver(pptransport.ParcelResolverDeps{
+		Declared: shipments, Addresses: shipments, Measured: measured,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell price probe inputs: %w", err)
+	}
+	evaluations, err := pppostgres.NewEvaluations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell price probe evaluations: %w", err)
+	}
+	handoff, err := pppostgres.NewOutboxEvaluationHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell price probe handoff: %w", err)
+	}
+	seriesVersions, err := pppostgres.NewReferenceSeriesVersions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell price probe series: %w", err)
+	}
+	seriesReviews, err := pppostgres.NewReferenceSeriesReviews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell price probe series: %w", err)
+	}
+	catalogueVersions, err := pppostgres.NewReferenceCatalogueVersions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell price probe catalogues: %w", err)
+	}
+	catalogueReviews, err := pppostgres.NewReferenceCatalogueReviews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell price probe catalogues: %w", err)
+	}
+	probe, err := ppapplication.NewSellPriceCardProbe(cards, inputs, ppapplication.NewEvaluatePricingHandler(ppapplication.EvaluatePricingDeps{
+		Store: evaluations, Downstream: handoff, Clock: clock,
+		InForce: seriesReviews, SeriesVersions: seriesVersions,
+		CatalogueInForce: catalogueReviews, Catalogues: catalogueVersions,
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment sell price probe: %w", err)
+	}
+	return probe, nil
 }
 
 func sellChainReads(db *bentopg.DB) (

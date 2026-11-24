@@ -143,3 +143,18 @@ type SellPriceCardPathView interface {
 		serviceProduct string,
 	) (SellPriceCardPath, error)
 }
+
+// SellPriceCardListView 在合同声明了不止一个范围时，按基础运费表有没有这一格决定停在哪一格。
+// 单范围不走它：没有下一格可跳。没装这一口时，多范围仍停在第一张在用卡上。
+type SellPriceCardListView interface {
+	ResolveSellPriceCardList(
+		ctx context.Context,
+		tenant domain.TenantID,
+		shipment domain.ShipmentReference,
+		members []domain.ParcelReference,
+		currency domain.CurrencyCode,
+		scopes []domain.EstimatePricingScope,
+		at time.Time,
+		serviceProduct string,
+	) (SellPriceCardPath, error)
+}

@@ -102,9 +102,9 @@ func (structures PricingPlanStructures) readsPackageWeights() bool {
 	return len(structures.packageWeightPredicates()) > 0
 }
 
-// volumetricThresholdScale 报出读体积重的判定条件里阈值最细的小数位。体积重在票级 / 主单级主体上是调用方声明的
-// 合计体积重，单位与价表不同时会被换算并可能截断；阈值是拿来跟它比较的有限小数，必须并入截断位数的边界（ADR-0346
-// 越权风险点 2 要求日后新增的比较量都并入），否则「截断不改变任何比较结果」的论证对这些阈值不成立。
+// volumetricThresholdScale 报出读体积重的判定条件里阈值最细的小数位。调用方声明的合计体积重单位与价表不同时会被换算
+// 并可能截断；阈值是拿来跟它比较的有限小数，必须并入截断位数的边界（ADR-0346 越权风险点 2 要求日后新增的比较量都并入），
+// 否则「截断不改变任何比较结果」的论证对这些阈值不成立。由各件尺寸按体积系数派生的体积重已经落在价表单位上，不经这道换算。
 func (structures PricingPlanStructures) volumetricThresholdScale() uint32 {
 	var scale uint32
 	for _, predicate := range structures.packageWeightPredicates() {

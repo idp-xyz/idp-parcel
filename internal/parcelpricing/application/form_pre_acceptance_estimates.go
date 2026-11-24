@@ -97,8 +97,8 @@ type FormPreAcceptanceEstimatesCommand struct {
 	// Scopes 是有序的销售价格来源（ADR-0380 决定三）。空或一项时不看它，仍按 Scope 给全部件用同一张卡。
 	// 多于一项时每件各自按这个顺序问；Scope 必须是第一项。
 	Scopes []domain.PricingScopeID
-	// Zone 是调用方已经定下的分区。只在按有序列表逐件问、且价卡不绑分区目录时用；空则仍只按申报的邮编路线。
-	// 只带一个范围的路不读它。
+	// Zone 是调用方已经定下的分区。只在按有序列表问、且价卡不绑分区目录时用：逐件与逐委托整票读的是同一份。
+	// 空则仍只按申报的邮编路线。只带一个范围的路不读它。
 	Zone string
 }
 
@@ -414,6 +414,14 @@ func (handler *FormPreAcceptanceEstimatesHandler) estimateWholeShipment(
 	if err != nil {
 		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
 	}
+	// 有序列表上的逐委托试算与逐件那一路读同一份调用方分区。只带一个范围的路不读它。
+	// 绑了分区目录的卡只认目录，把调用方分区写进快照会改摘要。
+	if len(command.Scopes) > 1 && command.Zone != "" && !planBindsZoneCatalogue(plan) {
+		input, err = input.WithCallerZone(command.Zone)
+		if err != nil {
+			return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
+		}
+	}
 	input, err = input.WithSettlementCurrency(command.Settlement)
 	if err != nil {
 		return FormPreAcceptanceEstimatesResult{}, fmt.Errorf("pre-acceptance shipment estimate: %w", err)
@@ -445,4 +453,13 @@ func (handler *FormPreAcceptanceEstimatesHandler) estimateWholeShipment(
 			Parcel: command.ShipmentRequest, Answer: EstimateCandidateEvaluated, Evaluation: evaluation,
 		}},
 	}, nil
+}
+
+func planBindsZoneCatalogue(plan domain.PricingPlanVersion) bool {
+	for _, link := range plan.Structures().ReferenceCatalogues() {
+		if link.Kind() == domain.CatalogueKindZone {
+			return true
+		}
+	}
+	return false
 }
