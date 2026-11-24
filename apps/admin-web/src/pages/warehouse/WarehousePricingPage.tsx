@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
-import type { InspectorContent } from '../../templates/inspector';
+import type { InspectorAction, InspectorContent, InspectorField } from '../../templates/inspector';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
 import { catalogueConditionsNarrow, type CatalogueConditions } from '../catalogue-query';
@@ -19,6 +19,7 @@ import {
 } from './api';
 import { pricingActionSpecs } from './actions';
 import { WarehouseActionPanel, useWarehouseActionTargets } from './ActionPanel';
+import type { GuidedFormSeed, GuidedFormValues } from './guided-forms';
 
 const info = moduleInfoById['warehouse-pricing'];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
@@ -53,26 +54,6 @@ const planColumns: ListColumn<WarehousePlanRecord>[] = [
   { id: 'effective', header: '生效时刻', className: mono, render: (row) => formatInstant(row.effectiveFrom) },
 ];
 
-function planInspector(row: WarehousePlanRecord): InspectorContent {
-  return {
-    title: row.id,
-    subtitle: `版本 ${row.version}`,
-    sections: [
-      {
-        kind: 'summary',
-        fields: [
-          { label: '计价范围', value: row.scope, mono: true },
-          { label: '币种', value: row.currency, mono: true },
-          { label: '申报值口径', value: row.declaredValue, mono: true },
-          { label: '收费组数', value: String(row.groupCount), mono: true },
-          { label: '规则条数', value: String(row.ruleCount), mono: true },
-          { label: '生效时刻', value: formatInstant(row.effectiveFrom), mono: true },
-        ],
-      },
-    ],
-  };
-}
-
 const adoptionColumns: ListColumn<WarehouseAdoptionRecord>[] = [
   { id: 'owner', header: '货主', className: mono, render: (row) => row.ownerAccount },
   { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
@@ -81,25 +62,6 @@ const adoptionColumns: ListColumn<WarehouseAdoptionRecord>[] = [
   { id: 'scope', header: '计价范围', className: mono, render: (row) => row.pricingScope },
   { id: 'effective', header: '生效时刻', className: mono, render: (row) => formatInstant(row.effectiveAt) },
 ];
-
-function adoptionInspector(row: WarehouseAdoptionRecord): InspectorContent {
-  return {
-    title: `${row.ownerAccount} · ${row.warehouseCode}`,
-    subtitle: `第 ${row.revision} 版`,
-    sections: [
-      {
-        kind: 'summary',
-        fields: [
-          { label: '结算账户', value: row.account, mono: true },
-          { label: '计价范围', value: row.pricingScope, mono: true },
-          { label: '依据', value: row.basis },
-          { label: '生效时刻', value: formatInstant(row.effectiveAt), mono: true },
-        ],
-      },
-      { kind: 'audit', fields: [{ label: '登记人', value: row.registrant, mono: true }] },
-    ],
-  };
-}
 
 const occurrenceColumns: ListColumn<ChargeOccurrenceRecord>[] = [
   { id: 'id', header: '发生项', className: mono, render: (row) => row.occurrenceId },
@@ -110,30 +72,48 @@ const occurrenceColumns: ListColumn<ChargeOccurrenceRecord>[] = [
   { id: 'time', header: '业务时刻', className: mono, render: (row) => formatInstant(row.businessTime) },
 ];
 
-function occurrenceInspector(row: ChargeOccurrenceRecord): InspectorContent {
-  const fields: Array<{ label: string; value: string; mono?: boolean }> = [
+export function buildOccurrenceInspector(
+  row: ChargeOccurrenceRecord,
+  available: ReadonlySet<string>,
+  onPrefill: (targetId: string, values: GuidedFormValues) => void,
+): InspectorContent {
+  // 概要严格不超过 8 格（INSPECTOR_SUMMARY_LIMIT）。
+  const measuresText =
+    row.measures.length === 0
+      ? '—'
+      : row.measures
+          .map((m) => (m.unmeasured ? `${m.unit}(未测)` : `${m.quantity ?? '0'} ${m.unit}${m.class ? `[${m.class}]` : ''}`))
+          .join('；');
+  const attrsText =
+    row.attributes.length === 0 ? '—' : row.attributes.map((a) => `${a.name}=${a.value}`).join('；');
+  const fields: InspectorField[] = [
     { label: '来源事实', value: row.sourceFact, mono: true },
     { label: '货主 / 仓', value: `${row.ownerAccount} · ${row.warehouseCode}`, mono: true },
     { label: '重量 / 体积单位', value: `${row.weightUnit || '—'} / ${row.volumeUnit || '—'}`, mono: true },
     { label: '明细行数', value: String(row.lineCount), mono: true },
+    { label: '计量', value: measuresText, mono: true },
+    { label: '作业属性', value: attrsText },
     { label: '业务时刻', value: formatInstant(row.businessTime), mono: true },
   ];
-  row.measures.forEach((measure, index) => {
-    fields.push({
-      label: `计量 ${index + 1}`,
-      value: measure.unmeasured
-        ? `${measure.unit}（未测量）`
-        : `${measure.quantity ?? '0'} ${measure.unit}${measure.class ? ` [${measure.class}]` : ''}`,
-      mono: true,
-    });
-  });
-  row.attributes.forEach((attr) => {
-    fields.push({ label: attr.name, value: attr.value });
-  });
+  const actions: InspectorAction[] = available.has('storage-day-close')
+    ? [
+        {
+          label: '同户同仓触发仓租日结',
+          onRun: () =>
+            onPrefill('storage-day-close', {
+              ownerAccount: row.ownerAccount,
+              warehouse: row.warehouseCode,
+            }),
+        },
+      ]
+    : [];
   return {
     title: row.occurrenceId,
     subtitle: `${occurrenceKindLabels[row.kind] ?? row.kind} · 第 ${row.version} 版`,
-    sections: [{ kind: 'summary', fields }],
+    sections: [
+      { kind: 'summary', fields },
+      ...(actions.length > 0 ? [{ kind: 'actions' as const, actions }] : []),
+    ],
   };
 }
 
@@ -155,8 +135,7 @@ function requestInspector(row: WarehouseChargeRequestRecord): InspectorContent {
         kind: 'summary',
         fields: [
           { label: '发生项与版本', value: `${row.occurrenceId} v${row.version}`, mono: true },
-          { label: '结算账户', value: row.account || '—', mono: true },
-          { label: '结算币种', value: row.settlementCurrency || '—', mono: true },
+          { label: '结算账户与币种', value: `${row.account || '—'} / ${row.settlementCurrency || '—'}`, mono: true },
           { label: '计价范围', value: row.pricingScope || '—', mono: true },
           { label: '计价基准时点', value: row.pricingBasisAt ? formatInstant(row.pricingBasisAt) : '—', mono: true },
           { label: '评价标识', value: row.evaluationId || '—', mono: true },
@@ -168,18 +147,63 @@ function requestInspector(row: WarehouseChargeRequestRecord): InspectorContent {
   };
 }
 
-function PlansTable() {
+function PlansTable({
+  available,
+  onPrefill,
+}: {
+  available: ReadonlySet<string>;
+  onPrefill: (targetId: string, values: GuidedFormValues) => void;
+}) {
   const [keyword, setKeyword] = useState('');
   const settled = useSettledKeyword(keyword);
   const conditions: CatalogueConditions = { q: settled };
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listWarehousePlans);
   const rows = answer?.kind === 'outcome' ? answer.body.plans : [];
 
+  const planInspector = (row: WarehousePlanRecord): InspectorContent => {
+    const actions: InspectorAction[] = [];
+    if (available.has('charge-adoption')) {
+      actions.push({
+        label: '按此范围登记计费采用',
+        onRun: () => onPrefill('charge-adoption', { pricingScope: row.scope, revision: '1' }),
+      });
+    }
+    if (available.has('warehouse-plan')) {
+      actions.push({
+        label: '登记此方案新版本',
+        onRun: () =>
+          onPrefill('warehouse-plan', {
+            id: row.id,
+            scope: row.scope,
+            currency: row.currency,
+            declaredValue: row.declaredValue,
+          }),
+      });
+    }
+    return {
+      title: row.id,
+      subtitle: `版本 ${row.version}`,
+      sections: [
+        {
+          kind: 'summary',
+          fields: [
+            { label: '计价范围', value: row.scope, mono: true },
+            { label: '币种', value: row.currency, mono: true },
+            { label: '申报值口径', value: row.declaredValue, mono: true },
+            { label: '收费组 / 规则数', value: `${row.groupCount} / ${row.ruleCount}`, mono: true },
+            { label: '生效时刻', value: formatInstant(row.effectiveFrom), mono: true },
+          ],
+        },
+        ...(actions.length > 0 ? [{ kind: 'actions' as const, actions }] : []),
+      ],
+    };
+  };
+
   return (
     <ListPageTemplate<WarehousePlanRecord>
       moduleId="warehouse-pricing"
       title={info.title}
-      description="已登记的仓储计费方案。新增方案、登记采用、配置单位与库龄口径及仓租日结在「登记与日结」签。"
+      description="已登记的仓储计费方案。单击行可从右栏直接按该计价范围登记采用，或在「登记与日结」签逐格填写。"
       search={{ value: keyword, onChange: setKeyword, placeholder: '搜方案标识、版本、计价范围或币种' }}
       columns={planColumns}
       rows={rows}
@@ -191,25 +215,76 @@ function PlansTable() {
         module: info,
         endpoint: 'GET /pricing-warehouse-plan-list',
         emptyTitle: '还没有仓储计费方案',
-        emptyDescription: '在「登记与日结」签登记仓储计费方案后，会在这里出现。',
+        emptyDescription: '在「登记与日结」签逐格登记仓储计费方案后，会在这里出现。',
         narrowed: catalogueConditionsNarrow(conditions),
       })}
     />
   );
 }
 
-function AdoptionsTable() {
+function AdoptionsTable({
+  available,
+  onPrefill,
+}: {
+  available: ReadonlySet<string>;
+  onPrefill: (targetId: string, values: GuidedFormValues) => void;
+}) {
   const [keyword, setKeyword] = useState('');
   const settled = useSettledKeyword(keyword);
   const conditions: CatalogueConditions = { q: settled };
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listWarehouseAdoptions);
   const rows = answer?.kind === 'outcome' ? answer.body.adoptions : [];
 
+  const adoptionInspector = (row: WarehouseAdoptionRecord): InspectorContent => {
+    const actions: InspectorAction[] = [];
+    if (available.has('charge-adoption')) {
+      actions.push({
+        label: `登记下一修订（r${row.revision + 1}）`,
+        onRun: () =>
+          onPrefill('charge-adoption', {
+            ownerAccount: row.ownerAccount,
+            warehouse: row.warehouseCode,
+            revision: String(row.revision + 1),
+            account: row.account,
+            pricingScope: row.pricingScope,
+            basis: row.basis,
+          }),
+      });
+    }
+    if (available.has('storage-day-close')) {
+      actions.push({
+        label: '触发仓租日结',
+        onRun: () =>
+          onPrefill('storage-day-close', {
+            ownerAccount: row.ownerAccount,
+            warehouse: row.warehouseCode,
+          }),
+      });
+    }
+    return {
+      title: `${row.ownerAccount} · ${row.warehouseCode}`,
+      subtitle: `第 ${row.revision} 版`,
+      sections: [
+        {
+          kind: 'summary',
+          fields: [
+            { label: '结算账户', value: row.account, mono: true },
+            { label: '计价范围', value: row.pricingScope, mono: true },
+            { label: '依据', value: row.basis },
+            { label: '生效时刻', value: formatInstant(row.effectiveAt), mono: true },
+          ],
+        },
+        ...(actions.length > 0 ? [{ kind: 'actions' as const, actions }] : []),
+        { kind: 'audit', fields: [{ label: '登记人', value: row.registrant, mono: true }] },
+      ],
+    };
+  };
+
   return (
     <ListPageTemplate<WarehouseAdoptionRecord>
       moduleId="warehouse-pricing"
       title="仓储计费采用"
-      description="各货主与仓采用的结算账户及计价范围修订。没有适用采用行的发生项答未配置。"
+      description="各货主与仓采用的结算账户及计价范围修订。单击行可从右栏直接登记下一修订或触发仓租日结。"
       search={{ value: keyword, onChange: setKeyword, placeholder: '搜货主、仓、账户、范围或依据' }}
       columns={adoptionColumns}
       rows={rows}
@@ -230,7 +305,13 @@ function AdoptionsTable() {
 
 const kindChips = ['ALL', 'INBOUND_HANDLING', 'OUTBOUND_HANDLING', 'STORAGE', 'RETURN_HANDLING', 'VALUE_ADDED', 'PROCESSING', 'DESTRUCTION'] as const;
 
-function OccurrencesTable() {
+function OccurrencesTable({
+  available,
+  onPrefill,
+}: {
+  available: ReadonlySet<string>;
+  onPrefill: (targetId: string, values: GuidedFormValues) => void;
+}) {
   const [keyword, setKeyword] = useState('');
   const [kind, setKind] = useState<(typeof kindChips)[number]>('ALL');
   const settled = useSettledKeyword(keyword);
@@ -265,7 +346,7 @@ function OccurrencesTable() {
       columns={occurrenceColumns}
       rows={rows}
       rowKey={(row) => row.occurrenceId}
-      inspector={occurrenceInspector}
+      inspector={(row) => buildOccurrenceInspector(row, available, onPrefill)}
       pagination={pagination}
       emptyRowsNote="当前条件下没有匹配的收费发生项"
       viewState={catalogueViewState(answer, rows.length, retry, {
@@ -330,13 +411,21 @@ function ChargeRequestsTable() {
   );
 }
 
-/** 仓储计价与收费配置页：方案、采用、发生项、计费请求四张列表表加登记与日结面板。 */
+/** 仓储计价与收费配置页：方案、采用、发生项、计费请求四张列表表加引导式登记与日结面板。 */
 export function WarehousePricingPage() {
   const targets = useWarehouseActionTargets(pricingActionSpecs);
+  const available = new Set(targets.map((target) => target.id));
+  const [tab, setTab] = useState('plans');
+  const [seed, setSeed] = useState<GuidedFormSeed | null>(null);
+
+  const openPrefill = (targetId: string, values: GuidedFormValues) => {
+    setSeed((current) => ({ targetId, values, nonce: (current?.nonce ?? 0) + 1 }));
+    setTab('act');
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="plans" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="plans">计费方案</TabsTrigger>
           <TabsTrigger value="adoptions">计费采用</TabsTrigger>
@@ -345,20 +434,20 @@ export function WarehousePricingPage() {
           {targets.length > 0 ? <TabsTrigger value="act">登记与日结</TabsTrigger> : null}
         </TabsList>
         <TabsContent value="plans" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <PlansTable />
+          <PlansTable available={available} onPrefill={openPrefill} />
         </TabsContent>
         <TabsContent value="adoptions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <AdoptionsTable />
+          <AdoptionsTable available={available} onPrefill={openPrefill} />
         </TabsContent>
         <TabsContent value="occurrences" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <OccurrencesTable />
+          <OccurrencesTable available={available} onPrefill={openPrefill} />
         </TabsContent>
         <TabsContent value="requests" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <ChargeRequestsTable />
         </TabsContent>
         {targets.length > 0 ? (
           <TabsContent value="act" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-            <WarehouseActionPanel moduleId="warehouse-pricing" targets={targets} />
+            <WarehouseActionPanel moduleId="warehouse-pricing" targets={targets} seed={seed} />
           </TabsContent>
         ) : null}
       </Tabs>

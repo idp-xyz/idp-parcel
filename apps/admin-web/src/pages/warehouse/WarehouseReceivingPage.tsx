@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Input, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
-import type { InspectorContent } from '../../templates/inspector';
+import type { InspectorAction, InspectorContent, InspectorField } from '../../templates/inspector';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
 import { catalogueConditionsNarrow, type CatalogueConditions } from '../catalogue-query';
@@ -20,6 +20,7 @@ import {
 } from './api';
 import { receivingActionSpecs } from './actions';
 import { WarehouseActionPanel, useWarehouseActionTargets } from './ActionPanel';
+import type { GuidedFormSeed, GuidedFormValues } from './guided-forms';
 import { problemNote } from './presentation';
 
 const info = moduleInfoById['warehouse-receiving'];
@@ -53,23 +54,50 @@ const arrivalColumns: ListColumn<UnclaimedArrivalRecord>[] = [
   { id: 'received', header: '登记时刻', className: mono, render: (row) => formatInstant(row.receivedAt) },
 ];
 
-function arrivalInspector(row: UnclaimedArrivalRecord): InspectorContent {
-  const fields = [
+export function buildArrivalInspector(
+  row: UnclaimedArrivalRecord,
+  available: ReadonlySet<string>,
+  onPrefill: (targetId: string, values: GuidedFormValues) => void,
+): InspectorContent {
+  // 概要严格不超过 8 格（INSPECTOR_SUMMARY_LIMIT）。
+  const fields: InspectorField[] = [
     { label: '事实标识', value: row.factId, mono: true },
-    { label: '来源', value: row.origin },
-    { label: '仓', value: row.warehouseCode, mono: true },
+    { label: '仓 / 来源', value: `${row.warehouseCode} · ${row.origin}`, mono: true },
     { label: '发生时刻', value: formatInstant(row.occurredAt), mono: true },
     { label: '观察', value: row.observation || '—' },
-    { label: '货主线索', value: row.ownerClue || '—', mono: true },
-    { label: '预报线索', value: row.preAdviceClue || '—', mono: true },
+    { label: '货主 / 预报线索', value: `${row.ownerClue || '—'} / ${row.preAdviceClue || '—'}`, mono: true },
     { label: '存放处', value: row.storageLocation || '—', mono: true },
   ];
   if (row.disposition) {
     fields.push(
-      { label: '处置方式', value: row.disposition.method },
-      { label: '处置规则', value: `${row.disposition.ruleWarehouseCode} r${row.disposition.ruleRevision}`, mono: true },
+      { label: '处置方式与规则', value: `${row.disposition.method}（${row.disposition.ruleWarehouseCode} r${row.disposition.ruleRevision}）` },
       { label: '处置时刻', value: formatInstant(row.disposition.disposedAt), mono: true },
     );
+  }
+  const actions: InspectorAction[] = [];
+  if (row.status === 'UNCLAIMED') {
+    if (available.has('unclaimed-claim')) {
+      actions.push({
+        label: '认领这件到货',
+        onRun: () =>
+          onPrefill('unclaimed-claim', {
+            arrivalId: row.arrivalId,
+            ownerAccount: row.ownerClue ?? '',
+            preAdviceId: row.preAdviceClue ?? '',
+          }),
+      });
+    }
+    if (available.has('unclaimed-dispose')) {
+      actions.push({
+        label: '按规则处置',
+        onRun: () => onPrefill('unclaimed-dispose', { arrivalId: row.arrivalId }),
+      });
+    }
+  } else if (row.status === 'CLAIMED' && available.has('unclaimed-revoke')) {
+    actions.push({
+      label: '撤销认领',
+      onRun: () => onPrefill('unclaimed-revoke', { arrivalId: row.arrivalId }),
+    });
   }
   return {
     title: row.arrivalId,
@@ -77,6 +105,7 @@ function arrivalInspector(row: UnclaimedArrivalRecord): InspectorContent {
     sections: [
       { kind: 'summary', fields },
       { kind: 'status', items: [{ label: '状态', word: arrivalStatusLabels[row.status] ?? row.status }] },
+      ...(actions.length > 0 ? [{ kind: 'actions' as const, actions }] : []),
       { kind: 'audit', fields: [{ label: '操作者', value: row.operator, mono: true }, { label: '设备', value: row.device, mono: true }] },
     ],
   };
@@ -90,25 +119,13 @@ const ruleColumns: ListColumn<DisposalRuleRecord>[] = [
   { id: 'at', header: '登记时刻', className: mono, render: (row) => formatInstant(row.registeredAt) },
 ];
 
-function ruleInspector(row: DisposalRuleRecord): InspectorContent {
-  return {
-    title: row.warehouseCode,
-    subtitle: `第 ${row.revision} 版`,
-    sections: [
-      {
-        kind: 'summary',
-        fields: [
-          { label: '认领期限（秒）', value: String(row.claimWindowSeconds), mono: true },
-          { label: '处置方式', value: row.disposalMethods.join('、') },
-          { label: '登记时刻', value: formatInstant(row.registeredAt), mono: true },
-        ],
-      },
-      { kind: 'audit', fields: [{ label: '登记人', value: row.registrant, mono: true }] },
-    ],
-  };
-}
-
-function UnclaimedTable() {
+function UnclaimedTable({
+  available,
+  onPrefill,
+}: {
+  available: ReadonlySet<string>;
+  onPrefill: (targetId: string, values: GuidedFormValues) => void;
+}) {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<ArrivalStatusFilter>('UNCLAIMED');
   const settled = useSettledKeyword(keyword);
@@ -123,7 +140,7 @@ function UnclaimedTable() {
     <ListPageTemplate<UnclaimedArrivalRecord>
       moduleId="warehouse-receiving"
       title={info.title}
-      description="待认领到货的运营查阅。收货确认、整箱收货和一线待认领登记由作业端发起；认领、撤销、处置和预报代录在「处理」签。"
+      description="待认领到货的运营查阅。单击行可从右栏带出到货号与线索去认领、撤销或处置；收货确认留在一线作业端。"
       search={{ value: keyword, onChange: setKeyword, placeholder: '搜到货号、仓或观察' }}
       filters={
         <>
@@ -143,7 +160,7 @@ function UnclaimedTable() {
       columns={arrivalColumns}
       rows={rows}
       rowKey={(row) => row.arrivalId}
-      inspector={arrivalInspector}
+      inspector={(row) => buildArrivalInspector(row, available, onPrefill)}
       pagination={pagination}
       emptyRowsNote="当前条件下没有匹配的待认领到货"
       viewState={catalogueViewState(answer, rows.length, retry, {
@@ -157,12 +174,53 @@ function UnclaimedTable() {
   );
 }
 
-function DisposalRulesTable() {
+function DisposalRulesTable({
+  available,
+  onPrefill,
+}: {
+  available: ReadonlySet<string>;
+  onPrefill: (targetId: string, values: GuidedFormValues) => void;
+}) {
   const [keyword, setKeyword] = useState('');
   const settled = useSettledKeyword(keyword);
   const conditions: CatalogueConditions = { q: settled };
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listDisposalRules);
   const rows = answer?.kind === 'outcome' ? answer.body.disposalRules : [];
+
+  const ruleInspector = (row: DisposalRuleRecord): InspectorContent => ({
+    title: row.warehouseCode,
+    subtitle: `第 ${row.revision} 版`,
+    sections: [
+      {
+        kind: 'summary',
+        fields: [
+          { label: '认领期限（秒）', value: String(row.claimWindowSeconds), mono: true },
+          { label: '处置方式', value: row.disposalMethods.join('、') },
+          { label: '登记时刻', value: formatInstant(row.registeredAt), mono: true },
+        ],
+      },
+      ...(available.has('disposal-rule')
+        ? [
+            {
+              kind: 'actions' as const,
+              actions: [
+                {
+                  label: `登记下一修订（r${row.revision + 1}）`,
+                  onRun: () =>
+                    onPrefill('disposal-rule', {
+                      warehouseCode: row.warehouseCode,
+                      revision: String(row.revision + 1),
+                      claimWindowSeconds: String(row.claimWindowSeconds),
+                      disposalMethods: row.disposalMethods.join(', '),
+                    }),
+                },
+              ],
+            },
+          ]
+        : []),
+      { kind: 'audit', fields: [{ label: '登记人', value: row.registrant, mono: true }] },
+    ],
+  });
 
   return (
     <ListPageTemplate<DisposalRuleRecord>
@@ -187,7 +245,13 @@ function DisposalRulesTable() {
   );
 }
 
-function OwnerPreAdviceLookup() {
+function OwnerPreAdviceLookup({
+  available,
+  onPrefill,
+}: {
+  available: ReadonlySet<string>;
+  onPrefill: (targetId: string, values: GuidedFormValues) => void;
+}) {
   const [owner, setOwner] = useState('');
   const [keyword, setKeyword] = useState('');
   const [mode, setMode] = useState<'pre-advice' | 'goods'>('pre-advice');
@@ -268,6 +332,7 @@ function OwnerPreAdviceLookup() {
                   <th className="px-3 py-2">入库方式</th>
                   <th className="px-3 py-2">状态</th>
                   <th className="px-3 py-2">受理时刻</th>
+                  <th className="px-3 py-2">快捷处理</th>
                 </tr>
               </thead>
               <tbody>
@@ -279,6 +344,37 @@ function OwnerPreAdviceLookup() {
                     <td className="px-3 py-2">{item.inboundMode}</td>
                     <td className="px-3 py-2">{preAdviceStatusLabels[item.status] ?? item.status}</td>
                     <td className="px-3 py-2 font-mono">{formatInstant(item.acceptedAt)}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {available.has('pre-advice-notice') && item.status !== 'CLOSED' && item.status !== 'CANCELLED' ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onPrefill('pre-advice-notice', { preAdviceId: item.preAdviceId })}
+                          >
+                            更新告知
+                          </Button>
+                        ) : null}
+                        {available.has('pre-advice-withdrawal') && item.status === 'ADVISED' ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onPrefill('pre-advice-withdrawal', { preAdviceId: item.preAdviceId })}
+                          >
+                            撤回
+                          </Button>
+                        ) : null}
+                        {available.has('pre-advice-close') && item.status === 'RECEIVING' ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onPrefill('pre-advice-close', { preAdviceId: item.preAdviceId })}
+                          >
+                            完结
+                          </Button>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -299,6 +395,7 @@ function OwnerPreAdviceLookup() {
                   <th className="px-3 py-2">批号 / 效期</th>
                   <th className="px-3 py-2">修订</th>
                   <th className="px-3 py-2">登记时刻</th>
+                  <th className="px-3 py-2">快捷处理</th>
                 </tr>
               </thead>
               <tbody>
@@ -310,6 +407,27 @@ function OwnerPreAdviceLookup() {
                     <td className="px-3 py-2">{`${item.trackBatch ? '记批' : '不记批'} / ${item.trackExpiry ? '记效期' : '不记效期'}`}</td>
                     <td className="px-3 py-2 font-mono">{item.revision}</td>
                     <td className="px-3 py-2 font-mono">{formatInstant(item.registeredAt)}</td>
+                    <td className="px-3 py-2">
+                      {available.has('goods-on-behalf') ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            onPrefill('goods-on-behalf', {
+                              ownerAccount: item.ownerAccount,
+                              goodsCode: item.goodsCode,
+                              basisRevision: String(item.revision),
+                              name: item.name,
+                              baseUnit: item.baseUnit,
+                              trackBatch: item.trackBatch,
+                              trackExpiry: item.trackExpiry,
+                            })
+                          }
+                        >
+                          代录新修订
+                        </Button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -321,13 +439,21 @@ function OwnerPreAdviceLookup() {
   );
 }
 
-/** 收货与待认领页：待认领到货列表、处置规则、按货主查预报与商品，以及相关代录/认领/处置动作。 */
+/** 收货与待认领页：待认领到货列表、处置规则、按货主查预报与商品，以及引导式表单处理签。 */
 export function WarehouseReceivingPage() {
   const targets = useWarehouseActionTargets(receivingActionSpecs);
+  const available = new Set(targets.map((target) => target.id));
+  const [tab, setTab] = useState('unclaimed');
+  const [seed, setSeed] = useState<GuidedFormSeed | null>(null);
+
+  const openPrefill = (targetId: string, values: GuidedFormValues) => {
+    setSeed((current) => ({ targetId, values, nonce: (current?.nonce ?? 0) + 1 }));
+    setTab('act');
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="unclaimed" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="unclaimed">待认领到货</TabsTrigger>
           <TabsTrigger value="rules">处置规则</TabsTrigger>
@@ -335,17 +461,17 @@ export function WarehouseReceivingPage() {
           {targets.length > 0 ? <TabsTrigger value="act">处理</TabsTrigger> : null}
         </TabsList>
         <TabsContent value="unclaimed" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <UnclaimedTable />
+          <UnclaimedTable available={available} onPrefill={openPrefill} />
         </TabsContent>
         <TabsContent value="rules" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <DisposalRulesTable />
+          <DisposalRulesTable available={available} onPrefill={openPrefill} />
         </TabsContent>
         <TabsContent value="owner-lookup" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <OwnerPreAdviceLookup />
+          <OwnerPreAdviceLookup available={available} onPrefill={openPrefill} />
         </TabsContent>
         {targets.length > 0 ? (
           <TabsContent value="act" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-            <WarehouseActionPanel moduleId="warehouse-receiving" targets={targets} />
+            <WarehouseActionPanel moduleId="warehouse-receiving" targets={targets} seed={seed} />
           </TabsContent>
         ) : null}
       </Tabs>

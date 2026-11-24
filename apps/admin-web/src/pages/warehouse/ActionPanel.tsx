@@ -1,17 +1,19 @@
 import { useMemo } from 'react';
-import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import { useMayMakeDecision, useMayWriteRegistry } from '../use-operator-grants';
 import {
   postWarehouseAction,
   warehouseActionOutcomeLabels,
   type WarehouseActionSpec,
 } from './actions';
+import type { GuidedFormSeed } from './guided-forms';
+import { allWarehouseGuidedForms } from './guided-schemas';
+import { GuidedActionPanel, type GuidedActionTarget } from './GuidedActionPanel';
 import { problemNote } from './presentation';
 
 /**
- * 按操作者持有的授予筛选仓配页上的写动作。明确没有那一种授予的动作不摆出。
+ * 按操作者持有的授予筛选仓配页上的引导式写动作。明确没有那一种授予的动作不摆出。
  */
-export function useWarehouseActionTargets(specs: readonly WarehouseActionSpec[]): RegistrationTarget[] {
+export function useWarehouseActionTargets(specs: readonly WarehouseActionSpec[]): GuidedActionTarget[] {
   const mayWriteRegistry = useMayWriteRegistry();
   const mayGoods = useMayMakeDecision('GOODS_RECORD_ON_BEHALF');
   const mayPreAdvice = useMayMakeDecision('INBOUND_PRE_ADVICE_RECORD_ON_BEHALF');
@@ -85,6 +87,7 @@ export function useWarehouseActionTargets(specs: readonly WarehouseActionSpec[])
         snapshotHint: spec.snapshotHint,
         submit: (snapshot: unknown) => postWarehouseAction(spec.endpoint, snapshot),
         outcomeLabels: warehouseActionOutcomeLabels,
+        form: allWarehouseGuidedForms[spec.id] ?? { fields: [] },
       }));
   }, [
     specs,
@@ -112,16 +115,11 @@ export function useWarehouseActionTargets(specs: readonly WarehouseActionSpec[])
 export function WarehouseActionPanel({
   moduleId,
   targets,
+  seed,
 }: {
   moduleId: string;
-  targets: RegistrationTarget[];
+  targets: readonly GuidedActionTarget[];
+  seed?: GuidedFormSeed | null;
 }) {
-  if (targets.length === 0) {
-    return (
-      <div className="p-6 type-body text-idpxyz-textMuted">
-        当前操作者没有这一页所需的能力面或运营决定授予，没有可执行的写动作。
-      </div>
-    );
-  }
-  return <MultiRegistrationPanel moduleId={moduleId} targets={targets} problemNote={problemNote} />;
+  return <GuidedActionPanel moduleId={moduleId} targets={targets} problemNote={problemNote} seed={seed} />;
 }
