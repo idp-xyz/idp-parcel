@@ -1,6 +1,6 @@
 # idp-parcel 文档入口
 
-取证于 main `623bfa946`（2026-11-20）。
+取证于 main `0a5c5db9c`（2026-11-24）。
 
 `dox/` 是现行文档，规则以这里为准。`docs/` 与 `.scratch/` 自 2026-11-12 起冻结，是历史记录，只在追一条规则的来历时翻。
 
@@ -51,7 +51,7 @@
 | PN-06 | 追踪、异常与客户披露 | `visibility-exception` | 达标（留待项已认可） |
 | PN-07 | 计价、账单与运营结算 | `parcel-pricing`、`settlement-accounting` | 达标（留待项已认可） |
 | PN-08 | 端到端试点与阶段准入 | `pilotgovernance` | 达标；真实候选与证据包等租户 |
-| PN-09 | 仓配履约（可选，首发不含） | `warehouse-fulfillment` | 默认关。主数据登记册、商品（货主口、运营代录与双方查阅）、仓测尺寸重量、库存账、入库预报、收货确认、整箱库存、完结与少收、收货差异结论，以及取消或完结后到达的收货转待认领，均在 main；待认领认领与处置已在 main；建账导入的提交与入账在分支上，批准口还没有；上架与库内作业还没有 |
+| PN-09 | 仓配履约（可选，首发不含） | `warehouse-fulfillment` | 默认关。入库、库内、出库与仓储计费已在 main，范围以仓配履约上下文的「已实现」节为准。管理台有仓库与库位、建账导入 |
 
 ## 一条规则现在是什么，看哪
 
@@ -69,7 +69,7 @@
 | 小包计价 | [contexts/parcel-pricing.md](./contexts/parcel-pricing.md) |
 | 结算与经营核算 | [contexts/settlement-accounting.md](./contexts/settlement-accounting.md) |
 | 代收与清分 | [contexts/collection-remittance.md](./contexts/collection-remittance.md) |
-| 仓配履约（可选，默认关；入库一段已有代码） | [contexts/warehouse-fulfillment.md](./contexts/warehouse-fulfillment.md) |
+| 仓配履约（可选，默认关） | [contexts/warehouse-fulfillment.md](./contexts/warehouse-fulfillment.md) |
 | 接入与身份（共享技术能力） | [contexts/access-identity.md](./contexts/access-identity.md) |
 | 试点治理 | [contexts/pilot-governance.md](./contexts/pilot-governance.md) |
 
