@@ -5,6 +5,7 @@ import {
   legacyWorkstationHash,
   packStationHash,
   pickStationHash,
+  dispatchStationHash,
   receiveStationHash,
   resolveStationRoute,
   stationEntries,
@@ -18,14 +19,14 @@ function route(hash: string) {
   return resolveStationRoute(address);
 }
 
-test('六个工位，次序与名字照屏幕示意；拣货、复核打包与收货可进', () => {
+test('六个工位，次序与名字照屏幕示意；拣货、复核打包、收货与发货交接可进', () => {
   deepEqual(
     stationEntries.map((entry) => entry.name),
     ['拣货', '复核打包', '收货', '发货交接', '上架与移库', '盘点清点'],
   );
   deepEqual(
     stationEntries.filter((entry) => entry.ready).map((entry) => entry.id),
-    ['pick', 'pack', 'receive'],
+    ['pick', 'pack', 'receive', 'dispatch'],
   );
   equal(new Set(stationEntries.map((entry) => entry.id)).size, 6);
 });
@@ -91,8 +92,15 @@ test('收货地址落到收货工位；预报标识取查询串里的 advice', (
   deepEqual(route('#/station/receive?advice='), { kind: 'receive', advice: null });
 });
 
-test('另外三个工位全屏的还没做好：落到说明页，不当成拣货或复核打包', () => {
-  for (const id of ['dispatch', 'putaway', 'count']) {
+test('发货交接地址落到发货交接工位；出库请求号取查询串里的 request', () => {
+  equal(dispatchStationHash(), '#/station/dispatch');
+  equal(dispatchStationHash('OBR-1'), '#/station/dispatch?request=OBR-1');
+  deepEqual(route('#/station/dispatch'), { kind: 'dispatch', request: null });
+  deepEqual(route('#/station/dispatch?request=OBR-1'), { kind: 'dispatch', request: 'OBR-1' });
+});
+
+test('另外两个工位全屏的还没做好：落到说明页，不当成别的工位', () => {
+  for (const id of ['putaway', 'count']) {
     const resolved = route(`#/station/${id}`);
     equal(resolved.kind, 'not-ready', id);
     if (resolved.kind === 'not-ready') equal(resolved.entry.id, id);

@@ -26,11 +26,11 @@ test('已放波次的去拣货工位：不知道波次是本仓全部波次，�
   });
 });
 
-test('复核打包之后现场还没搬进全屏的几步还指到旧的作业台页', () => {
-  for (const status of ['PACKED', 'AWAITING_RETURN']) {
-    const next = outboundNextStep(status, false);
-    equal(next?.kind === 'go' ? next.moduleId : null, 'warehouse-workstation', status);
-  }
+test('已打包的去发货交接工位；还没搬进全屏的回库仍指到旧的作业台页', () => {
+  deepEqual(outboundNextStep('PACKED', false, undefined, 'OBR-1'), { kind: 'station', label: '去发货', hash: '#/station/dispatch?request=OBR-1' });
+  deepEqual(outboundNextStep('PACKED', false), { kind: 'station', label: '去发货', hash: '#/station/dispatch' });
+  const waiting = outboundNextStep('AWAITING_RETURN', false);
+  equal(waiting?.kind === 'go' ? waiting.moduleId : null, 'warehouse-workstation');
 });
 
 test('已拣货的去复核、已复核的去打包，都进复核打包工位；带着出库请求号就直接做这一张，没带就进去等人扫单号', () => {
@@ -47,7 +47,7 @@ test('已拣货的去复核、已复核的去打包，都进复核打包工位�
 });
 
 test('出库请求号只对已拣货与已复核的有用，别的状态不受影响', () => {
-  for (const status of ['RESERVED', 'ALLOCATED', 'PACKED', 'SHIPPED', 'CANCELLED', 'AWAITING_RETURN', 'HANDED_OFF']) {
+  for (const status of ['RESERVED', 'ALLOCATED', 'SHIPPED', 'CANCELLED', 'AWAITING_RETURN', 'HANDED_OFF']) {
     deepEqual(outboundNextStep(status, false, undefined, 'OBR-1'), outboundNextStep(status, false), status);
   }
 });

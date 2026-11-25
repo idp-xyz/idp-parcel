@@ -46,7 +46,7 @@ import {
 } from './pack-flow';
 import type { OrderLookup, OrderOpened, PackGoods, PackOrder, PackQueue } from './pack-order';
 import type { PackagingMaterial } from './pack-parcels';
-import { legacyWorkstationHash, pickStationHash } from './stations';
+import { pickStationHash } from './stations';
 import { judgeWorkFactAnswer, type WorkFactVerdict } from './work-fact-submit';
 
 const WH = 'SYN-WH-01';
@@ -332,7 +332,7 @@ test('读到的单现在不能做：还有任务没拣完、一件都没拣到�
   ok(shipped.state.feedback.text.includes('已经出库了') && shipped.state.feedback.text.includes('没有记任何东西'));
 
   const packed = orderOpened(reading, 'OBR-1', opened(order({ status: 'PACKED' })));
-  equal(packed.state.feedback.goto?.hash, legacyWorkstationHash);
+  equal(packed.state.feedback.goto?.hash, '#/station/dispatch?request=OBR-1');
 });
 
 test('读明细：没有这张单与没读成是两回事，没读成不说成没有', () => {

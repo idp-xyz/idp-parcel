@@ -106,6 +106,7 @@ const baseInternalLineFields: readonly GuidedFieldSpec[] = [
 
 export const workFactOutcomeLabels: Record<string, string> = {
   CONFIRMED: '已确认并入账',
+  CORRECTED: '已更正出库确认的时点',
   DIVERTED_TO_UNCLAIMED: '预报已取消或完结，已自动转待认领到货（未入账）',
   RECORDED: '已记录',
   REGISTERED: '已登记并入账',

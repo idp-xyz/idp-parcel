@@ -189,7 +189,7 @@ test('去处：还没拣完的去拣货工位，已打包的去出库发货，�
     return work.kind === 'not-here' ? work.goto : undefined;
   };
   equal(gotoOf('ALLOCATED')?.hash, pickStationHash());
-  equal(gotoOf('PACKED')?.hash, legacyWorkstationHash);
+  equal(gotoOf('PACKED')?.hash, '#/station/dispatch?request=OBR-1');
   equal(gotoOf('AWAITING_RETURN')?.hash, legacyWorkstationHash);
   equal(gotoOf('HANDED_OFF')?.hash, '#/warehouse-agents');
   ok(gotoOf('SHIPPED')?.hash.includes('OBR-1'));

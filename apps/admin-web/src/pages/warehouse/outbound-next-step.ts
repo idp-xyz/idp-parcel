@@ -1,7 +1,7 @@
 // 一张出库单此刻该做的那一步（纯 TypeScript，node:test 直接测）。列表每行最右与单据页头区的主动作读同一份，
 // 两处不各写一套判断。
 
-import { packStationHash, pickStationHash } from './station/stations';
+import { dispatchStationHash, packStationHash, pickStationHash } from './station/stations';
 
 export type OutboundNextStep =
   /** 在出库单上就地做：放波次。 */
@@ -39,7 +39,7 @@ export function outboundNextStep(status: string, agentWarehouse: boolean, wave?:
     case 'PACKED':
       return agentWarehouse
         ? { kind: 'go', label: '回录代理仓交接', moduleId: 'warehouse-agents' }
-        : { kind: 'go', label: '去发货', moduleId: workstation };
+        : { kind: 'station', label: '去发货', hash: dispatchStationHash(requestId) };
     case 'AWAITING_RETURN':
       return { kind: 'go', label: '去回库', moduleId: workstation };
     case 'HANDED_OFF':

@@ -102,6 +102,7 @@ const recordedOutcomes: ReadonlySet<string> = new Set([
   'PACKED',
   'SUBMITTED',
   'CONFIRMED',
+  'CORRECTED',
   'DIVERTED_TO_UNCLAIMED',
   'REGISTERED',
   'SHORTAGE_REGISTERED',

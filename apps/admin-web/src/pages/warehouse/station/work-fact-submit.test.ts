@@ -261,6 +261,7 @@ const outcomeAnswer = (outcome: string) => ({ kind: 'outcome', status: 200, body
 // 每个业务答复都要有一个归属：新增一个词（后端加了结果、work-fact.ts 的词表加了一格）而这里没有决定它算成还是没成，这条就红。
 const doneOutcomes = [
   'CONFIRMED',
+  'CORRECTED',
   'DIVERTED_TO_UNCLAIMED',
   'RECORDED',
   'REGISTERED',

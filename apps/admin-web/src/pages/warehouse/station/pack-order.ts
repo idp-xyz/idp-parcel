@@ -20,7 +20,7 @@ import {
   type OutboundRequestRecord,
 } from '../api';
 import { seek, type SeekWords } from './catalogue-seek';
-import { legacyWorkstationHash, pickStationHash } from './stations';
+import { dispatchStationHash, legacyWorkstationHash, pickStationHash } from './stations';
 import { describeReadFailure } from './work-fact-submit';
 
 /** 这个工位要认的两种状态：已拣货等复核，已复核等打包。 */
@@ -131,7 +131,7 @@ function notHere(number: string, status: string, requestId: string): { text: str
     case 'ALLOCATED':
       return { text: `${number} 还没拣完：它还有拣货任务没做。`, goto: { label: '去拣货', hash: pickStationHash() } };
     case 'PACKED':
-      return { text: `${number} 已经打包了，不用再复核打包。下一步是出库确认。`, goto: { label: '去出库发货', hash: legacyWorkstationHash } };
+      return { text: `${number} 已经打包了，不用再复核打包。下一步是出库确认。`, goto: { label: '去发货', hash: dispatchStationHash(requestId) } };
     case 'SHIPPED':
       return { text: `${number} 已经出库了。`, goto: outboundDocument(requestId) };
     case 'CANCELLED':
