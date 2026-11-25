@@ -138,6 +138,7 @@ export const workFactOutcomeLabels: Record<string, string> = {
   UNAVAILABLE: '库存不足或被占用，未入账',
   STATUS_MISMATCH: '当前单据状态不允许此作业',
   WAVE_NOT_FOUND: '找不到对应的任务或出库请求',
+  COUNT_NOT_FOUND: '找不到这张盘点单',
 };
 
 export function workFactProblemNote(code: string): string {

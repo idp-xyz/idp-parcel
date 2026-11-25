@@ -297,6 +297,7 @@ const refusedOutcomes = [
   'UNAVAILABLE',
   'STATUS_MISMATCH',
   'WAVE_NOT_FOUND',
+  'COUNT_NOT_FOUND',
 ];
 
 test('词表里的每个业务答复都归了类，没有漏的也没有多的', () => {

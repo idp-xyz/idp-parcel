@@ -19,14 +19,14 @@ function route(hash: string) {
   return resolveStationRoute(address);
 }
 
-test('六个工位，次序与名字照屏幕示意；只剩盘点清点还没进全屏', () => {
+test('六个工位都可进，次序与名字照屏幕示意', () => {
   deepEqual(
     stationEntries.map((entry) => entry.name),
     ['拣货', '复核打包', '收货', '发货交接', '上架与移库', '盘点清点'],
   );
   deepEqual(
     stationEntries.filter((entry) => entry.ready).map((entry) => entry.id),
-    ['pick', 'pack', 'receive', 'dispatch', 'putaway'],
+    ['pick', 'pack', 'receive', 'dispatch', 'putaway', 'count'],
   );
   equal(new Set(stationEntries.map((entry) => entry.id)).size, 6);
 });
@@ -103,12 +103,10 @@ test('上架与移库落到自己的工位', () => {
   deepEqual(route('#/station/putaway'), { kind: 'putaway' });
 });
 
-test('盘点清点全屏的还没做好：落到说明页', () => {
-  for (const id of ['count']) {
-    const resolved = route(`#/station/${id}`);
-    equal(resolved.kind, 'not-ready', id);
-    if (resolved.kind === 'not-ready') equal(resolved.entry.id, id);
-  }
+test('盘点清点与更多作业落到自己的页', () => {
+  deepEqual(route('#/station/count'), { kind: 'count', count: null });
+  deepEqual(route('#/station/count?count=CNT-1'), { kind: 'count', count: 'CNT-1' });
+  deepEqual(route('#/station/more'), { kind: 'more' });
 });
 
 test('不是工位的词落到「没有这个工位」，带着原词', () => {

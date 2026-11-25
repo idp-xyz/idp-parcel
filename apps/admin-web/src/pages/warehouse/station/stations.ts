@@ -22,7 +22,7 @@ export const stationEntries: readonly StationEntry[] = [
   { id: 'receive', name: '收货', summary: '扫入库预报，逐件扫货，一次提交一批收货。', ready: true },
   { id: 'dispatch', name: '发货交接', summary: '扫出库单号，逐个包裹确认交出。', ready: true },
   { id: 'putaway', name: '上架与移库', summary: '选货主，扫源库位、商品和目标库位。', ready: true },
-  { id: 'count', name: '盘点清点', summary: '选一张盘点单，按库位逐件清点。', ready: false },
+  { id: 'count', name: '盘点清点', summary: '选一张盘点单，按库位逐件清点。', ready: true },
 ];
 
 /** 旧的仓内作业台页。还没搬进全屏的工位仍在那里做；「退出作业台」也回到它。 */
@@ -67,6 +67,8 @@ export type StationRoute =
   | { kind: 'receive'; advice: string | null }
   | { kind: 'dispatch'; request: string | null }
   | { kind: 'putaway' }
+  | { kind: 'count'; count: string | null }
+  | { kind: 'more' }
   /** 词是六个工位之一，但全屏的还没做好：说明它还在仓内作业台里。 */
   | { kind: 'not-ready'; entry: StationEntry }
   /** 词不是任何一个工位。 */
@@ -81,6 +83,7 @@ const textOf = (address: StationAddress, name: string): string | null => {
 export function resolveStationRoute(address: StationAddress): StationRoute {
   if (address.station === null) return { kind: 'home' };
   const entry = stationEntryOf(address.station);
+  if (address.station === 'more') return { kind: 'more' };
   if (entry === undefined) return { kind: 'unknown', station: address.station };
   if (!entry.ready) return { kind: 'not-ready', entry };
   // 做好一个工位要在这里给它一支；没给的哪怕 ready 了也落到说明页，不错落到别的工位上
@@ -95,6 +98,8 @@ export function resolveStationRoute(address: StationAddress): StationRoute {
       return { kind: 'dispatch', request: textOf(address, 'request') };
     case 'putaway':
       return { kind: 'putaway' };
+    case 'count':
+      return { kind: 'count', count: textOf(address, 'count') };
     default:
       return { kind: 'not-ready', entry };
   }
