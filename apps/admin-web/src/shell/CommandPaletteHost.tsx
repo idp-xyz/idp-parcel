@@ -29,9 +29,18 @@ export interface CommandPaletteHostProps {
   recentObjectHash: (entry: RecentEntry) => string;
   /** 检查器栏的可见性与切法（票 02 壳层段）；归 Layout 的工作区状态，这里只透传给动作集。 */
   inspector: { visible: boolean; toggle: () => void };
+  /** 仓配入口摆不摆；归 Layout 取到的部署开关，这里只透传给动作集。缺省为摆。 */
+  warehouseOffered?: boolean;
 }
 
-export function CommandPaletteHost({ open, onOpenChange, readRecent, recentObjectHash, inspector }: CommandPaletteHostProps) {
+export function CommandPaletteHost({
+  open,
+  onOpenChange,
+  readRecent,
+  recentObjectHash,
+  inspector,
+  warehouseOffered,
+}: CommandPaletteHostProps) {
   const { theme, toggleTheme } = useTheme();
   const { density, toggleDensity } = useDensity();
 
@@ -54,9 +63,10 @@ export function CommandPaletteHost({ open, onOpenChange, readRecent, recentObjec
               inspectorVisible: inspector.visible,
               toggleInspector: inspector.toggle,
             },
+            warehouseOffered,
           })
         : [],
-    [open, readRecent, recentObjectHash, theme, toggleTheme, density, toggleDensity, inspector.visible, inspector.toggle],
+    [open, readRecent, recentObjectHash, theme, toggleTheme, density, toggleDensity, inspector.visible, inspector.toggle, warehouseOffered],
   );
 
   return <CommandPalette open={open} onClose={close} actions={actions} />;

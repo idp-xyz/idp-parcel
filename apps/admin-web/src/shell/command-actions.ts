@@ -1,6 +1,7 @@
 import type { CommandPaletteAction } from '@idpxyz/ui-workspace';
 import type { DensityPreference, ThemePreference } from './preferences';
 import { densityToggleLabel, themeToggleLabel } from './top-bar-model';
+import { isWarehouseWithdrawn } from './workspace-mode';
 
 // 命令面板的动作集（票 admin-web-workspace-form/03 第 1 条）：面板能做的每一件事在这里生成，CommandPaletteHost 只挂。
 //
@@ -55,6 +56,11 @@ export interface BuildCommandActionsInput {
   shellToggles: ShellToggles;
   /** 落 hash 的地方；默认写 window.location.hash，测试注入以免碰全局。 */
   navigate?: (hash: string) => void;
+  /**
+   * 仓配入口摆不摆（shell/warehouse-switch.ts）。为假时仓配页面与指向仓配页的最近对象都不进面板：点了只会落到
+   * 「本部署没有启用仓配履约」的说明。缺省为真——不知道开关时面板与过去逐字一样。
+   */
+  warehouseOffered?: boolean;
 }
 
 /** 最近对象在面板里的条数上限，沿 myshop-web 的前 10；再多要翻，翻就不如去「我的工作」那一页。 */
@@ -123,8 +129,10 @@ export function buildCommandActions({
   recentObjectHash,
   shellToggles,
   navigate = assignLocationHash,
+  warehouseOffered = true,
 }: BuildCommandActionsInput): CommandPaletteAction[] {
-  const navigation: CommandPaletteAction[] = Object.entries(pageTitleById).map(([id, title]) => ({
+  const listedPages = Object.entries(pageTitleById).filter(([id]) => !isWarehouseWithdrawn(id, warehouseOffered));
+  const navigation: CommandPaletteAction[] = listedPages.map(([id, title]) => ({
     id: `${NAVIGATION_ACTION_ID_PREFIX}${id}`,
     label: openLabel(title),
     group: 'navigation',
@@ -132,7 +140,9 @@ export function buildCommandActions({
     run: () => navigate(moduleHash(id)),
   }));
 
-  const recent: CommandPaletteAction[] = recentObjects.slice(0, RECENT_ACTIONS_LIMIT).map((entry) => ({
+  // 先剔除再按 RECENT_ACTIONS_LIMIT 取：被收起的仓配对象不该占掉能点开的名额。
+  const listedRecent = recentObjects.filter((entry) => !isWarehouseWithdrawn(entry.moduleId, warehouseOffered));
+  const recent: CommandPaletteAction[] = listedRecent.slice(0, RECENT_ACTIONS_LIMIT).map((entry) => ({
     id: `${RECENT_ACTION_ID_PREFIX}${entry.moduleId}/${entry.objectId}`,
     label: openLabel(entry.title),
     group: 'recent',

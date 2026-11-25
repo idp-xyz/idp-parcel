@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ElementType } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ElementType } from 'react';
 import { createPortal } from 'react-dom';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { EditorGroup, Sidebar, useResize } from '@idpxyz/ui-workspace';
@@ -7,6 +7,7 @@ import { Button, Tooltip } from '@idpxyz/ui-primitives';
 import { parcelNavigationSections, warehouseNavigationSections, sidebarIconMap, pageTitleById } from './navigation';
 import {
   isWarehouseModule,
+  isWarehouseWithdrawn,
   loadWorkspaceMode,
   resolveWorkspaceMode,
   saveWorkspaceMode,
@@ -28,6 +29,7 @@ import { Workbench } from './pages/Workbench';
 import { UnwiredModule } from './pages/UnwiredModule';
 import { TopBar } from './shell/TopBar';
 import { CommandPaletteHost } from './shell/CommandPaletteHost';
+import { useWarehouseOffered } from './shell/use-warehouse-switch';
 import { WorkspaceStatusBar } from './shell/WorkspaceStatusBar';
 import { isOpenCommandPaletteShortcut } from './shell/command-actions';
 import { useSessionPrincipal } from './shell/session';
@@ -121,6 +123,9 @@ import {
 
 /** 命令面板每次打开时重读一遍最近对象；模块级常量而不是每次渲染新建，host 的 useMemo 依赖它的引用。 */
 const readRecentObjectsForPalette = () => listRecentObjects(window.localStorage);
+
+/** 说明页只有开关关着的部署才用到：按需取块，不占入口块。模块级常量，各标签与每次渲染共用同一个 lazy，不会重挂也不会重复取块。 */
+const WarehouseNotEnabled = lazy(() => import('./shell/WarehouseNotEnabled').then((m) => ({ default: m.WarehouseNotEnabled })));
 
 /** hash 落到标签集上：对象 / 模块地址开或激活对应标签；工作台、空 hash 与词表外的 id 都是「没有活动标签」。 */
 function applyHash(state: WorkspaceState, hash: string): WorkspaceState {
@@ -271,16 +276,18 @@ export function Layout() {
   const activeTab = workspace.tabs.find((tab) => tab.id === workspace.activeTabId) ?? null;
   const activeModuleId = activeTab ? moduleIdOfTab(activeTab.id) : WORKBENCH_MODULE_ID;
 
+  // 仓配是可选能力：部署开关明确关着才收起仓配入口，答出之前与答不出都照旧摆（shell/use-warehouse-switch.ts）。
+  const warehouseOffered = useWarehouseOffered();
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(() =>
-    loadWorkspaceMode(window.localStorage, activeModuleId),
+    loadWorkspaceMode(window.localStorage, activeModuleId, warehouseOffered),
   );
   useEffect(() => {
     setWorkspaceMode((current) => {
-      const next = resolveWorkspaceMode(activeModuleId, current);
+      const next = resolveWorkspaceMode(activeModuleId, current, warehouseOffered);
       if (next !== current) saveWorkspaceMode(window.localStorage, next);
       return next;
     });
-  }, [activeModuleId]);
+  }, [activeModuleId, warehouseOffered]);
 
   const handleWorkspaceModeChange = (nextMode: WorkspaceMode) => {
     setWorkspaceMode(nextMode);
@@ -395,7 +402,7 @@ export function Layout() {
   const renderTab = (tabId: string) => {
     if (!visitedTabs.has(tabId)) return null;
     const moduleId = moduleIdOfTab(tabId);
-    const Page = pageById[moduleId];
+    const Page = isWarehouseWithdrawn(moduleId, warehouseOffered) ? WarehouseNotEnabled : pageById[moduleId];
     return (
       <CurrentTabContext.Provider key={`${tabId}\u0000${mountGenerations.get(tabId) ?? 0}`} value={tabId}>
         {Page ? (
@@ -420,7 +427,7 @@ export function Layout() {
         onSignOut={logout}
         onOpenCommandPalette={openCommandPalette}
         workspaceMode={workspaceMode}
-        onWorkspaceModeChange={handleWorkspaceModeChange}
+        onWorkspaceModeChange={warehouseOffered ? handleWorkspaceModeChange : undefined}
       />
       <CommandPaletteHost
         open={commandPaletteOpen}
@@ -428,6 +435,7 @@ export function Layout() {
         readRecent={readRecentObjectsForPalette}
         recentObjectHash={recentObjectHash}
         inspector={inspectorToggle}
+        warehouseOffered={warehouseOffered}
       />
 
       <div className="flex flex-1 overflow-hidden">

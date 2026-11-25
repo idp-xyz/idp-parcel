@@ -139,6 +139,85 @@ test('动作 id 全集无重复', () => {
   equal(new Set(actions.map((a) => a.id)).size, actions.length);
 });
 
+// 仓配部署开关（shell/warehouse-switch.ts）带来的用例：关着时 warehouseOffered 为假；开着、不知道、没传时与没有这个开关时逐字一样。
+const pageTitlesWithWarehouse: Record<string, string> = {
+  ...pageTitleById,
+  'warehouse-dashboard': '仓配工作台',
+  'warehouse-outbound': '出库单',
+  'stock-imports': '建账导入',
+  'work-devices': '扫描设备',
+  'operator-access': '操作者与授予',
+};
+
+function buildWithWarehouse(recentObjects: RecentEntry[], warehouseOffered?: boolean) {
+  return buildCommandActions({
+    pageTitleById: pageTitlesWithWarehouse,
+    recentObjects,
+    recentObjectHash: stubHash,
+    shellToggles: {
+      theme: 'light',
+      toggleTheme: () => {},
+      density: 'comfortable',
+      toggleDensity: () => {},
+      inspectorVisible: true,
+      toggleInspector: () => {},
+    },
+    navigate: () => {},
+    ...(warehouseOffered === undefined ? {} : { warehouseOffered }),
+  });
+}
+
+const warehouseNavIds = ['nav:warehouse-dashboard', 'nav:warehouse-outbound', 'nav:stock-imports'];
+
+// Covers: 关着时仓配页面不出现在可跳转的页面里；共享设置页（扫描设备、操作者与授予）与小包页照旧。
+test('仓配不可用时导航组不列仓配页，共享设置页与小包页照旧', () => {
+  const ids = buildWithWarehouse([], false)
+    .filter((a) => a.group === 'navigation')
+    .map((a) => a.id);
+  for (const id of warehouseNavIds) ok(!ids.includes(id), `${id} 不该在面板里`);
+  for (const id of ['nav:workbench', 'nav:shipment-request-inquiry', 'nav:exception-cases', 'nav:work-devices', 'nav:operator-access']) {
+    ok(ids.includes(id), `${id} 该照旧在面板里`);
+  }
+});
+
+// Covers: 指向仓配页的最近对象同样不进面板，而且不占名额：先剔除再按上限取，能点开的照样取满。
+test('仓配不可用时最近对象剔掉仓配页的，上限按剔除之后取', () => {
+  const warehouseRecent: RecentEntry[] = [
+    { moduleId: 'warehouse-outbound', objectId: 'OB-001', title: '出库单 · OB-001' },
+    { moduleId: 'stock-imports', objectId: 'IMP-001', title: '建账导入 · IMP-001' },
+    { moduleId: 'warehouse-outbound', objectId: 'OB-002', title: '出库单 · OB-002' },
+  ];
+  const entries = [...warehouseRecent, ...recentEntries(12)];
+
+  const withheld = buildWithWarehouse(entries, false).filter((a) => a.group === 'recent');
+  equal(withheld.length, RECENT_ACTIONS_LIMIT);
+  equal(withheld[0].label, openLabel('委托查阅 · SR-001'));
+  ok(withheld.every((a) => !a.id.includes('warehouse-outbound') && !a.id.includes('stock-imports')));
+
+  const shown = buildWithWarehouse(entries, true).filter((a) => a.group === 'recent');
+  equal(shown.length, RECENT_ACTIONS_LIMIT);
+  equal(shown[0].label, openLabel('出库单 · OB-001'));
+});
+
+// Covers: 开着、不知道（没传）时动作集与过去逐字一样：仓配页与指向它们的最近对象都在，传真与不传同一份。
+test('仓配可用或没传时，仓配页与它们的最近对象照旧在面板里，动作集逐字一致', () => {
+  const entries: RecentEntry[] = [{ moduleId: 'warehouse-outbound', objectId: 'OB-001', title: '出库单 · OB-001' }, ...recentEntries(2)];
+  const omitted = buildWithWarehouse(entries);
+  const offered = buildWithWarehouse(entries, true);
+  deepEqual(
+    offered.map((a) => [a.id, a.label, a.group, a.keywords]),
+    omitted.map((a) => [a.id, a.label, a.group, a.keywords]),
+  );
+  const ids = omitted.map((a) => a.id);
+  for (const id of warehouseNavIds) ok(ids.includes(id), `${id} 在面板里`);
+  ok(ids.includes('recent:warehouse-outbound/OB-001'));
+});
+
+// Covers: 壳层组三条（切主题、切密度、切检查器）与开关无关，关着时也在。
+test('仓配不可用时壳层组照旧三条', () => {
+  equal(buildWithWarehouse([], false).filter((a) => a.group === 'actions').length, 3);
+});
+
 // Covers: 开面板快捷键认 Ctrl+K 与 ⌘+K、大小写 K 都算；Alt 一并按下不认；没按修饰键的 k、按了修饰键的别的键都不认。
 test('开面板快捷键只认 Ctrl/⌘ + K', () => {
   equal(isOpenCommandPaletteShortcut({ key: 'k', ctrlKey: true, metaKey: false, altKey: false }), true);
