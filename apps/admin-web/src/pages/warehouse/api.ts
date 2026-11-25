@@ -521,15 +521,18 @@ export function getInternalJob(factId: string): Promise<ApiResult<InternalJobOne
 export function listOwnerPreAdvices(
   ownerAccount: string,
   keyword: string,
+  after: string | null = null,
 ): Promise<ApiResult<PreAdviceListBody>> {
   const params = new URLSearchParams({ ownerAccount });
   if (keyword.trim() !== '') params.set('q', keyword.trim());
+  if (after !== null && after !== '') params.set('after', after);
   return exchangeMasterData<PreAdviceListBody>(`/warehouse-fulfillment-inbound-pre-advices?${params.toString()}`);
 }
 
-export function listOwnerGoods(ownerAccount: string, keyword: string): Promise<ApiResult<GoodsListBody>> {
+export function listOwnerGoods(ownerAccount: string, keyword: string, after: string | null = null): Promise<ApiResult<GoodsListBody>> {
   const params = new URLSearchParams({ ownerAccount });
   if (keyword.trim() !== '') params.set('q', keyword.trim());
+  if (after !== null && after !== '') params.set('after', after);
   return exchangeMasterData<GoodsListBody>(`/warehouse-fulfillment-goods?${params.toString()}`);
 }
 

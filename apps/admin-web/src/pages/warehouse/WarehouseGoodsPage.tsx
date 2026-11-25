@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
@@ -6,10 +6,11 @@ import type { InspectorAction, InspectorContent } from '../../templates/inspecto
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
-import { useSettledKeyword } from '../use-catalogue-cursor';
+import type { CatalogueConditions } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { receivingActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
-import { listOwnerGoods, type ApiResult, type GoodsListBody, type GoodsRecord } from './api';
+import { listOwnerGoods, type GoodsRecord } from './api';
 import { DocumentLink } from './document-page';
 import { GoodsDocument } from './GoodsDocument';
 import { revisionPrefill } from './goods-profile';
@@ -18,6 +19,18 @@ import { openDocument, useDocumentParts } from './use-document';
 const moduleId = 'warehouse-goods';
 const info = moduleInfoById[moduleId];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
+
+function loadGoods(conditions: CatalogueConditions, after: string | null) {
+  const owner = conditions.selectors?.ownerAccount ?? '';
+  if (owner === '') {
+    return Promise.resolve({
+      kind: 'outcome' as const,
+      status: 200,
+      body: { outcome: 'GOODS_LISTED', ownerAccount: '', goods: [], page: { size: 0, next: null, total: null } },
+    });
+  }
+  return listOwnerGoods(owner, conditions.q ?? '', after);
+}
 
 const columns: ListColumn<GoodsRecord>[] = [
   {
@@ -45,32 +58,11 @@ function GoodsList() {
   const owners = drawer.lookups.owners;
   const [picked, setPicked] = useState('');
   const [keyword, setKeyword] = useState('');
-  const [answer, setAnswer] = useState<ApiResult<GoodsListBody> | null>(null);
-  const [refreshes, setRefreshes] = useState(0);
-  const refresh = () => setRefreshes((count) => count + 1);
   const settled = useSettledKeyword(keyword);
-
-  // 商品按货主归属，读口必须带货主：人没挑过就取名册里的第一家，不让人对着一张空表找筛选。名册一到这一帧就有货主，
-  // 不靠副作用补选——那样名册到了与选定之间会闪一帧「还没有货主客户账户」。
   const owner = picked !== '' ? picked : (owners[0]?.accountId ?? '');
-
-  useEffect(() => {
-    if (owner === '') {
-      setAnswer(null);
-      return;
-    }
-    let cancelled = false;
-    setAnswer(null);
-    void listOwnerGoods(owner, settled).then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [owner, settled, refreshes]);
+  const { answer, pagination, retry } = useCatalogueCursor({ selectors: { ownerAccount: owner }, q: settled }, loadGoods);
 
   const rows = answer?.kind === 'outcome' ? answer.body.goods : [];
-  const page = answer?.kind === 'outcome' ? answer.body.page : undefined;
 
   const inspectorOf = (row: GoodsRecord): InspectorContent => {
     const actions: InspectorAction[] = [{ label: '打开商品档案', onRun: () => openDocument(moduleId, [row.ownerAccount, row.goodsCode]) }];
@@ -112,7 +104,7 @@ function GoodsList() {
         description="按货主查阅商品当前修订。点商品编码打开商品档案：包装、别名、组合组件、尺寸重量，和它在各仓的库存。"
         headerActions={
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={refresh}>
+            <Button type="button" variant="outline" onClick={retry}>
               <RefreshCw className="mr-1 h-3.5 w-3.5" />
               刷新
             </Button>
@@ -148,12 +140,7 @@ function GoodsList() {
             </label>
           </div>
         }
-        // 商品读口没有翻页条：一位货主的商品多过一页时，如实说只显示了前面这些，请用检索词找。
-        filterSummary={
-          page && page.next !== null ? (
-            <span className="type-caption text-amber-600 dark:text-amber-400">只显示了前 {rows.length} 个，后面的请用检索词找</span>
-          ) : undefined
-        }
+        pagination={owner === '' ? undefined : pagination}
         columns={columns}
         rows={rows}
         rowKey={(row) => `${row.ownerAccount}/${row.goodsCode}`}
@@ -169,7 +156,7 @@ function GoodsList() {
                   description: '商品按货主归属。先在国际小包那边的「客户」里登记货主的客户账户。',
                 }
               : { kind: 'loading', shape: 'table' }
-            : catalogueViewState(answer, rows.length, refresh, {
+            : catalogueViewState(answer, rows.length, retry, {
                 module: info,
                 endpoint: 'GET /warehouse-fulfillment-goods',
                 emptyTitle: '该货主还没有商品档案',
@@ -178,7 +165,7 @@ function GoodsList() {
               })
         }
       />
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={retry} />
     </>
   );
 }

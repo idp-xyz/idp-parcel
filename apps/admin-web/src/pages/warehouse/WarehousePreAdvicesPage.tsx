@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
@@ -7,10 +7,11 @@ import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { enterStation } from '../../shell/enter-station';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
-import { useSettledKeyword } from '../use-catalogue-cursor';
+import type { CatalogueConditions } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { receivingActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
-import { listOwnerPreAdvices, type ApiResult, type PreAdviceListBody, type PreAdviceRecord } from './api';
+import { listOwnerPreAdvices, type PreAdviceRecord } from './api';
 import { DocumentLink } from './document-page';
 import { PreAdviceDocument } from './PreAdviceDocument';
 import { openDocument, useDocumentParts } from './use-document';
@@ -24,6 +25,18 @@ const mono = 'whitespace-nowrap font-mono type-body leading-4';
 
 const statuses = ['ADVISED', 'RECEIVING', 'CLOSED', 'CANCELLED'] as const;
 
+function loadPreAdvices(conditions: CatalogueConditions, after: string | null) {
+  const owner = conditions.selectors?.ownerAccount ?? '';
+  if (owner === '') {
+    return Promise.resolve({
+      kind: 'outcome' as const,
+      status: 200,
+      body: { outcome: 'PRE_ADVICES_LISTED', ownerAccount: '', preAdvices: [], page: { size: 0, next: null, total: null } },
+    });
+  }
+  return listOwnerPreAdvices(owner, conditions.q ?? '', after);
+}
+
 /** 还没开始收、预计到达已经过去的预报算迟到；收货中的已经到了。 */
 const lateOf = (row: PreAdviceRecord, now: Date) => (row.status === 'ADVISED' ? elapsedLabel(row.currentNotice?.expectedAt, now) : '');
 
@@ -36,37 +49,17 @@ export function WarehousePreAdvicesPage() {
 function PreAdviceList() {
   const drawer = useActionDrawer(receivingActionSpecs);
   const owners = drawer.lookups.owners;
-  const [owner, setOwner] = useState('');
+  const [picked, setPicked] = useState('');
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<string>('ALL');
-  const [answer, setAnswer] = useState<ApiResult<PreAdviceListBody> | null>(null);
-  const [refreshes, setRefreshes] = useState(0);
-  const refresh = () => setRefreshes((count) => count + 1);
   const settled = useSettledKeyword(keyword);
-
-  // 预报按货主归属，读口必须带货主：名册到了先选第一家，不让人对着一张空表找筛选。
-  useEffect(() => {
-    if (owner === '' && owners.length > 0) setOwner(owners[0].accountId);
-  }, [owners, owner]);
-
-  useEffect(() => {
-    if (owner === '') {
-      setAnswer(null);
-      return;
-    }
-    let cancelled = false;
-    setAnswer(null);
-    void listOwnerPreAdvices(owner, settled).then((result) => {
-      if (!cancelled) setAnswer(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [owner, settled, refreshes]);
+  // 预报按货主归属，读口必须带货主：人没挑过就取名册里的第一家。货主写进条件签名，换货主就回到第一页。
+  const owner = picked !== '' ? picked : (owners[0]?.accountId ?? '');
+  const { answer, pagination, retry } = useCatalogueCursor({ selectors: { ownerAccount: owner }, q: settled }, loadPreAdvices);
 
   const loaded = answer?.kind === 'outcome' ? answer.body.preAdvices : [];
-  // 读口不按状态筛，状态是在答回来的这一页里筛的。这一页就是全部时签上才写数；后面还有页的话，数出来的不是各队的总数。
-  const wholeList = answer?.kind === 'outcome' && answer.body.page.next === null;
+  // 读口不按状态筛，状态是在答回来的这一页里筛的。整份只有一页时签上才写数。
+  const wholeList = answer?.kind === 'outcome' && answer.body.page.next === null && (pagination?.page ?? 1) === 1;
   const rows = status === 'ALL' ? loaded : loaded.filter((row) => row.status === status);
   const now = new Date();
 
@@ -201,7 +194,7 @@ function PreAdviceList() {
               <select
                 className="h-7 max-w-[16rem] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body text-idpxyz-text focus:border-idpxyz-accent focus:outline-none"
                 value={owner}
-                onChange={(event) => setOwner(event.target.value)}
+                onChange={(event) => setPicked(event.target.value)}
               >
                 {owners.length === 0 ? <option value="">没有货主客户账户</option> : null}
                 {owners.map((account) => (
@@ -213,13 +206,14 @@ function PreAdviceList() {
             </label>
           </div>
         }
+        pagination={owner === '' ? undefined : pagination}
         columns={columns}
         rows={rows}
         rowKey={(row) => row.preAdviceId}
         inspector={inspectorOf}
         onRowOpen={(row) => openDocument(moduleId, [row.ownerAccount, row.preAdviceId])}
         emptyRowsNote={
-          wholeList ? '这位货主名下没有这个状态的入库预报' : '这一页里没有这个状态的入库预报；读口不按状态筛，后面的页没有看'
+          wholeList ? '这位货主名下没有这个状态的入库预报' : '这一页里没有这个状态的入库预报。读口不按状态筛，换一页再看。'
         }
         viewState={
           owner === ''
@@ -230,7 +224,7 @@ function PreAdviceList() {
                   description: '入库预报按货主归属。先在国际小包那边的「客户」里登记货主的客户账户。',
                 }
               : { kind: 'loading', shape: 'table' }
-            : catalogueViewState(answer, loaded.length, refresh, {
+            : catalogueViewState(answer, loaded.length, retry, {
                 module: info,
                 endpoint: 'GET /warehouse-fulfillment-inbound-pre-advices',
                 emptyTitle: '这位货主还没有入库预报',
@@ -239,7 +233,7 @@ function PreAdviceList() {
               })
         }
       />
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={retry} />
     </>
   );
 }
