@@ -5,6 +5,7 @@ import {
   legacyWorkstationHash,
   packStationHash,
   pickStationHash,
+  receiveStationHash,
   resolveStationRoute,
   stationEntries,
   stationEntryOf,
@@ -17,14 +18,14 @@ function route(hash: string) {
   return resolveStationRoute(address);
 }
 
-test('六个工位，次序与名字照屏幕示意；拣货与复核打包可进', () => {
+test('六个工位，次序与名字照屏幕示意；拣货、复核打包与收货可进', () => {
   deepEqual(
     stationEntries.map((entry) => entry.name),
     ['拣货', '复核打包', '收货', '发货交接', '上架与移库', '盘点清点'],
   );
   deepEqual(
     stationEntries.filter((entry) => entry.ready).map((entry) => entry.id),
-    ['pick', 'pack'],
+    ['pick', 'pack', 'receive'],
   );
   equal(new Set(stationEntries.map((entry) => entry.id)).size, 6);
 });
@@ -82,8 +83,16 @@ test('复核打包地址落到复核打包工位；出库请求号取查询串�
   deepEqual(route('#/station/pick?request=OBR-1'), { kind: 'pick', wave: null }, '拣货不认 request');
 });
 
-test('另外四个工位全屏的还没做好：落到说明页，不当成拣货或复核打包', () => {
-  for (const id of ['receive', 'dispatch', 'putaway', 'count']) {
+test('收货地址落到收货工位；预报标识取查询串里的 advice', () => {
+  equal(receiveStationHash(), '#/station/receive');
+  equal(receiveStationHash('IPA-1'), '#/station/receive?advice=IPA-1');
+  deepEqual(route('#/station/receive'), { kind: 'receive', advice: null });
+  deepEqual(route('#/station/receive?advice=IPA-1'), { kind: 'receive', advice: 'IPA-1' });
+  deepEqual(route('#/station/receive?advice='), { kind: 'receive', advice: null });
+});
+
+test('另外三个工位全屏的还没做好：落到说明页，不当成拣货或复核打包', () => {
+  for (const id of ['dispatch', 'putaway', 'count']) {
     const resolved = route(`#/station/${id}`);
     equal(resolved.kind, 'not-ready', id);
     if (resolved.kind === 'not-ready') equal(resolved.entry.id, id);

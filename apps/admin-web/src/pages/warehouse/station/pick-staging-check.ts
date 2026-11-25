@@ -34,6 +34,23 @@ export interface StagingVerifier {
   verify(warehouse: string, code: string): Promise<StagingVerdict>;
 }
 
+/**
+ * 库区用途这条怎么说。缺省是拣货的待出库库位；收货工位传入收货暂存。
+ * 停用、不在这个仓、没登记这几句两个工位相同，不在这里。
+ */
+export interface StagingUsage {
+  usage: string;
+  deactivated(code: string): string;
+  wrongUsage(code: string, zoneCode: string, usageLabel: string): string;
+}
+
+const outboundUsage: StagingUsage = {
+  usage: 'OUTBOUND_STAGING',
+  deactivated: (code) => `库位 ${code} 已停用，不能放货。`,
+  wrongUsage: (code, zoneCode, usageLabel) =>
+    `库位 ${code} 所在的库区 ${zoneCode} 用途是「${usageLabel}」，不是待出库库区，拣出来的货不能放那里。`,
+};
+
 /** 一次定向的读最多翻几页（每页读口至多 200 行）。包含匹配的结果多得翻不完时，说没核成。 */
 export const MAX_STAGING_PAGES = 10;
 
@@ -58,7 +75,11 @@ function overLimit(subject: string, code: string): string | null {
   return length > keywordLimit ? `${subject}有 ${length} 个字符，比读口收的检索词（最多 ${keywordLimit} 个字符）还长，没法去登记册里找它` : null;
 }
 
-export function createStagingVerifier(read: CatalogueReader, maxPages: number = MAX_STAGING_PAGES): StagingVerifier {
+export function createStagingVerifier(
+  read: CatalogueReader,
+  maxPages: number = MAX_STAGING_PAGES,
+  usage: StagingUsage = outboundUsage,
+): StagingVerifier {
   return {
     async verify(warehouse, code) {
       const long = overLimit('这个码', code);
@@ -90,7 +111,7 @@ export function createStagingVerifier(read: CatalogueReader, maxPages: number = 
       }
 
       const place = here.row;
-      if (place.deactivated) return rejected(`库位 ${code} 已停用，不能放货。`);
+      if (place.deactivated) return rejected(usage.deactivated(code));
       const zoneCode = place.zoneCode;
       const zoneLong = overLimit('库位所在的库区码', zoneCode);
       if (zoneLong !== null) return unverified(zoneLong);
@@ -105,10 +126,8 @@ export function createStagingVerifier(read: CatalogueReader, maxPages: number = 
       if (zone.kind === 'unread') return unverified(zone.reason);
       if (zone.kind === 'absent') return rejected(`找不到库位 ${code} 所在的库区 ${zoneCode}。`);
       if (zone.row.deactivated) return rejected(`库位 ${code} 所在的库区 ${zoneCode} 已停用。`);
-      if (zone.row.usage !== 'OUTBOUND_STAGING') {
-        return rejected(
-          `库位 ${code} 所在的库区 ${zoneCode} 用途是「${zoneUsageLabel(zone.row.usage)}」，不是待出库库区，拣出来的货不能放那里。`,
-        );
+      if (zone.row.usage !== usage.usage) {
+        return rejected(usage.wrongUsage(code, zoneCode, zoneUsageLabel(zone.row.usage)));
       }
       return { kind: 'ok' };
     },

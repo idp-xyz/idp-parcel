@@ -777,6 +777,19 @@ export function getPreAdviceDetail(ownerAccount: string, preAdviceId: string): P
   return exchangeMasterData<PreAdviceOneBody>(`/warehouse-fulfillment-inbound-pre-advice?${params.toString()}`);
 }
 
+export interface PreAdviceByNumberBody {
+  outcome: string;
+  documentNumber: string;
+  found: boolean;
+  preAdvice?: PreAdviceRecord;
+}
+
+/** 按单据号取一张入库预报。逐字相等，只在本租户；找不到答 found 为假，不答 404。 */
+export function getPreAdviceByNumber(documentNumber: string): Promise<ApiResult<PreAdviceByNumberBody>> {
+  const params = new URLSearchParams({ documentNumber });
+  return exchangeMasterData<PreAdviceByNumberBody>(`/warehouse-fulfillment-inbound-pre-advice-by-number?${params.toString()}`);
+}
+
 export function getGoodsCurrent(ownerAccount: string, goodsCode: string): Promise<ApiResult<GoodsCurrentBody>> {
   const params = new URLSearchParams({ ownerAccount, goodsCode });
   return exchangeMasterData<GoodsCurrentBody>(`/warehouse-fulfillment-goods-current?${params.toString()}`);

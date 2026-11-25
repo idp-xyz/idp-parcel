@@ -1,5 +1,6 @@
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
+import { enterStation } from '../../shell/enter-station';
 import { formatInstant } from '../catalogue-view';
 import { receivingActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
@@ -8,6 +9,7 @@ import { WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { preAdviceProgress } from './pre-advice-progress';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
+import { receiveStationHash } from './station/stations';
 import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type StepItem } from './wms-ui';
 
@@ -103,9 +105,7 @@ export function PreAdviceDocument({ ownerAccount, preAdviceId }: { ownerAccount:
                 <Button
                   type="button"
                   className={primaryActionClass}
-                  onClick={() => {
-                    window.location.hash = '#/warehouse-workstation';
-                  }}
+                  onClick={() => enterStation(receiveStationHash(record?.preAdviceId))}
                 >
                   去收货
                 </Button>

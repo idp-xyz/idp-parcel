@@ -19,7 +19,7 @@ export interface StationEntry {
 export const stationEntries: readonly StationEntry[] = [
   { id: 'pick', name: '拣货', summary: '按波次里还没拣的格，逐格扫库位、扫商品，扫满自动提交。', ready: true },
   { id: 'pack', name: '复核打包', summary: '扫出库单号，逐件复核，再选包材称重打包。', ready: true },
-  { id: 'receive', name: '收货', summary: '扫入库预报，逐件扫货，一次提交一批收货。', ready: false },
+  { id: 'receive', name: '收货', summary: '扫入库预报，逐件扫货，一次提交一批收货。', ready: true },
   { id: 'dispatch', name: '发货交接', summary: '扫出库单号，逐个包裹确认交出。', ready: false },
   { id: 'putaway', name: '上架与移库', summary: '选货主，扫源库位、商品和目标库位。', ready: false },
   { id: 'count', name: '盘点清点', summary: '选一张盘点单，按库位逐件清点。', ready: false },
@@ -40,6 +40,11 @@ export function packStationHash(request?: string): string {
   return stationHash('pack', { request });
 }
 
+/** 收货工位的地址。给了预报标识就直接去做那一张，不给就等人扫入库单号。 */
+export function receiveStationHash(advice?: string): string {
+  return stationHash('receive', { advice });
+}
+
 export function stationEntryOf(station: string | null): StationEntry | undefined {
   return stationEntries.find((entry) => entry.id === station);
 }
@@ -49,6 +54,7 @@ export type StationRoute =
   | { kind: 'home' }
   | { kind: 'pick'; wave: string | null }
   | { kind: 'pack'; request: string | null }
+  | { kind: 'receive'; advice: string | null }
   /** 词是六个工位之一，但全屏的还没做好：说明它还在仓内作业台里。 */
   | { kind: 'not-ready'; entry: StationEntry }
   /** 词不是任何一个工位。 */
@@ -71,6 +77,8 @@ export function resolveStationRoute(address: StationAddress): StationRoute {
       return { kind: 'pick', wave: textOf(address, 'wave') };
     case 'pack':
       return { kind: 'pack', request: textOf(address, 'request') };
+    case 'receive':
+      return { kind: 'receive', advice: textOf(address, 'advice') };
     default:
       return { kind: 'not-ready', entry };
   }

@@ -5,6 +5,7 @@ import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { InspectorAction, InspectorContent } from '../../templates/inspector';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
+import { enterStation } from '../../shell/enter-station';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useSettledKeyword } from '../use-catalogue-cursor';
 import { receivingActionSpecs } from './actions';
@@ -13,6 +14,7 @@ import { listOwnerPreAdvices, type ApiResult, type PreAdviceListBody, type PreAd
 import { DocumentLink } from './document-page';
 import { PreAdviceDocument } from './PreAdviceDocument';
 import { openDocument, useDocumentParts } from './use-document';
+import { receiveStationHash } from './station/stations';
 import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsStatusTabs } from './wms-ui';
 
@@ -115,7 +117,7 @@ function PreAdviceList() {
             className="text-[color:var(--ds-text-link-hover)] hover:underline"
             onClick={(event) => {
               event.stopPropagation();
-              window.location.hash = '#/warehouse-workstation';
+              enterStation(receiveStationHash(row.preAdviceId));
             }}
           >
             {row.status === 'ADVISED' ? '去收货' : '接着收货'}
