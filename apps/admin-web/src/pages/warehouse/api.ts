@@ -209,6 +209,10 @@ export interface InternalJobLineRecord {
   shortOnBook: number;
   held: number;
   cartonMissing?: boolean;
+  /** 这一行入账记下的流水；没入账的行没有。 */
+  movementId?: string;
+  /** 这一行没入账的部分形成的差异。 */
+  discrepancyId?: string;
 }
 
 export interface InternalJobRecord {
@@ -225,6 +229,13 @@ export interface InternalJobListBody {
   outcome: string;
   jobs: InternalJobRecord[];
   page: CataloguePage;
+}
+
+export interface InternalJobOneBody {
+  outcome: string;
+  factId: string;
+  found: boolean;
+  job?: InternalJobRecord;
 }
 
 export interface PreAdviceGoodsLineRecord {
@@ -500,6 +511,11 @@ export function listInternalJobs(
   return exchangeMasterData<InternalJobListBody>(
     catalogueRequestPath('/warehouse-fulfillment-internal-jobs', conditions, after),
   );
+}
+
+export function getInternalJob(factId: string): Promise<ApiResult<InternalJobOneBody>> {
+  const params = new URLSearchParams({ factId });
+  return exchangeMasterData<InternalJobOneBody>(`/warehouse-fulfillment-internal-job?${params.toString()}`);
 }
 
 export function listOwnerPreAdvices(
@@ -1107,6 +1123,52 @@ export function listJobDiscrepancies(
   return exchangeMasterData<JobDiscrepancyListBody>(
     catalogueRequestPath('/warehouse-fulfillment-job-discrepancies', conditions, after),
   );
+}
+
+/** 按号检索列表之后认出的那一张：认不出时 record 缺席，searched 是答回来的行数，truncated 说后面还有页没翻。 */
+export interface FoundByNumber<T> {
+  record?: T;
+  searched: number;
+  truncated: boolean;
+}
+
+/**
+ * 库存调整没有按号取一张的读口，只有列表：按调整号检索，再在答回来的那一页里认出号完全相同的那一张。检索是按包含匹配的
+ * （大小写不分），调整号又是调用方自己给的，号恰好是另一批调整号的一段、而那一批多到挤出第一页时会认不出；认不出而后面还有页时
+ * `truncated` 为真，由页面如实说「没翻到」，不说成没有这张单。
+ */
+export async function findAdjustment(adjustmentId: string): Promise<ApiResult<FoundByNumber<StockAdjustmentRecord>>> {
+  const answer = await listAdjustments({ q: adjustmentId });
+  if (answer.kind !== 'outcome') return answer;
+  const { adjustments, page } = answer.body;
+  return {
+    kind: 'outcome',
+    status: answer.status,
+    body: {
+      record: adjustments.find((item) => item.adjustmentId === adjustmentId),
+      searched: adjustments.length,
+      truncated: page.next !== null,
+    },
+  };
+}
+
+/**
+ * 作业差异同样只有列表。检索覆盖差异号、作业事实号、货主、仓、商品、库位与箱号，差异号是系统随机签发的、彼此不是对方的一段，
+ * 所以实际上不会认不出；局限与库存调整一样，认不出而后面还有页时 `truncated` 为真。
+ */
+export async function findJobDiscrepancy(discrepancyId: string): Promise<ApiResult<FoundByNumber<JobDiscrepancyRecord>>> {
+  const answer = await listJobDiscrepancies({ q: discrepancyId });
+  if (answer.kind !== 'outcome') return answer;
+  const { discrepancies, page } = answer.body;
+  return {
+    kind: 'outcome',
+    status: answer.status,
+    body: {
+      record: discrepancies.find((item) => item.discrepancyId === discrepancyId),
+      searched: discrepancies.length,
+      truncated: page.next !== null,
+    },
+  };
 }
 
 export interface InstructionRecord {

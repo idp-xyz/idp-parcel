@@ -1,6 +1,13 @@
 import { afterEach, test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { getStockImportDetail, getUnclaimedArrivalDetail } from './api';
+import {
+  findAdjustment,
+  findJobDiscrepancy,
+  getCountDetail,
+  getInternalJob,
+  getStockImportDetail,
+  getUnclaimedArrivalDetail,
+} from './api';
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -50,4 +57,85 @@ test('待认领到货按到货号取一张，答复照原样交回（found 由�
   const answer = await getUnclaimedArrivalDetail('UCA-1');
   deepEqual(urls, ['/warehouse-fulfillment-unclaimed-arrival?arrivalId=UCA-1']);
   deepEqual(answer, { kind: 'outcome', status: 200, body });
+});
+
+test('盘点按盘点号取一张，查无此号是业务答复（count 缺席），原样交回', async () => {
+  const body = { outcome: 'COUNT_NOT_FOUND' };
+  const urls = answerWith(200, body);
+  const answer = await getCountDetail('CNT/1');
+  deepEqual(urls, ['/warehouse-fulfillment-count?countId=CNT%2F1']);
+  deepEqual(answer, { kind: 'outcome', status: 200, body });
+});
+
+test('库内作业按作业事实号取一次，答复照原样交回', async () => {
+  const body = { outcome: 'READ', factId: 'FACT-1', found: true, job: { factId: 'FACT-1', kind: 'INTERNAL_MOVE', lines: [] } };
+  const urls = answerWith(200, body);
+  deepEqual(await getInternalJob('FACT-1'), { kind: 'outcome', status: 200, body });
+  deepEqual(urls, ['/warehouse-fulfillment-internal-job?factId=FACT-1']);
+});
+
+// 库存调整与作业差异没有按号取一张的读口：按号检索列表，再在答回来的那一页里认出号完全相同的那一张。
+
+const adjustmentPage = (ids: string[], next: string | null = null) => ({
+  outcome: 'ADJUSTMENTS_LISTED',
+  adjustments: ids.map((adjustmentId) => ({ adjustmentId, status: 'PENDING', lines: [] })),
+  page: { size: 200, next, total: ids.length },
+});
+
+test('库存调整按号检索，在答回来的一页里认出号完全相同的那张：包含匹配带出的别的单不冒充', async () => {
+  const urls = answerWith(200, adjustmentPage(['ADJ-10', 'ADJ-1', 'ADJ-11']));
+  const answer = await findAdjustment('ADJ-1');
+  deepEqual(urls, ['/warehouse-fulfillment-adjustments?q=ADJ-1']);
+  equal(answer.kind, 'outcome');
+  if (answer.kind !== 'outcome') return;
+  equal(answer.body.record?.adjustmentId, 'ADJ-1');
+  equal(answer.body.searched, 3);
+  equal(answer.body.truncated, false);
+});
+
+test('库存调整检索里没有这个号：record 缺席；后面还有页时说没翻到，不说成没有这张单', async () => {
+  answerWith(200, adjustmentPage(['ADJ-10', 'ADJ-11']));
+  const absent = await findAdjustment('ADJ-1');
+  equal(absent.kind === 'outcome' && absent.body.record, undefined);
+  equal(absent.kind === 'outcome' && absent.body.truncated, false);
+
+  answerWith(200, adjustmentPage(['ADJ-10', 'ADJ-11'], 'CURSOR-2'));
+  const unfinished = await findAdjustment('ADJ-1');
+  equal(unfinished.kind === 'outcome' && unfinished.body.record, undefined);
+  equal(unfinished.kind === 'outcome' && unfinished.body.truncated, true);
+  equal(unfinished.kind === 'outcome' && unfinished.body.searched, 2);
+});
+
+test('库存调整检索的号里有特殊字符照编码；读口的非业务答复原样交回', async () => {
+  const urls = answerWith(200, adjustmentPage([]));
+  await findAdjustment('ADJ/1 一');
+  deepEqual(urls, ['/warehouse-fulfillment-adjustments?q=ADJ%2F1+%E4%B8%80']);
+
+  answerWith(403, { error: { code: 'OPERATOR_NOT_GRANTED' } });
+  equal((await findAdjustment('ADJ-1')).kind, 'notGranted');
+  answerWith(500, { error: { code: 'NO_ANSWER_FORMED' } });
+  equal((await findAdjustment('ADJ-1')).kind, 'noAnswer');
+});
+
+test('作业差异按号检索，同样只认号完全相同的那一条', async () => {
+  const urls = answerWith(200, {
+    outcome: 'JOB_DISCREPANCIES_LISTED',
+    discrepancies: [{ discrepancyId: 'SDP-B', factId: 'SDP-A' }, { discrepancyId: 'SDP-A', factId: 'F-1' }],
+    page: { size: 200, next: null, total: 2 },
+  });
+  const answer = await findJobDiscrepancy('SDP-A');
+  deepEqual(urls, ['/warehouse-fulfillment-job-discrepancies?q=SDP-A']);
+  equal(answer.kind === 'outcome' && answer.body.record?.discrepancyId, 'SDP-A');
+  equal(answer.kind === 'outcome' && answer.body.record?.factId, 'F-1');
+});
+
+test('作业差异检索不到：record 缺席，传输失败原样交回', async () => {
+  answerWith(200, { outcome: 'JOB_DISCREPANCIES_LISTED', discrepancies: [], page: { size: 200, next: null, total: 0 } });
+  const absent = await findJobDiscrepancy('SDP-X');
+  equal(absent.kind === 'outcome' && absent.body.record, undefined);
+
+  globalThis.fetch = (async () => {
+    throw new Error('网络断了');
+  }) as typeof fetch;
+  deepEqual(await findJobDiscrepancy('SDP-X'), { kind: 'transport', message: '网络断了' });
 });
