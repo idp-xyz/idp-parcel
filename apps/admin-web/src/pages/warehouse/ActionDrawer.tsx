@@ -34,8 +34,15 @@ export interface ActionDrawerControl {
 
 /** 一页或一张单据上的动作抽屉：按授予筛过的动作、表单要用的名册、此刻开着的那一个。 */
 export function useActionDrawer(specs: readonly WarehouseActionSpec[]): ActionDrawerControl {
+  return useDrawerOver(useWarehouseTargetMap(specs));
+}
+
+/**
+ * 动作不在仓配动作表里的页，自己交出筛好的动作：建账导入的写口有自己的答复译法与授予判断，不走仓配动作表。
+ * 抽屉的其余部分与 useActionDrawer 完全一样。
+ */
+export function useDrawerOver(targets: ReadonlyMap<string, GuidedActionTarget>): ActionDrawerControl {
   const lookups = useWarehouseLookups();
-  const targets = useWarehouseTargetMap(specs);
   const [active, setActive] = useState<ActiveDrawerAction | null>(null);
   return {
     lookups,

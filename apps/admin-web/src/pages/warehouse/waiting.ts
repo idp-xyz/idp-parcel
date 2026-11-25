@@ -22,3 +22,15 @@ export function elapsedLabel(since: string | undefined, now: Date): string {
 export function overdueLabel(expectedAt: string | undefined, now: Date): string {
   return elapsedLabel(expectedAt, now);
 }
+
+/**
+ * 一段规定时长（认领期限这类租户登记的秒数）的写法：能整除的取最大的单位，不能整除的退到更小的单位，不四舍五入——
+ * 规则里写的是多少，页面上就写多少。不是正数答空串。
+ */
+export function durationLabel(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  for (const [size, name] of [[dayMs / 1000, '天'], [hourMs / 1000, '小时'], [minuteMs / 1000, '分钟']] as const) {
+    if (seconds % size === 0) return `${seconds / size} ${name}`;
+  }
+  return `${seconds} 秒`;
+}

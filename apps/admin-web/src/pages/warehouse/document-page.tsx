@@ -17,6 +17,7 @@ import { openDocument } from './use-document';
  */
 export function WmsDocumentPage({
   kind,
+  measure = '张',
   title,
   subtitle,
   badge,
@@ -31,6 +32,8 @@ export function WmsDocumentPage({
 }: {
   /** 单据种类的叫法：出库单、波次、入库预报。 */
   kind: string;
+  /** 「没有取到这张出库单」里的量词，缺省是张；待认领到货是件，商品档案是份。 */
+  measure?: string;
   /** 单号。还没读到时用地址里的那一个。 */
   title: string;
   subtitle?: string;
@@ -81,7 +84,7 @@ export function WmsDocumentPage({
         </div>
       ) : error ? (
         <div className="flex flex-1 items-center justify-center overflow-auto">
-          <StateSlot state={{ kind: 'error', title: `没有取到这张${kind}`, description: error, onRetry: onReload }} />
+          <StateSlot state={{ kind: 'error', title: `没有取到这${measure}${kind}`, description: error, onRetry: onReload }} />
         </div>
       ) : (
         <div className="flex-1 overflow-auto">

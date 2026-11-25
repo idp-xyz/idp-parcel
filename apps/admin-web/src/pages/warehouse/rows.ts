@@ -58,15 +58,6 @@ export function catalogueConditions(family: CatalogueFamily, keyword: string, ac
   };
 }
 
-export type StockImportStatusFilter = 'ALL' | 'PENDING' | 'POSTED' | 'REJECTED';
-
-export function stockImportConditions(keyword: string, status: StockImportStatusFilter): CatalogueConditions {
-  return {
-    q: keyword,
-    filters: status === 'ALL' ? undefined : { status: [status] },
-  };
-}
-
 const warehouseKindLabels: Record<string, string> = {
   SELF_OPERATED: '自营',
   AGENT: '代理',

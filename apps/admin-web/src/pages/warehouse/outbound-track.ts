@@ -1,18 +1,8 @@
 // 出库单状态在步进条上的落点（纯 TypeScript，node:test 直接测）。
 
-export interface TrackStep {
-  id: string;
-  label: string;
-}
+import type { DocumentTrack, TrackStep } from './document-track';
 
-export interface OutboundTrack {
-  steps: readonly TrackStep[];
-  currentId: string;
-  /** 卡在当前这一步、还没做完时，用状态本身的词代替这一步的名字。 */
-  currentLabel?: string;
-  /** 流程已经停下：失败类答红，拆成新单这类正常结束答中性。 */
-  halt?: { label: string; tone: 'danger' | 'neutral' };
-}
+export type OutboundTrack = DocumentTrack;
 
 export const selfOutboundSteps: readonly TrackStep[] = [
   { id: 'RESERVED', label: '已预占' },

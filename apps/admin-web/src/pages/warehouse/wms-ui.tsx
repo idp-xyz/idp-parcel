@@ -167,6 +167,9 @@ export const wmsWordLabels: Record<string, string> = {
   PUTAWAY: '良品上架',
   SELF_OPERATED: '自营仓',
   AGENT: '代理仓',
+  // 组合商品的出库方式
+  BY_COMPONENT: '按组件出库',
+  AS_FINISHED_GOODS: '按成品出库',
 };
 
 export function labelOf(code: string | undefined, fallback = '—'): string {

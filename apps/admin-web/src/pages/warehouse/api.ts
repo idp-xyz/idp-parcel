@@ -137,6 +137,21 @@ export interface UnclaimedArrivalRecord {
   ownerClue?: string;
   preAdviceClue?: string;
   storageLocation?: string;
+  /** 取消或完结之后又到的收货转来的那一次收货：货的内容只在这里，到货本身没有观察文字。 */
+  divertedReceipt?: {
+    factId: string;
+    occurredAt: string;
+    lines?: ReadonlyArray<{
+      observed?: string;
+      goodsCode?: string;
+      cartonNumber?: string;
+      unit?: string;
+      stockState?: string;
+      quantity?: number;
+      batchNumber?: string;
+      expiryDate?: string;
+    }> | null;
+  };
   postingReferences?: string[];
   claims?: ReadonlyArray<{
     claim: { decisionId: string; ownerAccount: string; preAdviceId?: string; operator: string; claimedAt: string };
@@ -156,6 +171,13 @@ export interface UnclaimedArrivalListBody {
   outcome: string;
   arrivals: UnclaimedArrivalRecord[];
   page: CataloguePage;
+}
+
+export interface UnclaimedArrivalOneBody {
+  outcome: string;
+  arrivalId: string;
+  found: boolean;
+  arrival?: UnclaimedArrivalRecord;
 }
 
 export interface DisposalRuleRecord {
@@ -742,6 +764,30 @@ export function getPreAdviceDetail(ownerAccount: string, preAdviceId: string): P
 export function getGoodsCurrent(ownerAccount: string, goodsCode: string): Promise<ApiResult<GoodsCurrentBody>> {
   const params = new URLSearchParams({ ownerAccount, goodsCode });
   return exchangeMasterData<GoodsCurrentBody>(`/warehouse-fulfillment-goods-current?${params.toString()}`);
+}
+
+export interface StockImportOneBody {
+  found: boolean;
+  stockImport?: StockImportRecord;
+}
+
+/**
+ * 按导入号取一张建账导入。这个读口答的是导入本身，没有 outcome 外壳；查无此号答 404 `STOCK_IMPORT_NOT_FOUND`。
+ * 这里把它收成 `found: false`，与别的按号读口同一个形状，单据页按「没有这张单」说话，不必认问题码。别的非业务答复原样交回。
+ */
+export async function getStockImportDetail(importId: string): Promise<ApiResult<StockImportOneBody>> {
+  const params = new URLSearchParams({ importId });
+  const answer = await exchangeMasterData<StockImportRecord>(`/warehouse-fulfillment-stock-import?${params.toString()}`);
+  if (answer.kind === 'outcome') return { kind: 'outcome', status: answer.status, body: { found: true, stockImport: answer.body } };
+  if (answer.kind === 'callerProblem' && answer.status === 404 && answer.code === 'STOCK_IMPORT_NOT_FOUND') {
+    return { kind: 'outcome', status: answer.status, body: { found: false } };
+  }
+  return answer;
+}
+
+export function getUnclaimedArrivalDetail(arrivalId: string): Promise<ApiResult<UnclaimedArrivalOneBody>> {
+  const params = new URLSearchParams({ arrivalId });
+  return exchangeMasterData<UnclaimedArrivalOneBody>(`/warehouse-fulfillment-unclaimed-arrival?${params.toString()}`);
 }
 
 export interface SettingsOverviewBody {
