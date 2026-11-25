@@ -923,7 +923,7 @@ func walkOperations(ctx context.Context, db *bentopg.DB) error {
 		return err
 	}
 
-	// 7. 覆盖全出库生命周期的 6 笔出库订单 + 2 个波次（让出库订单、波次与拣货、代理仓履约、作业台拣货车/复核打包台/发货台全部有实时待办）
+	// 7. 覆盖全出库生命周期的 7 笔出库订单 + 3 个波次（让出库订单、波次与拣货、代理仓履约、作业台拣货车/复核打包台/发货台全部有实时待办；另有一张已打包的本产品网络单供模拟面单）
 	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
 		acceptOB := func(key string, wh whdomain.WarehouseCode, dispatch whdomain.DispatchMethod, service, recipient, addr, goodsCode string, qty int64) (whdomain.OutboundRequest, error) {
 			line, err := whdomain.NewOutboundLine(whdomain.OutboundLineSpec{
@@ -1052,6 +1052,65 @@ func walkOperations(ctx context.Context, db *bentopg.DB) error {
 			return err
 		} else if lbRes.Outcome() != whapp.WaveStrategyRegistered && lbRes.Outcome() != whapp.WaveRecorded && lbRes.Outcome() != whapp.WaveExisting {
 			return fmt.Errorf("登记货主面单 06：%s", lbRes.Outcome())
+		}
+
+		// 7.3b 一张已打包的本产品网络单，单独一个波次。出库单页可打模拟 USPS 面单；不登记货主面单，也不做出库确认。
+		obLabel, err := acceptOB("DEC-SEED-OB-PACKED-08", whSelf, whdomain.DispatchProductNetwork, "SYN-PROD-CN-SG-EXPRESS", "Morgan Lee（演示）", "1600 Demonstration Ave, Springfield, VA 22150, United States（模拟）", "SYN-SKU-EARBUD-01", 2)
+		if err != nil {
+			return err
+		}
+		w3, err := waveHandler.Release(txCtx, whapp.ReleaseWaveCommand{
+			Tenant: tenant, ID: mustRef(whdomain.NewWaveID, "WAVE-SEED-LABEL-03"), Warehouse: whSelf,
+			Operator: regOp, Requests: []whdomain.OutboundRequestID{obLabel.ID()},
+		})
+		if err != nil {
+			return err
+		}
+		if w3.Outcome() != whapp.WaveAllocated && w3.Outcome() != whapp.WaveExisting {
+			return fmt.Errorf("释放波次 03：%s", w3.Outcome())
+		}
+		for idx, task := range w3.Tasks() {
+			if task.Status != "OPEN" {
+				continue
+			}
+			pRes, err := waveHandler.Pick(txCtx, whapp.PickCommand{
+				Tenant: tenant, FactID: mustRef(whdomain.NewPickFactID, fmt.Sprintf("SYN-FACT-SEED-PICK-08-%02d", idx+1)),
+				TaskID: task.ID, Quantity: task.Quantity, Target: outStage, Warehouse: whSelf,
+			})
+			if err != nil {
+				return err
+			}
+			if pRes.Outcome() != whapp.WavePicked && pRes.Outcome() != whapp.WaveExisting {
+				return fmt.Errorf("拣货 08：%s", pRes.Outcome())
+			}
+		}
+		if cRes, err := waveHandler.Check(txCtx, whapp.CheckCommand{
+			Tenant: tenant, FactID: mustRef(whdomain.NewPickFactID, "SYN-FACT-SEED-CHK-08"),
+			Request: obLabel.ID(), Observed: 2, Warehouse: whSelf,
+		}); err != nil {
+			return err
+		} else if cRes.Outcome() != whapp.WaveChecked && cRes.Outcome() != whapp.WaveExisting && cRes.Outcome() != whapp.WaveStatusMismatch {
+			return fmt.Errorf("复核 08：%s", cRes.Outcome())
+		}
+		if pkRes, err := waveHandler.Pack(txCtx, whapp.PackCommand{
+			Tenant: tenant, FactID: mustRef(whdomain.NewPickFactID, "SYN-FACT-SEED-PACK-08"),
+			Request: obLabel.ID(), Warehouse: whSelf,
+			Parcels: []whapp.PackParcelCommand{
+				{
+					Sequence: 1, Packaging: "SYN-BOX-S", Weight: "0.40", WeightUnit: "KG",
+					Length: "25", Width: "20", Height: "12", Dimension: "CM",
+					Goods: mustRef(whdomain.NewGoodsCode, "SYN-SKU-EARBUD-01"), Unit: mustRef(whdomain.NewGoodsUnitName, "件"), Quantity: 1,
+				},
+				{
+					Sequence: 2, Packaging: "SYN-BOX-S", Weight: "0.40", WeightUnit: "KG",
+					Length: "25", Width: "20", Height: "12", Dimension: "CM",
+					Goods: mustRef(whdomain.NewGoodsCode, "SYN-SKU-EARBUD-01"), Unit: mustRef(whdomain.NewGoodsUnitName, "件"), Quantity: 1,
+				},
+			},
+		}); err != nil {
+			return err
+		} else if pkRes.Outcome() != whapp.WavePacked && pkRes.Outcome() != whapp.WaveExisting && pkRes.Outcome() != whapp.WaveStatusMismatch {
+			return fmt.Errorf("打包 08：%s", pkRes.Outcome())
 		}
 
 		// 7.4 一笔代理仓出库单（HANDED_OFF）+ 代理仓库存声明，供「代理仓履约」演示转出与回执
