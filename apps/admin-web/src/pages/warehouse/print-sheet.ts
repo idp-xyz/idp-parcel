@@ -1,4 +1,5 @@
-// 把一张要打的单收成自包含的 HTML，交给浏览器打印。不引样式包、不打面单文件：面单本体不在这些读口里。
+// 把一张要打的单收成自包含的 HTML，交给浏览器打印。不引样式包。
+// 模拟的 USPS 面单另有自己的版式，走 openPrintHtml；它不是承运商交来的面单文件。
 //
 // 格子里的字都先转义。单上的号、库位、商品码来自租户数据，不转义的话一个「<」就能把这页拆开。
 
@@ -41,10 +42,15 @@ section{break-after:page}section:last-child{break-after:auto}
 
 /** 新开一页并拉起打印。拦了弹窗时说一声，不把内容倒进当前页。 */
 export function openPrint(sheet: PrintSheet): { ok: true } | { ok: false; reason: string } {
+  return openPrintHtml(printHtml(sheet));
+}
+
+/** 已经排好版的 HTML，同样新开一页再拉起打印。 */
+export function openPrintHtml(html: string): { ok: true } | { ok: false; reason: string } {
   const page = window.open('', '_blank', 'noopener,noreferrer');
   if (page === null) return { ok: false, reason: '浏览器拦住了打印窗口。允许这个站点的弹窗后再打一次。' };
   page.document.open();
-  page.document.write(printHtml(sheet));
+  page.document.write(html);
   page.document.close();
   page.focus();
   page.print();

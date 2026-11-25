@@ -2,7 +2,8 @@ import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
 import { cartonMarkSheet, packListSheet } from './print-forms';
-import { openPrint } from './print-sheet';
+import { openPrint, openPrintHtml } from './print-sheet';
+import { simulatedUspsLabelHtml } from './simulated-usps-label';
 import { formatInstant } from '../catalogue-view';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
@@ -169,6 +170,29 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
                   >
                     打印箱唛
                   </Button>
+                  {request.dispatch === 'PRODUCT_NETWORK' ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        openPrintHtml(
+                          simulatedUspsLabelHtml({
+                            documentNumber: request.documentNumber ?? request.requestId,
+                            warehouseCode: request.warehouseCode,
+                            recipient: request.recipient,
+                            address: request.address,
+                            parcels: parcels.map((parcel) => ({
+                              sequence: parcel.parcelSequence,
+                              weight: parcel.weightValue,
+                              weightUnit: parcel.weightUnit,
+                            })),
+                          }),
+                        )
+                      }
+                    >
+                      打印模拟面单
+                    </Button>
+                  ) : null}
                 </>
               ) : null}
               {next?.kind === 'station' ? (
