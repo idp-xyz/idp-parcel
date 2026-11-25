@@ -5,6 +5,7 @@ import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { InspectorAction, InspectorContent } from '../../templates/inspector';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
+import { enterStation } from '../../shell/enter-station';
 import type { CatalogueConditions } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
@@ -311,7 +312,8 @@ function NextStepCell({
       className="text-[color:var(--ds-text-link-hover)] hover:underline"
       onClick={(event) => {
         event.stopPropagation();
-        window.location.hash = `#/${next.moduleId}`;
+        if (next.kind === 'station') enterStation(next.hash);
+        else window.location.hash = `#/${next.moduleId}`;
       }}
     >
       {next.label}

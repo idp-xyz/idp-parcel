@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, ScanBarcode, TabletSmartphone } from 'lucide-react';
+import { Maximize2, RefreshCw, ScanBarcode, TabletSmartphone } from 'lucide-react';
 import { Button, Input, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
+import { enterStation } from '../../shell/enter-station';
 import { postWorkFact } from '../catalogue-api';
 import { listWorkDevices, type WorkDeviceRecord } from '../work-devices/api';
 import { asWarehouseAction, type WarehouseActionBody } from './actions';
@@ -15,6 +16,15 @@ import {
 } from './api';
 import { GuidedFormBody, type GuidedActionTarget } from './GuidedActionPanel';
 import type { GuidedFormSeed, GuidedFormValues } from './guided-forms';
+import {
+  advanceDeviceSequence,
+  browserStorage,
+  readActiveDeviceId,
+  readDeviceSequence,
+  registeredDeviceConditions,
+  writeActiveDeviceId,
+} from './station/device-binding';
+import { pickStationHash } from './station/stations';
 import { useWarehouseLookups } from './use-catalogues';
 import {
   workFactOutcomeLabels,
@@ -47,47 +57,6 @@ const internalIds = [
   'count-entry',
 ] as const;
 
-const ACTIVE_DEVICE_KEY = 'idp.parcel.warehouse.activeDevice';
-const seqKey = (deviceId: string) => `idp.parcel.warehouse.deviceSeq.${deviceId}`;
-
-function readActiveDeviceId(): string {
-  try {
-    return window.localStorage.getItem(ACTIVE_DEVICE_KEY) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-function writeActiveDeviceId(deviceId: string): void {
-  try {
-    window.localStorage.setItem(ACTIVE_DEVICE_KEY, deviceId);
-  } catch {
-    // 禁用存储时忽略
-  }
-}
-
-function readDeviceSequence(deviceId: string): number {
-  if (!deviceId) return 0;
-  try {
-    const raw = window.localStorage.getItem(seqKey(deviceId));
-    const parsed = raw ? Number.parseInt(raw, 10) : 0;
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function advanceDeviceSequence(deviceId: string, toValue?: number): number {
-  const cur = readDeviceSequence(deviceId);
-  const next = toValue && toValue > cur ? toValue : cur + 1;
-  try {
-    window.localStorage.setItem(seqKey(deviceId), String(next));
-  } catch {
-    // 禁用存储时忽略
-  }
-  return next;
-}
-
 function specById(id: string): WorkFactSpec {
   return workFactSpecs.find((s) => s.id === id) ?? workFactSpecs[0];
 }
@@ -103,8 +72,10 @@ export function WarehouseWorkstationPage() {
   const [devices, setDevices] = useState<WorkDeviceRecord[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(true);
   const [deviceError, setDeviceError] = useState<string | null>(null);
-  const [activeDeviceId, setActiveDeviceId] = useState<string>(() => readActiveDeviceId());
-  const [seqDisplay, setSeqDisplay] = useState<number>(() => readDeviceSequence(readActiveDeviceId()));
+  const [activeDeviceId, setActiveDeviceId] = useState<string>(() => readActiveDeviceId(browserStorage()));
+  const [seqDisplay, setSeqDisplay] = useState<number>(() =>
+    readDeviceSequence(browserStorage(), readActiveDeviceId(browserStorage())),
+  );
 
   const [station, setStation] = useState<StationTab>('picking');
   const [activeSpecId, setActiveSpecId] = useState<string>('pick');
@@ -123,7 +94,7 @@ export function WarehouseWorkstationPage() {
   const loadDevices = useCallback(() => {
     setLoadingDevices(true);
     setDeviceError(null);
-    void listWorkDevices({ filters: { status: ['REGISTERED'] } }).then((res) => {
+    void listWorkDevices(registeredDeviceConditions).then((res) => {
       setLoadingDevices(false);
       if (res.kind !== 'outcome') {
         setDeviceError(
@@ -138,11 +109,11 @@ export function WarehouseWorkstationPage() {
       const warehouseDevices = res.body.devices.filter((d) => d.workScopeKind === 'WAREHOUSE');
       setDevices(warehouseDevices);
       if (warehouseDevices.length > 0) {
-        const stored = readActiveDeviceId();
+        const stored = readActiveDeviceId(browserStorage());
         const chosen = warehouseDevices.some((d) => d.deviceId === stored) ? stored : warehouseDevices[0].deviceId;
         setActiveDeviceId(chosen);
-        writeActiveDeviceId(chosen);
-        setSeqDisplay(readDeviceSequence(chosen));
+        writeActiveDeviceId(browserStorage(), chosen);
+        setSeqDisplay(readDeviceSequence(browserStorage(), chosen));
       }
     });
   }, []);
@@ -218,7 +189,12 @@ export function WarehouseWorkstationPage() {
     (specId: string, extra: GuidedFormValues) => {
       const spec = specById(specId);
       const base = activeDevice
-        ? workFactPrefillFor(spec, activeDevice.deviceId, activeDevice.workScopeRef, readDeviceSequence(activeDevice.deviceId) + 1)
+        ? workFactPrefillFor(
+            spec,
+            activeDevice.deviceId,
+            activeDevice.workScopeRef,
+            readDeviceSequence(browserStorage(), activeDevice.deviceId) + 1,
+          )
         : {};
       setActiveSpecId(specId);
       setSeed((current) => ({ targetId: specId, values: { ...base, ...extra }, nonce: (current?.nonce ?? 0) + 1 }));
@@ -247,8 +223,8 @@ export function WarehouseWorkstationPage() {
 
   const handleSelectDevice = (deviceId: string) => {
     setActiveDeviceId(deviceId);
-    writeActiveDeviceId(deviceId);
-    setSeqDisplay(readDeviceSequence(deviceId));
+    writeActiveDeviceId(browserStorage(), deviceId);
+    setSeqDisplay(readDeviceSequence(browserStorage(), deviceId));
     setSeed(null);
   };
 
@@ -331,14 +307,14 @@ export function WarehouseWorkstationPage() {
           if (typeof rec.deviceSequence === 'number' && Number.isFinite(rec.deviceSequence)) {
             usedSeq = rec.deviceSequence;
           } else {
-            usedSeq = readDeviceSequence(activeDevice.deviceId) + 1;
+            usedSeq = readDeviceSequence(browserStorage(), activeDevice.deviceId) + 1;
             rec.deviceSequence = usedSeq;
           }
         }
         const answer = await postWorkFact<WarehouseActionBody>(activeSpec.endpoint, body, headers);
         if (answer.kind !== 'outcome') return answer;
         if (activeSpec.usesDeviceSequence && usedSeq !== undefined) {
-          setSeqDisplay(advanceDeviceSequence(activeDevice.deviceId, usedSeq));
+          setSeqDisplay(advanceDeviceSequence(browserStorage(), activeDevice.deviceId, usedSeq));
         }
         return { kind: 'outcome', status: answer.status, body: asWarehouseAction(answer.body) };
       },
@@ -390,6 +366,10 @@ export function WarehouseWorkstationPage() {
                 placeholder="扫单号/任务号回车自动定位"
               />
             </form>
+            <Button type="button" variant="outline" size="sm" onClick={() => enterStation(pickStationHash())}>
+              <Maximize2 className="h-3.5 w-3.5 mr-1" />
+              全屏拣货
+            </Button>
             <Button type="button" variant="outline" size="sm" disabled={loadingQueues} onClick={loadQueues}>
               <RefreshCw className="h-3.5 w-3.5 mr-1" />
               刷新待办

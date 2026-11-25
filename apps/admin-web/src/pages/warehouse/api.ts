@@ -782,6 +782,23 @@ export function getGoodsCurrent(ownerAccount: string, goodsCode: string): Promis
   return exchangeMasterData<GoodsCurrentBody>(`/warehouse-fulfillment-goods-current?${params.toString()}`);
 }
 
+export interface GoodsFoundBody {
+  outcome: string;
+  ownerAccount: string;
+  code: string;
+  found: boolean;
+  goods?: GoodsRecord;
+}
+
+/**
+ * 按一个码找一位货主名下的商品：码是商品编码，或是此刻有效的商品条码、平台商品码（别名按有效区间认，已过期与还没生效的不认）。
+ * 找不到答 found 为假，不答 404；别的货主的商品同样答找不到。同一个码在同一刻指向了两个商品时后端答 500，调用方当没问成。
+ */
+export function findGoodsByCode(ownerAccount: string, code: string): Promise<ApiResult<GoodsFoundBody>> {
+  const params = new URLSearchParams({ ownerAccount, code });
+  return exchangeMasterData<GoodsFoundBody>(`/warehouse-fulfillment-goods-by-code?${params.toString()}`);
+}
+
 export interface StockImportOneBody {
   found: boolean;
   stockImport?: StockImportRecord;

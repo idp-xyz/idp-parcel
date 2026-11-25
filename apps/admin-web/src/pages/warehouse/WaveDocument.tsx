@@ -1,11 +1,13 @@
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
+import { enterStation } from '../../shell/enter-station';
 import type { ApiResult } from '../catalogue-api';
 import { formatInstant } from '../catalogue-view';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
 import { listWaves, type WaveRecord } from './api';
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
+import { pickStationHash } from './station/stations';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
 import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsSubTable } from './wms-ui';
@@ -61,7 +63,9 @@ export function WaveDocument({ waveId }: { waveId: string }) {
                 type="button"
                 className={primaryActionClass}
                 onClick={() => {
-                  window.location.hash = '#/warehouse-workstation';
+                  // 还有没拣的格去全屏的拣货工位，只做这个波次；拣完了去复核打包，那几步还在旧的作业台页里
+                  if (open.length > 0) enterStation(pickStationHash(waveId));
+                  else window.location.hash = '#/warehouse-workstation';
                 }}
               >
                 {open.length > 0 ? '去拣货' : '去复核打包'}

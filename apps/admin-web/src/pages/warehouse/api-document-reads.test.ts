@@ -3,6 +3,7 @@ import { deepEqual, equal } from 'node:assert/strict';
 import {
   findAdjustment,
   findFreeze,
+  findGoodsByCode,
   findInstruction,
   findJobDiscrepancy,
   getCountDetail,
@@ -215,4 +216,37 @@ test('冻结检索的传输失败与没授予原样交回', async () => {
 
   answerWith(403, { error: { code: 'OPERATOR_NOT_GRANTED' } });
   equal((await findFreeze('FRZ-1')).kind, 'notGranted');
+});
+
+// 作业台按扫到的码认商品：读口按（货主，码）找此刻指向的商品，码是商品编码或有效的条码、平台商品码都认；找不到答 found 为假。
+
+test('按码找商品：路径与查询键照读口的声明（ownerAccount、code），答复照原样交回', async () => {
+  const body = {
+    outcome: 'GOODS_FOUND',
+    ownerAccount: 'SYN-OWNER-01',
+    code: '6900001000028',
+    found: true,
+    goods: { goodsCode: 'SYN-SKU-CHARGER-02' },
+  };
+  const urls = answerWith(200, body);
+  deepEqual(await findGoodsByCode('SYN-OWNER-01', '6900001000028'), { kind: 'outcome', status: 200, body });
+  deepEqual(urls, ['/warehouse-fulfillment-goods-by-code?ownerAccount=SYN-OWNER-01&code=6900001000028']);
+});
+
+test('按码找商品：找不到是 found 为假的业务答复，码里的特殊字符照编码', async () => {
+  const body = { outcome: 'GOODS_FOUND', ownerAccount: 'O 1', code: 'A/B 一', found: false };
+  const urls = answerWith(200, body);
+  deepEqual(await findGoodsByCode('O 1', 'A/B 一'), { kind: 'outcome', status: 200, body });
+  deepEqual(urls, ['/warehouse-fulfillment-goods-by-code?ownerAccount=O+1&code=A%2FB+%E4%B8%80']);
+});
+
+test('按码找商品：没授予、读口没形成答案、传输失败原样交回，不冒充找不到', async () => {
+  answerWith(403, { error: { code: 'OPERATOR_NOT_GRANTED' } });
+  equal((await findGoodsByCode('O', 'C')).kind, 'notGranted');
+  answerWith(500, { error: { code: 'NO_ANSWER_FORMED' } });
+  equal((await findGoodsByCode('O', 'C')).kind, 'noAnswer');
+  globalThis.fetch = (async () => {
+    throw new Error('网络断了');
+  }) as typeof fetch;
+  deepEqual(await findGoodsByCode('O', 'C'), { kind: 'transport', message: '网络断了' });
 });

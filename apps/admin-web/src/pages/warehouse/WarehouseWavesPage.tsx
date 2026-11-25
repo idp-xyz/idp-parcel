@@ -5,6 +5,7 @@ import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { InspectorAction, InspectorContent } from '../../templates/inspector';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
+import { enterStation } from '../../shell/enter-station';
 import type { CatalogueConditions } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
@@ -12,6 +13,7 @@ import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
 import { listWaves, type WaveRecord } from './api';
 import { DocumentLink } from './document-page';
+import { pickStationHash } from './station/stations';
 import { openDocument, useDocumentParts } from './use-document';
 import { WaveDocument } from './WaveDocument';
 import { WmsBadge, WmsFilterSelect } from './wms-ui';
@@ -71,7 +73,9 @@ function WaveList() {
       {
         label: open.length > 0 ? `去拣货（还有 ${open.length} 格）` : '去复核打包',
         onRun: () => {
-          window.location.hash = '#/warehouse-workstation';
+          // 还有没拣的格去全屏的拣货工位，只做这个波次；拣完了去复核打包，那几步还在旧的作业台页里
+          if (open.length > 0) enterStation(pickStationHash(row.waveId));
+          else window.location.hash = '#/warehouse-workstation';
         },
       },
     ];

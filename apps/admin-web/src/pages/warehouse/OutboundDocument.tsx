@@ -1,5 +1,6 @@
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
+import { enterStation } from '../../shell/enter-station';
 import { formatInstant } from '../catalogue-view';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
@@ -37,7 +38,9 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
   const agentWarehouse =
     request !== undefined && drawer.lookups.warehouses.some((w) => w.warehouseCode === request.warehouseCode && w.kind === 'AGENT');
   const track = request ? outboundTrack(request.status, agentWarehouse) : null;
-  const next = request ? outboundNextStep(request.status, agentWarehouse) : null;
+  // 去拣货只做这张单所在的那个波次；一张单放进过几个波次时不替人挑，按本仓全部波次
+  const onlyWave = body?.waves?.length === 1 ? body.waves[0] : undefined;
+  const next = request ? outboundNextStep(request.status, agentWarehouse, onlyWave) : null;
 
   const reservations = body?.reservations ?? [];
   const reservedByLine = new Map<number, number>();
@@ -128,6 +131,11 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
                     window.location.hash = `#/${next.moduleId}`;
                   }}
                 >
+                  {next.label}
+                </Button>
+              ) : null}
+              {next?.kind === 'station' ? (
+                <Button type="button" className={primaryActionClass} onClick={() => enterStation(next.hash)}>
                   {next.label}
                 </Button>
               ) : null}
