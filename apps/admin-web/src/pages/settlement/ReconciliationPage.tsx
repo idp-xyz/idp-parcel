@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { MultiRegistrationPanel } from '../../components/registration';
 import { statementDecisionTargets } from './decisions';
+import { statementDecisionPrefill } from './decision-forms';
 import { problemNote as decisionProblemNote } from './presentation';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { ListPageTemplate, type ListColumn } from '../../templates';
@@ -145,10 +146,12 @@ function CustomerStatementsTable({
   names,
   disputedOnly,
   onDisputedOnlyChange,
+  onStatementPick,
 }: {
   names: PartyNames;
   disputedOnly: boolean;
   onDisputedOnlyChange: (next: boolean) => void;
+  onStatementPick: (statement: string) => void;
 }) {
   const [search, setSearch] = useState('');
   const [refine, setRefine] = useState('');
@@ -220,7 +223,10 @@ function CustomerStatementsTable({
           rows={visibleStatements}
           // 行键即对账单号：发布后固定，替代单用新单号。
           rowKey={(row) => row.statementNumber}
-          onRowClick={(row) => setSelected(row.statementNumber)}
+          onRowClick={(row) => {
+            setSelected(row.statementNumber);
+            onStatementPick(row.statementNumber);
+          }}
           emptyRowsNote={pageEmptyNote('对账单', statements.length)}
           pagination={pagination}
           viewState={catalogueViewState(answer, statements.length, retry, {
@@ -269,6 +275,8 @@ function useDisputedOnlyPlace(): [boolean, (disputedOnly: boolean) => void] {
 export function ReconciliationPage() {
   const names = usePartyNames();
   const [disputedOnly, place] = useDisputedOnlyPlace();
+  const [statement, setStatement] = useState<string | null>(null);
+  const [pickNonce, setPickNonce] = useState(0);
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="statements" className="flex-1 flex flex-col overflow-hidden gap-0">
@@ -277,11 +285,25 @@ export function ReconciliationPage() {
           <TabsTrigger value="decisions">运营决定</TabsTrigger>
         </TabsList>
         <TabsContent value="statements" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CustomerStatementsTable names={names} disputedOnly={disputedOnly} onDisputedOnlyChange={place} />
+          <CustomerStatementsTable
+            names={names}
+            disputedOnly={disputedOnly}
+            onDisputedOnlyChange={place}
+            onStatementPick={(next) => {
+              setStatement(next);
+              setPickNonce((nonce) => nonce + 1);
+            }}
+          />
         </TabsContent>
-        <TabsContent value="decisions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          {/* 发布、作废与后续账期纳入：后端口都在，这里先用登记面板接上，照提示填 JSON 提交。 */}
-          <MultiRegistrationPanel moduleId="reconciliation" targets={statementDecisionTargets} problemNote={decisionProblemNote} />
+        {/* forceMount：回对账单签点一张再回来，选的口与填了一半的格都还在。 */}
+        <TabsContent value="decisions" forceMount className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <MultiRegistrationPanel
+            moduleId="reconciliation"
+            targets={statementDecisionTargets}
+            problemNote={decisionProblemNote}
+            prefillByTarget={statementDecisionPrefill(statement)}
+            pickNonce={pickNonce}
+          />
         </TabsContent>
       </Tabs>
     </div>

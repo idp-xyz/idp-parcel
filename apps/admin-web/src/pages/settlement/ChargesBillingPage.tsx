@@ -22,6 +22,7 @@ import { TechnicalDetails } from '../../components/TechnicalDetails';
 import { pageEmptyNote } from './list-conditions';
 import { MultiRegistrationPanel } from '../../components/registration';
 import { chargeDecisionTargets } from './decisions';
+import { chargeDecisionPrefill } from './decision-forms';
 import { problemNote } from './presentation';
 import { AmountCell, TwoLine, technicalRows } from './ops-ui';
 import { adjustmentText, feeItemLabel, parcelFromRef, pricedWeightLabel, pricedWeightText, sourceFactLabel, supersededByText, weightBasisText } from './ops-refs';
@@ -151,7 +152,7 @@ function customerChargeColumns(names: PartyNames): ListColumn<CustomerChargeReco
 const loadCustomerCharges = (conditions: RegistryConditions<'customer-charge'>, after: string | null) =>
   listSettlementCharges(conditions, after);
 
-function CustomerChargesTable({ names }: { names: PartyNames }) {
+function CustomerChargesTable({ names, onChargePick }: { names: PartyNames; onChargePick: (charge: string) => void }) {
   const [search, setSearch] = useState('');
   const [refine, setRefine] = useState('');
   const conditions = registryConditions('customer-charge', { q: useSettledKeyword(search) });
@@ -180,6 +181,7 @@ function CustomerChargesTable({ names }: { names: PartyNames }) {
       rows={visibleCharges}
       // 行键循库主键（租户，费用）：一费用一行，册上没有版本列。
       rowKey={(row) => row.charge}
+      onRowClick={(row) => onChargePick(row.charge)}
       emptyRowsNote={pageEmptyNote('费用', charges.length)}
       pagination={pagination}
       viewState={catalogueViewState(answer, charges.length, retry, {
@@ -306,6 +308,8 @@ function SupplierExpectedCostsTable() {
 export function ChargesBillingPage() {
   // 参与方名称一问放在页级，两签共用，切签不重问。
   const names = usePartyNames();
+  const [charge, setCharge] = useState<string | null>(null);
+  const [pickNonce, setPickNonce] = useState(0);
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="customer" className="flex-1 flex flex-col overflow-hidden gap-0">
@@ -315,13 +319,26 @@ export function ChargesBillingPage() {
           <TabsTrigger value="decisions">运营决定</TabsTrigger>
         </TabsList>
         <TabsContent value="customer" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CustomerChargesTable names={names} />
+          <CustomerChargesTable
+            names={names}
+            onChargePick={(next) => {
+              setCharge(next);
+              setPickNonce((nonce) => nonce + 1);
+            }}
+          />
         </TabsContent>
         <TabsContent value="supplier" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <SupplierExpectedCostsTable />
         </TabsContent>
-        <TabsContent value="decisions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <MultiRegistrationPanel moduleId="charges-billing" targets={chargeDecisionTargets} problemNote={problemNote} />
+        {/* forceMount：回费用签点一笔再回来，选的口与填了一半的格都还在。 */}
+        <TabsContent value="decisions" forceMount className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <MultiRegistrationPanel
+            moduleId="charges-billing"
+            targets={chargeDecisionTargets}
+            problemNote={problemNote}
+            prefillByTarget={chargeDecisionPrefill(charge)}
+            pickNonce={pickNonce}
+          />
         </TabsContent>
       </Tabs>
     </div>

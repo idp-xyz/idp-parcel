@@ -1,11 +1,11 @@
 import type { RegistrationResponseBody, RegistrationTarget } from '../../components/registration';
 import { postMasterData, type ApiResult } from '../catalogue-api';
+import { customsDecisionForm } from './decision-forms';
 
 /**
  * 清关的运营决定口：建案、提交授权、申报提交、放行检查、关闭清关单，以及监管限制的建立与解除。
  *
- * 这些口后端早已接上，管理台此前没有任何一页调它们。这里先用登记面板把它们接进页面：操作员照提示填一份 JSON 提交，
- * 页面示出服务端的答复。它不是引导式表单——没有从列表行带出标识、没有逐格校验——但每一步在产品里有了路。所属公司与
+ * 这些口逐格填写。点清关列表的一行，把那一行上的原始标识带进同名格。所属公司与
  * 决定人由系统按登录身份记下，不在内容里填。
  */
 
@@ -198,6 +198,7 @@ export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTa
       title: customsDecisionTitles[kind],
       endpoint: `POST ${customsDecisionEndpoints[kind]}`,
       snapshotHint: customsDecisionHints[kind],
+      form: customsDecisionForm(kind),
       submit: (snapshot: unknown) => submitCustomsDecision(kind, snapshot),
       outcomeLabels: manualLodgementOutcomeLabels,
     };
@@ -209,6 +210,7 @@ export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTa
       title: customsDecisionTitles[kind],
       endpoint: `POST ${customsDecisionEndpoints[kind]}`,
       snapshotHint: customsDecisionHints[kind],
+      form: customsDecisionForm(kind),
       submit: (snapshot: unknown) => submitCustomsDecision(kind, snapshot),
       outcomeLabels: manifestEntryOutcomeLabels,
     };
@@ -220,6 +222,7 @@ export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTa
       title: customsDecisionTitles[kind],
       endpoint: `POST ${customsDecisionEndpoints[kind]}`,
       snapshotHint: customsDecisionHints[kind],
+      form: customsDecisionForm(kind),
       submit: (snapshot: unknown) => submitCustomsDecision(kind, snapshot),
       outcomeLabels: customsDecisionOutcomeLabels,
       undecidedReasonLabels: declarationSubmissionUndecidedLabels,
@@ -232,6 +235,7 @@ export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTa
       title: customsDecisionTitles[kind],
       endpoint: `POST ${customsDecisionEndpoints[kind]}`,
       snapshotHint: customsDecisionHints[kind],
+      form: customsDecisionForm(kind),
       submit: (snapshot: unknown) => submitCustomsDecision(kind, snapshot),
       outcomeLabels: externalResultEntryOutcomeLabels,
       undecidedReasonLabels: externalResultEntryUndecidedLabels,
@@ -243,6 +247,7 @@ export function customsDecisionTarget(kind: CustomsDecisionKind): RegistrationTa
     title: customsDecisionTitles[kind],
     endpoint: `POST ${customsDecisionEndpoints[kind]}`,
     snapshotHint: customsDecisionHints[kind],
+    form: customsDecisionForm(kind),
     submit: (snapshot: unknown) => submitCustomsDecision(kind, snapshot),
     outcomeLabels: customsDecisionOutcomeLabels,
   };

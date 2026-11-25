@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { GuidedFormValues } from '../guided-form/guided-forms';
 import { RegistrationPanel, type RegistrationPanelProps } from './RegistrationPanel';
 import { chipClass } from './chip';
 
@@ -29,12 +30,21 @@ export interface MultiRegistrationPanelProps {
   targets: RegistrationTarget[];
   /** problem+json 错误码的中文说明：一个上下文一份，各册共用。 */
   problemNote: (code: string) => string;
+  /**
+   * 列表行带出的标识，按选册键分好：同名的格在不同口上指的不是同一样东西（舱单的版本与申报的版本），
+   * 所以由页面说清这一行给哪一口带哪几格，这里只取选中那一口的那一份。
+   */
+  prefillByTarget?: Readonly<Record<string, GuidedFormValues | undefined>>;
+  /** 每次点中列表行加一。 */
+  pickNonce?: number;
 }
 
 export function MultiRegistrationPanel({
   moduleId,
   targets,
   problemNote,
+  prefillByTarget,
+  pickNonce = 0,
 }: MultiRegistrationPanelProps) {
   const [selectedId, setSelectedId] = useState(targets[0].id);
   const selected = targets.find((target) => target.id === selectedId) ?? targets[0];
@@ -62,6 +72,9 @@ export function MultiRegistrationPanel({
         title={selected.title}
         endpoint={selected.endpoint}
         snapshotHint={selected.snapshotHint}
+        form={selected.form}
+        prefill={prefillByTarget?.[selected.id]}
+        pickNonce={pickNonce}
         submit={selected.submit}
         outcomeLabels={selected.outcomeLabels}
         refusalReasonLabels={selected.refusalReasonLabels}

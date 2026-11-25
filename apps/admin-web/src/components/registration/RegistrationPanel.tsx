@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Textarea } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../../pages/catalogue-api';
 import { accessRefusalCode, accessRefusalStatus } from '../../auth/access-refusal';
+import { GuidedFields } from '../guided-form/GuidedFields';
+import {
+  buildGuidedPayload,
+  carriedGuidedValues,
+  initialGuidedValues,
+  type GuidedFormDefinition,
+  type GuidedFormValues,
+} from '../guided-form/guided-forms';
 import { OperatorRefusalNote, TechnicalDetails, httpRows } from '../states';
 import { outcomeTechnicalRows } from './answer-rows';
 import { overAppliedNote, unreconciledScopesNote, type UnreconciledScope } from './over-applied-note';
@@ -23,9 +31,10 @@ import { overAppliedNote, unreconciledScopesNote, type UnreconciledScope } from 
  *     原行不被顶替，续办属登记方或治理裁决。折成一句「提交失败」会让操作者以为重试有用。
  *   - 未决 —— 依赖故障，登记与否未知，可重试。
  *
- * 表单收的是登记快照 JSON 本体，与受控登记 CLI 吃的同一份形状。**不逐字段建表单**：
+ * 登记册仍收快照 JSON，与受控登记 CLI 吃的同一份形状。**登记册不逐字段建表单**：
  * 「渠道原始载荷 → 登记快照」的翻译按决定三属渠道接入契约、随 `PAR-INT-01` 提供，
- * 现在拆成字段就是替租户拟那份契约。
+ * 现在拆成字段就是替租户拟那份契约。运营决定口例外：调用方传入 `form` 时逐格填写、
+ * 本地先校验，再把装好的对象送进同一个提交函数。
  *
  * 词表与错误码说明都由调用页传入而不在这里内置：答案代数归各登记口自己的应用结果枚举，
  * 错误码说明归各上下文自己的 presentation——共享的是呈现形状，不是任何一个上下文的词。
@@ -104,6 +113,12 @@ export interface RegistrationPanelProps {
   endpoint: string;
   /** 快照形状的一句话提示，取各自受控登记 CLI 的文档口径。 */
   snapshotHint: string;
+  /** 有它时这一口是逐格表单，不再收 JSON 原文。登记册不传。 */
+  form?: GuidedFormDefinition;
+  /** 列表行为这一口带出的标识，键是这张表单的格名。只带单据标识，不带租户取值。 */
+  prefill?: GuidedFormValues;
+  /** 每次点中列表行加一，用来把标识写进已经打开的表单。 */
+  pickNonce?: number;
   submit: (snapshot: unknown) => Promise<ApiResult<RegistrationResponseBody>>;
   /** 该登记口答案代数的逐格中文（outcome 原名 → 中文）；未收录的原样示出英文原名。 */
   outcomeLabels: Record<string, string>;
@@ -139,6 +154,9 @@ export function RegistrationPanel({
   title,
   endpoint,
   snapshotHint,
+  form,
+  prefill,
+  pickNonce = 0,
   submit,
   outcomeLabels,
   refusalReasonLabels,
@@ -149,16 +167,55 @@ export function RegistrationPanel({
 }: RegistrationPanelProps) {
   const info = moduleInfoById[moduleId];
   const [draft, setDraft] = useState('');
+  const [values, setValues] = useState<GuidedFormValues>(() => (form ? initialGuidedValues(form.fields, prefill) : {}));
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // 逐格表单本地没过的那一句。不借 malformed：那一格说的是「不是合法 JSON」。
+  const [formError, setFormError] = useState<string | null>(null);
+  // 逐格表单里人动过、还没提交的输入。列表行带进来的标识不算人的输入。
+  const [touched, setTouched] = useState(false);
   const [state, setState] = useState<PanelState>({ kind: 'idle' });
   // 送出去过的那一份：与框里此刻的一样就算提交过（答复原样留在面板里，人看完再走不该被拦）；被拒后改过一字，又是没提交的。
   const [submittedDraft, setSubmittedDraft] = useState<string | null>(null);
-  const unsaved = draft.trim() !== '' && draft !== submittedDraft;
+  const unsaved = form ? touched : draft.trim() !== '' && draft !== submittedDraft;
   useEffect(() => {
     onUnsavedChange?.(unsaved);
     return () => onUnsavedChange?.(false);
   }, [unsaved]);
+  // 列表行又点了一次：只改带出的那几格，人已经填的别的格不动。上一行带过、这一行没带、人也没改过的格清掉，
+  // 免得两行的标识拼进同一份决定。
+  const carriedBefore = useRef<GuidedFormValues>(form ? carriedGuidedValues(form.fields, prefill) : {});
+  useEffect(() => {
+    if (!form || pickNonce === 0) return;
+    const carried = carriedGuidedValues(form.fields, prefill);
+    const before = carriedBefore.current;
+    carriedBefore.current = carried;
+    setValues((current) => {
+      const next = { ...current };
+      for (const [path, value] of Object.entries(before)) {
+        if (!(path in carried) && next[path] === value) next[path] = '';
+      }
+      return { ...next, ...carried };
+    });
+  }, [pickNonce]);
+  const carriedLabels = form ? form.fields.filter((field) => prefill?.[field.path] !== undefined).map((field) => field.label) : [];
 
   const send = () => {
+    if (form) {
+      const built = buildGuidedPayload(form, values);
+      if (!built.ok) {
+        setFieldErrors(built.errors);
+        setFormError(built.formError ?? '还有没填对的格，没有提交。');
+        // 上一次的服务端答复不留在「没有提交」旁边：两句并排，人分不出哪一句说的是这一次。
+        setState({ kind: 'idle' });
+        return;
+      }
+      setFieldErrors({});
+      setFormError(null);
+      setTouched(false);
+      setState({ kind: 'submitting' });
+      void submit(built.payload).then((answer) => setState({ kind: 'answered', answer }));
+      return;
+    }
     let snapshot: unknown;
     try {
       snapshot = JSON.parse(draft);
@@ -192,16 +249,36 @@ export function RegistrationPanel({
               ]}
             />
           </div>
-          <Textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="粘贴登记快照 JSON"
-            rows={12}
-            className="font-mono type-body leading-4"
-          />
+          {form ? (
+            <>
+              {carriedLabels.length > 0 ? (
+                <p className="type-body leading-4 text-idpxyz-textMuted">
+                  列表里点中的那一行带入了：{carriedLabels.join('、')}。带入的格可以改。
+                </p>
+              ) : null}
+              <GuidedFields
+                fields={form.fields}
+                values={values}
+                errors={fieldErrors}
+                onChange={(path, next) => {
+                  setTouched(true);
+                  setValues((current) => ({ ...current, [path]: next }));
+                }}
+              />
+              {formError ? <p className="type-body leading-4 text-idpxyz-danger">{formError}</p> : null}
+            </>
+          ) : (
+            <Textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="粘贴登记快照 JSON"
+              rows={12}
+              className="font-mono type-body leading-4"
+            />
+          )}
           <div className="flex items-center gap-3">
-            <Button onClick={send} disabled={state.kind === 'submitting' || draft.trim() === ''}>
-              {state.kind === 'submitting' ? '提交中…' : '提交登记'}
+            <Button onClick={send} disabled={state.kind === 'submitting' || (!form && draft.trim() === '')}>
+              {state.kind === 'submitting' ? '提交中…' : form ? '提交' : '提交登记'}
             </Button>
             <RegistrationAnswerNote
               state={state}

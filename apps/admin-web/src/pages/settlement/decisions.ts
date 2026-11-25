@@ -1,11 +1,11 @@
 import type { RegistrationResponseBody, RegistrationTarget } from '../../components/registration';
 import { postMasterData, type ApiResult } from '../catalogue-api';
+import { settlementDecisionForm } from './decision-forms';
 
 /**
  * 账务的运营决定口：费用确认与调整登记（费用页），对账单发布、作废与后续账期纳入（对账页）。
  *
- * 后端口都已接上，这里先用登记面板把它们接进页面：操作员照提示填一份 JSON 提交，页面示出服务端的答复。不是引导式
- * 表单。所属公司由系统按登录身份记下；金额一律填最小货币单位的整数串（例如 96.00 元填 "9600"）。
+ * 这些口逐格填写。点中的费用或对账单把标识带进同名格。所属公司由系统按登录身份记下；金额填最小货币单位的整数串（例如 96.00 元填 9600）。
  */
 
 export type SettlementDecisionKind =
@@ -101,6 +101,7 @@ function target(kind: SettlementDecisionKind): RegistrationTarget {
     title: settlementDecisionTitles[kind],
     endpoint: `POST ${settlementDecisionEndpoints[kind]}`,
     snapshotHint: settlementDecisionHints[kind],
+    form: settlementDecisionForm(kind),
     submit: (snapshot: unknown) => submitSettlementDecision(kind, snapshot),
     outcomeLabels: settlementDecisionOutcomeLabels,
   };

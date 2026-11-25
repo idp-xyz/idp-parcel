@@ -1,11 +1,11 @@
 import type { RegistrationResponseBody, RegistrationTarget } from '../../components/registration';
 import { postMasterData, type ApiResult } from '../catalogue-api';
+import { exceptionDecisionForm } from './decision-forms';
 
 /**
  * 异常的运营决定口：案件的接单、关闭与归并，证据的登记、评价与披露版本准备，客户披露的判断与授权确认，客户异常通知。
  *
- * 后端口都已接上，这里先用登记面板把它们接进页面：操作员照提示填一份 JSON 提交，页面示出服务端的答复。不是引导式
- * 表单。所属公司与操作者由系统按登录身份记下。
+ * 这些口逐格填写。点中的案件把案件标识带进同名格。所属公司与操作者由系统按登录身份记下。
  */
 
 export type ExceptionDecisionKind =
@@ -136,6 +136,7 @@ export const exceptionDecisionTargets: RegistrationTarget[] = (Object.keys(excep
   title: exceptionDecisionTitles[kind],
   endpoint: `POST ${exceptionDecisionEndpoints[kind]}`,
   snapshotHint: exceptionDecisionHints[kind],
+  form: exceptionDecisionForm(kind),
   submit: (snapshot: unknown) => submitExceptionDecision(kind, snapshot),
   outcomeLabels: kind === 'customer-exception-notification-manual-record' ? manualNotificationOutcomeLabels : exceptionDecisionOutcomeLabels,
   undecidedReasonLabels: exceptionDecisionUndecidedLabels,

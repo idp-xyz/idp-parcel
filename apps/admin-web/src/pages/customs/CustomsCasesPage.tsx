@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn, type ListCursorPaginationProps } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { MultiRegistrationPanel, RegistrationPanel } from '../../components/registration';
 import { caseDecisionTargets } from './decisions';
+import { customsDecisionPrefill, type CustomsDecisionPrefill } from './decision-forms';
 import { StatusPill } from '../../components/StatusPill';
 import { TechnicalDetails } from '../../components/TechnicalDetails';
 import type { ApiResult } from '../catalogue-api';
@@ -301,10 +302,15 @@ interface RecordTableProps {
   narrowed: boolean;
 }
 
+/** 各签的表共用一个 RecordTable；点中的行经它交给页面，页面再交给「运营决定」签。 */
+const DecisionPick = createContext<(row: RegisterRow) => void>(() => {});
+
 function RecordTable(props: RecordTableProps) {
   const [refine, setRefine] = useState('');
+  const pick = useContext(DecisionPick);
   return (
     <ListPageTemplate<RegisterRow>
+      onRowClick={pick}
       title={props.title}
       description={props.description}
       search={props.search}
@@ -958,76 +964,92 @@ function useCasesPlace(): [CasesTab, boolean, (tab: CasesTab, unadmittedOnly: bo
 
 export function CustomsCasesPage() {
   const [tab, unadmittedOnly, place] = useCasesPlace();
+  const [prefill, setPrefill] = useState<CustomsDecisionPrefill>({});
+  const [pickNonce, setPickNonce] = useState(0);
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs
-        value={tab}
-        onValueChange={(value) => {
-          if ((casesTabs as readonly string[]).includes(value)) place(value as CasesTab, unadmittedOnly);
-        }}
-        className="flex-1 flex flex-col overflow-hidden gap-0"
-      >
-        <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="cases">清关单</TabsTrigger>
-          <TabsTrigger value="units">报关批次</TabsTrigger>
-          <TabsTrigger value="snapshots">申报资料</TabsTrigger>
-          <TabsTrigger value="submissions">申报记录</TabsTrigger>
-          <TabsTrigger value="results">海关结果与放行</TabsTrigger>
-          <TabsTrigger value="manifests">舱单引用</TabsTrigger>
-          <TabsTrigger value="admission">放行记录</TabsTrigger>
-          <TabsTrigger value="closure-obligations">关闭核对</TabsTrigger>
-          <TabsTrigger value="preconditions">申报准备</TabsTrigger>
-          <TabsTrigger value="credentials">监管凭证</TabsTrigger>
-          <TabsTrigger value="register">登记监管凭证</TabsTrigger>
-          <TabsTrigger value="decisions">运营决定</TabsTrigger>
-        </TabsList>
-        <TabsContent value="cases" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CustomsCasesTable />
-        </TabsContent>
-        <TabsContent value="units" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <DeclarationUnitsTable />
-        </TabsContent>
-        <TabsContent value="snapshots" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <DeclarationSnapshotsTable />
-        </TabsContent>
-        <TabsContent value="submissions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <SubmissionVersionsTable />
-        </TabsContent>
-        <TabsContent value="results" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <ExternalResultsTable />
-        </TabsContent>
-        <TabsContent value="manifests" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <ManifestReferencesTable />
-        </TabsContent>
-        <TabsContent value="admission" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <AdmissionJudgementsTable unadmittedOnly={unadmittedOnly} onUnadmittedOnlyChange={(next) => place('admission', next)} />
-        </TabsContent>
-        <TabsContent value="closure-obligations" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <ClosureObligationsTable />
-        </TabsContent>
-        <TabsContent value="preconditions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <SubmissionPreconditionsTable />
-        </TabsContent>
-        <TabsContent value="credentials" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <CredentialsTable />
-        </TabsContent>
-        <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          {/* 本页只有一本册可在线登记，直接摆 RegistrationPanel，不套选册。凭证交回配置族那套答案，词表复用 registrationOutcomeLabels。 */}
-          <RegistrationPanel
-            moduleId="customs-cases"
-            title={registrationTitles['regulatory-credential']}
-            endpoint={`POST ${customsRegistrationEndpoints['regulatory-credential']}`}
-            snapshotHint={registrationSnapshotHints['regulatory-credential']}
-            submit={(snapshot) => registerCustomsConfiguration('regulatory-credential', snapshot)}
-            outcomeLabels={registrationOutcomeLabels}
-            problemNote={problemNote}
-          />
-        </TabsContent>
-        <TabsContent value="decisions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          {/* 建案、提交授权、申报提交、放行检查与关闭：后端口都在，这里先用登记面板接上，照提示填 JSON 提交。 */}
-          <MultiRegistrationPanel moduleId="customs-cases" targets={caseDecisionTargets} problemNote={problemNote} />
-        </TabsContent>
-      </Tabs>
-    </div>
+    <DecisionPick.Provider
+      value={(row) => {
+        setPrefill(customsDecisionPrefill(row));
+        setPickNonce((nonce) => nonce + 1);
+      }}
+    >
+      <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+        <Tabs
+          value={tab}
+          onValueChange={(value) => {
+            if ((casesTabs as readonly string[]).includes(value)) place(value as CasesTab, unadmittedOnly);
+          }}
+          className="flex-1 flex flex-col overflow-hidden gap-0"
+        >
+          <TabsList className="px-4 shrink-0">
+            <TabsTrigger value="cases">清关单</TabsTrigger>
+            <TabsTrigger value="units">报关批次</TabsTrigger>
+            <TabsTrigger value="snapshots">申报资料</TabsTrigger>
+            <TabsTrigger value="submissions">申报记录</TabsTrigger>
+            <TabsTrigger value="results">海关结果与放行</TabsTrigger>
+            <TabsTrigger value="manifests">舱单引用</TabsTrigger>
+            <TabsTrigger value="admission">放行记录</TabsTrigger>
+            <TabsTrigger value="closure-obligations">关闭核对</TabsTrigger>
+            <TabsTrigger value="preconditions">申报准备</TabsTrigger>
+            <TabsTrigger value="credentials">监管凭证</TabsTrigger>
+            <TabsTrigger value="register">登记监管凭证</TabsTrigger>
+            <TabsTrigger value="decisions">运营决定</TabsTrigger>
+          </TabsList>
+          <TabsContent value="cases" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <CustomsCasesTable />
+          </TabsContent>
+          <TabsContent value="units" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <DeclarationUnitsTable />
+          </TabsContent>
+          <TabsContent value="snapshots" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <DeclarationSnapshotsTable />
+          </TabsContent>
+          <TabsContent value="submissions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <SubmissionVersionsTable />
+          </TabsContent>
+          <TabsContent value="results" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <ExternalResultsTable />
+          </TabsContent>
+          <TabsContent value="manifests" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <ManifestReferencesTable />
+          </TabsContent>
+          <TabsContent value="admission" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <AdmissionJudgementsTable unadmittedOnly={unadmittedOnly} onUnadmittedOnlyChange={(next) => place('admission', next)} />
+          </TabsContent>
+          <TabsContent value="closure-obligations" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <ClosureObligationsTable />
+          </TabsContent>
+          <TabsContent value="preconditions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <SubmissionPreconditionsTable />
+          </TabsContent>
+          <TabsContent value="credentials" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            <CredentialsTable />
+          </TabsContent>
+          <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            {/* 本页只有一本册可在线登记，直接摆 RegistrationPanel，不套选册。凭证交回配置族那套答案，词表复用 registrationOutcomeLabels。 */}
+            <RegistrationPanel
+              moduleId="customs-cases"
+              title={registrationTitles['regulatory-credential']}
+              endpoint={`POST ${customsRegistrationEndpoints['regulatory-credential']}`}
+              snapshotHint={registrationSnapshotHints['regulatory-credential']}
+              submit={(snapshot) => registerCustomsConfiguration('regulatory-credential', snapshot)}
+              outcomeLabels={registrationOutcomeLabels}
+              problemNote={problemNote}
+            />
+          </TabsContent>
+          {/* forceMount：去别的签点一行再回来，选的口与填了一半的格都还在；点中的行才写得进这张开着的表单。 */}
+          <TabsContent value="decisions" forceMount className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+            {/* 别的签里点中的那一行，把清关单、批次、版本这些标识带进用得上它的口；带不出的格手填。 */}
+            <MultiRegistrationPanel
+              moduleId="customs-cases"
+              targets={caseDecisionTargets}
+              problemNote={problemNote}
+              prefillByTarget={prefill}
+              pickNonce={pickNonce}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </DecisionPick.Provider>
   );
 }

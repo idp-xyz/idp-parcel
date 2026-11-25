@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { MultiRegistrationPanel } from '../../components/registration';
 import { exceptionDecisionTargets } from './decisions';
+import { exceptionDecisionPrefill } from './decision-forms';
 import { exceptionProblemNote } from './case-presentation';
 import {
   WorkbenchPageTemplate,
@@ -138,6 +139,7 @@ export function ExceptionCasesPage() {
   const [phase, setPhase] = useState<CasePhaseFilter>(allStatuses);
   const [sort, setSort] = useState<WorkbenchSort>(defaultCaseSort);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [pickNonce, setPickNonce] = useState(0);
   const conditions = exceptionCaseConditions(useSettledKeyword(search), phase, sort);
   const { answer, pagination, retry } = useCatalogueCursor(conditions, listExceptionCaseRecords);
   const rows = answer?.kind === 'outcome' ? answer.body.cases : [];
@@ -167,7 +169,10 @@ export function ExceptionCasesPage() {
             rows={rows}
             rowKey={(row) => row.caseId}
             selectedKey={selectedKey}
-            onSelect={setSelectedKey}
+            onSelect={(key) => {
+              setSelectedKey(key);
+              setPickNonce((nonce) => nonce + 1);
+            }}
             rowAttention={(row) => row.phase === 'AWAITING_RESPONSE'}
             sort={sort}
             onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
@@ -190,9 +195,16 @@ export function ExceptionCasesPage() {
             })}
           />
         </TabsContent>
-        <TabsContent value="decisions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          {/* 案件、证据、披露与通知的决定口：后端口都在，这里先用登记面板接上，照提示填 JSON 提交。 */}
-          <MultiRegistrationPanel moduleId="exception-cases" targets={exceptionDecisionTargets} problemNote={exceptionProblemNote} />
+        {/* forceMount：回案件签选一件再回来，选的口与填了一半的格都还在。 */}
+        <TabsContent value="decisions" forceMount className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          {/* 选中的案件带进接单与关闭；别的口要的标识不在案件行上，手填。 */}
+          <MultiRegistrationPanel
+            moduleId="exception-cases"
+            targets={exceptionDecisionTargets}
+            problemNote={exceptionProblemNote}
+            prefillByTarget={exceptionDecisionPrefill(selectedKey)}
+            pickNonce={pickNonce}
+          />
         </TabsContent>
       </Tabs>
     </div>
