@@ -592,13 +592,11 @@ export function ListPageTemplate<Row>({
 
       {viewState.kind === 'ready' ? (
         <>
-          {/* 主表放进 surface 层容器（黄金标准「Main Content 黄金标准」；照 loms-web ShipmentMonitor：外圈留白 + 边框 + 圆角 +
-              --idpxyz-sidebar 一档底色，Light 下页底 editor 是 Layer 1、这个容器是 Layer 2）。容器吃满剩余高度，滚动发生在容器内，
-              所以表头吸顶仍对着容器的滚动口；分页条留在容器外的页底，翻页时它不随表体滚走。 */}
-          <div className="flex min-h-0 flex-1 flex-col p-2">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
-              <div className="min-h-0 flex-1 overflow-auto">
-                <Table stickyHeader>
+          {/* 表的边框跟着行走。行少时翻页条挨着最后一行，不再用一整块空白把三行表撑到页底。
+              行多过剩余高度时框自己滚动，表头仍吸在这个滚动口上。 */}
+          <div className={`grid min-h-0 flex-1 gap-2 p-2 ${pagination ? 'grid-rows-[minmax(0,max-content)_auto]' : 'grid-rows-[minmax(0,max-content)]'}`}>
+            <div className="min-h-0 overflow-auto rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
+              <Table stickyHeader>
                   <TableHeader>
                     <TableRow>
                       {selection && (
@@ -623,8 +621,7 @@ export function ListPageTemplate<Row>({
                   </TableHeader>
                   <TableBody>
                     {rows.length === 0 && emptyRowsNote !== undefined ? (
-                      // 这一行不是数据行：不给悬停底色，纵向收紧到一行说明的高度——容器已经吃满剩余高度，空表体不该再用一整格
-                      // 数据行的留白把「筛没了」这句话顶开。
+                      // 这一行不是数据行：不给悬停底色，纵向收紧到一行说明的高度。空表体不该再用一整格数据行的留白把「筛没了」这句话顶开。
                       <TableRow className="hover:bg-transparent">
                         <TableCell
                           colSpan={columns.length + (selection ? 1 : 0)}
@@ -709,31 +706,30 @@ export function ListPageTemplate<Row>({
                     })}
                   </TableBody>
                 </Table>
+            </div>
+            {pagination ? (
+              <div className="shrink-0 px-1">
+                {pagination.mode === 'cursor' ? (
+                  <CursorPaginationBar pagination={pagination} />
+                ) : (
+                  <Pagination
+                    variant="table"
+                    page={pagination.page}
+                    pageSize={pagination.pageSize}
+                    total={pagination.total}
+                    onPageChange={pagination.onPageChange}
+                    onPageSizeChange={pagination.onPageSizeChange}
+                    pageSizeOptions={pagination.pageSizeOptions}
+                  />
+                )}
               </div>
-            </div>
+            ) : null}
           </div>
-          {pagination && (
-            <div className="border-t border-idpxyz-border px-4 py-1.5 shrink-0">
-              {pagination.mode === 'cursor' ? (
-                <CursorPaginationBar pagination={pagination} />
-              ) : (
-                <Pagination
-                  variant="table"
-                  page={pagination.page}
-                  pageSize={pagination.pageSize}
-                  total={pagination.total}
-                  onPageChange={pagination.onPageChange}
-                  onPageSizeChange={pagination.onPageSizeChange}
-                  pageSizeOptions={pagination.pageSizeOptions}
-                />
-              )}
-            </div>
-          )}
         </>
       ) : viewState.kind === 'loading' && skeletonOf(viewState.shape) === 'table' ? (
         // 表形骨架摆进与真表同一个 surface 容器、顶对齐、列数随真表：居中放会让几行骨架浮在页面中下部，上面一大片空。
         <div className="flex min-h-0 flex-1 flex-col p-2">
-          <div className="min-h-0 overflow-hidden rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
+          <div className="w-full self-start overflow-hidden rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
             <StateSlot
               state={{ ...viewState, cols: viewState.cols ?? columns.length + (selection ? 1 : 0) }}
               override={stateOverride}
