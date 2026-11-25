@@ -1,5 +1,6 @@
 import { parseStationAddress } from '../../../shell/station-address';
 import { DeviceGate } from './DeviceGate';
+import { PackStation } from './PackStation';
 import { PickStation } from './PickStation';
 import { StationFrame } from './StationFrame';
 import { StationHome } from './StationHome';
@@ -22,6 +23,9 @@ export function StationRoot({ hash }: { hash: string }) {
         route.kind === 'pick' ? (
           // 设备或波次一换就是新的一趟：状态、本趟的认码缓存都从头来
           <PickStation key={`${bound.deviceId}|${route.wave ?? ''}`} device={bound} wave={route.wave} onChangeDevice={onChangeDevice} />
+        ) : route.kind === 'pack' ? (
+          // 设备或地址里的出库请求号一换也是新的一趟
+          <PackStation key={`${bound.deviceId}|${route.request ?? ''}`} device={bound} request={route.request} onChangeDevice={onChangeDevice} />
         ) : (
           <StationFrame
             title="作业台"

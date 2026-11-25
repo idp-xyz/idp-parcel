@@ -17,7 +17,7 @@ import type { ApiResult } from '../../catalogue-api';
 import type { CatalogueConditions } from '../../catalogue-query';
 import { listWarehouseCatalogue, type CatalogueListBody, type LocationRecord, type ZoneRecord } from '../api';
 import { zoneUsageLabel } from '../rows';
-import { describeReadFailure } from './work-fact-submit';
+import { seek, type SeekWords } from './catalogue-seek';
 
 /** 一页一页读名册：交条件与游标，答复原样交回。真读口是 listWarehouseCatalogue，测试传造的。 */
 export type CatalogueReader = (conditions: CatalogueConditions, after: string | null) => Promise<ApiResult<CatalogueListBody>>;
@@ -40,37 +40,13 @@ export const MAX_STAGING_PAGES = 10;
 // 读口对检索词的长度上限（后端 cataloguepage 的 MaxKeywordRunes），按字符计；超过它整个请求答 400，这里就不问了。
 const keywordLimit = 100;
 
-type Seen<Row> = { kind: 'found'; row: Row } | { kind: 'absent' } | { kind: 'unread'; reason: string };
-
-interface Seek<Row> {
-  /** 说给人听的册名：库位、库区。 */
-  what: string;
-  conditions: CatalogueConditions;
-  rowsOf: (body: CatalogueListBody) => readonly Row[] | undefined;
-  /** 这一行就是要找的那一个。 */
-  isIt: (row: Row) => boolean;
-}
-
-/** 下一页的游标；答复里没有 page 或没有 next 是形状不对，与「没有下一页」（null）是两回事。 */
-function nextCursor(body: CatalogueListBody): string | null | undefined {
-  const page: Partial<CatalogueListBody['page']> | null | undefined = body.page;
-  return page === undefined || page === null ? undefined : page.next;
-}
-
-async function seek<Row>(read: CatalogueReader, search: Seek<Row>, maxPages: number): Promise<Seen<Row>> {
-  let after: string | null = null;
-  for (let pages = 1; ; pages += 1) {
-    const answer = await read(search.conditions, after);
-    if (answer.kind !== 'outcome') return { kind: 'unread', reason: `读${search.what}名册没成：${describeReadFailure(answer)}` };
-    const rows = search.rowsOf(answer.body);
-    const next = nextCursor(answer.body);
-    if (!Array.isArray(rows) || next === undefined) return { kind: 'unread', reason: `读${search.what}名册得到的答复不是名册的样子` };
-    const hit = rows.find(search.isIt);
-    if (hit !== undefined) return { kind: 'found', row: hit };
-    if (next === null) return { kind: 'absent' };
-    if (pages >= maxPages) return { kind: 'unread', reason: `${search.what}名册里含这个码的行太多，翻了 ${maxPages} 页还没认出它` };
-    after = next;
-  }
+/** 说给人听的册名：库位、库区。 */
+function registerWords(what: string): SeekWords {
+  return {
+    failed: (cause) => `读${what}名册没成：${cause}`,
+    shape: `读${what}名册得到的答复不是名册的样子`,
+    tooMany: (maxPages) => `${what}名册里含这个码的行太多，翻了 ${maxPages} 页还没认出它`,
+  };
 }
 
 const unverified = (reason: string): StagingVerdict => ({ kind: 'unverified', reason });
@@ -88,29 +64,23 @@ export function createStagingVerifier(read: CatalogueReader, maxPages: number = 
       const long = overLimit('这个码', code);
       if (long !== null) return unverified(long);
 
-      const here = await seek<LocationRecord>(
-        read,
-        {
-          what: '库位',
-          conditions: { selectors: { family: 'location' }, filters: { warehouseCode: [warehouse] }, q: code },
-          rowsOf: (body) => body.locations,
-          isIt: (row) => row.warehouseCode === warehouse && row.locationCode === code,
-        },
+      const here = await seek<CatalogueListBody, LocationRecord>({
+        read: (after) => read({ selectors: { family: 'location' }, filters: { warehouseCode: [warehouse] }, q: code }, after),
+        rowsOf: (body) => body.locations,
+        isIt: (row) => row.warehouseCode === warehouse && row.locationCode === code,
+        words: registerWords('库位'),
         maxPages,
-      );
+      });
       if (here.kind === 'unread') return unverified(here.reason);
       if (here.kind === 'absent') {
         // 这个仓里没有：要知道是登记在别的仓，还是哪里都没有，才有话可说
-        const elsewhere = await seek<LocationRecord>(
-          read,
-          {
-            what: '库位',
-            conditions: { selectors: { family: 'location' }, q: code },
-            rowsOf: (body) => body.locations,
-            isIt: (row) => row.locationCode === code && row.warehouseCode !== warehouse,
-          },
+        const elsewhere = await seek<CatalogueListBody, LocationRecord>({
+          read: (after) => read({ selectors: { family: 'location' }, q: code }, after),
+          rowsOf: (body) => body.locations,
+          isIt: (row) => row.locationCode === code && row.warehouseCode !== warehouse,
+          words: registerWords('库位'),
           maxPages,
-        );
+        });
         if (elsewhere.kind === 'unread') return unverified(elsewhere.reason);
         return rejected(
           elsewhere.kind === 'found'
@@ -125,16 +95,13 @@ export function createStagingVerifier(read: CatalogueReader, maxPages: number = 
       const zoneLong = overLimit('库位所在的库区码', zoneCode);
       if (zoneLong !== null) return unverified(zoneLong);
 
-      const zone = await seek<ZoneRecord>(
-        read,
-        {
-          what: '库区',
-          conditions: { selectors: { family: 'zone' }, filters: { warehouseCode: [warehouse] }, q: zoneCode },
-          rowsOf: (body) => body.zones,
-          isIt: (row) => row.warehouseCode === warehouse && row.zoneCode === zoneCode,
-        },
+      const zone = await seek<CatalogueListBody, ZoneRecord>({
+        read: (after) => read({ selectors: { family: 'zone' }, filters: { warehouseCode: [warehouse] }, q: zoneCode }, after),
+        rowsOf: (body) => body.zones,
+        isIt: (row) => row.warehouseCode === warehouse && row.zoneCode === zoneCode,
+        words: registerWords('库区'),
         maxPages,
-      );
+      });
       if (zone.kind === 'unread') return unverified(zone.reason);
       if (zone.kind === 'absent') return rejected(`找不到库位 ${code} 所在的库区 ${zoneCode}。`);
       if (zone.row.deactivated) return rejected(`库位 ${code} 所在的库区 ${zoneCode} 已停用。`);

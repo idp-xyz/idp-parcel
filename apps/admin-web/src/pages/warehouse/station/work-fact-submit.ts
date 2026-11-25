@@ -87,15 +87,18 @@ export function sendWorkFact(attempt: WorkFactAttempt, post: WorkFactPoster = po
 }
 
 /**
- * 答复里「这笔事实已经记下了（这一次或更早以前）」的那些业务答复，名字取自 `workFactOutcomeLabels`：
+ * 答复里「这笔事实已经记下了（这一次或更早以前）」的那些业务答复，名字取自 `workFactOutcomeLabels`，逐个对过 Go 端
+ * `WaveOutcome.String()` 与各登记口的答复名：
  * EXISTING_RESULT 是同一个事实号同样内容的重放，说明更早的那次已经到了，算成功。
- * 复核数量不符（MISMATCH）与指令留在待处理（PENDING）也是「记下了」：事实在册，只是业务上没往前走，由用它的工位另说。
+ * 复核数量不符（CHECK_MISMATCH）与指令留在待处理（PENDING）也是「记下了」：事实在册，只是业务上没往前走，由用它的工位另说。
+ * 打包之后提交委托没成的四个词（OWNERSHIP_UNRESOLVED 这一类）不在这里：答到它们，工位上这一笔还没走完，要给「再送一次」；
+ * 用到它们的工位自己分（`packCommissionWords`）。
  */
 const recordedOutcomes: ReadonlySet<string> = new Set([
   'PICKED',
   'RECORDED',
   'CHECKED',
-  'MISMATCH',
+  'CHECK_MISMATCH',
   'PACKED',
   'SUBMITTED',
   'CONFIRMED',

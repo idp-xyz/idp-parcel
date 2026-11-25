@@ -3,6 +3,7 @@ import { deepEqual, equal, ok } from 'node:assert/strict';
 import { parseStationAddress } from '../../../shell/station-address';
 import {
   legacyWorkstationHash,
+  packStationHash,
   pickStationHash,
   resolveStationRoute,
   stationEntries,
@@ -16,14 +17,14 @@ function route(hash: string) {
   return resolveStationRoute(address);
 }
 
-test('六个工位，次序与名字照屏幕示意；这一笔只有拣货可进', () => {
+test('六个工位，次序与名字照屏幕示意；拣货与复核打包可进', () => {
   deepEqual(
     stationEntries.map((entry) => entry.name),
     ['拣货', '复核打包', '收货', '发货交接', '上架与移库', '盘点清点'],
   );
   deepEqual(
     stationEntries.filter((entry) => entry.ready).map((entry) => entry.id),
-    ['pick'],
+    ['pick', 'pack'],
   );
   equal(new Set(stationEntries.map((entry) => entry.id)).size, 6);
 });
@@ -35,12 +36,23 @@ test('每个工位都有一句说明，没有英文码', () => {
   }
 });
 
-test('地址：选工位、拣货、带波次的拣货；退出作业台回旧页', () => {
+test('地址：选工位、拣货、带波次的拣货、复核打包、带出库请求号的复核打包；退出作业台回旧页', () => {
   equal(stationHomeHash, '#/station');
   equal(pickStationHash(), '#/station/pick');
   equal(pickStationHash('SYN-WAVE-03'), '#/station/pick?wave=SYN-WAVE-03');
   equal(pickStationHash(undefined), '#/station/pick');
+  equal(packStationHash(), '#/station/pack');
+  equal(packStationHash(undefined), '#/station/pack');
+  equal(packStationHash(''), '#/station/pack');
+  equal(packStationHash('OBR-1'), '#/station/pack?request=OBR-1');
   equal(legacyWorkstationHash, '#/warehouse-workstation');
+});
+
+test('出库请求号里有特殊字符也原样往返：写进地址再读出来还是它', () => {
+  for (const request of ['OBR-1', 'SYN/REQ 2', 'a&b=c', '出库?1', 'x#y']) {
+    const resolved = route(packStationHash(request));
+    deepEqual(resolved, { kind: 'pack', request }, request);
+  }
 });
 
 test('选工位地址落到选工位页', () => {
@@ -60,8 +72,18 @@ test('带多余的段也落到拣货工位', () => {
   deepEqual(route('#/station/pick/anything?wave=W-1'), { kind: 'pick', wave: 'W-1' });
 });
 
-test('另外五个工位全屏的还没做好：落到说明页，不当成拣货', () => {
-  for (const id of ['pack', 'receive', 'dispatch', 'putaway', 'count']) {
+test('复核打包地址落到复核打包工位；出库请求号取查询串里的 request，空白当没给；别的查询项不影响', () => {
+  deepEqual(route('#/station/pack'), { kind: 'pack', request: null });
+  deepEqual(route('#/station/pack?request=OBR-1'), { kind: 'pack', request: 'OBR-1' });
+  deepEqual(route('#/station/pack?request='), { kind: 'pack', request: null });
+  deepEqual(route('#/station/pack?request=%20%20'), { kind: 'pack', request: null });
+  deepEqual(route('#/station/pack?wave=W-1'), { kind: 'pack', request: null });
+  deepEqual(route('#/station/pack?request=%20OBR-1%20'), { kind: 'pack', request: 'OBR-1' });
+  deepEqual(route('#/station/pick?request=OBR-1'), { kind: 'pick', wave: null }, '拣货不认 request');
+});
+
+test('另外四个工位全屏的还没做好：落到说明页，不当成拣货或复核打包', () => {
+  for (const id of ['receive', 'dispatch', 'putaway', 'count']) {
     const resolved = route(`#/station/${id}`);
     equal(resolved.kind, 'not-ready', id);
     if (resolved.kind === 'not-ready') equal(resolved.entry.id, id);
@@ -71,10 +93,12 @@ test('另外五个工位全屏的还没做好：落到说明页，不当成拣�
 test('不是工位的词落到「没有这个工位」，带着原词', () => {
   deepEqual(route('#/station/shipping'), { kind: 'unknown', station: 'shipping' });
   deepEqual(route('#/station/PICK'), { kind: 'unknown', station: 'PICK' });
+  deepEqual(route('#/station/Pack'), { kind: 'unknown', station: 'Pack' });
 });
 
 test('按词取工位', () => {
   equal(stationEntryOf('pick')?.name, '拣货');
+  equal(stationEntryOf('pack')?.name, '复核打包');
   equal(stationEntryOf('count')?.name, '盘点清点');
   equal(stationEntryOf('nope'), undefined);
   equal(stationEntryOf(null), undefined);

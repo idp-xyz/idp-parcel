@@ -269,7 +269,7 @@ const doneOutcomes = [
   'PENDING',
   'PICKED',
   'CHECKED',
-  'MISMATCH',
+  'CHECK_MISMATCH',
   'PACKED',
   'SUBMITTED',
   'COUNTED',
@@ -277,6 +277,13 @@ const doneOutcomes = [
   'EXISTING_RESULT',
 ];
 const refusedOutcomes = [
+  // 打包之后提交委托没成的四个词：打包已记下，工位上这一笔没走完，不算成
+  'OWNERSHIP_UNRESOLVED',
+  'ADMISSION_PAUSED',
+  'OTHER_PRODUCTION_AUTHORITY',
+  'INPUT_NOT_ACCEPTED',
+  // 出库确认的放行条件没满足，没有记下
+  'WITHHELD',
   'CONTENT_CONFLICT',
   'CONTENT_INVALID',
   'NOT_ACCEPTED',
@@ -293,6 +300,43 @@ const refusedOutcomes = [
 
 test('词表里的每个业务答复都归了类，没有漏的也没有多的', () => {
   deepEqual([...doneOutcomes, ...refusedOutcomes].sort(), Object.keys(workFactOutcomeLabels).sort());
+});
+
+// 下面这几个词各自对着 Go 端哪个符号、哪个登记口答，核过再写进词表（internal/warehousefulfillment/application）：
+//   CHECK_MISMATCH         WaveMismatch，复核口：实点数与已拣合计不等，复核照样记下，出库单仍是已拣货
+//   WITHHELD               WaveWithheld，出库确认口与自提交付口（Confirm）：不是离线交出、放行条件有缺口，没有记下、货没动
+//   OWNERSHIP_UNRESOLVED / ADMISSION_PAUSED / OTHER_PRODUCTION_AUTHORITY / INPUT_NOT_ACCEPTED
+//                          WaveUnresolved、WavePaused、WaveOtherAuthority、WaveInputRejected，打包口：只有打包之后提交委托那一步
+//                          （CommissionHandler）才会答，打包已经记下，委托没提交成
+// 词表里本来的 MISMATCH 后端从不答（复核不符答的是 CHECK_MISMATCH），换掉了。
+test('复核数量不符答 CHECK_MISMATCH：这一次复核记下了，算成；老词表里后端从不答的 MISMATCH 不再有', () => {
+  const verdict = judgeWorkFactAnswer(outcomeAnswer('CHECK_MISMATCH'));
+  equal(verdict.verdict, 'done');
+  equal(verdict.outcome, 'CHECK_MISMATCH');
+  ok(verdict.headline.includes('已记下') && verdict.headline.includes('不能打包'));
+  equal(outcomeRecorded('CHECK_MISMATCH'), true);
+  equal(outcomeRecorded('MISMATCH'), false);
+  equal('MISMATCH' in workFactOutcomeLabels, false);
+});
+
+test('放行条件没满足（WITHHELD）没有记下；打包之后委托没提交的四个词不算成，话里说打包已记下、委托没提交', () => {
+  const withheld = judgeWorkFactAnswer(outcomeAnswer('WITHHELD'));
+  equal(withheld.verdict, 'refused');
+  equal(outcomeRecorded('WITHHELD'), false);
+  ok(withheld.headline.includes('没有确认出库') && withheld.headline.includes('离线已交出'));
+  for (const outcome of ['OWNERSHIP_UNRESOLVED', 'ADMISSION_PAUSED', 'OTHER_PRODUCTION_AUTHORITY', 'INPUT_NOT_ACCEPTED']) {
+    const verdict = judgeWorkFactAnswer(outcomeAnswer(outcome));
+    equal(verdict.verdict, 'refused', outcome);
+    equal(outcomeRecorded(outcome), false, outcome);
+    ok(verdict.headline.includes('打包已记下') && verdict.headline.includes('没提交本产品网络委托'), outcome);
+  }
+});
+
+test('词表里的话都是中文，不带英文答复名', () => {
+  for (const [outcome, text] of Object.entries(workFactOutcomeLabels)) {
+    ok(text.length > 0, outcome);
+    ok(!/[A-Z]{2,}_[A-Z_]+/.test(text), `${outcome}：${text}`);
+  }
 });
 
 test('记下了的答复算成了：这一次记的、更早已记的（已有结果）、迟到记下的都算', () => {

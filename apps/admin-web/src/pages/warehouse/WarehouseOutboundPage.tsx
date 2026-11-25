@@ -286,7 +286,7 @@ function NextStepCell({
   agentWarehouse: boolean;
   drawer: ActionDrawerControl;
 }) {
-  const next = outboundNextStep(row.status, agentWarehouse);
+  const next = outboundNextStep(row.status, agentWarehouse, undefined, row.requestId);
   if (next === null) return <span className="text-idpxyz-textMuted">—</span>;
   if (next.kind === 'wait') return <span className="type-caption text-amber-600 dark:text-amber-400">{next.label}</span>;
   if (next.kind === 'wave') {

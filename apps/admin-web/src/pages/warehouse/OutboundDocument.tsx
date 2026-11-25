@@ -40,7 +40,7 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
   const track = request ? outboundTrack(request.status, agentWarehouse) : null;
   // 去拣货只做这张单所在的那个波次；一张单放进过几个波次时不替人挑，按本仓全部波次
   const onlyWave = body?.waves?.length === 1 ? body.waves[0] : undefined;
-  const next = request ? outboundNextStep(request.status, agentWarehouse, onlyWave) : null;
+  const next = request ? outboundNextStep(request.status, agentWarehouse, onlyWave, request.requestId) : null;
 
   const reservations = body?.reservations ?? [];
   const reservedByLine = new Map<number, number>();

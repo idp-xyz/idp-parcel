@@ -10,7 +10,7 @@ import { allWavesChoice, waveChoices, waveOfChoice, type PickCell, type PickQueu
 import { ScanBox } from './ScanBox';
 import { panelClass, ScanFeedback } from './ScanFeedback';
 import { StationFrame, stationActionClass, stationButtonClass, stationPrimaryClass } from './StationFrame';
-import { legacyWorkstationHash, pickStationHash } from './stations';
+import { packStationHash, pickStationHash } from './stations';
 import { usePickSession } from './use-pick-session';
 import { useStationSound } from './use-station-sound';
 import type { WorkFactVerdict } from './work-fact-submit';
@@ -211,7 +211,7 @@ export function PickStation({ device, wave, onChangeDevice }: PickStationProps) 
               <button type="button" className={stationPrimaryClass} disabled={!actions.refresh || session.refreshing} onClick={session.refresh}>
                 刷新
               </button>
-              <a className={stationActionClass} href={legacyWorkstationHash}>
+              <a className={stationActionClass} href={packStationHash()}>
                 去复核打包
               </a>
               {wave !== null ? (

@@ -18,7 +18,7 @@ export interface StationEntry {
 
 export const stationEntries: readonly StationEntry[] = [
   { id: 'pick', name: '拣货', summary: '按波次里还没拣的格，逐格扫库位、扫商品，扫满自动提交。', ready: true },
-  { id: 'pack', name: '复核打包', summary: '扫出库单号，逐件复核，再选包材称重打包。', ready: false },
+  { id: 'pack', name: '复核打包', summary: '扫出库单号，逐件复核，再选包材称重打包。', ready: true },
   { id: 'receive', name: '收货', summary: '扫入库预报，逐件扫货，一次提交一批收货。', ready: false },
   { id: 'dispatch', name: '发货交接', summary: '扫出库单号，逐个包裹确认交出。', ready: false },
   { id: 'putaway', name: '上架与移库', summary: '选货主，扫源库位、商品和目标库位。', ready: false },
@@ -35,6 +35,11 @@ export function pickStationHash(wave?: string): string {
   return stationHash('pick', { wave });
 }
 
+/** 复核打包工位的地址。给了出库请求号就直接去做那一张单，不给就等人扫出库单号。 */
+export function packStationHash(request?: string): string {
+  return stationHash('pack', { request });
+}
+
 export function stationEntryOf(station: string | null): StationEntry | undefined {
   return stationEntries.find((entry) => entry.id === station);
 }
@@ -43,10 +48,16 @@ export type StationRoute =
   /** 选工位。 */
   | { kind: 'home' }
   | { kind: 'pick'; wave: string | null }
+  | { kind: 'pack'; request: string | null }
   /** 词是六个工位之一，但全屏的还没做好：说明它还在仓内作业台里。 */
   | { kind: 'not-ready'; entry: StationEntry }
   /** 词不是任何一个工位。 */
   | { kind: 'unknown'; station: string };
+
+const textOf = (address: StationAddress, name: string): string | null => {
+  const value = address.query.get(name)?.trim() ?? '';
+  return value === '' ? null : value;
+};
 
 /** 地址落到哪个工位。 */
 export function resolveStationRoute(address: StationAddress): StationRoute {
@@ -54,6 +65,13 @@ export function resolveStationRoute(address: StationAddress): StationRoute {
   const entry = stationEntryOf(address.station);
   if (entry === undefined) return { kind: 'unknown', station: address.station };
   if (!entry.ready) return { kind: 'not-ready', entry };
-  const wave = address.query.get('wave')?.trim() ?? '';
-  return { kind: 'pick', wave: wave === '' ? null : wave };
+  // 做好一个工位要在这里给它一支；没给的哪怕 ready 了也落到说明页，不错落到别的工位上
+  switch (entry.id) {
+    case 'pick':
+      return { kind: 'pick', wave: textOf(address, 'wave') };
+    case 'pack':
+      return { kind: 'pack', request: textOf(address, 'request') };
+    default:
+      return { kind: 'not-ready', entry };
+  }
 }
