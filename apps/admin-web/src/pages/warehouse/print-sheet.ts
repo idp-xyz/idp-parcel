@@ -40,18 +40,38 @@ section{break-after:page}section:last-child{break-after:auto}
 </style></head><body><h1>${escapePrint(sheet.title)}</h1>${sheet.sections.map(sectionHtml).join('')}</body></html>`;
 }
 
-/** 新开一页并拉起打印。拦了弹窗时说一声，不把内容倒进当前页。 */
+/** 拉起打印。 */
 export function openPrint(sheet: PrintSheet): { ok: true } | { ok: false; reason: string } {
   return openPrintHtml(printHtml(sheet));
 }
 
-/** 已经排好版的 HTML，同样新开一页再拉起打印。 */
+/**
+ * 在当前页里拉起打印。
+ * 新开窗口会被弹窗拦截；带 noopener 时即便开了，open 也返回空，页面分不出打没打成。
+ * 点击这一下里写进同一页的框再 print，不另求弹窗许可。
+ */
 export function openPrintHtml(html: string): { ok: true } | { ok: false; reason: string } {
-  const page = window.open('', '_blank', 'noopener,noreferrer');
-  if (page === null) return { ok: false, reason: '浏览器拦住了打印窗口。允许这个站点的弹窗后再打一次。' };
-  page.document.open();
-  page.document.write(html);
-  page.document.close();
+  const frame = document.createElement('iframe');
+  frame.title = '打印';
+  frame.style.position = 'fixed';
+  frame.style.left = '-10000px';
+  frame.style.top = '0';
+  frame.style.width = '8in';
+  frame.style.height = '11in';
+  frame.style.border = '0';
+  document.body.appendChild(frame);
+  const page = frame.contentWindow;
+  const doc = frame.contentDocument;
+  if (page === null || doc === null) {
+    frame.remove();
+    return { ok: false, reason: '这一页打不开打印内容。' };
+  }
+  doc.open();
+  doc.write(html);
+  doc.close();
+  const remove = () => frame.remove();
+  page.addEventListener('afterprint', remove);
+  window.setTimeout(remove, 60_000);
   page.focus();
   page.print();
   return { ok: true };

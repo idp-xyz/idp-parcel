@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
@@ -31,6 +32,10 @@ const lineNumber = (lineIndex: number) => String(lineIndex + 1);
  * 明细行例外，它是单据本身。
  */
 export function OutboundDocument({ requestId }: { requestId: string }) {
+  const [printNote, setPrintNote] = useState('');
+  const notePrint = (result: { ok: true } | { ok: false; reason: string }) => {
+    setPrintNote(result.ok ? '' : result.reason);
+  };
   const drawer = useActionDrawer(outboundWaveActionSpecs);
   const back = useReturnToList('warehouse-outbound');
   const { answer, loading, reload } = useKeyedLoad(requestId, getOutboundRequestDetail);
@@ -143,14 +148,16 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
                     type="button"
                     variant="outline"
                     onClick={() =>
-                      openPrint(
-                        packListSheet(request.documentNumber ?? request.requestId, parcels.map((parcel) => ({
-                          sequence: parcel.parcelSequence,
-                          goods: parcel.lines,
-                          weight: parcel.weightValue,
-                          weightUnit: parcel.weightUnit,
-                          size: [parcel.lengthValue, parcel.widthValue, parcel.heightValue].filter(Boolean).join(' × ') + (parcel.dimensionUnit ? ` ${parcel.dimensionUnit}` : ''),
-                        }))),
+                      notePrint(
+                        openPrint(
+                          packListSheet(request.documentNumber ?? request.requestId, parcels.map((parcel) => ({
+                            sequence: parcel.parcelSequence,
+                            goods: parcel.lines,
+                            weight: parcel.weightValue,
+                            weightUnit: parcel.weightUnit,
+                            size: [parcel.lengthValue, parcel.widthValue, parcel.heightValue].filter(Boolean).join(' × ') + (parcel.dimensionUnit ? ` ${parcel.dimensionUnit}` : ''),
+                          }))),
+                        ),
                       )
                     }
                   >
@@ -160,11 +167,13 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
                     type="button"
                     variant="outline"
                     onClick={() =>
-                      openPrint(
-                        cartonMarkSheet(request.documentNumber ?? request.requestId, parcels.map((parcel) => ({
-                          sequence: parcel.parcelSequence,
-                          goods: parcel.lines,
-                        }))),
+                      notePrint(
+                        openPrint(
+                          cartonMarkSheet(request.documentNumber ?? request.requestId, parcels.map((parcel) => ({
+                            sequence: parcel.parcelSequence,
+                            goods: parcel.lines,
+                          }))),
+                        ),
                       )
                     }
                   >
@@ -175,18 +184,20 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
                       type="button"
                       variant="outline"
                       onClick={() =>
-                        openPrintHtml(
-                          simulatedUspsLabelHtml({
-                            documentNumber: request.documentNumber ?? request.requestId,
-                            warehouseCode: request.warehouseCode,
-                            recipient: request.recipient,
-                            address: request.address,
-                            parcels: parcels.map((parcel) => ({
-                              sequence: parcel.parcelSequence,
-                              weight: parcel.weightValue,
-                              weightUnit: parcel.weightUnit,
-                            })),
-                          }),
+                        notePrint(
+                          openPrintHtml(
+                            simulatedUspsLabelHtml({
+                              documentNumber: request.documentNumber ?? request.requestId,
+                              warehouseCode: request.warehouseCode,
+                              recipient: request.recipient,
+                              address: request.address,
+                              parcels: parcels.map((parcel) => ({
+                                sequence: parcel.parcelSequence,
+                                weight: parcel.weightValue,
+                                weightUnit: parcel.weightUnit,
+                              })),
+                            }),
+                          ),
                         )
                       }
                     >
@@ -195,6 +206,7 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
                   ) : null}
                 </>
               ) : null}
+              {printNote ? <span className="type-caption text-idpxyz-textMuted">{printNote}</span> : null}
               {next?.kind === 'station' ? (
                 <Button type="button" className={primaryActionClass} onClick={() => enterStation(next.hash)}>
                   {next.label}
