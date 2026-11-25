@@ -55,6 +55,11 @@ export function putawayStationHash(): string {
   return stationHash('putaway');
 }
 
+/** 盘点清点工位的地址。给了盘点单号就直接做那一张。 */
+export function countStationHash(count?: string): string {
+  return stationHash('count', { count });
+}
+
 export function stationEntryOf(station: string | null): StationEntry | undefined {
   return stationEntries.find((entry) => entry.id === station);
 }

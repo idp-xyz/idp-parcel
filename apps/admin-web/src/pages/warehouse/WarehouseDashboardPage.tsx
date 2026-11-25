@@ -1,259 +1,173 @@
-import { useEffect, useState } from 'react';
-import {
-  AlertTriangle,
-  BadgeDollarSign,
-  Boxes,
-  ClipboardCheck,
-  Lock,
-  PackagePlus,
-  RefreshCw,
-  Route,
-  Scale,
-  Send,
-  TabletSmartphone,
-  Warehouse,
-} from 'lucide-react';
-import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
+import { Button } from '@idpxyz/ui-primitives';
+import { listCustomerAccounts } from '../party/api';
 import { moduleInfoById } from '../../navigation';
-import { listWorkDevices } from '../work-devices/api';
 import {
-  listOutboundRequests,
-  listStockImports,
-  listUnclaimedArrivals,
-  listWarehouseCatalogue,
-  listWarehouseChargeRequests,
-  listWarehousePlans,
-  listWaves,
-  listCounts,
+  getReturnsOverview,
   listAdjustments,
+  listCounts,
   listFreezes,
+  listOutboundRequests,
+  listOwnerPreAdvices,
+  listUnclaimedArrivals,
+  type PreAdviceRecord,
 } from './api';
+import {
+  countCard,
+  exceptionRows,
+  outboundCards,
+  receiveCard,
+  type AdviceWait,
+  type ExceptionRow,
+  type WorkCard,
+  countStationHash,
+  freezeList,
+} from './dashboard-board';
+import { documentHash } from './document-address';
+import { returnAdviceKind, returnReceiptKind, returnsModule } from './return-address';
+import { awaitsDisposition, returnAdviceStatus, receiptsOfAdvice } from './return-flow';
+import { enterStation } from '../../shell/enter-station';
 
 const info = moduleInfoById['warehouse-dashboard'];
 
-interface Metric {
-  label: string;
-  value: string;
+interface Board {
+  cards: WorkCard[];
+  exceptions: ExceptionRow[];
   note: string;
-  target: string;
-  icon: typeof Warehouse;
 }
 
-function go(moduleId: string) {
-  window.location.hash = `#/${moduleId}`;
+function totalOf(answer: { kind: string; body?: { page?: { total: number | null }; requests?: readonly unknown[]; counts?: readonly unknown[]; adjustments?: readonly unknown[]; freezes?: readonly unknown[]; arrivals?: readonly unknown[] } }, rows: readonly unknown[] | undefined): number | null {
+  if (answer.kind !== 'outcome') return null;
+  const total = answer.body?.page?.total;
+  return typeof total === 'number' ? total : (rows?.length ?? 0);
 }
 
-/**
- * 仓配工作台：仓配系统首页。按岗位聚合实时待办计数、在用基础设施与四段履约动线入口。
- */
 export function WarehouseDashboardPage() {
   const [loading, setLoading] = useState(true);
-  const [counts, setCounts] = useState({
-    pendingImports: '—',
-    unclaimed: '—',
-    reservedOutbound: '—',
-    waves: '—',
-    openTasks: '—',
-    counting: '—',
-    pendingAdjustments: '—',
-    frozen: '—',
-    warehouses: '—',
-    whDevices: '—',
-    plans: '—',
-    chargeRequests: '—',
-  });
+  const [board, setBoard] = useState<Board>({ cards: [], exceptions: [], note: '' });
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
-    void Promise.all([
-      listStockImports({ filters: { status: ['PENDING'] } }),
-      listUnclaimedArrivals({ filters: { status: ['UNCLAIMED'] } }),
-      listOutboundRequests({ filters: { status: ['RESERVED'] } }),
-      listWaves({}),
-      listWarehouseCatalogue({ selectors: { family: 'warehouse' }, filters: { deactivated: ['false'] } }),
-      listWorkDevices({ filters: { status: ['REGISTERED'] } }),
-      listWarehousePlans({}),
-      listWarehouseChargeRequests({}),
-      listCounts({ filters: { status: ['PENDING', 'COUNTING'] } }),
-      listAdjustments({ filters: { status: ['PENDING'] } }),
-      listFreezes({ filters: { status: ['FROZEN'] } }),
-    ]).then(([imp, unc, out, wav, wh, dev, pln, req, counting, adjustments, freezes]) => {
-      const openTasks =
-        wav.kind === 'outcome'
-          ? wav.body.waves.reduce((sum, w) => sum + w.tasks.filter((t) => t.status === 'OPEN').length, 0)
-          : null;
-      const whDevices =
-        dev.kind === 'outcome'
-          ? dev.body.devices.filter((d) => d.workScopeKind === 'WAREHOUSE').length
-          : null;
-      setCounts({
-        pendingImports: imp.kind === 'outcome' ? String(imp.body.page.total ?? imp.body.imports.length) : '—',
-        unclaimed: unc.kind === 'outcome' ? String(unc.body.page.total ?? unc.body.arrivals.length) : '—',
-        reservedOutbound: out.kind === 'outcome' ? String(out.body.page.total ?? out.body.requests.length) : '—',
-        waves: wav.kind === 'outcome' ? String(wav.body.page.total ?? wav.body.waves.length) : '—',
-        openTasks: openTasks === null ? '—' : String(openTasks),
-        counting: counting.kind === 'outcome' ? String(counting.body.page.total ?? counting.body.counts.length) : '—',
-        pendingAdjustments: adjustments.kind === 'outcome' ? String(adjustments.body.page.total ?? adjustments.body.adjustments.length) : '—',
-        frozen: freezes.kind === 'outcome' ? String(freezes.body.page.total ?? freezes.body.freezes.length) : '—',
-        warehouses: wh.kind === 'outcome' ? String(wh.body.page.total ?? (wh.body.warehouses?.length ?? 0)) : '—',
-        whDevices: whDevices === null ? '—' : String(whDevices),
-        plans: pln.kind === 'outcome' ? String(pln.body.page.total ?? pln.body.plans.length) : '—',
-        chargeRequests: req.kind === 'outcome' ? String(req.body.page.total ?? req.body.requests.length) : '—',
+    const now = new Date();
+    void (async () => {
+      const [allocated, picked, checked, packed, counting, adjustments, freezes, unclaimed, returns, accounts] = await Promise.all([
+        listOutboundRequests({ filters: { status: ['ALLOCATED'] } }),
+        listOutboundRequests({ filters: { status: ['PICKED'] } }),
+        listOutboundRequests({ filters: { status: ['CHECKED'] } }),
+        listOutboundRequests({ filters: { status: ['PACKED'] } }),
+        listCounts({ filters: { status: ['COUNTING'] } }, null),
+        listAdjustments({ filters: { status: ['PENDING'] }, sort: 'submittedAt' }),
+        listFreezes({ filters: { status: ['FROZEN'] }, sort: 'frozenAt' }),
+        listUnclaimedArrivals({ filters: { status: ['UNCLAIMED'] }, sort: 'receivedAt' }),
+        getReturnsOverview(),
+        listCustomerAccounts(),
+      ]);
+      const reviewing = picked.kind === 'outcome' && checked.kind === 'outcome'
+        ? (picked.body.page.total ?? picked.body.requests.length) + (checked.body.page.total ?? checked.body.requests.length)
+        : null;
+      let advices: AdviceWait[] | null = [];
+      let ownersTruncated = false;
+      if (accounts.kind !== 'outcome') advices = null;
+      else {
+        ownersTruncated = accounts.body.page?.next != null;
+        const lists = await Promise.all((accounts.body.accounts ?? []).map((account) => listOwnerPreAdvices(account.accountId, '')));
+        if (lists.some((item) => item.kind !== 'outcome')) advices = null;
+        else {
+          advices = lists.flatMap((item) => {
+            if (item.kind !== 'outcome') return [];
+            return (item.body.preAdvices ?? []).filter((advice) => advice.status === 'ADVISED' || advice.status === 'RECEIVING').map(waitOf);
+          });
+        }
+      }
+      const returnRows = returns.kind === 'outcome' ? returnExceptions(returns.body.preAdvices, returns.body.receipts) : [];
+      const cards = [
+        receiveCard(advices, ownersTruncated, now),
+        ...outboundCards({
+          allocated: totalOf(allocated, allocated.kind === 'outcome' ? allocated.body.requests : undefined),
+          reviewing,
+          packed: totalOf(packed, packed.kind === 'outcome' ? packed.body.requests : undefined),
+        }),
+        countCard('退货', returns.kind === 'outcome' ? returnRows.length : null, '等收或等处置。', '#/warehouse-returns'),
+        countCard('盘点', totalOf(counting, counting.kind === 'outcome' ? counting.body.counts : undefined), '正在清点。', countStationHash()),
+        countCard('冻结', totalOf(freezes, freezes.kind === 'outcome' ? freezes.body.freezes : undefined), '还冻着。', freezeList),
+      ];
+      const exceptions = exceptionRows({
+        now,
+        advices: advices ?? [],
+        unclaimed: unclaimed.kind === 'outcome' ? unclaimed.body.arrivals ?? [] : [],
+        adjustments: adjustments.kind === 'outcome' ? adjustments.body.adjustments ?? [] : [],
+        freezes: freezes.kind === 'outcome' ? freezes.body.freezes ?? [] : [],
+        returns: returnRows,
       });
+      const failed = [allocated, picked, checked, packed, counting, adjustments, freezes, unclaimed, returns].filter((item) => item.kind !== 'outcome').length;
+      setBoard({ cards, exceptions, note: failed > 0 ? `${failed} 处没读成，对应的卡写着没读成。` : ownersTruncated ? '货主名册只看了第一页，收货张数不是全租户。' : '' });
       setLoading(false);
-    });
-  };
+    })();
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
-
-  const metrics: Metric[] = [
-    { label: '待批建账导入', value: counts.pendingImports, note: '等待批准入账或驳回', target: 'stock-imports', icon: PackagePlus },
-    { label: '待认领到货', value: counts.unclaimed, note: '无主到货与逾期到达', target: 'warehouse-unclaimed', icon: AlertTriangle },
-    { label: '待放波次出库单', value: counts.reservedOutbound, note: '已预占，可合并释放波次', target: 'warehouse-outbound', icon: Send },
-    { label: '待拣货任务', value: counts.openTasks, note: `共 ${counts.waves} 个已放波次`, target: 'warehouse-waves', icon: Route },
-    { label: '盘点进行中', value: counts.counting, note: '待开始或正在清点', target: 'warehouse-counts-adjustments', icon: ClipboardCheck },
-    { label: '待批库存调整', value: counts.pendingAdjustments, note: '提交后尚未入账', target: 'warehouse-counts-adjustments', icon: Scale },
-    { label: '冻结中', value: counts.frozen, note: '不可被出库分配', target: 'warehouse-processing', icon: Lock },
-    { label: '在用仓库', value: counts.warehouses, note: '自营仓与代理仓', target: 'warehouse-catalogues', icon: Warehouse },
-    { label: '在用仓库扫码设备', value: counts.whDevices, note: '实体终端与网页工位', target: 'warehouse-workstation', icon: TabletSmartphone },
-    { label: '仓储计费方案', value: counts.plans, note: `累计 ${counts.chargeRequests} 笔计费请求`, target: 'warehouse-pricing', icon: BadgeDollarSign },
-  ];
-
-  const flowGroups = [
-    {
-      step: '01',
-      title: '基础建档与规则',
-      desc: '先建仓、库区、库位与包材，配置租户规则与扫码工位，再开始作业。',
-      links: [
-        { label: '仓库与库位', id: 'warehouse-catalogues' },
-        { label: '货主与商品', id: 'warehouse-goods' },
-        { label: '仓配规则设置', id: 'warehouse-settings' },
-        { label: '扫描设备', id: 'work-devices' },
-      ],
-    },
-    {
-      step: '02',
-      title: '入库与建账',
-      desc: '受理入库预报或提交期初建账导入，在扫码作业台收货确认，处理待认领与退货。',
-      links: [
-        { label: '入库预报', id: 'warehouse-pre-advices' },
-        { label: '建账导入', id: 'stock-imports' },
-        { label: '待认领到货', id: 'warehouse-unclaimed' },
-        { label: '退货管理', id: 'warehouse-returns' },
-      ],
-    },
-    {
-      step: '03',
-      title: '实时库存与库内作业',
-      desc: '查看商品格、整箱、占用与流水；执行上架移库、盘点审批、库存调整与加工换标。',
-      links: [
-        { label: '实时库存', id: 'warehouse-stock' },
-        { label: '盘点与调整', id: 'warehouse-counts-adjustments' },
-        { label: '加工与换标', id: 'warehouse-processing' },
-      ],
-    },
-    {
-      step: '04',
-      title: '出库履约、扫码与计费',
-      desc: '多选出库单合并放波次，在作业台按待办拣货复核打包发货，并跟进代理仓与仓储计费。',
-      links: [
-        { label: '出库单', id: 'warehouse-outbound' },
-        { label: '波次与拣货', id: 'warehouse-waves' },
-        { label: '仓内作业台', id: 'warehouse-workstation' },
-        { label: '代理仓履约', id: 'warehouse-agents' },
-        { label: '仓储计费', id: 'warehouse-pricing' },
-      ],
-    },
-  ];
+  }, [load]);
 
   return (
     <div className="flex-1 overflow-y-auto bg-idpxyz-editor">
-      <div className="max-w-[1160px] mx-auto px-6 py-6 space-y-6">
+      <div className="mx-auto flex max-w-[1160px] flex-col gap-6 px-6 py-6">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="type-title font-bold text-idpxyz-textBright">{info.title}</h1>
-            <p className="mt-1 type-body text-idpxyz-textMuted">
-              以仓库作业流组织的运营总览：待办队列、现场扫码作业台与计费台账。未配置的租户规则仍如实答未配置。
-            </p>
+            <p className="mt-1 type-body text-idpxyz-textMuted">各类作业还压着多少，以及等得最久的那几张。点一张卡进那一队，点一行开那张单据。</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={loading} onClick={load}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-              {loading ? '刷新中…' : '刷新数据'}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => go('warehouse-workstation')}>
-              <TabletSmartphone className="h-3.5 w-3.5 mr-1.5" />
-              打开仓内作业台
-            </Button>
-          </div>
+          <Button type="button" variant="outline" disabled={loading} onClick={load}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            {loading ? '刷新中…' : '刷新'}
+          </Button>
         </header>
-
-        <section aria-label="关键待办与状态" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {metrics.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => go(item.target)}
-                className="text-left rounded-lg border border-idpxyz-border bg-idpxyz-panel p-4 hover:border-idpxyz-accent transition-colors"
-              >
-                <div className="flex items-center justify-between text-idpxyz-textMuted">
-                  <span className="type-body">{item.label}</span>
-                  <Icon className="h-4 w-4 shrink-0" />
-                </div>
-                <div className="mt-2 font-mono type-display font-bold text-idpxyz-textBright">{item.value}</div>
-                <p className="mt-1 type-caption text-idpxyz-textMuted">{item.note}</p>
-              </button>
-            );
-          })}
-        </section>
-
-        <section aria-label="仓配业务动线" className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {flowGroups.map((group) => (
-            <Card key={group.step}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-idpxyz-accent/15 font-mono type-caption font-bold text-idpxyz-accent">
-                    {group.step}
-                  </span>
-                  <CardTitle className="type-section">{group.title}</CardTitle>
-                </div>
-                <p className="mt-1 type-body text-idpxyz-textMuted">{group.desc}</p>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {group.links.map((link) => (
-                    <Button key={link.id} type="button" variant="outline" onClick={() => go(link.id)}>
-                      {link.label}
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+        {board.note ? <p className="type-caption text-idpxyz-textMuted">{board.note}</p> : null}
+        <section aria-label="作业待处理" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {board.cards.map((item) => (
+            <button key={item.name} type="button" className="rounded-lg border border-idpxyz-border bg-idpxyz-panel p-4 text-left hover:border-idpxyz-accent" onClick={() => (item.hash.startsWith('#/station') ? enterStation(item.hash) : (window.location.hash = item.hash))}>
+              <div className="type-body text-idpxyz-textMuted">{item.name}</div>
+              <div className="mt-2 font-mono type-display font-bold text-idpxyz-textBright">{item.count === null ? '—' : item.count}</div>
+              <p className="mt-1 type-caption text-idpxyz-textMuted">{item.note}</p>
+            </button>
           ))}
         </section>
-
-        <section className="rounded-lg border border-idpxyz-border bg-idpxyz-panel p-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <Boxes className="h-5 w-5 text-idpxyz-accent shrink-0" />
-            <div>
-              <p className="type-body font-medium text-idpxyz-text">需要直接开始扫码收货、拣货或打包？</p>
-              <p className="type-caption text-idpxyz-textMuted">
-                在「扫描设备」为目标仓库登记一个网页工位设备并授予「作业事实登记」权限，即可无硬件操作全部现场作业。
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => go('warehouse-settings')}>
-              <ClipboardCheck className="h-3.5 w-3.5 mr-1.5" />
-              检查仓配规则设置
-            </Button>
-          </div>
+        <section aria-label="异常清单" className="rounded-lg border border-idpxyz-border bg-idpxyz-panel">
+          <h2 className="border-b border-idpxyz-border px-4 py-3 type-section text-idpxyz-textBright">等得最久的</h2>
+          {board.exceptions.length === 0 ? <p className="px-4 py-6 type-body text-idpxyz-textMuted">这几处读到的队列里没有还在等的。</p> : (
+            <ul>
+              {board.exceptions.map((item) => (
+                <li key={`${item.kind}|${item.title}`} className="border-b border-idpxyz-border last:border-b-0">
+                  <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-idpxyz-hover" onClick={() => { window.location.hash = item.hash; }}>
+                    <span className="type-body text-idpxyz-textBright">{item.kind}</span>
+                    <span className="min-w-0 flex-1 truncate font-mono type-body">{item.title}</span>
+                    <span className="type-caption text-idpxyz-textMuted">{item.waited}</span>
+                    <span className="type-body text-idpxyz-accent">{item.next}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
     </div>
   );
+}
+
+function waitOf(advice: PreAdviceRecord): AdviceWait {
+  return { ownerAccount: advice.ownerAccount, preAdviceId: advice.preAdviceId, documentNumber: advice.documentNumber, status: advice.status, expectedAt: advice.currentNotice?.expectedAt };
+}
+
+function returnExceptions(advices: Parameters<typeof receiptsOfAdvice>[0][], receipts: Parameters<typeof receiptsOfAdvice>[1]): ExceptionRow['kind'] extends string ? Array<{ kind: string; title: string; at: string; next: string; hash: string }> : never {
+  const rows: Array<{ kind: string; title: string; at: string; next: string; hash: string }> = [];
+  for (const advice of advices) {
+    if (returnAdviceStatus(receiptsOfAdvice(advice, receipts)) !== 'AWAITING_ARRIVAL') continue;
+    rows.push({ kind: '退货待到仓', title: advice.documentNumber ?? advice.adviceId, at: advice.receivedAt, next: '去收退件', hash: documentHash(returnsModule, [returnAdviceKind, advice.adviceId]) });
+  }
+  for (const receipt of receipts) {
+    if (!awaitsDisposition(receipt)) continue;
+    rows.push({ kind: '退货待处置', title: receipt.factId, at: receipt.occurredAt, next: '处置', hash: documentHash(returnsModule, [returnReceiptKind, receipt.factId]) });
+  }
+  return rows;
 }

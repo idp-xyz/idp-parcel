@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { WmsDocumentPage } from './document-page';
 import { FreezeDocument } from './FreezeDocument';
@@ -31,8 +31,19 @@ export function WarehouseProcessingPage() {
   }
 }
 
+function tabFromHash(): string {
+  const hash = window.location.hash;
+  const query = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '';
+  return new URLSearchParams(query).get('tab') === 'freeze' ? 'freeze' : 'instructions';
+}
+
 function ProcessingHome() {
-  const [tab, setTab] = useState('instructions');
+  const [tab, setTab] = useState(tabFromHash);
+  useEffect(() => {
+    const sync = () => setTab(tabFromHash());
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, []);
   // 页签切走时那一张列表会卸载，筛选态放在这里，换回来还在。
   const instructionFilters = useQueueFilters('PENDING');
   const freezeFilters = useQueueFilters('FROZEN');
