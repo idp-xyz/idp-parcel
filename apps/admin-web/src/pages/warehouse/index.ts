@@ -3,6 +3,7 @@ export { WarehouseAgentsPage } from './WarehouseAgentsPage';
 export { WarehouseCataloguesPage } from './WarehouseCataloguesPage';
 export { WarehouseCountsAdjustmentsPage } from './WarehouseCountsAdjustmentsPage';
 export { WarehouseDashboardPage } from './WarehouseDashboardPage';
+export { WarehouseMonitorPage } from './WarehouseMonitorPage';
 export { WarehouseGoodsPage } from './WarehouseGoodsPage';
 export { WarehouseOutboundPage } from './WarehouseOutboundPage';
 export { WarehousePreAdvicesPage } from './WarehousePreAdvicesPage';

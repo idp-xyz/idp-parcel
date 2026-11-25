@@ -199,7 +199,10 @@ const warehouseBaseDataSection = '基础资料';
 const warehouseOnlyNavigationSections: NavigationSection[] = [
   {
     title: '总览',
-    items: [{ id: 'warehouse-dashboard', label: '仓配工作台', icon: 'warehouse-dashboard' }],
+    items: [
+      { id: 'warehouse-dashboard', label: '仓配工作台', icon: 'warehouse-dashboard' },
+      { id: 'warehouse-monitor', label: '仓库监控', icon: 'warehouse-monitor' },
+    ],
   },
   {
     title: '入库',
@@ -301,6 +304,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'compliance-rules': Library,
   'customs-ports-paths': Anchor,
   'warehouse-dashboard': LayoutDashboard,
+  'warehouse-monitor': Radar,
   'warehouse-catalogues': Warehouse,
   'warehouse-goods': PackageOpen,
   'warehouse-pre-advices': ClipboardCheck,
@@ -535,6 +539,12 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     summary: '仓配待办总览：待批建账导入、待认领到货、待放波次出库单、在途波次与作业设备状态。',
     owner: '仓配履约（warehouse-fulfillment）',
     source: 'dox/contexts/warehouse-fulfillment.md 仓配概览',
+  },
+  'warehouse-monitor': {
+    title: '仓库监控',
+    summary: '左边按入库、出库、库存、库内列对象，右边按仓和货主看现有读口的第一页。双击出库单或波次看拣货任务，从出库单再钻到这一格库存。没有单独列表读口的对象点开只说明。',
+    owner: '仓配履约（warehouse-fulfillment）',
+    source: 'dox/contexts/warehouse-fulfillment.md 仓库监控',
   },
   'warehouse-catalogues': {
     title: '仓库与库位',
