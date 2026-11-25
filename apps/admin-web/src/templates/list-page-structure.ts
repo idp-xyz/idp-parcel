@@ -72,20 +72,13 @@ export interface FilterBarSlotInputs {
 }
 
 /**
- * 按调用方接了哪些位算出四个结构位的状态。视图模式位永远禁用：本仓列表只有表格视图
- * （票 admin-web-ux-alignment/03「不做」——Board / Timeline 不在本轮），留位是为了结构位置一致。
+ * 过滤条上真正接了动作的位。没接的不占位：一个不能点的按钮，悬停才说明为什么，读起来像坏了。
+ * 顺序仍是排序、保存视图、更多筛选。视图只有表格一种，不另占一个不能点的位。
  */
 export function filterBarSlots(inputs: FilterBarSlotInputs): FilterBarSlot[] {
-  return [
-    inputs.sort
-      ? { id: 'sort', label: '排序', enabled: true }
-      : { id: 'sort', label: '排序', enabled: false, disabledReason: '本页尚未提供排序' },
-    { id: 'view-mode', label: '视图：表格', enabled: false, disabledReason: '本页只有表格视图' },
-    inputs.savedViews
-      ? { id: 'saved-view', label: '保存视图', enabled: true }
-      : { id: 'saved-view', label: '保存视图', enabled: false, disabledReason: '本页尚未接入保存视图' },
-    inputs.moreFilters
-      ? { id: 'more-filters', label: '更多筛选', enabled: true }
-      : { id: 'more-filters', label: '更多筛选', enabled: false, disabledReason: '本页没有更多筛选项' },
-  ];
+  const slots: FilterBarSlot[] = [];
+  if (inputs.sort) slots.push({ id: 'sort', label: '排序', enabled: true });
+  if (inputs.savedViews) slots.push({ id: 'saved-view', label: '保存视图', enabled: true });
+  if (inputs.moreFilters) slots.push({ id: 'more-filters', label: '更多筛选', enabled: true });
+  return slots;
 }

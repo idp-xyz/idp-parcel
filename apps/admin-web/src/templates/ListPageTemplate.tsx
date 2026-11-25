@@ -175,8 +175,7 @@ export interface ListPageTemplateProps<Row> {
   /** 过滤控件（下拉、chip 等）由调用方提供：筛选维度是业务决定，模板不预设。 */
   filters?: ReactNode;
   /**
-   * 排序 / 保存视图 / 更多筛选三个位都可选：不传时位置照旧渲染成禁用按钮 + 悬停说明
-   * （黄金标准 Rule 2「即使功能未完整，也要按完整模板布局」），传了才有动作。
+   * 排序 / 保存视图 / 更多筛选。不传就不摆：不能点的按钮读起来像坏了。
    */
   sort?: ListSortProps;
   savedViews?: ListSavedViewsProps;
@@ -461,7 +460,7 @@ export function ListPageTemplate<Row>({
     moreFilters: moreFilters !== undefined,
   });
 
-  // 位的启用与否由 filterBarSlots 决定；这里只管「启用的位长什么样」。视图模式位永远禁用，走不到下面。
+  // 只渲染接了动作的位。没接的不占位。
   const renderSlot = (slot: FilterBarSlot) => {
     if (!slot.enabled) {
       return <DisabledSlot key={slot.id} label={slot.label} reason={slot.disabledReason ?? ''} />;
