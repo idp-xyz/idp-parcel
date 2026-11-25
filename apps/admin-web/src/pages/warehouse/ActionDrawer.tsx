@@ -3,7 +3,6 @@ import {
   Dialog,
   DialogBody,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -44,9 +43,9 @@ export function ActionDrawer({
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         {active ? (
           <>
+            {/* 标题下不摆接口路径：读这张表单的是仓里的人，路径收在表单底部的技术详情里，排障时再展开。 */}
             <DialogHeader>
               <DialogTitle>{active.target.title}</DialogTitle>
-              <DialogDescription className="font-mono type-caption">{active.target.endpoint}</DialogDescription>
             </DialogHeader>
             <DialogBody className="overflow-y-auto">
               <GuidedFormBody

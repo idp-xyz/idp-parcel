@@ -17,11 +17,20 @@ test('国际小包导航保持十组运营顺序，不含仓配页面', () => {
   );
 });
 
-test('仓配系统导航按专业仓配岗位与业务流分为八组', () => {
+test('仓配系统导航按岗位分七组，现场的人只用作业台一组', () => {
   deepEqual(
     warehouseNavigationSections.map((section) => section.title),
-    ['仓配概览', '基础资料', '入库管理', '库存管理', '出库履约', '现场扫码', '仓储计费', '仓配配置'],
+    ['总览', '入库', '出库', '作业台', '库存', '计费', '基础资料'],
   );
+  deepEqual(
+    warehouseNavigationSections.find((section) => section.title === '作业台')?.items.map((item) => item.id),
+    ['warehouse-workstation'],
+  );
+});
+
+test('两个工作区共用的扫描设备与操作者授予挂在仓配基础资料末尾', () => {
+  const baseData = warehouseNavigationSections[warehouseNavigationSections.length - 1];
+  deepEqual(baseData.items.slice(-2).map((item) => item.id), ['work-devices', 'operator-access']);
 });
 
 test('导航每个条目都有页名，且条目 label 与页名一致', () => {

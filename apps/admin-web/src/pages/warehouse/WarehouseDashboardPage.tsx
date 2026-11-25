@@ -159,7 +159,7 @@ export function WarehouseDashboardPage() {
       title: '出库履约、扫码与计费',
       desc: '多选出库单合并放波次，在作业台按待办拣货复核打包发货，并跟进代理仓与仓储计费。',
       links: [
-        { label: '出库订单', id: 'warehouse-outbound' },
+        { label: '出库单', id: 'warehouse-outbound' },
         { label: '波次与拣货', id: 'warehouse-waves' },
         { label: '仓内作业台', id: 'warehouse-workstation' },
         { label: '代理仓履约', id: 'warehouse-agents' },

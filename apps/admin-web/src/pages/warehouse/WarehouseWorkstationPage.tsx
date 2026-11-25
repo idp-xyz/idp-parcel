@@ -490,7 +490,7 @@ export function WarehouseWorkstationPage() {
                   {`本仓待拣货任务（${openPicks.length}）`}
                 </div>
                 {openPicks.length === 0 ? (
-                  <p className="type-caption text-idpxyz-textMuted">本仓暂无待拣任务。请先在「出库订单」释放波次。</p>
+                  <p className="type-caption text-idpxyz-textMuted">本仓暂无待拣任务。请先在「出库单」释放波次。</p>
                 ) : (
                   <div className="space-y-2">
                     {openPicks.map(({ waveId, task }) => (

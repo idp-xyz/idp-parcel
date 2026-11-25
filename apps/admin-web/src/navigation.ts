@@ -192,22 +192,17 @@ export const parcelNavigationSections: NavigationSection[] = [
   },
 ];
 
-// 仓配系统专属导航（按专业仓配岗位与业务流分区）：切到顶栏「仓配系统」工作区时，左侧只显示这八组，
-// 不与国际小包网络菜单混在一起。
+// 仓配系统专属导航，按岗位分组而不是按后端的册：主管看总览，客服管入库与出库的单据，现场的人只用作业台，库管管库存，
+// 实施与主管才进基础资料。组的先后照一票货在仓里的走向——到货、发货、现场、在库、算钱——基础资料用得最少，放最后。
+// 切到顶栏「仓配系统」工作区时左侧只显示这七组，不与国际小包的菜单混在一起。
+const warehouseBaseDataSection = '基础资料';
 const warehouseOnlyNavigationSections: NavigationSection[] = [
   {
-    title: '仓配概览',
+    title: '总览',
     items: [{ id: 'warehouse-dashboard', label: '仓配工作台', icon: 'warehouse-dashboard' }],
   },
   {
-    title: '基础资料',
-    items: [
-      { id: 'warehouse-catalogues', label: '仓库与库位', icon: 'warehouse-catalogues' },
-      { id: 'warehouse-goods', label: '货主与商品', icon: 'warehouse-goods' },
-    ],
-  },
-  {
-    title: '入库管理',
+    title: '入库',
     items: [
       { id: 'warehouse-pre-advices', label: '入库预报', icon: 'warehouse-pre-advices' },
       { id: 'warehouse-unclaimed', label: '待认领到货', icon: 'warehouse-unclaimed' },
@@ -215,39 +210,43 @@ const warehouseOnlyNavigationSections: NavigationSection[] = [
     ],
   },
   {
-    title: '库存管理',
+    title: '出库',
     items: [
-      { id: 'warehouse-stock', label: '实时库存', icon: 'warehouse-stock' },
-      { id: 'stock-imports', label: '建账导入', icon: 'stock-imports' },
-      { id: 'warehouse-counts-adjustments', label: '盘点与调整', icon: 'warehouse-counts-adjustments' },
-      { id: 'warehouse-processing', label: '加工与换标', icon: 'warehouse-processing' },
-    ],
-  },
-  {
-    title: '出库履约',
-    items: [
-      { id: 'warehouse-outbound', label: '出库订单', icon: 'warehouse-outbound' },
+      { id: 'warehouse-outbound', label: '出库单', icon: 'warehouse-outbound' },
       { id: 'warehouse-waves', label: '波次与拣货', icon: 'warehouse-waves' },
       { id: 'warehouse-agents', label: '代理仓履约', icon: 'warehouse-agents' },
     ],
   },
   {
-    title: '现场扫码',
+    title: '作业台',
     items: [{ id: 'warehouse-workstation', label: '仓内作业台', icon: 'warehouse-workstation' }],
   },
   {
-    title: '仓储计费',
+    title: '库存',
+    items: [
+      { id: 'warehouse-stock', label: '实时库存', icon: 'warehouse-stock' },
+      { id: 'warehouse-counts-adjustments', label: '盘点与调整', icon: 'warehouse-counts-adjustments' },
+      { id: 'warehouse-processing', label: '加工与换标', icon: 'warehouse-processing' },
+      { id: 'stock-imports', label: '建账导入', icon: 'stock-imports' },
+    ],
+  },
+  {
+    title: '计费',
     items: [{ id: 'warehouse-pricing', label: '仓储计费', icon: 'warehouse-pricing' }],
   },
   {
-    title: '仓配配置',
-    items: [{ id: 'warehouse-settings', label: '仓配规则设置', icon: 'warehouse-settings' }],
+    title: warehouseBaseDataSection,
+    items: [
+      { id: 'warehouse-catalogues', label: '仓库与库位', icon: 'warehouse-catalogues' },
+      { id: 'warehouse-goods', label: '货主与商品', icon: 'warehouse-goods' },
+      { id: 'warehouse-settings', label: '仓配规则设置', icon: 'warehouse-settings' },
+    ],
   },
 ];
 
-/** 仓配系统工作区左侧栏：八个专业仓配分组，并在仓配配置末尾挂出共享的扫描设备与操作者授权。 */
+/** 仓配系统工作区左侧栏：七组，并在基础资料末尾挂出两个工作区共用的扫描设备与操作者授予。 */
 export const warehouseNavigationSections: NavigationSection[] = warehouseOnlyNavigationSections.map((section) =>
-  section.title === '仓配配置'
+  section.title === warehouseBaseDataSection
     ? {
         ...section,
         items: [
@@ -259,7 +258,7 @@ export const warehouseNavigationSections: NavigationSection[] = warehouseOnlyNav
     : section,
 );
 
-/** 全站唯一模块分区表（供面包屑反查与测试守门用）：国际小包十组 + 仓配八组，每个模块只出现一次。 */
+/** 全站唯一模块分区表（供面包屑反查与测试守门用）：国际小包十组 + 仓配七组，每个模块只出现一次。 */
 export const navigationSections: NavigationSection[] = [
   ...parcelNavigationSections,
   ...warehouseOnlyNavigationSections,
@@ -592,8 +591,8 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     source: 'dox/contexts/warehouse-fulfillment.md 加工、换标与冻结',
   },
   'warehouse-outbound': {
-    title: '出库订单',
-    summary: '管理出库请求、拆单截单、货主面单登记，并支持多选已预占订单一键合并放波次。',
+    title: '出库单',
+    summary: '管理出库请求、拆单截单、货主面单登记，并支持多选已预占的出库单一键合并放波次。',
     owner: '仓配履约（warehouse-fulfillment）',
     source: 'dox/contexts/warehouse-fulfillment.md 出库请求与截单',
   },

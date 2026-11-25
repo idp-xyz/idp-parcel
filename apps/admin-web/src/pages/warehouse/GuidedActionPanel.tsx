@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Textarea } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
+import { TechnicalDetails } from '../../components/TechnicalDetails';
 import {
   RegistrationAnswerNote,
   chipClass,
@@ -371,9 +372,7 @@ export function GuidedFormBody({
 
       {rawMode ? (
         <div className="space-y-2">
-          <p className="type-caption text-idpxyz-textMuted">
-            端点：<span className="font-mono">{target.endpoint}</span>。可直接核对或粘贴 JSON 原文。
-          </p>
+          <p className="type-caption text-idpxyz-textMuted">可直接核对或粘贴 JSON 原文。</p>
           <Textarea
             rows={12}
             className="font-mono type-body"
@@ -438,6 +437,8 @@ export function GuidedFormBody({
         declarationLandingLabels={target.declarationLandingLabels}
         problemNote={problemNote}
       />
+      {/* 接口路径只在排障与对接时用，收进技术详情，不摆在标题下。 */}
+      <TechnicalDetails rows={[{ label: '提交到', value: target.endpoint }]} />
     </div>
   );
 
@@ -448,7 +449,6 @@ export function GuidedFormBody({
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="type-section">{target.title}</CardTitle>
-          <p className="mt-0.5 font-mono type-caption text-idpxyz-textMuted">{target.endpoint}</p>
         </CardHeader>
         <CardContent>{inner}</CardContent>
       </Card>

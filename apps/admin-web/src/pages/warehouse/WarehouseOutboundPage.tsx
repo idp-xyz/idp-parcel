@@ -204,7 +204,7 @@ export function WarehouseOutboundPage() {
         viewState={catalogueViewState(answer, rows.length, retry, {
           module: info,
           endpoint: 'GET /warehouse-fulfillment-outbound-request-list',
-          emptyTitle: '还没有出库订单',
+          emptyTitle: '还没有出库单',
           emptyDescription: '点右上角「代录出库单」创建测试或运营代录单，或等待货主经客户接口提交。',
           narrowed: settled.trim() !== '' || status !== 'ALL',
         })}

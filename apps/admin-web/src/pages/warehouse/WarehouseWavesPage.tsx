@@ -146,7 +146,7 @@ export function WarehouseWavesPage() {
           module: info,
           endpoint: 'GET /warehouse-fulfillment-wave-list',
           emptyTitle: '还没有释放波次',
-          emptyDescription: '可在「出库订单」勾选「已预占」订单合并放波次，或点右上角「释放新波次」。',
+          emptyDescription: '可在「出库单」勾选「已预占」的出库单合并放波次，或点右上角「释放新波次」。',
           narrowed: settled.trim() !== '',
         })}
       />
