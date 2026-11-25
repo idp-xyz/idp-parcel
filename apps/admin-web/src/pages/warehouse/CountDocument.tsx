@@ -1,11 +1,15 @@
 import type { ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
+import { enterStation } from '../../shell/enter-station';
 import { formatInstant } from '../catalogue-view';
 import { hiddenDecisionHint } from '../operator-grants';
 import { internalOpsActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
 import { getCountDetail, type StockCountDetailBody } from './api';
+import { countSheet } from './print-forms';
+import { openPrint } from './print-sheet';
+import { countStationHash } from './station/stations';
 import {
   codesPreview,
   countEntryRows,
@@ -76,14 +80,14 @@ export function CountDocument({ countId }: { countId: string }) {
   const allCounted = progress !== null && progress.missing.length === 0;
   const mayDecide = drawer.has('count-approve') || drawer.has('count-reject');
 
-  const goWorkstation = () => {
-    window.location.hash = '#/warehouse-workstation';
+  const goCount = () => {
+    if (count) enterStation(countStationHash(count.countId));
   };
   // 主动作排在最后：还有库位没录就是去作业台，都录齐了就是结束。
   const workstationButton =
     status === 'COUNTING' ? (
-      <Button type="button" variant={allCounted ? 'outline' : undefined} className={allCounted ? undefined : primaryActionClass} onClick={goWorkstation}>
-        去作业台录数
+      <Button type="button" variant={allCounted ? 'outline' : undefined} className={allCounted ? undefined : primaryActionClass} onClick={goCount}>
+        去清点
       </Button>
     ) : null;
   const completeButton =
@@ -282,6 +286,19 @@ export function CountDocument({ countId }: { countId: string }) {
         actions={
           count ? (
             <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const keep = effectiveEntryIds(entries);
+                  const lines = entries
+                    .filter((entry) => keep.has(entry.factId))
+                    .flatMap((entry) => entry.lines.map((line) => ({ locationCode: entry.locationCode, goodsCode: line.goodsCode ?? '', quantity: line.quantity, stockState: line.stockState, observed: line.observed })));
+                  openPrint(countSheet(count.countId, count.warehouseCode, count.locations, lines));
+                }}
+              >
+                打印盘点单
+              </Button>
               {(status === 'PENDING' || status === 'COUNTING') && drawer.has('count-void') ? (
                 <Button type="button" variant="outline" onClick={() => drawer.open('count-void', { countId: count.countId })}>
                   作废

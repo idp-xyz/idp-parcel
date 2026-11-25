@@ -1,6 +1,8 @@
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
+import { cartonMarkSheet, packListSheet } from './print-forms';
+import { openPrint } from './print-sheet';
 import { formatInstant } from '../catalogue-view';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
@@ -133,6 +135,41 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
                 >
                   {next.label}
                 </Button>
+              ) : null}
+              {parcels.length > 0 ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      openPrint(
+                        packListSheet(request.documentNumber ?? request.requestId, parcels.map((parcel) => ({
+                          sequence: parcel.parcelSequence,
+                          goods: parcel.lines,
+                          weight: parcel.weightValue,
+                          weightUnit: parcel.weightUnit,
+                          size: [parcel.lengthValue, parcel.widthValue, parcel.heightValue].filter(Boolean).join(' × ') + (parcel.dimensionUnit ? ` ${parcel.dimensionUnit}` : ''),
+                        }))),
+                      )
+                    }
+                  >
+                    打印装箱单
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      openPrint(
+                        cartonMarkSheet(request.documentNumber ?? request.requestId, parcels.map((parcel) => ({
+                          sequence: parcel.parcelSequence,
+                          goods: parcel.lines,
+                        }))),
+                      )
+                    }
+                  >
+                    打印箱唛
+                  </Button>
+                </>
               ) : null}
               {next?.kind === 'station' ? (
                 <Button type="button" className={primaryActionClass} onClick={() => enterStation(next.hash)}>

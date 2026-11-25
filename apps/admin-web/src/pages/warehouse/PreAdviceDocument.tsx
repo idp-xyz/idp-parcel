@@ -9,6 +9,8 @@ import { WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { preAdviceProgress } from './pre-advice-progress';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
+import { inboundSheet } from './print-forms';
+import { openPrint } from './print-sheet';
 import { receiveStationHash } from './station/stations';
 import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type StepItem } from './wms-ui';
@@ -101,6 +103,22 @@ export function PreAdviceDocument({ ownerAccount, preAdviceId }: { ownerAccount:
                   完结
                 </Button>
               ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  openPrint(
+                    inboundSheet(record.documentNumber ?? record.preAdviceId, record.warehouseCode, (record.goodsLines ?? []).map((line) => ({
+                      goodsCode: line.goodsCode,
+                      unit: line.unit,
+                      advised: line.quantity,
+                      received: (record.cumulativeReceived ?? []).filter((item) => item.goodsCode === line.goodsCode).reduce((sum, item) => sum + item.quantity, 0),
+                    }))),
+                  )
+                }
+              >
+                打印入库单
+              </Button>
               {open ? (
                 <Button
                   type="button"
