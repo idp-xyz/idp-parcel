@@ -947,6 +947,25 @@ export function listFreezes(
   return exchangeMasterData<StockFreezeListBody>(catalogueRequestPath('/warehouse-fulfillment-freezes', conditions, after));
 }
 
+/**
+ * 冻结同样只有列表。检索覆盖冻结号、货主、仓、商品、库位、箱号与原因，按包含匹配（大小写不分）；冻结号是系统签发的，
+ * 局限与库存调整一样：号恰好是另一批冻结号的一段、而那一批多到挤出第一页时认不出，认不出而后面还有页时 `truncated` 为真。
+ */
+export async function findFreeze(freezeId: string): Promise<ApiResult<FoundByNumber<StockFreezeRecord>>> {
+  const answer = await listFreezes({ q: freezeId });
+  if (answer.kind !== 'outcome') return answer;
+  const { freezes, page } = answer.body;
+  return {
+    kind: 'outcome',
+    status: answer.status,
+    body: {
+      record: freezes.find((item) => item.freezeId === freezeId),
+      searched: freezes.length,
+      truncated: page.next !== null,
+    },
+  };
+}
+
 export interface StockCountRecord {
   countId: string;
   decisionId: string;
@@ -1216,6 +1235,25 @@ export function listInstructions(
   after: string | null = null,
 ): Promise<ApiResult<InstructionListBody>> {
   return exchangeMasterData<InstructionListBody>(catalogueRequestPath('/warehouse-fulfillment-instructions', conditions, after));
+}
+
+/**
+ * 加工、拆解与换标指令共用一份指令册、一个读口，也只有列表。检索覆盖指令号、货主、仓、商品、新别名与原因，按包含匹配
+ * （大小写不分）；局限同库存调整：认不出而后面还有页时 `truncated` 为真，由页面如实说「没翻到」，不说成没有这条指令。
+ */
+export async function findInstruction(instructionId: string): Promise<ApiResult<FoundByNumber<InstructionRecord>>> {
+  const answer = await listInstructions({ q: instructionId });
+  if (answer.kind !== 'outcome') return answer;
+  const { instructions, page } = answer.body;
+  return {
+    kind: 'outcome',
+    status: answer.status,
+    body: {
+      record: instructions.find((item) => item.instructionId === instructionId),
+      searched: instructions.length,
+      truncated: page.next !== null,
+    },
+  };
 }
 
 export interface ReturnPreAdviceRecord {

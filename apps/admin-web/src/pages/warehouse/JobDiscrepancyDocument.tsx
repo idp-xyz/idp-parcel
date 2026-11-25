@@ -8,6 +8,7 @@ import { findJobDiscrepancy, getInternalJob, type InternalJobLineRecord } from '
 import { lotLabel } from './count-flow';
 import { countsAdjustmentsModule, discrepancyKind } from './counts-adjustments-address';
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
+import { internalJobKind, processingModule } from './processing-address';
 import { discrepancyEffect, discrepancyStatusLabel, discrepancyTrack, originLineIndex } from './stock-approval-flow';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
@@ -19,7 +20,7 @@ const mutedText = 'type-caption text-idpxyz-textMuted';
 /**
  * 作业差异页：库内作业（上架、移库、形态与状态转换、短少上报）里没能入账的那一部分，等人批准补账或驳回。
  * 差异本身不带作业种类，所以页面按作业事实号再读一次那次作业，读不到不拦正文，只少了种类与作业各行。
- * 作业事实在别处还没有自己的单据页，这里只写号，不做链接。批准与驳回在头区做。
+ * 作业事实号链到它自己的库内作业页，那里写这次作业账上入了多少。批准与驳回在头区做。
  */
 export function JobDiscrepancyDocument({ discrepancyId }: { discrepancyId: string }) {
   const drawer = useActionDrawer(internalOpsActionSpecs);
@@ -155,7 +156,7 @@ export function JobDiscrepancyDocument({ discrepancyId }: { discrepancyId: strin
                 </WmsAsideBlock>
               ) : null}
               <WmsAsideBlock title="来自的库内作业">
-                <span className="break-all font-mono">{record.factId}</span>
+                <DocumentLink moduleId={processingModule} parts={[internalJobKind, record.factId]} />
                 {job ? (
                   <>
                     <span>{labelOf(job.kind)}</span>

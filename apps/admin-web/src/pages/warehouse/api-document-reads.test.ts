@@ -2,6 +2,8 @@ import { afterEach, test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import {
   findAdjustment,
+  findFreeze,
+  findInstruction,
   findJobDiscrepancy,
   getCountDetail,
   getInternalJob,
@@ -138,4 +140,79 @@ test('作业差异检索不到：record 缺席，传输失败原样交回', asyn
     throw new Error('网络断了');
   }) as typeof fetch;
   deepEqual(await findJobDiscrepancy('SDP-X'), { kind: 'transport', message: '网络断了' });
+});
+
+// 加工与换标指令、库存冻结同样没有按号取一张的读口，退回按号检索列表。
+
+const instructionPage = (ids: string[], next: string | null = null) => ({
+  outcome: 'INSTRUCTIONS_LISTED',
+  instructions: ids.map((instructionId) => ({ instructionId, status: 'PENDING', components: [], executions: [] })),
+  page: { size: 200, next, total: ids.length },
+});
+
+test('指令按号检索，只认号完全相同的那一条：包含匹配带出的别的指令不冒充', async () => {
+  const urls = answerWith(200, instructionPage(['INS-10', 'INS-1', 'INS-11']));
+  const answer = await findInstruction('INS-1');
+  deepEqual(urls, ['/warehouse-fulfillment-instructions?q=INS-1']);
+  equal(answer.kind === 'outcome' && answer.body.record?.instructionId, 'INS-1');
+  equal(answer.kind === 'outcome' && answer.body.searched, 3);
+  equal(answer.kind === 'outcome' && answer.body.truncated, false);
+});
+
+test('指令检索里没有这个号：record 缺席；后面还有页时说没翻到，不说成没有这条指令', async () => {
+  answerWith(200, instructionPage(['INS-10', 'INS-11']));
+  const absent = await findInstruction('INS-1');
+  equal(absent.kind === 'outcome' && absent.body.record, undefined);
+  equal(absent.kind === 'outcome' && absent.body.truncated, false);
+
+  answerWith(200, instructionPage(['INS-10', 'INS-11'], 'CURSOR-2'));
+  const unfinished = await findInstruction('INS-1');
+  equal(unfinished.kind === 'outcome' && unfinished.body.record, undefined);
+  equal(unfinished.kind === 'outcome' && unfinished.body.truncated, true);
+  equal(unfinished.kind === 'outcome' && unfinished.body.searched, 2);
+});
+
+test('指令检索的号里有特殊字符照编码；读口的非业务答复原样交回', async () => {
+  const urls = answerWith(200, instructionPage([]));
+  await findInstruction('INS/1 一');
+  deepEqual(urls, ['/warehouse-fulfillment-instructions?q=INS%2F1+%E4%B8%80']);
+
+  answerWith(403, { error: { code: 'OPERATOR_NOT_GRANTED' } });
+  equal((await findInstruction('INS-1')).kind, 'notGranted');
+  answerWith(500, { error: { code: 'NO_ANSWER_FORMED' } });
+  equal((await findInstruction('INS-1')).kind, 'noAnswer');
+});
+
+const freezePage = (ids: string[], next: string | null = null) => ({
+  outcome: 'FREEZES_LISTED',
+  freezes: ids.map((freezeId) => ({ freezeId, status: 'FROZEN', target: 'GOODS', quantity: 1 })),
+  page: { size: 200, next, total: ids.length },
+});
+
+test('冻结按号检索，只认号完全相同的那一份；认不出而后面还有页时说没翻到', async () => {
+  const urls = answerWith(200, freezePage(['FRZ-2', 'FRZ-20', 'FRZ-200']));
+  const answer = await findFreeze('FRZ-20');
+  deepEqual(urls, ['/warehouse-fulfillment-freezes?q=FRZ-20']);
+  equal(answer.kind === 'outcome' && answer.body.record?.freezeId, 'FRZ-20');
+  equal(answer.kind === 'outcome' && answer.body.searched, 3);
+
+  answerWith(200, freezePage(['FRZ-200'], 'CURSOR-2'));
+  const unfinished = await findFreeze('FRZ-20');
+  equal(unfinished.kind === 'outcome' && unfinished.body.record, undefined);
+  equal(unfinished.kind === 'outcome' && unfinished.body.truncated, true);
+
+  answerWith(200, freezePage([]));
+  const absent = await findFreeze('FRZ-20');
+  equal(absent.kind === 'outcome' && absent.body.record, undefined);
+  equal(absent.kind === 'outcome' && absent.body.truncated, false);
+});
+
+test('冻结检索的传输失败与没授予原样交回', async () => {
+  globalThis.fetch = (async () => {
+    throw new Error('网络断了');
+  }) as typeof fetch;
+  deepEqual(await findFreeze('FRZ-1'), { kind: 'transport', message: '网络断了' });
+
+  answerWith(403, { error: { code: 'OPERATOR_NOT_GRANTED' } });
+  equal((await findFreeze('FRZ-1')).kind, 'notGranted');
 });
