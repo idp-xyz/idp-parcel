@@ -80,15 +80,7 @@ export function FreezeList({ filters }: { filters: QueueFilters }) {
     },
     { id: 'qty', header: '数量', align: 'right', className: mono, render: (row) => freezeQuantityLabel(row) },
     { id: 'reason', header: '原因', className: 'max-w-[18rem] truncate', render: (row) => row.reason },
-    { id: 'at', header: '冻结时刻', className: mono, render: (row) => formatInstant(row.frozenAt) },
-    {
-      id: 'waiting',
-      header: '已冻',
-      align: 'right',
-      className: 'whitespace-nowrap',
-      // 只有冻结中的还冻着；已解冻的不写冻了多久。
-      render: (row) => elapsedLabel(freezeWaitingSince(row), now) || '—',
-    },
+    { id: 'waiting', header: '已冻', align: 'right', className: 'whitespace-nowrap', render: (row) => (row.status === 'FROZEN' ? elapsedLabel(freezeWaitingSince(row), now) || '—' : '—') },
     { id: 'next', header: '下一步', className: 'whitespace-nowrap', render: (row) => <NextStepCell row={row} drawer={drawer} /> },
   ];
 

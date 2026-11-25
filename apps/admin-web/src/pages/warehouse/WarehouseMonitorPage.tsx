@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
-import { Button } from '@idpxyz/ui-primitives';
+import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import {
   getOutboundRequestDetail,
@@ -16,7 +16,8 @@ import {
 import { documentHash } from './document-address';
 import { adjustmentKind, countKind, countsAdjustmentsModule } from './counts-adjustments-address';
 import { freezeKind, processingModule } from './processing-address';
-import { labelOf } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect } from './wms-ui';
+import { useWarehouseLookups } from './use-catalogues';
 import {
   monitorCursorCanPrevious,
   monitorCursorNext,
@@ -50,6 +51,7 @@ interface View {
 }
 
 export function WarehouseMonitorPage() {
+  const lookups = useWarehouseLookups();
   const [node, setNode] = useState<MonitorNode>(opening);
   const [warehouse, setWarehouse] = useState('');
   const [owner, setOwner] = useState('');
@@ -96,7 +98,7 @@ export function WarehouseMonitorPage() {
         title: `${request.documentNumber ?? request.requestId} 的拣货任务`,
         headers: taskHeaders,
         lines: taskLinesFromDetail(tasks, request.ownerAccount, request.warehouseCode),
-        note: tasks.length === 0 ? '这张单还没有拣货任务。' : '双击一行看这一库位上的这件货。',
+        note: tasks.length === 0 ? '这张单还没有拣货任务。' : '点「这一格」看这个库位上的这件货。',
         next: null,
       });
       return;
@@ -151,22 +153,32 @@ export function WarehouseMonitorPage() {
             <h1 className="type-title font-bold text-idpxyz-textBright">{info?.title ?? '仓库监控'}</h1>
             <p className="type-caption text-idpxyz-textMuted">{stack.map((item) => item.title).concat(view.title).join(' / ')}</p>
           </div>
-          {stack.length > 0 ? <button type="button" className="type-body text-idpxyz-accent" onClick={() => { const previous = stack[stack.length - 1]; setStack(stack.slice(0, -1)); setView(previous); }}>返回上一层</button> : null}
-          <input aria-label="仓" className="h-9 w-28 rounded border border-idpxyz-border bg-idpxyz-panel px-2 type-body" placeholder="仓" value={warehouse} onChange={(event) => narrow(() => setWarehouse(event.target.value))} />
-          <input aria-label="货主" className="h-9 w-36 rounded border border-idpxyz-border bg-idpxyz-panel px-2 type-body" placeholder="货主" value={owner} onChange={(event) => narrow(() => setOwner(event.target.value))} />
+          {stack.length > 0 ? <Button type="button" variant="ghost" size="sm" onClick={() => { const previous = stack[stack.length - 1]; setStack(stack.slice(0, -1)); setView(previous); }}>返回上一层</Button> : null}
+          {(node.warehouse || node.id === 'pre-advice') ? (
+            <WmsFilterSelect
+              label="仓"
+              value={warehouse}
+              options={lookups.warehouses.map((item) => ({ value: item.warehouseCode, label: item.name ? `${item.name}` : item.warehouseCode }))}
+              onChange={(next) => narrow(() => setWarehouse(next))}
+            />
+          ) : null}
+          {(node.owner || node.needsOwner) ? (
+            <WmsFilterSelect
+              label="货主"
+              value={owner}
+              options={lookups.owners.map((item) => ({ value: item.accountId, label: item.customerPartyName ? `${item.customerPartyName}` : item.accountId }))}
+              onChange={(next) => narrow(() => setOwner(next))}
+            />
+          ) : null}
           {node.status ? (
-            <select aria-label="状态" className="h-9 rounded border border-idpxyz-border bg-idpxyz-panel px-2 type-body" value={status} onChange={(event) => narrow(() => setStatus(event.target.value))}>
-              <option value="">全部状态</option>
-              {node.status.map((code) => <option key={code} value={code}>{labelOf(code, code)}</option>)}
-            </select>
+            <WmsFilterSelect
+              label="状态"
+              value={status}
+              options={node.status.map((code) => ({ value: code, label: labelOf(code, code) }))}
+              onChange={(next) => narrow(() => setStatus(next))}
+            />
           ) : null}
-          {stack.length === 0 && monitorCursorCanPrevious(cursor) ? (
-            <button type="button" className="type-body text-idpxyz-accent" disabled={loading} onClick={() => setCursor(monitorCursorPrevious(cursor))}>上一页</button>
-          ) : null}
-          {stack.length === 0 && view.next !== null ? (
-            <button type="button" className="type-body text-idpxyz-accent" disabled={loading} onClick={() => { const next = view.next; if (next !== null) setCursor(monitorCursorNext(cursor, next)); }}>下一页</button>
-          ) : null}
-          <Button type="button" variant="outline" disabled={loading} onClick={() => setNonce((current) => current + 1)}>
+          <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => setNonce((current) => current + 1)}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
             {loading ? '刷新中…' : '刷新'}
           </Button>
@@ -175,31 +187,65 @@ export function WarehouseMonitorPage() {
           {view.note ? <p className="type-body text-idpxyz-textMuted">{view.note}</p> : null}
           {loading && view.lines.length === 0 && !view.note ? <p className="type-body text-idpxyz-textMuted">在读…</p> : null}
           {view.headers.length > 0 ? (
-            <table className="mt-3 w-full border-collapse rounded-lg bg-idpxyz-panel type-body">
-              <thead>
-                <tr>{view.headers.map((header) => <th key={header} className="border-b border-idpxyz-border px-3 py-2 text-left text-idpxyz-textMuted">{header}</th>)}<th className="border-b border-idpxyz-border" /></tr>
-              </thead>
-              <tbody>
-                {view.lines.length === 0 ? (
-                  <tr><td colSpan={view.headers.length + 1} className="px-3 py-6 text-idpxyz-textMuted">这一页没有。</td></tr>
-                ) : view.lines.map((line) => {
-                  const canDrill = line.drillOutbound !== undefined || line.drillTasks !== undefined || line.drillStock !== undefined;
-                  return (
-                    <tr key={line.key} title={canDrill ? '双击往下钻' : undefined} className={canDrill ? 'cursor-pointer hover:bg-idpxyz-hover' : undefined} onDoubleClick={() => { if (canDrill) void drill(line); }}>
-                      {line.cells.map((cell, index) => <td key={index} className="border-b border-idpxyz-border px-3 py-2 font-mono">{labelOf(cell, cell)}</td>)}
-                      <td className="border-b border-idpxyz-border px-3 py-2 text-right">
-                        {line.hash ? <a className="text-idpxyz-accent" href={line.hash}>打开</a> : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="mt-3 overflow-hidden rounded-lg border border-idpxyz-border bg-idpxyz-panel">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {view.headers.map((header) => <TableHead key={header}>{header}</TableHead>)}
+                    {view.lines.some((line) => line.drillLabel) ? <TableHead className="text-right">往下</TableHead> : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {view.lines.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={view.headers.length} className="py-8 text-center text-idpxyz-textMuted">这一页没有。</TableCell>
+                    </TableRow>
+                  ) : view.lines.map((line) => (
+                    <TableRow key={line.key}>
+                      {line.cells.map((cell, index) => (
+                        <TableCell key={view.headers[index]} className={monitorCellClass(view.headers[index])}>
+                          {index === 0 && line.hash ? <a className="text-idpxyz-accent hover:underline" href={line.hash}>{labelOf(cell, cell)}</a> : null}
+                          {index === 0 && !line.hash ? labelOf(cell, cell) : null}
+                          {index > 0 && view.headers[index] === '状态' ? <WmsBadge code={cell} /> : null}
+                          {index > 0 && view.headers[index] !== '状态' ? labelOf(cell, cell) : null}
+                        </TableCell>
+                      ))}
+                      {view.lines.some((item) => item.drillLabel) ? (
+                        <TableCell className="text-right">
+                          {line.drillLabel ? <Button type="button" variant="ghost" size="sm" onClick={() => void drill(line)}>{line.drillLabel}</Button> : null}
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {stack.length === 0 ? (
+                <nav aria-label="翻页" className="flex items-center justify-between gap-4 border-t border-idpxyz-border px-3 py-2 type-caption text-idpxyz-textMuted">
+                  <span>第 {cursor.trail.length} 页</span>
+                  <div className="flex items-center gap-1">
+                    <Button type="button" variant="ghost" size="sm" disabled={loading || !monitorCursorCanPrevious(cursor)} onClick={() => setCursor(monitorCursorPrevious(cursor))}>
+                      <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+                      上一页
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" disabled={loading || view.next === null} onClick={() => { const next = view.next; if (next !== null) setCursor(monitorCursorNext(cursor, next)); }}>
+                      下一页
+                      <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </nav>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+const monoHeaders = new Set(['出库单', '货主', '仓', '到货', '预报', '波次', '任务', '库位', '商品', '箱号', '盘点单', '调整', '冻结']);
+
+function monitorCellClass(header: string): string {
+  return monoHeaders.has(header) ? 'whitespace-nowrap font-mono' : 'whitespace-nowrap';
 }
 
 async function readView(node: MonitorNode, warehouse: string, owner: string, status: string, after: string | null): Promise<View> {
@@ -216,12 +262,12 @@ async function loadLines(node: MonitorNode, warehouse: string, owner: string, st
   if (node.id === 'outbound') {
     const answer = await listOutboundRequests(conditions, after);
     if (answer.kind !== 'outcome') return { headers: outboundHeaders, lines: [], note: '出库单没读成。', next: null };
-    return { headers: outboundHeaders, lines: outboundLines(answer.body.requests ?? []), note: '双击一行看这张单的拣货任务。', next: answer.body.page?.next ?? null };
+    return { headers: outboundHeaders, lines: outboundLines(answer.body.requests ?? []), note: '点单号打开这张单。要看拣货任务，点这一行的「拣货任务」。', next: answer.body.page?.next ?? null };
   }
   if (node.id === 'waves') {
     const answer = await listWaves(conditions, after);
     if (answer.kind !== 'outcome') return { headers: waveHeaders, lines: [], note: '波次没读成。', next: null };
-    return { headers: waveHeaders, lines: waveLines(answer.body.waves ?? []), note: '双击一行看这个波次的拣货任务。', next: answer.body.page?.next ?? null };
+    return { headers: waveHeaders, lines: waveLines(answer.body.waves ?? []), note: '点波次号打开波次。点「拣货任务」看这一波的每一格。', next: answer.body.page?.next ?? null };
   }
   if (node.id === 'unclaimed') {
     const answer = await listUnclaimedArrivals(conditions, after);

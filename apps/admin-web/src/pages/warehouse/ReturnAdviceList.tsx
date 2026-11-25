@@ -78,15 +78,7 @@ export function ReturnAdviceList({ overview, filters }: { overview: ReturnsOverv
     { id: 'warehouse', header: '仓', className: mono, render: (row) => row.advice.warehouseCode },
     { id: 'lines', header: '预计行', align: 'right', className: mono, render: (row) => String(row.advice.lines?.length ?? 0) },
     { id: 'origin', header: '来源', className: 'whitespace-nowrap', render: (row) => labelOf(row.advice.origin) },
-    { id: 'at', header: '受理时刻', className: mono, render: (row) => formatInstant(row.advice.receivedAt) },
-    {
-      id: 'waiting',
-      header: '已等',
-      align: 'right',
-      className: 'whitespace-nowrap',
-      // 只有待到仓的在等货；到了仓的不写等了多久。
-      render: (row) => elapsedLabel(returnAdviceWaitingSince(row.status, row.advice), now) || '—',
-    },
+    { id: 'waiting', header: '已等', align: 'right', className: 'whitespace-nowrap', render: (row) => elapsedLabel(returnAdviceWaitingSince(row.status, row.advice), now) || '—' },
     { id: 'next', header: '下一步', className: 'whitespace-nowrap', render: (row) => <NextStepCell status={row.status} /> },
   ];
 

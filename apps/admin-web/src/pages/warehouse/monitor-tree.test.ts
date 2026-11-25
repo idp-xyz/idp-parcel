@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { monitorFilters, monitorNodes, outboundLines, taskLinesFromDetail, waveLines } from './monitor-tree';
+import { monitorFilters, monitorGroups, monitorNodes, outboundLines, taskLinesFromDetail, waveLines } from './monitor-tree';
 
 test('出库单行能打开单据，也能钻进拣货任务', () => {
   const lines = outboundLines([{ requestId: 'OBR-1', documentNumber: 'OB-1', ownerAccount: 'O', warehouseCode: 'WH', status: 'ALLOCATED', dispatch: 'PICKUP' }]);
   equal(lines[0].cells[0], 'OB-1');
+  equal(lines[0].drillLabel, '拣货任务');
   equal(lines[0].drillOutbound, 'OBR-1');
   equal(lines[0].hash?.includes('warehouse-outbound'), true);
 });
@@ -25,6 +26,12 @@ test('出库单详情里的任务带上货主，才能再钻库存格', () => {
   equal(lines[0].drillStock?.owner, 'OWNER');
   equal(lines[0].drillStock?.goods, 'G-1');
   equal(taskLinesFromDetail([{ taskId: 'T-1', locationCode: 'L-1', goodsCode: 'G-1', quantity: 1, picked: 1, status: 'PICKED' }], '  ', 'WH')[0].drillStock, undefined);
+});
+
+test('没有列表读口的对象不进树', () => {
+  const labels = monitorGroups().flatMap((group) => group.nodes.map((node) => node.label));
+  equal(labels.includes('收货记录'), false);
+  equal(labels.includes('出库单'), true);
 });
 
 test('没声明的筛选维不发出去，状态不在词表里也不发', () => {

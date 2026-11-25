@@ -33,13 +33,13 @@ function loadGoods(conditions: CatalogueConditions, after: string | null) {
 }
 
 const columns: ListColumn<GoodsRecord>[] = [
+  { id: 'name', header: '名称', render: (row) => row.name },
   {
     id: 'code',
     header: '商品编码',
     className: 'whitespace-nowrap',
     render: (row) => <DocumentLink moduleId={moduleId} parts={[row.ownerAccount, row.goodsCode]} />,
   },
-  { id: 'name', header: '名称', render: (row) => row.name },
   { id: 'unit', header: '基本单位', render: (row) => row.baseUnit },
   { id: 'track', header: '批次 / 效期', render: (row) => `${row.trackBatch ? '记批' : '不记批'} / ${row.trackExpiry ? '记效期' : '不记效期'}` },
   { id: 'composite', header: '组合商品', render: (row) => (row.composite ? '是' : '否') },

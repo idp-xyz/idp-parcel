@@ -91,14 +91,7 @@ export function CountList({ filters }: { filters: QueueFilters }) {
           '—'
         ),
     },
-    { id: 'at', header: '创建时刻', className: mono, render: (row) => formatInstant(row.createdAt) },
-    {
-      id: 'waiting',
-      header: '已停留',
-      align: 'right',
-      className: 'whitespace-nowrap',
-      render: (row) => elapsedLabel(countWaitingSince(row), now) || '—',
-    },
+    { id: 'waiting', header: '已停留', align: 'right', className: 'whitespace-nowrap', render: (row) => elapsedLabel(countWaitingSince(row), now) || '—' },
     {
       id: 'next',
       header: '下一步',

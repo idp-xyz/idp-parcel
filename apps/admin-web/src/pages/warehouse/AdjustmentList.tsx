@@ -69,15 +69,7 @@ export function AdjustmentList({ filters }: { filters: QueueFilters }) {
     { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
     { id: 'lines', header: '行数', align: 'right', className: mono, render: (row) => String(row.lines?.length ?? 0) },
     { id: 'reason', header: '原因', className: 'max-w-[18rem] truncate', render: (row) => row.reason },
-    { id: 'at', header: '提交时刻', className: mono, render: (row) => formatInstant(row.submittedAt) },
-    {
-      id: 'waiting',
-      header: '已等',
-      align: 'right',
-      className: 'whitespace-nowrap',
-      // 只有待批的在等人；已了结的单不写等了多久。
-      render: (row) => (row.status === 'PENDING' ? elapsedLabel(row.submittedAt, now) || '—' : '—'),
-    },
+    { id: 'waiting', header: '已等', align: 'right', className: 'whitespace-nowrap', render: (row) => (row.status === 'PENDING' ? elapsedLabel(row.submittedAt, now) || '—' : '—') },
   ];
 
   const inspectorOf = (row: StockAdjustmentRecord): InspectorContent => {

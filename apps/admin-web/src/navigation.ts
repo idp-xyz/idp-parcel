@@ -542,7 +542,7 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
   },
   'warehouse-monitor': {
     title: '仓库监控',
-    summary: '左边按入库、出库、库存、库内列对象，右边按仓和货主看现有读口，目录有下一页就翻。双击出库单或波次看拣货任务，从出库单再钻到这一格库存。没有单独列表读口的对象点开只说明。',
+    summary: '左边只列有表的对象，右边是和出库单同一套表。状态用徽章，仓和货主用名册下拉。点拣货任务或这一格往下看，点单号打开单据。',
     owner: '仓配履约（warehouse-fulfillment）',
     source: 'dox/contexts/warehouse-fulfillment.md 仓库监控',
   },

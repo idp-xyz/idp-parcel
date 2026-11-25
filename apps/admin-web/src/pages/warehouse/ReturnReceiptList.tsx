@@ -81,15 +81,7 @@ export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOver
     { id: 'goods', header: '商品', className: mono, render: (row) => row.goodsCode },
     { id: 'qty', header: '数量', className: mono, render: (row) => `${row.quantity} ${row.unit}` },
     { id: 'state', header: '入库状态', render: (row) => <WmsBadge code={row.stockState} /> },
-    { id: 'at', header: '到仓时刻', className: mono, render: (row) => formatInstant(row.occurredAt) },
-    {
-      id: 'waiting',
-      header: '已等',
-      align: 'right',
-      className: 'whitespace-nowrap',
-      // 只有待处置的在等人记去向；处置过的、转了待认领的不写等了多久。
-      render: (row) => elapsedLabel(returnReceiptWaitingSince(row), now) || '—',
-    },
+    { id: 'waiting', header: '已等', align: 'right', className: 'whitespace-nowrap', render: (row) => elapsedLabel(returnReceiptWaitingSince(row), now) || '—' },
     { id: 'next', header: '下一步', className: 'whitespace-nowrap', render: (row) => <NextStepCell row={row} drawer={drawer} /> },
   ];
 

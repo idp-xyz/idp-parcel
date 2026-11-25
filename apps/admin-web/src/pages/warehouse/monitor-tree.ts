@@ -1,8 +1,8 @@
 // 仓库监控的对象树，以及一行怎么钻到下一层（纯 TypeScript，node:test 直接测）。
 //
-// 只列现有读口答得了的对象。收货记录、收货差异、占用、流水、移库、加工换标没有单独的列表读口，点开会说明，不编一张空表。
-// 筛选只发该读口声明过的维：没声明的键整份请求会被退回。出库单钻到拣货任务要再读出库单详情，详情上有货主，才能再钻库存格。
-// 波次列表上已经带着任务，直接展开；任务上没有货主，这一层不再钻库存。
+// 只列现有读口答得了的对象。没有列表读口的不进这棵树，去对应单据页看。
+// 筛选只发该读口声明过的维：没声明的键整份请求会被退回。出库单点「拣货任务」要再读出库单详情，详情上有货主，才能再看这一格库存。
+// 波次列表上已经带着任务，点「拣货任务」直接展开；任务上没有货主，这一层不再往下。
 
 import { documentHash } from './document-address';
 
@@ -52,6 +52,8 @@ export interface MonitorLine {
   key: string;
   cells: string[];
   hash?: string;
+  /** 往下看的按钮上的字。没有这一列就不画。 */
+  drillLabel?: string;
   drillOutbound?: string;
   /** 波次展开出来的任务，已经在列表行上，不必再问。 */
   drillTasks?: MonitorLine[];
@@ -104,6 +106,7 @@ export function outboundLines(rows: readonly MonitorOutbound[]): MonitorLine[] {
     cells: [row.documentNumber ?? row.requestId, row.ownerAccount, row.warehouseCode, row.status, row.dispatch],
     hash: documentHash('warehouse-outbound', [row.requestId]),
     drillOutbound: row.requestId,
+    drillLabel: '拣货任务',
   }));
 }
 
@@ -112,6 +115,7 @@ export function waveLines(rows: readonly MonitorWave[]): MonitorLine[] {
     key: row.waveId,
     cells: [row.waveId, row.warehouseCode, String(row.requests.length), String(row.tasks.length)],
     hash: documentHash('warehouse-waves', [row.waveId]),
+    drillLabel: '拣货任务',
     drillTasks: row.tasks.map((task) => ({
       key: task.taskId,
       cells: [task.taskId, task.locationCode, task.goodsCode, String(task.quantity), String(task.picked), task.status],
@@ -124,12 +128,14 @@ export function taskLinesFromDetail(tasks: readonly MonitorTask[], owner: string
     key: task.taskId,
     cells: [task.taskId, task.locationCode, task.goodsCode, String(task.quantity), String(task.picked), task.status],
     drillStock: owner.trim() === '' ? undefined : { owner: owner.trim(), warehouse, location: task.locationCode, goods: task.goodsCode },
+    drillLabel: owner.trim() === '' ? undefined : '这一格',
   }));
 }
 
 export function monitorGroups(): Array<{ group: string; nodes: MonitorNode[] }> {
   const groups: Array<{ group: string; nodes: MonitorNode[] }> = [];
   for (const node of monitorNodes) {
+    if (node.unavailable) continue;
     const found = groups.find((item) => item.group === node.group);
     if (found) found.nodes.push(node);
     else groups.push({ group: node.group, nodes: [node] });
