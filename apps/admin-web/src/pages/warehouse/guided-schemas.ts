@@ -48,6 +48,14 @@ const outboundLineFields: readonly GuidedFieldSpec[] = [
   { path: 'quantity', label: '数量', kind: 'integer', required: true, placeholder: '1' },
 ];
 
+// 后端认的回库去向就这四个词（domain.NewReturnDestination）；写成别的词整份报文被当成坏载荷退回。
+const returnDestinationOptions: readonly GuidedSelectOption[] = [
+  { value: 'GOOD_PUTAWAY', label: '良品上架（GOOD_PUTAWAY）' },
+  { value: 'DEFECTIVE', label: '转次品（DEFECTIVE）' },
+  { value: 'DESTROY', label: '销毁（DESTROY）' },
+  { value: 'RETURN_TO_OWNER', label: '退还货主（RETURN_TO_OWNER）' },
+];
+
 const returnLineFields: readonly GuidedFieldSpec[] = [
   { path: 'goodsCode', label: '商品编码', kind: 'text', required: true, placeholder: 'SYN-GOODS-01' },
   { path: 'unit', label: '计量单位', kind: 'text', required: true, placeholder: '件' },
@@ -332,11 +340,7 @@ export const receivingGuidedForms: Record<string, GuidedFormDefinition> = {
         label: '处置去向',
         kind: 'select',
         required: true,
-        options: [
-          { value: 'PUTAWAY', label: '良品上架（PUTAWAY）' },
-          { value: 'DEFECTIVE', label: '转次品（DEFECTIVE）' },
-          { value: 'RETURN_TO_OWNER', label: '退还货主（RETURN_TO_OWNER）' },
-        ],
+        options: returnDestinationOptions,
       },
     ],
   },

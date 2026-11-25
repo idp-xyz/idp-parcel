@@ -229,7 +229,7 @@ export const receivingActionSpecs: readonly WarehouseActionSpec[] = [
     title: '代录退货回库处置',
     endpoint: '/warehouse-fulfillment-return-dispositions',
     grant: 'RETURN_RECORD_ON_BEHALF',
-    snapshotHint: '填 basis、factId、destination（PUTAWAY / DEFECTIVE / RETURN_TO_OWNER）。不要带 ownerAccount。' + noActorNote,
+    snapshotHint: '填 basis、factId、destination（GOOD_PUTAWAY / DEFECTIVE / DESTROY / RETURN_TO_OWNER）。不要带 ownerAccount。' + noActorNote,
   },
 ];
 

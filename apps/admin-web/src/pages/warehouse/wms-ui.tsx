@@ -91,6 +91,11 @@ export const wmsStatusMap: Record<string, StatusMeta> = {
   OPEN: { label: '待执行', tone: 'warning' },
   SHORT: { label: '短拣', tone: 'danger' },
   LATE: { label: '迟到取消', tone: 'neutral' },
+  // 退货：预报没有状态字段，待到仓与已到仓是按到仓记录对出来的；到仓记录的待处置、转待认领是按到仓结果与处置判的
+  AWAITING_ARRIVAL: { label: '待到仓', tone: 'warning' },
+  ARRIVED: { label: '已到仓', tone: 'info' },
+  AWAITING_DISPOSITION: { label: '待处置', tone: 'warning' },
+  DIVERTED: { label: '转待认领', tone: 'neutral' },
   // 退货与代理声明
   PUTAWAY: { label: '良品上架', tone: 'success' },
   GOOD_PUTAWAY: { label: '良品上架', tone: 'success' },
@@ -448,33 +453,6 @@ export function WmsSubTable<T>({
         )}
       </div>
     </section>
-  );
-}
-
-/** 列表筛选：第一项用 `ALL` 表示不按下推状态。 */
-export function WmsStatusChips({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: readonly string[];
-  onChange: (next: string) => void;
-}) {
-  return (
-    <>
-      {options.map((item) => (
-        <button
-          key={item}
-          type="button"
-          className={chipClass(item === value)}
-          aria-pressed={item === value}
-          onClick={() => onChange(item)}
-        >
-          {item === 'ALL' ? '全部' : labelOf(item)}
-        </button>
-      ))}
-    </>
   );
 }
 

@@ -193,6 +193,22 @@ test('跨字段与明细行校验在提交前拦住不完整输入', () => {
   }
 });
 
+test('退货回库处置的去向选项就是后端认的四个词：写成别的词整份报文会被当成坏载荷退回', () => {
+  const destination = receivingGuidedForms['return-disposition'].fields.find((field) => field.path === 'destination');
+  deepEqual(
+    destination?.options?.map((option) => option.value),
+    ['GOOD_PUTAWAY', 'DEFECTIVE', 'DESTROY', 'RETURN_TO_OWNER'],
+  );
+
+  const built = buildGuidedPayload(receivingGuidedForms['return-disposition'], {
+    basis: 'RET-DISP-01',
+    factId: 'SYN-FACT-SEED-RET-01',
+    destination: 'GOOD_PUTAWAY',
+  });
+  equal(built.ok, true);
+  if (built.ok) deepEqual(built.payload, { basis: 'RET-DISP-01', factId: 'SYN-FACT-SEED-RET-01', destination: 'GOOD_PUTAWAY' });
+});
+
 test('增强后的仓配表单自动附带名册下拉（lookup）与可读单据号前缀（autoIdPrefix），且不覆盖列表预填', () => {
   const waveDef = allWarehouseGuidedForms['wave-release'];
   const waveIdField = waveDef.fields.find((f) => f.path === 'waveId');
