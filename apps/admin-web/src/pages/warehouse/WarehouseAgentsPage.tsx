@@ -16,8 +16,12 @@ import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { useWarehouseLookups } from './use-catalogues';
-import { OutboundDetailModal } from './document-modals';
+import { DocumentLink } from './document-page';
+import { openDocument } from './use-document';
 import { labelOf, WmsBadge, WmsDetailModal, WmsKpiStrip, WmsSubTable } from './wms-ui';
+
+// 代理仓的单也是出库单：明细在出库单页上看，这一页只管转出与回录代理仓的结果。
+const outboundModule = 'warehouse-outbound';
 
 const info = moduleInfoById['warehouse-agents'];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
@@ -32,7 +36,16 @@ const statusLabels: Record<string, string> = {
 const agentStatusFilters = ['HANDED_OFF', 'FORWARDED', 'PACKED', 'SHIPPED'] as const;
 
 const columns: ListColumn<OutboundRequestRecord>[] = [
-  { id: 'id', header: '出库单号', className: mono, render: (row) => row.documentNumber ?? row.requestId },
+  {
+    id: 'id',
+    header: '出库单号',
+    className: 'whitespace-nowrap',
+    render: (row) => (
+      <DocumentLink moduleId={outboundModule} parts={[row.requestId]}>
+        {row.documentNumber ?? row.requestId}
+      </DocumentLink>
+    ),
+  },
   { id: 'warehouse', header: '代理仓', className: mono, render: (row) => row.warehouseCode },
   { id: 'owner', header: '货主', className: mono, render: (row) => row.ownerAccount },
   { id: 'status', header: '履约进展', render: (row) => <WmsBadge code={row.status} label={statusLabels[row.status]} /> },
@@ -48,7 +61,6 @@ export function WarehouseAgentsPage() {
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<string>('HANDED_OFF');
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [ledger, setLedger] = useState<ApiResult<AgentOverviewBody> | null>(null);
   const settled = useSettledKeyword(keyword);
@@ -85,7 +97,7 @@ export function WarehouseAgentsPage() {
   const overview = ledger?.kind === 'outcome' ? ledger.body : null;
 
   const inspectorOf = (row: OutboundRequestRecord): InspectorContent => {
-    const actions: InspectorAction[] = [{ label: '查看出库明细', onRun: () => setDetailId(row.requestId) }];
+    const actions: InspectorAction[] = [{ label: '打开出库单', onRun: () => openDocument(outboundModule, [row.requestId]) }];
     if (row.status === 'HANDED_OFF' && targetMap.has('agent-result')) {
       actions.push({ label: '转出给代理仓', onRun: () => openAction('agent-result', { requestId: row.requestId, kind: 'FORWARDED' }) });
     }
@@ -176,7 +188,7 @@ export function WarehouseAgentsPage() {
         rows={rows}
         rowKey={(row) => row.requestId}
         inspector={inspectorOf}
-        onRowOpen={(row) => setDetailId(row.requestId)}
+        onRowOpen={(row) => openDocument(outboundModule, [row.requestId])}
         pagination={pagination}
         emptyRowsNote="当前状态下没有代理仓履约订单"
         viewState={catalogueViewState(answer, rows.length, retry, {
@@ -233,26 +245,13 @@ export function WarehouseAgentsPage() {
           rows={overview?.results ?? []}
           rowKey={(row) => row.resultId}
           columns={[
-            { id: 'req', header: '出库单', mono: true, render: (row) => row.requestId },
+            { id: 'req', header: '出库单', render: (row) => <DocumentLink moduleId={outboundModule} parts={[row.requestId]} /> },
             { id: 'kind', header: '结果', render: (row) => labelOf(row.kind) },
             { id: 'wh', header: '仓', mono: true, render: (row) => row.warehouseCode },
             { id: 'at', header: '回传时刻', mono: true, render: (row) => formatInstant(row.reportedAt) },
           ]}
         />
       </WmsDetailModal>
-      <OutboundDetailModal
-        requestId={detailId}
-        isAgentWarehouse={(code) => agentWarehouseCodes.has(code)}
-        canWave={false}
-        canSplit={targetMap.has('outbound-split')}
-        canCutoff={targetMap.has('outbound-cutoff')}
-        canLabel={targetMap.has('owner-label')}
-        onClose={() => setDetailId(null)}
-        onAction={(id, prefill) => {
-          setDetailId(null);
-          openAction(id, prefill);
-        }}
-      />
       <ActionDrawer
         moduleId="warehouse-agents"
         active={drawer}

@@ -1,0 +1,41 @@
+import { test } from 'node:test';
+import { deepEqual, equal } from 'node:assert/strict';
+import { outboundNextStep, outboundReservationOpen, outboundSettled } from './outbound-next-step';
+
+test('占没占够只在拣完之前问：拣完之后与取消之后预占是 0，不是缺货', () => {
+  for (const status of ['RESERVED', 'PARTIALLY_RESERVED', 'PENDING_POLICY', 'ALLOCATED']) equal(outboundReservationOpen(status), true, status);
+  for (const status of ['PICKED', 'CHECKED', 'PACKED', 'SHIPPED', 'CANCELLED', 'REJECTED']) equal(outboundReservationOpen(status), false, status);
+});
+
+test('已预占的在出库单上就地放波次', () => {
+  deepEqual(outboundNextStep('RESERVED', false), { kind: 'wave', label: '放波次' });
+});
+
+test('放波次之后现场的几步都指到作业台', () => {
+  for (const status of ['ALLOCATED', 'PICKED', 'CHECKED', 'PACKED', 'AWAITING_RETURN']) {
+    const next = outboundNextStep(status, false);
+    equal(next?.kind === 'go' ? next.moduleId : null, 'warehouse-workstation', status);
+  }
+});
+
+test('代理仓的单不指到自营仓的作业台', () => {
+  for (const status of ['HANDED_OFF', 'FORWARDED']) {
+    const next = outboundNextStep(status, true);
+    equal(next?.kind === 'go' ? next.moduleId : null, 'warehouse-agents', status);
+  }
+  const packed = outboundNextStep('PACKED', true);
+  equal(packed?.kind === 'go' ? packed.moduleId : null, 'warehouse-agents');
+});
+
+test('卡在预占的两种状态说清在等什么，不摆一个按不动的按钮', () => {
+  equal(outboundNextStep('PARTIALLY_RESERVED', false)?.kind, 'wait');
+  equal(outboundNextStep('PENDING_POLICY', false)?.kind, 'wait');
+});
+
+test('走完或中止的没有下一步，队列上不算在等', () => {
+  for (const status of ['SHIPPED', 'CANCELLED', 'REJECTED', 'SPLIT']) {
+    equal(outboundNextStep(status, false), null, status);
+    equal(outboundSettled(status), true, status);
+  }
+  equal(outboundSettled('PACKED'), false);
+});

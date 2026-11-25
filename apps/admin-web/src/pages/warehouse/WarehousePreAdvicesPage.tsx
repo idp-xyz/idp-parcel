@@ -1,136 +1,165 @@
 import { useEffect, useState } from 'react';
-import { Plus, RefreshCw } from 'lucide-react';
-import { Button, Input } from '@idpxyz/ui-primitives';
+import { Plus } from 'lucide-react';
+import { Button } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { InspectorAction, InspectorContent } from '../../templates/inspector';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
-import { listOwnerPreAdvices, type ApiResult, type PreAdviceListBody, type PreAdviceRecord } from './api';
+import { useSettledKeyword } from '../use-catalogue-cursor';
 import { receivingActionSpecs } from './actions';
-import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
-import { useWarehouseTargetMap } from './ActionPanel';
-import type { GuidedFormValues } from './guided-forms';
-import { useWarehouseLookups } from './use-catalogues';
-import { PreAdviceDetailModal } from './document-modals';
-import { WmsBadge } from './wms-ui';
+import { ActionDrawer, useActionDrawer } from './ActionDrawer';
+import { listOwnerPreAdvices, type ApiResult, type PreAdviceListBody, type PreAdviceRecord } from './api';
+import { DocumentLink } from './document-page';
+import { PreAdviceDocument } from './PreAdviceDocument';
+import { openDocument, useDocumentParts } from './use-document';
+import { elapsedLabel } from './waiting';
+import { labelOf, WmsBadge, WmsStatusTabs } from './wms-ui';
 
-const info = moduleInfoById['warehouse-pre-advices'];
+const moduleId = 'warehouse-pre-advices';
+const info = moduleInfoById[moduleId];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
 
-const statusLabels: Record<string, string> = {
-  ADVISED: '已预报',
-  RECEIVING: '收货中',
-  CLOSED: '已完结',
-  CANCELLED: '已取消',
-};
+const statuses = ['ADVISED', 'RECEIVING', 'CLOSED', 'CANCELLED'] as const;
 
-const inboundModeLabels: Record<string, string> = {
-  BY_GOODS: '按商品',
-  BY_CARTON: '按整箱',
-};
+/** 还没开始收、预计到达已经过去的预报算迟到；收货中的已经到了。 */
+const lateOf = (row: PreAdviceRecord, now: Date) => (row.status === 'ADVISED' ? elapsedLabel(row.currentNotice?.expectedAt, now) : '');
 
-const columns: ListColumn<PreAdviceRecord>[] = [
-  { id: 'id', header: '预报标识', className: mono, render: (row) => row.preAdviceId },
-  { id: 'number', header: '入库单号', className: mono, render: (row) => row.documentNumber ?? '—' },
-  { id: 'warehouse', header: '仓库', className: mono, render: (row) => row.warehouseCode },
-  { id: 'mode', header: '入库形态', render: (row) => inboundModeLabels[row.inboundMode] ?? row.inboundMode },
-  { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} label={statusLabels[row.status]} /> },
-  { id: 'at', header: '受理时刻', className: mono, render: (row) => formatInstant(row.acceptedAt) },
-];
-
-/** 入库预报管理页：按货主查阅入库预报单，页头直接代录预报与录差异结论，行内右栏直接更新告知、撤回、完结或跳转作业台收货。 */
+/** 入库预报：列表与每一张预报各占自己的标签。预报的读口要货主，所以单据键是货主加预报标识两段。 */
 export function WarehousePreAdvicesPage() {
-  const lookups = useWarehouseLookups();
-  const targetMap = useWarehouseTargetMap(receivingActionSpecs);
+  const parts = useDocumentParts();
+  return parts ? <PreAdviceDocument ownerAccount={parts[0]} preAdviceId={parts[1] ?? ''} /> : <PreAdviceList />;
+}
 
+function PreAdviceList() {
+  const drawer = useActionDrawer(receivingActionSpecs);
+  const owners = drawer.lookups.owners;
   const [owner, setOwner] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState<string>('ALL');
   const [answer, setAnswer] = useState<ApiResult<PreAdviceListBody> | null>(null);
-  const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
+  const [refreshes, setRefreshes] = useState(0);
+  const refresh = () => setRefreshes((count) => count + 1);
+  const settled = useSettledKeyword(keyword);
+
+  // 预报按货主归属，读口必须带货主：名册到了先选第一家，不让人对着一张空表找筛选。
+  useEffect(() => {
+    if (owner === '' && owners.length > 0) setOwner(owners[0].accountId);
+  }, [owners, owner]);
 
   useEffect(() => {
-    if (owner === '' && lookups.owners.length > 0) {
-      setOwner(lookups.owners[0].accountId);
-    }
-  }, [lookups.owners, owner]);
-
-  useEffect(() => {
-    const trimmed = owner.trim();
-    if (!trimmed) {
+    if (owner === '') {
       setAnswer(null);
       return;
     }
     let cancelled = false;
     setAnswer(null);
-    void listOwnerPreAdvices(trimmed, keyword).then((res) => {
-      if (!cancelled) setAnswer(res);
+    void listOwnerPreAdvices(owner, settled).then((result) => {
+      if (!cancelled) setAnswer(result);
     });
     return () => {
       cancelled = true;
     };
-  }, [owner, keyword, tick]);
+  }, [owner, settled, refreshes]);
 
-  const openAction = (id: string, prefill?: GuidedFormValues) => {
-    const target = targetMap.get(id);
-    if (!target) return;
-    setDrawer((current) => ({ target, prefill, nonce: (current?.nonce ?? 0) + 1 }));
-  };
+  const loaded = answer?.kind === 'outcome' ? answer.body.preAdvices : [];
+  // 读口不按状态筛，状态是在答回来的这一页里筛的。这一页就是全部时签上才写数；后面还有页的话，数出来的不是各队的总数。
+  const wholeList = answer?.kind === 'outcome' && answer.body.page.next === null;
+  const rows = status === 'ALL' ? loaded : loaded.filter((row) => row.status === status);
+  const now = new Date();
 
-  const rows = answer?.kind === 'outcome' ? answer.body.preAdvices : [];
+  const columns: ListColumn<PreAdviceRecord>[] = [
+    {
+      id: 'id',
+      header: '入库单号',
+      className: 'whitespace-nowrap',
+      render: (row) => (
+        <DocumentLink moduleId={moduleId} parts={[row.ownerAccount, row.preAdviceId]}>
+          {row.documentNumber ?? row.preAdviceId}
+        </DocumentLink>
+      ),
+    },
+    { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} /> },
+    { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
+    { id: 'mode', header: '到仓 / 入库', className: 'whitespace-nowrap', render: (row) => `${labelOf(row.arrivalMode)} · ${labelOf(row.inboundMode)}` },
+    {
+      id: 'size',
+      header: '商品行 / 整箱',
+      align: 'right',
+      className: mono,
+      render: (row) => `${row.goodsLines?.length ?? 0} / ${row.cartons?.length ?? 0}`,
+    },
+    {
+      id: 'expected',
+      header: '预计到达',
+      className: 'whitespace-nowrap',
+      render: (row) => {
+        const late = lateOf(row, now);
+        return (
+          <span className="inline-flex items-center gap-2">
+            <span className="font-mono">{row.currentNotice ? formatInstant(row.currentNotice.expectedAt) : '—'}</span>
+            {late ? <WmsBadge label={`已迟 ${late}`} tone="danger" /> : null}
+          </span>
+        );
+      },
+    },
+    { id: 'at', header: '受理时刻', className: mono, render: (row) => formatInstant(row.acceptedAt) },
+    {
+      id: 'next',
+      header: '下一步',
+      className: 'whitespace-nowrap',
+      render: (row) =>
+        row.status === 'ADVISED' || row.status === 'RECEIVING' ? (
+          <button
+            type="button"
+            className="text-[color:var(--ds-text-link-hover)] hover:underline"
+            onClick={(event) => {
+              event.stopPropagation();
+              window.location.hash = '#/warehouse-workstation';
+            }}
+          >
+            {row.status === 'ADVISED' ? '去收货' : '接着收货'}
+          </button>
+        ) : (
+          <span className="text-idpxyz-textMuted">—</span>
+        ),
+    },
+  ];
 
   const inspectorOf = (row: PreAdviceRecord): InspectorContent => {
-    const actions: InspectorAction[] = [{ label: '查看完整明细', onRun: () => setDetailId(row.preAdviceId) }];
-    if (row.status === 'ADVISED' || row.status === 'RECEIVING') {
-      actions.push({
-        label: '去作业台扫码收货',
-        onRun: () => {
-          window.location.hash = '#/warehouse-workstation';
-        },
-      });
+    const actions: InspectorAction[] = [{ label: '打开入库预报', onRun: () => openDocument(moduleId, [row.ownerAccount, row.preAdviceId]) }];
+    const open = row.status === 'ADVISED' || row.status === 'RECEIVING';
+    if (open && drawer.has('pre-advice-notice')) {
+      actions.push({ label: '更新告知', onRun: () => drawer.open('pre-advice-notice', { preAdviceId: row.preAdviceId }) });
     }
-    if (targetMap.has('pre-advice-notice') && row.status !== 'CLOSED' && row.status !== 'CANCELLED') {
-      actions.push({
-        label: '更新到货告知',
-        onRun: () => openAction('pre-advice-notice', { preAdviceId: row.preAdviceId }),
-      });
+    if (row.status === 'ADVISED' && drawer.has('pre-advice-withdrawal')) {
+      actions.push({ label: '撤回', onRun: () => drawer.open('pre-advice-withdrawal', { preAdviceId: row.preAdviceId }) });
     }
-    if (targetMap.has('pre-advice-withdrawal') && row.status === 'ADVISED') {
-      actions.push({
-        label: '撤回预报',
-        onRun: () => openAction('pre-advice-withdrawal', { preAdviceId: row.preAdviceId }),
-      });
-    }
-    if (targetMap.has('pre-advice-close') && row.status === 'RECEIVING') {
-      actions.push({
-        label: '完结预报并计算少收',
-        onRun: () => openAction('pre-advice-close', { preAdviceId: row.preAdviceId }),
-      });
+    if (row.status === 'RECEIVING' && drawer.has('pre-advice-close')) {
+      actions.push({ label: '完结', onRun: () => drawer.open('pre-advice-close', { preAdviceId: row.preAdviceId }) });
     }
     return {
       title: row.documentNumber ?? row.preAdviceId,
-      subtitle: row.preAdviceId,
+      subtitle: labelOf(row.status),
       sections: [
         {
           kind: 'summary',
           fields: [
-            { label: '货主', value: row.ownerAccount, mono: true },
-            { label: '入库仓库', value: row.warehouseCode, mono: true },
-            { label: '到仓 / 入库方式', value: `${row.arrivalMode} · ${inboundModeLabels[row.inboundMode] ?? row.inboundMode}` },
-            { label: '商品行 / 整箱数', value: `${row.goodsLines?.length ?? 0} / ${row.cartons?.length ?? 0}`, mono: true },
-            { label: '单据号状态', value: row.documentNumber ?? row.numberingAbsence ?? '—', mono: true },
+            { label: '货主 / 仓库', value: `${row.ownerAccount} · ${row.warehouseCode}`, mono: true },
+            { label: '到仓 / 入库', value: `${labelOf(row.arrivalMode)} · ${labelOf(row.inboundMode)}` },
+            { label: '预计到达', value: row.currentNotice ? formatInstant(row.currentNotice.expectedAt) : '没有告知', mono: true },
+            {
+              label: '商品',
+              value: row.goodsLines?.map((line) => `${line.goodsCode}×${line.quantity}`).join('、') || '没有按商品的行',
+              mono: true,
+            },
+            { label: '整箱', value: row.cartons?.map((carton) => carton.cartonNumber).join('、') || '没有整箱', mono: true },
           ],
         },
-        { kind: 'status', items: [{ label: '状态', word: statusLabels[row.status] ?? row.status }] },
-        ...(actions.length > 0 ? [{ kind: 'actions' as const, actions }] : []),
+        { kind: 'actions', actions },
         {
           kind: 'audit',
-          fields: [
-            { label: '提交途径 / 登记人', value: `${row.submissionPath} · ${row.registrant}`, mono: true },
-            { label: '受理时刻', value: formatInstant(row.acceptedAt), mono: true },
-          ],
+          fields: [{ label: '来源 / 受理时刻', value: `${labelOf(row.submissionPath)} · ${formatInstant(row.acceptedAt)}` }],
         },
       ],
     };
@@ -139,100 +168,76 @@ export function WarehousePreAdvicesPage() {
   return (
     <>
       <ListPageTemplate<PreAdviceRecord>
-        moduleId="warehouse-pre-advices"
+        moduleId={moduleId}
         title={info.title}
-        description="管理货主入库预报。双击看商品行、整箱、已收进度和收货事实；收货本身在作业台完成。"
+        description="货主说要来的货。点单号看预报了多少、收了多少和每一次收货；收货本身在作业台做。"
         headerActions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => setTick((n) => n + 1)}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1" />
-              刷新
+          drawer.has('pre-advice-on-behalf') ? (
+            <Button type="button" className={primaryActionClass} onClick={() => drawer.open('pre-advice-on-behalf', { ownerAccount: owner })}>
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              代录入库预报
             </Button>
-            {targetMap.has('discrepancy-conclusion') ? (
-              <Button type="button" variant="outline" onClick={() => openAction('discrepancy-conclusion')}>
-                录收货差异结论
-              </Button>
-            ) : null}
-            {targetMap.has('pre-advice-on-behalf') ? (
-              <Button
-                type="button"
-                className={primaryActionClass}
-                onClick={() => openAction('pre-advice-on-behalf', { ownerAccount: owner.trim() })}
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                代录入库预报
-              </Button>
-            ) : null}
-          </div>
+          ) : undefined
         }
-        search={{ value: keyword, onChange: setKeyword, placeholder: '搜预报号或仓编码' }}
+        search={{ value: keyword, onChange: setKeyword, placeholder: '搜预报标识或仓编码' }}
         filters={
-          <div className="flex items-center gap-2">
-            {lookups.owners.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <WmsStatusTabs
+              value={status}
+              onChange={setStatus}
+              tabs={[
+                { value: 'ALL', label: '全部', count: wholeList ? loaded.length : undefined },
+                ...statuses.map((code) => ({
+                  value: code,
+                  label: labelOf(code),
+                  count: wholeList ? loaded.filter((row) => row.status === code).length : undefined,
+                })),
+              ]}
+            />
+            <label className="inline-flex items-center gap-1.5 type-body text-idpxyz-textMuted">
+              <span className="whitespace-nowrap">货主</span>
               <select
-                className="h-6 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-caption text-idpxyz-text"
-                value={lookups.owners.some((o) => o.accountId === owner) ? owner : ''}
-                onChange={(event) => {
-                  if (event.target.value) setOwner(event.target.value);
-                }}
+                className="h-7 max-w-[16rem] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body text-idpxyz-text focus:border-idpxyz-accent focus:outline-none"
+                value={owner}
+                onChange={(event) => setOwner(event.target.value)}
               >
-                <option value="">选择货主客户账户…</option>
-                {lookups.owners.map((acct) => (
-                  <option key={acct.accountId} value={acct.accountId}>
-                    {acct.customerPartyName ? `${acct.accountId} · ${acct.customerPartyName}` : acct.accountId}
+                {owners.length === 0 ? <option value="">没有货主客户账户</option> : null}
+                {owners.map((account) => (
+                  <option key={account.accountId} value={account.accountId}>
+                    {account.customerPartyName ? `${account.accountId} · ${account.customerPartyName}` : account.accountId}
                   </option>
                 ))}
               </select>
-            ) : null}
-            <Input
-              className="h-6 w-48 font-mono type-caption"
-              value={owner}
-              onChange={(event) => setOwner(event.target.value)}
-              placeholder="输入货主账户编码"
-            />
+            </label>
           </div>
         }
         columns={columns}
         rows={rows}
         rowKey={(row) => row.preAdviceId}
         inspector={inspectorOf}
-        onRowOpen={(row) => setDetailId(row.preAdviceId)}
-        emptyRowsNote="该货主名下没有匹配的入库预报"
+        onRowOpen={(row) => openDocument(moduleId, [row.ownerAccount, row.preAdviceId])}
+        emptyRowsNote={
+          wholeList ? '这位货主名下没有这个状态的入库预报' : '这一页里没有这个状态的入库预报；读口不按状态筛，后面的页没有看'
+        }
         viewState={
-          owner.trim() === ''
-            ? {
-                kind: 'empty',
-                title: '请先选择货主客户账户',
-                description: '入库预报按货主归属。选择货主后即可查看并操作该货主的预报单。',
-              }
-            : catalogueViewState(answer, rows.length, () => setTick((n) => n + 1), {
+          owner === ''
+            ? drawer.lookups.loaded
+              ? {
+                  kind: 'empty',
+                  title: '还没有货主客户账户',
+                  description: '入库预报按货主归属。先在国际小包那边的「客户」里登记货主的客户账户。',
+                }
+              : { kind: 'loading', shape: 'table' }
+            : catalogueViewState(answer, loaded.length, refresh, {
                 module: info,
                 endpoint: 'GET /warehouse-fulfillment-inbound-pre-advices',
-                emptyTitle: '该货主还没有入库预报',
-                emptyDescription: '点右上角「代录入库预报」新建，或等待货主经客户接口提交。',
-                narrowed: keyword.trim() !== '',
+                emptyTitle: '这位货主还没有入库预报',
+                emptyDescription: '点右上角「代录入库预报」新建，或等货主经客户接口提交。',
+                narrowed: settled.trim() !== '',
               })
         }
       />
-      <PreAdviceDetailModal
-        ownerAccount={owner.trim()}
-        preAdviceId={detailId}
-        canNotice={targetMap.has('pre-advice-notice')}
-        canWithdraw={targetMap.has('pre-advice-withdrawal')}
-        canClose={targetMap.has('pre-advice-close')}
-        onClose={() => setDetailId(null)}
-        onAction={(id, prefill) => {
-          setDetailId(null);
-          openAction(id, prefill);
-        }}
-      />
-      <ActionDrawer
-        moduleId="warehouse-pre-advices"
-        active={drawer}
-        lookups={lookups}
-        onClose={() => setDrawer(null)}
-        onSubmitted={() => setTick((n) => n + 1)}
-      />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
     </>
   );
 }

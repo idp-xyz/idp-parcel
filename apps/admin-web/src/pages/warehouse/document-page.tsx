@@ -1,0 +1,132 @@
+import type { ReactNode } from 'react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { PageHeader, PageHeaderActions, PageHeaderContent, PageHeaderTitle } from '@idpxyz/ui-patterns';
+import { Button } from '@idpxyz/ui-primitives';
+import { CodeRef } from '../../components/CodeRef';
+import { StateSlot } from '../../templates/state-slot';
+import { openDocument } from './use-document';
+
+/**
+ * 仓配单据页的外框：一张单据占一张标签，有自己的地址。
+ *
+ * 头区照对象页的写法——种类、单号（点按复制）、状态在左，此刻能做的动作在右；头区下面是进度条；正文是纵向排开的几块，
+ * 宽屏上右边多一栏放关联单据。动作钉在头区不随正文滚：人滚到拣货任务那一块时，「放波次」还在手边。
+ *
+ * 不用 DetailPageTemplate：它的签是固定词表（概要、联系人、时间线……），区块只收带标题的卡片；仓配单据要进度条，
+ * 正文是几张各带计数的子表。头区用的是同一套 PageHeader 件，看上去是同一种页。
+ */
+export function WmsDocumentPage({
+  kind,
+  title,
+  subtitle,
+  badge,
+  actions,
+  stepper,
+  loading,
+  error,
+  onBack,
+  onReload,
+  aside,
+  children,
+}: {
+  /** 单据种类的叫法：出库单、波次、入库预报。 */
+  kind: string;
+  /** 单号。还没读到时用地址里的那一个。 */
+  title: string;
+  subtitle?: string;
+  badge?: ReactNode;
+  actions?: ReactNode;
+  stepper?: ReactNode;
+  loading?: boolean;
+  /** 读不到或没有这张单据时的那一句；给了就不画正文。 */
+  error?: string | null;
+  onBack: () => void;
+  onReload?: () => void;
+  /** 右栏：关联单据一类看不见也不缺的辅助内容，只在宽屏显示。 */
+  aside?: ReactNode;
+  children: ReactNode;
+}) {
+  const ready = !loading && !error;
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <PageHeader className="items-start">
+        <PageHeaderContent className="flex-col items-start gap-1">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
+            <PageHeaderTitle>{kind}</PageHeaderTitle>
+            {title ? <CodeRef value={title} title={`${kind}号`} /> : null}
+            {ready ? badge : null}
+          </div>
+          {ready && subtitle ? <p className="type-caption leading-4 text-idpxyz-textMuted">{subtitle}</p> : null}
+        </PageHeaderContent>
+        <PageHeaderActions>
+          {ready ? actions : null}
+          {onReload ? (
+            <Button type="button" variant="outline" disabled={loading} onClick={onReload}>
+              <RefreshCw className="mr-1 h-3.5 w-3.5" />
+              刷新
+            </Button>
+          ) : null}
+          <Button type="button" variant="outline" onClick={onBack}>
+            <ArrowLeft className="mr-1 h-3.5 w-3.5" />
+            返回列表
+          </Button>
+        </PageHeaderActions>
+      </PageHeader>
+
+      {ready && stepper ? <div className="shrink-0 border-b border-idpxyz-border px-4 py-2.5">{stepper}</div> : null}
+
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center overflow-auto">
+          <StateSlot state={{ kind: 'loading', shape: 'detail' }} />
+        </div>
+      ) : error ? (
+        <div className="flex flex-1 items-center justify-center overflow-auto">
+          <StateSlot state={{ kind: 'error', title: `没有取到这张${kind}`, description: error, onRetry: onReload }} />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto">
+          <div className="mx-auto flex max-w-[1320px] gap-4 p-4">
+            <div className="flex min-w-0 flex-1 flex-col gap-5">{children}</div>
+            {aside ? <aside className="hidden w-[280px] shrink-0 flex-col gap-4 xl:flex">{aside}</aside> : null}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 右栏里的一块：一个小标题加内容。 */
+export function WmsAsideBlock({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-lg border border-idpxyz-border bg-idpxyz-panel p-3">
+      <h3 className="type-caption font-medium text-idpxyz-textMuted">{title}</h3>
+      <div className="mt-2 flex flex-col gap-1.5 type-body text-idpxyz-text">{children}</div>
+    </section>
+  );
+}
+
+/** 指到另一张单据：点了在它自己的标签里打开，这一张留着。 */
+export function DocumentLink({
+  moduleId,
+  parts,
+  children,
+}: {
+  moduleId: string;
+  parts: readonly string[];
+  /** 显示的字，缺省是最后一段标识。 */
+  children?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className="max-w-full truncate text-left font-mono text-[color:var(--ds-text-link-hover)] hover:underline"
+      onClick={(event) => {
+        // 它常落在表格行里：不让行把这一下当成选中或打开。
+        event.stopPropagation();
+        openDocument(moduleId, parts);
+      }}
+    >
+      {children ?? parts[parts.length - 1]}
+    </button>
+  );
+}

@@ -7,16 +7,47 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@idpxyz/ui-primitives';
+import { useState } from 'react';
+import type { WarehouseActionSpec } from './actions';
+import { useWarehouseTargetMap } from './ActionPanel';
 import { GuidedFormBody, type GuidedActionTarget } from './GuidedActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { problemNote } from './presentation';
-import type { WarehouseLookups } from './use-catalogues';
+import { useWarehouseLookups, type WarehouseLookups } from './use-catalogues';
 import { useCloseOnHashChange } from './use-close-on-hash';
 
 export interface ActiveDrawerAction {
   target: GuidedActionTarget;
   prefill?: GuidedFormValues;
   nonce: number;
+}
+
+export interface ActionDrawerControl {
+  lookups: WarehouseLookups;
+  /** 这个动作此刻摆不摆：操作者明确没有那一种授予的不摆。 */
+  has: (id: string) => boolean;
+  /** 打开一个动作的表单，可带上从行或单据带出的标识。没有授予的动作打不开。 */
+  open: (id: string, prefill?: GuidedFormValues) => void;
+  active: ActiveDrawerAction | null;
+  close: () => void;
+}
+
+/** 一页或一张单据上的动作抽屉：按授予筛过的动作、表单要用的名册、此刻开着的那一个。 */
+export function useActionDrawer(specs: readonly WarehouseActionSpec[]): ActionDrawerControl {
+  const lookups = useWarehouseLookups();
+  const targets = useWarehouseTargetMap(specs);
+  const [active, setActive] = useState<ActiveDrawerAction | null>(null);
+  return {
+    lookups,
+    has: (id) => targets.has(id),
+    open: (id, prefill) => {
+      const target = targets.get(id);
+      if (!target) return;
+      setActive((current) => ({ target, prefill, nonce: (current?.nonce ?? 0) + 1 }));
+    },
+    active,
+    close: () => setActive(null),
+  };
 }
 
 /**

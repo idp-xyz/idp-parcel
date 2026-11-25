@@ -145,6 +145,9 @@ export const wmsWordLabels: Record<string, string> = {
   CUSTOMER: '货主自助',
   ON_BEHALF: '运营代录',
   BY_OWNER: '货主自助',
+  OWNER: '货主自助',
+  // 收货结果
+  DIVERTED_TO_UNCLAIMED: '转成待认领',
   WORK_FACT: '一线扫码登记',
   DIVERTED_RECEIPT: '收货异常转入',
   INBOUND: '入库到货',
@@ -469,6 +472,74 @@ export function WmsStatusChips({
         </button>
       ))}
     </>
+  );
+}
+
+/**
+ * 状态签：一队一个签，签上是这一队此刻有几张。数量没答出来的签不写数，也不写成 0；不数的签（已出库这类只增不减的）
+ * 不给 count。
+ */
+export function WmsStatusTabs({
+  value,
+  tabs,
+  onChange,
+}: {
+  value: string;
+  tabs: ReadonlyArray<{ value: string; label: string; count?: number | null }>;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <div role="tablist" aria-label="按状态看" className="flex flex-wrap items-center gap-1.5">
+      {tabs.map((tab) => {
+        const active = tab.value === value;
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={`${chipClass(active)} whitespace-nowrap`}
+            onClick={() => onChange(tab.value)}
+          >
+            {tab.label}
+            {typeof tab.count === 'number' ? (
+              <span className={`ml-1.5 font-mono ${active ? '' : tab.count > 0 ? 'font-semibold text-idpxyz-textBright' : ''}`}>{tab.count}</span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 列表筛选区里的一个下拉：第一项是「全部」，即不按这一维筛。 */
+export function WmsFilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: ReadonlyArray<{ value: string; label: string }>;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <label className="inline-flex items-center gap-1.5 type-body text-idpxyz-textMuted">
+      <span className="whitespace-nowrap">{label}</span>
+      <select
+        className="h-7 max-w-[14rem] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body text-idpxyz-text focus:border-idpxyz-accent focus:outline-none"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">全部</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
