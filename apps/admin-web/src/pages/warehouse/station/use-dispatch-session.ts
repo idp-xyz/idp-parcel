@@ -59,7 +59,11 @@ export function useDispatchSession(input: DispatchSessionInput) {
   const run = useCallback((effects: DispatchEffect[]) => {
     for (const effect of effects) {
       if (effect.kind === 'find') {
-        void finder.find(input.warehouse, effect.code).then((lookup) => apply(orderFound(stateRef.current, lookup)));
+        void finder.find(input.warehouse, effect.code).then((lookup) => {
+          const step = orderFound(stateRef.current, lookup);
+          apply(step);
+          run(step.effects);
+        });
       }
       if (effect.kind === 'open') {
         void getOutboundRequestDetail(effect.requestId).then((answer) => {

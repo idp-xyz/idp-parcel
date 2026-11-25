@@ -126,7 +126,9 @@ export function useReceiveSession(input: ReceiveSessionInput) {
       if (effect.kind === 'remember-location') writeReceiveLocation(browserStorage(), input.deviceId, effect.code);
       if (effect.kind === 'verify-location') {
         void verifier.verify(input.warehouse, effect.code).then((verdict) => {
-          apply(locationVerdict(stateRef.current, effect.code, verdict));
+          const step = locationVerdict(stateRef.current, effect.code, verdict);
+          apply(step);
+          run(step.effects);
         });
       }
       if (effect.kind === 'find') {

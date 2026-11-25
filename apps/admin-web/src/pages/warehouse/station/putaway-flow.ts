@@ -166,13 +166,12 @@ function scanGoods(state: PutawayState, code: string): PutawayStep {
 
 export function placeVerdict(state: PutawayState, code: string, verdict: PlaceVerdict): PutawayStep {
   if (state.phase !== 'verifying') return hold(state);
-  if (verdict.kind === 'unverified') {
-    const back = state.source === null ? 'source' : 'target';
-    return hold({ ...state, phase: back, feedback: { tone: 'unsent', headline: '这一次没核成', detail: verdict.reason }, cue: 'wrong' });
-  }
-  if (verdict.kind === 'rejected') {
-    const back = state.source === null ? 'source' : 'target';
-    return hold({ ...state, phase: back, feedback: { tone: 'wrong', headline: '这个库位不能用', detail: verdict.reason }, cue: 'wrong' });
+  if (verdict.kind !== 'ok') {
+    // 目标没核过就回到扫货：核过的源库位还在，人再扫一个目标。源本身没核过才回到扫源库位。
+    const back = state.source === null ? 'source' : 'goods';
+    const headline = verdict.kind === 'unverified' ? '这一次没核成' : '这个库位不能用';
+    const tone = verdict.kind === 'unverified' ? 'unsent' : 'wrong';
+    return hold({ ...state, phase: back, feedback: { tone, headline, detail: verdict.reason }, cue: 'wrong' });
   }
   if (state.source === null) {
     return {

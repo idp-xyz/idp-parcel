@@ -36,6 +36,15 @@ test('扫货加一；扫一个库位码就当目标并提交；次品库区先�
   equal(defective.state.feedback.headline.includes('次品'), true);
 });
 
+test('目标库位不合格时回到扫货，源库位还留着', () => {
+  const withGoods = scanCode(ready(), 'G-1');
+  const verifying = scanCode(withGoods.state, 'LOC-OUT');
+  const rejected = placeVerdict(verifying.state, 'LOC-OUT', { kind: 'rejected', reason: '在待出库库区' });
+  equal(rejected.state.phase, 'goods');
+  equal(rejected.state.source, 'LOC-A');
+  equal(rejected.state.target, null);
+});
+
 test('库位没核成不记', () => {
   const owned = chooseOwner(startPutaway().state, 'OWNER-1');
   const verifying = scanCode(owned.state, 'NOPE');
