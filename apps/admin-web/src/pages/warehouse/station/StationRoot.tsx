@@ -1,6 +1,7 @@
 import { parseStationAddress } from '../../../shell/station-address';
 import { DeviceGate } from './DeviceGate';
 import { DispatchStation } from './DispatchStation';
+import { PutawayStation } from './PutawayStation';
 import { PackStation } from './PackStation';
 import { ReceiveStation } from './ReceiveStation';
 import { PickStation } from './PickStation';
@@ -32,6 +33,8 @@ export function StationRoot({ hash }: { hash: string }) {
           <ReceiveStation key={`${bound.deviceId}|${route.advice ?? ''}`} device={bound} adviceId={route.advice} onChangeDevice={onChangeDevice} />
         ) : route.kind === 'dispatch' ? (
           <DispatchStation key={`${bound.deviceId}|${route.request ?? ''}`} device={bound} requestId={route.request} onChangeDevice={onChangeDevice} />
+        ) : route.kind === 'putaway' ? (
+          <PutawayStation key={bound.deviceId} device={bound} onChangeDevice={onChangeDevice} />
         ) : (
           <StationFrame
             title="作业台"

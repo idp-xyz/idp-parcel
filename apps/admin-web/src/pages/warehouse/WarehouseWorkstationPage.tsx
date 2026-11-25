@@ -24,7 +24,7 @@ import {
   registeredDeviceConditions,
   writeActiveDeviceId,
 } from './station/device-binding';
-import { dispatchStationHash, packStationHash, pickStationHash, receiveStationHash } from './station/stations';
+import { dispatchStationHash, packStationHash, pickStationHash, putawayStationHash, receiveStationHash } from './station/stations';
 import { useWarehouseLookups } from './use-catalogues';
 import {
   workFactOutcomeLabels,
@@ -381,6 +381,10 @@ export function WarehouseWorkstationPage() {
             <Button type="button" variant="outline" size="sm" onClick={() => enterStation(dispatchStationHash())}>
               <Maximize2 className="h-3.5 w-3.5 mr-1" />
               全屏发货
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => enterStation(putawayStationHash())}>
+              <Maximize2 className="h-3.5 w-3.5 mr-1" />
+              全屏移库
             </Button>
             <Button type="button" variant="outline" size="sm" disabled={loadingQueues} onClick={loadQueues}>
               <RefreshCw className="h-3.5 w-3.5 mr-1" />

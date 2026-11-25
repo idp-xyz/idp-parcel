@@ -19,14 +19,14 @@ function route(hash: string) {
   return resolveStationRoute(address);
 }
 
-test('六个工位，次序与名字照屏幕示意；拣货、复核打包、收货与发货交接可进', () => {
+test('六个工位，次序与名字照屏幕示意；只剩盘点清点还没进全屏', () => {
   deepEqual(
     stationEntries.map((entry) => entry.name),
     ['拣货', '复核打包', '收货', '发货交接', '上架与移库', '盘点清点'],
   );
   deepEqual(
     stationEntries.filter((entry) => entry.ready).map((entry) => entry.id),
-    ['pick', 'pack', 'receive', 'dispatch'],
+    ['pick', 'pack', 'receive', 'dispatch', 'putaway'],
   );
   equal(new Set(stationEntries.map((entry) => entry.id)).size, 6);
 });
@@ -99,8 +99,12 @@ test('发货交接地址落到发货交接工位；出库请求号取查询串�
   deepEqual(route('#/station/dispatch?request=OBR-1'), { kind: 'dispatch', request: 'OBR-1' });
 });
 
-test('另外两个工位全屏的还没做好：落到说明页，不当成别的工位', () => {
-  for (const id of ['putaway', 'count']) {
+test('上架与移库落到自己的工位', () => {
+  deepEqual(route('#/station/putaway'), { kind: 'putaway' });
+});
+
+test('盘点清点全屏的还没做好：落到说明页', () => {
+  for (const id of ['count']) {
     const resolved = route(`#/station/${id}`);
     equal(resolved.kind, 'not-ready', id);
     if (resolved.kind === 'not-ready') equal(resolved.entry.id, id);
