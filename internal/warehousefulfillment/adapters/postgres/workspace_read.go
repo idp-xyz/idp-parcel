@@ -312,6 +312,29 @@ func (store *WorkspaceReads) OutboundRequestDetail(
 	case !errors.Is(err, pgx.ErrNoRows):
 		return out, false, fmt.Errorf("%s: short pick disposal: %w", op, err)
 	}
+	{
+		rows, err := querier.Query(ctx,
+			`SELECT tote_code, bound_at, released_at
+			   FROM warehouse_fulfillment.tote_binding
+			  WHERE tenant_id = $1 AND request_id = $2
+			  ORDER BY bound_at, binding_seq`,
+			tenant.String(), requestID)
+		if err != nil {
+			return out, false, fmt.Errorf("%s: totes: %w", op, err)
+		}
+		for rows.Next() {
+			var tote ports.OutboundToteDetail
+			if err := rows.Scan(&tote.ToteCode, &tote.BoundAt, &tote.ReleasedAt); err != nil {
+				rows.Close()
+				return out, false, fmt.Errorf("%s: totes: %w", op, err)
+			}
+			out.Totes = append(out.Totes, tote)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return out, false, fmt.Errorf("%s: totes: %w", op, err)
+		}
+	}
 
 	// 明细行
 	{

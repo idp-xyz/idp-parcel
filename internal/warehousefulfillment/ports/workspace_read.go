@@ -99,20 +99,29 @@ type ShortPickDisposalDetail struct {
 	RecordedAt       time.Time
 }
 
+// OutboundToteDetail 是一张出库请求绑过的一个周转箱。
+type OutboundToteDetail struct {
+	ToteCode   string
+	BoundAt    time.Time
+	ReleasedAt *time.Time
+}
+
 // OutboundRequestDetail 是单张出库单的 360° 全链路详情，供管理台与作业台复核打包直接使用。
 type OutboundRequestDetail struct {
 	PartialShipment PartialShipmentDetail
 	// ShortPickDisposal 为空是没办过拣不齐的处置。
 	ShortPickDisposal *ShortPickDisposalDetail
-	Request           OutboundRequestRow
-	Lines             []OutboundRequestDetailLine
-	Reservations      []OutboundReservationDetail
-	Waves             []string
-	PickTasks         []OutboundPickTaskDetail
-	Checks            []OutboundCheckDetail
-	Parcels           []OutboundParcelDetail
-	Confirmations     []OutboundConfirmationDetail
-	ReturnTasks       []OutboundReturnTaskDetail
+	// Totes 是这张请求绑过的周转箱，按绑上的先后；还没放开的 ReleasedAt 为空。
+	Totes         []OutboundToteDetail
+	Request       OutboundRequestRow
+	Lines         []OutboundRequestDetailLine
+	Reservations  []OutboundReservationDetail
+	Waves         []string
+	PickTasks     []OutboundPickTaskDetail
+	Checks        []OutboundCheckDetail
+	Parcels       []OutboundParcelDetail
+	Confirmations []OutboundConfirmationDetail
+	ReturnTasks   []OutboundReturnTaskDetail
 }
 
 type OutboundRequestDetailLine struct {

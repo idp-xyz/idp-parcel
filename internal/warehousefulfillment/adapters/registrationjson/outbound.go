@@ -535,6 +535,8 @@ type pickDocument struct {
 	Warehouse *string `json:"warehouse"`
 	Quantity  *int64  `json:"quantity"`
 	Target    *string `json:"targetLocation"`
+	// ToteCode 可以不带：没用周转箱就不带这一格。带了就得是一个箱号，空串不是「没用箱」的写法。
+	ToteCode *string `json:"toteCode"`
 }
 
 // PickCommand 把拣货事实译成命令。
@@ -566,7 +568,14 @@ func PickCommand(reader io.Reader) (application.PickCommand, error) {
 	if err != nil {
 		return none, err
 	}
-	return application.PickCommand{FactID: fact, TaskID: task, Warehouse: warehouse, Quantity: *document.Quantity, Target: target}, nil
+	var tote domain.ToteCode
+	if document.ToteCode != nil {
+		tote, err = domain.NewToteCode(*document.ToteCode)
+		if err != nil {
+			return none, malformed("toteCode must not be blank")
+		}
+	}
+	return application.PickCommand{FactID: fact, TaskID: task, Warehouse: warehouse, Quantity: *document.Quantity, Target: target, Tote: tote}, nil
 }
 
 type checkDocument struct {

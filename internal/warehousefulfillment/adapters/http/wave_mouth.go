@@ -18,6 +18,7 @@ type WaveService interface {
 	ShipPicked(ctx context.Context, command application.ShipPickedCommand) (application.WaveResult, error)
 	RegisterTotes(ctx context.Context, command application.RegisterTotesCommand) (application.WaveResult, error)
 	RetireTote(ctx context.Context, command application.RetireToteCommand) (application.WaveResult, error)
+	ReleaseTote(ctx context.Context, command application.ReleaseToteCommand) (application.WaveResult, error)
 	Adopt(ctx context.Context, command application.AdoptStrategyCommand) (application.WaveResult, error)
 	Pick(ctx context.Context, command application.PickCommand) (application.WaveResult, error)
 	Check(ctx context.Context, command application.CheckCommand) (application.WaveResult, error)
@@ -53,6 +54,7 @@ type WaveReleaseIntake interface {
 	IntakeWaveWithdrawal(ctx context.Context, request *http.Request) (application.WithdrawWaveCommand, error)
 	IntakeShortShipment(ctx context.Context, request *http.Request) (application.ShipPickedCommand, error)
 	IntakeShortageSplit(ctx context.Context, request *http.Request) (application.SplitShortageCommand, error)
+	IntakeToteRelease(ctx context.Context, request *http.Request) (application.ReleaseToteCommand, error)
 }
 
 type OperatorWaveIntake struct {
@@ -122,7 +124,25 @@ func (intake *OperatorWaveIntake) IntakeShortageSplit(ctx context.Context, reque
 	return command, nil
 }
 
+func (intake *OperatorWaveIntake) IntakeToteRelease(ctx context.Context, request *http.Request) (application.ReleaseToteCommand, error) {
+	identity, err := intake.authenticator.AuthenticateWaveRelease(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.ReleaseToteCommand{}, err
+	}
+	command, err := registrationjson.ReleaseToteCommand(requestBody(request))
+	if err != nil {
+		return application.ReleaseToteCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	command.Operator = identity.Registrant
+	return command, nil
+}
+
 type UnconfiguredWaveIntake struct{}
+
+func (UnconfiguredWaveIntake) IntakeToteRelease(context.Context, *http.Request) (application.ReleaseToteCommand, error) {
+	return application.ReleaseToteCommand{}, ErrAccessChannelNotConfigured
+}
 
 func (UnconfiguredWaveIntake) IntakeShortageSplit(context.Context, *http.Request) (application.SplitShortageCommand, error) {
 	return application.SplitShortageCommand{}, ErrAccessChannelNotConfigured
@@ -638,7 +658,7 @@ func writeWaveAnswer(response http.ResponseWriter, request *http.Request, result
 		result.Outcome() == application.WavePosted ||
 		result.Outcome() == application.WaveSubmitted || result.Outcome() == application.WaveWithdrawn ||
 		result.Outcome() == application.WaveShortShipped || result.Outcome() == application.WaveTotesRegistered ||
-		result.Outcome() == application.WaveToteRetired {
+		result.Outcome() == application.WaveToteRetired || result.Outcome() == application.WaveToteReleased {
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, outboundAnswer{Outcome: name})

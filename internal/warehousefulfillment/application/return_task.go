@@ -73,6 +73,10 @@ func (handler *WaveHandler) Return(ctx context.Context, command ReturnCommand) (
 		if err := handler.waves.SetRequestStatus(ctx, command.Tenant, task.Request, domain.OutboundCancelled); err != nil {
 			return WaveResult{}, fmt.Errorf("return stock: %w", err)
 		}
+		// 截单的货都回了库，箱空出来。
+		if err := handler.waves.ReleaseTotes(ctx, command.Tenant, task.Request, handler.clock.Now()); err != nil {
+			return WaveResult{}, fmt.Errorf("return stock: %w", err)
+		}
 	}
 	return WaveResult{outcome: WaveRecorded}, nil
 }

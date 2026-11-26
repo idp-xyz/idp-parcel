@@ -292,6 +292,7 @@ func NewQueryOutboundRequestDetailEndpoint(intake CatalogueIntake, queries Works
 			"partialShipment": partialShipmentBodyOf(detail.PartialShipment),
 			// 没办过拣不齐的处置时这一格是 null。
 			"shortPickDisposal": shortPickDisposalBodyOf(detail.ShortPickDisposal),
+			"totes":             outboundTotesBodyOf(detail.Totes),
 			"lines":             lines,
 			"reservations":      reservations,
 			"waves":             waves,
@@ -717,6 +718,19 @@ func NewQueryAgentOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQuer
 			"results":    results,
 		})
 	})
+}
+
+// outboundTotesBodyOf 答这张请求绑过的周转箱；还绑着的不带 releasedAt。没绑过是空数组。
+func outboundTotesBodyOf(totes []ports.OutboundToteDetail) []map[string]any {
+	body := make([]map[string]any, 0, len(totes))
+	for _, tote := range totes {
+		item := map[string]any{"toteCode": tote.ToteCode, "boundAt": rfc3339(tote.BoundAt)}
+		if tote.ReleasedAt != nil {
+			item["releasedAt"] = rfc3339(*tote.ReleasedAt)
+		}
+		body = append(body, item)
+	}
+	return body
 }
 
 // shortPickDisposalBodyOf 答这张请求拣不齐之后办过的那一次处置：照的规则与出处、要发与实发、谁在何时办的。

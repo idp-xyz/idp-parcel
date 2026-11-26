@@ -149,3 +149,15 @@ type toteBody struct {
 	RetiredBy    string `json:"retiredBy,omitempty"`
 	RetiredAt    string `json:"retiredAt,omitempty"`
 }
+
+// NewReleaseToteEndpoint 交回由人放开周转箱的入口（POST /warehouse-fulfillment-tote-releases）。
+// 它动的是一张单在拣货里的归属，与放波次、撤单挂同一种运营决定，不挂主数据登记。
+func NewReleaseToteEndpoint(intake WaveReleaseIntake, waves WaveService) http.Handler {
+	return toteEndpoint(func(request *http.Request) (application.WaveResult, error) {
+		command, err := intake.IntakeToteRelease(request.Context(), request)
+		if err != nil {
+			return application.WaveResult{}, &toteIntakeError{err}
+		}
+		return waves.ReleaseTote(request.Context(), command)
+	})
+}

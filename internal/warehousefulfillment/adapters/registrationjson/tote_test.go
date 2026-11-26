@@ -42,3 +42,31 @@ func TestToteDocumentsTranslateIntoCommands(t *testing.T) {
 		}
 	}
 }
+
+// 拣货事实可以带箱号，不带就是没用箱；带了空白的不收。由人放开周转箱带仓与一个箱号，操作者取自身份。
+func TestAPickMayNameAToteAndAReleaseNamesOne(t *testing.T) {
+	pick := `{"factId":"SYN-FACT-01","taskId":"SYN-TASK-01","warehouse":"SYN-WH-01","quantity":2,"targetLocation":"SYN-LOC-OUT"`
+	plain, err := registrationjson.PickCommand(strings.NewReader(pick + `}`))
+	if err != nil || plain.Tote.String() != "" {
+		t.Fatalf("不带箱号：%v %q", err, plain.Tote)
+	}
+	named, err := registrationjson.PickCommand(strings.NewReader(pick + `,"toteCode":"SYN-TOTE-01"}`))
+	if err != nil || named.Tote.String() != "SYN-TOTE-01" {
+		t.Fatalf("带箱号：%v %q", err, named.Tote)
+	}
+	if _, err := registrationjson.PickCommand(strings.NewReader(pick + `,"toteCode":" "}`)); err == nil {
+		t.Error("空白的箱号没有被拒")
+	}
+	released, err := registrationjson.ReleaseToteCommand(strings.NewReader(`{"warehouse":"SYN-WH-01","toteCode":"SYN-TOTE-01"}`))
+	if err != nil || released.Warehouse.String() != "SYN-WH-01" || released.Code.String() != "SYN-TOTE-01" || released.Operator.String() != "" {
+		t.Fatalf("放开译出的命令 %+v：%v", released, err)
+	}
+	for name, body := range map[string]string{
+		"没有箱号":  `{"warehouse":"SYN-WH-01"}`,
+		"带了操作者": `{"warehouse":"SYN-WH-01","toteCode":"SYN-TOTE-01","registrant":"someone"}`,
+	} {
+		if _, err := registrationjson.ReleaseToteCommand(strings.NewReader(body)); err == nil {
+			t.Errorf("放开，%s：没有被拒", name)
+		}
+	}
+}

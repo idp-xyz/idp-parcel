@@ -656,6 +656,19 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       },
     ],
   },
+  'tote-release': {
+    fields: [
+      { path: 'warehouse', label: '仓编码', kind: 'text', required: true, placeholder: 'SYN-WH-01' },
+      {
+        path: 'toteCode',
+        label: '箱号',
+        kind: 'text',
+        required: true,
+        placeholder: 'TOTE-001',
+        hint: '先确认箱里确实没有这张单的货了；放开之后别的出库单可以用这个箱',
+      },
+    ],
+  },
   'tote-retire': {
     fields: [
       { path: 'warehouse', label: '仓编码', kind: 'text', required: true, placeholder: 'SYN-WH-01' },

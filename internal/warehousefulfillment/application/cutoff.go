@@ -127,6 +127,12 @@ func (handler *WaveHandler) Cutoff(ctx context.Context, command CutoffCommand) (
 		if err := handler.waves.SetRequestStatus(ctx, command.Tenant, command.Request, status); err != nil {
 			return CutoffResult{}, fmt.Errorf("cut off outbound: %w", err)
 		}
+		// 取消了的请求不再占着箱。等回库的不在这里放：货还在箱里，回库都做完才放。
+		if status == domain.OutboundCancelled {
+			if err := handler.waves.ReleaseTotes(ctx, command.Tenant, command.Request, handler.clock.Now()); err != nil {
+				return CutoffResult{}, fmt.Errorf("cut off outbound: %w", err)
+			}
+		}
 	}
 	if err := handler.waves.SaveCutoff(ctx, command.Tenant, command.Key, command.Request.String(), command.Sequence, command.Basis, outcome.String(), handler.clock.Now()); err != nil {
 		return CutoffResult{}, fmt.Errorf("cut off outbound: %w", err)

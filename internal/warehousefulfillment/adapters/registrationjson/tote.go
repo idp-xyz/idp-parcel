@@ -67,3 +67,24 @@ func RetireToteCommand(reader io.Reader, tenant domain.TenantID, operator domain
 	}
 	return application.RetireToteCommand{Tenant: tenant, Warehouse: warehouse, Code: code, Operator: operator}, nil
 }
+
+// ReleaseToteCommand 把由人放开周转箱译成命令。载荷与停用同形：仓与一个箱号。
+func ReleaseToteCommand(reader io.Reader) (application.ReleaseToteCommand, error) {
+	var none application.ReleaseToteCommand
+	document, err := decodeDocument[toteRetirementDocument](reader, "tote release")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	warehouse, err := requiredText("warehouse", document.Warehouse, domain.NewWarehouseCode)
+	if err != nil {
+		return none, err
+	}
+	code, err := requiredText("toteCode", document.ToteCode, domain.NewToteCode)
+	if err != nil {
+		return none, err
+	}
+	return application.ReleaseToteCommand{Warehouse: warehouse, Code: code}, nil
+}

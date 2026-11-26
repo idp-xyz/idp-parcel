@@ -50,6 +50,8 @@ const (
 	WaveToteInUse
 	WaveWarehouseNotFound
 	WaveWarehouseNotAccepting
+	WaveToteReleased
+	WaveToteNotAccepting
 )
 
 func (outcome WaveOutcome) String() string {
@@ -124,6 +126,10 @@ func (outcome WaveOutcome) String() string {
 		return "WAREHOUSE_NOT_FOUND"
 	case WaveWarehouseNotAccepting:
 		return "WAREHOUSE_NOT_ACCEPTING"
+	case WaveToteReleased:
+		return "TOTE_RELEASED"
+	case WaveToteNotAccepting:
+		return "TOTE_NOT_ACCEPTING"
 	default:
 		return ""
 	}
@@ -159,6 +165,8 @@ type PickCommand struct {
 	Quantity  int64
 	Target    domain.LocationCode
 	Warehouse domain.WarehouseCode
+	// Tote 是拣货的人把这一格的货放进去的周转箱。没带就是没用箱。
+	Tote domain.ToteCode
 }
 
 // AdoptStrategyCommand 采用随产品发布的参考分配策略。没采用时放波次答未配置。
@@ -440,6 +448,17 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 	if err != nil || !found || zone.Content().Deactivated() || zone.Content().Usage() != domain.ZoneUsageOutboundStaging {
 		return WaveResult{outcome: WaveContentInvalid}, nil
 	}
+	// 箱在拣货入账之前绑：认不得的箱、绑着别的单的箱，这一笔拣货整份不成立，货不记进待出库。
+	// 同一张单可以用几个箱，一个箱同一时刻只装一张单。
+	if command.Tote.String() != "" {
+		refused, err := handler.bindTote(ctx, command.Tenant, request, command.Tote)
+		if err != nil {
+			return WaveResult{}, fmt.Errorf("pick: %w", err)
+		}
+		if refused != WaveOutcomeInvalid {
+			return WaveResult{outcome: refused}, nil
+		}
+	}
 	if err := handler.postPick(ctx, request, task, command); err != nil {
 		return WaveResult{}, fmt.Errorf("pick: %w", err)
 	}
@@ -635,6 +654,10 @@ func (handler *WaveHandler) Pack(ctx context.Context, command PackCommand) (Wave
 		})
 	}
 	if err := handler.waves.SavePack(ctx, command.Tenant, command.FactID, command.Request, stored, handler.clock.Now()); err != nil {
+		return WaveResult{}, fmt.Errorf("pack outbound: %w", err)
+	}
+	// 货都装进包裹了，箱空出来。
+	if err := handler.waves.ReleaseTotes(ctx, command.Tenant, command.Request, handler.clock.Now()); err != nil {
 		return WaveResult{}, fmt.Errorf("pack outbound: %w", err)
 	}
 	return WaveResult{outcome: WavePacked}, nil

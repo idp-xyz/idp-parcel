@@ -596,6 +596,7 @@ export const workFactSpecs: readonly WorkFactSpec[] = [
         { path: 'taskId', label: '拣货任务号', kind: 'text', required: true, placeholder: 'PKT-01', hint: '可从「出库与波次」波次右栏复制' },
         { path: 'quantity', label: '实拣数量', kind: 'integer', required: true, placeholder: '4' },
         { path: 'targetLocation', label: '目标待出库库位', kind: 'text', required: true, lookup: 'outbound-staging-location', placeholder: 'SYN-LOC-OUT' },
+        { path: 'toteCode', label: '周转箱号（用了箱才填）', kind: 'text', placeholder: 'TOTE-001', hint: '只认登记过的箱；箱上绑着别的出库单时这一笔不成立' },
       ],
     },
   },

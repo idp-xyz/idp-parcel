@@ -114,6 +114,8 @@ export const warehouseActionOutcomeLabels: Record<string, string> = {
   TOTE_RETIRED: '已停用，拣货不再认这个箱',
   TOTE_NOT_FOUND: '这个仓没有登记过这个箱号',
   TOTE_IN_USE: '这个箱上还绑着出库单，货还在里面',
+  TOTE_RELEASED: '已放开，这个箱可以绑别的出库单了',
+  TOTE_NOT_ACCEPTING: '这个箱已停用，不能再往里放货',
   SHORT_SHIPPED: '已按已拣数量发货：没拣到的预占放开，出库单进已拣货，往下按已拣数量复核打包',
   REMAINDER_SPLIT: '已拆出缺货部分：原单进已拣货、按已拣数量往下走，缺的另成一张出库单，在原单右栏能点过去',
   PARTIAL_SHIPMENT_NOT_CONFIGURED: '这张单没写明拣不齐时怎么发，货主也没登记默认，不能少发，也不能拆出缺货部分',
@@ -517,6 +519,17 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     endpoint: '/warehouse-fulfillment-tote-retirements',
     grant: 'registry',
     snapshotHint: '填 warehouse 与 toteCode。箱上还绑着出库单时不停。停用的箱留在名册上，再登记同一个箱号就恢复在用。' + noActorNote,
+  },
+  {
+    id: 'tote-release',
+    label: '放开周转箱',
+    title: '由人放开一个周转箱',
+    endpoint: '/warehouse-fulfillment-tote-releases',
+    grant: 'WAVE_RELEASE',
+    snapshotHint:
+      '填 warehouse 与 toteCode。箱平时由系统放开（出库单打完包，或截单的货都回了库）；箱被拿错、被清空而系统不知道时才由人放。'
+      + '它只解开箱与出库单的绑定，不动出库单、拣货任务与库存。' +
+      noActorNote,
   },
   {
     id: 'allocation-strategy',

@@ -68,13 +68,23 @@ test('拣货的报文键与定义里的格一一对应：定义多一格或少�
     deviceId: device,
     warehouse: 'SYN-WH-01',
     sequence: 1,
-    values: { taskId: 'PKT-1', quantity: '1', targetLocation: 'SYN-LOC-OUT-01' },
+    values: { taskId: 'PKT-1', quantity: '1', targetLocation: 'SYN-LOC-OUT-01', toteCode: 'SYN-TOTE-01' },
     now: at,
   });
   deepEqual(
     Object.keys(attempt.payload).sort(),
     spec.form.fields.map((field) => field.path).sort(),
   );
+  // 箱号是可选的一格：没用箱时不带这一键，后端把不带读成没用箱，空串它不收
+  const withoutTote = prepared({
+    spec,
+    deviceId: device,
+    warehouse: 'SYN-WH-01',
+    sequence: 2,
+    values: { taskId: 'PKT-1', quantity: '1', targetLocation: 'SYN-LOC-OUT-01' },
+    now: at,
+  });
+  equal('toteCode' in withoutTote.payload, false);
   // 拣货不带发生时刻与设备序号；后端用封闭载荷解码，多一个键就是 400
   equal('occurredAt' in attempt.payload, false);
   equal('deviceSequence' in attempt.payload, false);

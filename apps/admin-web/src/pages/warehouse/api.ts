@@ -956,6 +956,8 @@ export interface OutboundRequestDetailBody {
   partialShipment?: PartialShipmentAnswer;
   /** 拣不齐之后照部分发货规则办过的那一次；没办过是 null。 */
   shortPickDisposal?: ShortPickDisposalAnswer | null;
+  /** 这张单绑过的周转箱，按绑上的先后；还绑着的不带 `releasedAt`。 */
+  totes?: ReadonlyArray<{ toteCode: string; boundAt: string; releasedAt?: string }>;
   lines?: ReadonlyArray<{
     lineIndex: number;
     goodsCode: string;

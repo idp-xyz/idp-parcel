@@ -103,6 +103,7 @@ export function OutboundDocument({
   // 代录的同意只在它就是适用的那一层时摆依据：被后面的规则盖过的不在这里占地方。
   const consent = body?.partialShipment?.source === 'ORDER_CONSENT' ? body.partialShipment.consent : undefined;
   const disposal = body?.shortPickDisposal ?? undefined;
+  const totes = body?.totes ?? [];
   // 拣不齐、换不出别的库位的单停在已预占：这时摆货主许了的那一个处置，或说清为什么不摆。
   const stuckShort =
     request !== undefined && !agentWarehouse && awaitsShortPickDisposal(request.status, pickTasks, picked)
@@ -324,6 +325,18 @@ export function OutboundDocument({
                       <DocumentLink moduleId="warehouse-outbound" parts={[disposal.remainderRequestId]} />
                     </div>
                   ) : null}
+                </WmsAsideBlock>
+              ) : null}
+              {totes.length > 0 ? (
+                <WmsAsideBlock title="周转箱">
+                  {totes.map((tote) => (
+                    <span key={`${tote.toteCode}-${tote.boundAt}`} className="break-all font-mono type-caption">
+                      {tote.toteCode}
+                      <span className="ml-2 font-sans text-idpxyz-textMuted">
+                        {tote.releasedAt ? `已放开 ${formatInstant(tote.releasedAt)}` : '货在箱里'}
+                      </span>
+                    </span>
+                  ))}
                 </WmsAsideBlock>
               ) : null}
               <WmsAsideBlock title="来源">

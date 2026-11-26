@@ -1135,6 +1135,12 @@ func (registration transactionalWave) RetireTote(ctx context.Context, command wa
 	})
 }
 
+func (registration transactionalWave) ReleaseTote(ctx context.Context, command warehouseapp.ReleaseToteCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.ReleaseTote(txCtx, command)
+	})
+}
+
 func (registration transactionalWave) ShipPicked(ctx context.Context, command warehouseapp.ShipPickedCommand) (warehouseapp.WaveResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
 		return registration.inner.ShipPicked(txCtx, command)

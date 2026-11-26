@@ -41,4 +41,11 @@ test('周转箱登记与停用的报文', () => {
   equal(retire?.endpoint, '/warehouse-fulfillment-tote-retirements');
   equal(register?.grant, 'registry');
   equal(retire?.grant, 'registry');
+  // 由人放开动的是一张单在拣货里的归属，走放波次那一种运营决定，不走主数据登记。
+  const release = outboundWaveActionSpecs.find((spec) => spec.id === 'tote-release');
+  equal(release?.endpoint, '/warehouse-fulfillment-tote-releases');
+  equal(release?.grant, 'WAVE_RELEASE');
+  const released = buildGuidedPayload(outboundWaveGuidedForms['tote-release'], { warehouse: 'SYN-WH-01', toteCode: 'SYN-TOTE-01' });
+  equal(released.ok, true);
+  if (released.ok) deepEqual(released.payload, { warehouse: 'SYN-WH-01', toteCode: 'SYN-TOTE-01' });
 });

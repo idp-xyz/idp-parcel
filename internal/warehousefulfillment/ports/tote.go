@@ -24,7 +24,32 @@ type ToteStore interface {
 	RetireTote(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, code domain.ToteCode, operator domain.Registrant, at time.Time) error
 	// ToteHolder 交回这个箱此刻绑着的出库请求；没绑着交回 false。
 	ToteHolder(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, code domain.ToteCode) (domain.OutboundRequestID, bool, error)
+	// BindTote 把一个箱绑到一张出库请求上。箱没登记、已停用、绑着别的请求时不绑，照实交回是哪一种；
+	// 已经绑着这张请求的照旧。
+	BindTote(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, code domain.ToteCode, request domain.OutboundRequestID, at time.Time) (ToteBinding, error)
+	// ReleaseTotes 放开一张出库请求绑着的全部箱：它的货不在箱里了。
+	ReleaseTotes(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, at time.Time) error
+	// ReleaseTote 由人放开一个箱，记下是谁放的。箱没绑着交回 false。
+	ReleaseTote(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, code domain.ToteCode, operator domain.Registrant, at time.Time) (bool, error)
 }
+
+// ToteBinding 是绑一个箱的结果。
+type ToteBinding uint8
+
+const (
+	// ToteBindingInvalid 不是一种结果，只在出错时交回。
+	ToteBindingInvalid ToteBinding = iota
+	// ToteBound 是这一次绑上的。
+	ToteBound
+	// ToteAlreadyBound 是这个箱早就绑着这张请求。
+	ToteAlreadyBound
+	// ToteBoundElsewhere 是这个箱绑着别的出库请求。
+	ToteBoundElsewhere
+	// ToteUnregistered 是这个仓没有登记过这个箱号。
+	ToteUnregistered
+	// ToteOutOfService 是这个箱已停用。
+	ToteOutOfService
+)
 
 // 周转箱在列表上的三种状态：空着、绑着一张出库请求、已停用。
 const (

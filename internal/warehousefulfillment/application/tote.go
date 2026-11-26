@@ -102,3 +102,51 @@ func (handler *WaveHandler) RetireTote(ctx context.Context, command RetireToteCo
 	}
 	return WaveResult{outcome: WaveToteRetired}, nil
 }
+
+// ReleaseToteCommand 由人放开一个周转箱。
+type ReleaseToteCommand struct {
+	Tenant    domain.TenantID
+	Warehouse domain.WarehouseCode
+	Code      domain.ToteCode
+	Operator  domain.Registrant
+}
+
+// ReleaseTote 由人放开一个箱：箱被拿错、被清空而系统不知道时用。它只解开箱与出库请求的绑定，不动请求、任务与库存——
+// 货在哪里仍以库存账为准。箱本来就空着答已有结果。
+func (handler *WaveHandler) ReleaseTote(ctx context.Context, command ReleaseToteCommand) (WaveResult, error) {
+	if command.Operator.String() == "" || command.Warehouse.String() == "" || command.Code.String() == "" {
+		return WaveResult{outcome: WaveContentInvalid}, nil
+	}
+	if _, found, err := handler.waves.LoadTote(ctx, command.Tenant, command.Warehouse, command.Code); err != nil {
+		return WaveResult{}, fmt.Errorf("release tote: %w", err)
+	} else if !found {
+		return WaveResult{outcome: WaveToteNotFound}, nil
+	}
+	released, err := handler.waves.ReleaseTote(ctx, command.Tenant, command.Warehouse, command.Code, command.Operator, handler.clock.Now())
+	if err != nil {
+		return WaveResult{}, fmt.Errorf("release tote: %w", err)
+	}
+	if !released {
+		return WaveResult{outcome: WaveExisting}, nil
+	}
+	return WaveResult{outcome: WaveToteReleased}, nil
+}
+
+// bindTote 在拣货入账之前把箱绑到这张出库请求上。交回的 outcome 不是 WaveOutcomeInvalid 时拣货不成立：
+// 箱认不得或在别的单上，货就不该放进去。
+func (handler *WaveHandler) bindTote(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequest, code domain.ToteCode) (WaveOutcome, error) {
+	bound, err := handler.waves.BindTote(ctx, tenant, request.Warehouse(), code, request.ID(), handler.clock.Now())
+	if err != nil {
+		return WaveOutcomeInvalid, err
+	}
+	switch bound {
+	case ports.ToteBound, ports.ToteAlreadyBound:
+		return WaveOutcomeInvalid, nil
+	case ports.ToteBoundElsewhere:
+		return WaveToteInUse, nil
+	case ports.ToteOutOfService:
+		return WaveToteNotAccepting, nil
+	default:
+		return WaveToteNotFound, nil
+	}
+}

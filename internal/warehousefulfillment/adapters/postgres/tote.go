@@ -192,3 +192,79 @@ func (store *Waves) ListTotes(
 		return cataloguepage.Position{Value: item.ToteCode, Identity: []string{item.WarehouseCode, item.ToteCode}}
 	})
 }
+
+// BindTote 先锁住箱那一行再看它绑着谁：两个人同时把同一个空箱绑给两张请求时排在这一行上，后到的看得到先到的绑定。
+// 停用也先锁这一行，所以不会一边停用、一边刚把货放进去。
+func (store *Waves) BindTote(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, code domain.ToteCode, request domain.OutboundRequestID, at time.Time) (ports.ToteBinding, error) {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.ToteBindingInvalid, fmt.Errorf("bind tote: %w", err)
+	}
+	var retiredAt *time.Time
+	err = executor.QueryRow(ctx,
+		`SELECT retired_at FROM warehouse_fulfillment.tote
+		  WHERE tenant_id = $1 AND warehouse_code = $2 AND tote_code = $3
+		    FOR UPDATE`,
+		tenant.String(), warehouse.String(), code.String()).Scan(&retiredAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.ToteUnregistered, nil
+	}
+	if err != nil {
+		return ports.ToteBindingInvalid, fmt.Errorf("bind tote: %w", err)
+	}
+	if retiredAt != nil {
+		return ports.ToteOutOfService, nil
+	}
+	var holder string
+	err = executor.QueryRow(ctx,
+		`SELECT request_id FROM warehouse_fulfillment.tote_binding
+		  WHERE tenant_id = $1 AND warehouse_code = $2 AND tote_code = $3 AND released_at IS NULL`,
+		tenant.String(), warehouse.String(), code.String()).Scan(&holder)
+	switch {
+	case err == nil && holder == request.String():
+		return ports.ToteAlreadyBound, nil
+	case err == nil:
+		return ports.ToteBoundElsewhere, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return ports.ToteBindingInvalid, fmt.Errorf("bind tote: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.tote_binding (tenant_id, warehouse_code, tote_code, request_id, bound_at)
+		 VALUES ($1,$2,$3,$4,$5)`,
+		tenant.String(), warehouse.String(), code.String(), request.String(), at.UTC()); err != nil {
+		return ports.ToteBindingInvalid, fmt.Errorf("bind tote: %w", err)
+	}
+	return ports.ToteBound, nil
+}
+
+// ReleaseTotes 放开的时刻不早于绑上的时刻：同一刻绑上又放开的（时钟没走）记成绑上那一刻放开。
+func (store *Waves) ReleaseTotes(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, at time.Time) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("release totes: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.tote_binding
+		    SET released_at = GREATEST($3::timestamptz, bound_at)
+		  WHERE tenant_id = $1 AND request_id = $2 AND released_at IS NULL`,
+		tenant.String(), request.String(), at.UTC()); err != nil {
+		return fmt.Errorf("release totes: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) ReleaseTote(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, code domain.ToteCode, operator domain.Registrant, at time.Time) (bool, error) {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("release tote: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.tote_binding
+		    SET released_at = GREATEST($4::timestamptz, bound_at), released_by = $5
+		  WHERE tenant_id = $1 AND warehouse_code = $2 AND tote_code = $3 AND released_at IS NULL`,
+		tenant.String(), warehouse.String(), code.String(), at.UTC(), operator.String())
+	if err != nil {
+		return false, fmt.Errorf("release tote: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}

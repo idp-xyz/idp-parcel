@@ -62,6 +62,9 @@ export function ToteList() {
       const requestId = row.requestId;
       actions.push({ label: '打开绑着的出库单', onRun: () => openDocument('warehouse-outbound', [requestId]) });
     }
+    if (row.state === 'IN_USE' && drawer.has('tote-release')) {
+      actions.push({ label: '放开这个箱', onRun: () => drawer.open('tote-release', { warehouse: row.warehouseCode, toteCode: row.toteCode }) });
+    }
     if (canRetireTote(row.state) && drawer.has('tote-retire')) {
       actions.push({ label: '停用这个箱', onRun: () => drawer.open('tote-retire', { warehouse: row.warehouseCode, toteCode: row.toteCode }) });
     }
