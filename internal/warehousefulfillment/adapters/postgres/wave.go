@@ -176,6 +176,54 @@ func (store *Waves) IsSingleUnitWave(ctx context.Context, tenant domain.TenantID
 	return single, nil
 }
 
+// SingleUnitAwaitingCheck 只认还留在单品单件波次里的请求（撤出的不算），拣的那一件取它在那个波次里拣满的任务。
+func (store *Waves) SingleUnitAwaitingCheck(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode) ([]ports.SingleUnitCandidate, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT request.request_id, coalesce(request.document_number, ''), request.owner_account_id, task.goods_code
+		   FROM warehouse_fulfillment.outbound_request request
+		   JOIN warehouse_fulfillment.wave_request member
+		     ON member.tenant_id = request.tenant_id AND member.request_id = request.request_id AND member.withdrawn_at IS NULL
+		   JOIN warehouse_fulfillment.wave wave
+		     ON wave.tenant_id = member.tenant_id AND wave.wave_id = member.wave_id AND wave.single_unit
+		   JOIN warehouse_fulfillment.pick_task task
+		     ON task.tenant_id = request.tenant_id AND task.request_id = request.request_id
+		    AND task.wave_id = wave.wave_id AND task.status = 'DONE'
+		  WHERE request.tenant_id = $1 AND request.warehouse_code = $2 AND request.status = 'PICKED'
+		  ORDER BY wave.released_at, request.received_at, request.request_id
+		  LIMIT $3`,
+		tenant.String(), warehouse.String(), ports.SingleUnitCandidateLimit)
+	if err != nil {
+		return nil, fmt.Errorf("single unit awaiting check: %w", err)
+	}
+	defer rows.Close()
+	var candidates []ports.SingleUnitCandidate
+	for rows.Next() {
+		var request, owner, goods string
+		var candidate ports.SingleUnitCandidate
+		if err := rows.Scan(&request, &candidate.DocumentNumber, &owner, &goods); err != nil {
+			return nil, fmt.Errorf("single unit awaiting check: %w", err)
+		}
+		if candidate.Request, err = domain.NewOutboundRequestID(request); err != nil {
+			return nil, fmt.Errorf("single unit awaiting check: %w", err)
+		}
+		if candidate.Owner, err = domain.NewOwnerAccountID(owner); err != nil {
+			return nil, fmt.Errorf("single unit awaiting check: %w", err)
+		}
+		if candidate.Goods, err = domain.NewGoodsCode(goods); err != nil {
+			return nil, fmt.Errorf("single unit awaiting check: %w", err)
+		}
+		candidates = append(candidates, candidate)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("single unit awaiting check: %w", err)
+	}
+	return candidates, nil
+}
+
 // waveIsSingleUnit 是「单品单件波次」的那一条规则：波次里有出库请求，并且每一张要拣的都只有一件——
 // 预占需求合计是 1 个基本单位（套装按组件展开之后算）。放出之后不往波次里加单，所以放出时算一次就定了；
 // 迁移回填已有波次时用的也是这一条。

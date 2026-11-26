@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
@@ -224,6 +225,57 @@ func NewQueryWaveEndpoint(intake CatalogueIntake, queries WaveQueries) http.Hand
 		body := waveRowBodyOf(row)
 		writeJSON(response, http.StatusOK, waveResponse{Outcome: "WAVE_FOUND", Wave: &body})
 	})
+}
+
+// SingleUnitMatching 替复核打包台扫到的一件货配一张单品单件的出库请求。
+type SingleUnitMatching interface {
+	Match(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, code domain.IdentifierCode) (application.SingleUnitMatch, bool, error)
+}
+
+// NewMatchSingleUnitOrderEndpoint 交回扫货配单的入口（GET /warehouse-fulfillment-single-unit-match?warehouseCode=...&code=...）。
+// 没有等复核的单要这种货是一种答案，不是出错：答 SINGLE_UNIT_NOT_MATCHED。这是读：配上的那张单并没有被占住，
+// 两个人同时扫同一种货会配到同一张，后复核的那一个由复核口答状态不符，再扫一次配到下一张。
+func NewMatchSingleUnitOrderEndpoint(intake CatalogueIntake, matcher SingleUnitMatching) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if refuseMethod(response, request, http.MethodGet) {
+			return
+		}
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeIntakeProblem(response, err)
+			return
+		}
+		warehouse, warehouseErr := domain.NewWarehouseCode(strings.TrimSpace(request.URL.Query().Get("warehouseCode")))
+		code, codeErr := domain.NewIdentifierCode(strings.TrimSpace(request.URL.Query().Get("code")))
+		if warehouseErr != nil || codeErr != nil {
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		match, found, err := matcher.Match(request.Context(), query.Tenant, warehouse, code)
+		if err != nil {
+			slog.ErrorContext(request.Context(), "single unit match did not form an answer")
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		if !found {
+			writeJSON(response, http.StatusOK, singleUnitMatchResponse{Outcome: "SINGLE_UNIT_NOT_MATCHED"})
+			return
+		}
+		writeJSON(response, http.StatusOK, singleUnitMatchResponse{
+			Outcome: "SINGLE_UNIT_MATCHED", RequestID: match.Request.String(), DocumentNumber: match.DocumentNumber,
+			OwnerAccount: match.Owner.String(), GoodsCode: match.Goods.String(), Waiting: match.Waiting,
+		})
+	})
+}
+
+type singleUnitMatchResponse struct {
+	Outcome        string `json:"outcome"`
+	RequestID      string `json:"requestId,omitempty"`
+	DocumentNumber string `json:"documentNumber,omitempty"`
+	OwnerAccount   string `json:"ownerAccount,omitempty"`
+	GoodsCode      string `json:"goodsCode,omitempty"`
+	// Waiting 是这位货主的这种货此刻还有几张单等着复核，含配上的这一张。
+	Waiting int `json:"waiting,omitempty"`
 }
 
 // NewQueryPickDifferencesEndpoint 交回运营分页查阅拣货差异的入口（GET /warehouse-fulfillment-pick-differences）。

@@ -792,6 +792,26 @@ export function listTotes(conditions: CatalogueConditions, after: string | null 
   return exchangeMasterData<ToteListBody>(catalogueRequestPath('/warehouse-fulfillment-totes', conditions, after));
 }
 
+export interface SingleUnitMatchBody {
+  /** SINGLE_UNIT_MATCHED 配上了；SINGLE_UNIT_NOT_MATCHED 没有等复核的单品单件出库单要这种货。 */
+  outcome: string;
+  requestId?: string;
+  documentNumber?: string;
+  ownerAccount?: string;
+  goodsCode?: string;
+  /** 这位货主的这种货此刻还有几张单等着复核，含配上的这一张。 */
+  waiting?: number;
+}
+
+/**
+ * 复核打包台扫到一件货，给它配一张单品单件的出库单：本仓已拣完、等复核、要这种货的单里等得最久的那一张。
+ * 码可以是商品编码，也可以是货主登记过的条码、平台商品码。这是读，配上的单没有被占住。
+ */
+export function matchSingleUnitOrder(warehouse: string, code: string): Promise<ApiResult<SingleUnitMatchBody>> {
+  const params = new URLSearchParams({ warehouseCode: warehouse, code });
+  return exchangeMasterData<SingleUnitMatchBody>(`/warehouse-fulfillment-single-unit-match?${params.toString()}`);
+}
+
 /** 按波次号读一张。逐字相等，只在本租户；没有这个波次答 `WAVE_NOT_FOUND`、不带 `wave`，不答 404。 */
 export function getWave(waveId: string): Promise<ApiResult<WaveOneBody>> {
   const params = new URLSearchParams({ waveId });

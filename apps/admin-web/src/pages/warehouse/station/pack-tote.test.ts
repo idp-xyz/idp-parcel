@@ -1,9 +1,9 @@
 import { deepEqual, equal } from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ApiResult } from '../../catalogue-api';
-import type { OutboundRequestRecord, ToteListBody, ToteRecord } from '../api';
+import type { OutboundRequestRecord, SingleUnitMatchBody, ToteListBody, ToteRecord } from '../api';
 import type { OrderFinder, OrderLookup } from './pack-order';
-import { withToteLookup } from './pack-tote';
+import { scanAfterMatch, withSingleUnitMatch, withToteLookup, type SingleUnitMatcher } from './pack-tote';
 import type { ToteReader } from './pick-totes';
 
 const order = { requestId: 'OBR-A', documentNumber: 'OB-1', warehouseCode: 'SYN-WH-01', status: 'PICKED' } as OutboundRequestRecord;
@@ -64,6 +64,43 @@ test('空着的箱、没有的码、没读成的名册各说各的', async () =>
   deepEqual(await withToteLookup(none, totes([tote('TOTE-10', 'IN_USE', 'OBR-A')])).find('SYN-WH-01', 'TOTE-1'), { kind: 'absent' });
   const unread = await withToteLookup(none, totes('fail')).find('SYN-WH-01', 'TOTE-1');
   equal(unread.kind, 'unverified');
+});
+
+const matcher = (body: SingleUnitMatchBody | 'fail', asked: string[] = []): SingleUnitMatcher => async (warehouse, code) => {
+  asked.push(`${warehouse}/${code}`);
+  return body === 'fail'
+    ? ({ kind: 'unreachable' } as unknown as ApiResult<SingleUnitMatchBody>)
+    : { kind: 'outcome', status: 200, body };
+};
+
+// Covers: 扫到的码不是单号时当一件货配单：后端配出一张单品单件的出库单，照它的请求号找到单，并标上是按货配的。
+// 当单号找得到就不去配；没有单要这种货仍是没有这张单；配单没问成说没核成。
+test('扫货配单：按配出来的请求号找单，标上是按货配的', async () => {
+  const askedOrders: string[] = [];
+  const askedMatch: string[] = [];
+  const found = await withSingleUnitMatch(
+    orders({ 'OBR-A': { kind: 'found', row: order } }, askedOrders),
+    matcher({ outcome: 'SINGLE_UNIT_MATCHED', requestId: 'OBR-A', goodsCode: 'SKU-1', waiting: 3 }, askedMatch),
+  ).find('SYN-WH-01', '6901234567890');
+  deepEqual(found, { kind: 'found', row: order, byGoods: true });
+  deepEqual(askedOrders, ['6901234567890', 'OBR-A']);
+  deepEqual(askedMatch, ['SYN-WH-01/6901234567890']);
+
+  const direct = await withSingleUnitMatch(orders({ 'OB-1': { kind: 'found', row: order } }, []), matcher('fail', askedMatch)).find('SYN-WH-01', 'OB-1');
+  deepEqual(direct, { kind: 'found', row: order });
+  equal(askedMatch.length, 1);
+
+  deepEqual(await withSingleUnitMatch(orders({}, []), matcher({ outcome: 'SINGLE_UNIT_NOT_MATCHED' })).find('SYN-WH-01', 'X'), { kind: 'absent' });
+  equal((await withSingleUnitMatch(orders({}, []), matcher('fail')).find('SYN-WH-01', 'X')).kind, 'unverified');
+});
+
+// Covers: 按货配出来的单读开之后，刚才扫的那一件要算进复核的数里；读开的不是那张单、或它不在等逐件扫货时不补。
+test('按货配出来的单读开后补上刚才扫的那一件', () => {
+  const matched = { requestId: 'OBR-A', code: '6901234567890' };
+  equal(scanAfterMatch(matched, 'OBR-A', 'checking'), '6901234567890');
+  equal(scanAfterMatch(matched, 'OBR-B', 'checking'), null);
+  equal(scanAfterMatch(matched, 'OBR-A', 'packing'), null);
+  equal(scanAfterMatch(null, 'OBR-A', 'checking'), null);
 });
 
 // Covers: 当单号找的结果不是「没有」（在别的仓、没核成）时原样交回，不拿箱去盖它。

@@ -190,7 +190,8 @@ export function judgeOpened(opened: Extract<OrderOpened, { kind: 'order' }>, dev
 // —— 按扫到的码找单 ——
 
 export type OrderLookup =
-  | { kind: 'found'; row: OutboundRequestRecord }
+  /** `byGoods` 为真是扫的不是单号：扫的是一件货，这张单是按货配出来的单品单件出库单。 */
+  | { kind: 'found'; row: OutboundRequestRecord; byGoods?: boolean }
   /** 登记在别的仓。 */
   | { kind: 'elsewhere'; warehouse: string; number: string }
   /** 这个仓里问完没有，别的仓里也问完没有。 */

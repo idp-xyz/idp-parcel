@@ -116,6 +116,7 @@ type warehouseFulfillmentWiring struct {
 	outboundRequestQueries    warehousehttp.OutboundRequestQueries
 	waveQueries               warehousehttp.WaveQueries
 	toteQueries               warehousehttp.ToteQueries
+	singleUnitMatching        warehousehttp.SingleUnitMatching
 	chargeOccurrenceQueries   warehousehttp.ChargeOccurrenceQueries
 	warehouseAdoptionQueries  warehousehttp.WarehouseAdoptionQueries
 	warehouseChargeReqQueries warehousehttp.WarehouseChargeRequestQueries
@@ -625,6 +626,10 @@ func init() {
 			"/warehouse-fulfillment-totes": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-single-unit-match": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-single-unit-match?warehouseCode=WH-01&code=CODE-01",
+			},
 			"/warehouse-fulfillment-charge-occurrences": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 			},
@@ -868,6 +873,7 @@ func init() {
 				outboundRequestQueries:    orchestration.outboundRequestQueries,
 				waveQueries:               orchestration.waveQueries,
 				toteQueries:               orchestration.waveQueries,
+				singleUnitMatching:        orchestration.singleUnitMatching,
 				chargeOccurrenceQueries:   orchestration.chargeOccurrenceQueries,
 				warehouseAdoptionQueries:  orchestration.warehouseAdoptions,
 				warehouseChargeReqQueries: orchestration.warehouseAdoptions,
@@ -1020,6 +1026,7 @@ func init() {
 			waveOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			pickDifferenceList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			toteList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			singleUnitMatch := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			chargeOccurrenceList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			warehouseAdoptionList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			warehouseChargeRequestList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
@@ -1282,6 +1289,7 @@ func init() {
 				waveOne = warehousehttp.NewQueryWaveEndpoint(catalogueIntake, wiring.waveQueries)
 				pickDifferenceList = warehousehttp.NewQueryPickDifferencesEndpoint(catalogueIntake, wiring.waveQueries)
 				toteList = warehousehttp.NewQueryTotesEndpoint(catalogueIntake, wiring.toteQueries)
+				singleUnitMatch = warehousehttp.NewMatchSingleUnitOrderEndpoint(catalogueIntake, wiring.singleUnitMatching)
 				chargeOccurrenceList = warehousehttp.NewQueryChargeOccurrencesEndpoint(catalogueIntake, wiring.chargeOccurrenceQueries)
 				warehouseAdoptionList = warehousehttp.NewQueryWarehouseAdoptionsEndpoint(catalogueIntake, wiring.warehouseAdoptionQueries)
 				warehouseChargeRequestList = warehousehttp.NewQueryWarehouseChargeRequestsEndpoint(catalogueIntake, wiring.warehouseChargeReqQueries)
@@ -1439,6 +1447,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-wave", Handler: waveOne},
 				{Pattern: "/warehouse-fulfillment-pick-differences", Handler: pickDifferenceList},
 				{Pattern: "/warehouse-fulfillment-totes", Handler: toteList},
+				{Pattern: "/warehouse-fulfillment-single-unit-match", Handler: singleUnitMatch},
 				{Pattern: "/warehouse-fulfillment-charge-occurrences", Handler: chargeOccurrenceList},
 				{Pattern: "/warehouse-fulfillment-charge-adoption-list", Handler: warehouseAdoptionList},
 				{Pattern: "/warehouse-fulfillment-charge-requests", Handler: warehouseChargeRequestList},

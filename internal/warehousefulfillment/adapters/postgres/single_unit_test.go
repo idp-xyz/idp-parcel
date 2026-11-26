@@ -121,6 +121,72 @@ func TestASingleUnitWaveIsPickedWithoutTotesEvenWhereTotesAreRequired(t *testing
 	}
 }
 
+// Covers: 复核打包台扫到一件货，配给单品单件波次里已拣完、等复核、要这种货的出库请求里等得最久的那一张；
+// 商品编码与这位货主登记过的条码都认。复核走一张，再扫配到下一张；都走完了、码认不出、或没有单要这种货时配不上。
+// 不是单品单件波次的单、还没拣的单、从波次撤出的单不配。
+func TestAScannedUnitIsMatchedToTheLongestWaitingSingleUnitOrder(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	first, second, unpicked, bigger := reserve("REQ-MATCH-A", 1), reserve("REQ-MATCH-B", 1), reserve("REQ-MATCH-C", 1), reserve("REQ-MATCH-BIG", 2)
+	single := world.releaseRequests(t, handler, "WAVE-MATCH", first, second, unpicked)
+	other := world.releaseRequests(t, handler, "WAVE-MATCH-BIG", bigger)
+	if single.Outcome() != application.WaveAllocated || other.Outcome() != application.WaveAllocated {
+		t.Fatalf("放出 %s / %s", single.Outcome(), other.Outcome())
+	}
+	for _, task := range append(single.Tasks(), other.Tasks()...) {
+		if task.Request == unpicked {
+			continue
+		}
+		if world.pick(t, handler, task.ID, task.Quantity).Outcome() != application.WavePicked {
+			t.Fatalf("任务 %s 没有拣成", task.ID)
+		}
+	}
+	if world.withdraw(t, handler, "WAVE-MATCH", unpicked).Outcome() != application.WaveWithdrawn {
+		t.Fatal("没拣的那张没有撤出")
+	}
+	waves, err := adapter.NewWaves(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalogue, err := adapter.NewGoodsCatalogue(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matcher := application.NewSingleUnitMatcher(waves, catalogue, world.clock)
+	tenant, warehouse := valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), valueOf(t, domain.NewWarehouseCode, "SYN-WH-01")
+	match := func(code string) (application.SingleUnitMatch, bool) {
+		t.Helper()
+		found, ok, err := matcher.Match(t.Context(), tenant, warehouse, valueOf(t, domain.NewIdentifierCode, code))
+		if err != nil {
+			t.Fatalf("配单 %s：%v", code, err)
+		}
+		return found, ok
+	}
+	oldest := first
+	if second.String() < first.String() {
+		oldest = second
+	}
+	got, ok := match("SYN-GOODS-01")
+	if !ok || got.Request != oldest || got.Waiting != 2 || got.Goods.String() != "SYN-GOODS-01" || got.Owner.String() != "SYN-OWNER-01" {
+		t.Fatalf("按商品编码配到 %+v %v（两张同一刻受理，按请求号定先后，应是 %s）", got, ok, oldest)
+	}
+	if _, ok := match("SYN-CODE-NOT-THERE"); ok {
+		t.Fatal("认不出的码配上了单")
+	}
+	if world.checkOutbound(t, handler, oldest, "SYN-CHECK-MATCH", 1).Outcome() != application.WaveChecked {
+		t.Fatal("复核没有成")
+	}
+	next, ok := match("SYN-GOODS-01")
+	if !ok || next.Request == oldest || next.Waiting != 1 {
+		t.Fatalf("复核走一张之后配到 %+v %v", next, ok)
+	}
+	if world.checkOutbound(t, handler, next.Request, "SYN-CHECK-MATCH-2", 1).Outcome() != application.WaveChecked {
+		t.Fatal("第二张复核没有成")
+	}
+	if left, ok := match("SYN-GOODS-01"); ok {
+		t.Fatalf("都复核走了还配到 %+v", left)
+	}
+}
+
 // Covers: 一个单品单件的请求与一个两件的请求放进同一个波次，这个波次不是单品单件波次。
 func TestAWaveWithOneLargerRequestIsNotASingleUnitWave(t *testing.T) {
 	world, handler, reserve := twoCellWorld(t)

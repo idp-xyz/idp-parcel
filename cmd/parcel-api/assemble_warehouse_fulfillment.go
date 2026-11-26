@@ -183,6 +183,7 @@ type warehouseFulfillmentOrchestration struct {
 	warehouseAdoptions      warehouseAdoptionBridge
 	outboundRequestQueries  *whpostgres.OutboundRequests
 	waveQueries             *whpostgres.Waves
+	singleUnitMatching      *warehouseapp.SingleUnitMatcher
 	chargeOccurrenceQueries *whpostgres.Charges
 	workspaceQueries        *whpostgres.WorkspaceReads
 }
@@ -833,6 +834,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		warehouseAdoptions:      warehouseAdoptions,
 		outboundRequestQueries:  outboundStore,
 		waveQueries:             waveStore,
+		singleUnitMatching:      warehouseapp.NewSingleUnitMatcher(waveStore, goodsCatalogue, systemClock{}),
 		chargeOccurrenceQueries: chargeStore,
 		workspaceQueries:        workspaceReads,
 	}, nil

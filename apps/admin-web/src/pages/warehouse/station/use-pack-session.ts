@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { listTotes } from '../api';
-import { withToteLookup } from './pack-tote';
-import { findGoodsByCode, getOutboundRequestDetail, listOutboundRequests } from '../api';
+import { findGoodsByCode, getOutboundRequestDetail, listOutboundRequests, listTotes, matchSingleUnitOrder } from '../api';
 import { workFactSpecs, type WorkFactSpec } from '../work-fact';
 import type { GuidedFormValues } from '../guided-forms';
 import { browserStorage } from './device-binding';
@@ -36,6 +34,7 @@ import {
 import { liveOrderFinder, loadPackQueue, openedOf, type OrderFinder, type PackQueue } from './pack-order';
 import { liveLoadPackagingList, livePackagingFinder, type PackagingFinder, type PackagingList } from './pack-packaging';
 import { checkFactValues, packFactValues, type PackagingMaterial } from './pack-parcels';
+import { scanAfterMatch, withSingleUnitMatch, withToteLookup } from './pack-tote';
 import { createGoodsIdentifier, goodsLookupOf, type GoodsIdentifier } from './pick-goods';
 import type { ScanCue } from './scan-sound';
 import {
@@ -140,8 +139,12 @@ export function usePackSession({ deviceId, warehouse, request, cue }: PackSessio
     });
   }
   const finderRef = useRef<OrderFinder | null>(null);
-  // 扫到的码当出库单号找不到时，再当周转箱号找：货是装在箱里送到复核台的
-  if (finderRef.current === null) finderRef.current = withToteLookup(liveOrderFinder(), listTotes);
+  // 扫到的码当出库单号找不到时，再当周转箱号找（货是装在箱里送到复核台的）；还找不到，当一件货给单品单件的出库单配单
+  if (finderRef.current === null) {
+    finderRef.current = withSingleUnitMatch(withToteLookup(liveOrderFinder(), listTotes), matchSingleUnitOrder);
+  }
+  // 按货配出来的那张单与扫的那个码：单读开之后把这一件算进复核的数里，人不必再扫一次
+  const matchedRef = useRef<{ requestId: string; code: string } | null>(null);
   const packagingRef = useRef<PackagingFinder | null>(null);
   if (packagingRef.current === null) packagingRef.current = livePackagingFinder();
 
@@ -178,13 +181,19 @@ export function usePackSession({ deviceId, warehouse, request, cue }: PackSessio
     (effect: PackEffect) => {
       switch (effect.kind) {
         case 'find-order':
-          void finderRef.current?.find(warehouse, effect.code).then((lookup) => applyRef.current(orderFound(stateRef.current, effect.code, lookup)));
+          void finderRef.current?.find(warehouse, effect.code).then((lookup) => {
+            matchedRef.current = lookup.kind === 'found' && lookup.byGoods ? { requestId: lookup.row.requestId, code: effect.code } : null;
+            applyRef.current(orderFound(stateRef.current, effect.code, lookup));
+          });
           return;
         case 'open-order':
           void getOutboundRequestDetail(effect.requestId).then((answer) => {
             const opened = openedOf(answer);
             if (opened.kind === 'order') ownersRef.current.set(opened.order.requestId, opened.order.ownerAccount);
             applyRef.current(orderOpened(stateRef.current, effect.requestId, opened));
+            const again = scanAfterMatch(matchedRef.current, effect.requestId, stateRef.current.phase);
+            matchedRef.current = null;
+            if (again !== null) applyRef.current(scanCode(stateRef.current, again));
           });
           return;
         case 'identify':

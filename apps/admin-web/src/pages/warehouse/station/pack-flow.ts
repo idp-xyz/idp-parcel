@@ -249,7 +249,7 @@ export function orderFound(state: PackState, code: string, lookup: OrderLookup):
     case 'absent':
       return wrong(
         back(waitingFeedback),
-        `没有找到出库单 ${code}：这个仓和别的仓里都问过了，没有这个号，本仓也没有这个号的周转箱。没有记任何东西。`,
+        `没有找到出库单 ${code}：这个仓和别的仓里都问过了，没有这个号；本仓没有这个号的周转箱，也没有等复核的单品单件出库单要这种货。没有记任何东西。`,
         code,
         undefined,
         '没有这张单',

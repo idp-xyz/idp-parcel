@@ -50,6 +50,18 @@ type WaveMember struct {
 	Withdrawn bool
 }
 
+// SingleUnitCandidateLimit 是一次配单至多看的等复核的单品单件请求数。等得最久的先看；
+// 排在这之后的要等前面的复核走了才轮得到，不会被跳过去。
+const SingleUnitCandidateLimit = 500
+
+// SingleUnitCandidate 是一张已拣完、等复核的单品单件出库请求，和它拣的那一件是哪位货主的什么货。
+type SingleUnitCandidate struct {
+	Request        domain.OutboundRequestID
+	DocumentNumber string
+	Owner          domain.OwnerAccountID
+	Goods          domain.GoodsCode
+}
+
 // ShortPickDisposal 是一张请求拣不齐之后照货主的部分发货规则办的那一次。一张请求只办一次。
 // Rule 是当时照的规则（少发或拆单发），Source 是它出自哪一层；规则之后改了，这一次照的仍是记下的。
 // Remainder 只在拆单发时有，是没拣到的那部分拆成的请求。
@@ -107,6 +119,9 @@ type WaveStore interface {
 	LoadWaveMembers(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]WaveMember, bool, error)
 	// IsSingleUnitWave 回答这个波次是不是单品单件波次；没有这个波次答否。
 	IsSingleUnitWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) (bool, error)
+	// SingleUnitAwaitingCheck 列出这个仓里已拣完、等复核的单品单件出库请求，等得最久的在前：
+	// 先按波次放出的先后，再按请求受理的先后。一次至多交回 SingleUnitCandidateLimit 张。
+	SingleUnitAwaitingCheck(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode) ([]SingleUnitCandidate, error)
 	// WithdrawFromWave 记下撤出、作废这张请求在这个波次里待执行的任务，并把请求从已放波次改回已预占。
 	WithdrawFromWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, request domain.OutboundRequestID, operator domain.Registrant, at time.Time) error
 	LoadTask(ctx context.Context, tenant domain.TenantID, id domain.PickTaskID) (PickTask, bool, error)
