@@ -8,6 +8,14 @@ func NewWaveID(value string) (WaveID, error) {
 	return WaveID{required}, err
 }
 
+// WaveRuleCode 是租户给一条成波规则起的码，在一个仓里唯一。逐字保存。
+type WaveRuleCode struct{ requiredValue }
+
+func NewWaveRuleCode(value string) (WaveRuleCode, error) {
+	required, err := newRequiredValue("wave rule code", value)
+	return WaveRuleCode{required}, err
+}
+
 // PickTaskID 是一份拣货任务的身份，由本上下文签发。
 type PickTaskID struct{ requiredValue }
 

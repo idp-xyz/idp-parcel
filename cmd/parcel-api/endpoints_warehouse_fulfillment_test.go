@@ -347,6 +347,12 @@ func (unwiredWave) Adopt(context.Context, warehouseapp.AdoptStrategyCommand) (wa
 func (unwiredWave) Pick(context.Context, warehouseapp.PickCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
 }
+func (unwiredWave) RegisterWaveRule(context.Context, warehouseapp.RegisterWaveRuleCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+func (unwiredWave) RunWaveRule(context.Context, warehouseapp.RunWaveRuleCommand) (warehouseapp.WaveRuleRunResult, error) {
+	return warehouseapp.WaveRuleRunResult{}, errOrchestrationNotWired
+}
 func (unwiredWave) Sort(context.Context, warehouseapp.SortCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
 }
@@ -1084,6 +1090,8 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/warehouse-fulfillment-tote-registrations":                   {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-tote-retirements":                     {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-tote-requirements":                    {http.MethodPost, faceRegistryWrite},
+		"/warehouse-fulfillment-wave-rules":                           {http.MethodPost, faceRegistryWrite},
+		"/warehouse-fulfillment-wave-rule-runs":                       {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-agent-connectors":                     {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-agent-stock-statements":               {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-agent-outbound-results":               {http.MethodPost, faceRegistryWrite},
@@ -1225,6 +1233,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 			"/warehouse-fulfillment-outbound-short-shipments":             accessidentity.DecisionWaveRelease,
 			"/warehouse-fulfillment-outbound-shortage-splits":             accessidentity.DecisionWaveRelease,
 			"/warehouse-fulfillment-tote-releases":                        accessidentity.DecisionWaveRelease,
+			"/warehouse-fulfillment-wave-rule-runs":                       accessidentity.DecisionWaveRelease,
 		}
 		if kind, writesOnBehalf := decisionLines[pattern]; writesOnBehalf && line.face.decision != kind {
 			t.Fatalf("%s 的决定种类 = %s，want %s", pattern, line.face.decision, kind)
@@ -1366,6 +1375,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-tote-registrations":                 {status, code},
 			"/warehouse-fulfillment-tote-retirements":                   {status, code},
 			"/warehouse-fulfillment-tote-requirements":                  {status, code},
+			"/warehouse-fulfillment-wave-rules":                         {status, code},
+			"/warehouse-fulfillment-wave-rule-runs":                     {status, code},
 			"/warehouse-fulfillment-agent-connectors":                   {status, code},
 			"/warehouse-fulfillment-agent-stock-statements":             {status, code},
 			"/warehouse-fulfillment-agent-outbound-results":             {status, code},
@@ -1499,6 +1510,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-tote-registrations":                 {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-tote-retirements":                   {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-tote-requirements":                  {http.StatusBadRequest, "MALFORMED_REQUEST"},
+			"/warehouse-fulfillment-wave-rules":                         {http.StatusBadRequest, "MALFORMED_REQUEST"},
+			"/warehouse-fulfillment-wave-rule-runs":                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-agent-connectors":                   {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-agent-stock-statements":             {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-agent-outbound-results":             {http.StatusBadRequest, "MALFORMED_REQUEST"},
@@ -1652,6 +1665,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-tote-registrations":                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-tote-retirements":                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-tote-requirements":                  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-wave-rules":                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-wave-rule-runs":                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-agent-connectors":                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-agent-stock-statements":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-agent-outbound-results":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},

@@ -57,6 +57,12 @@ const (
 	WaveSorted
 	// WaveSortPending 是这张请求在合并拣货的波次里拣出来的货还没分完，不能复核。
 	WaveSortPending
+	// WaveRuleNotFound 是这个仓没有登记过这条成波规则。
+	WaveRuleNotFound
+	// WaveRuleDeactivated 是这条成波规则最新的一版是停用的。
+	WaveRuleDeactivated
+	// WaveNothingToRelease 是按规则没有放出任何波次：没有圈到单，或圈到的都分配不出。
+	WaveNothingToRelease
 )
 
 func (outcome WaveOutcome) String() string {
@@ -141,6 +147,12 @@ func (outcome WaveOutcome) String() string {
 		return "SORTED"
 	case WaveSortPending:
 		return "SORT_PENDING"
+	case WaveRuleNotFound:
+		return "WAVE_RULE_NOT_FOUND"
+	case WaveRuleDeactivated:
+		return "WAVE_RULE_DEACTIVATED"
+	case WaveNothingToRelease:
+		return "NOTHING_TO_RELEASE"
 	default:
 		return ""
 	}

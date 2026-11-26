@@ -71,6 +71,51 @@ func TestAToteRequirementDocumentMustSayWhetherTotesAreRequired(t *testing.T) {
 	}
 }
 
+// 成波规则带仓、规则码、修订、名字与一个波次最多几张；货主、发运方式、件型不带是不限，带了就得是认得的值。
+// 按规则成波带仓、规则码与执行号，操作者取自身份。
+func TestAWaveRuleDocumentNamesItsConditionsAndARunNamesTheRule(t *testing.T) {
+	tenant, _ := domain.NewTenantID("SYN-TENANT-01")
+	operator, _ := domain.NewRegistrant("operator-1")
+	plain, err := registrationjson.RegisterWaveRuleCommand(strings.NewReader(
+		`{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","revision":1,"name":" 早班小件 ","maxRequests":20}`), tenant, operator)
+	if err != nil || plain.Code.String() != "SYN-RULE-A" || plain.Name != "早班小件" || plain.MaxRequests != 20 || plain.Profile != "ANY" ||
+		plain.Owner != "" || plain.Dispatch != "" || plain.BatchPick || plain.Deactivated || plain.Operator != operator {
+		t.Fatalf("只带必填的规则 %+v：%v", plain, err)
+	}
+	full, err := registrationjson.RegisterWaveRuleCommand(strings.NewReader(
+		`{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","revision":2,"name":"小件","maxRequests":20,"ownerAccount":"SYN-OWNER-01",`+
+			`"dispatch":"PICKUP","profile":"SINGLE_UNIT","batchPick":true,"deactivated":true}`), tenant, operator)
+	if err != nil || full.Owner != "SYN-OWNER-01" || full.Dispatch != "PICKUP" || full.Profile != "SINGLE_UNIT" || !full.BatchPick || !full.Deactivated {
+		t.Fatalf("带齐条件的规则 %+v：%v", full, err)
+	}
+	for name, body := range map[string]string{
+		"没有规则码":    `{"warehouse":"SYN-WH-01","revision":1,"name":"小件","maxRequests":20}`,
+		"没有名字":     `{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","revision":1,"maxRequests":20}`,
+		"没说一个波次几张": `{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","revision":1,"name":"小件"}`,
+		"货主是空串":    `{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","revision":1,"name":"小件","maxRequests":20,"ownerAccount":""}`,
+		"不认识的发运方式": `{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","revision":1,"name":"小件","maxRequests":20,"dispatch":"DRONE"}`,
+		"不认识的件型":   `{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","revision":1,"name":"小件","maxRequests":20,"profile":"LARGE"}`,
+		"带了操作者":    `{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","revision":1,"name":"小件","maxRequests":20,"registrant":"someone"}`,
+	} {
+		if _, err := registrationjson.RegisterWaveRuleCommand(strings.NewReader(body), tenant, operator); err == nil {
+			t.Errorf("规则，%s：没有被拒", name)
+		}
+	}
+	run, err := registrationjson.RunWaveRuleCommand(strings.NewReader(`{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","runId":"SYN-RUN-1"}`))
+	if err != nil || run.Warehouse.String() != "SYN-WH-01" || run.Rule.String() != "SYN-RULE-A" || run.RunID.String() != "SYN-RUN-1" || run.Operator.String() != "" {
+		t.Fatalf("成波译出的命令 %+v：%v", run, err)
+	}
+	for name, body := range map[string]string{
+		"没有执行号": `{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A"}`,
+		"没有规则码": `{"warehouse":"SYN-WH-01","runId":"SYN-RUN-1"}`,
+		"带了操作者": `{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","runId":"SYN-RUN-1","registrant":"someone"}`,
+	} {
+		if _, err := registrationjson.RunWaveRuleCommand(strings.NewReader(body)); err == nil {
+			t.Errorf("成波，%s：没有被拒", name)
+		}
+	}
+}
+
 // 分拣的一次投放带波次、请求、商品、件数与箱号，一样都不能少；件数是正整数。
 func TestASortPutNamesTheWaveTheRequestTheGoodsAndTheTote(t *testing.T) {
 	full := `{"factId":"SYN-FACT-01","warehouse":"SYN-WH-01","waveId":"WAVE-01","requestId":"OBR-1","goodsCode":"SYN-GOODS-01","quantity":2,"toteCode":"SYN-TOTE-01"}`

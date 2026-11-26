@@ -113,6 +113,7 @@ type PickDifferences interface {
 type WaveStore interface {
 	ToteStore
 	SortStore
+	WaveRuleStore
 	LoadStrategy(ctx context.Context, tenant domain.TenantID) (AllocationStrategy, bool, error)
 	SaveStrategy(ctx context.Context, tenant domain.TenantID, strategy AllocationStrategy) error
 	LoadWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]domain.OutboundRequestID, bool, error)

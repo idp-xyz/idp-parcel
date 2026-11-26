@@ -607,6 +607,13 @@ func (channels endpointChannels) totes() warehousehttp.ToteIntake {
 	return warehousehttp.UnconfiguredIntake{}
 }
 
+func (channels endpointChannels) waveRules() warehousehttp.WaveRuleIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
 func (channels endpointChannels) stockAdjustment() warehousehttp.StockAdjustmentIntake {
 	if channels.operatorDecisions.warehouseStockAdjustment != nil {
 		return channels.operatorDecisions.warehouseStockAdjustment

@@ -18,6 +18,8 @@ type SettingsOverview struct {
 	AgentConnectors    []AgentConnectorOverview
 	// ToteRequirements 是登记过「拣货必须用周转箱」的仓各自最新的一版；没登记的仓不在里面，那是未配置。
 	ToteRequirements []ToteRequirementOverview
+	// WaveRules 是各仓登记过的成波规则各自最新的一版，停用的也在里面；没登记规则的仓不在里面。
+	WaveRules []WaveRuleOverview
 }
 
 type ToteRequirementOverview struct {

@@ -20,6 +20,8 @@ type WaveService interface {
 	RetireTote(ctx context.Context, command application.RetireToteCommand) (application.WaveResult, error)
 	ReleaseTote(ctx context.Context, command application.ReleaseToteCommand) (application.WaveResult, error)
 	RegisterToteRequirement(ctx context.Context, command application.RegisterToteRequirementCommand) (application.WaveResult, error)
+	RegisterWaveRule(ctx context.Context, command application.RegisterWaveRuleCommand) (application.WaveResult, error)
+	RunWaveRule(ctx context.Context, command application.RunWaveRuleCommand) (application.WaveRuleRunResult, error)
 	Adopt(ctx context.Context, command application.AdoptStrategyCommand) (application.WaveResult, error)
 	Pick(ctx context.Context, command application.PickCommand) (application.WaveResult, error)
 	Sort(ctx context.Context, command application.SortCommand) (application.WaveResult, error)
@@ -57,6 +59,7 @@ type WaveReleaseIntake interface {
 	IntakeShortShipment(ctx context.Context, request *http.Request) (application.ShipPickedCommand, error)
 	IntakeShortageSplit(ctx context.Context, request *http.Request) (application.SplitShortageCommand, error)
 	IntakeToteRelease(ctx context.Context, request *http.Request) (application.ReleaseToteCommand, error)
+	IntakeWaveRuleRun(ctx context.Context, request *http.Request) (application.RunWaveRuleCommand, error)
 }
 
 type OperatorWaveIntake struct {

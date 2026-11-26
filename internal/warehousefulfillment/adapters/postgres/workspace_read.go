@@ -117,6 +117,36 @@ func (store *WorkspaceReads) SettingsOverview(ctx context.Context, tenant domain
 		rows.Close()
 	}
 
+	// 各仓各条成波规则最新修订
+	{
+		rows, err := querier.Query(ctx,
+			`SELECT DISTINCT ON (warehouse_code, rule_code) warehouse_code, rule_code, revision, rule_name,
+			        coalesce(owner_account_id, ''), coalesce(dispatch, ''), profile, max_requests, batch_pick, deactivated,
+			        operator_id, registered_at
+			   FROM warehouse_fulfillment.wave_rule
+			  WHERE tenant_id = $1
+			  ORDER BY warehouse_code, rule_code, revision DESC`,
+			tenant.String(),
+		)
+		if err != nil {
+			return out, fmt.Errorf("%s: wave rules: %w", op, err)
+		}
+		for rows.Next() {
+			var item ports.WaveRuleOverview
+			if err := rows.Scan(&item.WarehouseCode, &item.RuleCode, &item.Revision, &item.Name, &item.OwnerAccount, &item.Dispatch,
+				&item.Profile, &item.MaxRequests, &item.BatchPick, &item.Deactivated, &item.Operator, &item.RegisteredAt); err != nil {
+				rows.Close()
+				return out, fmt.Errorf("%s: wave rules: %w", op, err)
+			}
+			out.WaveRules = append(out.WaveRules, item)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return out, fmt.Errorf("%s: wave rules: %w", op, err)
+		}
+		rows.Close()
+	}
+
 	// 3. 库存调整批准职责最新修订
 	{
 		var item ports.ApprovalDutyOverview

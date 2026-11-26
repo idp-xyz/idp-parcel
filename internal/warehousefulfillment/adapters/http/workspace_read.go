@@ -173,7 +173,24 @@ func NewQuerySettingsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQ
 				"operator": item.Operator, "registeredAt": rfc3339(item.RegisteredAt),
 			})
 		}
+		// 停用的规则也列：它在册，只是不能再按它成波。货主、发运方式没限的不带那一格。
+		waveRules := make([]map[string]any, 0, len(overview.WaveRules))
+		for _, item := range overview.WaveRules {
+			rule := map[string]any{
+				"warehouseCode": item.WarehouseCode, "ruleCode": item.RuleCode, "revision": item.Revision, "name": item.Name,
+				"profile": item.Profile, "maxRequests": item.MaxRequests, "batchPick": item.BatchPick, "deactivated": item.Deactivated,
+				"operator": item.Operator, "registeredAt": rfc3339(item.RegisteredAt),
+			}
+			if item.OwnerAccount != "" {
+				rule["ownerAccount"] = item.OwnerAccount
+			}
+			if item.Dispatch != "" {
+				rule["dispatch"] = item.Dispatch
+			}
+			waveRules = append(waveRules, rule)
+		}
 		writeJSON(response, http.StatusOK, map[string]any{
+			"waveRules":          waveRules,
 			"toteRequirements":   toteRequirements,
 			"outcome":            "SETTINGS_OVERVIEW_LOADED",
 			"allocationStrategy": alloc,

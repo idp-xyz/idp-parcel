@@ -128,7 +128,9 @@ type WaveRow struct {
 	SingleUnit bool
 	// BatchPick 是放出时选了合并拣货：货按库位、商品合在一起拿，拿回来再按请求分拣。
 	BatchPick bool
-	Requests  []string
+	// RuleCode 是放出这个波次的成波规则；由人点单放的波次为空。
+	RuleCode string
+	Requests []string
 	// Withdrawn 是 Requests 里已经撤出的那几张。
 	Withdrawn []string
 	Tasks     []WaveTaskRow
