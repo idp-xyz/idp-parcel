@@ -170,6 +170,11 @@ export interface ListPageTemplateProps<Row> {
   moduleId?: string;
   /** 页头右侧动作区（如「导出」按钮）。 */
   headerActions?: ReactNode;
+  /**
+   * 页头之下、过滤条之上单独的一行，给「按哪一队看」这种主分队用（如按状态分的签）。它和筛选不是一回事：分队决定
+   * 这张表是哪一份待办，筛选是在这一份里再收窄；挤进过滤条会把它和下拉混成一排，签一多过滤条就折行。不传就没有这一行。
+   */
+  tabs?: ReactNode;
   /** 不传则不渲染搜索框——过滤条整体仍在，便于只有下拉筛选的页面。 */
   search?: ListSearchProps;
   /** 过滤控件（下拉、chip 等）由调用方提供：筛选维度是业务决定，模板不预设。 */
@@ -340,6 +345,7 @@ export function ListPageTemplate<Row>({
   breadcrumb,
   moduleId,
   headerActions,
+  tabs,
   search,
   filters,
   sort,
@@ -538,6 +544,11 @@ export function ListPageTemplate<Row>({
         </PageHeaderContent>
         {headerActions && <PageHeaderActions>{headerActions}</PageHeaderActions>}
       </PageHeader>
+
+      {/* 主分队一行：签多了横向滚、不折行，下面各区的位置不随签的多少变。 */}
+      {tabs != null && tabs !== false && (
+        <div className="shrink-0 overflow-x-auto overflow-y-hidden border-b border-idpxyz-border px-4">{tabs}</div>
+      )}
 
       {/* 黄金标准 9.2 顺序：搜索 → 主筛选 → 排序 → 视图 → 保存视图 → 更多筛选 → 右端计数。位不够宽时横向滚，不换行。 */}
       <FilterBar className="overflow-x-auto">

@@ -13,13 +13,14 @@ import { useCloseOnHashChange } from './use-close-on-hash';
 
 export type WmsTone = 'success' | 'info' | 'warning' | 'danger' | 'neutral';
 
+// 底色的透明度只取 Tailwind 刻度上有的档（5 的倍数）：写成 `/12` 生不出样式，徽章就只剩一圈淡边、没有底。
 const toneClasses: Record<WmsTone, { pill: string; dot: string }> = {
   success: {
-    pill: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 border-emerald-500/25',
+    pill: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25',
     dot: 'bg-emerald-500',
   },
   info: {
-    pill: 'bg-blue-500/12 text-blue-700 dark:text-blue-300 border-blue-500/25',
+    pill: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25',
     dot: 'bg-blue-500',
   },
   warning: {
@@ -27,7 +28,7 @@ const toneClasses: Record<WmsTone, { pill: string; dot: string }> = {
     dot: 'bg-amber-500',
   },
   danger: {
-    pill: 'bg-rose-500/12 text-rose-700 dark:text-rose-300 border-rose-500/25',
+    pill: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/25',
     dot: 'bg-rose-500',
   },
   neutral: {
@@ -272,7 +273,7 @@ export function WmsStepper({
           className={`ml-auto inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 type-caption font-medium ${
             failedTone === 'neutral'
               ? 'border-idpxyz-border bg-idpxyz-hover text-idpxyz-textMuted'
-              : 'border-rose-500/30 bg-rose-500/12 text-rose-700 dark:text-rose-300'
+              : 'border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-300'
           }`}
         >
           {failedTone === 'neutral' ? null : <X className="h-3 w-3" />}
@@ -490,6 +491,79 @@ export function WmsStatusTabs({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * 列表顶上单独一行的队列签：一队一个签，选中的那一队下面压一道线。签多了横向滚，不折成两行——折行之后
+ * 筛选区的高度随签的多少变，表头跟着上下跳。数量的写法同 WmsStatusTabs：没答出来的不写数，也不写成 0。
+ */
+export function WmsQueueTabs({
+  value,
+  tabs,
+  onChange,
+}: {
+  value: string;
+  tabs: ReadonlyArray<{ value: string; label: string; count?: number | null }>;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <div role="tablist" aria-label="按状态看" className="flex items-stretch gap-1">
+      {tabs.map((tab) => {
+        const active = tab.value === value;
+        const waiting = typeof tab.count === 'number' && tab.count > 0;
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2 type-body focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-idpxyz-accent ${
+              active
+                ? 'border-idpxyz-accent font-medium text-idpxyz-textBright'
+                : 'border-transparent text-idpxyz-textMuted hover:text-idpxyz-text'
+            }`}
+            onClick={() => onChange(tab.value)}
+          >
+            {tab.label}
+            {typeof tab.count === 'number' ? (
+              <span
+                className={`rounded-full px-1.5 type-caption tabular-nums ${
+                  waiting ? 'bg-idpxyz-activeItem font-semibold text-idpxyz-textBright' : 'bg-idpxyz-hover text-idpxyz-textMuted'
+                }`}
+              >
+                {tab.count}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * 列表里一格两行：上面是人认的那个值（名称、单号），下面是辅助的小字（编码、时刻、地址）。没有辅助值就只有一行。
+ * 两行各自截断，全文在悬停里；`code` 为真时小字用等宽体，编码才对得齐。
+ */
+export function WmsTwoLine({
+  primary,
+  secondary,
+  code = false,
+  title,
+}: {
+  primary: ReactNode;
+  secondary?: ReactNode;
+  code?: boolean;
+  title?: string;
+}) {
+  return (
+    <div className="max-w-[18rem] leading-tight" title={title}>
+      <div className="truncate type-body text-idpxyz-text">{primary}</div>
+      {secondary ? (
+        <div className={`mt-0.5 truncate type-caption text-idpxyz-textMuted ${code ? 'font-mono' : ''}`}>{secondary}</div>
+      ) : null}
     </div>
   );
 }

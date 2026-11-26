@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Send } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { ListPageTemplate } from '../../templates';
 import type { InspectorAction, InspectorContent } from '../../templates/inspector';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
@@ -13,16 +13,16 @@ import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer, type ActionDrawerControl } from './ActionDrawer';
 import { listOutboundRequests, type OutboundRequestRecord } from './api';
 import { DocumentLink } from './document-page';
+import { nameOf, packColumns, shortInstant } from './list-cells';
 import { OutboundDocument } from './OutboundDocument';
 import { outboundNextStep, outboundSettled } from './outbound-next-step';
 import { openDocument, useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
 import { elapsedLabel } from './waiting';
-import { labelOf, WmsBadge, WmsFilterSelect, WmsStatusTabs } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueTabs, WmsTwoLine } from './wms-ui';
 
 const moduleId = 'warehouse-outbound';
 const info = moduleInfoById[moduleId];
-const mono = 'whitespace-nowrap font-mono type-body leading-4';
 
 // 签的先后照一张出库单往下走的先后；卡在预占的两种排在已预占前面，它们最需要人看。已出库与已取消放最后、不数：
 // 那两队只增不减，数出来的不是待办。
@@ -83,54 +83,75 @@ function OutboundList() {
   const allReserved = selectedRecords.every((row) => row.status === 'RESERVED');
   const canBulkWave = selectedRecords.length > 0 && sameWarehouse && allReserved;
 
-  const columns: ListColumn<OutboundRequestRecord>[] = [
+  const ownerNames = useMemo(
+    () => new Map(drawer.lookups.owners.map((account) => [account.accountId, account.customerPartyName ?? ''])),
+    [drawer.lookups.owners],
+  );
+  const warehouseNames = useMemo(
+    () => new Map(drawer.lookups.warehouses.map((w) => [w.warehouseCode, w.name ?? ''])),
+    [drawer.lookups.warehouses],
+  );
+  // 人认名称，编码放在下面那一行；名册里没有名称的只摆编码。
+  const named = (names: ReadonlyMap<string, string>, code: string) => {
+    const name = nameOf(names, code);
+    return name ? <WmsTwoLine primary={name} secondary={code} code title={`${name} · ${code}`} /> : <span className="font-mono">{code}</span>;
+  };
+
+  const columns = packColumns<OutboundRequestRecord>([
     {
       id: 'id',
-      header: '出库单号',
-      className: 'whitespace-nowrap',
+      header: '出库单',
       render: (row) => (
-        <DocumentLink moduleId={moduleId} parts={[row.requestId]}>
-          {row.documentNumber ?? row.requestId}
-        </DocumentLink>
+        <WmsTwoLine
+          primary={
+            <DocumentLink moduleId={moduleId} parts={[row.requestId]}>
+              {row.documentNumber ?? row.requestId}
+            </DocumentLink>
+          }
+          secondary={`${labelOf(row.origin)} · ${shortInstant(row.receivedAt, now)}`}
+          title={`受理于 ${formatInstant(row.receivedAt)}`}
+        />
       ),
     },
     { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} /> },
-    { id: 'owner', header: '货主', className: mono, render: (row) => row.ownerAccount },
-    { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
-    { id: 'dispatch', header: '发运方式', className: 'whitespace-nowrap', render: (row) => labelOf(row.dispatch) },
-    { id: 'recipient', header: '收件人', className: 'max-w-[14rem] truncate', render: (row) => row.recipient },
+    { id: 'owner', header: '货主', render: (row) => named(ownerNames, row.ownerAccount) },
+    { id: 'warehouse', header: '仓库', render: (row) => named(warehouseNames, row.warehouseCode) },
+    {
+      id: 'recipient',
+      header: '收件人',
+      render: (row) => <WmsTwoLine primary={row.recipient} secondary={row.address} title={`${row.recipient}\n${row.address}`} />,
+    },
+    { id: 'dispatch', header: '发运', render: (row) => labelOf(row.dispatch) },
     {
       id: 'qty',
-      header: '要发',
+      header: '件数',
       align: 'right',
-      className: 'whitespace-nowrap',
       // 只在卡在预占的两种状态上说占到多少：拣出去的那部分预占已经放开，拣完之后的 0 不是缺货。
       render: (row) => {
         const wanted = row.lines.reduce((sum, line) => sum + line.quantity, 0);
         const stuck = row.status === 'PARTIALLY_RESERVED' || row.status === 'PENDING_POLICY';
         return (
-          <span>
-            <span className="font-mono">{wanted}</span>
-            {stuck ? <span className="ml-2 type-caption text-amber-600 dark:text-amber-400">只占到 {row.reservedQuantity}</span> : null}
-          </span>
+          <div className="leading-tight">
+            <div className="tabular-nums">{wanted}</div>
+            {stuck ? <div className="mt-0.5 type-caption text-amber-600 dark:text-amber-400">只占到 {row.reservedQuantity}</div> : null}
+          </div>
         );
       },
     },
     {
       id: 'age',
-      header: '受理至今',
+      header: '已等',
       align: 'right',
-      className: 'whitespace-nowrap',
-      // 已了结的单不写过了多久：它不在等谁。
-      render: (row) => (outboundSettled(row.status) ? formatInstant(row.receivedAt) : elapsedLabel(row.receivedAt, now) || '—'),
+      className: 'tabular-nums',
+      // 已了结的单不写等了多久：它不在等谁。受理的时刻在单号下面那一行。
+      render: (row) => (outboundSettled(row.status) ? <span className="text-idpxyz-textMuted">—</span> : elapsedLabel(row.receivedAt, now) || '—'),
     },
     {
       id: 'next',
       header: '下一步',
-      className: 'whitespace-nowrap',
       render: (row) => <NextStepCell row={row} agentWarehouse={agentWarehouses.has(row.warehouseCode)} drawer={drawer} />,
     },
-  ];
+  ]);
 
   const inspectorOf = (row: OutboundRequestRecord): InspectorContent => {
     const actions: InspectorAction[] = [{ label: '打开出库单', onRun: () => openDocument(moduleId, [row.requestId]) }];
@@ -153,7 +174,8 @@ function OutboundList() {
         {
           kind: 'summary',
           fields: [
-            { label: '货主 / 仓库', value: `${row.ownerAccount} · ${row.warehouseCode}`, mono: true },
+            { label: '货主', value: [nameOf(ownerNames, row.ownerAccount), row.ownerAccount].filter(Boolean).join(' · ') },
+            { label: '仓库', value: [nameOf(warehouseNames, row.warehouseCode), row.warehouseCode].filter(Boolean).join(' · ') },
             { label: '发运方式', value: labelOf(row.dispatch) },
             { label: '收件人', value: row.recipient },
             { label: '收件地址', value: row.address },
@@ -189,37 +211,39 @@ function OutboundList() {
             { value: oldestFirst, label: '放得最久的在前' },
           ],
         }}
+        tabs={
+          <WmsQueueTabs
+            value={status}
+            onChange={(next) => {
+              setStatus(next);
+              setSelected(new Set());
+            }}
+            tabs={[
+              { value: 'ALL', label: '全部' },
+              ...queueStatuses.map((code) => ({ value: code, label: labelOf(code), count: counts[code] })),
+              ...settledStatuses.map((code) => ({ value: code, label: labelOf(code) })),
+            ]}
+          />
+        }
         filters={
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <WmsStatusTabs
-              value={status}
-              onChange={(next) => {
-                setStatus(next);
-                setSelected(new Set());
-              }}
-              tabs={[
-                { value: 'ALL', label: '全部' },
-                ...queueStatuses.map((code) => ({ value: code, label: labelOf(code), count: counts[code] })),
-                ...settledStatuses.map((code) => ({ value: code, label: labelOf(code) })),
-              ]}
-            />
+          <div className="flex items-center gap-3">
             <WmsFilterSelect
               label="货主"
               value={owner}
               onChange={setOwner}
               options={drawer.lookups.owners.map((account) => ({
                 value: account.accountId,
-                label: account.customerPartyName ? `${account.accountId} · ${account.customerPartyName}` : account.accountId,
+                label: account.customerPartyName ? `${account.customerPartyName} · ${account.accountId}` : account.accountId,
               }))}
             />
             <WmsFilterSelect
               label="仓库"
               value={warehouse}
               onChange={setWarehouse}
-              options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: `${w.warehouseCode} · ${w.name}` }))}
+              options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: w.name ? `${w.name} · ${w.warehouseCode}` : w.warehouseCode }))}
             />
             <WmsFilterSelect
-              label="发运方式"
+              label="发运"
               value={dispatch}
               onChange={setDispatch}
               options={dispatchWords.map((word) => ({ value: word, label: labelOf(word) }))}
@@ -276,7 +300,7 @@ function OutboundList() {
   );
 }
 
-/** 每行最右的那一格：这一单此刻该做的一步。能就地做的是按钮，要去别处做的是链接，等人定的只说在等什么。 */
+/** 每行末尾的那一格：这一单此刻该做的一步。能做的是一个钮，等人定的只说在等什么。 */
 function NextStepCell({
   row,
   agentWarehouse,
@@ -289,34 +313,23 @@ function NextStepCell({
   const next = outboundNextStep(row.status, agentWarehouse, undefined, row.requestId);
   if (next === null) return <span className="text-idpxyz-textMuted">—</span>;
   if (next.kind === 'wait') return <span className="type-caption text-amber-600 dark:text-amber-400">{next.label}</span>;
-  if (next.kind === 'wave') {
-    if (!drawer.has('wave-release')) return <span className="text-idpxyz-textMuted">等放波次</span>;
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={(event) => {
-          // 行上的单击是预览：这一下只开表单，不顺带把行选进右栏。
-          event.stopPropagation();
-          drawer.open('wave-release', { warehouse: row.warehouseCode, requests: row.requestId });
-        }}
-      >
-        {next.label}
-      </Button>
-    );
-  }
+  if (next.kind === 'wave' && !drawer.has('wave-release')) return <span className="text-idpxyz-textMuted">等放波次</span>;
+  // 能做的一步在每一行上是同一个样子的钮，不论它是就地开表单还是去别的页：操作者要认的是「这一单现在该做什么」，
+  // 不是这一步落在哪里。
   return (
-    <button
+    <Button
       type="button"
-      className="text-[color:var(--ds-text-link-hover)] hover:underline"
+      size="sm"
+      variant="outline"
       onClick={(event) => {
+        // 行上的单击是预览：这一下只做这一步，不顺带把行选进右栏。
         event.stopPropagation();
-        if (next.kind === 'station') enterStation(next.hash);
+        if (next.kind === 'wave') drawer.open('wave-release', { warehouse: row.warehouseCode, requests: row.requestId });
+        else if (next.kind === 'station') enterStation(next.hash);
         else window.location.hash = `#/${next.moduleId}`;
       }}
     >
       {next.label}
-    </button>
+    </Button>
   );
 }
