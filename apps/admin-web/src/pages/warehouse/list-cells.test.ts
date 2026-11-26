@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { fillerColumnId, fitContentClass, nameOf, packColumns, shortInstant } from './list-cells';
+import { fillerColumnId, fitContentClass, flexColumnClass, linesSummary, nameOf, packColumns, shortInstant } from './list-cells';
 
 test('各列按内容定宽，末尾补一列空列占剩下的宽度', () => {
   const packed = packColumns<{ id: string }>([
@@ -13,6 +13,55 @@ test('各列按内容定宽，末尾补一列空列占剩下的宽度', () => {
   equal(packed[1].align, 'right');
   equal(packed[2].className, 'w-full');
   equal(packed[2].render({ id: 'x' }), null);
+});
+
+test('点名吃宽度的列拿多出来的宽度，这时不再补空列', () => {
+  const packed = packColumns<{ id: string }>(
+    [
+      { id: 'number', header: '单号', render: (row) => row.id },
+      { id: 'address', header: '地址', render: () => '某路 1 号' },
+      { id: 'next', header: '下一步', render: () => '去拣货' },
+    ],
+    ['address'],
+  );
+  deepEqual(packed.map((column) => column.id), ['number', 'address', 'next']);
+  equal(packed[0].className, fitContentClass);
+  equal(packed[1].className, flexColumnClass(1));
+  equal(packed[2].className, fitContentClass);
+});
+
+test('几列一起吃宽度时各占一份，加起来正好一整份', () => {
+  const packed = packColumns<{ id: string }>(
+    [
+      { id: 'address', header: '地址', render: () => '某路 1 号' },
+      { id: 'goods', header: '商品', render: () => 'SKU-A × 2' },
+    ],
+    ['address', 'goods'],
+  );
+  equal(packed[0].className, flexColumnClass(2));
+  equal(packed[1].className, flexColumnClass(2));
+  equal(flexColumnClass(1).startsWith('w-full '), true);
+  equal(flexColumnClass(2).startsWith('w-1/2 '), true);
+  equal(flexColumnClass(3).startsWith('w-1/3 '), true);
+  equal(flexColumnClass(7), flexColumnClass(3));
+});
+
+test('点名的列不在表里，照没有点名办', () => {
+  const packed = packColumns<{ id: string }>([{ id: 'number', header: '单号', render: (row) => row.id }], ['address']);
+  deepEqual(packed.map((column) => column.id), ['number', fillerColumnId]);
+});
+
+test('商品行摆出第一种，其余的说还有几种', () => {
+  deepEqual(linesSummary([{ goodsCode: 'SKU-A', quantity: 2 }]), { first: 'SKU-A × 2', rest: '', all: 'SKU-A × 2' });
+  deepEqual(
+    linesSummary([
+      { goodsCode: 'SKU-A', quantity: 2 },
+      { goodsCode: 'SKU-B', quantity: 1 },
+      { goodsCode: 'SKU-C', quantity: 5 },
+    ]),
+    { first: 'SKU-A × 2', rest: '另 2 种', all: 'SKU-A × 2\nSKU-B × 1\nSKU-C × 5' },
+  );
+  deepEqual(linesSummary([]), { first: '', rest: '', all: '' });
 });
 
 // 测试里没有配置呈现时区，按 UTC 显。

@@ -436,7 +436,7 @@ export function WmsSubTable<T>({
             </thead>
             <tbody>
               {rows.map((row, idx) => (
-                <tr key={rowKey(row, idx)} className="hover:bg-idpxyz-hover transition-colors">
+                <tr key={rowKey(row, idx)}>
                   {columns.map((col) => (
                     <td
                       key={col.id}
@@ -545,21 +545,24 @@ export function WmsQueueTabs({
 
 /**
  * 列表里一格两行：上面是人认的那个值（名称、单号），下面是辅助的小字（编码、时刻、地址）。没有辅助值就只有一行。
- * 两行各自截断，全文在悬停里；`code` 为真时小字用等宽体，编码才对得齐。
+ * 两行各自截断，全文在悬停里；`code` 为真时小字用等宽体，编码才对得齐。按内容定宽的列里它最宽到 18rem；
+ * `fill` 为真是放在吃宽度的列里，跟着列宽走、不设上限。
  */
 export function WmsTwoLine({
   primary,
   secondary,
   code = false,
+  fill = false,
   title,
 }: {
   primary: ReactNode;
   secondary?: ReactNode;
   code?: boolean;
+  fill?: boolean;
   title?: string;
 }) {
   return (
-    <div className="max-w-[18rem] leading-tight" title={title}>
+    <div className={`${fill ? '' : 'max-w-[18rem]'} leading-tight`} title={title}>
       <div className="truncate type-body text-idpxyz-text">{primary}</div>
       {secondary ? (
         <div className={`mt-0.5 truncate type-caption text-idpxyz-textMuted ${code ? 'font-mono' : ''}`}>{secondary}</div>

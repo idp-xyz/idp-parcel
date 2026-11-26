@@ -13,7 +13,7 @@ import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer, type ActionDrawerControl } from './ActionDrawer';
 import { listOutboundRequests, type OutboundRequestRecord } from './api';
 import { DocumentLink } from './document-page';
-import { nameOf, packColumns, shortInstant } from './list-cells';
+import { linesSummary, nameOf, packColumns, shortInstant, wmsSurfaceClass } from './list-cells';
 import { OutboundDocument } from './OutboundDocument';
 import { outboundNextStep, outboundSettled } from './outbound-next-step';
 import { openDocument, useDocumentParts } from './use-document';
@@ -116,12 +116,21 @@ function OutboundList() {
     { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} /> },
     { id: 'owner', header: '货主', render: (row) => named(ownerNames, row.ownerAccount) },
     { id: 'warehouse', header: '仓库', render: (row) => named(warehouseNames, row.warehouseCode) },
+    { id: 'dispatch', header: '发运', render: (row) => labelOf(row.dispatch) },
     {
       id: 'recipient',
       header: '收件人',
-      render: (row) => <WmsTwoLine primary={row.recipient} secondary={row.address} title={`${row.recipient}\n${row.address}`} />,
+      render: (row) => <WmsTwoLine fill primary={row.recipient} secondary={row.address} title={`${row.recipient}\n${row.address}`} />,
     },
-    { id: 'dispatch', header: '发运', render: (row) => labelOf(row.dispatch) },
+    {
+      id: 'lines',
+      header: '商品',
+      render: (row) => {
+        const summary = linesSummary(row.lines);
+        if (summary.first === '') return <span className="text-idpxyz-textMuted">没有商品行</span>;
+        return <WmsTwoLine fill primary={<span className="font-mono">{summary.first}</span>} secondary={summary.rest} title={summary.all} />;
+      },
+    },
     {
       id: 'qty',
       header: '件数',
@@ -151,7 +160,7 @@ function OutboundList() {
       header: '下一步',
       render: (row) => <NextStepCell row={row} agentWarehouse={agentWarehouses.has(row.warehouseCode)} drawer={drawer} />,
     },
-  ]);
+  ], ['recipient', 'lines']);
 
   const inspectorOf = (row: OutboundRequestRecord): InspectorContent => {
     const actions: InspectorAction[] = [{ label: '打开出库单', onRun: () => openDocument(moduleId, [row.requestId]) }];
@@ -272,6 +281,7 @@ function OutboundList() {
           ) : undefined,
         }}
         columns={columns}
+        surfaceClassName={wmsSurfaceClass}
         rows={rows}
         rowKey={(row) => row.requestId}
         inspector={inspectorOf}
@@ -321,6 +331,8 @@ function NextStepCell({
       type="button"
       size="sm"
       variant="outline"
+      // 字用链接色：表里除了状态徽章只有能点的东西带颜色，灰描边灰字的钮在一排灰字里找不出来。
+      className="text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
       onClick={(event) => {
         // 行上的单击是预览：这一下只做这一步，不顺带把行选进右栏。
         event.stopPropagation();

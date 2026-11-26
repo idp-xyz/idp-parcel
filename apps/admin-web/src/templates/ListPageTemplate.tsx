@@ -189,6 +189,11 @@ export interface ListPageTemplateProps<Row> {
   /** 过滤条右端的统计摘要（如「共 N 条」）。 */
   filterSummary?: ReactNode;
   columns: ListColumn<Row>[];
+  /**
+   * 附加到表所在那块表面（带边框的滚动口）上的类。给一组页面统一表的样子用：表面多宽、行线、表头的底，都从这一处
+   * 往里指（`[&_tbody_td]:…`），不必给模板的每个格各开一个口。不传时表面与今天同。
+   */
+  surfaceClassName?: string;
   rows: Row[];
   rowKey: (row: Row) => string;
   /** 多选。不传则无复选列、无动作栏，与今天同。 */
@@ -353,6 +358,7 @@ export function ListPageTemplate<Row>({
   moreFilters,
   filterSummary,
   columns,
+  surfaceClassName,
   rows,
   rowKey,
   selection,
@@ -606,7 +612,7 @@ export function ListPageTemplate<Row>({
           {/* 表的边框跟着行走，行少时不用一整块空白把三行表撑到页底；行多过剩余高度时框自己滚动，表头仍吸在这个滚动口上。
               翻页条固定在页底：它的位置不随行数变，翻页时手不用跟着找。 */}
           <div className="flex min-h-0 flex-1 flex-col p-2">
-            <div className="min-h-0 overflow-auto rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
+            <div className={`min-h-0 overflow-auto rounded-md border border-idpxyz-border bg-idpxyz-sidebar ${surfaceClassName ?? ''}`}>
               <Table stickyHeader>
                   <TableHeader>
                     <TableRow>
