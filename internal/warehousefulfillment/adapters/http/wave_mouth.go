@@ -22,6 +22,7 @@ type WaveService interface {
 	RegisterToteRequirement(ctx context.Context, command application.RegisterToteRequirementCommand) (application.WaveResult, error)
 	Adopt(ctx context.Context, command application.AdoptStrategyCommand) (application.WaveResult, error)
 	Pick(ctx context.Context, command application.PickCommand) (application.WaveResult, error)
+	Sort(ctx context.Context, command application.SortCommand) (application.WaveResult, error)
 	Check(ctx context.Context, command application.CheckCommand) (application.WaveResult, error)
 	Pack(ctx context.Context, command application.PackCommand) (application.WaveResult, error)
 	Confirm(ctx context.Context, command application.ConfirmCommand) (application.WaveResult, error)
@@ -659,7 +660,8 @@ func writeWaveAnswer(response http.ResponseWriter, request *http.Request, result
 		result.Outcome() == application.WavePosted ||
 		result.Outcome() == application.WaveSubmitted || result.Outcome() == application.WaveWithdrawn ||
 		result.Outcome() == application.WaveShortShipped || result.Outcome() == application.WaveTotesRegistered ||
-		result.Outcome() == application.WaveToteRetired || result.Outcome() == application.WaveToteReleased {
+		result.Outcome() == application.WaveToteRetired || result.Outcome() == application.WaveToteReleased ||
+		result.Outcome() == application.WaveSorted {
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, outboundAnswer{Outcome: name})

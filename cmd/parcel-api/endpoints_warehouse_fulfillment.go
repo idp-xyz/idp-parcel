@@ -117,6 +117,7 @@ type warehouseFulfillmentWiring struct {
 	waveQueries               warehousehttp.WaveQueries
 	toteQueries               warehousehttp.ToteQueries
 	singleUnitMatching        warehousehttp.SingleUnitMatching
+	sortPlanQueries           warehousehttp.SortPlanQueries
 	chargeOccurrenceQueries   warehousehttp.ChargeOccurrenceQueries
 	warehouseAdoptionQueries  warehousehttp.WarehouseAdoptionQueries
 	warehouseChargeReqQueries warehousehttp.WarehouseChargeRequestQueries
@@ -554,6 +555,10 @@ func init() {
 				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
 				ownIntake: true, warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-sort-puts": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-outbound-checks": {
 				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
 				ownIntake: true, warehouseFulfillment: true,
@@ -629,6 +634,10 @@ func init() {
 			"/warehouse-fulfillment-single-unit-match": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-single-unit-match?warehouseCode=WH-01&code=CODE-01",
+			},
+			"/warehouse-fulfillment-wave-sort": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-wave-sort?waveId=WAVE-01",
 			},
 			"/warehouse-fulfillment-charge-occurrences": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
@@ -874,6 +883,7 @@ func init() {
 				waveQueries:               orchestration.waveQueries,
 				toteQueries:               orchestration.waveQueries,
 				singleUnitMatching:        orchestration.singleUnitMatching,
+				sortPlanQueries:           orchestration.waveQueries,
 				chargeOccurrenceQueries:   orchestration.chargeOccurrenceQueries,
 				warehouseAdoptionQueries:  orchestration.warehouseAdoptions,
 				warehouseChargeReqQueries: orchestration.warehouseAdoptions,
@@ -1027,6 +1037,8 @@ func init() {
 			pickDifferenceList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			toteList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			singleUnitMatch := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			sortPlan := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			sortPut := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			chargeOccurrenceList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			warehouseAdoptionList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			warehouseChargeRequestList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
@@ -1228,8 +1240,10 @@ func init() {
 				plainPick := warehousehttp.UnconfiguredPickIntake{}
 				if wiring.pickIntake != nil {
 					pick = warehousehttp.NewRecordPickEndpoint(wiring.pickIntake, wiring.waves)
+					sortPut = warehousehttp.NewRecordSortEndpoint(wiring.pickIntake, wiring.waves)
 				} else {
 					pick = warehousehttp.NewRecordPickEndpoint(plainPick, wiring.waves)
+					sortPut = warehousehttp.NewRecordSortEndpoint(plainPick, wiring.waves)
 				}
 				plainCheck := warehousehttp.UnconfiguredCheckIntake{}
 				if wiring.checkIntake != nil {
@@ -1290,6 +1304,7 @@ func init() {
 				pickDifferenceList = warehousehttp.NewQueryPickDifferencesEndpoint(catalogueIntake, wiring.waveQueries)
 				toteList = warehousehttp.NewQueryTotesEndpoint(catalogueIntake, wiring.toteQueries)
 				singleUnitMatch = warehousehttp.NewMatchSingleUnitOrderEndpoint(catalogueIntake, wiring.singleUnitMatching)
+				sortPlan = warehousehttp.NewQuerySortPlanEndpoint(catalogueIntake, wiring.sortPlanQueries)
 				chargeOccurrenceList = warehousehttp.NewQueryChargeOccurrencesEndpoint(catalogueIntake, wiring.chargeOccurrenceQueries)
 				warehouseAdoptionList = warehousehttp.NewQueryWarehouseAdoptionsEndpoint(catalogueIntake, wiring.warehouseAdoptionQueries)
 				warehouseChargeRequestList = warehousehttp.NewQueryWarehouseChargeRequestsEndpoint(catalogueIntake, wiring.warehouseChargeReqQueries)
@@ -1430,6 +1445,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-outbound-shortage-splits", Handler: shortageSplit},
 				{Pattern: "/warehouse-fulfillment-tote-releases", Handler: toteRelease},
 				{Pattern: "/warehouse-fulfillment-picks", Handler: pick},
+				{Pattern: "/warehouse-fulfillment-sort-puts", Handler: sortPut},
 				{Pattern: "/warehouse-fulfillment-outbound-checks", Handler: outboundCheck},
 				{Pattern: "/warehouse-fulfillment-packs", Handler: pack},
 				{Pattern: "/warehouse-fulfillment-returns", Handler: stockReturn},
@@ -1448,6 +1464,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-pick-differences", Handler: pickDifferenceList},
 				{Pattern: "/warehouse-fulfillment-totes", Handler: toteList},
 				{Pattern: "/warehouse-fulfillment-single-unit-match", Handler: singleUnitMatch},
+				{Pattern: "/warehouse-fulfillment-wave-sort", Handler: sortPlan},
 				{Pattern: "/warehouse-fulfillment-charge-occurrences", Handler: chargeOccurrenceList},
 				{Pattern: "/warehouse-fulfillment-charge-adoption-list", Handler: warehouseAdoptionList},
 				{Pattern: "/warehouse-fulfillment-charge-requests", Handler: warehouseChargeRequestList},

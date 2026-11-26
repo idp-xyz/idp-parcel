@@ -171,7 +171,7 @@ const waveRowSelection = `wave_id, warehouse_code, operator_id, prefetch, status
 
 const waveListed = `WITH listed AS (
 	SELECT wave_id, warehouse_code, operator_id, prefetch, prefetch::text AS prefetch_word, status, released_at,
-	       single_unit, single_unit::text AS single_unit_word, batch_pick
+	       single_unit, single_unit::text AS single_unit_word, batch_pick, batch_pick::text AS batch_pick_word
 	  FROM warehouse_fulfillment.wave
 	 WHERE tenant_id = $1
 )`
@@ -187,6 +187,7 @@ var waveListBinding = ports.WavePages.MustBind(cataloguepage.Columns{
 		"prefetch":      "prefetch_word",
 		"status":        "status",
 		"singleUnit":    "single_unit_word",
+		"batchPick":     "batch_pick_word",
 	},
 	Keyword: []string{"wave_id", "warehouse_code", "operator_id"},
 })

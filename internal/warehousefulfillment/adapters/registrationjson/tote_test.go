@@ -71,6 +71,28 @@ func TestAToteRequirementDocumentMustSayWhetherTotesAreRequired(t *testing.T) {
 	}
 }
 
+// 分拣的一次投放带波次、请求、商品、件数与箱号，一样都不能少；件数是正整数。
+func TestASortPutNamesTheWaveTheRequestTheGoodsAndTheTote(t *testing.T) {
+	full := `{"factId":"SYN-FACT-01","warehouse":"SYN-WH-01","waveId":"WAVE-01","requestId":"OBR-1","goodsCode":"SYN-GOODS-01","quantity":2,"toteCode":"SYN-TOTE-01"}`
+	command, err := registrationjson.SortCommand(strings.NewReader(full))
+	if err != nil || command.FactID.String() != "SYN-FACT-01" || command.Warehouse.String() != "SYN-WH-01" || command.Wave.String() != "WAVE-01" ||
+		command.Request.String() != "OBR-1" || command.Goods.String() != "SYN-GOODS-01" || command.Quantity != 2 || command.Tote.String() != "SYN-TOTE-01" {
+		t.Fatalf("投放译出的命令 %+v：%v", command, err)
+	}
+	for name, body := range map[string]string{
+		"没有箱号":  strings.Replace(full, `,"toteCode":"SYN-TOTE-01"`, ``, 1),
+		"没有波次":  strings.Replace(full, `"waveId":"WAVE-01",`, ``, 1),
+		"没有请求":  strings.Replace(full, `"requestId":"OBR-1",`, ``, 1),
+		"没有商品":  strings.Replace(full, `"goodsCode":"SYN-GOODS-01",`, ``, 1),
+		"件数是零":  strings.Replace(full, `"quantity":2`, `"quantity":0`, 1),
+		"带了操作者": strings.Replace(full, `}`, `,"registrant":"someone"}`, 1),
+	} {
+		if _, err := registrationjson.SortCommand(strings.NewReader(body)); err == nil {
+			t.Errorf("投放，%s：没有被拒", name)
+		}
+	}
+}
+
 // 拣货事实可以带箱号，不带就是没用箱；带了空白的不收。由人放开周转箱带仓与一个箱号，操作者取自身份。
 func TestAPickMayNameAToteAndAReleaseNamesOne(t *testing.T) {
 	pick := `{"factId":"SYN-FACT-01","taskId":"SYN-TASK-01","warehouse":"SYN-WH-01","quantity":2,"targetLocation":"SYN-LOC-OUT"`

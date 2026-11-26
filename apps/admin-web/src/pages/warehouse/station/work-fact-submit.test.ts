@@ -279,6 +279,7 @@ const doneOutcomes = [
   'POSTED',
   'PENDING',
   'PICKED',
+  'SORTED',
   'CHECKED',
   'CHECK_MISMATCH',
   'PACKED',
@@ -295,6 +296,8 @@ const refusedOutcomes = [
   'INPUT_NOT_ACCEPTED',
   // 出库确认的放行条件没满足，没有记下
   'WITHHELD',
+  // 合并拣货拣出来的货还没分拣完，这一次复核没有记
+  'SORT_PENDING',
   'CONTENT_CONFLICT',
   'CONTENT_INVALID',
   'NOT_ACCEPTED',

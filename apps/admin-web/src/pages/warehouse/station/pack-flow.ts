@@ -11,7 +11,8 @@
 //     matched 为假），出库单的状态不动，仍是已拣货，所以不能打包；之后可以用新的作业事实号再复核。同一个事实号同样数量重放，
 //     对上过的答已有结果（EXISTING_RESULT），没对上的再答一次 CHECK_MISMATCH；同一个事实号不同数量答内容冲突。
 //   - 复核的别的答复：单找不到 WAVE_NOT_FOUND；状态不是已拣货、或还有任务没拣完 STATUS_MISMATCH；仓与设备绑的仓对不上
-//     CONTENT_INVALID；这个租户一个仓都没登记 NOT_CONFIGURED。
+//     CONTENT_INVALID；这个租户一个仓都没登记 NOT_CONFIGURED；这张单在合并拣货的波次里拣出来的货还没分拣完 SORT_PENDING
+//     （这一次复核不记，分完之后再来）。
 //   - 打包只收已复核的单。一笔提交整张单：parcels 数组一次说完，一项一个包裹、只带一种货，序号不重复，件数合计等于已拣合计。
 //     成了答 PACKED；本产品网络的单随后在另一笔事务里提交委托，打包的答复被委托的答复换掉（commission.go 的 AfterCommission）：
 //     SUBMITTED（已提交）、EXISTING_RESULT（已有），或者没提交成的 OWNERSHIP_UNRESOLVED（生产归属未定）、ADMISSION_PAUSED（准入暂停）、
@@ -711,6 +712,7 @@ export const checkOutcomeLabels: Readonly<Record<string, string>> = {
   WAVE_NOT_FOUND: '找不到这张出库单，它可能已经被撤掉。这一笔没有记。',
   STATUS_MISMATCH: '这张单现在不能复核：它已经不是「已拣货」了（可能别的工位已经复核过），或者还有拣货任务没拣完。这一笔没有记。',
   NOT_CONFIGURED: '未配置：本租户还没有登记仓，这一笔复核没有记。',
+  SORT_PENDING: '这张单是合并拣货拣出来的，货还没按单分进周转箱。这一笔复核没有记：先到分拣台把它分完，再回来扫这张单。',
 };
 
 export const packOutcomeLabels: Readonly<Record<string, string>> = {

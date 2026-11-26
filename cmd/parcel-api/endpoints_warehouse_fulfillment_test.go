@@ -228,6 +228,7 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		waveQueries:               unwiredWave{},
 		toteQueries:               unwiredWave{},
 		singleUnitMatching:        unwiredWave{},
+		sortPlanQueries:           unwiredWave{},
 		chargeOccurrenceQueries:   unwiredChargeOccurrenceQueries{},
 		warehouseAdoptionQueries:  unwiredWarehouseChargeReads{},
 		warehouseChargeReqQueries: unwiredWarehouseChargeReads{},
@@ -345,6 +346,12 @@ func (unwiredWave) Adopt(context.Context, warehouseapp.AdoptStrategyCommand) (wa
 }
 func (unwiredWave) Pick(context.Context, warehouseapp.PickCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+func (unwiredWave) Sort(context.Context, warehouseapp.SortCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+func (unwiredWave) LoadSortPlan(context.Context, warehousedomain.TenantID, string) (warehouseports.SortPlan, bool, error) {
+	return warehouseports.SortPlan{}, false, errOrchestrationNotWired
 }
 func (unwiredWave) Check(context.Context, warehouseapp.CheckCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
@@ -841,6 +848,8 @@ const (
 	unboxingsLine               = "/warehouse-fulfillment-unboxings"
 	countEntriesLine            = "/warehouse-fulfillment-count-entries"
 	picksLine                   = "/warehouse-fulfillment-picks"
+	sortPutsLine                = "/warehouse-fulfillment-sort-puts"
+	sortPlanLine                = "/warehouse-fulfillment-wave-sort"
 	outboundChecksLine          = "/warehouse-fulfillment-outbound-checks"
 	packsLine                   = "/warehouse-fulfillment-packs"
 	returnsLine                 = "/warehouse-fulfillment-returns"
@@ -885,7 +894,7 @@ const (
 )
 
 func warehouseWorkLine(pattern string) bool {
-	return pattern == countEntriesLine || pattern == picksLine || pattern == outboundChecksLine || pattern == packsLine || pattern == returnsLine || pattern == returnReceiptsLine || pattern == outboundConfirmationsLine || pattern == pickupHandoversLine
+	return pattern == countEntriesLine || pattern == picksLine || pattern == sortPutsLine || pattern == outboundChecksLine || pattern == packsLine || pattern == returnsLine || pattern == returnReceiptsLine || pattern == outboundConfirmationsLine || pattern == pickupHandoversLine
 }
 
 // warehouseFulfillmentLines 是登记处里声明了仓配开关的各行，按路径排序。
@@ -1046,6 +1055,8 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/warehouse-fulfillment-stock-count-voids":                    {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-count-entries":                        {http.MethodPost, faceWorkFact},
 		"/warehouse-fulfillment-picks":                                {http.MethodPost, faceWorkFact},
+		sortPutsLine:                                                  {http.MethodPost, faceWorkFact},
+		sortPlanLine:                                                  {http.MethodGet, faceOperationsRead},
 		"/warehouse-fulfillment-outbound-checks":                      {http.MethodPost, faceWorkFact},
 		"/warehouse-fulfillment-packs":                                {http.MethodPost, faceWorkFact},
 		"/warehouse-fulfillment-returns":                              {http.MethodPost, faceWorkFact},
@@ -1326,6 +1337,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-stock-count-voids":                  {status, code},
 			countEntriesLine:                                            {status, code},
 			picksLine:                                                   {status, code},
+			sortPutsLine:                                                {status, code},
+			sortPlanLine:                                                {status, code},
 			outboundChecksLine:                                          {status, code},
 			packsLine:                                                   {status, code},
 			returnsLine:                                                 {status, code},
@@ -1471,6 +1484,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-stock-count-voids":                  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			countEntriesLine:                                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			picksLine:                                                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			sortPutsLine:                                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			outboundChecksLine:                                          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packsLine:                                                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			returnsLine:                                                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1522,6 +1536,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			pickDifferenceListLine:                                      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-totes":                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-single-unit-match":                  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			sortPlanLine:                                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			chargeOccurrenceListLine:                                    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseAdoptionListLine:                                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseChargeRequestsLine:                                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1609,6 +1624,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-stock-count-voids":                  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			countEntriesLine:                                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			picksLine:                                                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			sortPutsLine:                                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			outboundChecksLine:                                          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packsLine:                                                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			returnsLine:                                                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1660,6 +1676,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			pickDifferenceListLine:                                      {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			"/warehouse-fulfillment-totes":                              {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			"/warehouse-fulfillment-single-unit-match":                  {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			sortPlanLine:                                                {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			chargeOccurrenceListLine:                                    {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseAdoptionListLine:                                   {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseChargeRequestsLine:                                 {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
@@ -1744,7 +1761,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 				response = probeWorkFactPost(router, warehouseMeasurementsLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", warehouseMeasurementBody())
 			case unclaimedArrivalRegLine:
 				response = probeWorkFactPost(router, unclaimedArrivalRegLine, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", unclaimedArrivalBody())
-			case internalMovesLine, formConversionsLine, conditionConversionsLine, shortageRegistrationsLine, processingExecutionsLine, relabelExecutionsLine, unboxingsLine, countEntriesLine, picksLine, outboundChecksLine, packsLine, returnsLine, returnReceiptsLine, outboundConfirmationsLine, pickupHandoversLine:
+			case internalMovesLine, formConversionsLine, conditionConversionsLine, shortageRegistrationsLine, processingExecutionsLine, relabelExecutionsLine, unboxingsLine, countEntriesLine, picksLine, sortPutsLine, outboundChecksLine, packsLine, returnsLine, returnReceiptsLine, outboundConfirmationsLine, pickupHandoversLine:
 				response = probeWorkFactPost(router, pattern, testCase.token, "SYN-DEVICE-NODE", "WAREHOUSE", "SYN-WH-01", `{}`)
 			default:
 				response = probeWarehouseFulfillment(router, pattern, testCase.token, `{}`)

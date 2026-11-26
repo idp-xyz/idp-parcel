@@ -1167,6 +1167,12 @@ func (registration transactionalWave) Pick(ctx context.Context, command warehous
 	})
 }
 
+func (registration transactionalWave) Sort(ctx context.Context, command warehouseapp.SortCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.Sort(txCtx, command)
+	})
+}
+
 func (registration transactionalWave) Check(ctx context.Context, command warehouseapp.CheckCommand) (warehouseapp.WaveResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
 		return registration.inner.Check(txCtx, command)

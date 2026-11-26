@@ -116,6 +116,8 @@ export const workFactOutcomeLabels: Record<string, string> = {
   PICKED: '已拣货移入待出库',
   CHECKED: '复核通过，可打包',
   CHECK_MISMATCH: '复核数量与已拣不符：这一次复核已记下，出库单仍停在已拣，不能打包',
+  SORTED: '已分进周转箱',
+  SORT_PENDING: '这张单是合并拣货拣出来的，货还没按单分进周转箱。这一次复核没有记：先到分拣台分完，再来复核',
   PACKED: '已打包',
   SUBMITTED: '已打包并提交本产品网络委托',
   OWNERSHIP_UNRESOLVED: '打包已记下，但没提交本产品网络委托：这位货主的生产归属还没确定',

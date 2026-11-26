@@ -96,6 +96,7 @@ export function sendWorkFact(attempt: WorkFactAttempt, post: WorkFactPoster = po
  */
 const recordedOutcomes: ReadonlySet<string> = new Set([
   'PICKED',
+  'SORTED',
   'RECORDED',
   'CHECKED',
   'CHECK_MISMATCH',

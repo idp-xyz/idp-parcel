@@ -53,6 +53,10 @@ const (
 	WaveToteReleased
 	WaveToteNotAccepting
 	WaveToteRequired
+	// WaveSorted 是分拣的一次投放记下了。
+	WaveSorted
+	// WaveSortPending 是这张请求在合并拣货的波次里拣出来的货还没分完，不能复核。
+	WaveSortPending
 )
 
 func (outcome WaveOutcome) String() string {
@@ -133,6 +137,10 @@ func (outcome WaveOutcome) String() string {
 		return "TOTE_NOT_ACCEPTING"
 	case WaveToteRequired:
 		return "TOTE_REQUIRED"
+	case WaveSorted:
+		return "SORTED"
+	case WaveSortPending:
+		return "SORT_PENDING"
 	default:
 		return ""
 	}
@@ -618,6 +626,15 @@ func (handler *WaveHandler) Check(ctx context.Context, command CheckCommand) (Wa
 		if task.Status == "OPEN" {
 			return WaveResult{outcome: WaveStatusMismatch}, nil
 		}
+	}
+	// 合并拣货的波次拣出来的货是几张请求混在一起的：没按请求分进箱之前，复核台上数不出「这张请求的货」。
+	// 这一次复核不记：分完再来，用的还是这个事实号。
+	unsorted, err := handler.waves.UnsortedOf(ctx, command.Tenant, command.Request)
+	if err != nil {
+		return WaveResult{}, fmt.Errorf("check outbound: %w", err)
+	}
+	if unsorted > 0 {
+		return WaveResult{outcome: WaveSortPending}, nil
 	}
 	picked := pickedQuantity(tasks)
 	matched = command.Observed == picked && command.Observed > 0

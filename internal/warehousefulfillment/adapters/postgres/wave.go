@@ -150,7 +150,8 @@ func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id dom
 		}
 	}
 	if _, err := executor.Exec(ctx,
-		`UPDATE warehouse_fulfillment.wave AS target SET single_unit = `+waveIsSingleUnit+`
+		`UPDATE warehouse_fulfillment.wave AS target
+		    SET single_unit = `+waveIsSingleUnit+`, batch_pick = target.batch_pick AND NOT `+waveIsSingleUnit+`
 		  WHERE target.tenant_id = $1 AND target.wave_id = $2`,
 		tenant.String(), id.String()); err != nil {
 		return fmt.Errorf("save wave: %w", err)

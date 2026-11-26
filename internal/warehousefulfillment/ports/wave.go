@@ -112,10 +112,12 @@ type PickDifferences interface {
 // WaveStore 读写波次、分配策略与拣货任务。写入在没有环境事务时拒绝。
 type WaveStore interface {
 	ToteStore
+	SortStore
 	LoadStrategy(ctx context.Context, tenant domain.TenantID) (AllocationStrategy, bool, error)
 	SaveStrategy(ctx context.Context, tenant domain.TenantID, strategy AllocationStrategy) error
 	LoadWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]domain.OutboundRequestID, bool, error)
 	// SaveWave 的 batch 是放出时选的合并拣货：拣货的人按库位、商品把几张请求的货合在一起拿，拿回来再分拣。
+	// 放出来是单品单件波次的不记成合并拣货：它的货本来就合着拿，到复核打包扫货配单，不用分拣。
 	SaveWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, warehouse domain.WarehouseCode, operator domain.Registrant, prefetch, batch bool, at time.Time, requests []domain.OutboundRequestID, tasks []PickTask) error
 	LoadWaveMembers(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]WaveMember, bool, error)
 	// WavePicksMerged 回答这个波次的货是不是合在一起拿的：单品单件波次，或放出时选了合并拣货的波次。

@@ -95,6 +95,8 @@ var WavePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "prefetch", Vocabulary: cataloguepage.BooleanVocabulary()},
 		{Name: "status", Vocabulary: []string{WaveReleased, WavePicking, WaveCompleted, WaveCancelled}},
 		{Name: "singleUnit", Vocabulary: cataloguepage.BooleanVocabulary()},
+		// batchPick 是合并拣货的波次：分拣台按它列出要分拣的波次。
+		{Name: "batchPick", Vocabulary: cataloguepage.BooleanVocabulary()},
 	},
 })
 
