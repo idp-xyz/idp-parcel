@@ -135,7 +135,7 @@ export function WarehouseMonitorPage() {
 
   return (
     <div className="flex min-h-0 flex-1 bg-idpxyz-editor">
-      <aside aria-label="对象树" className="w-44 shrink-0 overflow-y-auto border-r border-idpxyz-border bg-idpxyz-panel p-3">
+      <aside aria-label="对象树" className="w-44 shrink-0 overflow-y-auto border-r border-idpxyz-border bg-idpxyz-sidebar p-3">
         {monitorGroups().map((group) => (
           <div key={group.group} className="mb-3">
             <div className="type-caption font-semibold text-idpxyz-textBright">{group.group}</div>
@@ -187,7 +187,7 @@ export function WarehouseMonitorPage() {
           {view.note ? <p className="type-body text-idpxyz-textMuted">{view.note}</p> : null}
           {loading && view.lines.length === 0 && !view.note ? <p className="type-body text-idpxyz-textMuted">在读…</p> : null}
           {view.headers.length > 0 ? (
-            <div className="mt-3 overflow-hidden rounded-lg border border-idpxyz-border bg-idpxyz-panel">
+            <div className="mt-3 overflow-hidden rounded-lg border border-idpxyz-border bg-idpxyz-sidebar">
               <Table>
                 <TableHeader>
                   <TableRow>

@@ -213,7 +213,7 @@ export function UnclaimedDocument({ arrivalId }: { arrivalId: string }) {
             <WmsKpiStrip items={kpis} />
             <section className="space-y-2">
               <h3 className="type-body font-semibold text-idpxyz-textBright">现场观察</h3>
-              <p className="whitespace-pre-wrap rounded-lg border border-idpxyz-border bg-idpxyz-panel px-4 py-3 type-body text-idpxyz-textBright">
+              <p className="whitespace-pre-wrap rounded-lg border border-idpxyz-border bg-idpxyz-sidebar px-4 py-3 type-body text-idpxyz-textBright">
                 {arrival.observation || '登记时没有写现场观察。'}
               </p>
             </section>

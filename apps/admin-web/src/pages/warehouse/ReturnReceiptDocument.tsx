@@ -26,7 +26,7 @@ import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsTone } from './wms-ui';
 
 const mutedText = 'type-caption text-idpxyz-textMuted';
-const noteBox = 'rounded-lg border border-idpxyz-border bg-idpxyz-panel px-4 py-3 type-body text-idpxyz-textBright';
+const noteBox = 'rounded-lg border border-idpxyz-border bg-idpxyz-sidebar px-4 py-3 type-body text-idpxyz-textBright';
 
 /**
  * 退货到仓页：一笔退件在作业台扫进暂存位之后留下的记录，认出了哪张预报、转没转待认领、记没记回库去向。退货只有概览一个读口，

@@ -126,7 +126,7 @@ export function AdjustmentDocument({ adjustmentId }: { adjustmentId: string }) {
           <>
             <section className="space-y-2">
               <h3 className="type-body font-semibold text-idpxyz-textBright">原因</h3>
-              <p className="whitespace-pre-wrap rounded-lg border border-idpxyz-border bg-idpxyz-panel px-4 py-3 type-body text-idpxyz-textBright">
+              <p className="whitespace-pre-wrap rounded-lg border border-idpxyz-border bg-idpxyz-sidebar px-4 py-3 type-body text-idpxyz-textBright">
                 {record.reason || '提交时没有写原因。'}
               </p>
             </section>

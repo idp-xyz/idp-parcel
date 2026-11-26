@@ -108,6 +108,9 @@ const OVERLAY_SELECTOR = '[role="menu"],[role="dialog"],[role="listbox"],[role="
 function focusOf(target: EventTarget | null): WorkbenchFocus {
   if (!(target instanceof HTMLElement)) return 'free';
   const tag = target.tagName;
+  // 多选列的复选框不算在打字：它只认空格。勾完一行焦点就停在它上面，这时 `/`、方向键与 Esc 该照常管用，不然人得先点一下
+  // 别处键盘才回来。只认列表里的——详情栏表单里的复选框照旧算输入，在表单里按 Esc 不该把栏连同草稿一起收掉。
+  if (tag === 'INPUT' && (target as HTMLInputElement).type === 'checkbox' && target.closest('[data-pane="list"]')) return 'free';
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return 'typing';
   if (target.closest(OVERLAY_SELECTOR)) return 'overlay';
   if (target.closest('[role="tablist"]')) return 'tablist';

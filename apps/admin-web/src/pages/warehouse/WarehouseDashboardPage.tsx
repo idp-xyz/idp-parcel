@@ -126,14 +126,14 @@ export function WarehouseDashboardPage() {
         {board.note ? <p className="type-caption text-idpxyz-textMuted">{board.note}</p> : null}
         <section aria-label="作业待处理" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {board.cards.map((item) => (
-            <button key={item.name} type="button" className="rounded-lg border border-idpxyz-border bg-idpxyz-panel p-4 text-left hover:border-idpxyz-accent" onClick={() => (item.hash.startsWith('#/station') ? enterStation(item.hash) : (window.location.hash = item.hash))}>
+            <button key={item.name} type="button" className="rounded-lg border border-idpxyz-border bg-idpxyz-sidebar p-4 text-left hover:border-idpxyz-accent" onClick={() => (item.hash.startsWith('#/station') ? enterStation(item.hash) : (window.location.hash = item.hash))}>
               <div className="type-body text-idpxyz-textMuted">{item.name}</div>
               <div className="mt-2 font-mono type-display font-bold text-idpxyz-textBright">{item.count === null ? '—' : item.count}</div>
               <p className="mt-1 type-caption text-idpxyz-textMuted">{item.note}</p>
             </button>
           ))}
         </section>
-        <section aria-label="异常清单" className="rounded-lg border border-idpxyz-border bg-idpxyz-panel">
+        <section aria-label="异常清单" className="rounded-lg border border-idpxyz-border bg-idpxyz-sidebar">
           <h2 className="border-b border-idpxyz-border px-4 py-3 type-section text-idpxyz-textBright">等得最久的</h2>
           {board.exceptions.length === 0 ? <p className="px-4 py-6 type-body text-idpxyz-textMuted">这几处读到的队列里没有还在等的。</p> : (
             <ul>

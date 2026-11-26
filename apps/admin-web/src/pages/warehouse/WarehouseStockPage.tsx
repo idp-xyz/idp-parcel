@@ -137,7 +137,7 @@ export function WarehouseStockPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <div className="px-6 pt-5 pb-3 border-b border-idpxyz-border bg-idpxyz-panel space-y-3 shrink-0">
+      <div className="px-6 pt-5 pb-3 border-b border-idpxyz-border bg-idpxyz-sidebar space-y-3 shrink-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="type-title font-bold text-idpxyz-textBright">{info.title}</h1>
@@ -233,7 +233,7 @@ export function WarehouseStockPage() {
         ) : loading && !body ? (
           <p className="type-body text-idpxyz-textMuted">正在查询实时库存…</p>
         ) : body ? (
-          <div className="rounded-lg border border-idpxyz-border bg-idpxyz-panel overflow-x-auto">
+          <div className="rounded-lg border border-idpxyz-border bg-idpxyz-sidebar overflow-x-auto">
             {view === 'cells' ? (
               (body.cells ?? []).length === 0 ? (
                 <p className="p-6 type-body text-idpxyz-textMuted">当前条件下没有商品库存格。</p>

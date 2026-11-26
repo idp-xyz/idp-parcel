@@ -154,7 +154,7 @@ export function WmsDocumentPage({
 /** 右栏里的一块：一个小标题加内容。 */
 export function WmsAsideBlock({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-idpxyz-border bg-idpxyz-panel p-3">
+    <section className="rounded-lg border border-idpxyz-border bg-idpxyz-sidebar p-3">
       <h3 className="type-caption font-medium text-idpxyz-textMuted">{title}</h3>
       <div className="mt-2 flex flex-col gap-1.5 type-body text-idpxyz-text">{children}</div>
     </section>

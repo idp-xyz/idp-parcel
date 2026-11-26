@@ -236,7 +236,7 @@ function RowsFieldControl({
       ) : (
         <div className="space-y-3">
           {rows.map((row, index) => (
-            <div key={index} className="rounded border border-idpxyz-border bg-idpxyz-panel p-3 space-y-2">
+            <div key={index} className="rounded border border-idpxyz-border bg-idpxyz-sidebar p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="type-caption font-medium text-idpxyz-textMuted">
                   {rowLabel} #{index + 1}

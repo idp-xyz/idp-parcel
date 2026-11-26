@@ -251,7 +251,7 @@ export function WarehouseSettingsPage() {
 
         <section className="space-y-3">
           <h2 className="type-section font-semibold text-idpxyz-textBright">已登记的待认领处置规则</h2>
-          <div className="rounded-lg border border-idpxyz-border bg-idpxyz-panel overflow-x-auto">
+          <div className="rounded-lg border border-idpxyz-border bg-idpxyz-sidebar overflow-x-auto">
             {disposalRules.length === 0 ? (
               <p className="p-4 type-body text-idpxyz-textMuted">暂未登记任何仓库的待认领处置规则（按未配置处理）。</p>
             ) : (

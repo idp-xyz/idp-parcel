@@ -36,7 +36,7 @@ function BlockNote({ title, tone, children }: { title: string; tone?: 'danger'; 
         className={`rounded-lg border px-4 py-5 type-body ${
           tone === 'danger'
             ? 'border-[color:var(--ds-status-danger-border)] bg-[color:var(--ds-status-danger-bg-subtle)] text-idpxyz-text'
-            : 'border-idpxyz-border bg-idpxyz-panel text-idpxyz-textMuted'
+            : 'border-idpxyz-border bg-idpxyz-sidebar text-idpxyz-textMuted'
         }`}
       >
         {children}

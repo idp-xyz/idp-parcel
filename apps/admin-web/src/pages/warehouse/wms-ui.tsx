@@ -236,7 +236,7 @@ export function WmsStepper({
                       ? 'bg-amber-500 text-white ring-2 ring-amber-500/25'
                       : active
                         ? 'bg-idpxyz-accent text-idpxyz-buttonFg ring-2 ring-idpxyz-accent/25'
-                        : 'border border-idpxyz-border bg-idpxyz-panel text-idpxyz-textMuted'
+                        : 'border border-idpxyz-border bg-idpxyz-sidebar text-idpxyz-textMuted'
                 }`}
               >
                 {done ? <Check className="h-3 w-3" /> : index + 1}
@@ -352,7 +352,7 @@ export function WmsInfoGrid({
   items: ReadonlyArray<{ label: string; value: ReactNode; mono?: boolean }>;
 }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 rounded-lg border border-idpxyz-border bg-idpxyz-panel p-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 rounded-lg border border-idpxyz-border bg-idpxyz-sidebar p-4">
       {items.map((item) => (
         <div key={item.label} className="min-w-0">
           <div className="type-caption text-idpxyz-textMuted">{item.label}</div>
@@ -406,7 +406,7 @@ export function WmsSubTable<T>({
           {extra}
         </div>
       ) : null}
-      <div className="rounded-lg border border-idpxyz-border bg-idpxyz-panel overflow-x-auto">
+      <div className="rounded-lg border border-idpxyz-border bg-idpxyz-sidebar overflow-x-auto">
         {rows.length === 0 ? (
           <p className="px-4 py-5 type-body text-idpxyz-textMuted">{emptyText}</p>
         ) : (
@@ -652,7 +652,7 @@ export function WmsKpiStrip({
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {items.map((item) => (
-        <div key={item.label} className="rounded-lg border border-idpxyz-border bg-idpxyz-panel px-4 py-3">
+        <div key={item.label} className="rounded-lg border border-idpxyz-border bg-idpxyz-sidebar px-4 py-3">
           <div className="flex items-center justify-between gap-2">
             <span className="type-caption text-idpxyz-textMuted">{item.label}</span>
             {item.tone ? <span className={`h-2 w-2 rounded-full ${toneClasses[item.tone].dot}`} /> : null}

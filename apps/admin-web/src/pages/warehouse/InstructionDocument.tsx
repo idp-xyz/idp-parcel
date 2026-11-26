@@ -168,7 +168,7 @@ export function InstructionDocument({ instructionId }: { instructionId: string }
           <>
             <section className="space-y-2">
               <h3 className="type-body font-semibold text-idpxyz-textBright">要做什么</h3>
-              <div className="rounded-lg border border-idpxyz-border bg-idpxyz-panel px-4 py-3 type-body text-idpxyz-textBright">
+              <div className="rounded-lg border border-idpxyz-border bg-idpxyz-sidebar px-4 py-3 type-body text-idpxyz-textBright">
                 <p>{instructionHeadline(record)}</p>
                 {relabel && relabel.scope.length > 0 ? <p className={`mt-1 ${mutedText}`}>只换这一批的库存：{relabel.scope.join('、')}。</p> : null}
               </div>
