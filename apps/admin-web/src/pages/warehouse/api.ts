@@ -607,7 +607,7 @@ export interface WaveRecord {
   warehouseCode: string;
   operator: string;
   prefetch: boolean;
-  /** 后端从拣货任务算出来的：RELEASED、PICKING、COMPLETED、CANCELLED。 */
+  /** RELEASED、PICKING、COMPLETED、CANCELLED，口径见 wave-flow.ts「波次的状态由读口答」。 */
   status: string;
   releasedAt: string;
   requests: string[];

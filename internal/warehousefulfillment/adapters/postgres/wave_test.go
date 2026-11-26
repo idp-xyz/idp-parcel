@@ -57,9 +57,9 @@ func TestAWaveAllocatesReservedStockAndAPickMovesItOut(t *testing.T) {
 	}
 }
 
-// Covers: 波次的状态读的时候从它的拣货任务算。刚放出是已放；拣了一条还剩一条是拣货中；都有了结果（拣满或少拣）是已完成；
-// 任务全被截单作废是已取消。迟到的任务算拣过、不算结果：作废之后才拣出来，波次仍是已取消；同一个波次里另有任务等着拣，
-// 就是拣货中。按状态筛只答那一种。按号读一张与列表的一行同形，没有的波次答找不到。
+// Covers: 波次的状态跟着它的拣货任务走。刚放出是已放出；拣了一条还剩一条是拣货中；都有了结果（拣满或少拣）是已完成；
+// 任务全被截单作废是已取消。迟到的任务不算：作废之后才拣出来，波次仍是已取消；同一个波次里另有任务等着拣，
+// 还是已放出，与进度写的「已拣 0」对得上。按状态筛只答那一种。按号读一张与列表的一行同形，没有的波次答找不到。
 func TestAWaveStatusFollowsItsPickTasks(t *testing.T) {
 	world := newReceiptWorld(t)
 	world.seedStorageStock(t, 60)
@@ -202,7 +202,7 @@ func TestAWaveStatusFollowsItsPickTasks(t *testing.T) {
 	if world.pick(t, handler, lateTask, 10).Outcome() != application.WaveRecorded {
 		t.Fatal("迟到那条没有记下")
 	}
-	if got := statusOf("WAVE-STATUS-LATE"); got != ports.WavePicking {
+	if got := statusOf("WAVE-STATUS-LATE"); got != ports.WaveReleased {
 		t.Fatalf("一条迟到、一条等着拣 = %s", got)
 	}
 
@@ -212,11 +212,14 @@ func TestAWaveStatusFollowsItsPickTasks(t *testing.T) {
 	if ids := listed("status=" + ports.WaveCompleted + "&sort=waveId"); len(ids) != 2 || ids[0] != "WAVE-STATUS" || ids[1] != "WAVE-STATUS-SHORT" {
 		t.Fatalf("按已完成筛 = %v", ids)
 	}
-	if ids := listed("status=" + ports.WaveReleased); len(ids) != 0 {
-		t.Fatalf("按已放筛 = %v", ids)
+	if ids := listed("status=" + ports.WaveReleased); len(ids) != 1 || ids[0] != "WAVE-STATUS-LATE" {
+		t.Fatalf("按已放出筛 = %v", ids)
 	}
-	if ids := listed("status=" + ports.WavePicking); len(ids) != 1 || ids[0] != "WAVE-STATUS-LATE" {
+	if ids := listed("status=" + ports.WavePicking); len(ids) != 0 {
 		t.Fatalf("末了按拣货中筛 = %v", ids)
+	}
+	if ids := listed("status=" + ports.WaveReleased + "&status=" + ports.WaveCompleted + "&sort=waveId"); len(ids) != 3 {
+		t.Fatalf("两种状态一起筛 = %v", ids)
 	}
 	if ids := listed(""); len(ids) != 4 {
 		t.Fatalf("不筛 = %v", ids)
@@ -891,10 +894,54 @@ func (world receiptWorld) waves(t *testing.T) *application.WaveHandler {
 	holds := adapter.LedgerHolds{
 		Freezes: adapter.NewFreezeHolds(freezes), Counts: counts, Reservations: requests, Allocations: waves,
 	}
+	// 凡是用到波次编排的用例，收尾时都核一遍：波次上存的状态与照它此刻的任务算出来的一致。
+	// 哪个写口改了任务状态却没有重算波次，在这里现形，不必每个用例各自记得去查。
+	t.Cleanup(func() { world.assertWaveStatusesFollowTheirTasks(t) })
 	return application.NewWaveHandler(
 		waves, requests, tasks, differences, world.poster(), world.ledger, world.locations, world.zones,
 		world.goods, holds, world.clock, world.warehouses,
 	)
+}
+
+// assertWaveStatusesFollowTheirTasks 把规则在这里另写一遍，不借适配器里重算用的那一句：只看待执行、拣满、少拣三种任务。
+func (world receiptWorld) assertWaveStatusesFollowTheirTasks(t *testing.T) {
+	t.Helper()
+	rows, err := world.pool.Query(context.Background(),
+		`SELECT wave.wave_id, wave.status,
+		        count(task.task_id) FILTER (WHERE task.status = 'OPEN'),
+		        count(task.task_id) FILTER (WHERE task.status IN ('DONE', 'SHORT'))
+		   FROM warehouse_fulfillment.wave wave
+		   LEFT JOIN warehouse_fulfillment.pick_task task
+		     ON task.tenant_id = wave.tenant_id AND task.wave_id = wave.wave_id
+		  GROUP BY wave.tenant_id, wave.wave_id, wave.status`)
+	if err != nil {
+		t.Errorf("核对波次状态：%v", err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, stored string
+		var open, settled int64
+		if err := rows.Scan(&id, &stored, &open, &settled); err != nil {
+			t.Errorf("核对波次状态：%v", err)
+			return
+		}
+		want := ports.WaveCancelled
+		switch {
+		case open > 0 && settled == 0:
+			want = ports.WaveReleased
+		case open > 0:
+			want = ports.WavePicking
+		case settled > 0:
+			want = ports.WaveCompleted
+		}
+		if stored != want {
+			t.Errorf("波次 %s 存的状态是 %s，照它的任务（待执行 %d、拣满或少拣 %d）应为 %s", id, stored, open, settled, want)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Errorf("核对波次状态：%v", err)
+	}
 }
 
 func (world receiptWorld) adoptStrategy(t *testing.T, handler *application.WaveHandler) application.WaveResult {

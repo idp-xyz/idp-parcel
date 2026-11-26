@@ -3,7 +3,9 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -40,6 +42,65 @@ func TestWithdrawingFromAWaveRefusesToRunOutsideATransaction(t *testing.T) {
 		valueOf(t, domain.NewOutboundRequestID, "OBR-1"), valueOf(t, domain.NewRegistrant, "operator-2"), preAdviceNumberingInstant)
 	if !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("WithdrawFromWave：%v", err)
+	}
+}
+
+// Covers: 同一个波次里两张请求的任务被两笔事务同时拣完，波次存下的状态是已完成。
+// 第一笔拣完先不提交，第二笔随后拣另一张请求的任务、卡在波次的行锁上，确认它真的卡住了才放第一笔提交——
+// 走到的是「等锁、锁放开后看得到前一笔提交的任务再重算」那条路，不是两笔碰巧一前一后。
+func TestTwoConcurrentPicksInOneWaveLeaveItCompleted(t *testing.T) {
+	world, handler, reserve := withdrawalWorld(t, 20)
+	released := world.releaseRequests(t, handler, "WAVE-RACE", reserve("REQ-RACE-A"), reserve("REQ-RACE-B"))
+	if released.Outcome() != application.WaveAllocated || len(released.Tasks()) != 2 {
+		t.Fatalf("放两张 %s", released.Outcome())
+	}
+	waves, err := adapter.NewWaves(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observer := newBlockedSessionObserver(t, world.pool)
+	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
+	pick := func(ctx context.Context, index int) error {
+		task := released.Tasks()[index]
+		task.Picked = task.Quantity
+		task.Status = "DONE"
+		task.Staging = valueOf(t, domain.NewLocationCode, "SYN-LOC-OUT")
+		return waves.SavePick(ctx, tenant, task, domain.OutboundPicked, "", "SYN-FACT-RACE-"+task.ID.String(), 0)
+	}
+	ctx := t.Context()
+	picked := make(chan struct{})
+	release := make(chan struct{})
+	var firstErr, secondErr error
+	var wait sync.WaitGroup
+	wait.Add(1)
+	go func() {
+		defer wait.Done()
+		firstErr = world.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			pickErr := pick(txCtx, 0)
+			close(picked)
+			if pickErr == nil {
+				<-release
+			}
+			return pickErr
+		})
+	}()
+	<-picked
+	wait.Add(1)
+	go func() {
+		defer wait.Done()
+		secondErr = world.transactor.WithinTransaction(ctx, func(txCtx context.Context) error { return pick(txCtx, 1) })
+	}()
+	blocked := observer.waitForBlockedSession(ctx, 10*time.Second)
+	close(release)
+	wait.Wait()
+	if firstErr != nil || secondErr != nil {
+		t.Fatalf("两笔拣货：%v / %v", firstErr, secondErr)
+	}
+	if !blocked {
+		t.Error("第二笔没有卡在波次的行锁上，没有走到「等锁」那条路")
+	}
+	if got := world.waveRow(t, "WAVE-RACE").Status; got != ports.WaveCompleted {
+		t.Fatalf("两条任务都拣完之后波次存的是 %s", got)
 	}
 }
 

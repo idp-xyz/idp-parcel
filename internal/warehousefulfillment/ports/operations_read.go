@@ -62,16 +62,17 @@ type OutboundRequestRow struct {
 	WantedQuantity           int64
 }
 
-// 波次的状态不另存，读的时候从它的拣货任务算出来：一条任务的状态一变，波次的状态跟着就对，没有第二处要记得同步。
-// 已取消与迟到的任务不算这个波次的结果：迟到是截单之后才拣出来的货，要回库。
+// 波次的状态存在波次上，只由一条规则从它的拣货任务算：任务的状态每变一次，写任务的那一笔事务里重算所属的波次。
+// 算的时候只看待执行、拣满、少拣三种任务，与拣货进度数的是同一批。作废的任务不是这个波次要拣的；
+// 迟到的是作废之后才拣出来的货，要回库，也不算。
 const (
-	// WaveReleased 是还有任务没拣，也还没有一条任务拣过。
+	// WaveReleased 是有任务待执行，没有一条拣满或少拣。
 	WaveReleased = "RELEASED"
-	// WavePicking 是还有任务没拣，已经有任务拣过（拣满、少拣或迟到）。
+	// WavePicking 是有任务待执行，已有任务拣满或少拣。
 	WavePicking = "PICKING"
-	// WaveCompleted 是没有任务等着拣，至少一条拣满或少拣。
+	// WaveCompleted 是没有任务待执行，至少一条拣满或少拣。
 	WaveCompleted = "COMPLETED"
-	// WaveCancelled 是每一条任务都被截单作废了。
+	// WaveCancelled 是任务全被截单或撤单作废了。
 	WaveCancelled = "CANCELLED"
 )
 

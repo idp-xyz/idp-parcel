@@ -108,9 +108,10 @@ func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id dom
 		return fmt.Errorf("save wave: %w", err)
 	}
 	if _, err := executor.Exec(ctx,
-		`INSERT INTO warehouse_fulfillment.wave (tenant_id, wave_id, warehouse_code, operator_id, prefetch, released_at)
-		 VALUES ($1,$2,$3,$4,$5,$6)`,
-		tenant.String(), id.String(), warehouse.String(), operator.String(), prefetch, at); err != nil {
+		`INSERT INTO warehouse_fulfillment.wave (tenant_id, wave_id, warehouse_code, operator_id, prefetch, released_at, status)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+		// 任务还没写进去，先按「没有任务」的答案落下；任务写完再照规则重算，放出时的状态不另写一份。
+		tenant.String(), id.String(), warehouse.String(), operator.String(), prefetch, at, ports.WaveCancelled); err != nil {
 		return fmt.Errorf("save wave: %w", err)
 	}
 	seen := map[string]struct{}{}
@@ -147,6 +148,54 @@ func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id dom
 			optionalText(task.Alias.String(), task.Alias.String() != "")); err != nil {
 			return fmt.Errorf("save pick task: %w", err)
 		}
+	}
+	return refreshWaveStatus(ctx, executor, tenant, `target.wave_id = $2`, id.String())
+}
+
+// waveStatusOfTasks 是波次状态的那一条规则，口径写在 ports.WaveReleased 那一组常量上。
+// 迁移回填已有波次时用的也是这一条。
+const waveStatusOfTasks = `(
+	SELECT CASE WHEN count(*) FILTER (WHERE task.status = 'OPEN') > 0
+	             AND count(*) FILTER (WHERE task.status IN ('DONE', 'SHORT')) = 0 THEN '` + ports.WaveReleased + `'
+	            WHEN count(*) FILTER (WHERE task.status = 'OPEN') > 0 THEN '` + ports.WavePicking + `'
+	            WHEN count(*) FILTER (WHERE task.status IN ('DONE', 'SHORT')) > 0 THEN '` + ports.WaveCompleted + `'
+	            ELSE '` + ports.WaveCancelled + `' END
+	  FROM warehouse_fulfillment.pick_task task
+	 WHERE task.tenant_id = target.tenant_id AND task.wave_id = target.wave_id)`
+
+// wavesOfRequest 圈出一张出库请求有任务在里面的各个波次：少拣之后再放的请求，任务可以分在两个波次里。
+const wavesOfRequest = `target.wave_id IN (
+	SELECT member.wave_id FROM warehouse_fulfillment.pick_task member
+	 WHERE member.tenant_id = $1 AND member.request_id = $2)`
+
+// lockWaves 在动拣货任务之前先锁住 which 圈出的波次行，锁到事务结束。
+// 一个波次里可以有几个货主的单，各货主的拣货不共用入账次序，截单更不走那道次序：两笔事务各改同一个波次里不同请求的任务，
+// 后重算的那一笔若只靠重算那一句去等行锁，醒来之后数任务用的仍是等锁之前的快照，看不到先提交的那一笔，
+// 存下的状态就停在「还在拣」。所以锁要单独一句、赶在改任务之前拿：拿到之后的每一句都看得到前一个持锁者提交的任务，
+// 同一个波次的任务改动从此一笔一笔排着来。几个波次按波次号的先后去锁，两笔事务不会各拿一半互相等。
+// 各写口都是先锁波次、再动任务，次序一致。which 的 $1 是租户，$2 是 scope。
+func lockWaves(ctx context.Context, executor bentopg.Executor, tenant domain.TenantID, which, scope string) error {
+	if _, err := executor.Exec(ctx,
+		`SELECT target.wave_id FROM warehouse_fulfillment.wave AS target
+		  WHERE target.tenant_id = $1 AND `+which+`
+		  ORDER BY target.wave_id
+		    FOR NO KEY UPDATE`,
+		tenant.String(), scope); err != nil {
+		return fmt.Errorf("lock waves: %w", err)
+	}
+	return nil
+}
+
+// refreshWaveStatus 照 waveStatusOfTasks 重算 which 圈出的波次。凡是让波次的状态可能变的写口——把任务从待执行改成
+// 拣满、少拣或作废的，往波次里添任务的——都先调 lockWaves、改完任务再在同一笔事务里调它：波次上存的状态只从这里来，
+// 不在别处各写各的。SaveLatePick 把作废改成迟到，两种都不计入状态；SaveOpenTask 只改库位与数量：这两处不调。
+// which 的 $1 是租户，$2 是 scope。
+func refreshWaveStatus(ctx context.Context, executor bentopg.Executor, tenant domain.TenantID, which, scope string) error {
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.wave AS target SET status = `+waveStatusOfTasks+`
+		  WHERE target.tenant_id = $1 AND `+which,
+		tenant.String(), scope); err != nil {
+		return fmt.Errorf("refresh wave status: %w", err)
 	}
 	return nil
 }
@@ -197,6 +246,9 @@ func (store *Waves) WithdrawFromWave(ctx context.Context, tenant domain.TenantID
 	if err != nil {
 		return fmt.Errorf("withdraw from wave: %w", err)
 	}
+	if err := lockWaves(ctx, executor, tenant, `target.wave_id = $2`, id.String()); err != nil {
+		return err
+	}
 	tag, err := executor.Exec(ctx,
 		`UPDATE warehouse_fulfillment.wave_request
 		    SET withdrawn_at = $4, withdrawn_by = $5
@@ -224,7 +276,7 @@ func (store *Waves) WithdrawFromWave(ctx context.Context, tenant domain.TenantID
 	if tag.RowsAffected() != 1 {
 		return fmt.Errorf("withdraw from wave: %s was not allocated", request.String())
 	}
-	return nil
+	return refreshWaveStatus(ctx, executor, tenant, `target.wave_id = $2`, id.String())
 }
 
 func (store *Waves) LoadTask(ctx context.Context, tenant domain.TenantID, id domain.PickTaskID) (ports.PickTask, bool, error) {
@@ -359,6 +411,9 @@ func (store *Waves) InsertOpenTask(ctx context.Context, tenant domain.TenantID, 
 	if err != nil {
 		return fmt.Errorf("insert open pick: %w", err)
 	}
+	if err := lockWaves(ctx, executor, tenant, `target.wave_id = $2`, task.WaveID.String()); err != nil {
+		return err
+	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO warehouse_fulfillment.pick_task (
 		    tenant_id, task_id, wave_id, request_id, location_code, goods_code, unit_name, stock_state,
@@ -369,13 +424,16 @@ func (store *Waves) InsertOpenTask(ctx context.Context, tenant domain.TenantID, 
 		optionalText(task.Alias.String(), task.Alias.String() != "")); err != nil {
 		return fmt.Errorf("insert open pick: %w", err)
 	}
-	return nil
+	return refreshWaveStatus(ctx, executor, tenant, `target.wave_id = $2`, task.WaveID.String())
 }
 
 func (store *Waves) SavePick(ctx context.Context, tenant domain.TenantID, task ports.PickTask, requestStatus domain.OutboundStatus, differenceID, factID string, short int64) error {
 	executor, err := store.db.RequireExecutor(ctx)
 	if err != nil {
 		return fmt.Errorf("save pick: %w", err)
+	}
+	if err := lockWaves(ctx, executor, tenant, wavesOfRequest, task.Request.String()); err != nil {
+		return err
 	}
 	tag, err := executor.Exec(ctx,
 		`UPDATE warehouse_fulfillment.pick_task
@@ -406,7 +464,7 @@ func (store *Waves) SavePick(ctx context.Context, tenant domain.TenantID, task p
 			return fmt.Errorf("save pick difference: %w", err)
 		}
 	}
-	return nil
+	return refreshWaveStatus(ctx, executor, tenant, wavesOfRequest, task.Request.String())
 }
 
 func (store *Waves) SaveCheck(ctx context.Context, tenant domain.TenantID, fact domain.PickFactID, request domain.OutboundRequestID, observed int64, matched bool, at time.Time, next domain.OutboundStatus) error {
@@ -1215,13 +1273,16 @@ func (store *Waves) CancelOpenTasks(ctx context.Context, tenant domain.TenantID,
 	if err != nil {
 		return fmt.Errorf("cancel open tasks: %w", err)
 	}
+	if err := lockWaves(ctx, executor, tenant, wavesOfRequest, request.String()); err != nil {
+		return err
+	}
 	if _, err := executor.Exec(ctx,
 		`UPDATE warehouse_fulfillment.pick_task SET status = 'CANCELLED'
 		  WHERE tenant_id = $1 AND request_id = $2 AND status = 'OPEN'`,
 		tenant.String(), request.String()); err != nil {
 		return fmt.Errorf("cancel open tasks: %w", err)
 	}
-	return nil
+	return refreshWaveStatus(ctx, executor, tenant, wavesOfRequest, request.String())
 }
 
 func (store *Waves) SaveReturnTask(ctx context.Context, tenant domain.TenantID, task ports.ReturnTask) error {
