@@ -20,10 +20,16 @@ const outboundRequestListColumns = `
 	numbering_absence, received_at, parent_request_id, platform_stocking,
 	prefetch_shipment_id, prefetch_declared_parcel_id, partial_shipment`
 
+// single_unit_word 是「单品单件」筛选用的那一列：这张请求要拣的只有一件，即预占需求合计是 1 个基本单位。
+// 口径与 waveIsSingleUnit 对每张请求问的是同一句；代理仓的请求不预占，合计是 0，不算。
 const outboundRequestListed = `WITH listed AS (
-	SELECT ` + outboundRequestListColumns + `
-	  FROM warehouse_fulfillment.outbound_request
-	 WHERE tenant_id = $1
+	SELECT ` + outboundRequestListColumns + `,
+	       ((SELECT coalesce(sum(reservation.wanted), 0)
+	           FROM warehouse_fulfillment.outbound_reservation reservation
+	          WHERE reservation.tenant_id = request.tenant_id
+	            AND reservation.request_id = request.request_id) = 1)::text AS single_unit_word
+	  FROM warehouse_fulfillment.outbound_request request
+	 WHERE request.tenant_id = $1
 )`
 
 var outboundRequestListBinding = ports.OutboundRequestPages.MustBind(cataloguepage.Columns{
@@ -37,6 +43,7 @@ var outboundRequestListBinding = ports.OutboundRequestPages.MustBind(cataloguepa
 		"warehouseCode": "warehouse_code",
 		"dispatch":      "dispatch",
 		"status":        "status",
+		"singleUnit":    "single_unit_word",
 	},
 	Keyword: []string{"request_id", "document_number", "owner_account_id", "warehouse_code", "recipient", "request_key"},
 })
@@ -145,7 +152,7 @@ func (store *OutboundRequests) List(
 
 // 波次的一行连同它的出库请求与拣货任务在同一句里取出：状态、成员与任务是同一刻的，不会状态说拣货中、
 // 任务却都已经拣完。成员与任务各聚成一个 JSON 数组，只对取到的这一页算。$1 是租户，与 waveListed 用的是同一个参数。
-const waveRowSelection = `wave_id, warehouse_code, operator_id, prefetch, status, released_at,
+const waveRowSelection = `wave_id, warehouse_code, operator_id, prefetch, status, released_at, single_unit,
 	(SELECT coalesce(jsonb_agg(jsonb_build_object(
 	            'requestId', member.request_id, 'withdrawn', member.withdrawn_at IS NOT NULL
 	        ) ORDER BY member.request_id), '[]'::jsonb)
@@ -160,7 +167,8 @@ const waveRowSelection = `wave_id, warehouse_code, operator_id, prefetch, status
 	  WHERE task.tenant_id = $1 AND task.wave_id = listed.wave_id) AS tasks`
 
 const waveListed = `WITH listed AS (
-	SELECT wave_id, warehouse_code, operator_id, prefetch, prefetch::text AS prefetch_word, status, released_at
+	SELECT wave_id, warehouse_code, operator_id, prefetch, prefetch::text AS prefetch_word, status, released_at,
+	       single_unit, single_unit::text AS single_unit_word
 	  FROM warehouse_fulfillment.wave
 	 WHERE tenant_id = $1
 )`
@@ -175,6 +183,7 @@ var waveListBinding = ports.WavePages.MustBind(cataloguepage.Columns{
 		"warehouseCode": "warehouse_code",
 		"prefetch":      "prefetch_word",
 		"status":        "status",
+		"singleUnit":    "single_unit_word",
 	},
 	Keyword: []string{"wave_id", "warehouse_code", "operator_id"},
 })
@@ -258,7 +267,7 @@ func (store *Waves) LoadWaveRow(ctx context.Context, tenant domain.TenantID, wav
 func scanWaveRow(row interface{ Scan(dest ...any) error }) (ports.WaveRow, error) {
 	var item ports.WaveRow
 	var members, tasks []byte
-	if err := row.Scan(&item.WaveID, &item.WarehouseCode, &item.Operator, &item.Prefetch, &item.Status, &item.ReleasedAt, &members, &tasks); err != nil {
+	if err := row.Scan(&item.WaveID, &item.WarehouseCode, &item.Operator, &item.Prefetch, &item.Status, &item.ReleasedAt, &item.SingleUnit, &members, &tasks); err != nil {
 		return ports.WaveRow{}, err
 	}
 	var listed []struct {

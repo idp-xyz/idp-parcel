@@ -613,6 +613,8 @@ export interface WaveRecord {
   /** RELEASED、PICKING、COMPLETED、CANCELLED，口径见 wave-flow.ts「波次的状态由读口答」。 */
   status: string;
   releasedAt: string;
+  /** 单品单件波次：放出时每张出库单要拣的都只有一件。拣货时同库位同商品合成一格拿，复核打包时扫货就能配单。 */
+  singleUnit?: boolean;
   requests: string[];
   /** `requests` 里已经撤出的那几张：它们在这个波次里的任务作废了，请求回到了已预占。 */
   withdrawnRequests: string[];

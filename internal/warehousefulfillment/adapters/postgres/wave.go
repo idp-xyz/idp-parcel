@@ -149,8 +149,30 @@ func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id dom
 			return fmt.Errorf("save pick task: %w", err)
 		}
 	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.wave AS target SET single_unit = `+waveIsSingleUnit+`
+		  WHERE target.tenant_id = $1 AND target.wave_id = $2`,
+		tenant.String(), id.String()); err != nil {
+		return fmt.Errorf("save wave: %w", err)
+	}
 	return refreshWaveStatus(ctx, executor, tenant, `target.wave_id = $2`, id.String())
 }
+
+// waveIsSingleUnit 是「单品单件波次」的那一条规则：波次里有出库请求，并且每一张要拣的都只有一件——
+// 预占需求合计是 1 个基本单位（套装按组件展开之后算）。放出之后不往波次里加单，所以放出时算一次就定了；
+// 迁移回填已有波次时用的也是这一条。
+const waveIsSingleUnit = `(
+	EXISTS (
+	    SELECT 1 FROM warehouse_fulfillment.wave_request member
+	     WHERE member.tenant_id = target.tenant_id AND member.wave_id = target.wave_id)
+	AND NOT EXISTS (
+	    SELECT 1 FROM warehouse_fulfillment.wave_request member
+	     WHERE member.tenant_id = target.tenant_id AND member.wave_id = target.wave_id
+	       AND (SELECT coalesce(sum(reservation.wanted), 0)
+	              FROM warehouse_fulfillment.outbound_reservation reservation
+	             WHERE reservation.tenant_id = member.tenant_id
+	               AND reservation.request_id = member.request_id) <> 1)
+)`
 
 // waveStatusOfTasks 是波次状态的那一条规则，口径写在 ports.WaveReleased 那一组常量上。
 // 迁移回填已有波次时用的也是这一条。

@@ -29,6 +29,7 @@ const columns: ListColumn<WaveRecord>[] = [
   { id: 'wave', header: '波次号', className: 'whitespace-nowrap', render: (row) => <DocumentLink moduleId={moduleId} parts={[row.waveId]} /> },
   { id: 'state', header: '状态', render: (row) => <WmsBadge code={row.status} label={waveStatusLabel(row.status)} /> },
   { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
+  { id: 'profile', header: '件型', className: 'whitespace-nowrap', render: (row) => (row.singleUnit ? '单品单件' : '—') },
   {
     id: 'requests',
     header: '出库单',

@@ -25,6 +25,8 @@ var OutboundRequestPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 			"FORWARDED", "SPLIT", "ALLOCATED", "PICKED", "CHECKED", "PACKED",
 			"SHIPPED", "CANCELLED", "AWAITING_RETURN", "PARTIALLY_CANCELLED",
 		}},
+		// singleUnit 是「单品单件」：这张请求要拣的只有一件（预占需求合计是 1 个基本单位）。
+		{Name: "singleUnit", Vocabulary: cataloguepage.BooleanVocabulary()},
 	},
 })
 
@@ -92,6 +94,7 @@ var WavePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "warehouseCode"},
 		{Name: "prefetch", Vocabulary: cataloguepage.BooleanVocabulary()},
 		{Name: "status", Vocabulary: []string{WaveReleased, WavePicking, WaveCompleted, WaveCancelled}},
+		{Name: "singleUnit", Vocabulary: cataloguepage.BooleanVocabulary()},
 	},
 })
 
@@ -117,7 +120,9 @@ type WaveRow struct {
 	Prefetch      bool
 	Status        string
 	ReleasedAt    time.Time
-	Requests      []string
+	// SingleUnit 是单品单件波次：放出时波次里每一张出库请求要拣的都只有一件。
+	SingleUnit bool
+	Requests   []string
 	// Withdrawn 是 Requests 里已经撤出的那几张。
 	Withdrawn []string
 	Tasks     []WaveTaskRow

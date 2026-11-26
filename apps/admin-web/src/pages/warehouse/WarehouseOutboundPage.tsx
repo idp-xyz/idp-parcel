@@ -43,6 +43,8 @@ const info = moduleInfoById[moduleId];
 /** 一队在页上的叫法：待处理是两种卡住状态合起来的一队，其余各队就叫它那个状态的名字。 */
 const queueLabel = (queue: string) => (queue === attentionQueue ? '待处理' : labelOf(queue));
 const dispatchWords = ['PRODUCT_NETWORK', 'OWNER_LABEL', 'PICKUP'] as const;
+/** 件型筛选里「单品单件」的值；读口的筛选维是 singleUnit。 */
+const singleUnitProfile = 'SINGLE_UNIT';
 
 // 「已等」是唯一能排的列（读口只按受理时刻排）。等得久的在前、刚受理的在前，各是它的降序与升序。
 const waitedKey = 'waited';
@@ -87,6 +89,8 @@ function OutboundList() {
   const [owner, setOwner] = useTabViewState('warehouse-outbound.owner', '');
   const [warehouse, setWarehouse] = useTabViewState('warehouse-outbound.warehouse', '');
   const [dispatch, setDispatch] = useTabViewState('warehouse-outbound.dispatch', '');
+  // 件型：现在只有「单品单件」一种可筛——整张单要拣的只有一件。筛出来放成一个波次，拣货时同库位同商品合成一格拿。
+  const [profile, setProfile] = useTabViewState('warehouse-outbound.profile', '');
   const [chosenSort, setChosenSort] = useTabViewState<WorkbenchSort | null>('warehouse-outbound.sort', null);
   const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-outbound.open', null);
   const [basket, setBasket] = useState<ReadonlyMap<string, OutboundRequestRecord>>(() => new Map());
@@ -100,6 +104,7 @@ function OutboundList() {
   if (owner) baseFilters.ownerAccount = [owner];
   if (warehouse) baseFilters.warehouseCode = [warehouse];
   if (dispatch) baseFilters.dispatch = [dispatch];
+  if (profile === singleUnitProfile) baseFilters.singleUnit = ['true'];
   const base: CatalogueConditions = { q: settled, filters: baseFilters };
   // 选了某一队之后等得最久的在最上面；看全部或已了结的，最新受理的在上面。人点过表头就照他的。
   const sort = chosenSort ?? (isWorkingQueue(queue) ? longestWaitFirst : newestFirst);
@@ -247,13 +252,15 @@ function OutboundList() {
     onClick: () => chooseQueue(queue === id ? allQueues : id),
   }));
 
-  const narrowed = settled.trim() !== '' || queue !== allQueues || owner !== '' || warehouse !== '' || dispatch !== '';
+  const narrowed =
+    settled.trim() !== '' || queue !== allQueues || owner !== '' || warehouse !== '' || dispatch !== '' || profile !== '';
   const clearFilters = () => {
     setKeyword('');
     setQueue(allQueues);
     setOwner('');
     setWarehouse('');
     setDispatch('');
+    setProfile('');
     setOnlyBasket(false);
   };
   // 只看已选时摆的是篮里的行，读口这一问答成什么样都不改它：照就绪摆。
@@ -316,6 +323,12 @@ function OutboundList() {
               value={dispatch}
               onChange={narrowing(setDispatch)}
               options={dispatchWords.map((word) => ({ value: word, label: labelOf(word) }))}
+            />
+            <WmsFilterSelect
+              label="件型"
+              value={profile}
+              onChange={narrowing(setProfile)}
+              options={[{ value: singleUnitProfile, label: '单品单件' }]}
             />
             {narrowed ? (
               <button

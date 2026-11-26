@@ -145,6 +145,7 @@ export function WaveDocument({ waveId }: { waveId: string }) {
               items={[
                 { label: '仓库', value: wave.warehouseCode, mono: true },
                 { label: '预取面单', value: wave.prefetch ? '是' : '否' },
+                { label: '件型', value: wave.singleUnit ? '单品单件：每张单只拣一件，同库位同商品合成一格拿' : '不是单品单件' },
                 { label: '放出时刻', value: formatInstant(wave.releasedAt), mono: true },
                 { label: '放波次人', value: wave.operator, mono: true },
               ]}
