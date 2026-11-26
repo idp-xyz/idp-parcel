@@ -725,7 +725,7 @@ func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
 	if err := waves.SaveStrategy(ctx, tenant, ports.AllocationStrategy{Revision: 1, Operator: "operator-1", RegisteredAt: preAdviceNumberingInstant}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveStrategy：%v", err)
 	}
-	if err := waves.SaveWave(ctx, tenant, valueOf(t, domain.NewWaveID, "WAVE"), valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), valueOf(t, domain.NewRegistrant, "operator-1"), false, preAdviceNumberingInstant, nil, nil); !errors.Is(err, bentopg.ErrTransactionRequired) {
+	if err := waves.SaveWave(ctx, tenant, valueOf(t, domain.NewWaveID, "WAVE"), valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), valueOf(t, domain.NewRegistrant, "operator-1"), false, false, preAdviceNumberingInstant, nil, nil); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveWave：%v", err)
 	}
 	if err := waves.SavePick(ctx, tenant, ports.PickTask{ID: valueOf(t, domain.NewPickTaskID, "PKT-1"), Request: valueOf(t, domain.NewOutboundRequestID, "OBR-1")}, domain.OutboundPicked, "", "", 0, preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {

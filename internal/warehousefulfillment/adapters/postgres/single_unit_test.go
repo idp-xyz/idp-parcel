@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"context"
 	"testing"
 
 	adapter "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/postgres"
@@ -118,6 +119,42 @@ func TestASingleUnitWaveIsPickedWithoutTotesEvenWhereTotesAreRequired(t *testing
 	}
 	if got := world.pick(t, handler, other.Tasks()[0].ID, 2).Outcome(); got != application.WaveToteRequired {
 		t.Fatalf("别的波次不带箱 = %s", got)
+	}
+}
+
+// Covers: 放波次时选了合并拣货，波次上记下来、读口答得出；它的货合在一起拿，不受「拣货必须用周转箱」管。
+// 不选的波次是逐单拣，同一个仓里照旧受管。合并拣货不改分配：任务仍是一张请求在一个库位取几件。
+func TestABatchPickWaveIsMarkedAndPickedWithoutTotes(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	if world.requireTotes(t, handler, "SYN-WH-01", 1, true).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("必须用箱没有登记成")
+	}
+	batched, discrete := reserve("REQ-BATCH", 2), reserve("REQ-DISCRETE", 2)
+	var released application.WaveResult
+	if err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var err error
+		released, err = handler.Release(ctx, application.ReleaseWaveCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), ID: valueOf(t, domain.NewWaveID, "WAVE-BATCH"),
+			Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), Operator: valueOf(t, domain.NewRegistrant, "operator-1"),
+			Requests: []domain.OutboundRequestID{batched}, BatchPick: true,
+		})
+		return err
+	}); err != nil {
+		t.Fatalf("放合并拣货的波次：%v", err)
+	}
+	other := world.releaseRequests(t, handler, "WAVE-DISCRETE", discrete)
+	if released.Outcome() != application.WaveAllocated || other.Outcome() != application.WaveAllocated ||
+		len(released.Tasks()) != 1 || released.Tasks()[0].Quantity != 2 {
+		t.Fatalf("放出 %s / %s，任务 %+v", released.Outcome(), other.Outcome(), released.Tasks())
+	}
+	if !world.waveRow(t, "WAVE-BATCH").BatchPick || world.waveRow(t, "WAVE-DISCRETE").BatchPick || world.waveRow(t, "WAVE-BATCH").SingleUnit {
+		t.Fatalf("合并拣货的标记：%+v / %+v", world.waveRow(t, "WAVE-BATCH"), world.waveRow(t, "WAVE-DISCRETE"))
+	}
+	if got := world.pick(t, handler, released.Tasks()[0].ID, 2).Outcome(); got != application.WavePicked {
+		t.Fatalf("合并拣货的波次不带箱 = %s", got)
+	}
+	if got := world.pick(t, handler, other.Tasks()[0].ID, 2).Outcome(); got != application.WaveToteRequired {
+		t.Fatalf("逐单拣的波次不带箱 = %s", got)
 	}
 }
 

@@ -115,10 +115,12 @@ type WaveStore interface {
 	LoadStrategy(ctx context.Context, tenant domain.TenantID) (AllocationStrategy, bool, error)
 	SaveStrategy(ctx context.Context, tenant domain.TenantID, strategy AllocationStrategy) error
 	LoadWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]domain.OutboundRequestID, bool, error)
-	SaveWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, warehouse domain.WarehouseCode, operator domain.Registrant, prefetch bool, at time.Time, requests []domain.OutboundRequestID, tasks []PickTask) error
+	// SaveWave 的 batch 是放出时选的合并拣货：拣货的人按库位、商品把几张请求的货合在一起拿，拿回来再分拣。
+	SaveWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, warehouse domain.WarehouseCode, operator domain.Registrant, prefetch, batch bool, at time.Time, requests []domain.OutboundRequestID, tasks []PickTask) error
 	LoadWaveMembers(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]WaveMember, bool, error)
-	// IsSingleUnitWave 回答这个波次是不是单品单件波次；没有这个波次答否。
-	IsSingleUnitWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) (bool, error)
+	// WavePicksMerged 回答这个波次的货是不是合在一起拿的：单品单件波次，或放出时选了合并拣货的波次。
+	// 这种波次拣货时不按出库请求分箱。没有这个波次答否。
+	WavePicksMerged(ctx context.Context, tenant domain.TenantID, id domain.WaveID) (bool, error)
 	// SingleUnitAwaitingCheck 列出这个仓里已拣完、等复核的单品单件出库请求，等得最久的在前：
 	// 先按波次放出的先后，再按请求受理的先后。一次至多交回 SingleUnitCandidateLimit 张。
 	SingleUnitAwaitingCheck(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode) ([]SingleUnitCandidate, error)

@@ -102,16 +102,16 @@ func (store *Waves) LoadWave(ctx context.Context, tenant domain.TenantID, id dom
 	return requests, true, rows.Err()
 }
 
-func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, warehouse domain.WarehouseCode, operator domain.Registrant, prefetch bool, at time.Time, requests []domain.OutboundRequestID, tasks []ports.PickTask) error {
+func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, warehouse domain.WarehouseCode, operator domain.Registrant, prefetch, batch bool, at time.Time, requests []domain.OutboundRequestID, tasks []ports.PickTask) error {
 	executor, err := store.db.RequireExecutor(ctx)
 	if err != nil {
 		return fmt.Errorf("save wave: %w", err)
 	}
 	if _, err := executor.Exec(ctx,
-		`INSERT INTO warehouse_fulfillment.wave (tenant_id, wave_id, warehouse_code, operator_id, prefetch, released_at, status)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+		`INSERT INTO warehouse_fulfillment.wave (tenant_id, wave_id, warehouse_code, operator_id, prefetch, released_at, status, batch_pick)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
 		// 任务还没写进去，先按「没有任务」的答案落下；任务写完再照规则重算，放出时的状态不另写一份。
-		tenant.String(), id.String(), warehouse.String(), operator.String(), prefetch, at, ports.WaveCancelled); err != nil {
+		tenant.String(), id.String(), warehouse.String(), operator.String(), prefetch, at, ports.WaveCancelled, batch); err != nil {
 		return fmt.Errorf("save wave: %w", err)
 	}
 	seen := map[string]struct{}{}
@@ -158,22 +158,22 @@ func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id dom
 	return refreshWaveStatus(ctx, executor, tenant, `target.wave_id = $2`, id.String())
 }
 
-func (store *Waves) IsSingleUnitWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) (bool, error) {
+func (store *Waves) WavePicksMerged(ctx context.Context, tenant domain.TenantID, id domain.WaveID) (bool, error) {
 	querier, err := store.db.ReadExecutor(ctx)
 	if err != nil {
 		return false, err
 	}
-	var single bool
+	var merged bool
 	err = querier.QueryRow(ctx,
-		`SELECT single_unit FROM warehouse_fulfillment.wave WHERE tenant_id = $1 AND wave_id = $2`,
-		tenant.String(), id.String()).Scan(&single)
+		`SELECT single_unit OR batch_pick FROM warehouse_fulfillment.wave WHERE tenant_id = $1 AND wave_id = $2`,
+		tenant.String(), id.String()).Scan(&merged)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("single unit wave: %w", err)
+		return false, fmt.Errorf("wave picks merged: %w", err)
 	}
-	return single, nil
+	return merged, nil
 }
 
 // SingleUnitAwaitingCheck 只认还留在单品单件波次里的请求（撤出的不算），拣的那一件取它在那个波次里拣满的任务。

@@ -152,7 +152,7 @@ func (store *OutboundRequests) List(
 
 // 波次的一行连同它的出库请求与拣货任务在同一句里取出：状态、成员与任务是同一刻的，不会状态说拣货中、
 // 任务却都已经拣完。成员与任务各聚成一个 JSON 数组，只对取到的这一页算。$1 是租户，与 waveListed 用的是同一个参数。
-const waveRowSelection = `wave_id, warehouse_code, operator_id, prefetch, status, released_at, single_unit,
+const waveRowSelection = `wave_id, warehouse_code, operator_id, prefetch, status, released_at, single_unit, batch_pick,
 	(SELECT coalesce(jsonb_agg(jsonb_build_object(
 	            'requestId', member.request_id, 'withdrawn', member.withdrawn_at IS NOT NULL
 	        ) ORDER BY member.request_id), '[]'::jsonb)
@@ -171,7 +171,7 @@ const waveRowSelection = `wave_id, warehouse_code, operator_id, prefetch, status
 
 const waveListed = `WITH listed AS (
 	SELECT wave_id, warehouse_code, operator_id, prefetch, prefetch::text AS prefetch_word, status, released_at,
-	       single_unit, single_unit::text AS single_unit_word
+	       single_unit, single_unit::text AS single_unit_word, batch_pick
 	  FROM warehouse_fulfillment.wave
 	 WHERE tenant_id = $1
 )`
@@ -270,7 +270,7 @@ func (store *Waves) LoadWaveRow(ctx context.Context, tenant domain.TenantID, wav
 func scanWaveRow(row interface{ Scan(dest ...any) error }) (ports.WaveRow, error) {
 	var item ports.WaveRow
 	var members, tasks []byte
-	if err := row.Scan(&item.WaveID, &item.WarehouseCode, &item.Operator, &item.Prefetch, &item.Status, &item.ReleasedAt, &item.SingleUnit, &members, &tasks); err != nil {
+	if err := row.Scan(&item.WaveID, &item.WarehouseCode, &item.Operator, &item.Prefetch, &item.Status, &item.ReleasedAt, &item.SingleUnit, &item.BatchPick, &members, &tasks); err != nil {
 		return ports.WaveRow{}, err
 	}
 	var listed []struct {

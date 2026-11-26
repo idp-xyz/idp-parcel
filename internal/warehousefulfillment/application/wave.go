@@ -158,6 +158,9 @@ type ReleaseWaveCommand struct {
 	Requests  []domain.OutboundRequestID
 	Prefetch  bool
 	Packaging domain.PackagingMaterialCode
+	// BatchPick 是合并拣货：拣货的人按库位、商品把几张请求的货合在一起拿，拿回来再按请求分拣。
+	// 不选是逐单拣。分配与任务不因它而变——一条任务仍是某张请求在某个库位取几件。
+	BatchPick bool
 }
 
 // PickCommand 是一条拣货事实。实拣可以少于任务数量。
@@ -357,7 +360,7 @@ func (handler *WaveHandler) Release(ctx context.Context, command ReleaseWaveComm
 			return WaveResult{}, fmt.Errorf("release wave: %w", err)
 		}
 	}
-	if err := handler.waves.SaveWave(ctx, command.Tenant, command.ID, command.Warehouse, command.Operator, command.Prefetch, handler.clock.Now(), command.Requests, tasks); err != nil {
+	if err := handler.waves.SaveWave(ctx, command.Tenant, command.ID, command.Warehouse, command.Operator, command.Prefetch, command.BatchPick, handler.clock.Now(), command.Requests, tasks); err != nil {
 		return WaveResult{}, fmt.Errorf("release wave: %w", err)
 	}
 	if err := handler.prefetchRequests(ctx, command, tasks); err != nil {
@@ -463,18 +466,18 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 		}
 	} else {
 		// 租户给这个仓登记了「拣货必须用周转箱」时，不带箱的这一笔不成立。没登记这条规则就不要求。
-		// 单品单件波次不受这一条管：箱是用来把各张单的货分开的，而这种波次的货合在一起拿、复核打包时扫货配单，
-		// 一个箱里本来就装着好几张单的货，绑不到其中哪一张上。
+		// 货合在一起拿的波次不受这一条管：箱是用来把各张单的货分开的，而单品单件波次与合并拣货的波次，
+		// 拣货时一个容器里本来就装着好几张单的货，绑不到其中哪一张上——前者到复核打包扫货配单，后者到分拣才按单分箱。
 		required, err := handler.toteRequired(ctx, command.Tenant, request.Warehouse())
 		if err != nil {
 			return WaveResult{}, fmt.Errorf("pick: %w", err)
 		}
 		if required {
-			single, err := handler.waves.IsSingleUnitWave(ctx, command.Tenant, task.WaveID)
+			merged, err := handler.waves.WavePicksMerged(ctx, command.Tenant, task.WaveID)
 			if err != nil {
 				return WaveResult{}, fmt.Errorf("pick: %w", err)
 			}
-			if !single {
+			if !merged {
 				return WaveResult{outcome: WaveToteRequired}, nil
 			}
 		}

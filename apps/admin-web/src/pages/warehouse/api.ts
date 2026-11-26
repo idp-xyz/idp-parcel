@@ -617,6 +617,8 @@ export interface WaveRecord {
   releasedAt: string;
   /** 单品单件波次：放出时每张出库单要拣的都只有一件。拣货时同库位同商品合成一格拿，复核打包时扫货就能配单。 */
   singleUnit?: boolean;
+  /** 合并拣货的波次：放出时选的。货按库位、商品合在一起拿，拿回来再按出库单分拣。 */
+  batchPick?: boolean;
   requests: string[];
   /** `requests` 里已经撤出的那几张：它们在这个波次里的任务作废了，请求回到了已预占。 */
   withdrawnRequests: string[];

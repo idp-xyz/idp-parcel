@@ -468,7 +468,7 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     endpoint: '/warehouse-fulfillment-waves',
     grant: 'WAVE_RELEASE',
     snapshotHint:
-      '填 waveId、warehouse、requests（出库请求标识数组），可选 prefetch（是否预取估算委托）与 packagingMaterial（预取时选用的包材编码）。未采用分配策略时答未配置。' +
+      '填 waveId、warehouse、requests（出库请求标识数组），可选 batchPick（是否合并拣货）、prefetch（是否预取估算委托）与 packagingMaterial（预取时选用的包材编码）。未采用分配策略时答未配置。' +
       noActorNote,
   },
   {

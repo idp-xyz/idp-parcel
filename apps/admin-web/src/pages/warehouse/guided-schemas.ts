@@ -615,6 +615,13 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       { path: 'waveId', label: '波次号', kind: 'text', required: true, placeholder: 'WAVE-01' },
       { path: 'warehouse', label: '仓编码', kind: 'text', required: true, placeholder: 'SYN-WH-01' },
       { path: 'requests', label: '包含的出库请求号', kind: 'string-list', required: true, placeholder: 'OBR-01, OBR-02', hint: '逗号或换行分隔，可从列表行带出' },
+      {
+        path: 'batchPick',
+        label: '合并拣货（拣完要分拣）',
+        kind: 'boolean',
+        omitWhenFalse: true,
+        hint: '勾上：拣货的人按库位、商品把几张单的货合在一起拿，拿回来再按出库单分开。不勾是逐单拣。',
+      },
       { path: 'prefetch', label: '预取估算委托（按包裹序号 1）', kind: 'boolean', omitWhenFalse: true },
       { path: 'packagingMaterial', label: '预取选用包材编码（可选）', kind: 'text', placeholder: 'SYN-BOX-01' },
     ],

@@ -124,7 +124,9 @@ type WaveRow struct {
 	ReleasedAt    time.Time
 	// SingleUnit 是单品单件波次：放出时波次里每一张出库请求要拣的都只有一件。
 	SingleUnit bool
-	Requests   []string
+	// BatchPick 是放出时选了合并拣货：货按库位、商品合在一起拿，拿回来再按请求分拣。
+	BatchPick bool
+	Requests  []string
 	// Withdrawn 是 Requests 里已经撤出的那几张。
 	Withdrawn []string
 	Tasks     []WaveTaskRow

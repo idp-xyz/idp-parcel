@@ -17,7 +17,7 @@ import { pickStationHash } from './station/stations';
 import { ToteList } from './ToteList';
 import { openDocument, useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
-import { activeWaveStatuses, settledWaveStatuses, waveProgress, waveStatusLabel } from './wave-flow';
+import { activeWaveStatuses, settledWaveStatuses, wavePickingLabel, waveProgress, waveStatusLabel } from './wave-flow';
 import { WaveDocument } from './WaveDocument';
 import { WmsBadge, WmsFilterSelect, WmsProgress, WmsStatusTabs } from './wms-ui';
 
@@ -30,6 +30,7 @@ const columns: ListColumn<WaveRecord>[] = [
   { id: 'state', header: '状态', render: (row) => <WmsBadge code={row.status} label={waveStatusLabel(row.status)} /> },
   { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
   { id: 'profile', header: '件型', className: 'whitespace-nowrap', render: (row) => (row.singleUnit ? '单品单件' : '—') },
+  { id: 'picking', header: '拣货方式', className: 'whitespace-nowrap', render: (row) => wavePickingLabel(row) },
   {
     id: 'requests',
     header: '出库单',

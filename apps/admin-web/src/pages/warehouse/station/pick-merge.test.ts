@@ -7,6 +7,7 @@ import {
   pickFactValues,
   pickProgress,
   pickScreen,
+  reloadAfter,
   scanCode,
   setToteMode,
   shortPickLines,
@@ -152,7 +153,7 @@ test('合成的一格交到一半没成', () => {
   state = applyVerdict(state, done).state;
   const refused = applyVerdict(state, { verdict: 'refused', outcome: 'CONTENT_INVALID', headline: '没有记。' }).state;
   equal(refused.phase, 'refused');
-  ok(refused.feedback.text.includes('已经记下 1 张出库单'));
+  ok(refused.feedback.text.includes('已经记下 1 条任务共 1 件，还有 2 件没有记'));
   const moved = nextCell(refused).state;
   equal(moved.done, 1);
   equal(moved.batch, null);
@@ -168,4 +169,132 @@ test('单品单件波次的格不问周转箱', () => {
   const cell = mergedCell(2);
   const state = scanCode(setToteMode(startPick({ cells: [cell], staging: 'OUT-1' }), true).state, 'L-1').state;
   equal(state.phase, 'goods');
+});
+
+const batchWave = (waveId: string, tasks: WaveTaskRecord[]): WaveRecord => ({ ...wave(waveId, false, tasks), batchPick: true });
+
+// 三张出库单在同一库位要同一种货：3 件、2 件、1 件。
+function batchCell(): PickCell {
+  return cellsOfWaves(
+    [batchWave('W-B', [task('T-1', 'OBR-1', 'L-1', { quantity: 3 }), task('T-2', 'OBR-2', 'L-1', { quantity: 2 }), task('T-3', 'OBR-3', 'L-1')])],
+    scope,
+  )[0];
+}
+
+function scanTimes(state: PickState, times: number): PickState {
+  let current = state;
+  for (let index = 0; index < times; index += 1) current = scanCode(current, 'SKU-1').state;
+  return current;
+}
+
+// Covers: 合并拣货的波次里同库位同货主同商品的任务合成一格，不论各自几件，应拣数量是合计；同一个库位上单品单件波次的
+// 任务不并进来（它们不分拣）；合并拣货的波次里只有一条任务的格也不问周转箱。
+test('合并拣货的波次按库位商品合成一格，数量是合计', () => {
+  const cells = cellsOfWaves(
+    [
+      batchWave('W-B', [
+        task('T-1', 'OBR-1', 'L-1', { quantity: 3 }),
+        task('T-2', 'OBR-2', 'L-1', { quantity: 2 }),
+        task('T-3', 'OBR-3', 'L-2', { quantity: 4 }),
+      ]),
+      wave('W-S', true, [task('T-4', 'OBR-4', 'L-1'), task('T-5', 'OBR-5', 'L-1')]),
+    ],
+    scope,
+  );
+  equal(cells.length, 3);
+  const merged = cells.find((cell) => cell.batch === true && cell.members !== undefined);
+  equal(merged?.quantity, 5);
+  deepEqual(merged?.members, [
+    { taskId: 'T-1', waveId: 'W-B', requestId: 'OBR-1', quantity: 3 },
+    { taskId: 'T-2', waveId: 'W-B', requestId: 'OBR-2', quantity: 2 },
+  ]);
+  const single = cells.find((cell) => cell.singleUnit === true);
+  equal(single?.quantity, 2);
+  const lone = cells.find((cell) => cell.locationCode === 'L-2');
+  equal(lone?.members, undefined);
+  ok(pickScreen(startPick({ cells: [merged as PickCell], staging: 'OUT-1' })).counter.includes('2 张出库单的货合在一起拿，拿回来再分拣'));
+  const asked = scanCode(setToteMode(startPick({ cells: [lone as PickCell], staging: 'OUT-1' }), true, true).state, 'L-2').state;
+  equal(asked.phase, 'goods');
+});
+
+// Covers: 合并拣货的一格扫满后一条任务一条任务地交，各记自己要的件数，不带箱号。
+test('合并拣货的一格扫满后按各条任务的件数逐条提交', () => {
+  const full = scanCode(scanTimes(atGoods([batchCell()]), 5), 'SKU-1');
+  equal(full.state.phase, 'submitting');
+  const sent: Array<[string, number]> = [];
+  let step = full;
+  for (;;) {
+    const effect = step.effects[0];
+    if (effect === undefined || effect.kind !== 'submit') break;
+    sent.push([effect.cell.taskId, effect.quantity]);
+    equal(effect.cell.quantity, effect.quantity);
+    equal(effect.tote, undefined);
+    equal(reloadAfter(step.state, done), false);
+    step = applyVerdict(step.state, done);
+  }
+  deepEqual(sent, [
+    ['T-1', 3],
+    ['T-2', 2],
+    ['T-3', 1],
+  ]);
+  equal(step.state.phase, 'finished');
+  ok(step.state.feedback.text.includes('6 件 SKU-1 分开记给了 3 张出库单'));
+});
+
+// Covers: 合并拣货的一格没拿够：按任务先后分，前面的记满，轮到的那一条按剩下的记成短拣、不留在队里（后端换别的库位补），
+// 一件都没分到的任务原样留着排到队尾；最后一条记成之后要重读队列，交到一半时不读。
+test('合并拣货的一格没拿够：前面的记满，轮到的记短拣，没分到的留在队尾', () => {
+  const state = scanTimes(atGoods([batchCell()]), 4);
+  const plan = shortPickPlan(state);
+  equal(plan?.quantity, 4);
+  equal(plan?.short, 2);
+  const lines = plan === null ? [] : shortPickLines(plan);
+  ok(lines.some((line) => line.includes('出库单 OBR-2 在这一格要 2 件，只分到 1 件')));
+  ok(lines.some((line) => line.includes('还有 1 条任务一件都没分到')));
+  const first = submitShortPick(state);
+  ok(first.effects[0].kind === 'submit' && first.effects[0].cell.taskId === 'T-1' && first.effects[0].quantity === 3);
+  equal(reloadAfter(first.state, done), false);
+  const second = applyVerdict(first.state, done);
+  const effect = second.effects[0];
+  ok(effect.kind === 'submit' && effect.cell.taskId === 'T-2' && effect.quantity === 1 && effect.cell.quantity === 2);
+  equal(second.effects.length, 1);
+  equal(reloadAfter(second.state, done), true);
+  const settled = applyVerdict(second.state, done).state;
+  equal(settled.phase, 'location');
+  equal(settled.done, 1);
+  deepEqual(settled.queue[0].members, [{ taskId: 'T-3', waveId: 'W-B', requestId: 'OBR-3', quantity: 1 }]);
+  equal(settled.queue[0].quantity, 1);
+  ok(settled.feedback.text.includes('出库单 OBR-2 只记到 1 件（要 2 件），按短拣记了'));
+  equal(pickProgress(settled), '第 2 格，共 2 格');
+});
+
+// Covers: 没拿够而正好分到整条任务为止时没有短拣：不重读队列，没分到的任务留在队尾。
+test('合并拣货的一格没拿够而正好分到整条任务：没有短拣', () => {
+  const submitted = submitShortPick(scanTimes(atGoods([batchCell()]), 3));
+  equal(reloadAfter(submitted.state, done), false);
+  const settled = applyVerdict(submitted.state, done);
+  equal(settled.effects.length, 0);
+  deepEqual(settled.state.queue[0].members?.map((member) => member.taskId), ['T-2', 'T-3']);
+  equal(settled.state.queue[0].quantity, 3);
+});
+
+// Covers: 合并拣货的一格交到一半没成：屏上说清记下了几条共几件、还有几件没记；「下一格」把余下的任务合成一格排到队尾。
+test('合并拣货的一格交到一半没成，按件数说清', () => {
+  const full = scanCode(scanTimes(atGoods([batchCell()]), 5), 'SKU-1');
+  const second = applyVerdict(full.state, done).state;
+  const refused = applyVerdict(second, { verdict: 'refused', outcome: 'CONTENT_INVALID', headline: '没有记。' }).state;
+  ok(refused.feedback.text.includes('这一格拿了 6 件，已经记下 1 条任务共 3 件，还有 3 件没有记'));
+  const moved = nextCell(refused).state;
+  deepEqual(moved.queue[0].members?.map((member) => member.taskId), ['T-2', 'T-3']);
+  equal(moved.queue[0].quantity, 3);
+  ok(moved.feedback.text.includes('还有 2 条任务共 3 件没记'));
+});
+
+// Covers: 逐单拣的一格短拣之后也要重读队列；记满的不读。
+test('逐单拣的一格：短拣之后重读队列，记满不读', () => {
+  const lone = cellsOfWaves([wave('W-1', false, [task('T-1', 'OBR-1', 'L-1', { quantity: 2 })])], scope);
+  const short = submitShortPick(scanTimes(atGoods(lone), 1));
+  equal(reloadAfter(short.state, done), true);
+  const full = scanCode(scanTimes(atGoods(lone), 1), 'SKU-1');
+  equal(reloadAfter(full.state, done), false);
 });

@@ -11,7 +11,7 @@ import { pickListSheet } from './print-forms';
 import { packStationHash, pickStationHash } from './station/stations';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
-import { waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
+import { wavePickingNote, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
 import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable } from './wms-ui';
 
 /** 波次页：一次放出去的那一批出库单，和它们的每一条拣货任务拣到哪了。 */
@@ -146,6 +146,7 @@ export function WaveDocument({ waveId }: { waveId: string }) {
                 { label: '仓库', value: wave.warehouseCode, mono: true },
                 { label: '预取面单', value: wave.prefetch ? '是' : '否' },
                 { label: '件型', value: wave.singleUnit ? '单品单件：每张单只拣一件，同库位同商品合成一格拿' : '不是单品单件' },
+                { label: '拣货方式', value: wavePickingNote(wave) },
                 { label: '放出时刻', value: formatInstant(wave.releasedAt), mono: true },
                 { label: '放波次人', value: wave.operator, mono: true },
               ]}

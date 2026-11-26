@@ -11,19 +11,20 @@ import type { CatalogueConditions } from '../../catalogue-query';
 import type { WaveListBody, WaveOneBody, WaveRecord } from '../api';
 import { activeWaveStatuses } from '../wave-flow';
 
-/** 合成一格拿的几条任务里的一条。 */
+/** 合成一格拿的几条任务里的一条，和它自己要拣几件。 */
 export interface PickMember {
   taskId: string;
   waveId: string;
   requestId: string;
+  quantity: number;
 }
 
 /**
  * 一格：去哪个库位、拣哪个商品、拣几件。平常一格就是一条拣货任务。
  *
- * 单品单件波次里，同一库位、同一位货主的同一种货的几条任务合成一格拿（`members`）：每条任务一件，这一格的应拣数量
- * 就是任务的条数。合的只是拣货的人看到的这一层——账上仍是一条任务一笔，提交时一条一条交。`taskId`、`waveId`、
- * `requestId` 取其中头一条的，只用来认这一格。
+ * 货合在一起拿的波次（单品单件波次，或放出时选了合并拣货的波次）里，同一库位、同一位货主的同一种货的几条任务
+ * 合成一格拿（`members`）：这一格的应拣数量是各条任务应拣数量的合计。合的只是拣货的人看到的这一层——账上仍是
+ * 一条任务一笔，提交时一条一条交。`taskId`、`waveId`、`requestId` 取其中头一条的，只用来认这一格。
  */
 export interface PickCell {
   taskId: string;
@@ -37,14 +38,35 @@ export interface PickCell {
   quantity: number;
   /** 这一格来自单品单件波次：它的货合在一起拿、复核打包时扫货配单，不按出库单分周转箱。 */
   singleUnit?: boolean;
+  /** 这一格来自合并拣货的波次：它的货合在一起拿，拿回来到分拣才按出库单分开，拣货时不分周转箱。 */
+  batch?: boolean;
   /** 合成这一格的几条任务；没有这一项是一条任务一格。 */
   members?: readonly PickMember[];
 }
 
-/** 合成一格的任务里取出一条，当成一条任务一格的样子去提交：一件。 */
+/** 这一格的货是不是合在一起拿的（不按出库单分周转箱）。 */
+export const pickedTogether = (cell: PickCell): boolean => cell.singleUnit === true || cell.batch === true;
+
+/** 合成一格的任务里取出一条，当成一条任务一格的样子去提交：应拣数量是这条任务自己的。 */
 export function memberCell(cell: PickCell, member: PickMember): PickCell {
   const { members: _members, ...rest } = cell;
-  return { ...rest, taskId: member.taskId, waveId: member.waveId, requestId: member.requestId, quantity: 1 };
+  return { ...rest, taskId: member.taskId, waveId: member.waveId, requestId: member.requestId, quantity: member.quantity };
+}
+
+/**
+ * 合成的一格拿到了 `quantity` 件，按任务的先后分下去：排在前面的任务记满，轮到的那一条不够就按剩下的记（它会成短拣），
+ * 排在后面、一件都没分到的任务不在交回的名单里——一件都没拣到的任务后端不收，它们原样留着。
+ */
+export function allotMembers(cell: PickCell, quantity: number): { cell: PickCell; quantity: number }[] {
+  const allotted: { cell: PickCell; quantity: number }[] = [];
+  let left = quantity;
+  for (const member of cell.members ?? []) {
+    if (left <= 0) break;
+    const given = Math.min(member.quantity, left);
+    allotted.push({ cell: memberCell(cell, member), quantity: given });
+    left -= given;
+  }
+  return allotted;
 }
 
 /** 一次最多翻几页（每页读口最多 200 个波次）。 */
@@ -76,7 +98,7 @@ export interface PickScope {
  */
 export function cellsOfWaves(waves: readonly WaveRecord[], scope: PickScope): PickCell[] {
   const cells = new Map<string, PickCell>();
-  // 单品单件波次里能合的任务：键是库位、货主、商品、单位、库存状态。货主要在键里——商品编码只在一位货主之内唯一。
+  // 货合在一起拿的波次里能合的任务：键是库位、货主、商品、单位、库存状态。货主要在键里——商品编码只在一位货主之内唯一。
   const groups = new Map<string, { cell: PickCell; members: PickMember[] }>();
   for (const wave of waves) {
     if (wave.warehouseCode !== scope.warehouse) continue;
@@ -94,14 +116,18 @@ export function cellsOfWaves(waves: readonly WaveRecord[], scope: PickScope): Pi
         stockState: task.stockState,
         quantity: task.quantity,
         ...(wave.singleUnit === true ? { singleUnit: true } : {}),
+        ...(wave.batchPick === true ? { batch: true } : {}),
       };
       // 读口没带货主（旧后端）时不合：分不清是不是同一位货主的货
-      if (wave.singleUnit !== true || task.quantity !== 1 || !task.ownerAccount) {
+      if (!pickedTogether(cell) || !task.ownerAccount) {
         cells.set(task.taskId, cell);
         continue;
       }
-      const key = [task.locationCode, task.ownerAccount, task.goodsCode, task.unit, task.stockState].join('\u0000');
-      const member: PickMember = { taskId: task.taskId, waveId: wave.waveId, requestId: task.requestId };
+      // 单品单件波次与合并拣货的波次不混在一格里：前者到复核打包扫货配单，后者要去分拣，拿回来走的不是一条路
+      const key = [wave.singleUnit === true ? 'single' : 'batch', task.locationCode, task.ownerAccount, task.goodsCode, task.unit, task.stockState].join(
+        '\u0000',
+      );
+      const member: PickMember = { taskId: task.taskId, waveId: wave.waveId, requestId: task.requestId, quantity: task.quantity };
       const group = groups.get(key);
       if (group === undefined) groups.set(key, { cell, members: [member] });
       else if (!group.members.some((known) => known.taskId === member.taskId)) group.members.push(member);
@@ -115,7 +141,8 @@ export function cellsOfWaves(waves: readonly WaveRecord[], scope: PickScope): Pi
     // 成员按任务号排，头一条的号认这一格：同一批任务读几次，合出来的是同一格、同一个次序
     const members = [...group.members].sort((left, right) => (left.taskId < right.taskId ? -1 : left.taskId > right.taskId ? 1 : 0));
     const head = members[0];
-    cells.set(head.taskId, { ...group.cell, taskId: head.taskId, waveId: head.waveId, requestId: head.requestId, quantity: members.length, members });
+    const quantity = members.reduce((sum, member) => sum + member.quantity, 0);
+    cells.set(head.taskId, { ...group.cell, taskId: head.taskId, waveId: head.waveId, requestId: head.requestId, quantity, members });
   }
   return [...cells.values()].sort(compareCells);
 }

@@ -23,6 +23,26 @@ export function waveStatusLabel(status: string): string {
   return waveStatusLabels[status] ?? status;
 }
 
+interface WavePicking {
+  singleUnit?: boolean;
+  batchPick?: boolean;
+}
+
+/**
+ * 这个波次的货怎么拣，列表上的短词。合并拣货是放出时选的；单品单件波次不用选也是合着拿，但它不分拣——
+ * 复核打包时扫货配单。两样都不是就是逐单拣。
+ */
+export function wavePickingLabel(wave: WavePicking): string {
+  if (wave.batchPick) return '合并拣货';
+  return wave.singleUnit ? '合着拿' : '逐单拣';
+}
+
+/** 同一件事在波次单据页上的整句。 */
+export function wavePickingNote(wave: WavePicking): string {
+  if (wave.batchPick) return '合并拣货：同库位同商品的货合在一起拿，拿回来再按出库单分拣';
+  return wave.singleUnit ? '合着拿：单品单件，复核打包时扫货配单，不用分拣' : '逐单拣：货在拣货时就按出库单分开';
+}
+
 export const waveSteps: readonly TrackStep[] = [
   { id: 'RELEASED', label: '已放出' },
   { id: 'PICKING', label: '拣货中' },

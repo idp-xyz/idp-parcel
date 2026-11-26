@@ -410,6 +410,8 @@ type waveDocument struct {
 	Requests  *[]string `json:"requests"`
 	Prefetch  *bool     `json:"prefetch"`
 	Packaging *string   `json:"packagingMaterial"`
+	// BatchPick 是合并拣货；不带就是逐单拣。
+	BatchPick *bool `json:"batchPick"`
 }
 
 // ReleaseWaveCommand 把放波次译成命令。
@@ -452,7 +454,10 @@ func ReleaseWaveCommand(reader io.Reader) (application.ReleaseWaveCommand, error
 			return none, malformed("packagingMaterial is not a code")
 		}
 	}
-	return application.ReleaseWaveCommand{ID: id, Warehouse: warehouse, Requests: requests, Prefetch: prefetch, Packaging: packaging}, nil
+	return application.ReleaseWaveCommand{
+		ID: id, Warehouse: warehouse, Requests: requests, Prefetch: prefetch, Packaging: packaging,
+		BatchPick: document.BatchPick != nil && *document.BatchPick,
+	}, nil
 }
 
 type waveWithdrawalDocument struct {
