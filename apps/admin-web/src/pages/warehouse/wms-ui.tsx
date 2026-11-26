@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import {
   Button,
   Dialog,
@@ -521,6 +521,42 @@ export function WmsFilterSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+/**
+ * 不走列表模板的页（仓库监控、实时库存）自己摆的翻页条。它是页面纵向排布里最后一格、不随内容滚动，
+ * 所以行多行少它都在页底同一处；样子与列表模板的翻页条一致。
+ */
+export function WmsPagerBar({
+  summary,
+  canPrevious,
+  canNext,
+  onPrevious,
+  onNext,
+}: {
+  summary: string;
+  canPrevious: boolean;
+  canNext: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="shrink-0 border-t border-idpxyz-border px-4 py-1.5">
+      <nav aria-label="翻页" className="flex items-center justify-between gap-4 type-caption text-idpxyz-textMuted">
+        <span className="tabular-nums">{summary}</span>
+        <div className="flex items-center gap-1">
+          <Button type="button" variant="ghost" size="sm" disabled={!canPrevious} onClick={onPrevious}>
+            <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+            上一页
+          </Button>
+          <Button type="button" variant="ghost" size="sm" disabled={!canNext} onClick={onNext}>
+            下一页
+            <ChevronRight className="h-3 w-3" aria-hidden="true" />
+          </Button>
+        </div>
+      </nav>
+    </div>
   );
 }
 

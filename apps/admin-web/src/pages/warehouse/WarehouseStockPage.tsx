@@ -9,7 +9,9 @@ import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { problemNote } from './presentation';
+import { stockPageClamp, stockPageCount, stockPageSlice, stockPageSummary } from './stock-page';
 import { useWarehouseLookups } from './use-catalogues';
+import { WmsPagerBar } from './wms-ui';
 
 const info = moduleInfoById['warehouse-stock'];
 
@@ -24,6 +26,14 @@ const holdKindLabels: Record<string, string> = {
   LOCKED: '作业锁',
   CARTON_FROZEN: '整箱冻结',
 };
+
+function stockRowCount(body: StockReadBody, view: StockViewKind): number {
+  if (view === 'cells') return (body.cells ?? []).length;
+  if (view === 'cartons') return (body.cartons ?? []).length;
+  if (view === 'summary') return (body.summary ?? []).length;
+  if (view === 'holds') return (body.holds ?? []).length;
+  return (body.movements ?? []).length;
+}
 
 const thClass = 'px-3 py-2 text-left type-caption font-medium text-idpxyz-textMuted border-b border-idpxyz-border whitespace-nowrap';
 const tdClass = 'px-3 py-2 type-body text-idpxyz-text border-b border-idpxyz-border/60 align-top';
@@ -41,6 +51,7 @@ export function WarehouseStockPage() {
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
+  const [paging, setPaging] = useState({ conditions: '', page: 1 });
 
   useEffect(() => {
     if (owner === '' && lookups.owners.length > 0) {
@@ -74,6 +85,12 @@ export function WarehouseStockPage() {
   };
 
   const body = answer?.kind === 'outcome' ? answer.body : null;
+
+  // 页码跟着查阅条件记：货主、仓或视图一换，记下的页码对不上新条件，就从第一页看起。
+  const conditions = `${owner.trim()}|${warehouse}|${view}`;
+  const total = body ? stockRowCount(body, view) : 0;
+  const page = stockPageClamp(paging.conditions === conditions ? paging.page : 1, total);
+  const turnTo = (next: number) => setPaging({ conditions, page: next });
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
@@ -191,7 +208,7 @@ export function WarehouseStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(body.cells ?? []).map((cell, index) => (
+                    {stockPageSlice(body.cells ?? [], page).map((cell, index) => (
                       <tr key={`${cell.warehouse}-${cell.location ?? ''}-${cell.goodsCode}-${cell.inboundBatchId}-${index}`} className="hover:bg-idpxyz-hover/40">
                         <td className={monoTd}>{`${cell.warehouse} / ${cell.location ?? '代理仓(无库位)'}`}</td>
                         <td className={monoTd}>
@@ -301,7 +318,7 @@ export function WarehouseStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(body.cartons ?? []).map((carton) => (
+                    {stockPageSlice(body.cartons ?? [], page).map((carton) => (
                       <tr key={`${carton.warehouse}-${carton.cartonNumber}`} className="hover:bg-idpxyz-hover/40">
                         <td className={monoTd}>{`${carton.warehouse} / ${carton.location ?? '—'}`}</td>
                         <td className={monoTd}>{carton.cartonNumber}</td>
@@ -358,7 +375,7 @@ export function WarehouseStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(body.summary ?? []).map((row, index) => (
+                    {stockPageSlice(body.summary ?? [], page).map((row, index) => (
                       <tr key={`${row.warehouse}-${row.goodsCode}-${row.unit}-${row.stockState}-${index}`} className="hover:bg-idpxyz-hover/40">
                         <td className={monoTd}>{row.warehouse}</td>
                         <td className={monoTd}>{row.goodsCode}</td>
@@ -391,7 +408,7 @@ export function WarehouseStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(body.holds ?? []).map((hold, index) => (
+                    {stockPageSlice(body.holds ?? [], page).map((hold, index) => (
                       <tr key={`${hold.kind}-${hold.warehouse}-${hold.goodsCode ?? hold.cartonNumber ?? ''}-${index}`} className="hover:bg-idpxyz-hover/40">
                         <td className={tdClass}>{holdKindLabels[hold.kind] ?? hold.kind}</td>
                         <td className={monoTd}>{`${hold.warehouse} / ${hold.location ?? '—'}`}</td>
@@ -420,7 +437,7 @@ export function WarehouseStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(body.movements ?? []).map((mov, index) => (
+                    {stockPageSlice(body.movements ?? [], page).map((mov, index) => (
                       <tr key={`${mov.warehouse}-${mov.source ?? ''}-${mov.occurredAt}-${index}`} className="hover:bg-idpxyz-hover/40">
                         <td className={monoTd}>{mov.warehouse}</td>
                         <td className={tdClass}>{mov.reason}</td>
@@ -442,6 +459,16 @@ export function WarehouseStockPage() {
           </div>
         ) : null}
       </div>
+
+      {body && owner.trim() !== '' ? (
+        <WmsPagerBar
+          summary={stockPageSummary(page, total, view !== 'movements')}
+          canPrevious={page > 1}
+          canNext={page < stockPageCount(total)}
+          onPrevious={() => turnTo(page - 1)}
+          onNext={() => turnTo(page + 1)}
+        />
+      ) : null}
 
       <ActionDrawer
         moduleId="warehouse-stock"

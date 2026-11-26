@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import {
@@ -16,7 +16,7 @@ import {
 import { documentHash } from './document-address';
 import { adjustmentKind, countKind, countsAdjustmentsModule } from './counts-adjustments-address';
 import { freezeKind, processingModule } from './processing-address';
-import { labelOf, WmsBadge, WmsFilterSelect } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsPagerBar } from './wms-ui';
 import { useWarehouseLookups } from './use-catalogues';
 import {
   monitorCursorCanPrevious,
@@ -147,7 +147,7 @@ export function WarehouseMonitorPage() {
           </div>
         ))}
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-2 border-b border-idpxyz-border px-4 py-3">
           <div className="mr-auto">
             <h1 className="type-title font-bold text-idpxyz-textBright">{info?.title ?? '仓库监控'}</h1>
@@ -219,24 +219,20 @@ export function WarehouseMonitorPage() {
                   ))}
                 </TableBody>
               </Table>
-              {stack.length === 0 ? (
-                <nav aria-label="翻页" className="flex items-center justify-between gap-4 border-t border-idpxyz-border px-3 py-2 type-caption text-idpxyz-textMuted">
-                  <span>第 {cursor.trail.length} 页</span>
-                  <div className="flex items-center gap-1">
-                    <Button type="button" variant="ghost" size="sm" disabled={loading || !monitorCursorCanPrevious(cursor)} onClick={() => setCursor(monitorCursorPrevious(cursor))}>
-                      <ChevronLeft className="h-3 w-3" aria-hidden="true" />
-                      上一页
-                    </Button>
-                    <Button type="button" variant="ghost" size="sm" disabled={loading || view.next === null} onClick={() => { const next = view.next; if (next !== null) setCursor(monitorCursorNext(cursor, next)); }}>
-                      下一页
-                      <ChevronRight className="h-3 w-3" aria-hidden="true" />
-                    </Button>
-                  </div>
-                </nav>
-              ) : null}
             </div>
           ) : null}
         </div>
+        {/* 钻下去的那一层是从上一层带出来的几行，不翻页；回到顶层翻页条才出来。在读时它留在原处、只把钮按住，
+            不然每翻一页它都要消失再出现一次。 */}
+        {stack.length === 0 ? (
+          <WmsPagerBar
+            summary={`第 ${cursor.trail.length} 页`}
+            canPrevious={!loading && monitorCursorCanPrevious(cursor)}
+            canNext={!loading && view.next !== null}
+            onPrevious={() => setCursor(monitorCursorPrevious(cursor))}
+            onNext={() => { const next = view.next; if (next !== null) setCursor(monitorCursorNext(cursor, next)); }}
+          />
+        ) : null}
       </div>
     </div>
   );
