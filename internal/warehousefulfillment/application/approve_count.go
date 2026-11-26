@@ -119,6 +119,29 @@ type CountApprovalHandler struct {
 	holds        ports.StockHolds
 	clock        ports.Clock
 	anyWarehouse ports.TenantWarehouseLookup
+	// pickDifferences 缺席时差额照样批准或驳回，只是盘出差额的库位上少拣留下的拣货差异不随之了结。
+	pickDifferences ports.PickDifferences
+}
+
+// WithPickDifferences 接上拣货差异：盘出差额的库位，等这份差额批准入账或驳回之后，那里的拣货差异才了结。
+func (handler *CountApprovalHandler) WithPickDifferences(differences ports.PickDifferences) *CountApprovalHandler {
+	handler.pickDifferences = differences
+	return handler
+}
+
+// settlePickDifferences 在一份盘点差额有了结论之后，了结它那个库位上那位货主那种货的拣货差异。
+func (handler *CountApprovalHandler) settlePickDifferences(ctx context.Context, difference ports.StoredCountDifference) error {
+	if handler.pickDifferences == nil {
+		return nil
+	}
+	count, found, err := handler.counts.Load(ctx, difference.Tenant, difference.CountID)
+	if err != nil || !found {
+		return err
+	}
+	return handler.pickDifferences.ClosePickDifferences(ctx, difference.Tenant, ports.PickDifferenceClosure{
+		Warehouse: difference.Warehouse, Locations: []domain.LocationCode{difference.Location}, Owner: difference.Owner,
+		Goods: []domain.GoodsCode{difference.Goods}, Before: count.StartedAt(), Count: difference.CountID.String(), At: handler.clock.Now(),
+	})
 }
 
 func NewCountApprovalHandler(
@@ -224,6 +247,9 @@ func (handler *CountApprovalHandler) Approve(ctx context.Context, command Approv
 	if err := handler.counts.MarkApproved(ctx, command.Tenant, difference.ID, command.Operator, handler.clock.Now(), command.Note, duty.Revision); err != nil {
 		return ApprovalResult{}, fmt.Errorf("approve count difference: %w", err)
 	}
+	if err := handler.settlePickDifferences(ctx, difference); err != nil {
+		return ApprovalResult{}, fmt.Errorf("approve count difference: %w", err)
+	}
 	return ApprovalResult{outcome: ApprovalPosted, status: "APPROVED"}, nil
 }
 
@@ -252,6 +278,9 @@ func (handler *CountApprovalHandler) Reject(ctx context.Context, command RejectC
 		return ApprovalResult{outcome: ApprovalStatusMismatch, status: difference.Status}, nil
 	}
 	if err := handler.counts.MarkRejected(ctx, command.Tenant, difference.ID, command.Operator, handler.clock.Now(), command.Reason); err != nil {
+		return ApprovalResult{}, fmt.Errorf("reject count difference: %w", err)
+	}
+	if err := handler.settlePickDifferences(ctx, difference); err != nil {
 		return ApprovalResult{}, fmt.Errorf("reject count difference: %w", err)
 	}
 	return ApprovalResult{outcome: ApprovalRejected, status: "REJECTED"}, nil

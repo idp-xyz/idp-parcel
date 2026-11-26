@@ -65,7 +65,7 @@ func TestTwoConcurrentPicksInOneWaveLeaveItCompleted(t *testing.T) {
 		task.Picked = task.Quantity
 		task.Status = "DONE"
 		task.Staging = valueOf(t, domain.NewLocationCode, "SYN-LOC-OUT")
-		return waves.SavePick(ctx, tenant, task, domain.OutboundPicked, "", "SYN-FACT-RACE-"+task.ID.String(), 0)
+		return waves.SavePick(ctx, tenant, task, domain.OutboundPicked, "", "SYN-FACT-RACE-"+task.ID.String(), 0, preAdviceNumberingInstant)
 	}
 	ctx := t.Context()
 	picked := make(chan struct{})

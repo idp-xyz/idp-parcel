@@ -2,10 +2,14 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+
+	whidentity "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/identity"
 	adapter "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
@@ -203,7 +207,7 @@ func TestAPickReducesTheReservationOfTheGoodsItPicked(t *testing.T) {
 		other.Picked = 3
 		other.Status = "SHORT"
 		other.Staging = valueOf(t, domain.NewLocationCode, "SYN-LOC-OUT")
-		return waves.SavePick(ctx, tenant, other, domain.OutboundAllocated, "SDC-REDUCE-OTHER", "SYN-FACT-REDUCE-OTHER", 2)
+		return waves.SavePick(ctx, tenant, other, domain.OutboundAllocated, "SDC-REDUCE-OTHER", "SYN-FACT-REDUCE-OTHER", 2, preAdviceNumberingInstant)
 	}); err != nil {
 		t.Fatalf("拣第二种货：%v", err)
 	}
@@ -225,5 +229,200 @@ func TestAPickReducesTheReservationOfTheGoodsItPicked(t *testing.T) {
 	}
 	if lines[0] != 6 || lines[1] != 2 {
 		t.Fatalf("预占各行 %v：头一行应仍是 6，第二行应剩 2", lines)
+	}
+}
+
+// liveCounting 照生产装配的口径建盘点与盘点差额批准两个编排：占用按账上的预占、冻结、盘点锁与待执行任务算，
+// 并接上拣货差异。用不看占用的编排去测，「预占还指着这批货时盘点开不开得了」这一步等于没测。
+func (world receiptWorld) liveCounting(t *testing.T) (*application.CountHandler, *application.CountApprovalHandler, *adapter.Waves) {
+	t.Helper()
+	waves, err := adapter.NewWaves(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := adapter.NewCounts(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identities, err := whidentity.NewCountIdentities()
+	if err != nil {
+		t.Fatal(err)
+	}
+	differences, err := whidentity.NewStockDiscrepancyIdentities()
+	if err != nil {
+		t.Fatal(err)
+	}
+	holds := world.ledgerHolds(t)
+	counter := application.NewCountHandler(store, identities, differences, world.warehouses, world.locations, world.zones, world.goods, holds, world.ledger, world.clock, world.warehouses).WithPickDifferences(waves)
+	approver := application.NewCountApprovalHandler(store, store, world.poster(), holds, world.clock, world.warehouses).WithPickDifferences(waves)
+	return counter, approver, waves
+}
+
+func pickDifferencesOf(t *testing.T, waves *adapter.Waves, raw string) []ports.PickDifferenceRow {
+	t.Helper()
+	query, err := ports.PickDifferencePages.DecodeRaw(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := waves.ListPickDifferences(t.Context(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), 20, query)
+	if err != nil {
+		t.Fatalf("拣货差异列表：%v", err)
+	}
+	return page.Rows
+}
+
+// shortSpotWorld 摆出少拣之后的局面：头一张请求在 SYN-LOC-STORE 少拣了 2 件、换到另一个库位补；
+// 第二张请求 4 件已预占，别处只剩 2 件没被占着，放波次只能靠少拣的那个库位。
+func shortSpotWorld(t *testing.T) (receiptWorld, *application.WaveHandler, domain.OutboundRequestID, domain.OutboundRequestID) {
+	t.Helper()
+	world, handler, reserve := twoCellWorld(t)
+	first := reserve("REQ-SPOT-A", 3)
+	released := world.releaseRequests(t, handler, "WAVE-SPOT-A", first)
+	if released.Outcome() != application.WaveAllocated || world.pick(t, handler, released.Tasks()[0].ID, 1).Outcome() != application.WavePicked {
+		t.Fatal("头一张没有少拣成")
+	}
+	second := reserve("REQ-SPOT-B", 4)
+	if got := world.releaseRequests(t, handler, "WAVE-SPOT-B", second).Outcome(); got != application.WaveContentInvalid {
+		t.Fatalf("差异没了结时放第二张 = %s（少拣的库位不该再分）", got)
+	}
+	return world, handler, first, second
+}
+
+// Covers: 少拣留下的差异还没了结时，那个库位上的这种货不再分给拣货任务——别的请求放波次分不到它。
+// 预占还指着这批货，盘点照样开得了：挂着拣货差异的格不算进「挤占预占」。盘出来账实相符，差异随盘点完成了结并
+// 记下是哪一份盘点，库位照常再分配。范围盖不到的（别的货主、别的商品、别的仓、盘点开始之后才记下的）不了结。
+func TestAShortLocationIsNotAllocatedUntilACountSettlesIt(t *testing.T) {
+	world, handler, first, second := shortSpotWorld(t)
+	counter, _, waves := world.liveCounting(t)
+	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
+	pending := pickDifferencesOf(t, waves, "status=PENDING&warehouseCode=SYN-WH-01")
+	if len(pending) != 1 || pending[0].LocationCode != "SYN-LOC-STORE" || pending[0].Quantity != 2 || pending[0].TaskQuantity != 3 || pending[0].Picked != 1 ||
+		pending[0].WaveID != "WAVE-SPOT-A" || pending[0].RequestID != first.String() || pending[0].RecordedAt == nil || pending[0].ClosedAt != nil {
+		t.Fatalf("待处理的差异 %+v", pending)
+	}
+
+	store := valueOf(t, domain.NewLocationCode, "SYN-LOC-STORE")
+	inScope := ports.PickDifferenceClosure{
+		Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), Locations: []domain.LocationCode{store},
+		Before: *pending[0].RecordedAt, Count: "CNT-OUT-OF-SCOPE", At: world.clock.Now(),
+	}
+	outOfScope := map[string]func(*ports.PickDifferenceClosure){
+		"别的仓": func(closure *ports.PickDifferenceClosure) {
+			closure.Warehouse = valueOf(t, domain.NewWarehouseCode, "SYN-WH-99")
+		},
+		"别的库位": func(closure *ports.PickDifferenceClosure) {
+			closure.Locations = []domain.LocationCode{valueOf(t, domain.NewLocationCode, "SYN-LOC-STORE-2")}
+		},
+		"别的货主": func(closure *ports.PickDifferenceClosure) {
+			closure.Owner = valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-99")
+		},
+		"别的商品": func(closure *ports.PickDifferenceClosure) {
+			closure.Goods = []domain.GoodsCode{valueOf(t, domain.NewGoodsCode, "SYN-GOODS-99")}
+		},
+		"盘点开始之后才记下的": func(closure *ports.PickDifferenceClosure) { closure.Before = pending[0].RecordedAt.Add(-time.Minute) },
+		"盘出差额、点名留着的": func(closure *ports.PickDifferenceClosure) {
+			closure.Keep = []ports.PickDifferenceSpot{{
+				Owner: valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"), Location: store, Goods: valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"),
+			}}
+		},
+	}
+	for name, narrow := range outOfScope {
+		closure := inScope
+		narrow(&closure)
+		if err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+			return waves.ClosePickDifferences(ctx, tenant, closure)
+		}); err != nil {
+			t.Fatalf("%s：%v", name, err)
+		}
+		if left := pickDifferencesOf(t, waves, "status=PENDING"); len(left) != 1 {
+			t.Fatalf("%s：范围盖不到的差异被了结了", name)
+		}
+	}
+
+	created := world.createCount(t, counter, "SYN-COUNT-SPOT")
+	count, ok := created.Count()
+	if created.Outcome() != application.CountCreated || !ok {
+		t.Fatalf("建盘点 %s", created.Outcome())
+	}
+	// 这一刻这种货可分配 9 件、预占 6 件、要锁的是少拣库位的 5 件：不把挂着拣货差异的格放过去，盘点开始不了。
+	if got := world.startCount(t, counter, count.ID()).Outcome(); got != application.CountStarted {
+		t.Fatalf("预占还指着这批货时开始盘点 = %s", got)
+	}
+	if got := world.releaseRequests(t, handler, "WAVE-SPOT-B", second).Outcome(); got != application.WaveContentInvalid {
+		t.Fatalf("盘点还没盘完时放第二张 = %s", got)
+	}
+	if world.recordCount(t, counter, count.ID(), "SYN-FACT-COUNT-SPOT", 5).Outcome() != application.CountRecorded {
+		t.Fatal("清点没有记下")
+	}
+	if world.completeCount(t, counter, count.ID()).Outcome() != application.CountCounted {
+		t.Fatal("盘点没有完成")
+	}
+	if left := pickDifferencesOf(t, waves, "status=PENDING"); len(left) != 0 {
+		t.Fatalf("盘完之后还待处理的差异 %+v", left)
+	}
+	closed := pickDifferencesOf(t, waves, "status=CLOSED")
+	if len(closed) != 1 || closed[0].ClosedByCount != count.ID().String() || closed[0].ClosedAt == nil {
+		t.Fatalf("了结的差异 %+v", closed)
+	}
+	again := world.releaseRequests(t, handler, "WAVE-SPOT-B", second)
+	if again.Outcome() != application.WaveAllocated || taskAt(t, again.Tasks(), "SYN-LOC-STORE").Quantity == 0 {
+		t.Fatalf("盘完之后放第二张 %s %+v", again.Outcome(), again.Tasks())
+	}
+}
+
+// Covers: 盘出差额的库位，盘点完成时拣货差异先不了结，库位仍不分配——账还没调，放开只会再派人去拿账上多出来的货。
+// 那份差额批准入账之后，拣货差异了结，库位按调过的账再分配。
+func TestAShortLocationStaysBlockedUntilTheCountGapIsDecided(t *testing.T) {
+	world, handler, _, second := shortSpotWorld(t)
+	counter, approver, waves := world.liveCounting(t)
+	created := world.createCount(t, counter, "SYN-COUNT-GAP")
+	count, ok := created.Count()
+	if created.Outcome() != application.CountCreated || !ok {
+		t.Fatalf("建盘点 %s", created.Outcome())
+	}
+	if got := world.startCount(t, counter, count.ID()).Outcome(); got != application.CountStarted {
+		t.Fatalf("开始盘点 = %s", got)
+	}
+	// 账上 5 件，实盘 3 件。
+	if world.recordCount(t, counter, count.ID(), "SYN-FACT-COUNT-GAP", 3).Outcome() != application.CountRecorded {
+		t.Fatal("清点没有记下")
+	}
+	if world.completeCount(t, counter, count.ID()).Outcome() != application.CountCounted {
+		t.Fatal("盘点没有完成")
+	}
+	if left := pickDifferencesOf(t, waves, "status=PENDING"); len(left) != 1 {
+		t.Fatalf("盘出差额、还没批准时待处理的差异 %+v", left)
+	}
+	if got := world.releaseRequests(t, handler, "WAVE-SPOT-B", second).Outcome(); got != application.WaveContentInvalid {
+		t.Fatalf("差额还没批准时放第二张 = %s", got)
+	}
+	if world.registerDuty(t, approver, false).Outcome() != application.ApprovalDutyRegistered {
+		t.Fatal("批准职责没有登记")
+	}
+	if got := world.approveDifference(t, approver, world.onlyDifference(t, count.ID())).Outcome(); got != application.ApprovalPosted {
+		t.Fatalf("批准盘亏 = %s", got)
+	}
+	closed := pickDifferencesOf(t, waves, "status=CLOSED")
+	if world.stockUnitAt(t, "SYN-LOC-STORE", "件") != 3 || len(closed) != 1 || closed[0].ClosedByCount != count.ID().String() {
+		t.Fatalf("批准之后库位账上 %d，了结的差异 %+v", world.stockUnitAt(t, "SYN-LOC-STORE", "件"), closed)
+	}
+	again := world.releaseRequests(t, handler, "WAVE-SPOT-B", second)
+	if again.Outcome() != application.WaveAllocated || taskAt(t, again.Tasks(), "SYN-LOC-STORE").Quantity != 3 {
+		t.Fatalf("调账之后放第二张 %s %+v", again.Outcome(), again.Tasks())
+	}
+}
+
+func TestClosingPickDifferencesRefusesToRunOutsideATransaction(t *testing.T) {
+	world := newReceiptWorld(t)
+	waves, err := adapter.NewWaves(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = waves.ClosePickDifferences(context.Background(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), ports.PickDifferenceClosure{
+		Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), Locations: []domain.LocationCode{valueOf(t, domain.NewLocationCode, "SYN-LOC-STORE")},
+		Before: preAdviceNumberingInstant, Count: "CNT-1", At: preAdviceNumberingInstant,
+	})
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("ClosePickDifferences：%v", err)
 	}
 }

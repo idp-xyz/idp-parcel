@@ -8,12 +8,13 @@ import { countsAdjustmentsModule, countsAdjustmentsTarget } from './counts-adjus
 import { WmsDocumentPage } from './document-page';
 import { JobDiscrepancyDocument } from './JobDiscrepancyDocument';
 import { JobDiscrepancyList } from './JobDiscrepancyList';
+import { PickDifferenceList } from './PickDifferenceList';
 import { useDocumentParts, useReturnToList } from './use-document';
 import { useQueueFilters } from './use-queue-filters';
 
 /**
  * 盘点与调整：盘点、库存调整与作业差异三种单据各占自己的标签，同一个模块按地址里单据键的第一段（种类词）分派；
- * 没有单据键就是列表，三张列表各是一个页签。
+ * 没有单据键就是列表，各是一个页签；少拣待盘点只有列表，它的每一行由一份盘点了结。
  */
 export function WarehouseCountsAdjustmentsPage() {
   const parts = useDocumentParts();
@@ -37,6 +38,7 @@ function CountsAdjustmentsHome() {
   const countFilters = useQueueFilters('ALL');
   const adjustmentFilters = useQueueFilters('PENDING');
   const discrepancyFilters = useQueueFilters('PENDING');
+  const pickDifferenceFilters = useQueueFilters('PENDING');
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
@@ -45,6 +47,7 @@ function CountsAdjustmentsHome() {
           <TabsTrigger value="counts">盘点任务</TabsTrigger>
           <TabsTrigger value="adjustments">库存调整</TabsTrigger>
           <TabsTrigger value="job-diffs">作业差异审批</TabsTrigger>
+          <TabsTrigger value="pick-diffs">少拣待盘点</TabsTrigger>
         </TabsList>
 
         <TabsContent value="counts" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
@@ -55,6 +58,9 @@ function CountsAdjustmentsHome() {
         </TabsContent>
         <TabsContent value="job-diffs" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <JobDiscrepancyList filters={discrepancyFilters} />
+        </TabsContent>
+        <TabsContent value="pick-diffs" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <PickDifferenceList filters={pickDifferenceFilters} />
         </TabsContent>
       </Tabs>
     </div>

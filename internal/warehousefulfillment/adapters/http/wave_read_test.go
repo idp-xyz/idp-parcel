@@ -29,6 +29,19 @@ func (stub *waveQueriesStub) ListWaves(_ context.Context, _ domain.TenantID, lim
 	})
 }
 
+func (stub *waveQueriesStub) ListPickDifferences(_ context.Context, _ domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.PickDifferenceRow], error) {
+	stub.statuses = query.Filters["status"]
+	recorded := time.Date(2026, 11, 20, 7, 0, 0, 0, time.UTC)
+	row := ports.PickDifferenceRow{
+		DifferenceID: "SYN-DIFF-01", Status: "PENDING", Quantity: 2, TaskID: "SYN-TASK-01", WaveID: "SYN-WAVE-01", RequestID: "SYN-REQ-01",
+		OwnerAccount: "SYN-OWNER-01", WarehouseCode: "SYN-WH-01", LocationCode: "SYN-LOC-01", GoodsCode: "SYN-GOODS-01",
+		Unit: "件", StockState: "GOOD", TaskQuantity: 5, Picked: 3, RecordedAt: &recorded,
+	}
+	return cataloguepage.Finish(query, []ports.PickDifferenceRow{row}, limit, 1, func(item ports.PickDifferenceRow, _ string) cataloguepage.Position {
+		return cataloguepage.Position{Value: item.DifferenceID, Identity: []string{item.DifferenceID}}
+	})
+}
+
 func (stub *waveQueriesStub) LoadWaveRow(_ context.Context, _ domain.TenantID, waveID string) (ports.WaveRow, bool, error) {
 	stub.asked = append(stub.asked, waveID)
 	if waveID != stub.row.WaveID {
@@ -123,5 +136,47 @@ func TestWaveListCarriesStatusAndFiltersByIt(t *testing.T) {
 	response, _ = waveRead(t, endpoint, "/warehouse-fulfillment-wave-list?status=CLOSED")
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("词表之外的状态 = %d %s", response.Code, response.Body.String())
+	}
+}
+
+// 拣货差异列表：每行带它在哪个库位少了几件、了结了没有；没了结的不带了结时刻；状态是声明过的筛选维。
+func TestPickDifferenceListCarriesWhereItFellShort(t *testing.T) {
+	queries := &waveQueriesStub{row: pickingWave()}
+	endpoint := warehousehttp.NewQueryPickDifferencesEndpoint(stockReadIntakeStub{}, queries)
+	request := httptest.NewRequest(http.MethodGet, "/warehouse-fulfillment-pick-differences?status=PENDING", nil)
+	request.Header.Set("Authorization", "Bearer presented.token")
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, request)
+	var answer struct {
+		Outcome     string `json:"outcome"`
+		Differences []struct {
+			DifferenceID string  `json:"differenceId"`
+			Status       string  `json:"status"`
+			Quantity     int64   `json:"quantity"`
+			LocationCode string  `json:"locationCode"`
+			TaskQuantity int64   `json:"taskQuantity"`
+			Picked       int64   `json:"picked"`
+			RecordedAt   string  `json:"recordedAt"`
+			ClosedAt     *string `json:"closedAt"`
+		} `json:"differences"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
+		t.Fatalf("答复解不开：%v，正文 %s", err, response.Body.String())
+	}
+	if response.Code != http.StatusOK || answer.Outcome != "PICK_DIFFERENCES_LISTED" || len(answer.Differences) != 1 {
+		t.Fatalf("拣货差异列表 = %d %s", response.Code, response.Body.String())
+	}
+	got := answer.Differences[0]
+	if got.DifferenceID != "SYN-DIFF-01" || got.Status != "PENDING" || got.Quantity != 2 || got.LocationCode != "SYN-LOC-01" ||
+		got.TaskQuantity != 5 || got.Picked != 3 || got.RecordedAt != "2026-11-20T07:00:00Z" || got.ClosedAt != nil {
+		t.Fatalf("这一行 = %s", response.Body.String())
+	}
+	if len(queries.statuses) != 1 || queries.statuses[0] != "PENDING" {
+		t.Fatalf("交给读面的状态筛选 = %v", queries.statuses)
+	}
+	refused := httptest.NewRecorder()
+	endpoint.ServeHTTP(refused, httptest.NewRequest(http.MethodGet, "/warehouse-fulfillment-pick-differences?status=OPEN", nil))
+	if refused.Code != http.StatusBadRequest {
+		t.Fatalf("词表之外的状态 = %d %s", refused.Code, refused.Body.String())
 	}
 }

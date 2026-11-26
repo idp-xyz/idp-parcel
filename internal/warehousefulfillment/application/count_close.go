@@ -215,6 +215,21 @@ func (handler *CountHandler) Complete(ctx context.Context, command CountCommand)
 	if err := handler.counts.SaveFinish(ctx, finished, differences); err != nil {
 		return CountResult{}, fmt.Errorf("complete count: %w", err)
 	}
+	// 少拣之后那个库位停了分配，等的就是有人去盘。盘出来账实相符的，拣货差异到此了结，库位照常再分配。
+	// 盘出差额的先不了结：账还没调，这时放开分配，拣货的人还会被派去拿账上多出来的那几件；
+	// 等那份差额批准入账或驳回，再了结。这份盘点开始之后才少拣的也不了结，清点未必看到了它。
+	if handler.pickDifferences != nil {
+		keep := make([]ports.PickDifferenceSpot, 0, len(differences))
+		for _, difference := range differences {
+			keep = append(keep, ports.PickDifferenceSpot{Owner: difference.Owner, Location: difference.Location, Goods: difference.Goods})
+		}
+		if err := handler.pickDifferences.ClosePickDifferences(ctx, command.Tenant, ports.PickDifferenceClosure{
+			Warehouse: finished.Warehouse(), Locations: finished.Locations(), Owner: finished.Owner(), Goods: finished.Goods(),
+			Keep: keep, Before: finished.StartedAt(), Count: finished.ID().String(), At: handler.clock.Now(),
+		}); err != nil {
+			return CountResult{}, fmt.Errorf("complete count: %w", err)
+		}
+	}
 	if err := handler.noteCountCharge(ctx, finished, current); err != nil {
 		return CountResult{}, err
 	}

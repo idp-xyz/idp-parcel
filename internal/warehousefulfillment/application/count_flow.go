@@ -130,6 +130,7 @@ func (handler *CountHandler) Start(ctx context.Context, command CountCommand) (C
 		state domain.StockState
 	}
 	held := map[holdKey]int64{}
+	shortSpots := map[string]map[string]struct{}{}
 	for _, row := range rows {
 		owner, goods, location, cell, err := countCell(row)
 		if err != nil {
@@ -137,6 +138,14 @@ func (handler *CountHandler) Start(ctx context.Context, command CountCommand) (C
 		}
 		if !count.Covers(owner, goods, location) {
 			continue
+		}
+		spots, loaded := shortSpots[owner.String()]
+		if !loaded {
+			spots, err = handler.shortSpotsOf(ctx, command.Tenant, owner, count.Warehouse())
+			if err != nil {
+				return CountResult{}, fmt.Errorf("start count: %w", err)
+			}
+			shortSpots[owner.String()] = spots
 		}
 		overlap, err := handler.counts.CountingOverlap(ctx, command.Tenant, count.Warehouse(), location, owner, goods)
 		if err != nil {
@@ -165,7 +174,10 @@ func (handler *CountHandler) Start(ctx context.Context, command CountCommand) (C
 		if err != nil {
 			return CountResult{}, fmt.Errorf("start count: %w", err)
 		}
-		if allocatable {
+		// 挂着待处理拣货差异的格照样上锁，但不算进「会不会挤占预占」那一项：分配已经不用这一格的货，
+		// 锁住它没有从预占手里拿走什么。算进去的话，少拣之后预占还指着这批货，盘点永远开始不了，差异也就了结不了。
+		_, short := spots[location.String()+"\x1f"+goods.String()]
+		if allocatable && !short {
 			held[holdKey{owner, goods, cell.Unit(), cell.State()}] += free
 		}
 		locks = append(locks, domain.CountLock{Owner: owner, Location: location, Cell: cell, Quantity: free})

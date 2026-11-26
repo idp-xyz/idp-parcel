@@ -50,6 +50,39 @@ type WaveMember struct {
 	Withdrawn bool
 }
 
+// ShortSpot 是一个库位上的一种货：这位货主在这里有少拣留下的拣货差异还没了结。
+type ShortSpot struct {
+	Location domain.LocationCode
+	Goods    domain.GoodsCode
+}
+
+// PickDifferenceSpot 点名一位货主在一个库位上的一种货。
+type PickDifferenceSpot struct {
+	Owner    domain.OwnerAccountID
+	Location domain.LocationCode
+	Goods    domain.GoodsCode
+}
+
+// PickDifferenceClosure 圈出一份盘点要了结的拣货差异。Owner 为空是不限货主，Goods 为空是不限商品，与盘点范围的口径相同。
+// Keep 里点名的不了结：那里盘出了差额，账还没调，等那份差额批准或驳回再了结。
+// Before 之后才记下的差异不了结：这份盘点开始之后才少拣的，清点未必看到了它。
+type PickDifferenceClosure struct {
+	Warehouse domain.WarehouseCode
+	Locations []domain.LocationCode
+	Owner     domain.OwnerAccountID
+	Goods     []domain.GoodsCode
+	Keep      []PickDifferenceSpot
+	Before    time.Time
+	Count     string
+	At        time.Time
+}
+
+// PickDifferences 是盘点这一侧看到的拣货差异：哪些库位挂着待处理的差异，盘过之后了结它们。
+type PickDifferences interface {
+	ShortSpots(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) ([]ShortSpot, error)
+	ClosePickDifferences(ctx context.Context, tenant domain.TenantID, closure PickDifferenceClosure) error
+}
+
 // WaveStore 读写波次、分配策略与拣货任务。写入在没有环境事务时拒绝。
 type WaveStore interface {
 	LoadStrategy(ctx context.Context, tenant domain.TenantID) (AllocationStrategy, bool, error)
@@ -60,7 +93,9 @@ type WaveStore interface {
 	// WithdrawFromWave 记下撤出、作废这张请求在这个波次里待执行的任务，并把请求从已放波次改回已预占。
 	WithdrawFromWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, request domain.OutboundRequestID, operator domain.Registrant, at time.Time) error
 	LoadTask(ctx context.Context, tenant domain.TenantID, id domain.PickTaskID) (PickTask, bool, error)
-	SavePick(ctx context.Context, tenant domain.TenantID, task PickTask, requestStatus domain.OutboundStatus, differenceID, factID string, short int64) error
+	SavePick(ctx context.Context, tenant domain.TenantID, task PickTask, requestStatus domain.OutboundStatus, differenceID, factID string, short int64, at time.Time) error
+	// ShortSpots 列出这位货主在这个仓里还挂着待处理拣货差异的库位与商品。分配拣货任务时避开它们。
+	ShortSpots(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) ([]ShortSpot, error)
 	// InsertOpenTask 往已放出的波次里添一条待执行任务：少拣之后换格补拣，或库内移库把一条任务拆成两格。
 	InsertOpenTask(ctx context.Context, tenant domain.TenantID, task PickTask) error
 	TasksOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) ([]PickTask, error)

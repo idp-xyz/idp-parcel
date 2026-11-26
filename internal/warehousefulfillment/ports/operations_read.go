@@ -121,6 +121,45 @@ type WaveRow struct {
 	Tasks     []WaveTaskRow
 }
 
+// PickDifferencePages 是运营查阅拣货差异（少拣留下的）的查询声明（ADR-0144）。
+// 筛选维覆盖货主、仓与状态；q 覆盖差异标识、库位、商品、出库请求与波次。缺省按记下的时刻从新到旧；
+// 差异标识是随机签发的，不反映先后，只作同一时刻里的定序。早先没记时刻的差异排在最旧的一头。
+var PickDifferencePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-pick-differences",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "recordedAt", Kind: cataloguepage.Instant},
+		{Name: "differenceId", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "recordedAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "ownerAccount"},
+		{Name: "warehouseCode"},
+		{Name: "status", Vocabulary: []string{"PENDING", "CLOSED"}},
+	},
+})
+
+// PickDifferenceRow 是拣货差异列表的一行：哪条任务在哪个库位少拣了几件，了结了没有。
+type PickDifferenceRow struct {
+	DifferenceID  string
+	Status        string
+	Quantity      int64
+	TaskID        string
+	WaveID        string
+	RequestID     string
+	OwnerAccount  string
+	WarehouseCode string
+	LocationCode  string
+	GoodsCode     string
+	Unit          string
+	StockState    string
+	TaskQuantity  int64
+	Picked        int64
+	RecordedAt    *time.Time
+	ClosedAt      *time.Time
+	ClosedByCount string
+}
+
 // ChargeOccurrencePages 是运营查阅仓储作业收费发生项列表的查询声明（ADR-0144）。
 // 一份发生项一行，取最新一版（head_version）。不带金额。
 var ChargeOccurrencePages = cataloguepage.MustCatalogue(cataloguepage.Spec{

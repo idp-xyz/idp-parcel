@@ -458,7 +458,7 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 			status = domain.OutboundReserved
 		}
 	}
-	if err := handler.waves.SavePick(ctx, command.Tenant, task, status, differenceID, command.FactID.String(), short); err != nil {
+	if err := handler.waves.SavePick(ctx, command.Tenant, task, status, differenceID, command.FactID.String(), short, handler.clock.Now()); err != nil {
 		return WaveResult{}, fmt.Errorf("pick: %w", err)
 	}
 	for _, added := range replacements {
@@ -694,9 +694,23 @@ func (handler *WaveHandler) rankedCells(ctx context.Context, command ReleaseWave
 	if err != nil || !found {
 		return nil, err
 	}
+	// 少拣留下的差异还没了结的库位，这种货不再分：账上说还有，拣货的人在那里确认过没有，等盘点盘过再说。
+	spots, err := handler.waves.ShortSpots(ctx, command.Tenant, request.Owner(), command.Warehouse)
+	if err != nil {
+		return nil, err
+	}
+	short := map[string]struct{}{}
+	for _, spot := range spots {
+		if spot.Goods == reserved.Goods {
+			short[spot.Location.String()] = struct{}{}
+		}
+	}
 	var cells []rankedCell
 	for _, row := range rows {
 		if row.GoodsCode != reserved.Goods.String() || row.State != reserved.State.String() {
+			continue
+		}
+		if _, emptied := short[row.LocationCode]; emptied {
 			continue
 		}
 		if textOrEmpty(row.Alias) != reserved.Alias.String() {

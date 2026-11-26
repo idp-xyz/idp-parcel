@@ -162,6 +162,8 @@ type CountHandler struct {
 	clock        ports.Clock
 	anyWarehouse ports.TenantWarehouseLookup
 	charges      *ChargeHandler
+	// pickDifferences 缺席时盘点照样成立，只是少拣留下的拣货差异不随盘点了结。
+	pickDifferences ports.PickDifferences
 }
 
 func NewCountHandler(
@@ -189,4 +191,26 @@ func NewCountHandler(
 func (handler *CountHandler) WithCharges(charges *ChargeHandler) *CountHandler {
 	handler.charges = charges
 	return handler
+}
+
+// WithPickDifferences 接上拣货差异：盘点盘完，它盘到的库位上少拣留下的差异随之了结，那些库位照常再分配。
+func (handler *CountHandler) WithPickDifferences(differences ports.PickDifferences) *CountHandler {
+	handler.pickDifferences = differences
+	return handler
+}
+
+// shortSpotsOf 列出一位货主在这个仓里挂着待处理拣货差异的库位与商品，键是库位与商品。没接上拣货差异时是空的。
+func (handler *CountHandler) shortSpotsOf(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) (map[string]struct{}, error) {
+	spots := map[string]struct{}{}
+	if handler.pickDifferences == nil {
+		return spots, nil
+	}
+	listed, err := handler.pickDifferences.ShortSpots(ctx, tenant, owner, warehouse)
+	if err != nil {
+		return nil, err
+	}
+	for _, spot := range listed {
+		spots[spot.Location.String()+"\x1f"+spot.Goods.String()] = struct{}{}
+	}
+	return spots, nil
 }

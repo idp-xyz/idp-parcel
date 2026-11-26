@@ -96,6 +96,7 @@ export const warehouseActionOutcomeLabels: Record<string, string> = {
   UNFROZEN: '已解冻',
   CREATED: '已创建盘点',
   STARTED: '已开始盘点',
+  CANNOT_START: '盘点开始不了：范围里的货被别的盘点占着，或锁住它会挤占已有的预占、冻结',
   COMPLETED: '已完成盘点',
   POSTED: '已入账',
   APPROVED: '已批准',

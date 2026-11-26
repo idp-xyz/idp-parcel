@@ -722,6 +722,45 @@ export function listWaves(
   );
 }
 
+export interface PickDifferenceRecord {
+  differenceId: string;
+  /** PENDING 待盘点，CLOSED 已由一份盘点了结。 */
+  status: string;
+  /** 少拣的数量。 */
+  quantity: number;
+  taskId: string;
+  waveId: string;
+  requestId: string;
+  ownerAccount: string;
+  warehouseCode: string;
+  locationCode: string;
+  goodsCode: string;
+  unit: string;
+  stockState: string;
+  /** 那条任务应拣与实拣的数量。 */
+  taskQuantity: number;
+  picked: number;
+  recordedAt?: string;
+  closedAt?: string;
+  closedByCount?: string;
+}
+
+export interface PickDifferenceListBody {
+  outcome: string;
+  differences: PickDifferenceRecord[];
+  page: CataloguePage;
+}
+
+/** 少拣留下的拣货差异。检索覆盖差异号、库位、商品、出库请求号与波次号。 */
+export function listPickDifferences(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<PickDifferenceListBody>> {
+  return exchangeMasterData<PickDifferenceListBody>(
+    catalogueRequestPath('/warehouse-fulfillment-pick-differences', conditions, after),
+  );
+}
+
 /** 按波次号读一张。逐字相等，只在本租户；没有这个波次答 `WAVE_NOT_FOUND`、不带 `wave`，不答 404。 */
 export function getWave(waveId: string): Promise<ApiResult<WaveOneBody>> {
   const params = new URLSearchParams({ waveId });

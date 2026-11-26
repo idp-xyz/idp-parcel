@@ -644,7 +644,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 	}
 	approvals := transactionalApproval{
 		transactor: db.Transactor(),
-		inner:      warehouseapp.NewCountApprovalHandler(countStore, countStore, poster, holds, systemClock{}, warehouses),
+		inner:      warehouseapp.NewCountApprovalHandler(countStore, countStore, poster, holds, systemClock{}, warehouses).WithPickDifferences(waveStore),
 	}
 	outbounds := transactionalOutbound{
 		transactor: db.Transactor(),
@@ -686,7 +686,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		return none, err
 	}
 	chargeHandler := warehouseapp.NewChargeHandler(chargeStore, chargeIDs, chargeHandoff, warehouses, systemClock{}).WithReadings(goods, measurementStore)
-	counts.inner = counts.inner.WithCharges(chargeHandler)
+	counts.inner = counts.inner.WithCharges(chargeHandler).WithPickDifferences(waveStore)
 	adjustments.inner = adjustments.inner.WithCharges(chargeHandler)
 	receiptConfirm.inner = receiptConfirm.inner.WithCharges(chargeHandler)
 	waves := transactionalWave{

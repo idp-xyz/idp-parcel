@@ -148,14 +148,6 @@ func TestAWaveStatusFollowsItsPickTasks(t *testing.T) {
 		t.Fatalf("都拣了 = %s", got)
 	}
 
-	short := world.releaseWave(t, handler, "WAVE-STATUS-SHORT", reserve("REQ-STATUS-SHORT"))
-	if short.Outcome() != application.WaveAllocated || world.pick(t, handler, short.Tasks()[0].ID, 4).Outcome() != application.WavePicked {
-		t.Fatal("少拣没有记下")
-	}
-	if got := statusOf("WAVE-STATUS-SHORT"); got != ports.WaveCompleted {
-		t.Fatalf("少拣之后 = %s", got)
-	}
-
 	cut := reserve("REQ-STATUS-CUT")
 	cutWave := world.releaseWave(t, handler, "WAVE-STATUS-CUT", cut)
 	if cutWave.Outcome() != application.WaveAllocated {
@@ -204,6 +196,15 @@ func TestAWaveStatusFollowsItsPickTasks(t *testing.T) {
 	}
 	if got := statusOf("WAVE-STATUS-LATE"); got != ports.WaveReleased {
 		t.Fatalf("一条迟到、一条等着拣 = %s", got)
+	}
+
+	// 少拣放在最后：差异没了结时这个库位不再分配，排在它后面的放波次都分不到货。
+	short := world.releaseWave(t, handler, "WAVE-STATUS-SHORT", reserve("REQ-STATUS-SHORT"))
+	if short.Outcome() != application.WaveAllocated || world.pick(t, handler, short.Tasks()[0].ID, 4).Outcome() != application.WavePicked {
+		t.Fatal("少拣没有记下")
+	}
+	if got := statusOf("WAVE-STATUS-SHORT"); got != ports.WaveCompleted {
+		t.Fatalf("少拣之后 = %s", got)
 	}
 
 	if ids := listed("status=" + ports.WaveCancelled); len(ids) != 1 || ids[0] != "WAVE-STATUS-CUT" {
@@ -727,7 +728,7 @@ func TestWavesRefuseToRunOutsideATransaction(t *testing.T) {
 	if err := waves.SaveWave(ctx, tenant, valueOf(t, domain.NewWaveID, "WAVE"), valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), valueOf(t, domain.NewRegistrant, "operator-1"), false, preAdviceNumberingInstant, nil, nil); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SaveWave：%v", err)
 	}
-	if err := waves.SavePick(ctx, tenant, ports.PickTask{ID: valueOf(t, domain.NewPickTaskID, "PKT-1"), Request: valueOf(t, domain.NewOutboundRequestID, "OBR-1")}, domain.OutboundPicked, "", "", 0); !errors.Is(err, bentopg.ErrTransactionRequired) {
+	if err := waves.SavePick(ctx, tenant, ports.PickTask{ID: valueOf(t, domain.NewPickTaskID, "PKT-1"), Request: valueOf(t, domain.NewOutboundRequestID, "OBR-1")}, domain.OutboundPicked, "", "", 0, preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("SavePick：%v", err)
 	}
 	if err := waves.SaveOpenTask(ctx, tenant, ports.PickTask{ID: valueOf(t, domain.NewPickTaskID, "PKT-1")}); !errors.Is(err, bentopg.ErrTransactionRequired) {

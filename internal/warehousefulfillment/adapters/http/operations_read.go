@@ -32,6 +32,12 @@ type WaveQueries interface {
 		query cataloguepage.Query,
 	) (cataloguepage.Result[ports.WaveRow], error)
 	LoadWaveRow(ctx context.Context, tenant domain.TenantID, waveID string) (ports.WaveRow, bool, error)
+	ListPickDifferences(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.PickDifferenceRow], error)
 }
 
 // ChargeOccurrenceQueries 是运营查阅仓储作业收费发生项列表的读口。
@@ -217,6 +223,71 @@ func NewQueryWaveEndpoint(intake CatalogueIntake, queries WaveQueries) http.Hand
 		body := waveRowBodyOf(row)
 		writeJSON(response, http.StatusOK, waveResponse{Outcome: "WAVE_FOUND", Wave: &body})
 	})
+}
+
+// NewQueryPickDifferencesEndpoint 交回运营分页查阅拣货差异的入口（GET /warehouse-fulfillment-pick-differences）。
+func NewQueryPickDifferencesEndpoint(intake CatalogueIntake, queries WaveQueries) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if refuseMethod(response, request, http.MethodGet) {
+			return
+		}
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := ports.PickDifferencePages.DecodeRaw(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		page, err := queries.ListPickDifferences(request.Context(), query.Tenant, query.Limit, pageQuery)
+		if err != nil {
+			slog.ErrorContext(request.Context(), "pick difference list did not form an answer")
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		items := make([]pickDifferenceBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
+			items = append(items, pickDifferenceBody{
+				DifferenceID: row.DifferenceID, Status: row.Status, Quantity: row.Quantity, TaskID: row.TaskID, WaveID: row.WaveID,
+				RequestID: row.RequestID, OwnerAccount: row.OwnerAccount, WarehouseCode: row.WarehouseCode, LocationCode: row.LocationCode,
+				GoodsCode: row.GoodsCode, Unit: row.Unit, StockState: row.StockState, TaskQuantity: row.TaskQuantity, Picked: row.Picked,
+				RecordedAt: optRFC3339(row.RecordedAt), ClosedAt: optRFC3339(row.ClosedAt), ClosedByCount: row.ClosedByCount,
+			})
+		}
+		writeJSON(response, http.StatusOK, pickDifferenceListResponse{
+			Outcome:     "PICK_DIFFERENCES_LISTED",
+			Differences: items,
+			Page:        page.Page(query.Limit),
+		})
+	})
+}
+
+type pickDifferenceListResponse struct {
+	Outcome     string               `json:"outcome"`
+	Differences []pickDifferenceBody `json:"differences"`
+	Page        cataloguepage.Page   `json:"page"`
+}
+
+type pickDifferenceBody struct {
+	DifferenceID  string `json:"differenceId"`
+	Status        string `json:"status"`
+	Quantity      int64  `json:"quantity"`
+	TaskID        string `json:"taskId"`
+	WaveID        string `json:"waveId"`
+	RequestID     string `json:"requestId"`
+	OwnerAccount  string `json:"ownerAccount"`
+	WarehouseCode string `json:"warehouseCode"`
+	LocationCode  string `json:"locationCode"`
+	GoodsCode     string `json:"goodsCode"`
+	Unit          string `json:"unit"`
+	StockState    string `json:"stockState"`
+	TaskQuantity  int64  `json:"taskQuantity"`
+	Picked        int64  `json:"picked"`
+	RecordedAt    string `json:"recordedAt,omitempty"`
+	ClosedAt      string `json:"closedAt,omitempty"`
+	ClosedByCount string `json:"closedByCount,omitempty"`
 }
 
 func waveRowBodyOf(row ports.WaveRow) waveRowBody {

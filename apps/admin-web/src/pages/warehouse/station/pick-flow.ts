@@ -464,7 +464,7 @@ export function shortPickLines(plan: ShortPickPlan): string[] {
   return [
     `这一格要拣 ${plan.cell.quantity} 件 ${plan.cell.goodsCode}，现在只记 ${plan.quantity} 件。`,
     `这 ${plan.quantity} 件移进待出库库位 ${plan.staging}。`,
-    `这一格记成「短拣」，提交之后不能再拣，差额记一笔短拣差异。差的 ${plan.short} 件系统会在这个波次里换别的库位补：换得出就添进余下的格，换不出就等这张出库单别的格拣完后回到「已预占」。`,
+    `这一格记成「短拣」，提交之后不能再拣，差额记一笔短拣差异；盘点盘过之前，这个库位的这种货不再派人来拣。差的 ${plan.short} 件系统会在这个波次里换别的库位补：换得出就添进余下的格，换不出就等这张出库单别的格拣完后回到「已预占」。`,
   ];
 }
 

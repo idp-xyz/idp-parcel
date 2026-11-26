@@ -427,7 +427,7 @@ func (store *Waves) InsertOpenTask(ctx context.Context, tenant domain.TenantID, 
 	return refreshWaveStatus(ctx, executor, tenant, `target.wave_id = $2`, task.WaveID.String())
 }
 
-func (store *Waves) SavePick(ctx context.Context, tenant domain.TenantID, task ports.PickTask, requestStatus domain.OutboundStatus, differenceID, factID string, short int64) error {
+func (store *Waves) SavePick(ctx context.Context, tenant domain.TenantID, task ports.PickTask, requestStatus domain.OutboundStatus, differenceID, factID string, short int64, at time.Time) error {
 	executor, err := store.db.RequireExecutor(ctx)
 	if err != nil {
 		return fmt.Errorf("save pick: %w", err)
@@ -458,13 +458,99 @@ func (store *Waves) SavePick(ctx context.Context, tenant domain.TenantID, task p
 	}
 	if short > 0 {
 		if _, err := executor.Exec(ctx,
-			`INSERT INTO warehouse_fulfillment.pick_difference (tenant_id, difference_id, task_id, fact_id, quantity, status)
-			 VALUES ($1,$2,$3,$4,$5,'PENDING')`,
-			tenant.String(), differenceID, task.ID.String(), factID, short); err != nil {
+			`INSERT INTO warehouse_fulfillment.pick_difference (tenant_id, difference_id, task_id, fact_id, quantity, status, recorded_at)
+			 VALUES ($1,$2,$3,$4,$5,'PENDING',$6)`,
+			tenant.String(), differenceID, task.ID.String(), factID, short, at.UTC()); err != nil {
 			return fmt.Errorf("save pick difference: %w", err)
 		}
 	}
 	return refreshWaveStatus(ctx, executor, tenant, wavesOfRequest, task.Request.String())
+}
+
+var _ ports.PickDifferences = (*Waves)(nil)
+
+func (store *Waves) ShortSpots(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) ([]ports.ShortSpot, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("short spots: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT DISTINCT task.location_code, task.goods_code
+		   FROM warehouse_fulfillment.pick_difference difference
+		   JOIN warehouse_fulfillment.pick_task task
+		     ON task.tenant_id = difference.tenant_id AND task.task_id = difference.task_id
+		   JOIN warehouse_fulfillment.outbound_request request
+		     ON request.tenant_id = task.tenant_id AND request.request_id = task.request_id
+		  WHERE difference.tenant_id = $1 AND difference.status = 'PENDING'
+		    AND request.owner_account_id = $2 AND request.warehouse_code = $3
+		  ORDER BY task.location_code, task.goods_code`,
+		tenant.String(), owner.String(), warehouse.String())
+	if err != nil {
+		return nil, fmt.Errorf("short spots: %w", err)
+	}
+	defer rows.Close()
+	var spots []ports.ShortSpot
+	for rows.Next() {
+		var location, goods string
+		if err := rows.Scan(&location, &goods); err != nil {
+			return nil, fmt.Errorf("short spots: %w", err)
+		}
+		parsedLocation, err := domain.NewLocationCode(location)
+		if err != nil {
+			return nil, err
+		}
+		parsedGoods, err := domain.NewGoodsCode(goods)
+		if err != nil {
+			return nil, err
+		}
+		spots = append(spots, ports.ShortSpot{Location: parsedLocation, Goods: parsedGoods})
+	}
+	return spots, rows.Err()
+}
+
+// ClosePickDifferences 了结 closure 圈出的待处理拣货差异，记下是哪一份盘点了结的。
+func (store *Waves) ClosePickDifferences(ctx context.Context, tenant domain.TenantID, closure ports.PickDifferenceClosure) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("close pick differences: %w", err)
+	}
+	places := make([]string, 0, len(closure.Locations))
+	for _, location := range closure.Locations {
+		places = append(places, location.String())
+	}
+	codes := make([]string, 0, len(closure.Goods))
+	for _, code := range closure.Goods {
+		codes = append(codes, code.String())
+	}
+	keptOwners := make([]string, 0, len(closure.Keep))
+	keptPlaces := make([]string, 0, len(closure.Keep))
+	keptGoods := make([]string, 0, len(closure.Keep))
+	for _, spot := range closure.Keep {
+		keptOwners = append(keptOwners, spot.Owner.String())
+		keptPlaces = append(keptPlaces, spot.Location.String())
+		keptGoods = append(keptGoods, spot.Goods.String())
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.pick_difference AS difference
+		    SET status = 'CLOSED', closed_at = $3, closed_by_count = $4
+		   FROM warehouse_fulfillment.pick_task task
+		   JOIN warehouse_fulfillment.outbound_request request
+		     ON request.tenant_id = task.tenant_id AND request.request_id = task.request_id
+		  WHERE difference.tenant_id = $1 AND difference.status = 'PENDING'
+		    AND task.tenant_id = difference.tenant_id AND task.task_id = difference.task_id
+		    AND request.warehouse_code = $2 AND task.location_code = ANY($5::text[])
+		    AND ($6 = '' OR request.owner_account_id = $6)
+		    AND (cardinality($7::text[]) = 0 OR task.goods_code = ANY($7::text[]))
+		    AND (difference.recorded_at IS NULL OR difference.recorded_at <= $8)
+		    AND NOT EXISTS (
+		        SELECT 1 FROM unnest($9::text[], $10::text[], $11::text[]) AS kept(owner_account_id, location_code, goods_code)
+		         WHERE kept.owner_account_id = request.owner_account_id
+		           AND kept.location_code = task.location_code AND kept.goods_code = task.goods_code)`,
+		tenant.String(), closure.Warehouse.String(), closure.At.UTC(), closure.Count, places, closure.Owner.String(), codes,
+		closure.Before.UTC(), keptOwners, keptPlaces, keptGoods); err != nil {
+		return fmt.Errorf("close pick differences: %w", err)
+	}
+	return nil
 }
 
 func (store *Waves) SaveCheck(ctx context.Context, tenant domain.TenantID, fact domain.PickFactID, request domain.OutboundRequestID, observed int64, matched bool, at time.Time, next domain.OutboundStatus) error {

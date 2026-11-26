@@ -346,6 +346,14 @@ func (unwiredWave) ListWaves(
 func (unwiredWave) LoadWaveRow(context.Context, warehousedomain.TenantID, string) (warehouseports.WaveRow, bool, error) {
 	return warehouseports.WaveRow{}, false, errOrchestrationNotWired
 }
+func (unwiredWave) ListPickDifferences(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.PickDifferenceRow], error) {
+	return cataloguepage.Result[warehouseports.PickDifferenceRow]{}, errOrchestrationNotWired
+}
 
 type unwiredOutbound struct{}
 
@@ -808,6 +816,7 @@ const (
 	outboundRequestListLine     = "/warehouse-fulfillment-outbound-request-list"
 	waveListLine                = "/warehouse-fulfillment-wave-list"
 	waveOneLine                 = "/warehouse-fulfillment-wave"
+	pickDifferenceListLine      = "/warehouse-fulfillment-pick-differences"
 	chargeOccurrenceListLine    = "/warehouse-fulfillment-charge-occurrences"
 	warehouseAdoptionListLine   = "/warehouse-fulfillment-charge-adoption-list"
 	warehouseChargeRequestsLine = "/warehouse-fulfillment-charge-requests"
@@ -1038,6 +1047,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		outboundRequestListLine:                                       {http.MethodGet, faceOperationsRead},
 		waveListLine:                                                  {http.MethodGet, faceOperationsRead},
 		waveOneLine:                                                   {http.MethodGet, faceOperationsRead},
+		pickDifferenceListLine:                                        {http.MethodGet, faceOperationsRead},
 		chargeOccurrenceListLine:                                      {http.MethodGet, faceOperationsRead},
 		warehouseAdoptionListLine:                                     {http.MethodGet, faceOperationsRead},
 		warehouseChargeRequestsLine:                                   {http.MethodGet, faceOperationsRead},
@@ -1303,6 +1313,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			outboundRequestListLine:                                {status, code},
 			waveListLine:                                           {status, code},
 			waveOneLine:                                            {status, code},
+			pickDifferenceListLine:                                 {status, code},
 			chargeOccurrenceListLine:                               {status, code},
 			warehouseAdoptionListLine:                              {status, code},
 			warehouseChargeRequestsLine:                            {status, code},
@@ -1438,6 +1449,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			outboundRequestListLine:                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			waveListLine:                                           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			waveOneLine:                                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			pickDifferenceListLine:                                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			chargeOccurrenceListLine:                               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseAdoptionListLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseChargeRequestsLine:                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1566,6 +1578,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			outboundRequestListLine:                                {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			waveListLine:                                           {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			waveOneLine:                                            {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			pickDifferenceListLine:                                 {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			chargeOccurrenceListLine:                               {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseAdoptionListLine:                              {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseChargeRequestsLine:                            {http.StatusInternalServerError, "NO_ANSWER_FORMED"},

@@ -298,6 +298,93 @@ func scanWaveRow(row interface{ Scan(dest ...any) error }) (ports.WaveRow, error
 	return item, nil
 }
 
+const pickDifferenceListColumns = `difference_id, status, quantity, task_id, wave_id, request_id, owner_account_id, warehouse_code,
+	location_code, goods_code, unit_name, stock_state, task_quantity, picked, recorded_at, closed_at, closed_by_count, recorded_order`
+
+const pickDifferenceListed = `WITH listed AS (
+	SELECT difference.difference_id, difference.status, difference.quantity, difference.task_id, task.wave_id, task.request_id,
+	       request.owner_account_id, request.warehouse_code, task.location_code, task.goods_code, task.unit_name, task.stock_state,
+	       task.quantity AS task_quantity, task.picked, difference.recorded_at, difference.closed_at, difference.closed_by_count,
+	       coalesce(difference.recorded_at, 'epoch'::timestamptz) AS recorded_order
+	  FROM warehouse_fulfillment.pick_difference difference
+	  JOIN warehouse_fulfillment.pick_task task
+	    ON task.tenant_id = difference.tenant_id AND task.task_id = difference.task_id
+	  JOIN warehouse_fulfillment.outbound_request request
+	    ON request.tenant_id = task.tenant_id AND request.request_id = task.request_id
+	 WHERE difference.tenant_id = $1
+)`
+
+var pickDifferenceListBinding = ports.PickDifferencePages.MustBind(cataloguepage.Columns{
+	// 早先的差异没记时刻：排序用的那一列拿纪元起点顶上，它们排在最旧的一头；读出来的时刻仍是空的，不替它补。
+	Sorts:    map[string]string{"recordedAt": "recorded_order", "differenceId": "difference_id"},
+	Identity: []string{"difference_id"},
+	Filters: map[string]string{
+		"ownerAccount":  "owner_account_id",
+		"warehouseCode": "warehouse_code",
+		"status":        "status",
+	},
+	Keyword: []string{"difference_id", "location_code", "goods_code", "request_id", "wave_id"},
+})
+
+// ListPickDifferences 按分页条件列出本租户少拣留下的拣货差异，连同它所在的任务、波次、出库请求与库位。
+func (store *Waves) ListPickDifferences(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+	query cataloguepage.Query,
+) (cataloguepage.Result[ports.PickDifferenceRow], error) {
+	const operation = "list pick differences"
+	fail := func(err error) (cataloguepage.Result[ports.PickDifferenceRow], error) {
+		return cataloguepage.Result[ports.PickDifferenceRow]{}, fmt.Errorf("%s: %w", operation, err)
+	}
+	if tenant.String() == "" || limit < 1 {
+		return fail(errors.New("tenant and a positive limit are required"))
+	}
+	plan, err := pickDifferenceListBinding.Plan(query, "", []any{tenant.String()}, limit)
+	if err != nil {
+		return fail(err)
+	}
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	var total int64
+	if err := querier.QueryRow(ctx, pickDifferenceListed+" "+plan.CountSQL("listed"), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
+	}
+	rows, err := querier.Query(ctx, pickDifferenceListed+" "+plan.PageSQL(pickDifferenceListColumns, "listed"), plan.PageArgs...)
+	if err != nil {
+		return fail(err)
+	}
+	defer rows.Close()
+	var items []ports.PickDifferenceRow
+	order := map[string]time.Time{}
+	for rows.Next() {
+		var item ports.PickDifferenceRow
+		var closedBy *string
+		var recordedOrder time.Time
+		if err := rows.Scan(
+			&item.DifferenceID, &item.Status, &item.Quantity, &item.TaskID, &item.WaveID, &item.RequestID, &item.OwnerAccount, &item.WarehouseCode,
+			&item.LocationCode, &item.GoodsCode, &item.Unit, &item.StockState, &item.TaskQuantity, &item.Picked,
+			&item.RecordedAt, &item.ClosedAt, &closedBy, &recordedOrder,
+		); err != nil {
+			return fail(err)
+		}
+		item.ClosedByCount = valueOrEmpty(closedBy)
+		order[item.DifferenceID] = recordedOrder
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return fail(err)
+	}
+	return cataloguepage.Finish(query, items, limit, total, func(item ports.PickDifferenceRow, sortField string) cataloguepage.Position {
+		if sortField == "differenceId" {
+			return cataloguepage.Position{Value: item.DifferenceID, Identity: []string{item.DifferenceID}}
+		}
+		return cataloguepage.Position{Value: cataloguepage.FormatInstant(order[item.DifferenceID]), Identity: []string{item.DifferenceID}}
+	})
+}
+
 const chargeOccurrenceListColumns = `
 	occurrence_id, version, supersedes, correction, kind, owner_account_id, warehouse_code,
 	source_fact, business_time, measures, attributes, lines, weight_unit, volume_unit`
