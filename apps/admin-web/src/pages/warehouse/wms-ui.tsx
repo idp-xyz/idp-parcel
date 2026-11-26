@@ -435,11 +435,12 @@ export function WmsSubTable<T>({
             </thead>
             <tbody>
               {rows.map((row, idx) => (
-                <tr key={rowKey(row, idx)} className="hover:bg-idpxyz-hover/40 transition-colors">
+                <tr key={rowKey(row, idx)} className="hover:bg-idpxyz-hover transition-colors">
                   {columns.map((col) => (
                     <td
                       key={col.id}
-                      className={`px-3 py-2 type-body text-idpxyz-text border-b border-idpxyz-border/60 align-top ${
+                      // 行线不带透明度：主题色是裸 CSS 变量，`/60` 生不出样式，线会落回缺省的浅灰，深色主题下是白线。
+                      className={`px-3 py-2 type-body text-idpxyz-text border-b border-idpxyz-border align-top ${
                         col.mono ? 'font-mono whitespace-nowrap' : ''
                       } ${col.align === 'right' ? 'text-right' : 'text-left'}`}
                     >

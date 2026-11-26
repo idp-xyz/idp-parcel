@@ -47,7 +47,9 @@ function stockRowCount(body: StockReadBody, view: StockViewKind): number {
 }
 
 const thClass = 'px-3 py-2 text-left type-caption font-medium text-idpxyz-textMuted border-b border-idpxyz-border whitespace-nowrap';
-const tdClass = 'px-3 py-2 type-body text-idpxyz-text border-b border-idpxyz-border/60 align-top';
+// 行线用不带透明度的主题色：主题色是裸 CSS 变量，`/60` 这类透明度写法生不出样式，线会落回浏览器缺省的浅灰，
+// 在深色主题下是一条白线。行的悬停底色同理。
+const tdClass = 'px-3 py-2 type-body text-idpxyz-text border-b border-idpxyz-border align-top';
 const monoTd = `${tdClass} font-mono whitespace-nowrap`;
 
 /** 实时库存查询页：全部五视图以结构化数据表展示（零原始 JSON），每条库存格/整箱直接带出冻结、次品转良品与库存调整弹窗。 */
@@ -215,7 +217,7 @@ export function WarehouseStockPage() {
         {owner.trim() === '' ? (
           <p className="type-body text-idpxyz-textMuted">请先在上方选择一个货主客户账户。</p>
         ) : answer && answer.kind !== 'outcome' ? (
-          <div className="rounded border border-idpxyz-danger/40 bg-idpxyz-panel p-4 type-body text-idpxyz-danger">
+          <div className="rounded border border-rose-500/30 bg-rose-500/10 p-4 type-body text-rose-700 dark:text-rose-300">
             {answer.kind === 'callerProblem'
               ? answer.detail || problemNote(answer.code)
               : answer.kind === 'noAnswer'
@@ -250,7 +252,7 @@ export function WarehouseStockPage() {
                   </thead>
                   <tbody>
                     {stockPageSlice(body.cells ?? [], page).map((cell, index) => (
-                      <tr key={`${cell.warehouse}-${cell.location ?? ''}-${cell.goodsCode}-${cell.inboundBatchId}-${index}`} className="hover:bg-idpxyz-hover/40">
+                      <tr key={`${cell.warehouse}-${cell.location ?? ''}-${cell.goodsCode}-${cell.inboundBatchId}-${index}`} className="hover:bg-idpxyz-hover">
                         <td className={monoTd}>{`${cell.warehouse} / ${cell.location ?? '代理仓(无库位)'}`}</td>
                         <td className={monoTd}>
                           {cell.goodsCode}
@@ -360,7 +362,7 @@ export function WarehouseStockPage() {
                   </thead>
                   <tbody>
                     {stockPageSlice(body.cartons ?? [], page).map((carton) => (
-                      <tr key={`${carton.warehouse}-${carton.cartonNumber}`} className="hover:bg-idpxyz-hover/40">
+                      <tr key={`${carton.warehouse}-${carton.cartonNumber}`} className="hover:bg-idpxyz-hover">
                         <td className={monoTd}>{`${carton.warehouse} / ${carton.location ?? '—'}`}</td>
                         <td className={monoTd}>{carton.cartonNumber}</td>
                         <td className={tdClass}>
@@ -417,7 +419,7 @@ export function WarehouseStockPage() {
                   </thead>
                   <tbody>
                     {stockPageSlice(body.summary ?? [], page).map((row, index) => (
-                      <tr key={`${row.warehouse}-${row.goodsCode}-${row.unit}-${row.stockState}-${index}`} className="hover:bg-idpxyz-hover/40">
+                      <tr key={`${row.warehouse}-${row.goodsCode}-${row.unit}-${row.stockState}-${index}`} className="hover:bg-idpxyz-hover">
                         <td className={monoTd}>{row.warehouse}</td>
                         <td className={monoTd}>{row.goodsCode}</td>
                         <td className={tdClass}>{`${row.unit} · ${stockStateLabels[row.stockState] ?? row.stockState}`}</td>
@@ -450,7 +452,7 @@ export function WarehouseStockPage() {
                   </thead>
                   <tbody>
                     {stockPageSlice(body.holds ?? [], page).map((hold, index) => (
-                      <tr key={`${hold.kind}-${hold.warehouse}-${hold.goodsCode ?? hold.cartonNumber ?? ''}-${index}`} className="hover:bg-idpxyz-hover/40">
+                      <tr key={`${hold.kind}-${hold.warehouse}-${hold.goodsCode ?? hold.cartonNumber ?? ''}-${index}`} className="hover:bg-idpxyz-hover">
                         <td className={tdClass}>{holdKindLabels[hold.kind] ?? hold.kind}</td>
                         <td className={monoTd}>{`${hold.warehouse} / ${hold.location ?? '—'}`}</td>
                         <td className={monoTd}>{hold.cartonNumber ? `整箱 ${hold.cartonNumber}` : `${hold.goodsCode ?? '—'} (${hold.unit ?? ''})`}</td>
@@ -479,7 +481,7 @@ export function WarehouseStockPage() {
                   </thead>
                   <tbody>
                     {(body.movements ?? []).map((mov, index) => (
-                      <tr key={`${mov.warehouse}-${mov.source ?? ''}-${mov.occurredAt}-${index}`} className="hover:bg-idpxyz-hover/40">
+                      <tr key={`${mov.warehouse}-${mov.source ?? ''}-${mov.occurredAt}-${index}`} className="hover:bg-idpxyz-hover">
                         <td className={monoTd}>{mov.warehouse}</td>
                         <td className={tdClass}>{mov.reason}</td>
                         <td className={monoTd}>{mov.source ?? '—'}</td>

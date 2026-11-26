@@ -267,7 +267,7 @@ export function WarehouseSettingsPage() {
                 </thead>
                 <tbody>
                   {disposalRules.map((rule) => (
-                    <tr key={`${rule.warehouseCode}-${rule.revision}`} className="border-b border-idpxyz-border/60">
+                    <tr key={`${rule.warehouseCode}-${rule.revision}`} className="border-b border-idpxyz-border">
                       <td className="px-3 py-2 font-mono type-body">{rule.warehouseCode}</td>
                       <td className="px-3 py-2 font-mono type-body">{`r${rule.revision}`}</td>
                       <td className="px-3 py-2 font-mono type-body">{`${Math.round(rule.claimWindowSeconds / 86400)} 天（${rule.claimWindowSeconds}s）`}</td>
