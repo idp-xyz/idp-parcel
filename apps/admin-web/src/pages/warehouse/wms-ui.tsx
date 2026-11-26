@@ -499,7 +499,8 @@ export interface WmsQueueStat {
 }
 
 /**
- * 工作台标题行上的各队数量：一队一格，上面是队名、下面是数字，点一下看这一队。样子照工作台模板的指标格。
+ * 工作台标题行上的各队数量：一队一格，上面是队名、下面是数字，点一下看这一队。样子照工作台模板的指标格，
+ * 只是数字在队名下面居中：队名长短不一（两个字到四个字），数字靠左时各格的数字离自己的队名忽远忽近，一排读下来不齐。
  *
  * 不走模板的 kpis：那一组在窗口不到 2xl 宽时固定另起一行，而这里只有几格、标题行摆得下——另起一行的话，
  * 把它从工具条里拿出来省下的那一行高度就又还回去了。摆在标题旁的插槽里，放不下时才跟着标题行折行。
@@ -523,7 +524,7 @@ export function WmsQueueStats({ items }: { items: readonly WmsQueueStat[] }) {
             type="button"
             aria-pressed={item.active}
             title={item.active ? `正在看「${item.label}」，再点一下看全部` : `只看「${item.label}」`}
-            className={`flex shrink-0 flex-col items-start gap-0.5 rounded px-2 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-idpxyz-accent ${
+            className={`flex shrink-0 flex-col items-center gap-0.5 rounded px-2 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-idpxyz-accent ${
               item.active ? 'bg-idpxyz-activeItem ring-1 ring-idpxyz-accent' : 'hover:bg-idpxyz-hover'
             }`}
             onClick={item.onClick}
