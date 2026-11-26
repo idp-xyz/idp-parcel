@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { listTotes } from '../api';
+import { withToteLookup } from './pack-tote';
 import { findGoodsByCode, getOutboundRequestDetail, listOutboundRequests } from '../api';
 import { workFactSpecs, type WorkFactSpec } from '../work-fact';
 import type { GuidedFormValues } from '../guided-forms';
@@ -138,7 +140,8 @@ export function usePackSession({ deviceId, warehouse, request, cue }: PackSessio
     });
   }
   const finderRef = useRef<OrderFinder | null>(null);
-  if (finderRef.current === null) finderRef.current = liveOrderFinder();
+  // 扫到的码当出库单号找不到时，再当周转箱号找：货是装在箱里送到复核台的
+  if (finderRef.current === null) finderRef.current = withToteLookup(liveOrderFinder(), listTotes);
   const packagingRef = useRef<PackagingFinder | null>(null);
   if (packagingRef.current === null) packagingRef.current = livePackagingFinder();
 

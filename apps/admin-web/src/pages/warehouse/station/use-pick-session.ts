@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getWave, listWaves } from '../api';
+import { getWave, listTotes, listWaves } from '../api';
 import { workFactSpecs } from '../work-fact';
 import { browserStorage } from './device-binding';
 import { liveGoodsIdentifier, type GoodsIdentifier } from './pick-goods';
@@ -16,7 +16,9 @@ import {
   reloadQueue,
   resend,
   scanCode,
+  setToteMode,
   skipCell,
+  skipTote,
   stagingVerified,
   submitShortPick,
   type PickEffect,
@@ -25,6 +27,7 @@ import {
 } from './pick-flow';
 import { loadPickQueue, type PickQueue } from './pick-queue';
 import { readPickStaging, writePickStaging } from './pick-staging';
+import { warehouseHasTotes } from './pick-totes';
 import { liveStagingVerifier, type StagingVerifier } from './pick-staging-check';
 import type { ScanCue } from './scan-sound';
 import {
@@ -76,6 +79,8 @@ export interface PickSession {
   next: () => void;
   dismiss: () => void;
   refresh: () => void;
+  /** 「不用箱」。 */
+  skipTote: () => void;
 }
 
 export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionInput): PickSession {
@@ -142,7 +147,10 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
               spec: pickSpec,
               deviceId,
               warehouse,
-              values: pickFactValues({ cell: effect.cell, quantity: effect.quantity }, from.staging ?? ''),
+              values: pickFactValues(
+                { cell: effect.cell, quantity: effect.quantity, ...(effect.tote === undefined ? {} : { tote: effect.tote }) },
+                from.staging ?? '',
+              ),
             },
             floorRef.current,
           );
@@ -205,6 +213,22 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
     apply(beginPick(load.queue.cells, readPickStaging(browserStorage(), deviceId)));
   }, [load, deviceId, apply]);
 
+  // 这个仓登记了周转箱没有：开工后读一次，读回来告诉状态机。没读成就当没有箱——提示扫箱只是帮人把货分开，
+  // 不是拣货成立的条件；读成与否都不拦着拣。
+  useEffect(() => {
+    if (load.phase !== 'ready') return;
+    let cancelled = false;
+    void warehouseHasTotes(warehouse, listTotes).then((on) => {
+      const current = stateRef.current;
+      if (!cancelled && current !== null) apply(setToteMode(current, on));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // 只在队列第一次读成、或换了仓时读；刷新队列不必重读
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load.phase, warehouse, apply]);
+
   const scan = useCallback(
     (raw: string) => {
       const current = stateRef.current;
@@ -239,6 +263,7 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
   const resendNow = useMemo(() => act(resend), [act]);
   const next = useMemo(() => act(nextCell), [act]);
   const dismiss = useMemo(() => act(dismissWrong), [act]);
+  const withoutTote = useMemo(() => act(skipTote), [act]);
   const refresh = useCallback(() => setTick((value) => value + 1), []);
 
   return {
@@ -256,5 +281,6 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
     next,
     dismiss,
     refresh,
+    skipTote: withoutTote,
   };
 }

@@ -16,6 +16,10 @@
 //   - 出库单截单会把还没拣的任务取消（CANCELLED）。对被取消的任务提交，这一笔照记（RECORDED）：任务转成迟到（LATE），
 //     拣出来的货生成回库任务。只有被取消的任务照记，迟到的任务不再照记。
 //
+//   - 拣货可以带周转箱号：箱空着就绑到这张出库单上，一张单可以用几个箱，一个箱同一时刻只装一张单。箱没登记
+//     （TOTE_NOT_FOUND）、已停用（TOTE_NOT_ACCEPTING）、绑着别的出库单（TOTE_IN_USE）时这一笔整份不成立，任务仍待拣。
+//     这个仓登记了箱，工位才提示扫箱：一张单的第一格扫一次，同一张单后面的格沿用；不用箱可以点「不用箱」。
+//
 // 屏上文字与扫码顺序照屏幕示意里拣货那一项：开工扫一次待出库库位 → 扫库位码 → 逐件扫商品加一（也可直接改数量）→
 // 扫满自动提交这一格、跳到下一格。
 
@@ -34,6 +38,8 @@ export type PickPhase =
   | 'verifying'
   /** 等这一格的库位码。 */
   | 'location'
+  /** 等这张出库单的周转箱：只在这个仓登记了箱、这张单这一趟还没定过箱时出现。 */
+  | 'tote'
   /** 等商品码，逐件加一。 */
   | 'goods'
   /** 正在认一个商品码（读口在途）。 */
@@ -58,6 +64,8 @@ export interface PickFeedback {
 export interface PickSubmission {
   cell: PickCell;
   quantity: number;
+  /** 这一格的货放进的周转箱；没用箱就没有这一格。 */
+  tote?: string;
 }
 
 export interface PickState {
@@ -81,12 +89,16 @@ export interface PickState {
   submission: PickSubmission | null;
   /** 没成的那一笔里，这条任务在后端是不是已经不能拣了：是，「下一格」把它从队列里去掉；不是，挪到队尾。 */
   gone: boolean;
+  /** 这个仓登记了周转箱：是，一张出库单的第一格要扫箱（或点「不用箱」）。 */
+  toteOn: boolean;
+  /** 这一趟各张出库单定下的箱：箱号是用这个箱，null 是这张单不用箱，没有这一项是还没问过。 */
+  totes: Readonly<Record<string, string | null>>;
 }
 
 export type PickEffect =
   | { kind: 'identify'; cell: PickCell; code: string }
   | { kind: 'verify-staging'; code: string }
-  | { kind: 'submit'; cell: PickCell; quantity: number }
+  | { kind: 'submit'; cell: PickCell; quantity: number; tote?: string }
   | { kind: 'resend' }
   | { kind: 'remember-staging'; code: string };
 
@@ -103,6 +115,8 @@ export interface PickStart {
   cells: readonly PickCell[];
   /** 已经核过、此刻能用的放货位；没有为 null。 */
   staging: string | null;
+  /** 这个仓登记了周转箱没有；不给就是没有。 */
+  totes?: boolean;
 }
 
 const waitingFeedback: PickFeedback = { kind: 'waiting', text: '等你扫码。' };
@@ -121,7 +135,25 @@ export function startPick(input: PickStart): PickState {
     feedback: waitingFeedback,
     submission: null,
     gone: false,
+    toteOn: input.totes === true,
+    totes: {},
   };
+}
+
+/**
+ * 这个仓有没有登记周转箱是开工之后才读回来的：读回来了改这一格。已经定过箱的出库单不受影响；
+ * 正停在等箱那一步而读回来是没有箱时，直接去扫商品。
+ */
+export function setToteMode(state: PickState, on: boolean): PickStep {
+  if (state.toteOn === on) return { state, effects: [] };
+  if (!on && state.phase === 'tote') return { state: { ...state, toteOn: false, phase: 'goods', feedback: waitingFeedback }, effects: [] };
+  return { state: { ...state, toteOn: on }, effects: [] };
+}
+
+/** 这一格的货放进哪个箱：这张出库单这一趟定下的那个；没定或不用箱为 undefined。 */
+export function toteOfCell(state: PickState, cell: PickCell | undefined): string | undefined {
+  if (cell === undefined) return undefined;
+  return state.totes[cell.requestId] ?? undefined;
 }
 
 /**
@@ -179,6 +211,7 @@ export interface PickScreen {
 const wrongHeadlines: Partial<Record<PickPhase, string>> = {
   staging: '这个库位不能当放货位',
   location: '这不是这一格的库位',
+  tote: '这不是周转箱的码',
   goods: '这不是这一格要的货',
 };
 
@@ -211,13 +244,21 @@ export function pickScreen(state: PickState): PickScreen {
         headline: wrong ? (wrongHeadlines.location as string) : `去库位 ${cell.locationCode}，扫库位码`,
         counter: `这一格要拣 ${cell.goodsCode}，共 ${cell.quantity} 件`,
       };
+    case 'tote':
+      return {
+        label,
+        headline: wrong ? (wrongHeadlines.tote as string) : '扫这张单的周转箱',
+        counter: `这一格的货属于出库单 ${cell.requestId}，它的货都放进同一个箱。不用箱就点「不用箱」。`,
+      };
     case 'goods':
-    case 'resolving':
+    case 'resolving': {
+      const tote = toteOfCell(state, cell);
       return {
         label,
         headline: wrong ? (wrongHeadlines.goods as string) : `扫商品 ${cell.goodsCode}，还差 ${remaining(state)} 件`,
-        counter: `已扫 ${state.counted} / ${cell.quantity}`,
+        counter: tote === undefined ? `已扫 ${state.counted} / ${cell.quantity}` : `已扫 ${state.counted} / ${cell.quantity}，放进箱 ${tote}`,
       };
+    }
     case 'submitting':
       return { label: '请稍等', headline: '正在提交这一格…', counter: submissionCounter(state) };
     case 'unsent':
@@ -237,7 +278,8 @@ function submissionCounter(state: PickState): string {
   const sub = state.submission;
   if (sub === null) return '';
   const short = sub.quantity < sub.cell.quantity ? `（应拣 ${sub.cell.quantity} 件，按短拣记）` : '';
-  return `${sub.cell.goodsCode} ${sub.quantity} 件${short}，放到 ${state.staging ?? '待出库库位'}`;
+  const tote = sub.tote === undefined ? '' : `，装在箱 ${sub.tote}`;
+  return `${sub.cell.goodsCode} ${sub.quantity} 件${short}，放到 ${state.staging ?? '待出库库位'}${tote}`;
 }
 
 /** 屏上「进度」那一格：「第 3 格，共 12 格」。 */
@@ -262,17 +304,23 @@ function counted(state: PickState, count: number, text: string, scanned?: string
   const cell = state.queue[0];
   const feedback: PickFeedback = { kind: 'ok', text, ...(scanned === undefined ? {} : { scanned }) };
   if (count < cell.quantity) return step({ ...state, phase: 'goods', counted: count, feedback }, 'ok');
+  const tote = toteOfCell(state, cell);
   return step(
     {
       ...state,
       phase: 'submitting',
       counted: count,
-      submission: { cell, quantity: cell.quantity },
+      submission: withTote({ cell, quantity: cell.quantity }, tote),
       feedback: { ...feedback, text: `${text}扫满了，正在提交这一格。` },
     },
     'ok',
-    [{ kind: 'submit', cell, quantity: cell.quantity }],
+    [withTote({ kind: 'submit' as const, cell, quantity: cell.quantity }, tote)],
   );
+}
+
+// 没用箱时不带 tote 这一格：报文里不带箱号才是「没用箱」，空串后端不收。
+function withTote<T extends object>(value: T, tote: string | undefined): T & { tote?: string } {
+  return tote === undefined ? value : { ...value, tote };
 }
 
 /**
@@ -305,8 +353,43 @@ export function scanCode(state: PickState, raw: string): PickStep {
           code,
         );
       }
+      // 这个仓登记了箱、这张单这一趟还没定过箱：先定箱。定过的（含定了不用箱的）不再问。
+      if (state.toteOn && state.totes[cell.requestId] === undefined) {
+        return step(
+          {
+            ...state,
+            phase: 'tote',
+            counted: 0,
+            feedback: { kind: 'ok', text: `对。到了 ${cell.locationCode}。这张单还没有箱，扫一个周转箱。`, scanned: code },
+          },
+          'ok',
+        );
+      }
+      const tote = toteOfCell(state, cell);
+      const text =
+        tote === undefined ? `对。到了 ${cell.locationCode}，接着扫商品。` : `对。到了 ${cell.locationCode}，货放进箱 ${tote}，接着扫商品。`;
+      return step({ ...state, phase: 'goods', counted: 0, feedback: { kind: 'ok', text, scanned: code } }, 'ok');
+    }
+    case 'tote': {
+      if (code === cell.locationCode || code === state.staging) {
+        return wrong(state, `扫到的是库位码 ${code}，现在要扫周转箱。没有记下。`, code);
+      }
+      if (code === cell.goodsCode) {
+        return wrong(state, `扫到的是商品码 ${code}，现在要扫周转箱。没有记数，先扫箱。`, code);
+      }
+      // 这一趟里已经给了别的出库单的箱不收：后端也会拒，这里先拦住，货不至于放错箱才发现
+      const taken = Object.entries(state.totes).find(([request, tote]) => tote === code && request !== cell.requestId);
+      if (taken !== undefined) {
+        return wrong(state, `箱 ${code} 这一趟已经给了出库单 ${taken[0]}，一个箱只装一张单。换一个箱再扫。`, code);
+      }
       return step(
-        { ...state, phase: 'goods', counted: 0, feedback: { kind: 'ok', text: `对。到了 ${cell.locationCode}，接着扫商品。`, scanned: code } },
+        {
+          ...state,
+          phase: 'goods',
+          counted: 0,
+          totes: { ...state.totes, [cell.requestId]: code },
+          feedback: { kind: 'ok', text: `箱 ${code} 定给这张单了，接着扫商品。这个箱能不能用，提交这一格时后端会核。`, scanned: code },
+        },
         'ok',
       );
     }
@@ -405,7 +488,7 @@ export function stagingVerified(state: PickState, code: string, verdict: Staging
 
 /** Esc：清掉扫错与没核成，回到等扫。这两样只是屏上的一句话，什么都没记，所以清它们不改别的。 */
 export function dismissWrong(state: PickState): PickStep {
-  const scanning = state.phase === 'staging' || state.phase === 'location' || state.phase === 'goods';
+  const scanning = state.phase === 'staging' || state.phase === 'location' || state.phase === 'tote' || state.phase === 'goods';
   if (!scanning || (state.feedback.kind !== 'wrong' && state.feedback.kind !== 'unsent')) return { state, effects: [] };
   return step({ ...state, feedback: waitingFeedback });
 }
@@ -476,11 +559,11 @@ export function submitShortPick(state: PickState): PickStep {
     {
       ...state,
       phase: 'submitting',
-      submission: { cell: plan.cell, quantity: plan.quantity },
+      submission: withTote({ cell: plan.cell, quantity: plan.quantity }, toteOfCell(state, plan.cell)),
       feedback: { kind: 'waiting', text: `按 ${plan.quantity} 件提交这一格（短拣，差 ${plan.short} 件）…` },
     },
     undefined,
-    [{ kind: 'submit', cell: plan.cell, quantity: plan.quantity }],
+    [withTote({ kind: 'submit' as const, cell: plan.cell, quantity: plan.quantity }, toteOfCell(state, plan.cell))],
   );
 }
 
@@ -488,7 +571,7 @@ export function submitShortPick(state: PickState): PickStep {
 
 /** 跳过这一格：挪到队尾，不提交。扫了数的不让跳——那几件已经拿在手里，要么提交要么少拣。队里只有这一格时也没处可挪。 */
 export function skipCell(state: PickState): PickStep {
-  const onCell = state.phase === 'location' || (state.phase === 'goods' && state.counted === 0);
+  const onCell = state.phase === 'location' || state.phase === 'tote' || (state.phase === 'goods' && state.counted === 0);
   if (!onCell || state.queue.length < 2) return { state, effects: [] };
   const [head, ...rest] = state.queue;
   return step({
@@ -497,6 +580,19 @@ export function skipCell(state: PickState): PickStep {
     queue: [...rest, head],
     counted: 0,
     feedback: { kind: 'waiting', text: `跳过了 ${head.locationCode}，它排到了队尾。` },
+  });
+}
+
+/** 「不用箱」：这张出库单这一趟不用周转箱，后面它的格也不再问。只在等箱那一步能点。 */
+export function skipTote(state: PickState): PickStep {
+  if (state.phase !== 'tote') return { state, effects: [] };
+  const cell = state.queue[0];
+  return step({
+    ...state,
+    phase: 'goods',
+    counted: 0,
+    totes: { ...state.totes, [cell.requestId]: null },
+    feedback: { kind: 'waiting', text: '这张单不用箱。接着扫商品。' },
   });
 }
 
@@ -515,7 +611,9 @@ export function changeStaging(state: PickState): PickStep {
  * 由定义里的整数格去校验与转成数。
  */
 export function pickFactValues(submission: PickSubmission, staging: string): GuidedFormValues {
-  return { taskId: submission.cell.taskId, quantity: String(submission.quantity), targetLocation: staging };
+  const values: GuidedFormValues = { taskId: submission.cell.taskId, quantity: String(submission.quantity), targetLocation: staging };
+  // 没用箱就不带这一格：定义里它是可选的，不带时报文里没有这个键
+  return submission.tote === undefined ? values : { ...values, toteCode: submission.tote };
 }
 
 // —— 提交的结果 ——
@@ -533,7 +631,15 @@ export const pickOutcomeLabels: Readonly<Record<string, string>> = {
   CONTENT_INVALID:
     '后端不认这一笔的内容，没有记。最常见的是放货位不合（不在这个仓、已停用，或所在库区不是待出库用途）；也可能是数量超过了这一格还没拣的件数。换一个待出库库位，或刷新后再来。',
   NOT_CONFIGURED: '未配置：本租户还没有登记仓，拣货记不了。',
+  TOTE_IN_USE: '这个箱上绑着别的出库单，这一笔没有记。货先别放进去：点「下一格」，这一格排到队尾，回头再来时换一个箱扫。',
+  TOTE_NOT_FOUND: '这个仓没有登记过这个箱号，这一笔没有记。点「下一格」，这一格排到队尾，回头再来时换一个登记过的箱扫。',
+  TOTE_NOT_ACCEPTING: '这个箱已经停用，这一笔没有记。点「下一格」，这一格排到队尾，回头再来时换一个箱扫。',
 };
+
+/** 后端不认这个箱：这张出库单这一趟定下的箱要忘掉，回头再来这一格时重新扫。 */
+export function toteRefusedAfter(outcome: string | undefined): boolean {
+  return outcome === 'TOTE_IN_USE' || outcome === 'TOTE_NOT_FOUND' || outcome === 'TOTE_NOT_ACCEPTING';
+}
 
 /** 后端答这条任务已经不能拣：「下一格」要把它从队列里去掉，而不是挪到队尾。 */
 export function taskGoneAfter(outcome: string | undefined): boolean {
@@ -571,11 +677,17 @@ export function applyVerdict(state: PickState, verdict: WorkFactVerdict): PickSt
     }
     case 'retry':
       return step({ ...state, phase: 'unsent', feedback: { kind: 'unsent', text: verdict.headline } }, 'wrong');
-    case 'refused':
+    case 'refused': {
+      let totes = state.totes;
+      if (toteRefusedAfter(verdict.outcome)) {
+        const { [sub.cell.requestId]: _forgotten, ...rest } = state.totes;
+        totes = rest;
+      }
       return step(
-        { ...state, phase: 'refused', gone: taskGoneAfter(verdict.outcome), feedback: { kind: 'wrong', text: verdict.headline } },
+        { ...state, phase: 'refused', gone: taskGoneAfter(verdict.outcome), totes, feedback: { kind: 'wrong', text: verdict.headline } },
         'wrong',
       );
+    }
   }
 }
 
@@ -615,11 +727,14 @@ export interface PickActions {
   refresh: boolean;
   resend: boolean;
   next: boolean;
+  /** 「不用箱」：只在等箱那一步。 */
+  skipTote: boolean;
 }
 
 /** 这一刻哪些按钮能点。不能点的在界面上禁用，不藏起来：人要看得出它存在，只是现在不是时候。 */
 export function pickActions(state: PickState): PickActions {
-  const canSkip = (state.phase === 'location' || (state.phase === 'goods' && state.counted === 0)) && state.queue.length >= 2;
+  const canSkip =
+    (state.phase === 'location' || state.phase === 'tote' || (state.phase === 'goods' && state.counted === 0)) && state.queue.length >= 2;
   return {
     changeCount: state.phase === 'goods',
     shortPick: shortPickPlan(state) !== null,
@@ -629,18 +744,20 @@ export function pickActions(state: PickState): PickActions {
     refresh:
       (state.phase === 'staging' ||
         state.phase === 'location' ||
+        state.phase === 'tote' ||
         state.phase === 'goods' ||
         state.phase === 'refused' ||
         state.phase === 'finished') &&
       state.counted === 0,
     resend: state.phase === 'unsent',
     next: state.phase === 'refused',
+    skipTote: state.phase === 'tote',
   };
 }
 
-/** 扫描框收不收码：只有等放货位、等库位、等商品这三步收。 */
+/** 扫描框收不收码：只有等放货位、等库位、等周转箱、等商品这几步收。 */
 export function acceptingScans(state: PickState): boolean {
-  return state.phase === 'staging' || state.phase === 'location' || state.phase === 'goods';
+  return state.phase === 'staging' || state.phase === 'location' || state.phase === 'tote' || state.phase === 'goods';
 }
 
 /** 不收码时扫描框里写的字，让人知道为什么现在不理扫码。 */

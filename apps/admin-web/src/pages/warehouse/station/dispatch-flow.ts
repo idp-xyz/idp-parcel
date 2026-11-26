@@ -97,7 +97,8 @@ export function orderFound(state: DispatchState, lookup: OrderLookup): DispatchS
   if (lookup.kind === 'unverified') {
     return hold({ ...state, phase: 'waiting', feedback: { tone: 'unsent', headline: '这一次没核成', detail: lookup.reason }, cue: 'wrong' });
   }
-  if (lookup.kind === 'absent') {
+  // 发货交接这里只按出库单号找，不按周转箱找（打完包货已经不在箱里）；没绑单的箱这一种答复它收不到，收到了也按没有这张单说
+  if (lookup.kind === 'absent' || lookup.kind === 'emptyTote') {
     return hold({ ...state, phase: 'waiting', feedback: { tone: 'wrong', headline: '没有这张出库单', detail: `${state.scanned} 在这个仓和别的仓都没找到。` }, cue: 'wrong' });
   }
   if (lookup.kind === 'elsewhere') {

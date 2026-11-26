@@ -195,6 +195,8 @@ export type OrderLookup =
   | { kind: 'elsewhere'; warehouse: string; number: string }
   /** 这个仓里问完没有，别的仓里也问完没有。 */
   | { kind: 'absent' }
+  /** 扫到的是本仓一个登记过的周转箱，但它上面没绑着出库单（空着或已停用）。 */
+  | { kind: 'emptyTote'; state: string }
   /** 没问成，说不出有没有。 */
   | { kind: 'unverified'; reason: string };
 

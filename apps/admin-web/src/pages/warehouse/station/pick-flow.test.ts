@@ -208,6 +208,7 @@ test('核对中的按钮都点不了，扫描框里的字说明为什么；刷�
     refresh: false,
     resend: false,
     next: false,
+    skipTote: false,
   });
   equal(scanPlaceholder(verifying), '正在处理，先不收扫码');
   unchanged(verifying, reloadQueue(verifying, [C]));
@@ -1046,7 +1047,16 @@ test('拣货工位对个别答复的说法：没有英文码，也不自相矛�
 
 test('各按钮此刻能不能点', () => {
   const location = pickActions(atLocation());
-  deepEqual(location, { changeCount: false, shortPick: false, skip: true, changeStaging: true, refresh: true, resend: false, next: false });
+  deepEqual(location, {
+    changeCount: false,
+    shortPick: false,
+    skip: true,
+    changeStaging: true,
+    refresh: true,
+    resend: false,
+    next: false,
+    skipTote: false,
+  });
   const goods0 = pickActions(atGoods());
   equal(goods0.changeCount, true);
   equal(goods0.shortPick, false);

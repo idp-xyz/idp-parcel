@@ -247,7 +247,23 @@ export function orderFound(state: PackState, code: string, lookup: OrderLookup):
         '这张单在别的仓',
       );
     case 'absent':
-      return wrong(back(waitingFeedback), `没有找到出库单 ${code}：这个仓和别的仓里都问过了，没有这个号。没有记任何东西。`, code, undefined, '没有这张单');
+      return wrong(
+        back(waitingFeedback),
+        `没有找到出库单 ${code}：这个仓和别的仓里都问过了，没有这个号，本仓也没有这个号的周转箱。没有记任何东西。`,
+        code,
+        undefined,
+        '没有这张单',
+      );
+    case 'emptyTote':
+      return wrong(
+        back(waitingFeedback),
+        lookup.state === 'RETIRED'
+          ? `${code} 是一个已停用的周转箱，上面没有出库单。没有记任何东西。`
+          : `${code} 是一个空着的周转箱，上面没有绑着出库单：拣货时没有扫这个箱，或它的单已经打完包。扫出库单号试试。没有记任何东西。`,
+        code,
+        undefined,
+        '这个箱上没有单',
+      );
     case 'unverified':
       return step(
         {

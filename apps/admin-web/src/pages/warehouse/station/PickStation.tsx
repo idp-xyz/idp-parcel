@@ -231,6 +231,11 @@ export function PickStation({ device, wave, onChangeDevice }: PickStationProps) 
               <button type="button" className={stationActionClass} disabled={!actions.skip} onClick={session.skip}>
                 跳过这一格
               </button>
+              {state.toteOn ? (
+                <button type="button" className={stationActionClass} disabled={!actions.skipTote} onClick={session.skipTote}>
+                  不用箱
+                </button>
+              ) : null}
             </>
           )}
         </div>
