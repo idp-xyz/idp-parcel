@@ -59,7 +59,8 @@ export function WmsDocumentPage({
   if (panel) {
     return (
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-idpxyz-editor">
-        <div className="shrink-0 border-b border-idpxyz-border px-4 py-3">
+        {/* 头区与下面的进度条说的是同一件事——这张单是什么、走到哪了：有进度条时两块之间不画线，线只画在进度条下面一道。 */}
+        <div className={`shrink-0 px-4 ${ready && stepper ? 'pb-1 pt-3' : 'border-b border-idpxyz-border py-3'}`}>
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 flex-wrap items-center gap-2">

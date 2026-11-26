@@ -220,7 +220,8 @@ export function WmsStepper({
 }) {
   const currentIdx = steps.findIndex((s) => s.id === currentId);
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-idpxyz-border bg-idpxyz-editor/60 px-4 py-2.5">
+    // 不带外框也不带底：它摆在单据页头区下面那一条里，上下已经各有一道线，再套一圈框就是线叠着线。
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
       {steps.map((step, index) => {
         const done = !failedLabel && currentIdx >= 0 && index < currentIdx;
         const active = !failedLabel && index === currentIdx;
@@ -235,7 +236,8 @@ export function WmsStepper({
                     : stuck
                       ? 'bg-amber-500 text-white ring-2 ring-amber-500/25'
                       : active
-                        ? 'bg-idpxyz-accent text-idpxyz-buttonFg ring-2 ring-idpxyz-accent/25'
+                        ? // 光圈用 color-mix 写：主题色是裸 CSS 变量，`/25` 这类透明度写法生不出样式。
+                          'bg-idpxyz-accent text-white ring-2 ring-[color:color-mix(in_srgb,var(--idpxyz-accent)_30%,transparent)]'
                         : 'border border-idpxyz-border bg-idpxyz-sidebar text-idpxyz-textMuted'
                 }`}
               >
