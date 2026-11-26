@@ -446,7 +446,7 @@ func (store *Waves) SavePick(ctx context.Context, tenant domain.TenantID, task p
 	if tag.RowsAffected() != 1 {
 		return fmt.Errorf("save pick: %s was not open", task.ID.String())
 	}
-	if err := reduceReservation(ctx, executor, tenant, task.Request, task.Picked); err != nil {
+	if err := reduceReservation(ctx, executor, tenant, task, task.Picked); err != nil {
 		return err
 	}
 	if _, err := executor.Exec(ctx,
@@ -865,12 +865,19 @@ func (store *Waves) LoadPack(ctx context.Context, tenant domain.TenantID, fact d
 	return found, err
 }
 
-func reduceReservation(ctx context.Context, executor bentopg.Executor, tenant domain.TenantID, request domain.OutboundRequestID, picked int64) error {
+// reduceReservation 把拣走的数量从这张请求的预占里扣掉。先扣这条任务拣的那种货的行（商品、库存状态、标签别名相同），
+// 再扣别的行：一张请求有几种货时，拣哪种扣哪种，行上剩的才是那种货还没拣到的数量——少拣之后回到已预占再放，
+// 分配照行上的数量来，扣错了行就会给拣齐的那种货再分一遍，缺的那种反而不分。别的行只在对得上的行不够扣时才动，
+// 合计仍等于还没拣到的数量。
+func reduceReservation(ctx context.Context, executor bentopg.Executor, tenant domain.TenantID, task ports.PickTask, picked int64) error {
+	request := task.Request
 	rows, err := executor.Query(ctx,
 		`SELECT line_index, quantity
 		   FROM warehouse_fulfillment.outbound_reservation
 		  WHERE tenant_id = $1 AND request_id = $2
-		  ORDER BY line_index`, tenant.String(), request.String())
+		  ORDER BY (goods_code = $3 AND stock_state = $4 AND label_alias IS NOT DISTINCT FROM $5) DESC, line_index`,
+		tenant.String(), request.String(), task.Goods.String(), task.State.String(),
+		optionalText(task.Alias.String(), task.Alias.String() != ""))
 	if err != nil {
 		return fmt.Errorf("save pick: %w", err)
 	}

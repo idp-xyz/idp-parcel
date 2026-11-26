@@ -61,6 +61,8 @@ type WaveStore interface {
 	WithdrawFromWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, request domain.OutboundRequestID, operator domain.Registrant, at time.Time) error
 	LoadTask(ctx context.Context, tenant domain.TenantID, id domain.PickTaskID) (PickTask, bool, error)
 	SavePick(ctx context.Context, tenant domain.TenantID, task PickTask, requestStatus domain.OutboundStatus, differenceID, factID string, short int64) error
+	// InsertOpenTask 往已放出的波次里添一条待执行任务：少拣之后换格补拣，或库内移库把一条任务拆成两格。
+	InsertOpenTask(ctx context.Context, tenant domain.TenantID, task PickTask) error
 	TasksOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) ([]PickTask, error)
 	SaveCheck(ctx context.Context, tenant domain.TenantID, fact domain.PickFactID, request domain.OutboundRequestID, observed int64, matched bool, at time.Time, next domain.OutboundStatus) error
 	LoadCheck(ctx context.Context, tenant domain.TenantID, fact domain.PickFactID) (observed int64, matched bool, found bool, err error)

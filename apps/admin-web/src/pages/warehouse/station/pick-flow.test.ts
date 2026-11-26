@@ -670,12 +670,12 @@ test('一件都没扫的少拣提交不出去：0 件后端不收', () => {
   unchanged(before, submitShortPick(before));
 });
 
-test('少拣确认框里的话照核到的规则：记成短拣、不能再补、差额记一笔、出库单回到已预占', () => {
+test('少拣确认框里的话照核到的规则：记成短拣、不能再拣、差额记一笔、差的换别的库位补、换不出才回到已预占', () => {
   const plan = shortPickPlan(counted(3));
   ok(plan !== null);
   if (plan === null) return;
   const text = shortPickLines(plan).join('');
-  for (const must of ['要拣 5 件', '只记 3 件', STAGING, '差的 2 件', '短拣', '不能再拣', '已预占', '再放一次波次']) {
+  for (const must of ['要拣 5 件', '只记 3 件', STAGING, '差的 2 件', '短拣', '不能再拣', '换别的库位补', '添进余下的格', '已预占']) {
     ok(text.includes(must), must);
   }
 });

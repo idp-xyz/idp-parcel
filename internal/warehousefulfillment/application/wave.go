@@ -338,6 +338,25 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 	if !found {
 		return WaveResult{outcome: WaveNotFound}, nil
 	}
+	// 先拿到这位货主在这个仓的入账次序，再读任务与请求来判断。同一张请求的两条任务可以被两个人同时拣：
+	// 各自在排队之前读到的预占与任务状态都是旧的，照旧的判，拣齐的请求会停在已预占，或一条任务被记两遍。
+	owning, found, err := handler.requests.LoadByID(ctx, command.Tenant, task.Request)
+	if err != nil {
+		return WaveResult{}, fmt.Errorf("pick: %w", err)
+	}
+	if !found {
+		return WaveResult{outcome: WaveNotFound}, nil
+	}
+	if err := handler.ledger.SerializePosting(ctx, command.Tenant, owning.Owner(), owning.Warehouse()); err != nil {
+		return WaveResult{}, fmt.Errorf("pick: %w", err)
+	}
+	task, found, err = handler.waves.LoadTask(ctx, command.Tenant, command.TaskID)
+	if err != nil {
+		return WaveResult{}, fmt.Errorf("pick: %w", err)
+	}
+	if !found {
+		return WaveResult{outcome: WaveNotFound}, nil
+	}
 	if task.Status == "CANCELLED" || task.Status == "LATE" {
 		if task.Fact == command.FactID.String() && task.Picked == command.Quantity {
 			return WaveResult{outcome: WaveExisting, tasks: []ports.PickTask{task}}, nil
@@ -412,13 +431,7 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 			open = true
 		}
 	}
-	status := domain.OutboundPicked
-	if short > 0 || open {
-		status = domain.OutboundReserved
-		if open && short == 0 {
-			status = domain.OutboundAllocated
-		}
-	}
+	var replacements []ports.PickTask
 	differenceID := ""
 	if short > 0 {
 		id, err := handler.differences.NextStockDiscrepancyID()
@@ -426,11 +439,34 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 			return WaveResult{}, fmt.Errorf("pick: %w", err)
 		}
 		differenceID = id.String()
+		replacements, err = handler.reallocateShort(ctx, command.Tenant, request, task, siblings, short)
+		if err != nil {
+			return WaveResult{}, fmt.Errorf("pick: %w", err)
+		}
+	}
+	// 这张请求还有任务等着拣——别的任务，或刚替少拣添出来的——就仍是已放波次，不退出波次：退回已预占会让它带着
+	// 没拣的任务被再放一次，那几件就分了两遍。任务都有了结果之后，预占全拣走的是已拣货；还剩预占没拣到的
+	// （少了又换不出别的格）回到已预占，等有货了再放。
+	status := domain.OutboundAllocated
+	if !open && len(replacements) == 0 {
+		var remaining int64
+		for _, reserved := range request.Reservations() {
+			remaining += reserved.Quantity
+		}
+		status = domain.OutboundPicked
+		if remaining > command.Quantity {
+			status = domain.OutboundReserved
+		}
 	}
 	if err := handler.waves.SavePick(ctx, command.Tenant, task, status, differenceID, command.FactID.String(), short); err != nil {
 		return WaveResult{}, fmt.Errorf("pick: %w", err)
 	}
-	return WaveResult{outcome: WavePicked, tasks: []ports.PickTask{task}}, nil
+	for _, added := range replacements {
+		if err := handler.waves.InsertOpenTask(ctx, command.Tenant, added); err != nil {
+			return WaveResult{}, fmt.Errorf("pick: %w", err)
+		}
+	}
+	return WaveResult{outcome: WavePicked, tasks: append([]ports.PickTask{task}, replacements...)}, nil
 }
 
 // CheckCommand 是一次出库复核。观察到的数量必须等于已拣数量，否则不进入可打包。

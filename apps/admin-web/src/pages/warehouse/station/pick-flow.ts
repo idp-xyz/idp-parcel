@@ -5,9 +5,10 @@
 // warehousehttp.NewRecordPickEndpoint）。屏上的话照这些说，不照猜的说：
 //   - 实拣数量是不小于 1 的整数。0 与负数在读载荷时就是 400，连用例都到不了：一件都没拣到的格不能提交，只能跳过。
 //   - 实拣数量可以小于应拣。大于这条任务还没拣的数量，答内容不合（CONTENT_INVALID）。
-//   - 少拣照常成立：这条任务记成短拣（SHORT），差的件数记一笔待处理的拣货差异，已拣的那部分预占放开、没拣的预占留下，
-//     出库单回到已预占（RESERVED）——要再放一次波次，差的那几件才会重新分配拣货格。短拣之后这条任务不再是待拣，
-//     不能补拣：换一个事实号再提交答内容冲突（CONTENT_CONFLICT）。
+//   - 少拣照常成立：这条任务记成短拣（SHORT），差的件数记一笔待处理的拣货差异，已拣的那部分预占放开、没拣的预占留下。
+//     差的那几件后端当场在同一个波次里换别的库位再分配，避开少拣的这一格；分得出就添成新的待拣格，要重读队列才看得到。
+//     出库单不退出波次：它还有格等着拣时仍是已放波次；格都有了结果之后，拣齐的是已拣货，没拣齐的才回到已预占，
+//     等有货了再放一次波次。短拣之后这条任务不再是待拣，不能补拣：换一个事实号再提交答内容冲突（CONTENT_CONFLICT）。
 //   - 目标库位须是这张出库单所在仓的库位、没停用，所在库区没停用且用途是待出库（OUTBOUND_STAGING），否则内容不合。
 //     放货位在扫到的时候就照这一条到登记册核（核法是 pick-staging-check.ts 的 createStagingVerifier），提交时后端还会再核一遍。
 //   - 任务已经拣过（已完成、短拣或迟到）：同一个事实号同样数量重放答已有结果（EXISTING_RESULT），别的答内容冲突；
@@ -458,12 +459,12 @@ export function shortPickPlan(state: PickState): ShortPickPlan | null {
   return { cell, quantity: state.counted, short: cell.quantity - state.counted, staging: state.staging };
 }
 
-/** 少拣确认框里的话：这几件移进待出库库位、差的不再补并记成短拣、差额记一笔、出库单回到已预占。 */
+/** 少拣确认框里的话：这几件移进待出库库位、这一格记成短拣并记一笔差额、差的由系统换别的库位补。 */
 export function shortPickLines(plan: ShortPickPlan): string[] {
   return [
     `这一格要拣 ${plan.cell.quantity} 件 ${plan.cell.goodsCode}，现在只记 ${plan.quantity} 件。`,
     `这 ${plan.quantity} 件移进待出库库位 ${plan.staging}。`,
-    `差的 ${plan.short} 件不会再补：这一格记成「短拣」，提交之后不能再拣；差额记一笔短拣差异，这张出库单回到「已预占」，要再放一次波次，差的那几件才会重新分配。`,
+    `这一格记成「短拣」，提交之后不能再拣，差额记一笔短拣差异。差的 ${plan.short} 件系统会在这个波次里换别的库位补：换得出就添进余下的格，换不出就等这张出库单别的格拣完后回到「已预占」。`,
   ];
 }
 
@@ -543,7 +544,7 @@ function successText(sub: PickSubmission, staging: string | null, verdict: WorkF
   if (verdict.outcome !== 'PICKED') return verdict.headline;
   const place = staging ?? '待出库库位';
   return sub.quantity < sub.cell.quantity
-    ? `这一格按 ${sub.quantity} 件记成短拣（应拣 ${sub.cell.quantity} 件，差 ${sub.cell.quantity - sub.quantity} 件）。${sub.quantity} 件已放到 ${place}。`
+    ? `这一格按 ${sub.quantity} 件记成短拣（应拣 ${sub.cell.quantity} 件，差 ${sub.cell.quantity - sub.quantity} 件）。${sub.quantity} 件已放到 ${place}。差的若换得出别的库位，会添进余下的格。`
     : `这一格拣好了：${sub.quantity} 件 ${sub.cell.goodsCode} 放到了 ${place}。`;
 }
 

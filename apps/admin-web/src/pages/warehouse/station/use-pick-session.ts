@@ -102,7 +102,12 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
   const finish = useCallback((answered: WorkFactVerdict) => {
     setVerdict(answered);
     const current = stateRef.current;
+    const submitted = current?.submission ?? null;
     if (current !== null) applyRef.current(applyVerdict(current, answered));
+    // 少拣成立之后，后端会在这个波次里换别的库位补这几件；添出来的格在后端，重读队列才看得到。
+    if (answered.verdict === 'done' && answered.outcome === 'PICKED' && submitted !== null && submitted.quantity < submitted.cell.quantity) {
+      setTick((value) => value + 1);
+    }
   }, []);
 
   const send = useCallback(
