@@ -16,6 +16,7 @@ import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer, type ActionDrawerControl } from './ActionDrawer';
 import { listOutboundRequests, type OutboundRequestRecord } from './api';
+import { WaveRuleRunDialog } from './WaveRuleRunDialog';
 import { DocumentLink } from './document-page';
 import { fitColumnWidth, linesSummary, nameOf, shortInstant, waitedSortParam } from './list-cells';
 import { hiddenInBasket, mergeWaveBlocker, refreshedBasket, waveReleaseTookEffect } from './outbound-basket';
@@ -97,6 +98,7 @@ function OutboundList() {
   const [onlyBasket, setOnlyBasket] = useState(false);
   // 开着的放波次表单放的是不是篮里的这一批：行上的「放波次」也开同一张表单，那一种放成了不该清篮子。
   const mergingBasket = useRef(false);
+  const [ruleRunOpen, setRuleRunOpen] = useState(false);
   const [refreshes, setRefreshes] = useState(0);
 
   const settled = useSettledKeyword(keyword);
@@ -287,11 +289,22 @@ function OutboundList() {
         onRefresh={refresh}
         refreshing={answer === null}
         primaryAction={
-          drawer.has('outbound-request') ? (
-            <Button type="button" className={primaryActionClass} onClick={() => drawer.open('outbound-request')}>
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              代录出库单
-            </Button>
+          drawer.has('outbound-request') || drawer.has('wave-release') ? (
+            <>
+              {/* 按规则成波与勾单放波次是同一种运营决定：能放波次的人才摆。 */}
+              {drawer.has('wave-release') ? (
+                <Button type="button" variant="outline" onClick={() => setRuleRunOpen(true)}>
+                  <Send className="mr-1 h-3.5 w-3.5" />
+                  按规则成波
+                </Button>
+              ) : null}
+              {drawer.has('outbound-request') ? (
+                <Button type="button" className={primaryActionClass} onClick={() => drawer.open('outbound-request')}>
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  代录出库单
+                </Button>
+              ) : null}
+            </>
           ) : undefined
         }
         search={{ value: keyword, onChange: narrowing(setKeyword), placeholder: '搜出库单号、货主、仓、收件人…' }}
@@ -409,6 +422,13 @@ function OutboundList() {
           }
           refresh();
         }}
+      />
+      <WaveRuleRunDialog
+        open={ruleRunOpen}
+        onClose={() => setRuleRunOpen(false)}
+        onReleased={refresh}
+        warehouseNames={warehouseNames}
+        defaultWarehouse={warehouse || undefined}
       />
     </>
   );

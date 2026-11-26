@@ -15,6 +15,7 @@ import { listWaves, type WaveRecord } from './api';
 import { DocumentLink } from './document-page';
 import { packStationHash, pickStationHash, sortStationHash } from './station/stations';
 import { ToteList } from './ToteList';
+import { WaveRuleRunDialog } from './WaveRuleRunDialog';
 import { openDocument, useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
 import { activeWaveStatuses, settledWaveStatuses, wavePickingLabel, waveProgress, waveStatusLabel } from './wave-flow';
@@ -31,6 +32,7 @@ const columns: ListColumn<WaveRecord>[] = [
   { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
   { id: 'profile', header: '件型', className: 'whitespace-nowrap', render: (row) => (row.singleUnit ? '单品单件' : '—') },
   { id: 'picking', header: '拣货方式', className: 'whitespace-nowrap', render: (row) => wavePickingLabel(row) },
+  { id: 'rule', header: '成波规则', className: mono, render: (row) => row.ruleCode ?? '—' },
   {
     id: 'requests',
     header: '出库单',
@@ -82,6 +84,7 @@ function WaveList() {
   const [keyword, setKeyword] = useState('');
   const [warehouse, setWarehouse] = useState('');
   const [status, setStatus] = useState('ALL');
+  const [ruleRunOpen, setRuleRunOpen] = useState(false);
   const [refreshes, setRefreshes] = useState(0);
   const settled = useSettledKeyword(keyword);
   const base: CatalogueConditions = { q: settled, filters: warehouse ? { warehouseCode: [warehouse] } : {} };
@@ -165,6 +168,11 @@ function WaveList() {
               </Button>
             ) : null}
             {drawer.has('wave-release') ? (
+              <Button type="button" variant="outline" onClick={() => setRuleRunOpen(true)}>
+                按规则成波
+              </Button>
+            ) : null}
+            {drawer.has('wave-release') ? (
               <Button type="button" className={primaryActionClass} onClick={() => drawer.open('wave-release')}>
                 <Plus className="mr-1 h-3.5 w-3.5" />
                 放波次
@@ -208,6 +216,13 @@ function WaveList() {
         })}
       />
       <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
+      <WaveRuleRunDialog
+        open={ruleRunOpen}
+        onClose={() => setRuleRunOpen(false)}
+        onReleased={refresh}
+        warehouseNames={new Map(drawer.lookups.warehouses.map((w) => [w.warehouseCode, w.name ?? '']))}
+        defaultWarehouse={warehouse || undefined}
+      />
     </>
   );
 }

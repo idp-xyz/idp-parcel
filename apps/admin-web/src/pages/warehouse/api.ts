@@ -4,6 +4,7 @@ import type { CatalogueConditions, CataloguePage } from '../catalogue-query';
 import { catalogueRequestPath } from '../catalogue-query';
 import { asCatalogueRegistration, asStockImportWrite, type CatalogueRegistrationBody, type StockImportWriteBody } from './answers';
 import type { PartialShipmentAnswer, ShortPickDisposalAnswer } from './partial-shipment';
+import type { WaveRuleRecord, WaveRuleRunBody } from './wave-rule';
 import {
   catalogueReadPath,
   catalogueWritePaths,
@@ -619,6 +620,8 @@ export interface WaveRecord {
   singleUnit?: boolean;
   /** 合并拣货的波次：放出时选的。货按库位、商品合在一起拿，拿回来再按出库单分拣。 */
   batchPick?: boolean;
+  /** 放出这个波次的成波规则；由人点单放的波次不带。 */
+  ruleCode?: string;
   requests: string[];
   /** `requests` 里已经撤出的那几张：它们在这个波次里的任务作废了，请求回到了已预占。 */
   withdrawnRequests: string[];
@@ -1001,12 +1004,22 @@ export interface SettingsOverviewBody {
   }>;
   /** 登记过「拣货必须用周转箱」的仓各自最新的一版；没登记的仓不在里面，那是未配置。 */
   toteRequirements?: ReadonlyArray<{ warehouseCode: string; revision: number; required: boolean; operator: string; registeredAt: string }>;
+  /** 各仓登记过的成波规则各自最新的一版，停用的也在里面；没登记规则的仓不在里面。 */
+  waveRules?: ReadonlyArray<WaveRuleRecord>;
   approvalDuty: { configured: boolean; revision?: number; distinctSubjects?: boolean; operator?: string; registeredAt?: string };
   disposalRules: ReadonlyArray<DisposalRuleRecord>;
   chargeUnits: ReadonlyArray<{ warehouseCode: string; revision: number; weightUnit: string; volumeUnit: string; registeredAt: string }>;
   chargeAging: ReadonlyArray<{ warehouseCode: string; basis: string; registeredAt: string }>;
   chargeProjects: ReadonlyArray<{ warehouseCode: string; projectName: string; registeredAt: string }>;
   agentConnectors: ReadonlyArray<{ warehouseCode: string; registeredAt: string }>;
+}
+
+/**
+ * 按一条成波规则把这个仓里圈得到的已预占出库单放成波次。`runId` 是这一次执行的号：没送到时用同一个号再送，不会放两遍。
+ * 答复带放出的波次与放了几张、跳了几张、还有几张没轮到。
+ */
+export function runWaveRule(warehouse: string, ruleCode: string, runId: string): Promise<ApiResult<WaveRuleRunBody>> {
+  return postMasterData<WaveRuleRunBody>('/warehouse-fulfillment-wave-rule-runs', { warehouse, ruleCode, runId });
 }
 
 export function getSettingsOverview(): Promise<ApiResult<SettingsOverviewBody>> {

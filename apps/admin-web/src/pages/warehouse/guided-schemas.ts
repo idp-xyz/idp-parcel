@@ -675,6 +675,41 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       },
     ],
   },
+  'wave-rule': {
+    fields: [
+      { path: 'warehouse', label: '仓编码', kind: 'text', required: true, placeholder: 'SYN-WH-01' },
+      { path: 'ruleCode', label: '规则码', kind: 'text', required: true, placeholder: 'SMALL-AM', hint: '你们自己起的码，在这个仓里唯一；改规则时填原来的码' },
+      { path: 'revision', label: '修订号', kind: 'integer', required: true, placeholder: '1', hint: '从 1 起连续；要改或停用就登下一号' },
+      { path: 'name', label: '规则名', kind: 'text', required: true, placeholder: '早班小件' },
+      {
+        path: 'maxRequests',
+        label: '一个波次最多几张出库单',
+        kind: 'integer',
+        required: true,
+        placeholder: '20',
+        hint: '圈到的单按受理先后，每满这么多张放成一个波次；最多 200',
+      },
+      { path: 'ownerAccount', label: '只圈这位货主的（不填是不限）', kind: 'text', lookup: 'owner', placeholder: 'SYN-OWNER-01' },
+      { path: 'dispatch', label: '只圈这种发运方式的（不选是不限）', kind: 'select', options: dispatchOptions },
+      {
+        path: 'profile',
+        label: '件型（不选是不限）',
+        kind: 'select',
+        options: [
+          { value: 'SINGLE_UNIT', label: '只圈单品单件' },
+          { value: 'MULTI_UNIT', label: '只圈不是单品单件的' },
+        ],
+      },
+      {
+        path: 'batchPick',
+        label: '放出的波次合并拣货（拣完要分拣）',
+        kind: 'boolean',
+        omitWhenFalse: true,
+        hint: '只圈单品单件的规则不用勾：单品单件本来就合着拿，复核打包时扫货配单',
+      },
+      { path: 'deactivated', label: '停用这条规则', kind: 'boolean', omitWhenFalse: true, hint: '停用之后不能再按它成波；已经放出的波次不受影响' },
+    ],
+  },
   'tote-release': {
     fields: [
       { path: 'warehouse', label: '仓编码', kind: 'text', required: true, placeholder: 'SYN-WH-01' },

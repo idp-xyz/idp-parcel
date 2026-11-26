@@ -110,6 +110,9 @@ export const warehouseActionOutcomeLabels: Record<string, string> = {
   SPLIT: '已拆单',
   ALLOCATED: '已放波次并生成拣货任务',
   WITHDRAWN: '已从波次撤出，出库单回到已预占',
+  WAVE_RULE_NOT_FOUND: '这个仓没有登记过这条成波规则',
+  WAVE_RULE_DEACTIVATED: '这条成波规则已经停用',
+  NOTHING_TO_RELEASE: '没有可放的出库单，一个波次也没放出',
   TOTES_REGISTERED: '已登记：这一批里新的箱号已在册，停用过的已恢复在用',
   TOTE_RETIRED: '已停用，拣货不再认这个箱',
   TOTE_NOT_FOUND: '这个仓没有登记过这个箱号',
@@ -529,6 +532,17 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     grant: 'registry',
     snapshotHint:
       '填 warehouse、revision（从 1 起连续）、required（true 必须用箱 / false 不要求）。登记成必须之后，不带箱号的拣货不成立。没登记的仓带不带箱都收。' +
+      noActorNote,
+  },
+  {
+    id: 'wave-rule',
+    label: '登记成波规则',
+    title: '登记一个仓的一条成波规则',
+    endpoint: '/warehouse-fulfillment-wave-rules',
+    grant: 'registry',
+    snapshotHint:
+      '填 warehouse、ruleCode、revision（从 1 起连续，要改或停用就登下一号）、name、maxRequests（一个波次最多几张，必填），' +
+      '可选 ownerAccount、dispatch、profile（SINGLE_UNIT / MULTI_UNIT，不填是不限）、batchPick、deactivated。三个圈单条件不填就是不限。' +
       noActorNote,
   },
   {

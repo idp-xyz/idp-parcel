@@ -16,6 +16,7 @@ import { formatInstant } from '../catalogue-view';
 import { useCatalogueCursor } from '../use-catalogue-cursor';
 import { getSettingsOverview, listDisposalRules, type SettingsOverviewBody } from './api';
 import type { ApiResult } from '../catalogue-api';
+import { waveRuleSummary } from './wave-rule';
 import {
   internalOpsActionSpecs,
   outboundWaveActionSpecs,
@@ -58,6 +59,13 @@ const ruleCards: readonly RuleCardSpec[] = [
     group: 'stock',
     title: '拣货必须用周转箱',
     desc: '按仓登记拣货时是否必须把货放进周转箱。登记成必须之后，不带箱号的拣货不成立，拣货工位上不能点「不用箱」。',
+    icon: ClipboardList,
+  },
+  {
+    actionId: 'wave-rule',
+    group: 'stock',
+    title: '成波规则',
+    desc: '按仓登记成波规则：圈哪些已预占的出库单（货主、发运方式、件型，不填是不限）、一个波次最多几张、合不合并拣货。登记之后在出库单或波次页点「按规则成波」。',
     icon: ClipboardList,
   },
   {
@@ -124,6 +132,18 @@ function ruleLive(overview: SettingsOverviewBody | null, actionId: string): { co
               .join('；'),
           }
         : { configured: false, note: '还没有货主登记缺货处置' };
+    case 'wave-rule': {
+      // 规则是租户的取值，产品不带默认的：一条都没登就是未配置。停用的也列出来，写明停用。
+      const rules = overview.waveRules ?? [];
+      return rules.length > 0
+        ? {
+            configured: rules.some((rule) => !rule.deactivated),
+            note: rules
+              .map((rule) => `${rule.warehouseCode} ${rule.name}（${rule.ruleCode}，第 ${rule.revision} 版${rule.deactivated ? '，已停用' : ''}）：${waveRuleSummary(rule)}`)
+              .join('；'),
+          }
+        : { configured: false, note: '还没有登记成波规则；放波次照旧可以由人勾单放' };
+    }
     case 'tote-requirement': {
       // 只列登记过的仓；没登记的仓这一条未配置，拣货带不带箱都收，不把它说成「不要求」。
       const requirements = overview.toteRequirements ?? [];
