@@ -15,6 +15,7 @@ import (
 type OutboundService interface {
 	Accept(ctx context.Context, command application.AcceptOutboundCommand) (application.OutboundResult, error)
 	RegisterPolicy(ctx context.Context, command application.RegisterShortagePolicyCommand) (application.OutboundResult, error)
+	RecordConsent(ctx context.Context, command application.RecordPartialShipmentConsentCommand) (application.OutboundResult, error)
 	Split(ctx context.Context, command application.SplitOutboundCommand) (application.SplitResult, error)
 }
 
@@ -92,6 +93,7 @@ func (intake *CustomerOutboundIntake) IntakeOutboundRequest(ctx context.Context,
 		Tenant: identity.Tenant, Owner: identity.Owner, Warehouse: fields.Warehouse, Origin: domain.OutboundOriginCustomer,
 		Key: identity.RequestKey, Dispatch: fields.Dispatch, Service: fields.Service, Recipient: fields.Recipient,
 		Address: fields.Address, Lines: fields.Lines, PlatformStocking: fields.PlatformStocking,
+		PartialShipment: fields.PartialShipment,
 	}, nil
 }
 
@@ -163,6 +165,7 @@ type OutboundOnBehalfIntake interface {
 	IntakeOutboundSplit(ctx context.Context, request *http.Request) (application.SplitOutboundCommand, error)
 	IntakeOwnerLabel(ctx context.Context, request *http.Request) (application.RegisterOwnerLabelCommand, error)
 	IntakeOutboundCutoff(ctx context.Context, request *http.Request) (application.CutoffCommand, error)
+	IntakePartialShipmentConsent(ctx context.Context, request *http.Request) (application.RecordPartialShipmentConsentCommand, error)
 }
 
 type OperatorOutboundIntake struct {
@@ -234,7 +237,25 @@ func (intake *OperatorOutboundIntake) IntakeOutboundCutoff(ctx context.Context, 
 	return command, nil
 }
 
+func (intake *OperatorOutboundIntake) IntakePartialShipmentConsent(ctx context.Context, request *http.Request) (application.RecordPartialShipmentConsentCommand, error) {
+	identity, err := intake.authenticator.AuthenticateOutboundOnBehalf(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.RecordPartialShipmentConsentCommand{}, err
+	}
+	command, err := registrationjson.OperatorPartialShipmentConsent(requestBody(request))
+	if err != nil {
+		return application.RecordPartialShipmentConsentCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	command.Operator = identity.Registrant
+	return command, nil
+}
+
 type UnconfiguredOutboundIntake struct{}
+
+func (UnconfiguredOutboundIntake) IntakePartialShipmentConsent(context.Context, *http.Request) (application.RecordPartialShipmentConsentCommand, error) {
+	return application.RecordPartialShipmentConsentCommand{}, ErrAccessChannelNotConfigured
+}
 
 func (UnconfiguredOutboundIntake) IntakeOutboundOnBehalf(context.Context, *http.Request) (application.AcceptOutboundCommand, error) {
 	return application.AcceptOutboundCommand{}, ErrAccessChannelNotConfigured
@@ -412,6 +433,18 @@ func NewSplitOutboundEndpoint(intake OutboundOnBehalfIntake, service OutboundSer
 	})
 }
 
+// NewRecordPartialShipmentConsentEndpoint 交回代录部分发货同意的入口（POST /warehouse-fulfillment-outbound-partial-shipment-consents）。
+// 与出库请求代录挂同一种运营决定：都是运营替货主把他对一张请求的意思记下来。
+func NewRecordPartialShipmentConsentEndpoint(intake OutboundOnBehalfIntake, service OutboundService) http.Handler {
+	return newOutboundEndpoint(func(request *http.Request) (application.OutboundResult, error) {
+		command, err := intake.IntakePartialShipmentConsent(request.Context(), request)
+		if err != nil {
+			return application.OutboundResult{}, err
+		}
+		return service.RecordConsent(request.Context(), command)
+	})
+}
+
 func NewRegisterShortagePolicyEndpoint(intake ShortagePolicyIntake, service OutboundService) http.Handler {
 	return newOutboundEndpoint(func(request *http.Request) (application.OutboundResult, error) {
 		command, err := intake.IntakeShortagePolicy(request.Context(), request)
@@ -452,7 +485,7 @@ func writeOutboundAnswer(response http.ResponseWriter, request *http.Request, re
 	switch result.Outcome() {
 	case application.OutboundReserved, application.OutboundPartiallyReserved, application.OutboundRejected,
 		application.OutboundPendingPolicy, application.OutboundHandedOff, application.OutboundPolicyRegistered,
-		application.OutboundSplitResult:
+		application.OutboundSplitResult, application.OutboundConsentRecorded:
 		status = http.StatusCreated
 	}
 	body := outboundAnswer{Outcome: name}

@@ -12,6 +12,7 @@ import { getOutboundRequestDetail, type OutboundRequestDetailBody } from './api'
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { outboundNextStep, outboundReservationOpen } from './outbound-next-step';
 import { outboundTrack } from './outbound-track';
+import { canRecordPartialShipmentConsent, partialShipmentSummary } from './partial-shipment';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { openDocument, useReturnToList } from './use-document';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable } from './wms-ui';
@@ -91,6 +92,9 @@ export function OutboundDocument({
   const short = reservationOpen && !agentWarehouse ? Math.max(0, wanted - reserved - picked) : 0;
   const heldReservations = reservations.filter((line) => line.quantity > 0);
   const shipments = uniq([request?.prefetchShipmentId, ...parcels.map((parcel) => parcel.shipmentRequestId)]);
+  const partial = partialShipmentSummary(body?.partialShipment);
+  // 代录的同意只在它就是适用的那一层时摆依据：被后面的规则盖过的不在这里占地方。
+  const consent = body?.partialShipment?.source === 'ORDER_CONSENT' ? body.partialShipment.consent : undefined;
 
   return (
     <>
@@ -136,6 +140,15 @@ export function OutboundDocument({
               drawer.has('outbound-split') ? (
                 <Button type="button" variant="outline" onClick={() => drawer.open('outbound-split', { requestId: request.requestId })}>
                   拆单
+                </Button>
+              ) : null}
+              {canRecordPartialShipmentConsent(request.status) && drawer.has('partial-shipment-consent') ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => drawer.open('partial-shipment-consent', { requestId: request.requestId })}
+                >
+                  代录部分发货同意
                 </Button>
               ) : null}
               {request.status !== 'SHIPPED' && request.status !== 'CANCELLED' && drawer.has('outbound-cutoff') ? (
@@ -262,6 +275,23 @@ export function OutboundDocument({
                   <span className="text-idpxyz-textMuted">还没有波次，也没有提交运单委托。</span>
                 ) : null}
               </WmsAsideBlock>
+              {partial ? (
+                <WmsAsideBlock title="拣不齐时怎么发">
+                  <span className={partial.configured ? undefined : 'text-idpxyz-textMuted'}>{partial.headline}</span>
+                  <span className="type-caption text-idpxyz-textMuted">{partial.source}</span>
+                  {consent ? (
+                    <span className="break-all type-caption text-idpxyz-textMuted">
+                      依据 {consent.basis} · 代录人 {consent.operator}
+                      {consent.recordedAt ? ` · ${formatInstant(consent.recordedAt)}` : ''}
+                    </span>
+                  ) : null}
+                  {partial.layers.map((layer) => (
+                    <span key={layer} className="type-caption text-idpxyz-textMuted">
+                      {layer}
+                    </span>
+                  ))}
+                </WmsAsideBlock>
+              ) : null}
               <WmsAsideBlock title="来源">
                 <span>{labelOf(request.origin)}</span>
                 <span className="break-all font-mono type-caption text-idpxyz-textMuted">来源键 {request.requestKey}</span>

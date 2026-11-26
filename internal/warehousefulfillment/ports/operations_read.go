@@ -38,22 +38,24 @@ type OutboundRequestLineRow struct {
 
 // OutboundRequestRow 是运营查阅出库请求列表的一行。
 type OutboundRequestRow struct {
-	RequestID                string
-	DocumentNumber           string
-	NumberingAbsence         string
-	OwnerAccount             string
-	WarehouseCode            string
-	Origin                   string
-	RequestKey               string
-	Dispatch                 string
-	Service                  string
-	Recipient                string
-	Address                  string
-	Basis                    string
-	Operator                 string
-	Status                   string
-	ParentRequestID          string
-	PlatformStocking         bool
+	RequestID        string
+	DocumentNumber   string
+	NumberingAbsence string
+	OwnerAccount     string
+	WarehouseCode    string
+	Origin           string
+	RequestKey       string
+	Dispatch         string
+	Service          string
+	Recipient        string
+	Address          string
+	Basis            string
+	Operator         string
+	Status           string
+	ParentRequestID  string
+	PlatformStocking bool
+	// PartialShipment 是请求提交时带的部分发货规则，没带是空串。
+	PartialShipment          string
 	PrefetchShipmentID       string
 	PrefetchDeclaredParcelID string
 	ReceivedAt               time.Time

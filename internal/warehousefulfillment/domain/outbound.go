@@ -255,6 +255,7 @@ type OutboundRequest struct {
 	reservations     []OutboundReservation
 	receivedAt       time.Time
 	platformStocking bool
+	partialShipment  PartialShipment
 }
 
 type OutboundRequestSpec struct {
@@ -278,6 +279,8 @@ type OutboundRequestSpec struct {
 	Reservations     []OutboundReservation
 	ReceivedAt       time.Time
 	PlatformStocking bool
+	// PartialShipment 是这张请求提交时带的部分发货规则；没带就是没写明。
+	PartialShipment PartialShipment
 }
 
 func NewOutboundRequest(spec OutboundRequestSpec) (OutboundRequest, error) {
@@ -294,6 +297,7 @@ func NewOutboundRequest(spec OutboundRequestSpec) (OutboundRequest, error) {
 		dispatch: spec.Dispatch, service: spec.Service, recipient: spec.Recipient, address: spec.Address, basis: spec.Basis,
 		operator: spec.Operator, status: spec.Status, parent: spec.Parent, number: spec.Number, absence: spec.Absence, lines: lines,
 		reservations: reservations, receivedAt: spec.ReceivedAt, platformStocking: spec.PlatformStocking,
+		partialShipment: spec.PartialShipment,
 	}, nil
 }
 
@@ -320,6 +324,9 @@ func (request OutboundRequest) Reservations() []OutboundReservation {
 func (request OutboundRequest) ReceivedAt() time.Time  { return request.receivedAt }
 func (request OutboundRequest) PlatformStocking() bool { return request.platformStocking }
 
+// PartialShipment 是这张请求提交时带的部分发货规则。此刻适用哪一层看 EffectivePartialShipment。
+func (request OutboundRequest) PartialShipment() PartialShipment { return request.partialShipment }
+
 func (request OutboundRequest) DocumentNumber() (DocumentNumber, bool) {
 	if request.number.Assigned() {
 		return request.number, true
@@ -332,6 +339,7 @@ func (request OutboundRequest) NumberingAbsence() NumberingAbsence { return requ
 func (request OutboundRequest) SameSubmission(other OutboundRequest) bool {
 	if request.warehouse != other.warehouse || request.dispatch != other.dispatch || request.service != other.service ||
 		request.recipient != other.recipient || request.address != other.address || request.platformStocking != other.platformStocking ||
+		request.partialShipment != other.partialShipment ||
 		len(request.lines) != len(other.lines) {
 		return false
 	}

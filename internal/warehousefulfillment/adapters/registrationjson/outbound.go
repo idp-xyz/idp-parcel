@@ -27,6 +27,7 @@ type ownerOutboundDocument struct {
 	Address          *string                 `json:"address"`
 	Lines            *[]outboundLineDocument `json:"lines"`
 	PlatformStocking *bool                   `json:"platformStocking"`
+	PartialShipment  *string                 `json:"partialShipment"`
 }
 
 // OwnerOutboundFields 是货主口译出的出库请求。货主与来源请求键由信封填。
@@ -39,6 +40,7 @@ type OwnerOutboundFields struct {
 	Address          string
 	Lines            []domain.OutboundLine
 	PlatformStocking bool
+	PartialShipment  domain.PartialShipment
 }
 
 // ReadOwnerOutbound 把货主提交的出库请求译成字段。
@@ -60,6 +62,10 @@ func ReadOwnerOutbound(reader io.Reader) (OwnerOutboundFields, error) {
 	}
 	fields.AccessRequestID = rawAccessRequestID(document.AccessRequestID)
 	fields.PlatformStocking = markedPlatformStocking(document.PlatformStocking)
+	fields.PartialShipment, err = optionalPartialShipment(document.PartialShipment)
+	if err != nil {
+		return none, err
+	}
 	return fields, nil
 }
 
@@ -75,6 +81,7 @@ type operatorOutboundDocument struct {
 	Address          *string                 `json:"address"`
 	Lines            *[]outboundLineDocument `json:"lines"`
 	PlatformStocking *bool                   `json:"platformStocking"`
+	PartialShipment  *string                 `json:"partialShipment"`
 }
 
 // OperatorOutboundCommand 把代录的出库请求译成命令。租户与操作者由 Intake 填。
@@ -102,15 +109,71 @@ func OperatorOutboundCommand(reader io.Reader) (application.AcceptOutboundComman
 	if err != nil {
 		return none, err
 	}
+	partial, err := optionalPartialShipment(document.PartialShipment)
+	if err != nil {
+		return none, err
+	}
 	return application.AcceptOutboundCommand{
 		Owner: owner, Warehouse: fields.Warehouse, Origin: domain.OutboundOriginOperator, Key: key,
 		Dispatch: fields.Dispatch, Service: fields.Service, Recipient: fields.Recipient, Address: fields.Address,
 		Basis: *document.Basis, Lines: fields.Lines, PlatformStocking: markedPlatformStocking(document.PlatformStocking),
+		PartialShipment: partial,
 	}, nil
 }
 
 func markedPlatformStocking(value *bool) bool {
 	return value != nil && *value
+}
+
+// optionalPartialShipment 读部分发货这一格：不带是没写明；带了就得是三个词之一，空串也不收——
+// 没写明的写法是不带这一格，不是带一个空的。
+func optionalPartialShipment(value *string) (domain.PartialShipment, error) {
+	if value == nil {
+		return domain.PartialShipmentUnset, nil
+	}
+	rule, err := domain.NewPartialShipment(*value)
+	if err != nil {
+		return domain.PartialShipmentUnset, malformed("partialShipment must be SHIP_COMPLETE, SHORT_SHIP or SPLIT_SHIP")
+	}
+	return rule, nil
+}
+
+type partialShipmentConsentDocument struct {
+	carriedIdentity
+	refusedOwner
+	RequestID       *string `json:"requestId"`
+	PartialShipment *string `json:"partialShipment"`
+	Basis           *string `json:"basis"`
+}
+
+// OperatorPartialShipmentConsent 把代录的部分发货同意译成命令。租户与操作者由 Intake 填。
+func OperatorPartialShipmentConsent(reader io.Reader) (application.RecordPartialShipmentConsentCommand, error) {
+	var none application.RecordPartialShipmentConsentCommand
+	document, err := decodeDocument[partialShipmentConsentDocument](reader, "partial shipment consent")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	if len(document.OwnerAccount) > 0 {
+		return none, malformed("ownerAccount must not be carried in the payload")
+	}
+	request, err := requiredText("requestId", document.RequestID, domain.NewOutboundRequestID)
+	if err != nil {
+		return none, err
+	}
+	if document.PartialShipment == nil {
+		return none, malformed("partialShipment is required")
+	}
+	rule, err := optionalPartialShipment(document.PartialShipment)
+	if err != nil {
+		return none, err
+	}
+	if document.Basis == nil || strings.TrimSpace(*document.Basis) == "" {
+		return none, malformed("basis is required")
+	}
+	return application.RecordPartialShipmentConsentCommand{Request: request, Rule: rule, Basis: strings.TrimSpace(*document.Basis)}, nil
 }
 
 func outboundFields(warehouse, dispatch, service, recipient, address *string, lines *[]outboundLineDocument) (OwnerOutboundFields, error) {
@@ -176,6 +239,8 @@ type shortagePolicyDocument struct {
 	OwnerAccount *string `json:"ownerAccount"`
 	Revision     *int    `json:"revision"`
 	Kind         *string `json:"kind"`
+	// PartialShipment 是拣不齐时怎么发的默认，与 Kind 各说各的；两格至少带一格。
+	PartialShipment *string `json:"partialShipment"`
 }
 
 type outboundSplitDocument struct {
@@ -624,14 +689,23 @@ func ShortagePolicyCommand(reader io.Reader, tenant domain.TenantID, operator do
 	if document.Revision == nil || *document.Revision < 1 {
 		return none, malformed("revision must be a positive integer")
 	}
-	if document.Kind == nil {
-		return none, malformed("kind is required")
+	if document.Kind == nil && document.PartialShipment == nil {
+		return none, malformed("kind or partialShipment is required")
 	}
-	kind, err := domain.NewShortagePolicyKind(*document.Kind)
+	kind := domain.ShortagePolicyInvalid
+	if document.Kind != nil {
+		kind, err = domain.NewShortagePolicyKind(*document.Kind)
+		if err != nil {
+			return none, malformed("kind must be PARTIAL or REJECT")
+		}
+	}
+	partial, err := optionalPartialShipment(document.PartialShipment)
 	if err != nil {
-		return none, malformed("kind must be PARTIAL or REJECT")
+		return none, err
 	}
-	return application.RegisterShortagePolicyCommand{Tenant: tenant, Owner: owner, Revision: *document.Revision, Kind: kind, Operator: operator}, nil
+	return application.RegisterShortagePolicyCommand{
+		Tenant: tenant, Owner: owner, Revision: *document.Revision, Kind: kind, PartialShipment: partial, Operator: operator,
+	}, nil
 }
 
 type confirmDocument struct {

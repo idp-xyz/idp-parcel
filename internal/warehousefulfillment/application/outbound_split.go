@@ -95,6 +95,16 @@ func (handler *OutboundHandler) Split(ctx context.Context, command SplitOutbound
 	if !released {
 		return SplitResult{outcome: OutboundStatusMismatch, parent: parent, has: true}, nil
 	}
+	// 货主对这一张说过的话跟着这一张的货走：受理之后代录的同意盖过提交时带的，拆出的每一份都按它记。
+	// 货主的默认不带过去——那不是对这一张说的，子请求没写明时各自按当时的默认读。
+	said := parent.PartialShipment()
+	consent, consented, err := handler.requests.LatestConsent(ctx, command.Tenant, parent.ID())
+	if err != nil {
+		return SplitResult{}, fmt.Errorf("split outbound: %w", err)
+	}
+	if consented {
+		said = consent.Rule
+	}
 	owner := parent.Owner()
 	children := make([]domain.OutboundRequest, 0, len(command.Parts))
 	for _, part := range command.Parts {
@@ -102,7 +112,7 @@ func (handler *OutboundHandler) Split(ctx context.Context, command SplitOutbound
 			Tenant: command.Tenant, Owner: owner, Warehouse: parent.Warehouse(), Origin: command.Origin, Key: part.Key,
 			Dispatch: parent.Dispatch(), Service: parent.Service(), Recipient: parent.Recipient(), Address: parent.Address(),
 			Basis: command.Basis, Operator: command.Operator, Lines: part.Lines, Parent: parent.ID(),
-			PlatformStocking: parent.PlatformStocking(),
+			PlatformStocking: parent.PlatformStocking(), PartialShipment: said,
 		})
 		if err != nil {
 			return SplitResult{}, err

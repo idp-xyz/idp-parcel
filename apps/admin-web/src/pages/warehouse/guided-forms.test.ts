@@ -232,3 +232,42 @@ test('增强后的仓配表单自动附带名册下拉（lookup）与可读单�
   equal(allWarehouseGuidedForms.location.fields.find((f) => f.path === 'zoneCode')?.lookup, 'zone');
   equal(allWarehouseGuidedForms.location.fields.find((f) => f.path === 'locationCode')?.lookup, undefined);
 });
+
+// Covers: 部分发货规则在三张表单上的写法——不选就不带这一格，不拿空串或默认顶替。
+test('部分发货规则：出库单上可不选，缺货处置两件至少选一件，代录同意三格都要', () => {
+  const outbound = {
+    decisionId: 'DEC-1',
+    ownerAccount: 'SYN-OWNER-01',
+    basis: 'BASIS-1',
+    warehouse: 'SYN-WH-01',
+    dispatch: 'PICKUP',
+    recipient: '张三',
+    address: '深圳',
+    lines: [{ goodsCode: 'SYN-GOODS-01', unit: '件', stockState: 'GOOD', quantity: '2' }],
+  };
+  const unset = buildGuidedPayload(outboundWaveGuidedForms['outbound-request'], { ...outbound, partialShipment: '' });
+  equal(unset.ok, true);
+  if (unset.ok) equal('partialShipment' in unset.payload, false);
+  const chosen = buildGuidedPayload(outboundWaveGuidedForms['outbound-request'], { ...outbound, partialShipment: 'SPLIT_SHIP' });
+  equal(chosen.ok, true);
+  if (chosen.ok) equal(chosen.payload.partialShipment, 'SPLIT_SHIP');
+
+  const policy = outboundWaveGuidedForms['shortage-policy'];
+  const neither = buildGuidedPayload(policy, { ownerAccount: 'SYN-OWNER-01', revision: '1', kind: '', partialShipment: '' });
+  equal(neither.ok, false);
+  if (!neither.ok) ok(neither.formError?.includes('至少选一件'));
+  const onlyPartial = buildGuidedPayload(policy, { ownerAccount: 'SYN-OWNER-01', revision: '1', kind: '', partialShipment: 'SHORT_SHIP' });
+  equal(onlyPartial.ok, true);
+  if (onlyPartial.ok) deepEqual(onlyPartial.payload, { ownerAccount: 'SYN-OWNER-01', revision: 1, partialShipment: 'SHORT_SHIP' });
+  const both = buildGuidedPayload(policy, { ownerAccount: 'SYN-OWNER-01', revision: '2', kind: 'REJECT', partialShipment: 'SHIP_COMPLETE' });
+  equal(both.ok, true);
+  if (both.ok) deepEqual(both.payload, { ownerAccount: 'SYN-OWNER-01', revision: 2, kind: 'REJECT', partialShipment: 'SHIP_COMPLETE' });
+
+  const consent = outboundWaveGuidedForms['partial-shipment-consent'];
+  const recorded = buildGuidedPayload(consent, { requestId: 'OBR-01', partialShipment: 'SPLIT_SHIP', basis: 'SYN-CONSENT-01' });
+  equal(recorded.ok, true);
+  if (recorded.ok) deepEqual(recorded.payload, { requestId: 'OBR-01', partialShipment: 'SPLIT_SHIP', basis: 'SYN-CONSENT-01' });
+  equal(buildGuidedPayload(consent, { requestId: 'OBR-01', partialShipment: '', basis: 'SYN-CONSENT-01' }).ok, false);
+  equal(buildGuidedPayload(consent, { requestId: 'OBR-01', partialShipment: 'SPLIT_SHIP', basis: '' }).ok, false);
+  equal(outboundWaveActionSpecs.find((spec) => spec.id === 'partial-shipment-consent')?.endpoint, '/warehouse-fulfillment-outbound-partial-shipment-consents');
+});

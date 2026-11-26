@@ -409,7 +409,7 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     endpoint: '/warehouse-fulfillment-outbound-requests',
     grant: 'OUTBOUND_REQUEST_RECORD_ON_BEHALF',
     snapshotHint:
-      '填 decisionId、ownerAccount、basis、warehouse、dispatch（PRODUCT_NETWORK / OWNER_LABEL / PICKUP）、recipient、address、lines（goodsCode、unit、stockState、quantity）；本产品网络必填 service，平台备货可选 platformStocking: true。' +
+      '填 decisionId、ownerAccount、basis、warehouse、dispatch（PRODUCT_NETWORK / OWNER_LABEL / PICKUP）、recipient、address、lines（goodsCode、unit、stockState、quantity）；本产品网络必填 service，平台备货可选 platformStocking: true；货主对这一张拣不齐时怎么发另有交代时带 partialShipment（SHIP_COMPLETE / SHORT_SHIP / SPLIT_SHIP），没交代就不带。' +
       noActorNote,
   },
   {
@@ -427,6 +427,17 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     endpoint: '/warehouse-fulfillment-outbound-cancellations',
     grant: 'OUTBOUND_REQUEST_RECORD_ON_BEHALF',
     snapshotHint: '填 requestId、basis，按包裹截单时另填 parcelSequence。不要带 ownerAccount。' + noActorNote,
+  },
+  {
+    id: 'partial-shipment-consent',
+    label: '代录部分发货同意',
+    title: '代录货主对一张出库单拣不齐时怎么发的同意',
+    endpoint: '/warehouse-fulfillment-outbound-partial-shipment-consents',
+    grant: 'OUTBOUND_REQUEST_RECORD_ON_BEHALF',
+    snapshotHint:
+      '填 requestId、partialShipment（SHIP_COMPLETE 整单发 / SHORT_SHIP 少发 / SPLIT_SHIP 拆单发）、basis（货主那句话的出处）。' +
+      '它盖过这张单提交时写的与货主登记的默认，不动预占与拣货任务。不要带 ownerAccount。' +
+      noActorNote,
   },
   {
     id: 'owner-label',
@@ -470,7 +481,10 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     title: '登记货主缺货处置规则',
     endpoint: '/warehouse-fulfillment-shortage-policies',
     grant: 'registry',
-    snapshotHint: '填 ownerAccount、revision（从 1 起连续）、kind（PARTIAL 部分预占 / REJECT 不足拒单）。' + noActorNote,
+    snapshotHint:
+      '填 ownerAccount、revision（从 1 起连续），再至少填一件：kind（受理时库存不够怎么办：PARTIAL 部分预占 / REJECT 不足拒单）、' +
+      'partialShipment（拣不齐时怎么发的默认：SHIP_COMPLETE 整单发 / SHORT_SHIP 少发 / SPLIT_SHIP 拆单发）。每一版是完整的一份，没填的那件就是没登记。' +
+      noActorNote,
   },
   {
     id: 'confirmation-correction',

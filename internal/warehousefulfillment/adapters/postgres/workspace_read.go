@@ -66,7 +66,7 @@ func (store *WorkspaceReads) SettingsOverview(ctx context.Context, tenant domain
 	// 2. 各货主缺货处置规则最新修订
 	{
 		rows, err := querier.Query(ctx,
-			`SELECT DISTINCT ON (owner_account_id) owner_account_id, revision, kind, operator_id, registered_at
+			`SELECT DISTINCT ON (owner_account_id) owner_account_id, revision, coalesce(kind, ''), coalesce(partial_shipment, ''), operator_id, registered_at
 			   FROM warehouse_fulfillment.shortage_policy
 			  WHERE tenant_id = $1
 			  ORDER BY owner_account_id, revision DESC`,
@@ -77,7 +77,7 @@ func (store *WorkspaceReads) SettingsOverview(ctx context.Context, tenant domain
 		}
 		for rows.Next() {
 			var item ports.ShortagePolicyOverview
-			if err := rows.Scan(&item.OwnerAccount, &item.Revision, &item.Kind, &item.Operator, &item.RegisteredAt); err != nil {
+			if err := rows.Scan(&item.OwnerAccount, &item.Revision, &item.Kind, &item.PartialShipment, &item.Operator, &item.RegisteredAt); err != nil {
 				rows.Close()
 				return out, fmt.Errorf("%s: shortage policies: %w", op, err)
 			}
@@ -267,7 +267,7 @@ func (store *WorkspaceReads) OutboundRequestDetail(
 	var (
 		out                                               ports.OutboundRequestDetail
 		service, basis, operator, number, absence, parent *string
-		prefetchShipment, prefetchDeclared                *string
+		prefetchShipment, prefetchDeclared, partial       *string
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT `+outboundRequestListColumns+`
@@ -277,7 +277,7 @@ func (store *WorkspaceReads) OutboundRequestDetail(
 	).Scan(
 		&out.Request.RequestID, &out.Request.OwnerAccount, &out.Request.WarehouseCode, &out.Request.Origin, &out.Request.RequestKey,
 		&out.Request.Dispatch, &service, &out.Request.Recipient, &out.Request.Address, &basis, &operator, &out.Request.Status,
-		&number, &absence, &out.Request.ReceivedAt, &parent, &out.Request.PlatformStocking, &prefetchShipment, &prefetchDeclared,
+		&number, &absence, &out.Request.ReceivedAt, &parent, &out.Request.PlatformStocking, &prefetchShipment, &prefetchDeclared, &partial,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.OutboundRequestDetail{}, false, nil
@@ -293,6 +293,10 @@ func (store *WorkspaceReads) OutboundRequestDetail(
 	out.Request.ParentRequestID = valueOrEmpty(parent)
 	out.Request.PrefetchShipmentID = valueOrEmpty(prefetchShipment)
 	out.Request.PrefetchDeclaredParcelID = valueOrEmpty(prefetchDeclared)
+	out.Request.PartialShipment = valueOrEmpty(partial)
+	if out.PartialShipment, err = partialShipmentDetail(ctx, querier, tenant, out.Request); err != nil {
+		return out, false, fmt.Errorf("%s: partial shipment: %w", op, err)
+	}
 
 	// 明细行
 	{
@@ -1507,4 +1511,56 @@ func statementFreshness(now, validUntil time.Time, superseded bool) string {
 		return "UNKNOWN"
 	}
 	return "VALID"
+}
+
+// partialShipmentDetail 把一张请求三层各自写的部分发货规则读出来，按 domain.EffectivePartialShipment 定此刻适用哪一层。
+func partialShipmentDetail(ctx context.Context, querier bentopg.Querier, tenant domain.TenantID, request ports.OutboundRequestRow) (ports.PartialShipmentDetail, error) {
+	detail := ports.PartialShipmentDetail{Order: request.PartialShipment}
+	var consentAt time.Time
+	err := querier.QueryRow(ctx,
+		`SELECT partial_shipment, basis, operator_id, recorded_at
+		   FROM warehouse_fulfillment.outbound_partial_shipment_consent
+		  WHERE tenant_id = $1 AND request_id = $2
+		  ORDER BY recorded_at DESC, basis DESC
+		  LIMIT 1`,
+		tenant.String(), request.RequestID).Scan(&detail.Consent, &detail.ConsentBasis, &detail.ConsentOperator, &consentAt)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return detail, err
+	}
+	if err == nil {
+		detail.ConsentAt = &consentAt
+	}
+	var owner *string
+	err = querier.QueryRow(ctx,
+		`SELECT partial_shipment
+		   FROM warehouse_fulfillment.shortage_policy
+		  WHERE tenant_id = $1 AND owner_account_id = $2
+		  ORDER BY revision DESC
+		  LIMIT 1`,
+		tenant.String(), request.OwnerAccount).Scan(&owner)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return detail, err
+	}
+	detail.Owner = valueOrEmpty(owner)
+	parse := func(word string) (domain.PartialShipment, error) {
+		if word == "" {
+			return domain.PartialShipmentUnset, nil
+		}
+		return domain.NewPartialShipment(word)
+	}
+	consentRule, err := parse(detail.Consent)
+	if err != nil {
+		return detail, err
+	}
+	orderRule, err := parse(detail.Order)
+	if err != nil {
+		return detail, err
+	}
+	ownerRule, err := parse(detail.Owner)
+	if err != nil {
+		return detail, err
+	}
+	rule, source := domain.EffectivePartialShipment(consentRule, orderRule, ownerRule)
+	detail.Rule, detail.Source = rule.String(), source.String()
+	return detail, nil
 }

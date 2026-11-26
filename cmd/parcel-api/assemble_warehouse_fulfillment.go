@@ -1197,6 +1197,12 @@ func (registration transactionalWave) Pack(ctx context.Context, command warehous
 	return packed.AfterCommission(commissioned), nil
 }
 
+func (registration transactionalOutbound) RecordConsent(ctx context.Context, command warehouseapp.RecordPartialShipmentConsentCommand) (warehouseapp.OutboundResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.OutboundResult, error) {
+		return registration.inner.RecordConsent(txCtx, command)
+	})
+}
+
 func (registration transactionalOutbound) Split(ctx context.Context, command warehouseapp.SplitOutboundCommand) (warehouseapp.SplitResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.SplitResult, error) {
 		return registration.inner.Split(txCtx, command)

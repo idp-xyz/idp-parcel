@@ -24,6 +24,7 @@ import {
 } from './actions';
 import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
+import { partialShipmentLabel } from './partial-shipment';
 import { useWarehouseLookups } from './use-catalogues';
 import { labelOf, WmsBadge } from './wms-ui';
 
@@ -49,7 +50,7 @@ const ruleCards: readonly RuleCardSpec[] = [
     actionId: 'shortage-policy',
     group: 'stock',
     title: '货主缺货处置规则',
-    desc: '决定货主出库单库存不足时是整单拒绝（REJECT）还是按可用量部分预占（PARTIAL）。',
+    desc: '按货主登记两件事：受理时库存不够，是整单拒单还是有多少先占多少；拣不齐时，是整单发、少发还是拆单发。',
     icon: ClipboardList,
   },
   {
@@ -107,7 +108,13 @@ function ruleLive(overview: SettingsOverviewBody | null, actionId: string): { co
       return overview.shortagePolicies.length > 0
         ? {
             configured: true,
-            note: overview.shortagePolicies.map((item) => `${item.ownerAccount} ${labelOf(item.kind)}`).join('；'),
+            // 两格各说各的；没登记的那格如实说未配置，不当成另一格的推论。
+            note: overview.shortagePolicies
+              .map(
+                (item) =>
+                  `${item.ownerAccount} 受理不够：${labelOf(item.kind, '未配置')}，拣不齐：${partialShipmentLabel(item.partialShipment)}`,
+              )
+              .join('；'),
           }
         : { configured: false, note: '还没有货主登记缺货处置' };
     case 'approval-duty':

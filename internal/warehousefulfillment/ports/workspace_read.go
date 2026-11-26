@@ -24,12 +24,14 @@ type AllocationStrategyOverview struct {
 	RegisteredAt time.Time
 }
 
+// ShortagePolicyOverview 是一位货主当前的缺货处置。Kind 与 PartialShipment 各说各的，没说的那一格是空串。
 type ShortagePolicyOverview struct {
-	OwnerAccount string
-	Revision     int
-	Kind         string
-	Operator     string
-	RegisteredAt time.Time
+	OwnerAccount    string
+	Revision        int
+	Kind            string
+	PartialShipment string
+	Operator        string
+	RegisteredAt    time.Time
 }
 
 type ApprovalDutyOverview struct {
@@ -74,16 +76,30 @@ type AgentConnectorOverview struct {
 }
 
 // OutboundRequestDetail 是单张出库单的 360° 全链路详情，供管理台与作业台复核打包直接使用。
+// PartialShipmentDetail 是一张请求此刻适用的部分发货规则，连同三层各自写的是什么。
+// Rule 与 Source 为空是哪一层都没写明。
+type PartialShipmentDetail struct {
+	Rule            string
+	Source          string
+	Order           string
+	Owner           string
+	Consent         string
+	ConsentBasis    string
+	ConsentOperator string
+	ConsentAt       *time.Time
+}
+
 type OutboundRequestDetail struct {
-	Request       OutboundRequestRow
-	Lines         []OutboundRequestDetailLine
-	Reservations  []OutboundReservationDetail
-	Waves         []string
-	PickTasks     []OutboundPickTaskDetail
-	Checks        []OutboundCheckDetail
-	Parcels       []OutboundParcelDetail
-	Confirmations []OutboundConfirmationDetail
-	ReturnTasks   []OutboundReturnTaskDetail
+	PartialShipment PartialShipmentDetail
+	Request         OutboundRequestRow
+	Lines           []OutboundRequestDetailLine
+	Reservations    []OutboundReservationDetail
+	Waves           []string
+	PickTasks       []OutboundPickTaskDetail
+	Checks          []OutboundCheckDetail
+	Parcels         []OutboundParcelDetail
+	Confirmations   []OutboundConfirmationDetail
+	ReturnTasks     []OutboundReturnTaskDetail
 }
 
 type OutboundRequestDetailLine struct {

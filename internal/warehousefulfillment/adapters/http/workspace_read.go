@@ -59,9 +59,11 @@ func NewQuerySettingsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQ
 		type shortageBody struct {
 			OwnerAccount string `json:"ownerAccount"`
 			Revision     int    `json:"revision"`
-			Kind         string `json:"kind"`
-			Operator     string `json:"operator"`
-			RegisteredAt string `json:"registeredAt"`
+			Kind         string `json:"kind,omitempty"`
+			// PartialShipment 是拣不齐时怎么发的默认；没登记就不带这一格。
+			PartialShipment string `json:"partialShipment,omitempty"`
+			Operator        string `json:"operator"`
+			RegisteredAt    string `json:"registeredAt"`
 		}
 		type dutyBody struct {
 			Configured       bool   `json:"configured"`
@@ -122,7 +124,7 @@ func NewQuerySettingsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQ
 		shortages := make([]shortageBody, 0, len(overview.ShortagePolicies))
 		for _, item := range overview.ShortagePolicies {
 			shortages = append(shortages, shortageBody{
-				OwnerAccount: item.OwnerAccount, Revision: item.Revision, Kind: item.Kind,
+				OwnerAccount: item.OwnerAccount, Revision: item.Revision, Kind: item.Kind, PartialShipment: item.PartialShipment,
 				Operator: item.Operator, RegisteredAt: rfc3339(item.RegisteredAt),
 			})
 		}
@@ -283,17 +285,19 @@ func NewQueryOutboundRequestDetailEndpoint(intake CatalogueIntake, queries Works
 				"requestKey": req.RequestKey, "dispatch": req.Dispatch, "service": req.Service,
 				"recipient": req.Recipient, "address": req.Address, "basis": req.Basis, "operator": req.Operator,
 				"status": req.Status, "parentRequestId": req.ParentRequestID, "platformStocking": req.PlatformStocking,
+				"partialShipment":    req.PartialShipment,
 				"prefetchShipmentId": req.PrefetchShipmentID, "prefetchDeclaredParcelId": req.PrefetchDeclaredParcelID,
 				"receivedAt": rfc3339(req.ReceivedAt), "reservedQuantity": req.ReservedQuantity, "wantedQuantity": req.WantedQuantity,
 			},
-			"lines":         lines,
-			"reservations":  reservations,
-			"waves":         waves,
-			"pickTasks":     tasks,
-			"checks":        checks,
-			"parcels":       parcels,
-			"confirmations": confirmations,
-			"returnTasks":   returnTasks,
+			"partialShipment": partialShipmentBodyOf(detail.PartialShipment),
+			"lines":           lines,
+			"reservations":    reservations,
+			"waves":           waves,
+			"pickTasks":       tasks,
+			"checks":          checks,
+			"parcels":         parcels,
+			"confirmations":   confirmations,
+			"returnTasks":     returnTasks,
 		})
 	})
 }
@@ -711,4 +715,27 @@ func NewQueryAgentOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQuer
 			"results":    results,
 		})
 	})
+}
+
+// partialShipmentBodyOf 答一张请求此刻适用的部分发货规则。configured 为假是三层都没写明：
+// 不填默认，规则与出处两格都不带。各层自己写的照实带出，没写的不带。
+func partialShipmentBodyOf(detail ports.PartialShipmentDetail) map[string]any {
+	body := map[string]any{"configured": detail.Rule != ""}
+	if detail.Rule != "" {
+		body["rule"] = detail.Rule
+		body["source"] = detail.Source
+	}
+	if detail.Order != "" {
+		body["order"] = detail.Order
+	}
+	if detail.Owner != "" {
+		body["owner"] = detail.Owner
+	}
+	if detail.Consent != "" {
+		body["consent"] = map[string]any{
+			"rule": detail.Consent, "basis": detail.ConsentBasis, "operator": detail.ConsentOperator,
+			"recordedAt": optRFC3339(detail.ConsentAt),
+		}
+	}
+	return body
 }

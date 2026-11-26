@@ -143,6 +143,7 @@ func NewQueryOutboundRequestsEndpoint(intake CatalogueIntake, queries OutboundRe
 				Status:                   row.Status,
 				ParentRequestID:          row.ParentRequestID,
 				PlatformStocking:         row.PlatformStocking,
+				PartialShipment:          row.PartialShipment,
 				PrefetchShipmentID:       row.PrefetchShipmentID,
 				PrefetchDeclaredParcelID: row.PrefetchDeclaredParcelID,
 				ReceivedAt:               rfc3339(row.ReceivedAt),
@@ -486,6 +487,7 @@ type outboundRequestRowBody struct {
 	Status                   string                    `json:"status"`
 	ParentRequestID          string                    `json:"parentRequestId,omitempty"`
 	PlatformStocking         bool                      `json:"platformStocking"`
+	PartialShipment          string                    `json:"partialShipment,omitempty"`
 	PrefetchShipmentID       string                    `json:"prefetchShipmentId,omitempty"`
 	PrefetchDeclaredParcelID string                    `json:"prefetchDeclaredParcelId,omitempty"`
 	ReceivedAt               string                    `json:"receivedAt"`

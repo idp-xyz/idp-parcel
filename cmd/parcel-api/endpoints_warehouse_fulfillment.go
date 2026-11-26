@@ -485,6 +485,9 @@ func init() {
 			"/warehouse-fulfillment-outbound-cancellations": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-outbound-partial-shipment-consents": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionOutboundRequestRecordOnBehalf), warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-return-pre-advices": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionReturnRecordOnBehalf), warehouseFulfillment: true,
 			},
@@ -955,6 +958,7 @@ func init() {
 			outboundOnBehalf := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			outboundSplit := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			outboundCancellation := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			partialShipmentConsent := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			returnAdvice := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			returnDisposition := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			shortagePolicy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -1165,6 +1169,7 @@ func init() {
 				outboundOnBehalf = warehousehttp.NewRecordOutboundEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
 				outboundSplit = warehousehttp.NewSplitOutboundEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
 				outboundCancellation = warehousehttp.NewCancelOutboundEndpoint(channels.outboundOnBehalf(), wiring.waves)
+				partialShipmentConsent = warehousehttp.NewRecordPartialShipmentConsentEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
 				shortagePolicy = warehousehttp.NewRegisterShortagePolicyEndpoint(channels.shortagePolicy(), wiring.outbounds)
 				agentConnector = warehousehttp.NewRegisterAgentConnectorEndpoint(channels.agentIntake(), wiring.agents)
 				agentStatement = warehousehttp.NewRecordAgentStatementEndpoint(channels.agentIntake(), wiring.agents)
@@ -1358,6 +1363,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-outbound-requests", Handler: outboundOnBehalf},
 				{Pattern: "/warehouse-fulfillment-outbound-request-splits", Handler: outboundSplit},
 				{Pattern: "/warehouse-fulfillment-outbound-cancellations", Handler: outboundCancellation},
+				{Pattern: "/warehouse-fulfillment-outbound-partial-shipment-consents", Handler: partialShipmentConsent},
 				{Pattern: "/warehouse-fulfillment-return-pre-advices", Handler: returnAdvice},
 				{Pattern: "/warehouse-fulfillment-return-dispositions", Handler: returnDisposition},
 				{Pattern: "/warehouse-fulfillment-shortage-policies", Handler: shortagePolicy},

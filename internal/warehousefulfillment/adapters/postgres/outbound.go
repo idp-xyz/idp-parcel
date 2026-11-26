@@ -131,13 +131,13 @@ func (store *OutboundRequests) Save(ctx context.Context, request domain.Outbound
 		`INSERT INTO warehouse_fulfillment.outbound_request (
 		    tenant_id, request_id, owner_account_id, warehouse_code, origin, request_key, dispatch,
 		    service_product, recipient, address, basis, operator_id, status, document_number, numbering_absence, received_at,
-		    parent_request_id, platform_stocking
-		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+		    parent_request_id, platform_stocking, partial_shipment
+		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
 		request.Tenant().String(), request.ID().String(), request.Owner().String(), request.Warehouse().String(),
 		request.Origin().String(), request.Key().String(), request.Dispatch().String(), nullableText(request.Service()),
 		request.Recipient(), request.Address(), nullableText(request.Basis()), nullableText(request.Operator()),
 		request.Status().String(), number, absence, request.ReceivedAt(), nullableText(request.Parent().String()),
-		request.PlatformStocking(),
+		request.PlatformStocking(), nullableText(request.PartialShipment().String()),
 	); err != nil {
 		return fmt.Errorf("save outbound request: %w", err)
 	}
@@ -236,26 +236,87 @@ func (store *OutboundRequests) LoadPolicy(ctx context.Context, tenant domain.Ten
 		return ports.StoredShortagePolicy{}, false, err
 	}
 	var revision int
-	var kind, operator string
+	var operator string
+	var kind, partial *string
 	var at time.Time
 	err = querier.QueryRow(ctx,
-		`SELECT revision, kind, operator_id, registered_at
+		`SELECT revision, kind, partial_shipment, operator_id, registered_at
 		   FROM warehouse_fulfillment.shortage_policy
 		  WHERE tenant_id = $1 AND owner_account_id = $2
 		  ORDER BY revision DESC
 		  LIMIT 1`,
-		tenant.String(), owner.String()).Scan(&revision, &kind, &operator, &at)
+		tenant.String(), owner.String()).Scan(&revision, &kind, &partial, &operator, &at)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.StoredShortagePolicy{}, false, nil
 	}
 	if err != nil {
 		return ports.StoredShortagePolicy{}, false, fmt.Errorf("load shortage policy: %w", err)
 	}
-	parsed, err := domain.NewShortagePolicyKind(kind)
-	if err != nil {
-		return ports.StoredShortagePolicy{}, false, err
+	policy := ports.StoredShortagePolicy{Revision: revision, Operator: operator, RegisteredAt: at}
+	if kind != nil {
+		policy.Kind, err = domain.NewShortagePolicyKind(*kind)
+		if err != nil {
+			return ports.StoredShortagePolicy{}, false, err
+		}
 	}
-	return ports.StoredShortagePolicy{Revision: revision, Kind: parsed, Operator: operator, RegisteredAt: at}, true, nil
+	if partial != nil {
+		policy.PartialShipment, err = domain.NewPartialShipment(*partial)
+		if err != nil {
+			return ports.StoredShortagePolicy{}, false, err
+		}
+	}
+	return policy, true, nil
+}
+
+func (store *OutboundRequests) LoadConsent(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, basis string) (ports.PartialShipmentConsent, bool, error) {
+	return store.scanConsent(ctx, tenant, request, `AND basis = $3`, basis)
+}
+
+func (store *OutboundRequests) LatestConsent(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (ports.PartialShipmentConsent, bool, error) {
+	return store.scanConsent(ctx, tenant, request, ``)
+}
+
+// scanConsent 取一张请求上的一句部分发货同意；不点名依据时取最晚记下的那一句，同一时刻的按依据定先后。
+func (store *OutboundRequests) scanConsent(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, narrow string, args ...any) (ports.PartialShipmentConsent, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.PartialShipmentConsent{}, false, err
+	}
+	var basis, rule, operator string
+	var at time.Time
+	err = querier.QueryRow(ctx,
+		`SELECT basis, partial_shipment, operator_id, recorded_at
+		   FROM warehouse_fulfillment.outbound_partial_shipment_consent
+		  WHERE tenant_id = $1 AND request_id = $2 `+narrow+`
+		  ORDER BY recorded_at DESC, basis DESC
+		  LIMIT 1`,
+		append([]any{tenant.String(), request.String()}, args...)...).Scan(&basis, &rule, &operator, &at)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.PartialShipmentConsent{}, false, nil
+	}
+	if err != nil {
+		return ports.PartialShipmentConsent{}, false, fmt.Errorf("load partial shipment consent: %w", err)
+	}
+	parsed, err := domain.NewPartialShipment(rule)
+	if err != nil {
+		return ports.PartialShipmentConsent{}, false, err
+	}
+	return ports.PartialShipmentConsent{Request: request, Basis: basis, Rule: parsed, Operator: operator, RecordedAt: at}, true, nil
+}
+
+func (store *OutboundRequests) SaveConsent(ctx context.Context, tenant domain.TenantID, consent ports.PartialShipmentConsent) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save partial shipment consent: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.outbound_partial_shipment_consent (
+		    tenant_id, request_id, basis, partial_shipment, operator_id, recorded_at
+		 ) VALUES ($1,$2,$3,$4,$5,$6)`,
+		tenant.String(), consent.Request.String(), consent.Basis, consent.Rule.String(), consent.Operator, consent.RecordedAt.UTC()); err != nil {
+		return fmt.Errorf("save partial shipment consent: %w", err)
+	}
+	return nil
 }
 
 func (store *OutboundRequests) SavePolicy(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, policy ports.StoredShortagePolicy) error {
@@ -265,9 +326,10 @@ func (store *OutboundRequests) SavePolicy(ctx context.Context, tenant domain.Ten
 	}
 	_, err = executor.Exec(ctx,
 		`INSERT INTO warehouse_fulfillment.shortage_policy (
-		    tenant_id, owner_account_id, revision, kind, operator_id, registered_at
-		 ) VALUES ($1,$2,$3,$4,$5,$6)`,
-		tenant.String(), owner.String(), policy.Revision, policy.Kind.String(), policy.Operator, policy.RegisteredAt)
+		    tenant_id, owner_account_id, revision, kind, partial_shipment, operator_id, registered_at
+		 ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+		tenant.String(), owner.String(), policy.Revision, nullableText(policy.Kind.String()),
+		nullableText(policy.PartialShipment.String()), policy.Operator, policy.RegisteredAt)
 	if err != nil {
 		return fmt.Errorf("save shortage policy: %w", err)
 	}
@@ -279,13 +341,14 @@ func scanOutbound(ctx context.Context, querier bentopg.Querier, tenant domain.Te
 	var service, basis, operator, number, absence, parent *string
 	var received time.Time
 	var platformStocking bool
+	var partialShipment *string
 	err := querier.QueryRow(ctx,
 		`SELECT request_id, owner_account_id, warehouse_code, origin, request_key, dispatch, service_product,
 		        recipient, address, basis, operator_id, status, document_number, numbering_absence, received_at, parent_request_id,
-		        platform_stocking
+		        platform_stocking, partial_shipment
 		   FROM warehouse_fulfillment.outbound_request
 		  WHERE tenant_id = $1 AND `+where,
-		args...).Scan(&id, &owner, &warehouse, &origin, &key, &dispatch, &service, &recipient, &address, &basis, &operator, &status, &number, &absence, &received, &parent, &platformStocking)
+		args...).Scan(&id, &owner, &warehouse, &origin, &key, &dispatch, &service, &recipient, &address, &basis, &operator, &status, &number, &absence, &received, &parent, &platformStocking, &partialShipment)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.OutboundRequest{}, false, nil
 	}
@@ -349,12 +412,19 @@ func scanOutbound(ctx context.Context, querier bentopg.Querier, tenant domain.Te
 			return domain.OutboundRequest{}, false, err
 		}
 	}
+	partial := domain.PartialShipmentUnset
+	if partialShipment != nil {
+		partial, err = domain.NewPartialShipment(*partialShipment)
+		if err != nil {
+			return domain.OutboundRequest{}, false, err
+		}
+	}
 	request, err := domain.NewOutboundRequest(domain.OutboundRequestSpec{
 		Tenant: tenant, ID: parsedID, Owner: parsedOwner, Warehouse: parsedWarehouse, Origin: parsedOrigin, Key: parsedKey,
 		Dispatch: parsedDispatch, Service: valueOrEmpty(service), Recipient: recipient, Address: address,
 		Basis: valueOrEmpty(basis), Operator: valueOrEmpty(operator), Status: parsedStatus, Parent: parsedParent,
 		Number: document, Absence: numbering, Lines: lines, Reservations: reservations, ReceivedAt: received,
-		PlatformStocking: platformStocking,
+		PlatformStocking: platformStocking, PartialShipment: partial,
 	})
 	if err != nil {
 		return domain.OutboundRequest{}, false, err

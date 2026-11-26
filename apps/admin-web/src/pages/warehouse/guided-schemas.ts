@@ -2,6 +2,7 @@
 // 键名与 internal/warehousefulfillment/adapters/registrationjson、charge_mouth.go、warehouse_plan_mouth.go 一一对齐。
 
 import type { GuidedFieldSpec, GuidedFormDefinition, GuidedSelectOption, WarehouseLookupKind } from './guided-forms';
+import { partialShipmentOptions } from './partial-shipment';
 
 const stockStateOptions: readonly GuidedSelectOption[] = [
   { value: 'GOOD', label: '良品（GOOD）' },
@@ -557,6 +558,13 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       { path: 'recipient', label: '收件人', kind: 'text', required: true, placeholder: '收件人姓名' },
       { path: 'address', label: '收件地址', kind: 'text', required: true, placeholder: '收件地址正文' },
       { path: 'platformStocking', label: '平台备货（打包齐全后按整票交一份委托）', kind: 'boolean', omitWhenFalse: true },
+      {
+        path: 'partialShipment',
+        label: '拣不齐时怎么发',
+        kind: 'select',
+        options: [...partialShipmentOptions],
+        hint: '货主对这一张单另有交代时才选；不选就按货主登记的默认，货主也没登记就是未配置',
+      },
       { path: 'lines', label: '出库商品明细', rowLabel: '商品行', kind: 'rows', required: true, rowFields: outboundLineFields },
     ],
     validate: (_values, payload) => {
@@ -635,13 +643,38 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       { path: 'revision', label: '修订号', kind: 'integer', required: true, placeholder: '1' },
       {
         path: 'kind',
-        label: '缺货处置方式',
+        label: '受理时库存不够怎么办',
         kind: 'select',
-        required: true,
         options: [
-          { value: 'PARTIAL', label: '部分预占（PARTIAL）' },
-          { value: 'REJECT', label: '不足整单拒单（REJECT）' },
+          { value: 'PARTIAL', label: '部分预占：有多少先占多少' },
+          { value: 'REJECT', label: '整单拒单：不够就不受理' },
         ],
+      },
+      {
+        path: 'partialShipment',
+        label: '拣不齐时怎么发（这位货主的默认）',
+        kind: 'select',
+        options: [...partialShipmentOptions],
+        hint: '单张出库单另有交代时以那一张为准',
+      },
+    ],
+    // 每一版是完整的一份：这一版没选的那格，就是这位货主那一件没登记，不沿用上一版。
+    validate: (_values, payload) => {
+      if (!payload.kind && !payload.partialShipment) return '两件至少选一件；这一版没选的那件，就是这位货主那一件没登记';
+      return null;
+    },
+  },
+  'partial-shipment-consent': {
+    fields: [
+      { path: 'requestId', label: '出库请求号', kind: 'text', required: true, placeholder: 'OBR-01' },
+      { path: 'partialShipment', label: '货主同意这一张拣不齐时怎么发', kind: 'select', required: true, options: [...partialShipmentOptions] },
+      {
+        path: 'basis',
+        label: '依据',
+        kind: 'text',
+        required: true,
+        placeholder: '货主书面确认的编号或存档引用',
+        hint: '同一张单同一个依据只记一次；货主改了主意，用新的依据再录一次，以最后录的为准',
       },
     ],
   },

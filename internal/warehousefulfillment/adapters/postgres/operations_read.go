@@ -18,7 +18,7 @@ const outboundRequestListColumns = `
 	request_id, owner_account_id, warehouse_code, origin, request_key, dispatch,
 	service_product, recipient, address, basis, operator_id, status, document_number,
 	numbering_absence, received_at, parent_request_id, platform_stocking,
-	prefetch_shipment_id, prefetch_declared_parcel_id`
+	prefetch_shipment_id, prefetch_declared_parcel_id, partial_shipment`
 
 const outboundRequestListed = `WITH listed AS (
 	SELECT ` + outboundRequestListColumns + `
@@ -77,16 +77,17 @@ func (store *OutboundRequests) List(
 		var (
 			item                                              ports.OutboundRequestRow
 			service, basis, operator, number, absence, parent *string
-			prefetchShipment, prefetchDeclared                *string
+			prefetchShipment, prefetchDeclared, partial       *string
 		)
 		if err := rows.Scan(
 			&item.RequestID, &item.OwnerAccount, &item.WarehouseCode, &item.Origin, &item.RequestKey, &item.Dispatch,
 			&service, &item.Recipient, &item.Address, &basis, &operator, &item.Status, &number,
 			&absence, &item.ReceivedAt, &parent, &item.PlatformStocking,
-			&prefetchShipment, &prefetchDeclared,
+			&prefetchShipment, &prefetchDeclared, &partial,
 		); err != nil {
 			return fail(err)
 		}
+		item.PartialShipment = valueOrEmpty(partial)
 		item.Service = valueOrEmpty(service)
 		item.Basis = valueOrEmpty(basis)
 		item.Operator = valueOrEmpty(operator)

@@ -28,6 +28,7 @@ const (
 	OutboundSplitResult
 	OutboundStatusMismatch
 	OutboundNotFound
+	OutboundConsentRecorded
 )
 
 func (outcome OutboundOutcome) String() string {
@@ -60,6 +61,8 @@ func (outcome OutboundOutcome) String() string {
 		return "STATUS_MISMATCH"
 	case OutboundNotFound:
 		return "OUTBOUND_NOT_FOUND"
+	case OutboundConsentRecorded:
+		return "RECORDED"
 	default:
 		return ""
 	}
@@ -93,15 +96,18 @@ type AcceptOutboundCommand struct {
 	Lines            []domain.OutboundLine
 	Parent           domain.OutboundRequestID
 	PlatformStocking bool
+	// PartialShipment 是货主对这一张请求拣不齐时怎么发的交代；没带就是没写明，按货主的默认。
+	PartialShipment domain.PartialShipment
 }
 
-// RegisterShortagePolicyCommand 登记某个货主的缺货处置。修订只追加。
+// RegisterShortagePolicyCommand 登记某个货主的缺货处置。修订只追加。Kind 与 PartialShipment 至少说一件。
 type RegisterShortagePolicyCommand struct {
-	Tenant   domain.TenantID
-	Owner    domain.OwnerAccountID
-	Revision int
-	Kind     domain.ShortagePolicyKind
-	Operator domain.Registrant
+	Tenant          domain.TenantID
+	Owner           domain.OwnerAccountID
+	Revision        int
+	Kind            domain.ShortagePolicyKind
+	PartialShipment domain.PartialShipment
+	Operator        domain.Registrant
 }
 
 // OutboundHandler 受理出库请求并按可用量预占。预占不写库存流水。
@@ -223,7 +229,8 @@ func (handler *OutboundHandler) Accept(ctx context.Context, command AcceptOutbou
 		if err != nil {
 			return OutboundResult{}, fmt.Errorf("accept outbound: %w", err)
 		}
-		if !found {
+		// 修订在、但只说了拣不齐时怎么发、没说受理时不够怎么办的，这一件仍是没选定。
+		if !found || policy.Kind == domain.ShortagePolicyInvalid {
 			status = domain.OutboundPendingPolicy
 			planned = nil
 		} else if policy.Kind == domain.ShortagePolicyReject {
@@ -244,21 +251,23 @@ func (handler *OutboundHandler) RegisterPolicy(ctx context.Context, command Regi
 	if !configured {
 		return OutboundResult{outcome: OutboundWarehouseNotFound}, nil
 	}
-	if command.Revision < 1 || command.Kind == domain.ShortagePolicyInvalid || command.Operator.String() == "" {
+	if command.Revision < 1 || command.Operator.String() == "" ||
+		(command.Kind == domain.ShortagePolicyInvalid && !command.PartialShipment.Given()) {
 		return OutboundResult{outcome: OutboundContentInvalid}, nil
 	}
 	current, found, err := handler.requests.LoadPolicy(ctx, command.Tenant, command.Owner)
 	if err != nil {
 		return OutboundResult{}, fmt.Errorf("register shortage policy: %w", err)
 	}
-	if found && current.Revision == command.Revision && current.Kind == command.Kind {
+	if found && current.Revision == command.Revision && current.Kind == command.Kind && current.PartialShipment == command.PartialShipment {
 		return OutboundResult{outcome: OutboundExisting}, nil
 	}
 	if found && command.Revision != current.Revision+1 {
 		return OutboundResult{outcome: OutboundConflict}, nil
 	}
 	if err := handler.requests.SavePolicy(ctx, command.Tenant, command.Owner, ports.StoredShortagePolicy{
-		Revision: command.Revision, Kind: command.Kind, Operator: command.Operator.String(), RegisteredAt: handler.clock.Now(),
+		Revision: command.Revision, Kind: command.Kind, PartialShipment: command.PartialShipment,
+		Operator: command.Operator.String(), RegisteredAt: handler.clock.Now(),
 	}); err != nil {
 		return OutboundResult{}, fmt.Errorf("register shortage policy: %w", err)
 	}
@@ -292,7 +301,7 @@ func (handler *OutboundHandler) save(
 		Key: command.Key, Dispatch: command.Dispatch, Service: command.Service, Recipient: command.Recipient,
 		Address: command.Address, Basis: command.Basis, Operator: command.Operator.String(), Status: status,
 		Parent: command.Parent, Number: number, Absence: absence, Lines: command.Lines, Reservations: planned,
-		ReceivedAt: handler.clock.Now(), PlatformStocking: command.PlatformStocking,
+		ReceivedAt: handler.clock.Now(), PlatformStocking: command.PlatformStocking, PartialShipment: command.PartialShipment,
 	})
 	if err != nil {
 		return OutboundResult{}, fmt.Errorf("accept outbound: %w", err)
@@ -338,7 +347,7 @@ func sameOutboundSubmission(existing domain.OutboundRequest, command AcceptOutbo
 		Tenant: existing.Tenant(), ID: existing.ID(), Owner: existing.Owner(), Warehouse: command.Warehouse,
 		Origin: existing.Origin(), Key: existing.Key(), Dispatch: command.Dispatch, Service: command.Service,
 		Recipient: command.Recipient, Address: command.Address, Status: existing.Status(), Lines: command.Lines,
-		ReceivedAt: existing.ReceivedAt(), PlatformStocking: command.PlatformStocking,
+		ReceivedAt: existing.ReceivedAt(), PlatformStocking: command.PlatformStocking, PartialShipment: command.PartialShipment,
 	})
 	if err != nil {
 		return false

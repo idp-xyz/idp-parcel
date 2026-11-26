@@ -3,6 +3,7 @@ import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue
 import type { CatalogueConditions, CataloguePage } from '../catalogue-query';
 import { catalogueRequestPath } from '../catalogue-query';
 import { asCatalogueRegistration, asStockImportWrite, type CatalogueRegistrationBody, type StockImportWriteBody } from './answers';
+import type { PartialShipmentAnswer } from './partial-shipment';
 import {
   catalogueReadPath,
   catalogueWritePaths,
@@ -575,6 +576,8 @@ export interface OutboundRequestRecord {
   status: string;
   parentRequestId?: string;
   platformStocking: boolean;
+  /** 这张单提交时写明的部分发货规则；没写明就不带。此刻适用哪一层看明细读口的 `partialShipment`。 */
+  partialShipment?: string;
   prefetchShipmentId?: string;
   prefetchDeclaredParcelId?: string;
   receivedAt: string;
@@ -902,7 +905,15 @@ export function getUnclaimedArrivalDetail(arrivalId: string): Promise<ApiResult<
 export interface SettingsOverviewBody {
   outcome: string;
   allocationStrategy: { configured: boolean; revision?: number; operator?: string; registeredAt?: string };
-  shortagePolicies: ReadonlyArray<{ ownerAccount: string; revision: number; kind: string; operator: string; registeredAt: string }>;
+  /** 两格各说各的：`kind` 是受理时库存不够怎么办，`partialShipment` 是拣不齐时怎么发；没登记的那格不带。 */
+  shortagePolicies: ReadonlyArray<{
+    ownerAccount: string;
+    revision: number;
+    kind?: string;
+    partialShipment?: string;
+    operator: string;
+    registeredAt: string;
+  }>;
   approvalDuty: { configured: boolean; revision?: number; distinctSubjects?: boolean; operator?: string; registeredAt?: string };
   disposalRules: ReadonlyArray<DisposalRuleRecord>;
   chargeUnits: ReadonlyArray<{ warehouseCode: string; revision: number; weightUnit: string; volumeUnit: string; registeredAt: string }>;
@@ -918,6 +929,7 @@ export function getSettingsOverview(): Promise<ApiResult<SettingsOverviewBody>> 
 export interface OutboundRequestDetailBody {
   outcome: string;
   request?: OutboundRequestRecord;
+  partialShipment?: PartialShipmentAnswer;
   lines?: ReadonlyArray<{
     lineIndex: number;
     goodsCode: string;
