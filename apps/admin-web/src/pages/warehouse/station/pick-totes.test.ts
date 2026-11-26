@@ -1,10 +1,10 @@
 import { deepEqual, equal } from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ApiResult } from '../../catalogue-api';
-import type { ToteListBody, ToteRecord } from '../api';
+import type { SettingsOverviewBody, ToteListBody, ToteRecord } from '../api';
 import { applyVerdict, pickFactValues, pickScreen, scanCode, setToteMode, skipTote, startPick, pickActions } from './pick-flow';
 import type { PickCell } from './pick-queue';
-import { warehouseHasTotes, type ToteReader } from './pick-totes';
+import { warehouseHasTotes, warehouseRequiresTotes, warehouseToteMode, type SettingsReader, type ToteReader } from './pick-totes';
 
 const tote = (code: string, state: string): ToteRecord => ({
   warehouseCode: 'SYN-WH-01',
@@ -129,6 +129,63 @@ test('后端不认的箱要忘掉，回头重新扫', () => {
   state = scanCode(scanCode(state, 'L-1').state, 'TOTE-1').state;
   state = applyVerdict(scanCode(state, 'SKU-1').state, { verdict: 'refused', outcome: 'CONTENT_INVALID', headline: '没有记' }).state;
   equal(state.totes['OBR-A'], 'TOTE-1');
+});
+
+const settings = (toteRequirements: SettingsOverviewBody['toteRequirements'] | 'fail'): SettingsReader => async () =>
+  toteRequirements === 'fail'
+    ? ({ kind: 'unreachable' } as unknown as ApiResult<SettingsOverviewBody>)
+    : { kind: 'outcome', status: 200, body: { outcome: 'SETTINGS_OVERVIEW_LOADED', toteRequirements } as SettingsOverviewBody };
+
+const requirement = (warehouseCode: string, required: boolean) => ({
+  warehouseCode,
+  revision: 1,
+  required,
+  operator: 'op',
+  registeredAt: '2026-11-26T00:00:00Z',
+});
+
+// Covers: 租户给这个仓登记了必须用箱才是要求；登记成不要求、登记的是别的仓、没登记、读不成都不是。要求用箱时一定提示扫箱，
+// 哪怕这个仓一个箱都没登记。
+test('这个仓要不要求用箱取自租户登记的规则', async () => {
+  equal(await warehouseRequiresTotes('SYN-WH-01', settings([requirement('SYN-WH-01', true)])), true);
+  equal(await warehouseRequiresTotes('SYN-WH-01', settings([requirement('SYN-WH-01', false)])), false);
+  equal(await warehouseRequiresTotes('SYN-WH-01', settings([requirement('SYN-WH-02', true)])), false);
+  equal(await warehouseRequiresTotes('SYN-WH-01', settings([])), false);
+  equal(await warehouseRequiresTotes('SYN-WH-01', settings(undefined)), false);
+  equal(await warehouseRequiresTotes('SYN-WH-01', settings('fail')), false);
+  deepEqual(await warehouseToteMode('SYN-WH-01', reader({}), settings([requirement('SYN-WH-01', true)])), { on: true, required: true });
+  deepEqual(await warehouseToteMode('SYN-WH-01', reader({ FREE: [tote('T-1', 'FREE')] }), settings([])), { on: true, required: false });
+  deepEqual(await warehouseToteMode('SYN-WH-01', reader({}), settings([])), { on: false, required: false });
+});
+
+// Covers: 要求用箱时不能点「不用箱」，屏上说明这个仓必须用箱；这一趟此前点过「不用箱」的出库单要重新问。
+test('必须用箱：不能点不用箱，点过不用箱的单重新问', () => {
+  let state = setToteMode(startPick({ cells: [A1, A2], staging: 'OUT-1' }), true, true).state;
+  state = scanCode(state, 'L-1').state;
+  equal(state.phase, 'tote');
+  equal(pickActions(state).skipTote, false);
+  deepEqual(skipTote(state).state, state);
+  equal(pickScreen(state).counter.includes('必须用周转箱'), true);
+
+  // 开工时还不要求：头一张单点了不用箱；规则读回来是要求，那个决定作废
+  let declined = setToteMode(startPick({ cells: [A1, A2], staging: 'OUT-1' }), true).state;
+  declined = skipTote(scanCode(declined, 'L-1').state).state;
+  equal(declined.totes['OBR-A'], null);
+  const required = setToteMode(declined, true, true).state;
+  equal(required.totes['OBR-A'], undefined);
+  equal(required.toteRequired, true);
+});
+
+// Covers: 工位以为不要求、后端答必须用箱（规则是这一趟开工之后才登记的）：这一笔没记，工位从此按必须用箱来，这张单重新问箱。
+test('后端答必须用箱之后工位改成必须用箱', () => {
+  let state = startPick({ cells: [A1, B1], staging: 'OUT-1' });
+  state = scanCode(state, 'L-1').state;
+  equal(state.phase, 'goods');
+  state = applyVerdict(scanCode(state, 'SKU-1').state, { verdict: 'refused', outcome: 'TOTE_REQUIRED', headline: '没有记' }).state;
+  equal(state.phase, 'refused');
+  equal(state.gone, false);
+  equal(state.toteOn, true);
+  equal(state.toteRequired, true);
 });
 
 // Covers: 名册读回来是没有箱、而人正停在等箱那一步时，直接去扫商品。

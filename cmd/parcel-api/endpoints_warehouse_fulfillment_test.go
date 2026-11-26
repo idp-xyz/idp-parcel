@@ -323,6 +323,10 @@ func (unwiredWave) ReleaseTote(context.Context, warehouseapp.ReleaseToteCommand)
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
 }
 
+func (unwiredWave) RegisterToteRequirement(context.Context, warehouseapp.RegisterToteRequirementCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+
 func (unwiredWave) ListTotes(
 	context.Context,
 	warehousedomain.TenantID,
@@ -1063,6 +1067,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/warehouse-fulfillment-shortage-policies":                    {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-tote-registrations":                   {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-tote-retirements":                     {http.MethodPost, faceRegistryWrite},
+		"/warehouse-fulfillment-tote-requirements":                    {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-agent-connectors":                     {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-agent-stock-statements":               {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-agent-outbound-results":               {http.MethodPost, faceRegistryWrite},
@@ -1341,6 +1346,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-shortage-policies":                  {status, code},
 			"/warehouse-fulfillment-tote-registrations":                 {status, code},
 			"/warehouse-fulfillment-tote-retirements":                   {status, code},
+			"/warehouse-fulfillment-tote-requirements":                  {status, code},
 			"/warehouse-fulfillment-agent-connectors":                   {status, code},
 			"/warehouse-fulfillment-agent-stock-statements":             {status, code},
 			"/warehouse-fulfillment-agent-outbound-results":             {status, code},
@@ -1471,6 +1477,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-shortage-policies":                  {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-tote-registrations":                 {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-tote-retirements":                   {http.StatusBadRequest, "MALFORMED_REQUEST"},
+			"/warehouse-fulfillment-tote-requirements":                  {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-agent-connectors":                   {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-agent-stock-statements":             {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-agent-outbound-results":             {http.StatusBadRequest, "MALFORMED_REQUEST"},
@@ -1620,6 +1627,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-shortage-policies":                  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-tote-registrations":                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-tote-retirements":                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-tote-requirements":                  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-agent-connectors":                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-agent-stock-statements":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-agent-outbound-results":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},

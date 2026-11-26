@@ -54,6 +54,13 @@ const ruleCards: readonly RuleCardSpec[] = [
     icon: ClipboardList,
   },
   {
+    actionId: 'tote-requirement',
+    group: 'stock',
+    title: '拣货必须用周转箱',
+    desc: '按仓登记拣货时是否必须把货放进周转箱。登记成必须之后，不带箱号的拣货不成立，拣货工位上不能点「不用箱」。',
+    icon: ClipboardList,
+  },
+  {
     actionId: 'approval-duty',
     group: 'stock',
     title: '库存调整批准职责规则',
@@ -117,6 +124,16 @@ function ruleLive(overview: SettingsOverviewBody | null, actionId: string): { co
               .join('；'),
           }
         : { configured: false, note: '还没有货主登记缺货处置' };
+    case 'tote-requirement': {
+      // 只列登记过的仓；没登记的仓这一条未配置，拣货带不带箱都收，不把它说成「不要求」。
+      const requirements = overview.toteRequirements ?? [];
+      return requirements.length > 0
+        ? {
+            configured: true,
+            note: requirements.map((item) => `${item.warehouseCode} ${item.required ? '必须用箱' : '不要求用箱'}`).join('；'),
+          }
+        : { configured: false, note: '没登记的仓，拣货带不带箱都收' };
+    }
     case 'approval-duty':
       return overview.approvalDuty.configured
         ? {
@@ -152,7 +169,7 @@ function ruleLive(overview: SettingsOverviewBody | null, actionId: string): { co
   }
 }
 
-/** 仓配规则设置中心：把原先散落在 4 个业务页里的 8 项租户级规则集中收口，并按当前登记显示已配置或未配置。 */
+/** 仓配规则设置中心：把租户级规则集中收口在一页，并按当前登记显示已配置或未配置。 */
 export function WarehouseSettingsPage() {
   const lookups = useWarehouseLookups();
   const allSpecs = useMemo(

@@ -165,7 +165,16 @@ func NewQuerySettingsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQ
 				WarehouseCode: item.WarehouseCode, RegisteredAt: rfc3339(item.RegisteredAt),
 			})
 		}
+		// 没登记这条规则的仓不在这一格里：那是未配置，不是「不要求」。
+		toteRequirements := make([]map[string]any, 0, len(overview.ToteRequirements))
+		for _, item := range overview.ToteRequirements {
+			toteRequirements = append(toteRequirements, map[string]any{
+				"warehouseCode": item.WarehouseCode, "revision": item.Revision, "required": item.Required,
+				"operator": item.Operator, "registeredAt": rfc3339(item.RegisteredAt),
+			})
+		}
 		writeJSON(response, http.StatusOK, map[string]any{
+			"toteRequirements":   toteRequirements,
 			"outcome":            "SETTINGS_OVERVIEW_LOADED",
 			"allocationStrategy": alloc,
 			"shortagePolicies":   shortages,

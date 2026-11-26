@@ -41,6 +41,16 @@ test('周转箱登记与停用的报文', () => {
   equal(retire?.endpoint, '/warehouse-fulfillment-tote-retirements');
   equal(register?.grant, 'registry');
   equal(retire?.grant, 'registry');
+  // 必须用箱是租户按仓定的规则：required 不勾也照实交 false（明说不要求），不是不带这一格。
+  const requirement = outboundWaveActionSpecs.find((spec) => spec.id === 'tote-requirement');
+  equal(requirement?.endpoint, '/warehouse-fulfillment-tote-requirements');
+  equal(requirement?.grant, 'registry');
+  const must = buildGuidedPayload(outboundWaveGuidedForms['tote-requirement'], { warehouse: 'SYN-WH-01', revision: '1', required: true });
+  equal(must.ok, true);
+  if (must.ok) deepEqual(must.payload, { warehouse: 'SYN-WH-01', revision: 1, required: true });
+  const optional = buildGuidedPayload(outboundWaveGuidedForms['tote-requirement'], { warehouse: 'SYN-WH-01', revision: '2', required: false });
+  equal(optional.ok, true);
+  if (optional.ok) deepEqual(optional.payload, { warehouse: 'SYN-WH-01', revision: 2, required: false });
   // 由人放开动的是一张单在拣货里的归属，走放波次那一种运营决定，不走主数据登记。
   const release = outboundWaveActionSpecs.find((spec) => spec.id === 'tote-release');
   equal(release?.endpoint, '/warehouse-fulfillment-tote-releases');

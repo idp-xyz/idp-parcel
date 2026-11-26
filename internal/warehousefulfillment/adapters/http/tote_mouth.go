@@ -17,6 +17,26 @@ import (
 type ToteIntake interface {
 	IntakeToteRegistration(ctx context.Context, request *http.Request) (application.RegisterTotesCommand, error)
 	IntakeToteRetirement(ctx context.Context, request *http.Request) (application.RetireToteCommand, error)
+	IntakeToteRequirement(ctx context.Context, request *http.Request) (application.RegisterToteRequirementCommand, error)
+}
+
+func (intake *OperatorRegistryIntake) IntakeToteRequirement(ctx context.Context, request *http.Request) (application.RegisterToteRequirementCommand, error) {
+	return intakeRegistration(ctx, request, intake.authenticator, registrationjson.RegisterToteRequirementCommand)
+}
+
+func (UnconfiguredIntake) IntakeToteRequirement(context.Context, *http.Request) (application.RegisterToteRequirementCommand, error) {
+	return application.RegisterToteRequirementCommand{}, ErrAccessChannelNotConfigured
+}
+
+// NewRegisterToteRequirementEndpoint 交回登记「拣货必须用周转箱」的入口（POST /warehouse-fulfillment-tote-requirements）。
+func NewRegisterToteRequirementEndpoint(intake ToteIntake, waves WaveService) http.Handler {
+	return toteEndpoint(func(request *http.Request) (application.WaveResult, error) {
+		command, err := intake.IntakeToteRequirement(request.Context(), request)
+		if err != nil {
+			return application.WaveResult{}, &toteIntakeError{err}
+		}
+		return waves.RegisterToteRequirement(request.Context(), command)
+	})
 }
 
 func (intake *OperatorRegistryIntake) IntakeToteRegistration(ctx context.Context, request *http.Request) (application.RegisterTotesCommand, error) {

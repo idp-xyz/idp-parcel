@@ -116,6 +116,7 @@ export const warehouseActionOutcomeLabels: Record<string, string> = {
   TOTE_IN_USE: '这个箱上还绑着出库单，货还在里面',
   TOTE_RELEASED: '已放开，这个箱可以绑别的出库单了',
   TOTE_NOT_ACCEPTING: '这个箱已停用，不能再往里放货',
+  TOTE_REQUIRED: '这个仓拣货必须用周转箱，这一笔没带箱号，没有记',
   SHORT_SHIPPED: '已按已拣数量发货：没拣到的预占放开，出库单进已拣货，往下按已拣数量复核打包',
   REMAINDER_SPLIT: '已拆出缺货部分：原单进已拣货、按已拣数量往下走，缺的另成一张出库单，在原单右栏能点过去',
   PARTIAL_SHIPMENT_NOT_CONFIGURED: '这张单没写明拣不齐时怎么发，货主也没登记默认，不能少发，也不能拆出缺货部分',
@@ -519,6 +520,16 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     endpoint: '/warehouse-fulfillment-tote-retirements',
     grant: 'registry',
     snapshotHint: '填 warehouse 与 toteCode。箱上还绑着出库单时不停。停用的箱留在名册上，再登记同一个箱号就恢复在用。' + noActorNote,
+  },
+  {
+    id: 'tote-requirement',
+    label: '登记拣货必须用箱',
+    title: '登记一个仓拣货是否必须用周转箱',
+    endpoint: '/warehouse-fulfillment-tote-requirements',
+    grant: 'registry',
+    snapshotHint:
+      '填 warehouse、revision（从 1 起连续）、required（true 必须用箱 / false 不要求）。登记成必须之后，不带箱号的拣货不成立。没登记的仓带不带箱都收。' +
+      noActorNote,
   },
   {
     id: 'tote-release',

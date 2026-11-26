@@ -49,8 +49,8 @@ export function WmsDocumentPage({
   /** 右栏：关联单据一类看不见也不缺的辅助内容，只在宽屏显示。 */
   aside?: ReactNode;
   /**
-   * 摆在列表的详情栏里时给：头区收成两行（单号与状态一行、动作一行可换行），「返回列表」换成「整页打开」与「关闭」，
-   * 关联单据那一栏排到正文下面——栏只有半屏宽，照整页的排法动作会挤出栏外、右栏会把正文挤窄。
+   * 摆在列表的详情栏里时给：动作与单号排在同一行、靠右，栏窄到一行放不下时动作才换到下一行；「返回列表」换成
+   * 「整页打开」与「关闭」，钉在右上角；关联单据那一栏排到正文下面——栏可能只有半屏宽，右栏会把正文挤窄。
    */
   panel?: { onClose: () => void; onOpenPage: () => void };
   children: ReactNode;
@@ -61,28 +61,33 @@ export function WmsDocumentPage({
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-idpxyz-editor">
         {/* 头区与下面的进度条说的是同一件事——这张单是什么、走到哪了：有进度条时两块之间不画线，线只画在进度条下面一道。 */}
         <div className={`shrink-0 px-4 ${ready && stepper ? 'pb-1 pt-3' : 'border-b border-idpxyz-border py-3'}`}>
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="type-section font-semibold text-idpxyz-textBright">{kind}</span>
-                {title ? <CodeRef value={title} title={`${kind}号`} /> : null}
-                {ready ? badge : null}
+          {/* 刷新、整页打开、关闭钉在右上角，不参与换行：栏再窄，关闭也在老地方。右边留出它们的位置。 */}
+          <div className="relative pr-[6.5rem]">
+            <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+              <div className="min-w-0 flex-[1_1_18rem]">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="type-section font-semibold text-idpxyz-textBright">{kind}</span>
+                  {title ? <CodeRef value={title} title={`${kind}号`} /> : null}
+                  {ready ? badge : null}
+                </div>
+                {ready && subtitle ? <p className="mt-1 type-caption leading-4 text-idpxyz-textMuted">{subtitle}</p> : null}
               </div>
-              {ready && subtitle ? <p className="mt-1 type-caption leading-4 text-idpxyz-textMuted">{subtitle}</p> : null}
+              {ready && actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
             </div>
-            {onReload ? (
-              <Button type="button" variant="ghost" size="icon" disabled={loading} title="刷新" aria-label="刷新" onClick={onReload}>
-                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <div className="absolute right-0 top-0 flex items-center">
+              {onReload ? (
+                <Button type="button" variant="ghost" size="icon" disabled={loading} title="刷新" aria-label="刷新" onClick={onReload}>
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                </Button>
+              ) : null}
+              <Button type="button" variant="ghost" size="icon" title="整页打开" aria-label="整页打开" onClick={panel.onOpenPage}>
+                <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
               </Button>
-            ) : null}
-            <Button type="button" variant="ghost" size="icon" title="整页打开" aria-label="整页打开" onClick={panel.onOpenPage}>
-              <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" title="关闭详情" aria-label="关闭详情" onClick={panel.onClose}>
-              <X className="h-4 w-4" aria-hidden="true" />
-            </Button>
+              <Button type="button" variant="ghost" size="icon" title="关闭详情" aria-label="关闭详情" onClick={panel.onClose}>
+                <X className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
           </div>
-          {ready && actions ? <div className="mt-2.5 flex flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
         {ready && stepper ? <div className="shrink-0 overflow-x-auto border-b border-idpxyz-border px-4 py-2.5">{stepper}</div> : null}
         {loading ? (

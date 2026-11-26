@@ -43,6 +43,34 @@ func TestToteDocumentsTranslateIntoCommands(t *testing.T) {
 	}
 }
 
+// 「拣货必须用周转箱」的登记带仓、修订与 required；required 不带不当成假——假是明说不要求，与没登记是两回事。
+func TestAToteRequirementDocumentMustSayWhetherTotesAreRequired(t *testing.T) {
+	tenant, _ := domain.NewTenantID("SYN-TENANT-01")
+	operator, _ := domain.NewRegistrant("operator-1")
+	for _, required := range []bool{true, false} {
+		body := `{"warehouse":"SYN-WH-01","revision":1,"required":false}`
+		if required {
+			body = `{"warehouse":"SYN-WH-01","revision":1,"required":true}`
+		}
+		command, err := registrationjson.RegisterToteRequirementCommand(strings.NewReader(body), tenant, operator)
+		if err != nil || command.Warehouse.String() != "SYN-WH-01" || command.Revision != 1 || command.Required != required ||
+			command.Tenant != tenant || command.Operator != operator {
+			t.Fatalf("required=%v 译出的命令 %+v：%v", required, command, err)
+		}
+	}
+	for name, body := range map[string]string{
+		"没有仓":         `{"revision":1,"required":true}`,
+		"没有修订":        `{"warehouse":"SYN-WH-01","required":true}`,
+		"修订不是正整数":     `{"warehouse":"SYN-WH-01","revision":0,"required":true}`,
+		"没说 required": `{"warehouse":"SYN-WH-01","revision":1}`,
+		"带了操作者":       `{"warehouse":"SYN-WH-01","revision":1,"required":true,"registrant":"someone"}`,
+	} {
+		if _, err := registrationjson.RegisterToteRequirementCommand(strings.NewReader(body), tenant, operator); err == nil {
+			t.Errorf("%s：没有被拒", name)
+		}
+	}
+}
+
 // 拣货事实可以带箱号，不带就是没用箱；带了空白的不收。由人放开周转箱带仓与一个箱号，操作者取自身份。
 func TestAPickMayNameAToteAndAReleaseNamesOne(t *testing.T) {
 	pick := `{"factId":"SYN-FACT-01","taskId":"SYN-TASK-01","warehouse":"SYN-WH-01","quantity":2,"targetLocation":"SYN-LOC-OUT"`

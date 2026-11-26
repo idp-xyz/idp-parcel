@@ -268,3 +268,39 @@ func (store *Waves) ReleaseTote(ctx context.Context, tenant domain.TenantID, war
 	}
 	return tag.RowsAffected() == 1, nil
 }
+
+func (store *Waves) LoadToteRequirement(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode) (ports.ToteRequirement, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.ToteRequirement{}, false, err
+	}
+	var requirement ports.ToteRequirement
+	err = querier.QueryRow(ctx,
+		`SELECT revision, required, operator_id, registered_at
+		   FROM warehouse_fulfillment.tote_requirement
+		  WHERE tenant_id = $1 AND warehouse_code = $2
+		  ORDER BY revision DESC
+		  LIMIT 1`,
+		tenant.String(), warehouse.String()).Scan(&requirement.Revision, &requirement.Required, &requirement.Operator, &requirement.RegisteredAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.ToteRequirement{}, false, nil
+	}
+	if err != nil {
+		return ports.ToteRequirement{}, false, fmt.Errorf("load tote requirement: %w", err)
+	}
+	return requirement, true, nil
+}
+
+func (store *Waves) SaveToteRequirement(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, requirement ports.ToteRequirement) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save tote requirement: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.tote_requirement (tenant_id, warehouse_code, revision, required, operator_id, registered_at)
+		 VALUES ($1,$2,$3,$4,$5,$6)`,
+		tenant.String(), warehouse.String(), requirement.Revision, requirement.Required, requirement.Operator, requirement.RegisteredAt.UTC()); err != nil {
+		return fmt.Errorf("save tote requirement: %w", err)
+	}
+	return nil
+}

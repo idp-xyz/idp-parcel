@@ -938,6 +938,8 @@ export interface SettingsOverviewBody {
     operator: string;
     registeredAt: string;
   }>;
+  /** 登记过「拣货必须用周转箱」的仓各自最新的一版；没登记的仓不在里面，那是未配置。 */
+  toteRequirements?: ReadonlyArray<{ warehouseCode: string; revision: number; required: boolean; operator: string; registeredAt: string }>;
   approvalDuty: { configured: boolean; revision?: number; distinctSubjects?: boolean; operator?: string; registeredAt?: string };
   disposalRules: ReadonlyArray<DisposalRuleRecord>;
   chargeUnits: ReadonlyArray<{ warehouseCode: string; revision: number; weightUnit: string; volumeUnit: string; registeredAt: string }>;

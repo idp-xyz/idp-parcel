@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getWave, listTotes, listWaves } from '../api';
+import { getSettingsOverview, getWave, listTotes, listWaves } from '../api';
 import { workFactSpecs } from '../work-fact';
 import { browserStorage } from './device-binding';
 import { liveGoodsIdentifier, type GoodsIdentifier } from './pick-goods';
@@ -27,7 +27,7 @@ import {
 } from './pick-flow';
 import { loadPickQueue, type PickQueue } from './pick-queue';
 import { readPickStaging, writePickStaging } from './pick-staging';
-import { warehouseHasTotes } from './pick-totes';
+import { warehouseToteMode } from './pick-totes';
 import { liveStagingVerifier, type StagingVerifier } from './pick-staging-check';
 import type { ScanCue } from './scan-sound';
 import {
@@ -213,14 +213,14 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
     apply(beginPick(load.queue.cells, readPickStaging(browserStorage(), deviceId)));
   }, [load, deviceId, apply]);
 
-  // 这个仓登记了周转箱没有：开工后读一次，读回来告诉状态机。没读成就当没有箱——提示扫箱只是帮人把货分开，
-  // 不是拣货成立的条件；读成与否都不拦着拣。
+  // 这个仓登记了周转箱没有、租户要不要求用箱：开工后读一次，读回来告诉状态机。没读成就当没有箱、不要求——
+  // 读成与否都不拦着拣；真要求的话后端会拒不带箱的那一笔，状态机从那一笔起改成必须用箱。
   useEffect(() => {
     if (load.phase !== 'ready') return;
     let cancelled = false;
-    void warehouseHasTotes(warehouse, listTotes).then((on) => {
+    void warehouseToteMode(warehouse, listTotes, getSettingsOverview).then((mode) => {
       const current = stateRef.current;
-      if (!cancelled && current !== null) apply(setToteMode(current, on));
+      if (!cancelled && current !== null) apply(setToteMode(current, mode.on, mode.required));
     });
     return () => {
       cancelled = true;

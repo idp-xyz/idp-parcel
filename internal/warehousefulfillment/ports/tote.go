@@ -31,6 +31,18 @@ type ToteStore interface {
 	ReleaseTotes(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, at time.Time) error
 	// ReleaseTote 由人放开一个箱，记下是谁放的。箱没绑着交回 false。
 	ReleaseTote(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, code domain.ToteCode, operator domain.Registrant, at time.Time) (bool, error)
+	// LoadToteRequirement 交回这个仓「拣货必须用周转箱」最新的一版；没登记过交回 false。
+	LoadToteRequirement(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode) (ToteRequirement, bool, error)
+	SaveToteRequirement(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode, requirement ToteRequirement) error
+}
+
+// ToteRequirement 是一个仓「拣货必须用周转箱」这条规则的一版。Required 为假是租户明说不要求，与没登记不是一回事：
+// 没登记是未配置。
+type ToteRequirement struct {
+	Revision     int
+	Required     bool
+	Operator     string
+	RegisteredAt time.Time
 }
 
 // ToteBinding 是绑一个箱的结果。

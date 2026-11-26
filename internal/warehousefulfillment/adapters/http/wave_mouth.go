@@ -19,6 +19,7 @@ type WaveService interface {
 	RegisterTotes(ctx context.Context, command application.RegisterTotesCommand) (application.WaveResult, error)
 	RetireTote(ctx context.Context, command application.RetireToteCommand) (application.WaveResult, error)
 	ReleaseTote(ctx context.Context, command application.ReleaseToteCommand) (application.WaveResult, error)
+	RegisterToteRequirement(ctx context.Context, command application.RegisterToteRequirementCommand) (application.WaveResult, error)
 	Adopt(ctx context.Context, command application.AdoptStrategyCommand) (application.WaveResult, error)
 	Pick(ctx context.Context, command application.PickCommand) (application.WaveResult, error)
 	Check(ctx context.Context, command application.CheckCommand) (application.WaveResult, error)

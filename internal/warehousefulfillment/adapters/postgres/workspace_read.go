@@ -90,6 +90,33 @@ func (store *WorkspaceReads) SettingsOverview(ctx context.Context, tenant domain
 		rows.Close()
 	}
 
+	// 各仓「拣货必须用周转箱」最新修订
+	{
+		rows, err := querier.Query(ctx,
+			`SELECT DISTINCT ON (warehouse_code) warehouse_code, revision, required, operator_id, registered_at
+			   FROM warehouse_fulfillment.tote_requirement
+			  WHERE tenant_id = $1
+			  ORDER BY warehouse_code, revision DESC`,
+			tenant.String(),
+		)
+		if err != nil {
+			return out, fmt.Errorf("%s: tote requirements: %w", op, err)
+		}
+		for rows.Next() {
+			var item ports.ToteRequirementOverview
+			if err := rows.Scan(&item.WarehouseCode, &item.Revision, &item.Required, &item.Operator, &item.RegisteredAt); err != nil {
+				rows.Close()
+				return out, fmt.Errorf("%s: tote requirements: %w", op, err)
+			}
+			out.ToteRequirements = append(out.ToteRequirements, item)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return out, fmt.Errorf("%s: tote requirements: %w", op, err)
+		}
+		rows.Close()
+	}
+
 	// 3. 库存调整批准职责最新修订
 	{
 		var item ports.ApprovalDutyOverview

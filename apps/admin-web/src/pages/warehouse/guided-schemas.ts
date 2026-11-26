@@ -656,6 +656,18 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       },
     ],
   },
+  'tote-requirement': {
+    fields: [
+      { path: 'warehouse', label: '仓编码', kind: 'text', required: true, placeholder: 'SYN-WH-01' },
+      { path: 'revision', label: '修订号', kind: 'integer', required: true, placeholder: '1', hint: '从 1 起连续；要改就登下一号' },
+      {
+        path: 'required',
+        label: '这个仓拣货必须用周转箱',
+        kind: 'boolean',
+        hint: '勾上是必须：不带箱号的拣货不成立。不勾是明说不要求。这个仓要先登记好周转箱',
+      },
+    ],
+  },
   'tote-release': {
     fields: [
       { path: 'warehouse', label: '仓编码', kind: 'text', required: true, placeholder: 'SYN-WH-01' },

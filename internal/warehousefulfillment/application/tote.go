@@ -132,6 +132,61 @@ func (handler *WaveHandler) ReleaseTote(ctx context.Context, command ReleaseTote
 	return WaveResult{outcome: WaveToteReleased}, nil
 }
 
+// RegisterToteRequirementCommand 登记一个仓「拣货必须用周转箱」这条规则的一版。修订只追加。
+type RegisterToteRequirementCommand struct {
+	Tenant    domain.TenantID
+	Warehouse domain.WarehouseCode
+	Revision  int
+	Required  bool
+	Operator  domain.Registrant
+}
+
+// RegisterToteRequirement 这条规则是租户按仓定的：产品不替他定哪个仓必须用箱，没登记的仓就是未配置，拣货带不带箱都收。
+// 修订从 1 起连续；与最新一版逐格相同的重放答已有结果，跳号或同号不同内容是内容冲突。只给登记过的自营仓登。
+func (handler *WaveHandler) RegisterToteRequirement(ctx context.Context, command RegisterToteRequirementCommand) (WaveResult, error) {
+	if handler.toteWarehouses == nil {
+		return WaveResult{outcome: WaveNotConfigured}, nil
+	}
+	if command.Operator.String() == "" || command.Warehouse.String() == "" || command.Revision < 1 {
+		return WaveResult{outcome: WaveContentInvalid}, nil
+	}
+	warehouse, found, err := handler.toteWarehouses.LoadLatestWarehouse(ctx, command.Tenant, command.Warehouse)
+	if err != nil {
+		return WaveResult{}, fmt.Errorf("register tote requirement: %w", err)
+	}
+	if !found {
+		return WaveResult{outcome: WaveWarehouseNotFound}, nil
+	}
+	if warehouse.Content().Kind() == domain.WarehouseKindAgent {
+		return WaveResult{outcome: WaveWarehouseNotAccepting}, nil
+	}
+	current, found, err := handler.waves.LoadToteRequirement(ctx, command.Tenant, command.Warehouse)
+	if err != nil {
+		return WaveResult{}, fmt.Errorf("register tote requirement: %w", err)
+	}
+	if found && current.Revision == command.Revision && current.Required == command.Required {
+		return WaveResult{outcome: WaveExisting}, nil
+	}
+	if (found && command.Revision != current.Revision+1) || (!found && command.Revision != 1) {
+		return WaveResult{outcome: WaveConflict}, nil
+	}
+	if err := handler.waves.SaveToteRequirement(ctx, command.Tenant, command.Warehouse, ports.ToteRequirement{
+		Revision: command.Revision, Required: command.Required, Operator: command.Operator.String(), RegisteredAt: handler.clock.Now(),
+	}); err != nil {
+		return WaveResult{}, fmt.Errorf("register tote requirement: %w", err)
+	}
+	return WaveResult{outcome: WaveStrategyRegistered}, nil
+}
+
+// toteRequired 回答这个仓此刻要不要求拣货带箱。没登记这条规则是未配置，不要求。
+func (handler *WaveHandler) toteRequired(ctx context.Context, tenant domain.TenantID, warehouse domain.WarehouseCode) (bool, error) {
+	requirement, found, err := handler.waves.LoadToteRequirement(ctx, tenant, warehouse)
+	if err != nil {
+		return false, err
+	}
+	return found && requirement.Required, nil
+}
+
 // bindTote 在拣货入账之前把箱绑到这张出库请求上。交回的 outcome 不是 WaveOutcomeInvalid 时拣货不成立：
 // 箱认不得或在别的单上，货就不该放进去。
 func (handler *WaveHandler) bindTote(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequest, code domain.ToteCode) (WaveOutcome, error) {

@@ -16,6 +16,16 @@ type SettingsOverview struct {
 	ChargeAging        []ChargeAgingOverview
 	ChargeProjects     []ChargeProjectOverview
 	AgentConnectors    []AgentConnectorOverview
+	// ToteRequirements 是登记过「拣货必须用周转箱」的仓各自最新的一版；没登记的仓不在里面，那是未配置。
+	ToteRequirements []ToteRequirementOverview
+}
+
+type ToteRequirementOverview struct {
+	WarehouseCode string
+	Revision      int
+	Required      bool
+	Operator      string
+	RegisteredAt  time.Time
 }
 
 type AllocationStrategyOverview struct {

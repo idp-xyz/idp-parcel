@@ -52,6 +52,7 @@ const (
 	WaveWarehouseNotAccepting
 	WaveToteReleased
 	WaveToteNotAccepting
+	WaveToteRequired
 )
 
 func (outcome WaveOutcome) String() string {
@@ -130,6 +131,8 @@ func (outcome WaveOutcome) String() string {
 		return "TOTE_RELEASED"
 	case WaveToteNotAccepting:
 		return "TOTE_NOT_ACCEPTING"
+	case WaveToteRequired:
+		return "TOTE_REQUIRED"
 	default:
 		return ""
 	}
@@ -457,6 +460,15 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 		}
 		if refused != WaveOutcomeInvalid {
 			return WaveResult{outcome: refused}, nil
+		}
+	} else {
+		// 租户给这个仓登记了「拣货必须用周转箱」时，不带箱的这一笔不成立。没登记这条规则就不要求。
+		required, err := handler.toteRequired(ctx, command.Tenant, request.Warehouse())
+		if err != nil {
+			return WaveResult{}, fmt.Errorf("pick: %w", err)
+		}
+		if required {
+			return WaveResult{outcome: WaveToteRequired}, nil
 		}
 	}
 	if err := handler.postPick(ctx, request, task, command); err != nil {

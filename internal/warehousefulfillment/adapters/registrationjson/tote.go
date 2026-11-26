@@ -68,6 +68,39 @@ func RetireToteCommand(reader io.Reader, tenant domain.TenantID, operator domain
 	return application.RetireToteCommand{Tenant: tenant, Warehouse: warehouse, Code: code, Operator: operator}, nil
 }
 
+type toteRequirementDocument struct {
+	carriedIdentity
+	Warehouse *string `json:"warehouse"`
+	Revision  *int    `json:"revision"`
+	Required  *bool   `json:"required"`
+}
+
+// RegisterToteRequirementCommand 把「拣货必须用周转箱」的登记译成命令。required 必须明说是真是假：
+// 不带不当成假——假是租户明说不要求，与没登记是两回事。
+func RegisterToteRequirementCommand(reader io.Reader, tenant domain.TenantID, operator domain.Registrant) (application.RegisterToteRequirementCommand, error) {
+	var none application.RegisterToteRequirementCommand
+	document, err := decodeDocument[toteRequirementDocument](reader, "tote requirement")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	warehouse, err := requiredText("warehouse", document.Warehouse, domain.NewWarehouseCode)
+	if err != nil {
+		return none, err
+	}
+	if document.Revision == nil || *document.Revision < 1 {
+		return none, malformed("revision must be a positive integer")
+	}
+	if document.Required == nil {
+		return none, malformed("required is required")
+	}
+	return application.RegisterToteRequirementCommand{
+		Tenant: tenant, Warehouse: warehouse, Revision: *document.Revision, Required: *document.Required, Operator: operator,
+	}, nil
+}
+
 // ReleaseToteCommand 把由人放开周转箱译成命令。载荷与停用同形：仓与一个箱号。
 func ReleaseToteCommand(reader io.Reader) (application.ReleaseToteCommand, error) {
 	var none application.ReleaseToteCommand

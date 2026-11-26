@@ -504,6 +504,9 @@ func init() {
 			"/warehouse-fulfillment-tote-retirements": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-tote-requirements": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-agent-connectors": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
@@ -984,6 +987,7 @@ func init() {
 			shortagePolicy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			toteRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			toteRetirement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			toteRequirement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentConnector := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentStatement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentResult := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -1199,6 +1203,7 @@ func init() {
 				shortagePolicy = warehousehttp.NewRegisterShortagePolicyEndpoint(channels.shortagePolicy(), wiring.outbounds)
 				toteRegistration = warehousehttp.NewRegisterTotesEndpoint(channels.totes(), wiring.waves)
 				toteRetirement = warehousehttp.NewRetireToteEndpoint(channels.totes(), wiring.waves)
+				toteRequirement = warehousehttp.NewRegisterToteRequirementEndpoint(channels.totes(), wiring.waves)
 				agentConnector = warehousehttp.NewRegisterAgentConnectorEndpoint(channels.agentIntake(), wiring.agents)
 				agentStatement = warehousehttp.NewRecordAgentStatementEndpoint(channels.agentIntake(), wiring.agents)
 				agentResult = warehousehttp.NewRecordAgentResultEndpoint(channels.agentIntake(), wiring.agents)
@@ -1401,6 +1406,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-shortage-policies", Handler: shortagePolicy},
 				{Pattern: "/warehouse-fulfillment-tote-registrations", Handler: toteRegistration},
 				{Pattern: "/warehouse-fulfillment-tote-retirements", Handler: toteRetirement},
+				{Pattern: "/warehouse-fulfillment-tote-requirements", Handler: toteRequirement},
 				{Pattern: "/warehouse-fulfillment-agent-connectors", Handler: agentConnector},
 				{Pattern: "/warehouse-fulfillment-agent-stock-statements", Handler: agentStatement},
 				{Pattern: "/warehouse-fulfillment-agent-outbound-results", Handler: agentResult},

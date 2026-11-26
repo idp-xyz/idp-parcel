@@ -91,6 +91,8 @@ export interface PickState {
   gone: boolean;
   /** 这个仓登记了周转箱：是，一张出库单的第一格要扫箱（或点「不用箱」）。 */
   toteOn: boolean;
+  /** 租户给这个仓登记了「拣货必须用周转箱」：是，不能点「不用箱」，不带箱的拣货后端不收。 */
+  toteRequired: boolean;
   /** 这一趟各张出库单定下的箱：箱号是用这个箱，null 是这张单不用箱，没有这一项是还没问过。 */
   totes: Readonly<Record<string, string | null>>;
 }
@@ -136,18 +138,29 @@ export function startPick(input: PickStart): PickState {
     submission: null,
     gone: false,
     toteOn: input.totes === true,
+    toteRequired: false,
     totes: {},
   };
 }
 
 /**
- * 这个仓有没有登记周转箱是开工之后才读回来的：读回来了改这一格。已经定过箱的出库单不受影响；
- * 正停在等箱那一步而读回来是没有箱时，直接去扫商品。
+ * 这个仓有没有登记周转箱、租户要不要求用箱，是开工之后才读回来的：读回来了改这两格。要求用箱时一定提示扫箱。
+ * 已经定过箱的出库单不受影响；这一趟点过「不用箱」的出库单，要求用箱时那个决定作废、回头重新问。
+ * 正停在等箱那一步而读回来是没有箱、也不要求时，直接去扫商品。
  */
-export function setToteMode(state: PickState, on: boolean): PickStep {
-  if (state.toteOn === on) return { state, effects: [] };
-  if (!on && state.phase === 'tote') return { state: { ...state, toteOn: false, phase: 'goods', feedback: waitingFeedback }, effects: [] };
-  return { state: { ...state, toteOn: on }, effects: [] };
+export function setToteMode(state: PickState, on: boolean, required = false): PickStep {
+  const toteOn = on || required;
+  if (state.toteOn === toteOn && state.toteRequired === required) return { state, effects: [] };
+  if (!toteOn && state.phase === 'tote') {
+    return { state: { ...state, toteOn: false, toteRequired: false, phase: 'goods', feedback: waitingFeedback }, effects: [] };
+  }
+  const totes = required ? withoutDeclined(state.totes) : state.totes;
+  return { state: { ...state, toteOn, toteRequired: required, totes }, effects: [] };
+}
+
+// 去掉「这张单不用箱」的那些决定：要求用箱之后它们不作数了。
+function withoutDeclined(totes: Readonly<Record<string, string | null>>): Readonly<Record<string, string | null>> {
+  return Object.fromEntries(Object.entries(totes).filter(([, tote]) => tote !== null));
 }
 
 /** 这一格的货放进哪个箱：这张出库单这一趟定下的那个；没定或不用箱为 undefined。 */
@@ -248,7 +261,9 @@ export function pickScreen(state: PickState): PickScreen {
       return {
         label,
         headline: wrong ? (wrongHeadlines.tote as string) : '扫这张单的周转箱',
-        counter: `这一格的货属于出库单 ${cell.requestId}，它的货都放进同一个箱。不用箱就点「不用箱」。`,
+        counter: state.toteRequired
+          ? `这一格的货属于出库单 ${cell.requestId}，它的货都放进同一个箱。这个仓拣货必须用周转箱。`
+          : `这一格的货属于出库单 ${cell.requestId}，它的货都放进同一个箱。不用箱就点「不用箱」。`,
       };
     case 'goods':
     case 'resolving': {
@@ -583,9 +598,9 @@ export function skipCell(state: PickState): PickStep {
   });
 }
 
-/** 「不用箱」：这张出库单这一趟不用周转箱，后面它的格也不再问。只在等箱那一步能点。 */
+/** 「不用箱」：这张出库单这一趟不用周转箱，后面它的格也不再问。只在等箱那一步能点；这个仓要求用箱时不能点。 */
 export function skipTote(state: PickState): PickStep {
-  if (state.phase !== 'tote') return { state, effects: [] };
+  if (state.phase !== 'tote' || state.toteRequired) return { state, effects: [] };
   const cell = state.queue[0];
   return step({
     ...state,
@@ -634,11 +649,15 @@ export const pickOutcomeLabels: Readonly<Record<string, string>> = {
   TOTE_IN_USE: '这个箱上绑着别的出库单，这一笔没有记。货先别放进去：点「下一格」，这一格排到队尾，回头再来时换一个箱扫。',
   TOTE_NOT_FOUND: '这个仓没有登记过这个箱号，这一笔没有记。点「下一格」，这一格排到队尾，回头再来时换一个登记过的箱扫。',
   TOTE_NOT_ACCEPTING: '这个箱已经停用，这一笔没有记。点「下一格」，这一格排到队尾，回头再来时换一个箱扫。',
+  TOTE_REQUIRED: '这个仓拣货必须用周转箱，这一笔没带箱号，没有记。点「下一格」，这一格排到队尾，回头再来时先扫箱。',
 };
 
-/** 后端不认这个箱：这张出库单这一趟定下的箱要忘掉，回头再来这一格时重新扫。 */
+/**
+ * 后端不认这张出库单这一趟定下的箱（或定下的「不用箱」）：那个决定要忘掉，回头再来这一格时重新问。
+ * 必须用箱这一种（TOTE_REQUIRED）是这一趟开工之后租户才登记的规则，工位当时还不知道。
+ */
 export function toteRefusedAfter(outcome: string | undefined): boolean {
-  return outcome === 'TOTE_IN_USE' || outcome === 'TOTE_NOT_FOUND' || outcome === 'TOTE_NOT_ACCEPTING';
+  return outcome === 'TOTE_IN_USE' || outcome === 'TOTE_NOT_FOUND' || outcome === 'TOTE_NOT_ACCEPTING' || outcome === 'TOTE_REQUIRED';
 }
 
 /** 后端答这条任务已经不能拣：「下一格」要把它从队列里去掉，而不是挪到队尾。 */
@@ -683,8 +702,18 @@ export function applyVerdict(state: PickState, verdict: WorkFactVerdict): PickSt
         const { [sub.cell.requestId]: _forgotten, ...rest } = state.totes;
         totes = rest;
       }
+      // 后端说这个仓必须用箱：从这一笔起工位也按必须用箱来，不再让人点「不用箱」
+      const required = state.toteRequired || verdict.outcome === 'TOTE_REQUIRED';
       return step(
-        { ...state, phase: 'refused', gone: taskGoneAfter(verdict.outcome), totes, feedback: { kind: 'wrong', text: verdict.headline } },
+        {
+          ...state,
+          phase: 'refused',
+          gone: taskGoneAfter(verdict.outcome),
+          toteOn: state.toteOn || required,
+          toteRequired: required,
+          totes: required ? withoutDeclined(totes) : totes,
+          feedback: { kind: 'wrong', text: verdict.headline },
+        },
         'wrong',
       );
     }
@@ -751,7 +780,7 @@ export function pickActions(state: PickState): PickActions {
       state.counted === 0,
     resend: state.phase === 'unsent',
     next: state.phase === 'refused',
-    skipTote: state.phase === 'tote',
+    skipTote: state.phase === 'tote' && !state.toteRequired,
   };
 }
 

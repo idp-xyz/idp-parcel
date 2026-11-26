@@ -390,4 +390,92 @@ func TestWritingTotesRefusesToRunOutsideATransaction(t *testing.T) {
 	if _, err := waves.ReleaseTote(context.Background(), tenant, warehouse, code, operator, preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("ReleaseTote：%v", err)
 	}
+	err = waves.SaveToteRequirement(context.Background(), tenant, warehouse, ports.ToteRequirement{
+		Revision: 1, Required: true, Operator: "operator-2", RegisteredAt: preAdviceNumberingInstant,
+	})
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveToteRequirement：%v", err)
+	}
+}
+
+func (world receiptWorld) requireTotes(t *testing.T, handler *application.WaveHandler, warehouse string, revision int, required bool) application.WaveResult {
+	t.Helper()
+	var result application.WaveResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var registerErr error
+		result, registerErr = handler.RegisterToteRequirement(ctx, application.RegisterToteRequirementCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Warehouse: valueOf(t, domain.NewWarehouseCode, warehouse),
+			Revision: revision, Required: required, Operator: valueOf(t, domain.NewRegistrant, "operator-2"),
+		})
+		return registerErr
+	})
+	if err != nil {
+		t.Fatalf("登记必须用箱：%v", err)
+	}
+	return result
+}
+
+// Covers: 「这个仓拣货必须用周转箱」是租户按仓登记的。没登记时拣货带不带箱都收；登记成要求之后，不带箱的拣货整份不成立、
+// 任务仍待执行，带箱的照常；再登一版说不要求，不带箱的又收。修订从 1 起连续，原样重放答已有结果，跳号是内容冲突；
+// 没登记的仓、代理仓不收。设置总览只列登记过的仓。
+func TestPickingWithoutAToteIsRefusedOnlyWhereTheTenantRequiresTotes(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	if world.registerTotes(t, handler, "SYN-WH-01", "SYN-TOTE-01").Outcome() != application.WaveTotesRegistered {
+		t.Fatal("箱没有登记成")
+	}
+	request := reserve("REQ-TOTE-RULE", 10)
+	released := world.releaseRequests(t, handler, "WAVE-TOTE-RULE", request)
+	if released.Outcome() != application.WaveAllocated || len(released.Tasks()) != 2 {
+		t.Fatalf("放出 %s", released.Outcome())
+	}
+	near, far := taskAt(t, released.Tasks(), "SYN-LOC-STORE"), taskAt(t, released.Tasks(), "SYN-LOC-STORE-2")
+
+	if got := world.requireTotes(t, handler, "SYN-WH-01", 2, true).Outcome(); got != application.WaveConflict {
+		t.Fatalf("头一版不是 1 = %s", got)
+	}
+	if got := world.requireTotes(t, handler, "SYN-WH-MISSING", 1, true).Outcome(); got != application.WaveWarehouseNotFound {
+		t.Fatalf("没登记的仓 = %s", got)
+	}
+	mustSave(t, world.transactor, world.warehouses, revisionFixture(t, "SYN-TENANT-01", "SYN-WH-AGENT", 1, func(spec *domain.WarehouseContentSpec) {
+		spec.Kind = domain.WarehouseKindAgent
+	}))
+	if got := world.requireTotes(t, handler, "SYN-WH-AGENT", 1, true).Outcome(); got != application.WaveWarehouseNotAccepting {
+		t.Fatalf("代理仓 = %s", got)
+	}
+	if got := world.requireTotes(t, handler, "SYN-WH-01", 1, true).Outcome(); got != application.WaveStrategyRegistered {
+		t.Fatalf("登记要求 = %s", got)
+	}
+	if got := world.requireTotes(t, handler, "SYN-WH-01", 1, true).Outcome(); got != application.WaveExisting {
+		t.Fatalf("原样重放 = %s", got)
+	}
+	if got := world.requireTotes(t, handler, "SYN-WH-01", 1, false).Outcome(); got != application.WaveConflict {
+		t.Fatalf("同号换了内容 = %s", got)
+	}
+
+	if got := world.pick(t, handler, near.ID, 6).Outcome(); got != application.WaveToteRequired {
+		t.Fatalf("要求用箱时不带箱 = %s", got)
+	}
+	if world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 0 || world.requestStatus(t, request) != "ALLOCATED" {
+		t.Fatalf("不成立之后待出库 %d，请求 %s", world.stockUnitAt(t, "SYN-LOC-OUT", "件"), world.requestStatus(t, request))
+	}
+	if got := world.pickInto(t, handler, near.ID, 6, "SYN-TOTE-01").Outcome(); got != application.WavePicked {
+		t.Fatalf("要求用箱时带箱 = %s", got)
+	}
+
+	reads, err := adapter.NewWorkspaceReads(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overview, err := reads.SettingsOverview(t.Context(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"))
+	if err != nil || len(overview.ToteRequirements) != 1 || overview.ToteRequirements[0].WarehouseCode != "SYN-WH-01" ||
+		overview.ToteRequirements[0].Revision != 1 || !overview.ToteRequirements[0].Required || overview.ToteRequirements[0].Operator != "operator-2" {
+		t.Fatalf("设置总览 %+v err %v", overview.ToteRequirements, err)
+	}
+
+	if got := world.requireTotes(t, handler, "SYN-WH-01", 2, false).Outcome(); got != application.WaveStrategyRegistered {
+		t.Fatalf("第二版说不要求 = %s", got)
+	}
+	if got := world.pick(t, handler, far.ID, 4).Outcome(); got != application.WavePicked {
+		t.Fatalf("不要求之后不带箱 = %s", got)
+	}
 }
