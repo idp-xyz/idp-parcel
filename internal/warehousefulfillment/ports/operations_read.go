@@ -62,8 +62,21 @@ type OutboundRequestRow struct {
 	WantedQuantity           int64
 }
 
+// 波次的状态不另存，读的时候从它的拣货任务算出来：一条任务的状态一变，波次的状态跟着就对，没有第二处要记得同步。
+// 已取消与迟到的任务不算这个波次的结果：迟到是截单之后才拣出来的货，要回库。
+const (
+	// WaveReleased 是还有任务没拣，也还没有一条任务拣过。
+	WaveReleased = "RELEASED"
+	// WavePicking 是还有任务没拣，已经有任务拣过（拣满、少拣或迟到）。
+	WavePicking = "PICKING"
+	// WaveCompleted 是没有任务等着拣，至少一条拣满或少拣。
+	WaveCompleted = "COMPLETED"
+	// WaveCancelled 是每一条任务都被截单作废了。
+	WaveCancelled = "CANCELLED"
+)
+
 // WavePages 是运营查阅波次列表的查询声明（ADR-0144）。
-// 筛选维覆盖仓与是否预取；q 覆盖波次标识、仓与操作者。
+// 筛选维覆盖仓、是否预取与状态；q 覆盖波次标识、仓与操作者。
 var WavePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "warehouse-fulfillment-wave-list",
 	Sorts: []cataloguepage.SortDimension{
@@ -75,6 +88,7 @@ var WavePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
 		{Name: "prefetch", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "status", Vocabulary: []string{WaveReleased, WavePicking, WaveCompleted, WaveCancelled}},
 	},
 })
 
@@ -98,6 +112,7 @@ type WaveRow struct {
 	WarehouseCode string
 	Operator      string
 	Prefetch      bool
+	Status        string
 	ReleasedAt    time.Time
 	Requests      []string
 	Tasks         []WaveTaskRow

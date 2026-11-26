@@ -340,6 +340,9 @@ func (unwiredWave) ListWaves(
 ) (cataloguepage.Result[warehouseports.WaveRow], error) {
 	return cataloguepage.Result[warehouseports.WaveRow]{}, errOrchestrationNotWired
 }
+func (unwiredWave) LoadWaveRow(context.Context, warehousedomain.TenantID, string) (warehouseports.WaveRow, bool, error) {
+	return warehouseports.WaveRow{}, false, errOrchestrationNotWired
+}
 
 type unwiredOutbound struct{}
 
@@ -801,6 +804,7 @@ const (
 	conditionRestoreReadLine    = "/warehouse-fulfillment-condition-restore"
 	outboundRequestListLine     = "/warehouse-fulfillment-outbound-request-list"
 	waveListLine                = "/warehouse-fulfillment-wave-list"
+	waveOneLine                 = "/warehouse-fulfillment-wave"
 	chargeOccurrenceListLine    = "/warehouse-fulfillment-charge-occurrences"
 	warehouseAdoptionListLine   = "/warehouse-fulfillment-charge-adoption-list"
 	warehouseChargeRequestsLine = "/warehouse-fulfillment-charge-requests"
@@ -1029,6 +1033,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		conditionRestoreReadLine:                                      {http.MethodGet, faceOperationsRead},
 		outboundRequestListLine:                                       {http.MethodGet, faceOperationsRead},
 		waveListLine:                                                  {http.MethodGet, faceOperationsRead},
+		waveOneLine:                                                   {http.MethodGet, faceOperationsRead},
 		chargeOccurrenceListLine:                                      {http.MethodGet, faceOperationsRead},
 		warehouseAdoptionListLine:                                     {http.MethodGet, faceOperationsRead},
 		warehouseChargeRequestsLine:                                   {http.MethodGet, faceOperationsRead},
@@ -1291,6 +1296,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			conditionRestoreReadLine:                               {status, code},
 			outboundRequestListLine:                                {status, code},
 			waveListLine:                                           {status, code},
+			waveOneLine:                                            {status, code},
 			chargeOccurrenceListLine:                               {status, code},
 			warehouseAdoptionListLine:                              {status, code},
 			warehouseChargeRequestsLine:                            {status, code},
@@ -1424,6 +1430,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			conditionRestoreReadLine:                               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			outboundRequestListLine:                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			waveListLine:                                           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			waveOneLine:                                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			chargeOccurrenceListLine:                               {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseAdoptionListLine:                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseChargeRequestsLine:                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1550,6 +1557,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			conditionRestoreReadLine:                               {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			outboundRequestListLine:                                {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			waveListLine:                                           {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			waveOneLine:                                            {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			chargeOccurrenceListLine:                               {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseAdoptionListLine:                              {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseChargeRequestsLine:                            {http.StatusInternalServerError, "NO_ANSWER_FORMED"},

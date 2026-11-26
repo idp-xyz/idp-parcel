@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
 import type { ApiResult } from '../../catalogue-api';
 import type { CatalogueConditions } from '../../catalogue-query';
-import type { WaveListBody, WaveRecord, WaveTaskRecord } from '../api';
+import type { WaveListBody, WaveOneBody, WaveRecord, WaveTaskRecord } from '../api';
 import { allWavesChoice, cellsOfWaves, compareLocationCodes, loadPickQueue, MAX_WAVE_PAGES, waveChoices, waveOfChoice } from './pick-queue';
 
 function task(taskId: string, locationCode: string, overrides: Partial<WaveTaskRecord> = {}): WaveTaskRecord {
@@ -21,7 +21,7 @@ function task(taskId: string, locationCode: string, overrides: Partial<WaveTaskR
 }
 
 function wave(waveId: string, tasks: WaveTaskRecord[], warehouseCode = 'SYN-WH-01'): WaveRecord {
-  return { waveId, warehouseCode, operator: 'op', prefetch: false, releasedAt: '2026-11-25T08:00:00Z', requests: [], tasks };
+  return { waveId, warehouseCode, operator: 'op', prefetch: false, status: 'RELEASED', releasedAt: '2026-11-25T08:00:00Z', requests: [], tasks };
 }
 
 const scope = { warehouse: 'SYN-WH-01', wave: null };
@@ -130,6 +130,23 @@ test('同一个任务出现在两页里只算一格', () => {
 
 type Page = { waves: WaveRecord[]; next: string | null };
 
+// 没指名波次的用例不该去按号读；真去读了就让用例败在这里。
+const neverOne = async (waveId: string): Promise<ApiResult<WaveOneBody>> => {
+  throw new Error(`不该按号读 ${waveId}`);
+};
+
+function reader(known: WaveRecord[]): { one: (waveId: string) => Promise<ApiResult<WaveOneBody>>; asked: string[] } {
+  const asked: string[] = [];
+  return {
+    asked,
+    one: async (waveId) => {
+      asked.push(waveId);
+      const found = known.find((candidate) => candidate.waveId === waveId);
+      return { kind: 'outcome', status: 200, body: found ? { outcome: 'WAVE_FOUND', wave: found } : { outcome: 'WAVE_NOT_FOUND' } };
+    },
+  };
+}
+
 function pager(pages: Page[]): {
   list: (conditions: CatalogueConditions, after: string | null) => Promise<ApiResult<WaveListBody>>;
   seen: Array<{ conditions: CatalogueConditions; after: string | null }>;
@@ -150,12 +167,12 @@ function pager(pages: Page[]): {
   };
 }
 
-test('读队列：按本仓筛，从第一页翻到没有下一页，格排好了交回', async () => {
+test('读队列：按本仓、只问还没拣完的两种状态，从第一页翻到没有下一页，格排好了交回', async () => {
   const source = pager([
     { waves: [wave('W-3', [task('T-3', 'B-01-01')])], next: '1' },
     { waves: [wave('W-2', [task('T-2', 'A-01-01')]), wave('W-1', [task('T-1', 'A-01-02', { status: 'DONE' })])], next: null },
   ]);
-  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: null, list: source.list });
+  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: null, list: source.list, one: neverOne });
   equal(answer.kind, 'queue');
   if (answer.kind !== 'queue') return;
   deepEqual(
@@ -171,7 +188,7 @@ test('读队列：按本仓筛，从第一页翻到没有下一页，格排好�
     { waveId: 'W-2', open: 1 },
   ]);
   deepEqual(source.seen.map((call) => call.after), [null, '1']);
-  deepEqual(source.seen[0].conditions, { filters: { warehouseCode: ['SYN-WH-01'] } });
+  deepEqual(source.seen[0].conditions, { filters: { warehouseCode: ['SYN-WH-01'], status: ['RELEASED', 'PICKING'] } });
 });
 
 test('读队列：翻到页数上限还有下一页，就说只看了这些，不假装看全了', async () => {
@@ -180,7 +197,7 @@ test('读队列：翻到页数上限还有下一页，就说只看了这些，�
     next: index < 9 ? String(index + 1) : null,
   }));
   const source = pager(pages);
-  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: null, list: source.list });
+  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: null, list: source.list, one: neverOne });
   equal(answer.kind, 'queue');
   if (answer.kind !== 'queue') return;
   equal(answer.queue.pagesRead, MAX_WAVE_PAGES);
@@ -195,18 +212,16 @@ test('读队列：页数上限可以调，刚好翻完时不算被截断', async
     { waves: [wave('W-1', [task('T-1', 'A-01-01')])], next: '1' },
     { waves: [wave('W-2', [task('T-2', 'A-01-02')])], next: null },
   ]);
-  const exact = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: null, list: source.list, maxPages: 2 });
+  const exact = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: null, list: source.list, one: neverOne, maxPages: 2 });
   equal(exact.kind === 'queue' && exact.queue.truncated, false);
-  const cut = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: null, list: source.list, maxPages: 1 });
+  const cut = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: null, list: source.list, one: neverOne, maxPages: 1 });
   equal(cut.kind === 'queue' && cut.queue.truncated, true);
 });
 
-test('读队列：指名了波次就用检索词只问它，认出号完全相同的那个就不再翻页', async () => {
-  const source = pager([
-    { waves: [wave('W-10', [task('T-10', 'A-01-01')]), wave('W-1', [task('T-1', 'A-01-02')])], next: '1' },
-    { waves: [wave('W-11', [task('T-11', 'A-01-03')])], next: null },
-  ]);
-  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: 'W-1', list: source.list });
+test('读队列：指名了波次就按号读那一张，不走列表', async () => {
+  const source = pager([{ waves: [wave('W-10', [task('T-10', 'A-01-01')])], next: null }]);
+  const known = reader([wave('W-1', [task('T-1', 'A-01-02'), task('T-2', 'A-01-01', { status: 'DONE' })])]);
+  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: 'W-1', list: source.list, one: known.one });
   equal(answer.kind, 'queue');
   if (answer.kind !== 'queue') return;
   deepEqual(
@@ -215,28 +230,34 @@ test('读队列：指名了波次就用检索词只问它，认出号完全相�
   );
   equal(answer.queue.waveMissing, false);
   equal(answer.queue.truncated, false);
-  equal(source.seen.length, 1);
-  deepEqual(source.seen[0].conditions, { filters: { warehouseCode: ['SYN-WH-01'] }, q: 'W-1' });
+  deepEqual(answer.queue.waves, [{ waveId: 'W-1', open: 1 }]);
+  deepEqual(known.asked, ['W-1']);
+  equal(source.seen.length, 0);
 });
 
-test('读队列：指名的波次没找到（或不属于本仓）时说没找到，队列是空的', async () => {
-  const source = pager([{ waves: [wave('W-10', [task('T-10', 'A-01-01')]), wave('W-1', [task('T-1', 'A-01-02')], 'SYN-WH-02')], next: null }]);
-  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: 'W-1', list: source.list });
+test('读队列：指名的波次没有，或不属于本仓时说没找到，队列是空的', async () => {
+  const source = pager([{ waves: [], next: null }]);
+  const absent = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: 'W-1', list: source.list, one: reader([]).one });
+  equal(absent.kind === 'queue' && absent.queue.waveMissing, true);
+  equal(absent.kind === 'queue' && absent.queue.cells.length, 0);
+
+  const elsewhere = reader([wave('W-1', [task('T-1', 'A-01-02')], 'SYN-WH-02')]);
+  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: 'W-1', list: source.list, one: elsewhere.one });
   equal(answer.kind, 'queue');
   if (answer.kind !== 'queue') return;
   equal(answer.queue.waveMissing, true);
   deepEqual(answer.queue.cells, []);
 });
 
-test('读队列：指名的波次在后面的页里也认得出来', async () => {
-  const source = pager([
-    { waves: [wave('W-10', [task('T-10', 'A-01-01')])], next: '1' },
-    { waves: [wave('W-1', [task('T-1', 'A-01-02')])], next: null },
-  ]);
-  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: 'W-1', list: source.list });
-  equal(answer.kind === 'queue' && answer.queue.waveMissing, false);
-  equal(answer.kind === 'queue' && answer.queue.cells.length, 1);
-  equal(source.seen.length, 2);
+test('读队列：指名的波次没读成就原样交回失败', async () => {
+  const source = pager([{ waves: [], next: null }]);
+  const failure = await loadPickQueue({
+    warehouse: 'SYN-WH-01',
+    wave: 'W-1',
+    list: source.list,
+    one: async () => ({ kind: 'transport', message: '网络断了' }),
+  });
+  deepEqual(failure, { kind: 'failed', failure: { kind: 'transport', message: '网络断了' } });
 });
 
 test('读队列：读口没答出来就原样交回失败，不交一个空队列冒充「没有要拣的」', async () => {
@@ -244,6 +265,7 @@ test('读队列：读口没答出来就原样交回失败，不交一个空队�
     warehouse: 'SYN-WH-01',
     wave: null,
     list: async () => ({ kind: 'transport', message: '网络断了' }),
+    one: neverOne,
   });
   deepEqual(failure, { kind: 'failed', failure: { kind: 'transport', message: '网络断了' } });
 
@@ -256,6 +278,7 @@ test('读队列：读口没答出来就原样交回失败，不交一个空队�
       calls += 1;
       return calls === 1 ? half.list(conditions, after) : { kind: 'noAnswer', status: 500, code: 'NO_ANSWER_FORMED' };
     },
+    one: neverOne,
   });
   equal(flaky.kind, 'failed');
 });
@@ -271,7 +294,7 @@ test('各波次还剩几格：没有待拣格的波次不列，新的在前', as
       next: null,
     },
   ]);
-  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: null, list: source.list });
+  const answer = await loadPickQueue({ warehouse: 'SYN-WH-01', wave: null, list: source.list, one: neverOne });
   equal(answer.kind, 'queue');
   if (answer.kind !== 'queue') return;
   deepEqual(answer.queue.waves, [

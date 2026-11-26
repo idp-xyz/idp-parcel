@@ -1076,10 +1076,9 @@ test('队列读全了没有要说的；只看了前几页就如实说看了多�
   deepEqual(queueNotes({ wavesRead: 3, truncated: false, waveMissing: false }, null), []);
   const notes = queueNotes({ wavesRead: 1000, truncated: true, waveMissing: false }, null);
   equal(notes.length, 1);
-  ok(notes[0].includes('只看了最近 1000 个波次'));
+  ok(notes[0].includes('只看了最近放出的 1000 个还没拣完的波次'));
 });
 
-test('指名的波次没找到：说没找到；翻不完时说是在读到的这些里没找到', () => {
+test('指名的波次没找到：说没找到', () => {
   ok(queueNotes({ wavesRead: 0, truncated: false, waveMissing: true }, 'W-9')[0].includes('没有找到波次 W-9'));
-  ok(queueNotes({ wavesRead: 1000, truncated: true, waveMissing: true }, 'W-9')[0].includes('最近读到的 1000 个波次'));
 });

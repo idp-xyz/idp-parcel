@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { listWaves } from '../api';
+import { getWave, listWaves } from '../api';
 import { workFactSpecs } from '../work-fact';
 import { browserStorage } from './device-binding';
 import { liveGoodsIdentifier, type GoodsIdentifier } from './pick-goods';
@@ -174,7 +174,7 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
     let cancelled = false;
     setRefreshing(true);
     setRefreshError(null);
-    void loadPickQueue({ warehouse, wave, list: listWaves }).then((answer) => {
+    void loadPickQueue({ warehouse, wave, list: listWaves, one: getWave }).then((answer) => {
       if (cancelled) return;
       setRefreshing(false);
       if (answer.kind === 'failed') {

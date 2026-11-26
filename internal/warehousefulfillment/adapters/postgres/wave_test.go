@@ -57,6 +57,180 @@ func TestAWaveAllocatesReservedStockAndAPickMovesItOut(t *testing.T) {
 	}
 }
 
+// Covers: 波次的状态读的时候从它的拣货任务算。刚放出是已放；拣了一条还剩一条是拣货中；都有了结果（拣满或少拣）是已完成；
+// 任务全被截单作废是已取消。迟到的任务算拣过、不算结果：作废之后才拣出来，波次仍是已取消；同一个波次里另有任务等着拣，
+// 就是拣货中。按状态筛只答那一种。按号读一张与列表的一行同形，没有的波次答找不到。
+func TestAWaveStatusFollowsItsPickTasks(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedStorageStock(t, 60)
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-OUT", 1, func(spec *domain.ZoneContentSpec) {
+		spec.Usage = domain.ZoneUsageOutboundStaging
+	}))
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-OUT", 1, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-OUT")
+	}))
+	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
+	outbound := world.outbound(t)
+	reserve := func(key string) domain.OutboundRequestID {
+		t.Helper()
+		accepted := world.acceptOutbound(t, outbound, outboundCommand(t, key, 10))
+		request, ok := accepted.Request()
+		if accepted.Outcome() != application.OutboundReserved || !ok {
+			t.Fatalf("预占 %s：%s", key, accepted.Outcome())
+		}
+		return request.ID()
+	}
+	handler := world.waves(t)
+	if world.adoptStrategy(t, handler).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("策略没有采用")
+	}
+	store, err := adapter.NewWaves(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusOf := func(id string) string {
+		t.Helper()
+		row, found, err := store.LoadWaveRow(t.Context(), tenant, id)
+		if err != nil || !found {
+			t.Fatalf("读波次 %s：found %v err %v", id, found, err)
+		}
+		return row.Status
+	}
+	listed := func(raw string) []string {
+		t.Helper()
+		query, err := ports.WavePages.DecodeRaw(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		page, err := store.ListWaves(t.Context(), tenant, 20, query)
+		if err != nil {
+			t.Fatalf("波次列表 %s：%v", raw, err)
+		}
+		ids := make([]string, 0, len(page.Rows))
+		for _, row := range page.Rows {
+			if row.Status == "" {
+				t.Fatalf("波次 %s 没带状态", row.WaveID)
+			}
+			ids = append(ids, row.WaveID)
+		}
+		return ids
+	}
+
+	pair := []domain.OutboundRequestID{reserve("REQ-STATUS-A"), reserve("REQ-STATUS-B")}
+	var released application.WaveResult
+	if err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var releaseErr error
+		released, releaseErr = handler.Release(ctx, application.ReleaseWaveCommand{
+			Tenant: tenant, ID: valueOf(t, domain.NewWaveID, "WAVE-STATUS"),
+			Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), Operator: valueOf(t, domain.NewRegistrant, "operator-1"),
+			Requests: pair,
+		})
+		return releaseErr
+	}); err != nil || released.Outcome() != application.WaveAllocated || len(released.Tasks()) != 2 {
+		t.Fatalf("放两张单 %s 任务 %d err %v", released.Outcome(), len(released.Tasks()), err)
+	}
+	if got := statusOf("WAVE-STATUS"); got != ports.WaveReleased {
+		t.Fatalf("刚放出 = %s", got)
+	}
+	if world.pick(t, handler, released.Tasks()[0].ID, 10).Outcome() != application.WavePicked {
+		t.Fatal("第一条没有拣成")
+	}
+	if got := statusOf("WAVE-STATUS"); got != ports.WavePicking {
+		t.Fatalf("拣了一条 = %s", got)
+	}
+	if ids := listed("status=" + ports.WavePicking); len(ids) != 1 || ids[0] != "WAVE-STATUS" {
+		t.Fatalf("按拣货中筛 = %v", ids)
+	}
+	if world.pick(t, handler, released.Tasks()[1].ID, 10).Outcome() != application.WavePicked {
+		t.Fatal("第二条没有拣成")
+	}
+	if got := statusOf("WAVE-STATUS"); got != ports.WaveCompleted {
+		t.Fatalf("都拣了 = %s", got)
+	}
+
+	short := world.releaseWave(t, handler, "WAVE-STATUS-SHORT", reserve("REQ-STATUS-SHORT"))
+	if short.Outcome() != application.WaveAllocated || world.pick(t, handler, short.Tasks()[0].ID, 4).Outcome() != application.WavePicked {
+		t.Fatal("少拣没有记下")
+	}
+	if got := statusOf("WAVE-STATUS-SHORT"); got != ports.WaveCompleted {
+		t.Fatalf("少拣之后 = %s", got)
+	}
+
+	cut := reserve("REQ-STATUS-CUT")
+	cutWave := world.releaseWave(t, handler, "WAVE-STATUS-CUT", cut)
+	if cutWave.Outcome() != application.WaveAllocated {
+		t.Fatal("要截的那张没有放出")
+	}
+	if world.cutoff(t, handler, cut, 0, "SYN-CUT-STATUS").Outcome() != application.CutoffCancelled {
+		t.Fatal("截单没有成立")
+	}
+	if got := statusOf("WAVE-STATUS-CUT"); got != ports.WaveCancelled {
+		t.Fatalf("任务全作废 = %s", got)
+	}
+	if world.pick(t, handler, cutWave.Tasks()[0].ID, 10).Outcome() != application.WaveRecorded {
+		t.Fatal("作废之后的拣货没有记成迟到")
+	}
+	if got := statusOf("WAVE-STATUS-CUT"); got != ports.WaveCancelled {
+		t.Fatalf("作废之后才拣出来 = %s", got)
+	}
+
+	late := []domain.OutboundRequestID{reserve("REQ-STATUS-LATE"), reserve("REQ-STATUS-WAIT")}
+	var lateWave application.WaveResult
+	if err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var releaseErr error
+		lateWave, releaseErr = handler.Release(ctx, application.ReleaseWaveCommand{
+			Tenant: tenant, ID: valueOf(t, domain.NewWaveID, "WAVE-STATUS-LATE"),
+			Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), Operator: valueOf(t, domain.NewRegistrant, "operator-1"),
+			Requests: late,
+		})
+		return releaseErr
+	}); err != nil || lateWave.Outcome() != application.WaveAllocated || len(lateWave.Tasks()) != 2 {
+		t.Fatalf("放迟到那两张 %s err %v", lateWave.Outcome(), err)
+	}
+	if world.cutoff(t, handler, late[0], 0, "SYN-CUT-LATE").Outcome() != application.CutoffCancelled {
+		t.Fatal("迟到那张的截单没有成立")
+	}
+	if got := statusOf("WAVE-STATUS-LATE"); got != ports.WaveReleased {
+		t.Fatalf("一条作废、一条等着拣 = %s", got)
+	}
+	var lateTask domain.PickTaskID
+	for _, task := range lateWave.Tasks() {
+		if task.Request == late[0] {
+			lateTask = task.ID
+		}
+	}
+	if world.pick(t, handler, lateTask, 10).Outcome() != application.WaveRecorded {
+		t.Fatal("迟到那条没有记下")
+	}
+	if got := statusOf("WAVE-STATUS-LATE"); got != ports.WavePicking {
+		t.Fatalf("一条迟到、一条等着拣 = %s", got)
+	}
+
+	if ids := listed("status=" + ports.WaveCancelled); len(ids) != 1 || ids[0] != "WAVE-STATUS-CUT" {
+		t.Fatalf("按已取消筛 = %v", ids)
+	}
+	if ids := listed("status=" + ports.WaveCompleted + "&sort=waveId"); len(ids) != 2 || ids[0] != "WAVE-STATUS" || ids[1] != "WAVE-STATUS-SHORT" {
+		t.Fatalf("按已完成筛 = %v", ids)
+	}
+	if ids := listed("status=" + ports.WaveReleased); len(ids) != 0 {
+		t.Fatalf("按已放筛 = %v", ids)
+	}
+	if ids := listed("status=" + ports.WavePicking); len(ids) != 1 || ids[0] != "WAVE-STATUS-LATE" {
+		t.Fatalf("末了按拣货中筛 = %v", ids)
+	}
+	if ids := listed(""); len(ids) != 4 {
+		t.Fatalf("不筛 = %v", ids)
+	}
+
+	row, found, err := store.LoadWaveRow(t.Context(), tenant, "WAVE-STATUS")
+	if err != nil || !found || row.WarehouseCode != "SYN-WH-01" || len(row.Requests) != 2 || len(row.Tasks) != 2 || row.Tasks[0].Picked != 10 {
+		t.Fatalf("按号读一张 %+v found %v err %v", row, found, err)
+	}
+	if _, found, err := store.LoadWaveRow(t.Context(), tenant, "WAVE-NOT-THERE"); err != nil || found {
+		t.Fatalf("没有的波次 found %v err %v", found, err)
+	}
+}
+
 func TestAPrefetchedWaveSubmitsOneEstimatedCommission(t *testing.T) {
 	measured := newMeasurementWorld(t)
 	measured.seedStorageStock(t, 10)

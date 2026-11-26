@@ -607,9 +607,17 @@ export interface WaveRecord {
   warehouseCode: string;
   operator: string;
   prefetch: boolean;
+  /** 后端从拣货任务算出来的：RELEASED、PICKING、COMPLETED、CANCELLED。 */
+  status: string;
   releasedAt: string;
   requests: string[];
   tasks: WaveTaskRecord[];
+}
+
+export interface WaveOneBody {
+  outcome: string;
+  /** 没有这个波次时不带。 */
+  wave?: WaveRecord;
 }
 
 export interface WaveListBody {
@@ -710,6 +718,12 @@ export function listWaves(
   return exchangeMasterData<WaveListBody>(
     catalogueRequestPath('/warehouse-fulfillment-wave-list', conditions, after),
   );
+}
+
+/** 按波次号读一张。逐字相等，只在本租户；没有这个波次答 `WAVE_NOT_FOUND`、不带 `wave`，不答 404。 */
+export function getWave(waveId: string): Promise<ApiResult<WaveOneBody>> {
+  const params = new URLSearchParams({ waveId });
+  return exchangeMasterData<WaveOneBody>(`/warehouse-fulfillment-wave?${params.toString()}`);
 }
 
 export function listChargeOccurrences(

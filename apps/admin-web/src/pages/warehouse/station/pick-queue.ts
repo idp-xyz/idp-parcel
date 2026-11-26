@@ -1,14 +1,15 @@
 // 拣货工位的待拣队列：从波次读口读出本仓还没拣的拣货任务，排成作业的次序（纯 TypeScript，node:test 直接测）。
 //
-// 读口只有波次列表，一个波次带着它的全部任务。波次读口声明的筛选维只有仓与是否预取，没有「任务还没拣」这一维，所以只能把波次
-// 翻出来、在前端挑任务状态为待执行的。放出去的波次只增不减，翻到底会越来越慢，所以从新到旧翻（读口缺省序是放出时刻倒序）、
-// 设页数上限，翻不完时在结果里如实带出「只看了多少」，由界面照实说，不假装看全了。
+// 一个波次带着它的全部任务。看本仓全部波次时按状态只问还有任务等着拣的那两种（已放出、拣货中），拣完与取消的波次不再翻；
+// 任务这一层读口不筛，待执行的在前端挑。还没拣完的波次理应不多，仍设页数上限（读口缺省序是放出时刻倒序，从新到旧翻），
+// 翻不完时在结果里如实带出「只看了多少」，由界面照实说，不假装看全了。
 //
-// 指名了波次（地址里的 `?wave=`）时用检索词只问那一个：检索按包含匹配，答回来的里面再认出号完全相同的；认出就不再翻页。
+// 指名了波次（地址里的 `?wave=`）时按波次号读那一张，不走列表。
 
 import type { ApiResult } from '../../catalogue-api';
 import type { CatalogueConditions } from '../../catalogue-query';
-import type { WaveListBody, WaveRecord } from '../api';
+import type { WaveListBody, WaveOneBody, WaveRecord } from '../api';
+import { activeWaveStatuses } from '../wave-flow';
 
 /** 一格 = 一条拣货任务：去哪个库位、拣哪个商品、拣几件。 */
 export interface PickCell {
@@ -103,27 +104,50 @@ export interface PickQueue {
   /** 这一趟读到了几个波次。 */
   wavesRead: number;
   pagesRead: number;
-  /** 翻到页数上限，读口还有下一页：更早的波次没有看，里面若还有没拣的格，这里看不到。 */
+  /** 翻到页数上限，读口还有下一页：更早放出、还没拣完的波次没有看，里面没拣的格这里看不到。 */
   truncated: boolean;
-  /** 指名了波次，而读下来没有找到它（或它不属于本仓）。 */
+  /** 指名了波次，而没有这个波次（或它不属于本仓）。 */
   waveMissing: boolean;
   /** 读到的波次里各还有几格没拣（只列还有的），新的在前；供「换波次」选。 */
   waves: Array<{ waveId: string; open: number }>;
 }
 
-export type PickQueueAnswer =
-  | { kind: 'queue'; queue: PickQueue }
-  | { kind: 'failed'; failure: Exclude<ApiResult<WaveListBody>, { kind: 'outcome' }> };
+type ReadFailure = Exclude<ApiResult<unknown>, { kind: 'outcome' }>;
+
+export type PickQueueAnswer = { kind: 'queue'; queue: PickQueue } | { kind: 'failed'; failure: ReadFailure };
 
 export interface PickQueueInput extends PickScope {
   list: (conditions: CatalogueConditions, after: string | null) => Promise<ApiResult<WaveListBody>>;
+  one: (waveId: string) => Promise<ApiResult<WaveOneBody>>;
   maxPages?: number;
 }
 
+function queueOf(waves: readonly WaveRecord[], scope: PickScope, read: Pick<PickQueue, 'pagesRead' | 'truncated'>): PickQueue {
+  const scoped = waves.filter(
+    (candidate) => candidate.warehouseCode === scope.warehouse && (scope.wave === null || candidate.waveId === scope.wave),
+  );
+  return {
+    cells: cellsOfWaves(waves, scope),
+    wavesRead: waves.length,
+    ...read,
+    waveMissing: scope.wave !== null && scoped.length === 0,
+    waves: scoped
+      .map((candidate) => ({ waveId: candidate.waveId, open: candidate.tasks.filter((task) => task.status === 'OPEN').length }))
+      .filter((entry) => entry.open > 0),
+  };
+}
+
 export async function loadPickQueue(input: PickQueueInput): Promise<PickQueueAnswer> {
-  const { warehouse, wave, list } = input;
+  const { warehouse, wave, list, one } = input;
+  if (wave !== null) {
+    const answer = await one(wave);
+    if (answer.kind !== 'outcome') return { kind: 'failed', failure: answer };
+    const found = answer.body.wave ? [answer.body.wave] : [];
+    return { kind: 'queue', queue: queueOf(found, { warehouse, wave }, { pagesRead: 1, truncated: false }) };
+  }
+
   const maxPages = input.maxPages ?? MAX_WAVE_PAGES;
-  const conditions: CatalogueConditions = { filters: { warehouseCode: [warehouse] }, ...(wave === null ? {} : { q: wave }) };
+  const conditions: CatalogueConditions = { filters: { warehouseCode: [warehouse], status: [...activeWaveStatuses] } };
   const waves: WaveRecord[] = [];
   let after: string | null = null;
   let pagesRead = 0;
@@ -133,21 +157,7 @@ export async function loadPickQueue(input: PickQueueInput): Promise<PickQueueAns
     pagesRead += 1;
     waves.push(...answer.body.waves);
     after = answer.body.page.next;
-    if (wave !== null && waves.some((candidate) => candidate.waveId === wave)) after = null;
   } while (after !== null && pagesRead < maxPages);
 
-  const scoped = waves.filter((candidate) => candidate.warehouseCode === warehouse && (wave === null || candidate.waveId === wave));
-  return {
-    kind: 'queue',
-    queue: {
-      cells: cellsOfWaves(waves, { warehouse, wave }),
-      wavesRead: waves.length,
-      pagesRead,
-      truncated: after !== null,
-      waveMissing: wave !== null && scoped.length === 0,
-      waves: scoped
-        .map((candidate) => ({ waveId: candidate.waveId, open: candidate.tasks.filter((task) => task.status === 'OPEN').length }))
-        .filter((entry) => entry.open > 0),
-    },
-  };
+  return { kind: 'queue', queue: queueOf(waves, { warehouse, wave }, { pagesRead, truncated: after !== null }) };
 }

@@ -590,6 +590,10 @@ func init() {
 			"/warehouse-fulfillment-wave-list": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-wave": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+				probe: "/warehouse-fulfillment-wave?waveId=WAVE-01",
+			},
 			"/warehouse-fulfillment-charge-occurrences": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 			},
@@ -973,6 +977,7 @@ func init() {
 			conditionRestoreOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			outboundRequestList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			waveList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			waveOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			chargeOccurrenceList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			warehouseAdoptionList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			warehouseChargeRequestList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
@@ -1224,6 +1229,7 @@ func init() {
 				conditionRestoreOne = warehousehttp.NewQueryConditionRestoreEndpoint(catalogueIntake, wiring.internalJobQueries)
 				outboundRequestList = warehousehttp.NewQueryOutboundRequestsEndpoint(catalogueIntake, wiring.outboundRequestQueries)
 				waveList = warehousehttp.NewQueryWavesEndpoint(catalogueIntake, wiring.waveQueries)
+				waveOne = warehousehttp.NewQueryWaveEndpoint(catalogueIntake, wiring.waveQueries)
 				chargeOccurrenceList = warehousehttp.NewQueryChargeOccurrencesEndpoint(catalogueIntake, wiring.chargeOccurrenceQueries)
 				warehouseAdoptionList = warehousehttp.NewQueryWarehouseAdoptionsEndpoint(catalogueIntake, wiring.warehouseAdoptionQueries)
 				warehouseChargeRequestList = warehousehttp.NewQueryWarehouseChargeRequestsEndpoint(catalogueIntake, wiring.warehouseChargeReqQueries)
@@ -1370,6 +1376,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-condition-restore", Handler: conditionRestoreOne},
 				{Pattern: "/warehouse-fulfillment-outbound-request-list", Handler: outboundRequestList},
 				{Pattern: "/warehouse-fulfillment-wave-list", Handler: waveList},
+				{Pattern: "/warehouse-fulfillment-wave", Handler: waveOne},
 				{Pattern: "/warehouse-fulfillment-charge-occurrences", Handler: chargeOccurrenceList},
 				{Pattern: "/warehouse-fulfillment-charge-adoption-list", Handler: warehouseAdoptionList},
 				{Pattern: "/warehouse-fulfillment-charge-requests", Handler: warehouseChargeRequestList},

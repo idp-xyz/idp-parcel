@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
@@ -140,12 +143,24 @@ func (store *OutboundRequests) List(
 	})
 }
 
-const waveListColumns = `wave_id, warehouse_code, operator_id, prefetch, released_at`
+const waveListColumns = `wave_id, warehouse_code, operator_id, prefetch, status, released_at`
 
+// 状态在读的那一刻从拣货任务算，口径写在 ports.WaveReleased 那一组常量上；列表、筛选与按号读一张共用这一段。
 const waveListed = `WITH listed AS (
-	SELECT wave_id, warehouse_code, operator_id, prefetch, prefetch::text AS prefetch_word, released_at
-	  FROM warehouse_fulfillment.wave
-	 WHERE tenant_id = $1
+	SELECT wave.wave_id, wave.warehouse_code, wave.operator_id, wave.prefetch, wave.prefetch::text AS prefetch_word, wave.released_at,
+	       CASE WHEN tally.open_tasks > 0 AND tally.touched_tasks = 0 THEN '` + ports.WaveReleased + `'
+	            WHEN tally.open_tasks > 0 THEN '` + ports.WavePicking + `'
+	            WHEN tally.settled_tasks > 0 THEN '` + ports.WaveCompleted + `'
+	            ELSE '` + ports.WaveCancelled + `' END AS status
+	  FROM warehouse_fulfillment.wave wave
+	 CROSS JOIN LATERAL (
+	       SELECT count(*) FILTER (WHERE task.status = 'OPEN') AS open_tasks,
+	              count(*) FILTER (WHERE task.status IN ('DONE', 'SHORT', 'LATE')) AS touched_tasks,
+	              count(*) FILTER (WHERE task.status IN ('DONE', 'SHORT')) AS settled_tasks
+	         FROM warehouse_fulfillment.pick_task task
+	        WHERE task.tenant_id = wave.tenant_id AND task.wave_id = wave.wave_id
+	       ) tally
+	 WHERE wave.tenant_id = $1
 )`
 
 var waveListBinding = ports.WavePages.MustBind(cataloguepage.Columns{
@@ -157,6 +172,7 @@ var waveListBinding = ports.WavePages.MustBind(cataloguepage.Columns{
 	Filters: map[string]string{
 		"warehouseCode": "warehouse_code",
 		"prefetch":      "prefetch_word",
+		"status":        "status",
 	},
 	Keyword: []string{"wave_id", "warehouse_code", "operator_id"},
 })
@@ -195,7 +211,7 @@ func (store *Waves) ListWaves(
 	var items []ports.WaveRow
 	for rows.Next() {
 		var item ports.WaveRow
-		if err := rows.Scan(&item.WaveID, &item.WarehouseCode, &item.Operator, &item.Prefetch, &item.ReleasedAt); err != nil {
+		if err := rows.Scan(&item.WaveID, &item.WarehouseCode, &item.Operator, &item.Prefetch, &item.Status, &item.ReleasedAt); err != nil {
 			return fail(err)
 		}
 		items = append(items, item)
@@ -204,55 +220,9 @@ func (store *Waves) ListWaves(
 		return fail(err)
 	}
 	for index := range items {
-		reqRows, err := querier.Query(ctx,
-			`SELECT request_id FROM warehouse_fulfillment.wave_request
-			  WHERE tenant_id = $1 AND wave_id = $2
-			  ORDER BY request_id`,
-			tenant.String(), items[index].WaveID)
-		if err != nil {
+		if err := loadWaveMembers(ctx, querier, tenant, &items[index]); err != nil {
 			return fail(err)
 		}
-		for reqRows.Next() {
-			var id string
-			if err := reqRows.Scan(&id); err != nil {
-				reqRows.Close()
-				return fail(err)
-			}
-			items[index].Requests = append(items[index].Requests, id)
-		}
-		if err := reqRows.Err(); err != nil {
-			reqRows.Close()
-			return fail(err)
-		}
-		reqRows.Close()
-
-		taskRows, err := querier.Query(ctx,
-			`SELECT task_id, request_id, location_code, staging_location, goods_code, unit_name, stock_state, quantity, picked, status
-			   FROM warehouse_fulfillment.pick_task
-			  WHERE tenant_id = $1 AND wave_id = $2
-			  ORDER BY task_id`,
-			tenant.String(), items[index].WaveID)
-		if err != nil {
-			return fail(err)
-		}
-		for taskRows.Next() {
-			var task ports.WaveTaskRow
-			var staging *string
-			if err := taskRows.Scan(
-				&task.TaskID, &task.RequestID, &task.LocationCode, &staging,
-				&task.GoodsCode, &task.Unit, &task.StockState, &task.Quantity, &task.Picked, &task.Status,
-			); err != nil {
-				taskRows.Close()
-				return fail(err)
-			}
-			task.StagingLocation = valueOrEmpty(staging)
-			items[index].Tasks = append(items[index].Tasks, task)
-		}
-		if err := taskRows.Err(); err != nil {
-			taskRows.Close()
-			return fail(err)
-		}
-		taskRows.Close()
 	}
 	return cataloguepage.Finish(query, items, limit, total, func(item ports.WaveRow, sortField string) cataloguepage.Position {
 		switch sortField {
@@ -262,6 +232,82 @@ func (store *Waves) ListWaves(
 			return cataloguepage.Position{Value: cataloguepage.FormatInstant(item.ReleasedAt), Identity: []string{item.WaveID}}
 		}
 	})
+}
+
+// LoadWaveRow 按波次号读一张，形状与列表的一行相同。没有这个波次时 found 为假。
+func (store *Waves) LoadWaveRow(ctx context.Context, tenant domain.TenantID, waveID string) (ports.WaveRow, bool, error) {
+	const operation = "load wave"
+	if tenant.String() == "" || waveID == "" {
+		return ports.WaveRow{}, false, fmt.Errorf("%s: tenant and wave are required", operation)
+	}
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.WaveRow{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	var item ports.WaveRow
+	err = querier.QueryRow(ctx,
+		waveListed+" SELECT "+waveListColumns+" FROM listed WHERE wave_id = $2",
+		tenant.String(), waveID,
+	).Scan(&item.WaveID, &item.WarehouseCode, &item.Operator, &item.Prefetch, &item.Status, &item.ReleasedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.WaveRow{}, false, nil
+	}
+	if err != nil {
+		return ports.WaveRow{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	if err := loadWaveMembers(ctx, querier, tenant, &item); err != nil {
+		return ports.WaveRow{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	return item, true, nil
+}
+
+// loadWaveMembers 补上一个波次的出库请求与拣货任务。
+func loadWaveMembers(ctx context.Context, querier bentopg.Querier, tenant domain.TenantID, item *ports.WaveRow) error {
+	reqRows, err := querier.Query(ctx,
+		`SELECT request_id FROM warehouse_fulfillment.wave_request
+		  WHERE tenant_id = $1 AND wave_id = $2
+		  ORDER BY request_id`,
+		tenant.String(), item.WaveID)
+	if err != nil {
+		return err
+	}
+	for reqRows.Next() {
+		var id string
+		if err := reqRows.Scan(&id); err != nil {
+			reqRows.Close()
+			return err
+		}
+		item.Requests = append(item.Requests, id)
+	}
+	if err := reqRows.Err(); err != nil {
+		reqRows.Close()
+		return err
+	}
+	reqRows.Close()
+
+	taskRows, err := querier.Query(ctx,
+		`SELECT task_id, request_id, location_code, staging_location, goods_code, unit_name, stock_state, quantity, picked, status
+		   FROM warehouse_fulfillment.pick_task
+		  WHERE tenant_id = $1 AND wave_id = $2
+		  ORDER BY task_id`,
+		tenant.String(), item.WaveID)
+	if err != nil {
+		return err
+	}
+	defer taskRows.Close()
+	for taskRows.Next() {
+		var task ports.WaveTaskRow
+		var staging *string
+		if err := taskRows.Scan(
+			&task.TaskID, &task.RequestID, &task.LocationCode, &staging,
+			&task.GoodsCode, &task.Unit, &task.StockState, &task.Quantity, &task.Picked, &task.Status,
+		); err != nil {
+			return err
+		}
+		task.StagingLocation = valueOrEmpty(staging)
+		item.Tasks = append(item.Tasks, task)
+	}
+	return taskRows.Err()
 }
 
 const chargeOccurrenceListColumns = `

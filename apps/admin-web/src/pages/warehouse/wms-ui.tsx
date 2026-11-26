@@ -80,6 +80,9 @@ export const wmsStatusMap: Record<string, StatusMeta> = {
   HANDED_OFF: { label: '待转出代理仓', tone: 'warning' },
   FORWARDED: { label: '已转出代理仓', tone: 'info' },
   HANDED_OVER: { label: '代理仓已交接', tone: 'success' },
+  // 波次自己的状态：已完成与已取消用通用的那两个词
+  RELEASED: { label: '已放出', tone: 'warning' },
+  PICKING: { label: '拣货中', tone: 'info' },
   OPEN: { label: '待执行', tone: 'warning' },
   SHORT: { label: '短拣', tone: 'danger' },
   LATE: { label: '迟到取消', tone: 'neutral' },
@@ -646,6 +649,42 @@ export function WmsPagerBar({
         </div>
       </nav>
     </div>
+  );
+}
+
+/**
+ * 一条细的进度条加「做完 / 总数」。全做完是成功色，没做完是强调色；`flagged` 是其中出了岔子的数量（比如少拣），
+ * 大于零时数字后面用危险色点出来。总数是 0 时不画条，只写一个横杠——没有可做的不等于做完了。
+ */
+export function WmsProgress({ done, total, flagged = 0, flaggedLabel }: { done: number; total: number; flagged?: number; flaggedLabel?: string }) {
+  if (total <= 0) return <span className="text-idpxyz-textMuted">—</span>;
+  const percent = Math.min(100, Math.floor((done / total) * 100));
+  const complete = done >= total;
+  return (
+    <span className="inline-flex items-center gap-2 whitespace-nowrap">
+      <span
+        className="h-1.5 w-20 overflow-hidden rounded-full bg-idpxyz-hover"
+        role="progressbar"
+        aria-label={`${done} / ${total}`}
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={done}
+      >
+        <span
+          className={`block h-full rounded-full ${complete ? 'bg-[color:var(--ds-status-success-fg)]' : 'bg-idpxyz-accent'}`}
+          style={{ width: `${percent}%` }}
+        />
+      </span>
+      <span className="font-mono type-body leading-4">
+        {done} / {total}
+      </span>
+      {flagged > 0 ? (
+        <span className={`type-caption ${statusToneText.danger}`}>
+          {flaggedLabel ?? ''}
+          {flagged}
+        </span>
+      ) : null}
+    </span>
   );
 }
 

@@ -1,41 +1,31 @@
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
-import type { ApiResult } from '../catalogue-api';
 import { formatInstant } from '../catalogue-view';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
-import { listWaves, type WaveRecord } from './api';
+import { getWave } from './api';
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { openPrint } from './print-sheet';
 import { pickListSheet } from './print-forms';
 import { packStationHash, pickStationHash } from './station/stations';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
-import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsSubTable } from './wms-ui';
-
-/**
- * 波次没有按号取一张的读口，只有列表：按波次号检索，再在答回来的那一页里认出号完全相同的那一个。检索是按包含匹配的，
- * 号恰好是另一批波次号的一段、而那一批多到挤出第一页时会认不出，答找不到。
- */
-async function loadWave(waveId: string): Promise<ApiResult<{ wave?: WaveRecord }>> {
-  const answer = await listWaves({ q: waveId });
-  if (answer.kind !== 'outcome') return answer;
-  return { ...answer, body: { wave: answer.body.waves.find((wave) => wave.waveId === waveId) } };
-}
+import { waveProgress, waveStatusLabel, waveTrack } from './wave-flow';
+import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable } from './wms-ui';
 
 /** 波次页：一次放出去的那一批出库单，和它们的每一条拣货任务拣到哪了。 */
 export function WaveDocument({ waveId }: { waveId: string }) {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
   const back = useReturnToList('warehouse-waves');
-  const { answer, loading, reload } = useKeyedLoad(waveId, loadWave);
+  const { answer, loading, reload } = useKeyedLoad(waveId, getWave);
   const wave = answer?.kind === 'outcome' ? answer.body.wave : undefined;
   const failure = readFailureMessage(answer) ?? (answer?.kind === 'outcome' && !wave ? `没有 ${waveId} 这个波次。` : null);
 
   const tasks = wave?.tasks ?? [];
   const open = tasks.filter((task) => task.status === 'OPEN');
-  const short = tasks.filter((task) => task.status === 'SHORT');
-  const allPicked = tasks.length > 0 && open.length === 0;
+  const progress = waveProgress(tasks);
+  const track = wave ? waveTrack(wave.status) : undefined;
   // 余下的格按库位排：拣货的人顺着库位走，不照任务生成的先后。
   const ordered = [...tasks].sort((a, b) => {
     if ((a.status === 'OPEN') !== (b.status === 'OPEN')) return a.status === 'OPEN' ? -1 : 1;
@@ -48,7 +38,18 @@ export function WaveDocument({ waveId }: { waveId: string }) {
         kind="波次"
         title={waveId}
         subtitle={wave ? `仓 ${wave.warehouseCode} · ${wave.requests.length} 张出库单 · 放出于 ${formatInstant(wave.releasedAt)}` : undefined}
-        badge={wave ? <WmsBadge label={allPicked ? '拣货完成' : '拣货中'} tone={allPicked ? 'success' : 'info'} /> : undefined}
+        badge={wave ? <WmsBadge code={wave.status} label={waveStatusLabel(wave.status)} /> : undefined}
+        stepper={
+          track ? (
+            <WmsStepper
+              steps={track.steps}
+              currentId={track.currentId}
+              currentLabel={track.currentLabel}
+              failedLabel={track.halt?.label}
+              failedTone={track.halt?.tone}
+            />
+          ) : undefined
+        }
         loading={loading}
         error={failure}
         onBack={back}
@@ -64,16 +65,19 @@ export function WaveDocument({ waveId }: { waveId: string }) {
               <Button type="button" variant="outline" onClick={() => openPrint(pickListSheet(waveId, ordered))}>
                 打印拣货单
               </Button>
-              <Button
-                type="button"
-                className={primaryActionClass}
-                onClick={() => {
-                  if (open.length > 0) enterStation(pickStationHash(waveId));
-                  else enterStation(packStationHash());
-                }}
-              >
-                {open.length > 0 ? '去拣货' : '去复核打包'}
-              </Button>
+              {/* 已取消的波次没有下一步：任务都作废了，没有可拣的，也没有拣出来等复核的。 */}
+              {wave.status === 'CANCELLED' ? null : (
+                <Button
+                  type="button"
+                  className={primaryActionClass}
+                  onClick={() => {
+                    if (open.length > 0) enterStation(pickStationHash(waveId));
+                    else enterStation(packStationHash());
+                  }}
+                >
+                  {open.length > 0 ? '去拣货' : '去复核打包'}
+                </Button>
+              )}
             </>
           ) : undefined
         }
@@ -100,10 +104,20 @@ export function WaveDocument({ waveId }: { waveId: string }) {
           <>
             <WmsKpiStrip
               items={[
-                { label: '拣货任务', value: tasks.length, note: `${wave.requests.length} 张出库单` },
-                { label: '还没拣', value: open.length, tone: open.length > 0 ? 'warning' : 'success' },
-                { label: '已拣', value: tasks.length - open.length - short.length },
-                { label: '短拣', value: short.length, tone: short.length > 0 ? 'danger' : undefined },
+                {
+                  label: '拣货任务',
+                  value: progress.tasks,
+                  note: progress.cancelled > 0 ? `${wave.requests.length} 张出库单，另有 ${progress.cancelled} 条已作废` : `${wave.requests.length} 张出库单`,
+                },
+                {
+                  label: '还没拣',
+                  value: progress.open,
+                  tone: progress.open > 0 ? 'warning' : 'success',
+                  // 百分比把少拣也算有了结果，所以摆在「还没拣」这一格下面，不摆在只数拣满的「已拣」下面。
+                  note: progress.tasks > 0 ? `有结果的占 ${progress.percent}%` : undefined,
+                },
+                { label: '已拣', value: progress.done },
+                { label: '短拣', value: progress.short, tone: progress.short > 0 ? 'danger' : undefined },
               ]}
             />
             <WmsInfoGrid

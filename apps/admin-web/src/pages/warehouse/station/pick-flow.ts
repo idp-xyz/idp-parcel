@@ -668,17 +668,16 @@ export interface QueueScope {
   waveMissing: boolean;
 }
 
-/** 队列上方要如实说的话：只看了多少、指名的波次没找到。读全了没有要说的。 */
+/**
+ * 队列上方要如实说的话：只看了多少、指名的波次没找到。读全了没有要说的。
+ * 指名的波次是按号读的那一张，没有就是没有；只看了多少只会出在看本仓全部波次、还没拣完的波次多过页数上限的时候。
+ */
 export function queueNotes(queue: QueueScope, wave: string | null): string[] {
   const notes: string[] = [];
   if (queue.waveMissing && wave !== null) {
-    notes.push(
-      queue.truncated
-        ? `没有在最近读到的 ${queue.wavesRead} 个波次里找到波次 ${wave}（它可能不属于本仓，或放出得更早）。`
-        : `没有找到波次 ${wave}（它可能不属于本仓）。`,
-    );
+    notes.push(`没有找到波次 ${wave}（它可能不属于本仓）。`);
   } else if (queue.truncated) {
-    notes.push(`只看了最近 ${queue.wavesRead} 个波次；更早的波次里若还有没拣的格，这里看不到。`);
+    notes.push(`只看了最近放出的 ${queue.wavesRead} 个还没拣完的波次；更早放出的波次里还有没拣的格，这里看不到。`);
   }
   return notes;
 }

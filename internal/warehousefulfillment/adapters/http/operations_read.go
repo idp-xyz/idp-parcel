@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
@@ -22,7 +23,7 @@ type OutboundRequestQueries interface {
 	) (cataloguepage.Result[ports.OutboundRequestRow], error)
 }
 
-// WaveQueries 是运营查阅波次列表的读口。
+// WaveQueries 是运营查阅波次的读口：分页列表，与按波次号读一张。
 type WaveQueries interface {
 	ListWaves(
 		ctx context.Context,
@@ -30,6 +31,7 @@ type WaveQueries interface {
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[ports.WaveRow], error)
+	LoadWaveRow(ctx context.Context, tenant domain.TenantID, waveID string) (ports.WaveRow, bool, error)
 }
 
 // ChargeOccurrenceQueries 是运营查阅仓储作业收费发生项列表的读口。
@@ -175,23 +177,7 @@ func NewQueryWavesEndpoint(intake CatalogueIntake, queries WaveQueries) http.Han
 		}
 		items := make([]waveRowBody, 0, len(page.Rows))
 		for _, row := range page.Rows {
-			tasks := make([]waveTaskBody, 0, len(row.Tasks))
-			for _, task := range row.Tasks {
-				tasks = append(tasks, waveTaskBody{
-					TaskID: task.TaskID, RequestID: task.RequestID, LocationCode: task.LocationCode,
-					StagingLocation: task.StagingLocation, GoodsCode: task.GoodsCode, Unit: task.Unit,
-					StockState: task.StockState, Quantity: task.Quantity, Picked: task.Picked, Status: task.Status,
-				})
-			}
-			requests := row.Requests
-			if requests == nil {
-				requests = []string{}
-			}
-			items = append(items, waveRowBody{
-				WaveID: row.WaveID, WarehouseCode: row.WarehouseCode, Operator: row.Operator,
-				Prefetch: row.Prefetch, ReleasedAt: rfc3339(row.ReleasedAt),
-				Requests: requests, Tasks: tasks,
-			})
+			items = append(items, waveRowBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, waveListResponse{
 			Outcome: "WAVES_LISTED",
@@ -199,6 +185,58 @@ func NewQueryWavesEndpoint(intake CatalogueIntake, queries WaveQueries) http.Han
 			Page:    page.Page(query.Limit),
 		})
 	})
+}
+
+// NewQueryWaveEndpoint 交回运营按波次号读一张的入口（GET /warehouse-fulfillment-wave?waveId=...）。
+// 没有这个波次是一种答案，不是出错：答 WAVE_NOT_FOUND，不带 wave。
+func NewQueryWaveEndpoint(intake CatalogueIntake, queries WaveQueries) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if refuseMethod(response, request, http.MethodGet) {
+			return
+		}
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeIntakeProblem(response, err)
+			return
+		}
+		waveID := strings.TrimSpace(request.URL.Query().Get("waveId"))
+		if waveID == "" {
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		row, found, err := queries.LoadWaveRow(request.Context(), query.Tenant, waveID)
+		if err != nil {
+			slog.ErrorContext(request.Context(), "wave read did not form an answer")
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		if !found {
+			writeJSON(response, http.StatusOK, waveResponse{Outcome: "WAVE_NOT_FOUND"})
+			return
+		}
+		body := waveRowBodyOf(row)
+		writeJSON(response, http.StatusOK, waveResponse{Outcome: "WAVE_FOUND", Wave: &body})
+	})
+}
+
+func waveRowBodyOf(row ports.WaveRow) waveRowBody {
+	tasks := make([]waveTaskBody, 0, len(row.Tasks))
+	for _, task := range row.Tasks {
+		tasks = append(tasks, waveTaskBody{
+			TaskID: task.TaskID, RequestID: task.RequestID, LocationCode: task.LocationCode,
+			StagingLocation: task.StagingLocation, GoodsCode: task.GoodsCode, Unit: task.Unit,
+			StockState: task.StockState, Quantity: task.Quantity, Picked: task.Picked, Status: task.Status,
+		})
+	}
+	requests := row.Requests
+	if requests == nil {
+		requests = []string{}
+	}
+	return waveRowBody{
+		WaveID: row.WaveID, WarehouseCode: row.WarehouseCode, Operator: row.Operator,
+		Prefetch: row.Prefetch, Status: row.Status, ReleasedAt: rfc3339(row.ReleasedAt),
+		Requests: requests, Tasks: tasks,
+	}
 }
 
 // NewQueryChargeOccurrencesEndpoint 交回运营分页查阅仓储作业收费发生项的入口（GET /warehouse-fulfillment-charge-occurrences）。
@@ -394,11 +432,17 @@ type waveListResponse struct {
 	Page    cataloguepage.Page `json:"page"`
 }
 
+type waveResponse struct {
+	Outcome string       `json:"outcome"`
+	Wave    *waveRowBody `json:"wave,omitempty"`
+}
+
 type waveRowBody struct {
 	WaveID        string         `json:"waveId"`
 	WarehouseCode string         `json:"warehouseCode"`
 	Operator      string         `json:"operator"`
 	Prefetch      bool           `json:"prefetch"`
+	Status        string         `json:"status"`
 	ReleasedAt    string         `json:"releasedAt"`
 	Requests      []string       `json:"requests"`
 	Tasks         []waveTaskBody `json:"tasks"`
