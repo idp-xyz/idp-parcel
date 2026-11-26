@@ -16,6 +16,8 @@ type WaveService interface {
 	Release(ctx context.Context, command application.ReleaseWaveCommand) (application.WaveResult, error)
 	Withdraw(ctx context.Context, command application.WithdrawWaveCommand) (application.WaveResult, error)
 	ShipPicked(ctx context.Context, command application.ShipPickedCommand) (application.WaveResult, error)
+	RegisterTotes(ctx context.Context, command application.RegisterTotesCommand) (application.WaveResult, error)
+	RetireTote(ctx context.Context, command application.RetireToteCommand) (application.WaveResult, error)
 	Adopt(ctx context.Context, command application.AdoptStrategyCommand) (application.WaveResult, error)
 	Pick(ctx context.Context, command application.PickCommand) (application.WaveResult, error)
 	Check(ctx context.Context, command application.CheckCommand) (application.WaveResult, error)
@@ -635,7 +637,8 @@ func writeWaveAnswer(response http.ResponseWriter, request *http.Request, result
 		result.Outcome() == application.WaveCorrected || result.Outcome() == application.WavePending ||
 		result.Outcome() == application.WavePosted ||
 		result.Outcome() == application.WaveSubmitted || result.Outcome() == application.WaveWithdrawn ||
-		result.Outcome() == application.WaveShortShipped {
+		result.Outcome() == application.WaveShortShipped || result.Outcome() == application.WaveTotesRegistered ||
+		result.Outcome() == application.WaveToteRetired {
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, outboundAnswer{Outcome: name})

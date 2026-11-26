@@ -643,6 +643,25 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       },
     ],
   },
+  'tote-register': {
+    fields: [
+      { path: 'warehouse', label: '仓编码', kind: 'text', required: true, placeholder: 'SYN-WH-01' },
+      {
+        path: 'toteCodes',
+        label: '箱号',
+        kind: 'string-list',
+        required: true,
+        placeholder: 'TOTE-001, TOTE-002',
+        hint: '逗号或换行分隔，一次最多 500 个。箱上贴的码是什么就填什么；拣货车上的格口也按箱登记',
+      },
+    ],
+  },
+  'tote-retire': {
+    fields: [
+      { path: 'warehouse', label: '仓编码', kind: 'text', required: true, placeholder: 'SYN-WH-01' },
+      { path: 'toteCode', label: '箱号', kind: 'text', required: true, placeholder: 'TOTE-001' },
+    ],
+  },
   'wave-withdraw': {
     fields: [
       { path: 'waveId', label: '波次号', kind: 'text', required: true, placeholder: 'WAVE-01' },

@@ -226,6 +226,7 @@ func unwiredWarehouseFulfillment(enabled bool) warehouseFulfillmentWiring {
 		waves:                     unwiredWave{},
 		outboundRequestQueries:    unwiredOutbound{},
 		waveQueries:               unwiredWave{},
+		toteQueries:               unwiredWave{},
 		chargeOccurrenceQueries:   unwiredChargeOccurrenceQueries{},
 		warehouseAdoptionQueries:  unwiredWarehouseChargeReads{},
 		warehouseChargeReqQueries: unwiredWarehouseChargeReads{},
@@ -308,6 +309,23 @@ func (unwiredWave) Withdraw(context.Context, warehouseapp.WithdrawWaveCommand) (
 
 func (unwiredWave) ShipPicked(context.Context, warehouseapp.ShipPickedCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+
+func (unwiredWave) RegisterTotes(context.Context, warehouseapp.RegisterTotesCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+
+func (unwiredWave) RetireTote(context.Context, warehouseapp.RetireToteCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
+
+func (unwiredWave) ListTotes(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.ToteRow], error) {
+	return cataloguepage.Result[warehouseports.ToteRow]{}, errOrchestrationNotWired
 }
 func (unwiredWave) Adopt(context.Context, warehouseapp.AdoptStrategyCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
@@ -1039,6 +1057,8 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/warehouse-fulfillment-return-pre-advices":                   {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-return-dispositions":                  {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-shortage-policies":                    {http.MethodPost, faceRegistryWrite},
+		"/warehouse-fulfillment-tote-registrations":                   {http.MethodPost, faceRegistryWrite},
+		"/warehouse-fulfillment-tote-retirements":                     {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-agent-connectors":                     {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-agent-stock-statements":               {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-agent-outbound-results":               {http.MethodPost, faceRegistryWrite},
@@ -1061,6 +1081,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		waveListLine:                                                  {http.MethodGet, faceOperationsRead},
 		waveOneLine:                                                   {http.MethodGet, faceOperationsRead},
 		pickDifferenceListLine:                                        {http.MethodGet, faceOperationsRead},
+		"/warehouse-fulfillment-totes":                                {http.MethodGet, faceOperationsRead},
 		chargeOccurrenceListLine:                                      {http.MethodGet, faceOperationsRead},
 		warehouseAdoptionListLine:                                     {http.MethodGet, faceOperationsRead},
 		warehouseChargeRequestsLine:                                   {http.MethodGet, faceOperationsRead},
@@ -1312,6 +1333,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-return-pre-advices":                 {status, code},
 			"/warehouse-fulfillment-return-dispositions":                {status, code},
 			"/warehouse-fulfillment-shortage-policies":                  {status, code},
+			"/warehouse-fulfillment-tote-registrations":                 {status, code},
+			"/warehouse-fulfillment-tote-retirements":                   {status, code},
 			"/warehouse-fulfillment-agent-connectors":                   {status, code},
 			"/warehouse-fulfillment-agent-stock-statements":             {status, code},
 			"/warehouse-fulfillment-agent-outbound-results":             {status, code},
@@ -1333,6 +1356,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			waveListLine:                                                {status, code},
 			waveOneLine:                                                 {status, code},
 			pickDifferenceListLine:                                      {status, code},
+			"/warehouse-fulfillment-totes":                              {status, code},
 			chargeOccurrenceListLine:                                    {status, code},
 			warehouseAdoptionListLine:                                   {status, code},
 			warehouseChargeRequestsLine:                                 {status, code},
@@ -1438,6 +1462,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			replenishmentsLine:                                          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-approval-duty-rules":                {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-shortage-policies":                  {http.StatusBadRequest, "MALFORMED_REQUEST"},
+			"/warehouse-fulfillment-tote-registrations":                 {http.StatusBadRequest, "MALFORMED_REQUEST"},
+			"/warehouse-fulfillment-tote-retirements":                   {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-agent-connectors":                   {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-agent-stock-statements":             {http.StatusBadRequest, "MALFORMED_REQUEST"},
 			"/warehouse-fulfillment-agent-outbound-results":             {http.StatusBadRequest, "MALFORMED_REQUEST"},
@@ -1472,6 +1498,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			waveListLine:                                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			waveOneLine:                                                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			pickDifferenceListLine:                                      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-totes":                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			chargeOccurrenceListLine:                                    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseAdoptionListLine:                                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			warehouseChargeRequestsLine:                                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1583,6 +1610,8 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-return-pre-advices":                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-return-dispositions":                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-shortage-policies":                  {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-tote-registrations":                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-tote-retirements":                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-agent-connectors":                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-agent-stock-statements":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-agent-outbound-results":             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1604,6 +1633,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			waveListLine:                                                {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			waveOneLine:                                                 {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			pickDifferenceListLine:                                      {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			"/warehouse-fulfillment-totes":                              {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			chargeOccurrenceListLine:                                    {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseAdoptionListLine:                                   {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			warehouseChargeRequestsLine:                                 {http.StatusInternalServerError, "NO_ANSWER_FORMED"},

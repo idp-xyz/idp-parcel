@@ -99,6 +99,7 @@ type PickDifferences interface {
 
 // WaveStore 读写波次、分配策略与拣货任务。写入在没有环境事务时拒绝。
 type WaveStore interface {
+	ToteStore
 	LoadStrategy(ctx context.Context, tenant domain.TenantID) (AllocationStrategy, bool, error)
 	SaveStrategy(ctx context.Context, tenant domain.TenantID, strategy AllocationStrategy) error
 	LoadWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]domain.OutboundRequestID, bool, error)

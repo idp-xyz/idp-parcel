@@ -115,6 +115,7 @@ type warehouseFulfillmentWiring struct {
 	internalJobQueries        warehousehttp.InternalJobQueries
 	outboundRequestQueries    warehousehttp.OutboundRequestQueries
 	waveQueries               warehousehttp.WaveQueries
+	toteQueries               warehousehttp.ToteQueries
 	chargeOccurrenceQueries   warehousehttp.ChargeOccurrenceQueries
 	warehouseAdoptionQueries  warehousehttp.WarehouseAdoptionQueries
 	warehouseChargeReqQueries warehousehttp.WarehouseChargeRequestQueries
@@ -497,6 +498,12 @@ func init() {
 			"/warehouse-fulfillment-shortage-policies": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-tote-registrations": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-tote-retirements": {
+				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-agent-connectors": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
@@ -607,6 +614,9 @@ func init() {
 				probe: "/warehouse-fulfillment-wave?waveId=WAVE-01",
 			},
 			"/warehouse-fulfillment-pick-differences": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-totes": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 			},
 			"/warehouse-fulfillment-charge-occurrences": {
@@ -851,6 +861,7 @@ func init() {
 				internalJobQueries:        orchestration.internalJobQueries,
 				outboundRequestQueries:    orchestration.outboundRequestQueries,
 				waveQueries:               orchestration.waveQueries,
+				toteQueries:               orchestration.waveQueries,
 				chargeOccurrenceQueries:   orchestration.chargeOccurrenceQueries,
 				warehouseAdoptionQueries:  orchestration.warehouseAdoptions,
 				warehouseChargeReqQueries: orchestration.warehouseAdoptions,
@@ -968,6 +979,8 @@ func init() {
 			returnAdvice := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			returnDisposition := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			shortagePolicy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			toteRegistration := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			toteRetirement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentConnector := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentStatement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentResult := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -998,6 +1011,7 @@ func init() {
 			waveList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			waveOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			pickDifferenceList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			toteList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			chargeOccurrenceList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			warehouseAdoptionList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			warehouseChargeRequestList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
@@ -1179,6 +1193,8 @@ func init() {
 				outboundCancellation = warehousehttp.NewCancelOutboundEndpoint(channels.outboundOnBehalf(), wiring.waves)
 				partialShipmentConsent = warehousehttp.NewRecordPartialShipmentConsentEndpoint(channels.outboundOnBehalf(), wiring.outbounds)
 				shortagePolicy = warehousehttp.NewRegisterShortagePolicyEndpoint(channels.shortagePolicy(), wiring.outbounds)
+				toteRegistration = warehousehttp.NewRegisterTotesEndpoint(channels.totes(), wiring.waves)
+				toteRetirement = warehousehttp.NewRetireToteEndpoint(channels.totes(), wiring.waves)
 				agentConnector = warehousehttp.NewRegisterAgentConnectorEndpoint(channels.agentIntake(), wiring.agents)
 				agentStatement = warehousehttp.NewRecordAgentStatementEndpoint(channels.agentIntake(), wiring.agents)
 				agentResult = warehousehttp.NewRecordAgentResultEndpoint(channels.agentIntake(), wiring.agents)
@@ -1255,6 +1271,7 @@ func init() {
 				waveList = warehousehttp.NewQueryWavesEndpoint(catalogueIntake, wiring.waveQueries)
 				waveOne = warehousehttp.NewQueryWaveEndpoint(catalogueIntake, wiring.waveQueries)
 				pickDifferenceList = warehousehttp.NewQueryPickDifferencesEndpoint(catalogueIntake, wiring.waveQueries)
+				toteList = warehousehttp.NewQueryTotesEndpoint(catalogueIntake, wiring.toteQueries)
 				chargeOccurrenceList = warehousehttp.NewQueryChargeOccurrencesEndpoint(catalogueIntake, wiring.chargeOccurrenceQueries)
 				warehouseAdoptionList = warehousehttp.NewQueryWarehouseAdoptionsEndpoint(catalogueIntake, wiring.warehouseAdoptionQueries)
 				warehouseChargeRequestList = warehousehttp.NewQueryWarehouseChargeRequestsEndpoint(catalogueIntake, wiring.warehouseChargeReqQueries)
@@ -1377,6 +1394,8 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-return-pre-advices", Handler: returnAdvice},
 				{Pattern: "/warehouse-fulfillment-return-dispositions", Handler: returnDisposition},
 				{Pattern: "/warehouse-fulfillment-shortage-policies", Handler: shortagePolicy},
+				{Pattern: "/warehouse-fulfillment-tote-registrations", Handler: toteRegistration},
+				{Pattern: "/warehouse-fulfillment-tote-retirements", Handler: toteRetirement},
 				{Pattern: "/warehouse-fulfillment-agent-connectors", Handler: agentConnector},
 				{Pattern: "/warehouse-fulfillment-agent-stock-statements", Handler: agentStatement},
 				{Pattern: "/warehouse-fulfillment-agent-outbound-results", Handler: agentResult},
@@ -1407,6 +1426,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-wave-list", Handler: waveList},
 				{Pattern: "/warehouse-fulfillment-wave", Handler: waveOne},
 				{Pattern: "/warehouse-fulfillment-pick-differences", Handler: pickDifferenceList},
+				{Pattern: "/warehouse-fulfillment-totes", Handler: toteList},
 				{Pattern: "/warehouse-fulfillment-charge-occurrences", Handler: chargeOccurrenceList},
 				{Pattern: "/warehouse-fulfillment-charge-adoption-list", Handler: warehouseAdoptionList},
 				{Pattern: "/warehouse-fulfillment-charge-requests", Handler: warehouseChargeRequestList},

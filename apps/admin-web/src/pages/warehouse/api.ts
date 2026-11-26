@@ -764,6 +764,30 @@ export function listPickDifferences(
   );
 }
 
+export interface ToteRecord {
+  warehouseCode: string;
+  toteCode: string;
+  /** FREE 空着，IN_USE 绑着一张出库单，RETIRED 已停用。 */
+  state: string;
+  requestId?: string;
+  boundAt?: string;
+  registeredBy: string;
+  registeredAt: string;
+  retiredBy?: string;
+  retiredAt?: string;
+}
+
+export interface ToteListBody {
+  outcome: string;
+  totes: ToteRecord[];
+  page: CataloguePage;
+}
+
+/** 周转箱名册。检索覆盖箱号与绑着的出库请求号。 */
+export function listTotes(conditions: CatalogueConditions, after: string | null = null): Promise<ApiResult<ToteListBody>> {
+  return exchangeMasterData<ToteListBody>(catalogueRequestPath('/warehouse-fulfillment-totes', conditions, after));
+}
+
 /** 按波次号读一张。逐字相等，只在本租户；没有这个波次答 `WAVE_NOT_FOUND`、不带 `wave`，不答 404。 */
 export function getWave(waveId: string): Promise<ApiResult<WaveOneBody>> {
   const params = new URLSearchParams({ waveId });

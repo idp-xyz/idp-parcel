@@ -901,7 +901,7 @@ func (world receiptWorld) waves(t *testing.T) *application.WaveHandler {
 	return application.NewWaveHandler(
 		waves, requests, tasks, differences, world.poster(), world.ledger, world.locations, world.zones,
 		world.goods, holds, world.clock, world.warehouses,
-	)
+	).WithToteWarehouses(world.warehouses)
 }
 
 // assertWaveStatusesFollowTheirTasks 把规则在这里另写一遍，不借适配器里重算用的那一句：只看待执行、拣满、少拣三种任务。

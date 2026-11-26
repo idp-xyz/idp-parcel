@@ -110,6 +110,10 @@ export const warehouseActionOutcomeLabels: Record<string, string> = {
   SPLIT: '已拆单',
   ALLOCATED: '已放波次并生成拣货任务',
   WITHDRAWN: '已从波次撤出，出库单回到已预占',
+  TOTES_REGISTERED: '已登记：这一批里新的箱号已在册，停用过的已恢复在用',
+  TOTE_RETIRED: '已停用，拣货不再认这个箱',
+  TOTE_NOT_FOUND: '这个仓没有登记过这个箱号',
+  TOTE_IN_USE: '这个箱上还绑着出库单，货还在里面',
   SHORT_SHIPPED: '已按已拣数量发货：没拣到的预占放开，出库单进已拣货，往下按已拣数量复核打包',
   REMAINDER_SPLIT: '已拆出缺货部分：原单进已拣货、按已拣数量往下走，缺的另成一张出库单，在原单右栏能点过去',
   PARTIAL_SHIPMENT_NOT_CONFIGURED: '这张单没写明拣不齐时怎么发，货主也没登记默认，不能少发，也不能拆出缺货部分',
@@ -495,6 +499,24 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
       '填 requestId。只办停在「拣不齐、等处置」的单，货主许了拆单发才成立。拆多少不用填：没拣到的预占有多少就拆多少，按基本单位另成一张出库单重新受理、重新预占；'
       + '原单进已拣货，按已拣数量往下走。这一步撤不回。' +
       noActorNote,
+  },
+  {
+    id: 'tote-register',
+    label: '登记周转箱',
+    title: '给一个仓登记一批周转箱',
+    endpoint: '/warehouse-fulfillment-tote-registrations',
+    grant: 'registry',
+    snapshotHint:
+      '填 warehouse 与 toteCodes（箱号数组，一次最多 500 个）。已经在册的箱号照旧，停用过的恢复在用。拣货车上的格口也按箱登记。只给自营仓登。' +
+      noActorNote,
+  },
+  {
+    id: 'tote-retire',
+    label: '停用周转箱',
+    title: '停用一个周转箱',
+    endpoint: '/warehouse-fulfillment-tote-retirements',
+    grant: 'registry',
+    snapshotHint: '填 warehouse 与 toteCode。箱上还绑着出库单时不停。停用的箱留在名册上，再登记同一个箱号就恢复在用。' + noActorNote,
   },
   {
     id: 'allocation-strategy',

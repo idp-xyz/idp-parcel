@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { Button } from '@idpxyz/ui-primitives';
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { InspectorAction, InspectorContent } from '../../templates/inspector';
 import { primaryActionClass } from '../../components/primary-action';
@@ -14,6 +14,7 @@ import { ActionDrawer, useActionDrawer } from './ActionDrawer';
 import { listWaves, type WaveRecord } from './api';
 import { DocumentLink } from './document-page';
 import { pickStationHash } from './station/stations';
+import { ToteList } from './ToteList';
 import { openDocument, useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
 import { activeWaveStatuses, settledWaveStatuses, waveProgress, waveStatusLabel } from './wave-flow';
@@ -48,10 +49,30 @@ const columns: ListColumn<WaveRecord>[] = [
   { id: 'at', header: '放出时刻', className: mono, render: (row) => formatInstant(row.releasedAt) },
 ];
 
-/** 波次：列表与每一个波次各占自己的标签。 */
+/** 波次：列表与每一个波次各占自己的标签。周转箱名册只有列表，与波次列表并排成两个页签。 */
 export function WarehouseWavesPage() {
   const parts = useDocumentParts();
-  return parts ? <WaveDocument waveId={parts[0]} /> : <WaveList />;
+  return parts ? <WaveDocument waveId={parts[0]} /> : <WavesHome />;
+}
+
+function WavesHome() {
+  const [tab, setTab] = useState('waves');
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="waves">波次</TabsTrigger>
+          <TabsTrigger value="totes">周转箱</TabsTrigger>
+        </TabsList>
+        <TabsContent value="waves" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <WaveList />
+        </TabsContent>
+        <TabsContent value="totes" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <ToteList />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 }
 
 function WaveList() {

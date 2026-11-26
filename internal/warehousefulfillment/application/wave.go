@@ -44,6 +44,12 @@ const (
 	WavePartialShipmentNotConfigured
 	WavePartialShipmentNotAllowed
 	WavePrefetchStands
+	WaveTotesRegistered
+	WaveToteRetired
+	WaveToteNotFound
+	WaveToteInUse
+	WaveWarehouseNotFound
+	WaveWarehouseNotAccepting
 )
 
 func (outcome WaveOutcome) String() string {
@@ -106,6 +112,18 @@ func (outcome WaveOutcome) String() string {
 		return "PARTIAL_SHIPMENT_NOT_ALLOWED"
 	case WavePrefetchStands:
 		return "PREFETCH_STANDS"
+	case WaveTotesRegistered:
+		return "TOTES_REGISTERED"
+	case WaveToteRetired:
+		return "TOTE_RETIRED"
+	case WaveToteNotFound:
+		return "TOTE_NOT_FOUND"
+	case WaveToteInUse:
+		return "TOTE_IN_USE"
+	case WaveWarehouseNotFound:
+		return "WAREHOUSE_NOT_FOUND"
+	case WaveWarehouseNotAccepting:
+		return "WAREHOUSE_NOT_ACCEPTING"
 	default:
 		return ""
 	}
@@ -185,6 +203,8 @@ type WaveHandler struct {
 	charges chargeFormer
 	// prefetch 缺席时，标了预取也只分配，打包后再交委托。
 	prefetch *wavePrefetch
+	// toteWarehouses 缺席时周转箱登记答未配置。
+	toteWarehouses ports.WarehouseLookup
 }
 
 func NewWaveHandler(

@@ -693,7 +693,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		transactor: db.Transactor(),
 		inner: warehouseapp.NewWaveHandler(
 			waveStore, outboundStore, pickTaskIDs, discrepancyIDs, poster, stock, locations, zones, goods, holds, systemClock{}, warehouses,
-		).WithConfirmationHandoff(confirmationHandoff).WithApprovalDuties(countStore).WithShipmentReleaser(releaser).WithCharges(chargeHandler).WithPrefetch(opener, measurementStore, packagingMaterials),
+		).WithConfirmationHandoff(confirmationHandoff).WithApprovalDuties(countStore).WithShipmentReleaser(releaser).WithCharges(chargeHandler).WithPrefetch(opener, measurementStore, packagingMaterials).WithToteWarehouses(warehouses),
 		commissions: warehouseapp.NewCommissionHandler(outboundStore, waveStore, opener, warehouses).WithMeasurementAmender(opener),
 	}
 	followUps := transactionalFollowUp{
@@ -1120,6 +1120,18 @@ func (registration transactionalWave) Release(ctx context.Context, command wareh
 func (registration transactionalWave) Withdraw(ctx context.Context, command warehouseapp.WithdrawWaveCommand) (warehouseapp.WaveResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
 		return registration.inner.Withdraw(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) RegisterTotes(ctx context.Context, command warehouseapp.RegisterTotesCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.RegisterTotes(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) RetireTote(ctx context.Context, command warehouseapp.RetireToteCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.RetireTote(txCtx, command)
 	})
 }
 

@@ -600,6 +600,13 @@ func (channels endpointChannels) shortagePolicy() warehousehttp.ShortagePolicyIn
 	return warehousehttp.UnconfiguredIntake{}
 }
 
+func (channels endpointChannels) totes() warehousehttp.ToteIntake {
+	if channels.operatorRegistries.warehouse != nil {
+		return channels.operatorRegistries.warehouse
+	}
+	return warehousehttp.UnconfiguredIntake{}
+}
+
 func (channels endpointChannels) stockAdjustment() warehousehttp.StockAdjustmentIntake {
 	if channels.operatorDecisions.warehouseStockAdjustment != nil {
 		return channels.operatorDecisions.warehouseStockAdjustment
