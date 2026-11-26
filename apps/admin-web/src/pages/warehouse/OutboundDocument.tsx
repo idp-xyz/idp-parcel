@@ -15,6 +15,7 @@ import { outboundTrack } from './outbound-track';
 import {
   awaitsShortPickDisposal,
   canRecordPartialShipmentConsent,
+  canSplitUnallocated,
   partialShipmentSummary,
   shortPickDisposalChoice,
   shortPickDisposalLine,
@@ -148,8 +149,7 @@ export function OutboundDocument({
                   登记面单
                 </Button>
               ) : null}
-              {(request.status === 'RESERVED' || request.status === 'PARTIALLY_RESERVED' || request.status === 'PENDING_POLICY') &&
-              drawer.has('outbound-split') ? (
+              {canSplitUnallocated(request.status, picked) && drawer.has('outbound-split') ? (
                 <Button type="button" variant="outline" onClick={() => drawer.open('outbound-split', { requestId: request.requestId })}>
                   拆单
                 </Button>
@@ -157,6 +157,11 @@ export function OutboundDocument({
               {stuckShort?.action === 'short-shipment' && drawer.has('short-shipment') ? (
                 <Button type="button" variant="outline" onClick={() => drawer.open('short-shipment', { requestId: request.requestId })}>
                   按已拣数量发货
+                </Button>
+              ) : null}
+              {stuckShort?.action === 'shortage-split' && drawer.has('shortage-split') ? (
+                <Button type="button" variant="outline" onClick={() => drawer.open('shortage-split', { requestId: request.requestId })}>
+                  拆出缺货部分
                 </Button>
               ) : null}
               {canRecordPartialShipmentConsent(request.status) && drawer.has('partial-shipment-consent') ? (
@@ -312,6 +317,12 @@ export function OutboundDocument({
                     <span className="break-all type-caption text-idpxyz-textMuted">
                       {shortPickDisposalLine(disposal)} · {disposal.operator} · {formatInstant(disposal.recordedAt)}
                     </span>
+                  ) : null}
+                  {disposal?.remainderRequestId ? (
+                    <div className="flex items-baseline gap-2">
+                      <span className="shrink-0 text-idpxyz-textMuted">缺货部分</span>
+                      <DocumentLink moduleId="warehouse-outbound" parts={[disposal.remainderRequestId]} />
+                    </div>
                   ) : null}
                 </WmsAsideBlock>
               ) : null}

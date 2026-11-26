@@ -29,6 +29,10 @@ const (
 	OutboundStatusMismatch
 	OutboundNotFound
 	OutboundConsentRecorded
+	OutboundRemainderSplit
+	OutboundPartialShipmentNotConfigured
+	OutboundPartialShipmentNotAllowed
+	OutboundPrefetchStands
 )
 
 func (outcome OutboundOutcome) String() string {
@@ -63,6 +67,14 @@ func (outcome OutboundOutcome) String() string {
 		return "OUTBOUND_NOT_FOUND"
 	case OutboundConsentRecorded:
 		return "RECORDED"
+	case OutboundRemainderSplit:
+		return "REMAINDER_SPLIT"
+	case OutboundPartialShipmentNotConfigured:
+		return "PARTIAL_SHIPMENT_NOT_CONFIGURED"
+	case OutboundPartialShipmentNotAllowed:
+		return "PARTIAL_SHIPMENT_NOT_ALLOWED"
+	case OutboundPrefetchStands:
+		return "PREFETCH_STANDS"
 	default:
 		return ""
 	}
@@ -129,6 +141,8 @@ type OutboundHandler struct {
 	owners       ports.OwnerAccountLookup
 	clock        ports.Clock
 	anyWarehouse ports.TenantWarehouseLookup
+	// shortPicks 缺席时拆出缺货部分答状态不符，拆单也不看有没有货已经拣出来。
+	shortPicks shortPickStore
 }
 
 func NewOutboundHandler(

@@ -651,7 +651,7 @@ func buildWarehouseFulfillmentOrchestration(db *bentopg.DB, assigner *docnumber.
 		inner: warehouseapp.NewOutboundHandler(
 			outboundStore, outboundIDs, outboundNumbers, stock, warehouses, locations, zones, goods,
 			holds, owners, systemClock{}, warehouses,
-		),
+		).WithShortPicks(waveStore),
 	}
 	pickTaskIDs, err := whidentity.NewPickTaskIdentities()
 	if err != nil {
@@ -1212,6 +1212,12 @@ func (registration transactionalOutbound) RecordConsent(ctx context.Context, com
 func (registration transactionalOutbound) Split(ctx context.Context, command warehouseapp.SplitOutboundCommand) (warehouseapp.SplitResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.SplitResult, error) {
 		return registration.inner.Split(txCtx, command)
+	})
+}
+
+func (registration transactionalOutbound) SplitShortage(ctx context.Context, command warehouseapp.SplitShortageCommand) (warehouseapp.SplitResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.SplitResult, error) {
+		return registration.inner.SplitShortage(txCtx, command)
 	})
 }
 

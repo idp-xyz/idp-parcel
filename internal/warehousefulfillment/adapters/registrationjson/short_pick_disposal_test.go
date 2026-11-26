@@ -23,5 +23,12 @@ func TestAShortShipmentDocumentOnlyNamesTheRequest(t *testing.T) {
 		if _, err := registrationjson.ShipPickedCommand(strings.NewReader(body)); err == nil {
 			t.Errorf("%s：没有被拒", name)
 		}
+		if _, err := registrationjson.SplitShortageCommand(strings.NewReader(body)); err == nil {
+			t.Errorf("拆出缺货部分，%s：没有被拒", name)
+		}
+	}
+	split, err := registrationjson.SplitShortageCommand(strings.NewReader(`{"requestId":"OBR-01"}`))
+	if err != nil || split.Request.String() != "OBR-01" || split.Operator.String() != "" || split.Tenant.String() != "" {
+		t.Fatalf("拆出缺货部分译出的命令 %+v：%v", split, err)
 	}
 }

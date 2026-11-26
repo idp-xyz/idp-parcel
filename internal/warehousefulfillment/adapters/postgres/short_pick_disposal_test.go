@@ -166,9 +166,10 @@ func TestShippingWhatWasPickedNeedsARequestStuckOnAShortPick(t *testing.T) {
 	}
 }
 
-// Covers: 要发与实发都按基本单位记。3 套、每套 2 件的套装按组件出，预占 6 件、拣到 4 件——是要发 6 实发 4，
-// 不是拿「3 套」去比「4 件」把它挡在门外。
-func TestAShortShipmentCountsWhatWasWantedInBaseUnits(t *testing.T) {
+// stuckKit 摆出一张拣不齐的套装请求：3 套、每套 2 件，按组件出，预占 6 件、拣到 4 件，另一个库位的货被别的请求分走，换不出别的格。
+// partial 是货主登记的部分发货默认。
+func stuckKit(t *testing.T, partial domain.PartialShipment) (receiptWorld, *application.WaveHandler, *application.OutboundHandler, domain.OutboundRequestID) {
+	t.Helper()
 	world, handler, _ := twoCellWorld(t)
 	world.saveGoodsRevision(t, goodsRevisionFixture(t, "SYN-OWNER-01", "SYN-KIT-01", 1, "REQ-KIT-SHORT", func(spec *domain.GoodsContentSpec) {
 		spec.Name = valueOf(t, domain.NewGoodsName, "合成套装")
@@ -178,7 +179,7 @@ func TestAShortShipmentCountsWhatWasWantedInBaseUnits(t *testing.T) {
 		spec.Components = []domain.GoodsComponent{domain.NewGoodsComponent(valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), 2)}
 	}))
 	outbound := world.outbound(t)
-	if world.registerShortageRules(t, outbound, 1, domain.ShortagePolicyPartial, domain.PartialShipmentShortShip).Outcome() != application.OutboundPolicyRegistered {
+	if world.registerShortageRules(t, outbound, 1, domain.ShortagePolicyPartial, partial).Outcome() != application.OutboundPolicyRegistered {
 		t.Fatal("货主默认没有登记")
 	}
 	command := outboundCommand(t, "REQ-KIT-SHORT-SHIP", 3)
@@ -192,7 +193,6 @@ func TestAShortShipmentCountsWhatWasWantedInBaseUnits(t *testing.T) {
 	if released.Outcome() != application.WaveAllocated || len(released.Tasks()) != 1 || released.Tasks()[0].Quantity != 6 {
 		t.Fatalf("放出 %s %+v", released.Outcome(), released.Tasks())
 	}
-	// 另一个库位的 4 件先被别的请求分走，少拣之后换不出别的格。
 	blocker := world.acceptOutbound(t, outbound, outboundCommand(t, "REQ-KIT-BLOCK", 4))
 	blocking, ok := blocker.Request()
 	if blocker.Outcome() != application.OutboundReserved || !ok ||
@@ -202,14 +202,21 @@ func TestAShortShipmentCountsWhatWasWantedInBaseUnits(t *testing.T) {
 	if world.pick(t, handler, released.Tasks()[0].ID, 4).Outcome() != application.WavePicked || world.requestStatus(t, kit.ID()) != "RESERVED" {
 		t.Fatalf("少拣之后请求 %s", world.requestStatus(t, kit.ID()))
 	}
-	if got := world.shipPicked(t, handler, kit.ID()).Outcome(); got != application.WaveShortShipped {
+	return world, handler, outbound, kit.ID()
+}
+
+// Covers: 要发与实发都按基本单位记。3 套、每套 2 件的套装按组件出，预占 6 件、拣到 4 件——是要发 6 实发 4，
+// 不是拿「3 套」去比「4 件」把它挡在门外。
+func TestAShortShipmentCountsWhatWasWantedInBaseUnits(t *testing.T) {
+	world, handler, _, kit := stuckKit(t, domain.PartialShipmentShortShip)
+	if got := world.shipPicked(t, handler, kit).Outcome(); got != application.WaveShortShipped {
 		t.Fatalf("3 套拣到 4 件 = %s", got)
 	}
 	waves, err := adapter.NewWaves(world.db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	disposal, found, err := waves.LoadShortPickDisposal(t.Context(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), kit.ID())
+	disposal, found, err := waves.LoadShortPickDisposal(t.Context(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), kit)
 	if err != nil || !found || disposal.Wanted != 6 || disposal.Shipped != 4 {
 		t.Fatalf("记下的处置 %+v found %v err %v", disposal, found, err)
 	}

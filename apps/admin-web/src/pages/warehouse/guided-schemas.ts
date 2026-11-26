@@ -631,6 +631,18 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       },
     ],
   },
+  'shortage-split': {
+    fields: [
+      {
+        path: 'requestId',
+        label: '出库请求号',
+        kind: 'text',
+        required: true,
+        placeholder: 'OBR-01',
+        hint: '拣到的先发，没拣到的另成一张出库单继续等货；提交之后撤不回',
+      },
+    ],
+  },
   'wave-withdraw': {
     fields: [
       { path: 'waveId', label: '波次号', kind: 'text', required: true, placeholder: 'WAVE-01' },

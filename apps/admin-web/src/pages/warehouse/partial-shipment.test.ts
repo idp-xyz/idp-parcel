@@ -2,6 +2,7 @@ import { deepEqual, equal, ok } from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   awaitsShortPickDisposal,
+  canSplitUnallocated,
   canRecordPartialShipmentConsent,
   partialShipmentLabel,
   partialShipmentOptions,
@@ -81,7 +82,7 @@ test('拣不齐等处置：已预占、没有待执行的任务、已有已拣',
 });
 
 // Covers: 只在货主许了少发时摆「按已拣数量发货」；别的三种说清为什么不摆。
-test('拣不齐的处置只摆货主许了的那一个动作', () => {
+test('拣不齐的处置只摆货主许了的那一个动作：少发摆按已拣数量发货，拆单发摆拆出缺货部分', () => {
   const short = shortPickDisposalChoice({ configured: true, rule: 'SHORT_SHIP', source: 'OWNER' }, 6, 10, false);
   equal(short.action, 'short-shipment');
   ok(short.note.includes('少的 4'));
@@ -89,13 +90,14 @@ test('拣不齐的处置只摆货主许了的那一个动作', () => {
   equal(complete.action, null);
   ok(complete.note.includes('整单发'));
   const split = shortPickDisposalChoice({ configured: true, rule: 'SPLIT_SHIP', source: 'ORDER_CONSENT' }, 6, 10, false);
-  equal(split.action, null);
-  ok(split.note.includes('拆单发'));
+  equal(split.action, 'shortage-split');
+  ok(split.note.includes('拆出缺货部分'));
   const unset = shortPickDisposalChoice({ configured: false }, 6, 10, false);
   equal(unset.action, null);
   ok(unset.note.includes('没写明'));
   equal(shortPickDisposalChoice(undefined, 6, 10, false).action, null);
-  // 预取过估算委托的单，货主许了少发也不摆。
+  // 预取过估算委托的单，货主许了少发或拆单发也不摆。
+  equal(shortPickDisposalChoice({ configured: true, rule: 'SPLIT_SHIP', source: 'OWNER' }, 6, 10, true).action, null);
   const prefetched = shortPickDisposalChoice({ configured: true, rule: 'SHORT_SHIP', source: 'OWNER' }, 6, 10, true);
   equal(prefetched.action, null);
   ok(prefetched.note.includes('预取'));
@@ -105,5 +107,29 @@ test('办过的处置说清要发、实发与照的是哪一层', () => {
   equal(
     shortPickDisposalLine({ rule: 'SHORT_SHIP', source: 'OWNER', wanted: 10, shipped: 6, operator: 'op', recordedAt: '2026-11-26T00:00:00Z' }),
     '已按已拣数量发货：要发 10，实发 6，照货主登记的默认',
+  );
+});
+
+// Covers: 代录拆单的钮只给还没有货拣出来的单。
+test('已有货拣出来的单不摆代录拆单', () => {
+  equal(canSplitUnallocated('RESERVED', 0), true);
+  equal(canSplitUnallocated('PARTIALLY_RESERVED', 0), true);
+  equal(canSplitUnallocated('PENDING_POLICY', 0), true);
+  equal(canSplitUnallocated('RESERVED', 6), false);
+  equal(canSplitUnallocated('ALLOCATED', 0), false);
+});
+
+test('拆出缺货部分的处置说清要发、实发与照的是哪一层', () => {
+  equal(
+    shortPickDisposalLine({
+      rule: 'SPLIT_SHIP',
+      source: 'ORDER_CONSENT',
+      wanted: 10,
+      shipped: 6,
+      remainderRequestId: 'OBR-CHILD',
+      operator: 'op',
+      recordedAt: '2026-11-26T00:00:00Z',
+    }),
+    '已拆出缺货部分：要发 10，实发 6，照受理后代录的货主同意',
   );
 });

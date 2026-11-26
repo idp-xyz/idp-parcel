@@ -373,6 +373,9 @@ func (unwiredOutbound) RecordConsent(context.Context, warehouseapp.RecordPartial
 func (unwiredOutbound) Split(context.Context, warehouseapp.SplitOutboundCommand) (warehouseapp.SplitResult, error) {
 	return warehouseapp.SplitResult{}, errOrchestrationNotWired
 }
+func (unwiredOutbound) SplitShortage(context.Context, warehouseapp.SplitShortageCommand) (warehouseapp.SplitResult, error) {
+	return warehouseapp.SplitResult{}, errOrchestrationNotWired
+}
 func (unwiredOutbound) List(
 	context.Context,
 	warehousedomain.TenantID,
@@ -1048,6 +1051,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/warehouse-fulfillment-waves":                                {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-wave-withdrawals":                     {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-outbound-short-shipments":             {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-outbound-shortage-splits":             {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-stock":                                {http.MethodGet, faceOperationsRead},
 		"/v1/warehouse/reads/stock":                                   {http.MethodGet, faceCustomerClient},
 		internalJobsLine:                                              {http.MethodGet, faceOperationsRead},
@@ -1171,6 +1175,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 			"/warehouse-fulfillment-waves":                                accessidentity.DecisionWaveRelease,
 			"/warehouse-fulfillment-wave-withdrawals":                     accessidentity.DecisionWaveRelease,
 			"/warehouse-fulfillment-outbound-short-shipments":             accessidentity.DecisionWaveRelease,
+			"/warehouse-fulfillment-outbound-shortage-splits":             accessidentity.DecisionWaveRelease,
 		}
 		if kind, writesOnBehalf := decisionLines[pattern]; writesOnBehalf && line.face.decision != kind {
 			t.Fatalf("%s 的决定种类 = %s，want %s", pattern, line.face.decision, kind)
@@ -1319,6 +1324,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-waves":                              {status, code},
 			"/warehouse-fulfillment-wave-withdrawals":                   {status, code},
 			"/warehouse-fulfillment-outbound-short-shipments":           {status, code},
+			"/warehouse-fulfillment-outbound-shortage-splits":           {status, code},
 			"/warehouse-fulfillment-stock":                              {status, code},
 			internalJobsLine:                                            {status, code},
 			internalJobLine:                                             {status, code},
@@ -1457,6 +1463,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-waves":                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-wave-withdrawals":                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-short-shipments":           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-outbound-shortage-splits":           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-stock":                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			internalJobsLine:                                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			internalJobLine:                                             {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1588,6 +1595,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-waves":                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-wave-withdrawals":                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-outbound-short-shipments":           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-outbound-shortage-splits":           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-stock":                              {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			internalJobsLine:                                            {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			internalJobLine:                                             {http.StatusInternalServerError, "NO_ANSWER_FORMED"},

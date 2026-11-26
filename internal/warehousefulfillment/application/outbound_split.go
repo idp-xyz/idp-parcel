@@ -30,6 +30,14 @@ type SplitResult struct {
 	parent   domain.OutboundRequest
 	children []domain.OutboundRequest
 	has      bool
+	// remainder 只在拆出缺货部分时有：原请求照旧往下发，拆出的只有这一张。
+	remainder    domain.OutboundRequest
+	hasRemainder bool
+}
+
+// Remainder 交回拆出缺货部分时新成的那张请求。代录拆单没有它。
+func (result SplitResult) Remainder() (domain.OutboundRequest, bool) {
+	return result.remainder, result.hasRemainder
 }
 
 func (result SplitResult) Outcome() OutboundOutcome { return result.outcome }
@@ -75,6 +83,17 @@ func (handler *OutboundHandler) Split(ctx context.Context, command SplitOutbound
 	if !splittable(parent.Status()) {
 		return SplitResult{outcome: OutboundStatusMismatch, parent: parent, has: true}, nil
 	}
+	// 已有货拣进待出库的请求不走这条路：拆开会把原请求整张作废、预占全删，拣出来的货就没了归属。
+	// 它拣不齐时照货主的部分发货规则办（按已拣数量发货或拆出缺货部分），或截单把货送回去。
+	if handler.shortPicks != nil {
+		tasks, err := handler.shortPicks.TasksOf(ctx, command.Tenant, parent.ID())
+		if err != nil {
+			return SplitResult{}, fmt.Errorf("split outbound: %w", err)
+		}
+		if pickedQuantity(tasks) > 0 {
+			return SplitResult{outcome: OutboundStatusMismatch, parent: parent, has: true}, nil
+		}
+	}
 	if !partsConserve(parent.Lines(), command.Parts) {
 		return SplitResult{outcome: OutboundContentInvalid, parent: parent, has: true}, nil
 	}
@@ -95,15 +114,10 @@ func (handler *OutboundHandler) Split(ctx context.Context, command SplitOutbound
 	if !released {
 		return SplitResult{outcome: OutboundStatusMismatch, parent: parent, has: true}, nil
 	}
-	// 货主对这一张说过的话跟着这一张的货走：受理之后代录的同意盖过提交时带的，拆出的每一份都按它记。
-	// 货主的默认不带过去——那不是对这一张说的，子请求没写明时各自按当时的默认读。
-	said := parent.PartialShipment()
-	consent, consented, err := handler.requests.LatestConsent(ctx, command.Tenant, parent.ID())
+	// 货主的默认不带过去，子请求没写明时各自按当时的默认读。
+	said, err := handler.saidAboutOrder(ctx, command.Tenant, parent)
 	if err != nil {
 		return SplitResult{}, fmt.Errorf("split outbound: %w", err)
-	}
-	if consented {
-		said = consent.Rule
 	}
 	owner := parent.Owner()
 	children := make([]domain.OutboundRequest, 0, len(command.Parts))

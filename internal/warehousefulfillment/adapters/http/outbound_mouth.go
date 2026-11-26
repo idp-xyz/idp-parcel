@@ -17,6 +17,7 @@ type OutboundService interface {
 	RegisterPolicy(ctx context.Context, command application.RegisterShortagePolicyCommand) (application.OutboundResult, error)
 	RecordConsent(ctx context.Context, command application.RecordPartialShipmentConsentCommand) (application.OutboundResult, error)
 	Split(ctx context.Context, command application.SplitOutboundCommand) (application.SplitResult, error)
+	SplitShortage(ctx context.Context, command application.SplitShortageCommand) (application.SplitResult, error)
 }
 
 // FollowUpService 是货主补正后代交新提交版本的编排。
@@ -433,6 +434,33 @@ func NewSplitOutboundEndpoint(intake OutboundOnBehalfIntake, service OutboundSer
 	})
 }
 
+// NewSplitShortageEndpoint 交回拆出缺货部分的入口（POST /warehouse-fulfillment-outbound-shortage-splits）。
+// 与按已拣数量发货挂同一种运营决定：都是管波次的人照货主的规则处置一张拣不齐的单。
+func NewSplitShortageEndpoint(intake WaveReleaseIntake, service OutboundService) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		command, err := intake.IntakeShortageSplit(request.Context(), request)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		result, err := service.SplitShortage(request.Context(), command)
+		if errors.Is(err, application.ErrOwnerAccountNotInTenant) {
+			writeProblem(response, http.StatusNotFound, codeOwnerAccountNotVisible)
+			return
+		}
+		if err != nil {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeSplitAnswer(response, request, result)
+	})
+}
+
 // NewRecordPartialShipmentConsentEndpoint 交回代录部分发货同意的入口（POST /warehouse-fulfillment-outbound-partial-shipment-consents）。
 // 与出库请求代录挂同一种运营决定：都是运营替货主把他对一张请求的意思记下来。
 func NewRecordPartialShipmentConsentEndpoint(intake OutboundOnBehalfIntake, service OutboundService) http.Handler {
@@ -505,18 +533,34 @@ func writeSplitAnswer(response http.ResponseWriter, request *http.Request, resul
 		return
 	}
 	status := http.StatusOK
-	if result.Outcome() == application.OutboundSplitResult {
+	if result.Outcome() == application.OutboundSplitResult || result.Outcome() == application.OutboundRemainderSplit {
 		status = http.StatusCreated
 	}
 	body := outboundAnswer{Outcome: name}
 	if parent, ok := result.Parent(); ok {
 		body.Status = parent.Status().String()
 	}
+	// 拆出缺货部分的答复带上拆出的那一张：它是这一步新成的单，办的人要知道它叫什么、受理成了什么状态。
+	if child, ok := result.Remainder(); ok {
+		remainder := &outboundRemainderAnswer{RequestID: child.ID().String(), Status: child.Status().String()}
+		if number, numbered := child.DocumentNumber(); numbered {
+			remainder.DocumentNumber = number.String()
+		}
+		body.Remainder = remainder
+	}
 	writeJSON(response, status, body)
+}
+
+type outboundRemainderAnswer struct {
+	RequestID      string `json:"requestId"`
+	Status         string `json:"status"`
+	DocumentNumber string `json:"documentNumber,omitempty"`
 }
 
 type outboundAnswer struct {
 	Outcome        string `json:"outcome"`
 	Status         string `json:"status,omitempty"`
 	DocumentNumber string `json:"documentNumber,omitempty"`
+	// Remainder 只在拆出缺货部分的答复里有。
+	Remainder *outboundRemainderAnswer `json:"remainder,omitempty"`
 }

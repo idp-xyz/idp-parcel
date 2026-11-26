@@ -511,6 +511,23 @@ func ShipPickedCommand(reader io.Reader) (application.ShipPickedCommand, error) 
 	return application.ShipPickedCommand{Request: request}, nil
 }
 
+// SplitShortageCommand 把拆出缺货部分译成命令。载荷只点名请求：拆多少由没拣到的预占定。
+func SplitShortageCommand(reader io.Reader) (application.SplitShortageCommand, error) {
+	var none application.SplitShortageCommand
+	document, err := decodeDocument[shortPickDisposalDocument](reader, "shortage split")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	request, err := requiredText("requestId", document.RequestID, domain.NewOutboundRequestID)
+	if err != nil {
+		return none, err
+	}
+	return application.SplitShortageCommand{Request: request}, nil
+}
+
 type pickDocument struct {
 	carriedIdentity
 	FactID    *string `json:"factId"`

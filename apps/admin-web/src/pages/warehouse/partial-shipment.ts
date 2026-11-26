@@ -99,7 +99,7 @@ export function awaitsShortPickDisposal(status: string, tasks: ReadonlyArray<{ s
 }
 
 /**
- * 停在「拣不齐、等处置」的单此刻能办什么。能不能少发照货主的规则，页面只摆货主许了的那一个动作；
+ * 停在「拣不齐、等处置」的单此刻能办什么。少发还是拆单发照货主的规则，页面只摆货主许了的那一个动作；
  * 不许或没写明时说清为什么不摆、还能怎么办，不让人去猜。读口没答规则（旧后端）时不摆动作。
  * `picked` 与 `wanted` 都按基本单位：`wanted` 取读口的预占需求合计，不取明细行合计（明细行按下单单位写）。
  */
@@ -108,11 +108,11 @@ export function shortPickDisposalChoice(
   picked: number,
   wanted: number,
   prefetched: boolean,
-): { action: 'short-shipment' | null; note: string } {
+): { action: 'short-shipment' | 'shortage-split' | null; note: string } {
   const gap = `拣到 ${picked}，要发 ${wanted}，少的 ${Math.max(0, wanted - picked)} 换不出别的库位。`;
   // 预取过估算委托的单不办：委托按全量申报了件数，少发之后没有更正件数的路。与后端 `PREFETCH_STANDS` 同一口径。
   if (prefetched) {
-    return { action: null, note: `${gap}这张单放波次时已按全量预取过估算委托，不能少发：等有货了再放波次，或截单。` };
+    return { action: null, note: `${gap}这张单放波次时已按全量预取过估算委托，不能少发也不能拆出缺货部分：等有货了再放波次，或截单。` };
   }
   switch (answer?.configured ? answer.rule : undefined) {
     case 'SHORT_SHIP':
@@ -120,7 +120,10 @@ export function shortPickDisposalChoice(
     case 'SHIP_COMPLETE':
       return { action: null, note: `${gap}货主要整单发：等有货了再放波次，或截单。` };
     case 'SPLIT_SHIP':
-      return { action: null, note: `${gap}货主许的是拆单发，不是少发：等有货了再放波次，或截单。` };
+      return {
+        action: 'shortage-split',
+        note: `${gap}货主许了拆单发，可以拆出缺货部分：拣到的先发，缺的另成一张单继续等货；也可以等有货了再放波次。`,
+      };
     default:
       return {
         action: null,
@@ -133,4 +136,12 @@ export function shortPickDisposalChoice(
 export function shortPickDisposalLine(disposal: ShortPickDisposalAnswer): string {
   const base = `要发 ${disposal.wanted}，实发 ${disposal.shipped}，照${partialShipmentSourceLabel(disposal.source)}`;
   return disposal.rule === 'SPLIT_SHIP' ? `已拆出缺货部分：${base}` : `已按已拣数量发货：${base}`;
+}
+
+/**
+ * 代录拆单只给还没有货拣出来的单：已有货拣进待出库的单拆开会整张作废，拣出来的货就没了归属。
+ * 与后端 `Split` 挡的是同一种；那种单拣不齐时走上面两个处置，或截单。
+ */
+export function canSplitUnallocated(status: string, picked: number): boolean {
+  return (status === 'RESERVED' || status === 'PARTIALLY_RESERVED' || status === 'PENDING_POLICY') && picked === 0;
 }

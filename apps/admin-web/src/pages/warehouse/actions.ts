@@ -111,8 +111,9 @@ export const warehouseActionOutcomeLabels: Record<string, string> = {
   ALLOCATED: '已放波次并生成拣货任务',
   WITHDRAWN: '已从波次撤出，出库单回到已预占',
   SHORT_SHIPPED: '已按已拣数量发货：没拣到的预占放开，出库单进已拣货，往下按已拣数量复核打包',
-  PARTIAL_SHIPMENT_NOT_CONFIGURED: '这张单没写明拣不齐时怎么发，货主也没登记默认，不能少发',
-  PARTIAL_SHIPMENT_NOT_ALLOWED: '货主对这张单许的不是少发，不能按已拣数量发货',
+  REMAINDER_SPLIT: '已拆出缺货部分：原单进已拣货、按已拣数量往下走，缺的另成一张出库单，在原单右栏能点过去',
+  PARTIAL_SHIPMENT_NOT_CONFIGURED: '这张单没写明拣不齐时怎么发，货主也没登记默认，不能少发，也不能拆出缺货部分',
+  PARTIAL_SHIPMENT_NOT_ALLOWED: '货主对这张单许的不是这一种发法，没有办',
   PREFETCH_STANDS: '这张单放波次时已按全量预取过估算委托，委托上的申报件数改不了；等有货了再放波次，或截单',
   // 这个词几个口都答，指的东西不一样：撤单是没有这个波次，放波次是点名的出库单找不到或不在这个仓，
   // 更正出库确认是没有这条确认。所以只说对不上，不说是哪一样。
@@ -422,7 +423,9 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     title: '代录拆开尚未分配的出库请求',
     endpoint: '/warehouse-fulfillment-outbound-request-splits',
     grant: 'OUTBOUND_REQUEST_RECORD_ON_BEHALF',
-    snapshotHint: '填 requestId 与 parts（每项含 requestKey、lines）。拆开后原预占释放，新请求各自预占。' + noActorNote,
+    snapshotHint:
+      '填 requestId 与 parts（每项含 requestKey、lines）。拆开后原预占释放，新请求各自预占。已有货拣出来的单不能这样拆，它拣不齐时照货主的部分发货规则办。' +
+      noActorNote,
   },
   {
     id: 'outbound-cutoff',
@@ -480,6 +483,17 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     snapshotHint:
       '填 requestId。只办停在「拣不齐、等处置」的单：任务都有了结果、已有货拣进待出库、还有没拣到的预占。'
       + '货主许了少发才成立（这张单提交时写的、受理后代录的同意或货主登记的默认）；成立后没拣到的不再发，这一步撤不回。' +
+      noActorNote,
+  },
+  {
+    id: 'shortage-split',
+    label: '拆出缺货部分',
+    title: '拣不齐的出库单拆出缺货部分',
+    endpoint: '/warehouse-fulfillment-outbound-shortage-splits',
+    grant: 'WAVE_RELEASE',
+    snapshotHint:
+      '填 requestId。只办停在「拣不齐、等处置」的单，货主许了拆单发才成立。拆多少不用填：没拣到的预占有多少就拆多少，按基本单位另成一张出库单重新受理、重新预占；'
+      + '原单进已拣货，按已拣数量往下走。这一步撤不回。' +
       noActorNote,
   },
   {

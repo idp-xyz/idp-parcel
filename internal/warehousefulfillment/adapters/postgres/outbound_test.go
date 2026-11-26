@@ -266,10 +266,14 @@ func (world receiptWorld) outbound(t *testing.T) *application.OutboundHandler {
 	if err != nil {
 		t.Fatal(err)
 	}
+	picks, err := adapter.NewWaves(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return application.NewOutboundHandler(
 		requests, identities, world.outboundNumbers(t), world.ledger, world.warehouses, world.locations, world.zones,
 		world.goods, application.ZeroStockHolds{}, alwaysOwner{}, world.clock, world.warehouses,
-	)
+	).WithShortPicks(picks)
 }
 
 func (world receiptWorld) outboundNumbers(t *testing.T) *adapter.OutboundNumbers {

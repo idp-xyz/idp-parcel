@@ -50,6 +50,7 @@ type WaveReleaseIntake interface {
 	IntakeWaveRelease(ctx context.Context, request *http.Request) (application.ReleaseWaveCommand, error)
 	IntakeWaveWithdrawal(ctx context.Context, request *http.Request) (application.WithdrawWaveCommand, error)
 	IntakeShortShipment(ctx context.Context, request *http.Request) (application.ShipPickedCommand, error)
+	IntakeShortageSplit(ctx context.Context, request *http.Request) (application.SplitShortageCommand, error)
 }
 
 type OperatorWaveIntake struct {
@@ -105,7 +106,25 @@ func (intake *OperatorWaveIntake) IntakeShortShipment(ctx context.Context, reque
 	return command, nil
 }
 
+func (intake *OperatorWaveIntake) IntakeShortageSplit(ctx context.Context, request *http.Request) (application.SplitShortageCommand, error) {
+	identity, err := intake.authenticator.AuthenticateWaveRelease(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.SplitShortageCommand{}, err
+	}
+	command, err := registrationjson.SplitShortageCommand(requestBody(request))
+	if err != nil {
+		return application.SplitShortageCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	command.Operator = identity.Registrant
+	return command, nil
+}
+
 type UnconfiguredWaveIntake struct{}
+
+func (UnconfiguredWaveIntake) IntakeShortageSplit(context.Context, *http.Request) (application.SplitShortageCommand, error) {
+	return application.SplitShortageCommand{}, ErrAccessChannelNotConfigured
+}
 
 func (UnconfiguredWaveIntake) IntakeShortShipment(context.Context, *http.Request) (application.ShipPickedCommand, error) {
 	return application.ShipPickedCommand{}, ErrAccessChannelNotConfigured
