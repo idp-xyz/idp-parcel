@@ -592,9 +592,9 @@ export function ListPageTemplate<Row>({
 
       {viewState.kind === 'ready' ? (
         <>
-          {/* 表的边框跟着行走。行少时翻页条挨着最后一行，不再用一整块空白把三行表撑到页底。
-              行多过剩余高度时框自己滚动，表头仍吸在这个滚动口上。 */}
-          <div className={`grid min-h-0 flex-1 gap-2 p-2 ${pagination ? 'grid-rows-[minmax(0,max-content)_auto]' : 'grid-rows-[minmax(0,max-content)]'}`}>
+          {/* 表的边框跟着行走，行少时不用一整块空白把三行表撑到页底；行多过剩余高度时框自己滚动，表头仍吸在这个滚动口上。
+              翻页条固定在页底：它的位置不随行数变，翻页时手不用跟着找。 */}
+          <div className="flex min-h-0 flex-1 flex-col p-2">
             <div className="min-h-0 overflow-auto rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
               <Table stickyHeader>
                   <TableHeader>
@@ -707,24 +707,24 @@ export function ListPageTemplate<Row>({
                   </TableBody>
                 </Table>
             </div>
-            {pagination ? (
-              <div className="shrink-0 px-1">
-                {pagination.mode === 'cursor' ? (
-                  <CursorPaginationBar pagination={pagination} />
-                ) : (
-                  <Pagination
-                    variant="table"
-                    page={pagination.page}
-                    pageSize={pagination.pageSize}
-                    total={pagination.total}
-                    onPageChange={pagination.onPageChange}
-                    onPageSizeChange={pagination.onPageSizeChange}
-                    pageSizeOptions={pagination.pageSizeOptions}
-                  />
-                )}
-              </div>
-            ) : null}
           </div>
+          {pagination && (
+            <div className="border-t border-idpxyz-border px-4 py-1.5 shrink-0">
+              {pagination.mode === 'cursor' ? (
+                <CursorPaginationBar pagination={pagination} />
+              ) : (
+                <Pagination
+                  variant="table"
+                  page={pagination.page}
+                  pageSize={pagination.pageSize}
+                  total={pagination.total}
+                  onPageChange={pagination.onPageChange}
+                  onPageSizeChange={pagination.onPageSizeChange}
+                  pageSizeOptions={pagination.pageSizeOptions}
+                />
+              )}
+            </div>
+          )}
         </>
       ) : viewState.kind === 'loading' && skeletonOf(viewState.shape) === 'table' ? (
         // 表形骨架摆进与真表同一个 surface 容器、顶对齐、列数随真表：居中放会让几行骨架浮在页面中下部，上面一大片空。
