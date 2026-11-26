@@ -57,6 +57,12 @@ func (handler *WaveHandler) prefetchRequests(ctx context.Context, command Releas
 		if !found || request.Dispatch() != domain.DispatchProductNetwork || request.PlatformStocking() {
 			continue
 		}
+		// 撤单或少拣之后再放进波次的请求，上一次放出时已经预取过：估算委托只交一份，记下的那一份照旧用。
+		if _, had, err := handler.waves.LoadPrefetch(ctx, command.Tenant, id); err != nil {
+			return fmt.Errorf("release wave: %w", err)
+		} else if had {
+			continue
+		}
 		parcel, ok, err := prefetchParcel(ctx, handler.prefetch.measurements, command.Tenant, request, material.Content(), byRequest[id.String()])
 		if err != nil {
 			return fmt.Errorf("release wave: %w", err)

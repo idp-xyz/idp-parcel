@@ -44,12 +44,21 @@ type PickTask struct {
 	Fact     string
 }
 
+// WaveMember 是波次放出时带的一张出库请求。撤出之后成员行留着，Withdrawn 为真。
+type WaveMember struct {
+	Request   domain.OutboundRequestID
+	Withdrawn bool
+}
+
 // WaveStore 读写波次、分配策略与拣货任务。写入在没有环境事务时拒绝。
 type WaveStore interface {
 	LoadStrategy(ctx context.Context, tenant domain.TenantID) (AllocationStrategy, bool, error)
 	SaveStrategy(ctx context.Context, tenant domain.TenantID, strategy AllocationStrategy) error
 	LoadWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]domain.OutboundRequestID, bool, error)
 	SaveWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, warehouse domain.WarehouseCode, operator domain.Registrant, prefetch bool, at time.Time, requests []domain.OutboundRequestID, tasks []PickTask) error
+	LoadWaveMembers(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]WaveMember, bool, error)
+	// WithdrawFromWave 记下撤出、作废这张请求在这个波次里待执行的任务，并把请求从已放波次改回已预占。
+	WithdrawFromWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, request domain.OutboundRequestID, operator domain.Registrant, at time.Time) error
 	LoadTask(ctx context.Context, tenant domain.TenantID, id domain.PickTaskID) (PickTask, bool, error)
 	SavePick(ctx context.Context, tenant domain.TenantID, task PickTask, requestStatus domain.OutboundStatus, differenceID, factID string, short int64) error
 	TasksOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) ([]PickTask, error)

@@ -1117,6 +1117,12 @@ func (registration transactionalWave) Release(ctx context.Context, command wareh
 	})
 }
 
+func (registration transactionalWave) Withdraw(ctx context.Context, command warehouseapp.WithdrawWaveCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.Withdraw(txCtx, command)
+	})
+}
+
 func (registration transactionalWave) Adopt(ctx context.Context, command warehouseapp.AdoptStrategyCommand) (warehouseapp.WaveResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
 		return registration.inner.Adopt(txCtx, command)

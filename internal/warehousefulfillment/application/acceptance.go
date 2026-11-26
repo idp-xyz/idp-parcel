@@ -157,6 +157,7 @@ func (handler *AcceptanceHandler) unpack(ctx context.Context, tenant domain.Tena
 	if err != nil {
 		return fmt.Errorf("record acceptance: %w", err)
 	}
+	tasks = countedTasks(tasks)
 	if whole {
 		if err := queueReturnTasks(ctx, handler.store, tenant, request, 0, tasks); err != nil {
 			return fmt.Errorf("record acceptance: %w", err)

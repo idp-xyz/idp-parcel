@@ -28,7 +28,13 @@ const columns: ListColumn<WaveRecord>[] = [
   { id: 'wave', header: '波次号', className: 'whitespace-nowrap', render: (row) => <DocumentLink moduleId={moduleId} parts={[row.waveId]} /> },
   { id: 'state', header: '状态', render: (row) => <WmsBadge code={row.status} label={waveStatusLabel(row.status)} /> },
   { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
-  { id: 'requests', header: '出库单', align: 'right', className: mono, render: (row) => `${row.requests.length} 张` },
+  {
+    id: 'requests',
+    header: '出库单',
+    align: 'right',
+    className: mono,
+    render: (row) => (row.withdrawnRequests.length > 0 ? `${row.requests.length} 张（撤出 ${row.withdrawnRequests.length}）` : `${row.requests.length} 张`),
+  },
   {
     id: 'progress',
     header: '已拣 / 任务',
@@ -91,6 +97,7 @@ function WaveList() {
           kind: 'summary',
           fields: [
             { label: '出库单', value: row.requests.join('、') || '没有出库单', mono: true },
+            ...(row.withdrawnRequests.length > 0 ? [{ label: '其中已撤出', value: row.withdrawnRequests.join('、'), mono: true }] : []),
             { label: '状态', value: waveStatusLabel(row.status) },
             {
               label: '已拣 / 任务',

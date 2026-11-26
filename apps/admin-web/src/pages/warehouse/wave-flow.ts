@@ -42,6 +42,24 @@ export function waveTrack(status: string): DocumentTrack {
   }
 }
 
+/**
+ * 这个波次里现在还能撤出的出库单：没撤过，在这个波次里有任务等着拣，并且没有一条拣过（拣满或少拣）。
+ * 拣过的要走截单，拣出来的货得回库。这里只按读到的任务判，够不够格以后端的答复为准——出库单另被截掉、
+ * 或刚被别人拣了一条，后端会答状态不符。
+ */
+export function withdrawableRequests(wave: {
+  requests: readonly string[];
+  withdrawnRequests: readonly string[];
+  tasks: ReadonlyArray<{ requestId: string; status: string }>;
+}): string[] {
+  const withdrawn = new Set(wave.withdrawnRequests);
+  return wave.requests.filter((requestId) => {
+    if (withdrawn.has(requestId)) return false;
+    const own = wave.tasks.filter((task) => task.requestId === requestId);
+    return own.some((task) => task.status === 'OPEN') && !own.some((task) => task.status === 'DONE' || task.status === 'SHORT');
+  });
+}
+
 export interface WaveProgress {
   /** 算进度的任务数：待执行、拣满、少拣。作废与迟到的不算，那些货不再是这个波次要拣的。 */
   tasks: number;

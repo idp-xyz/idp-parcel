@@ -526,7 +526,7 @@ export function pickFactValues(submission: PickSubmission, staging: string): Gui
 export const pickOutcomeLabels: Readonly<Record<string, string>> = {
   PICKED: '这一格已记下。',
   EXISTING_RESULT: '这一格之前已经记过了（同一个作业事实号），这次没有重复记。',
-  RECORDED: '这一格所属的出库单已经截单。这一笔照记了：拣出来的货已生成回库任务，不要当成发货的货。',
+  RECORDED: '这一格已经作废：它的出库单已经截单，或从这个波次撤出了。这一笔照记了：拣出来的货已生成回库任务，不要当成发货的货。',
   CONTENT_CONFLICT: '这一格已经不能再拣：它已经被拣过了（含短拣）。这一笔没有记。',
   WAVE_NOT_FOUND: '找不到这一格的拣货任务，它可能已经被撤掉。这一笔没有记。',
   CONTENT_INVALID:

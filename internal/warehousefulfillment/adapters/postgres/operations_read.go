@@ -264,7 +264,7 @@ func (store *Waves) LoadWaveRow(ctx context.Context, tenant domain.TenantID, wav
 // loadWaveMembers 补上一个波次的出库请求与拣货任务。
 func loadWaveMembers(ctx context.Context, querier bentopg.Querier, tenant domain.TenantID, item *ports.WaveRow) error {
 	reqRows, err := querier.Query(ctx,
-		`SELECT request_id FROM warehouse_fulfillment.wave_request
+		`SELECT request_id, withdrawn_at IS NOT NULL FROM warehouse_fulfillment.wave_request
 		  WHERE tenant_id = $1 AND wave_id = $2
 		  ORDER BY request_id`,
 		tenant.String(), item.WaveID)
@@ -273,11 +273,15 @@ func loadWaveMembers(ctx context.Context, querier bentopg.Querier, tenant domain
 	}
 	for reqRows.Next() {
 		var id string
-		if err := reqRows.Scan(&id); err != nil {
+		var withdrawn bool
+		if err := reqRows.Scan(&id, &withdrawn); err != nil {
 			reqRows.Close()
 			return err
 		}
 		item.Requests = append(item.Requests, id)
+		if withdrawn {
+			item.Withdrawn = append(item.Withdrawn, id)
+		}
 	}
 	if err := reqRows.Err(); err != nil {
 		reqRows.Close()

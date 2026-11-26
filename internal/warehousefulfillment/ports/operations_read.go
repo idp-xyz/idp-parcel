@@ -115,7 +115,9 @@ type WaveRow struct {
 	Status        string
 	ReleasedAt    time.Time
 	Requests      []string
-	Tasks         []WaveTaskRow
+	// Withdrawn 是 Requests 里已经撤出的那几张。
+	Withdrawn []string
+	Tasks     []WaveTaskRow
 }
 
 // ChargeOccurrencePages 是运营查阅仓储作业收费发生项列表的查询声明（ADR-0144）。

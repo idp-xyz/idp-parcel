@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { activeWaveStatuses, settledWaveStatuses, waveProgress, waveStatusLabel, waveTrack } from './wave-flow';
+import { activeWaveStatuses, settledWaveStatuses, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
 
 test('状态的词：四种各有中文，陌生的词原样示出', () => {
   deepEqual(
@@ -25,6 +25,26 @@ test('进度条：已取消是流程停下，答中性；陌生的词示在第�
 });
 
 const tasks = (...statuses: string[]) => statuses.map((status) => ({ status }));
+
+test('能撤出的出库单：没撤过、有任务等着拣、没有一条拣过', () => {
+  const wave = {
+    requests: ['R-OPEN', 'R-PART', 'R-SHORT', 'R-DONE', 'R-GONE', 'R-CUT', 'R-NONE'],
+    withdrawnRequests: ['R-GONE'],
+    tasks: [
+      { requestId: 'R-OPEN', status: 'OPEN' },
+      { requestId: 'R-OPEN', status: 'OPEN' },
+      { requestId: 'R-PART', status: 'OPEN' },
+      { requestId: 'R-PART', status: 'DONE' },
+      { requestId: 'R-SHORT', status: 'OPEN' },
+      { requestId: 'R-SHORT', status: 'SHORT' },
+      { requestId: 'R-DONE', status: 'DONE' },
+      { requestId: 'R-GONE', status: 'CANCELLED' },
+      { requestId: 'R-CUT', status: 'CANCELLED' },
+    ],
+  };
+  deepEqual(withdrawableRequests(wave), ['R-OPEN']);
+  deepEqual(withdrawableRequests({ requests: [], withdrawnRequests: [], tasks: [] }), []);
+});
 
 test('拣货进度：有了结果的（拣满、少拣）占待执行、拣满、少拣三种的百分比，往下取整', () => {
   deepEqual(waveProgress(tasks('OPEN', 'DONE', 'SHORT')), { tasks: 3, open: 1, done: 1, short: 1, cancelled: 0, percent: 66 });

@@ -11,7 +11,7 @@ import { pickListSheet } from './print-forms';
 import { packStationHash, pickStationHash } from './station/stations';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
-import { waveProgress, waveStatusLabel, waveTrack } from './wave-flow';
+import { waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
 import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable } from './wms-ui';
 
 /** 波次页：一次放出去的那一批出库单，和它们的每一条拣货任务拣到哪了。 */
@@ -26,6 +26,10 @@ export function WaveDocument({ waveId }: { waveId: string }) {
   const open = tasks.filter((task) => task.status === 'OPEN');
   const progress = waveProgress(tasks);
   const track = wave ? waveTrack(wave.status) : undefined;
+  const withdrawn = new Set(wave?.withdrawnRequests ?? []);
+  const withdrawable = wave ? withdrawableRequests(wave) : [];
+  const canWithdraw = drawer.has('wave-withdraw');
+  const withdraw = (requests: readonly string[]) => drawer.open('wave-withdraw', { waveId, requests: requests.join(', ') });
   // 余下的格按库位排：拣货的人顺着库位走，不照任务生成的先后。
   const ordered = [...tasks].sort((a, b) => {
     if ((a.status === 'OPEN') !== (b.status === 'OPEN')) return a.status === 'OPEN' ? -1 : 1;
@@ -87,8 +91,25 @@ export function WaveDocument({ waveId }: { waveId: string }) {
               <WmsAsideBlock title="这个波次里的出库单">
                 {wave.requests.length === 0 ? <span className="text-idpxyz-textMuted">没有出库单。</span> : null}
                 {wave.requests.map((requestId) => (
-                  <DocumentLink key={requestId} moduleId="warehouse-outbound" parts={[requestId]} />
+                  <div key={requestId} className="flex min-w-0 items-center justify-between gap-2">
+                    <DocumentLink moduleId="warehouse-outbound" parts={[requestId]} />
+                    {withdrawn.has(requestId) ? (
+                      <span className="shrink-0 type-caption text-idpxyz-textMuted">已撤出</span>
+                    ) : canWithdraw && withdrawable.includes(requestId) ? (
+                      <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => withdraw([requestId])}>
+                        撤出
+                      </Button>
+                    ) : null}
+                  </div>
                 ))}
+                {canWithdraw && withdrawable.length > 1 ? (
+                  <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => withdraw(withdrawable)}>
+                    把还没拣的 {withdrawable.length} 张都撤出
+                  </Button>
+                ) : null}
+                {canWithdraw && withdrawable.length > 0 ? (
+                  <span className="type-caption text-idpxyz-textMuted">撤出后出库单回到已预占，可以再放进别的波次；拣过的单撤不了，要走截单。</span>
+                ) : null}
               </WmsAsideBlock>
               <WmsAsideBlock title="放波次">
                 <span className="break-all font-mono type-caption text-idpxyz-textMuted">操作者 {wave.operator}</span>

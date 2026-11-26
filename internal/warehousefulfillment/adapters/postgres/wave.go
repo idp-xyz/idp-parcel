@@ -151,6 +151,82 @@ func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id dom
 	return nil
 }
 
+func (store *Waves) LoadWaveMembers(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]ports.WaveMember, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	var exists bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM warehouse_fulfillment.wave WHERE tenant_id = $1 AND wave_id = $2)`,
+		tenant.String(), id.String()).Scan(&exists); err != nil {
+		return nil, false, fmt.Errorf("load wave members: %w", err)
+	}
+	if !exists {
+		return nil, false, nil
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT request_id, withdrawn_at IS NOT NULL FROM warehouse_fulfillment.wave_request
+		  WHERE tenant_id = $1 AND wave_id = $2
+		  ORDER BY request_id`, tenant.String(), id.String())
+	if err != nil {
+		return nil, false, fmt.Errorf("load wave members: %w", err)
+	}
+	defer rows.Close()
+	var members []ports.WaveMember
+	for rows.Next() {
+		var raw string
+		var withdrawn bool
+		if err := rows.Scan(&raw, &withdrawn); err != nil {
+			return nil, false, fmt.Errorf("load wave members: %w", err)
+		}
+		request, err := domain.NewOutboundRequestID(raw)
+		if err != nil {
+			return nil, false, err
+		}
+		members = append(members, ports.WaveMember{Request: request, Withdrawn: withdrawn})
+	}
+	return members, true, rows.Err()
+}
+
+// WithdrawFromWave 三句各带自己的前置条件：成员行还没撤过、请求仍是已放波次。有一句没改到行就整笔不成立。
+// 拣货与放波次排在编排先拿到的入账次序里，改不到行的只会是不走那道次序的截单抢在了前面：请求已经不是已放波次，
+// 这一笔连同前面作废的任务一起退回，截单的结果不动。
+func (store *Waves) WithdrawFromWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, request domain.OutboundRequestID, operator domain.Registrant, at time.Time) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("withdraw from wave: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.wave_request
+		    SET withdrawn_at = $4, withdrawn_by = $5
+		  WHERE tenant_id = $1 AND wave_id = $2 AND request_id = $3 AND withdrawn_at IS NULL`,
+		tenant.String(), id.String(), request.String(), at.UTC(), operator.String())
+	if err != nil {
+		return fmt.Errorf("withdraw from wave: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("withdraw from wave: %s was not a standing member of %s", request.String(), id.String())
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.pick_task SET status = 'CANCELLED'
+		  WHERE tenant_id = $1 AND wave_id = $2 AND request_id = $3 AND status = 'OPEN'`,
+		tenant.String(), id.String(), request.String()); err != nil {
+		return fmt.Errorf("withdraw from wave: %w", err)
+	}
+	tag, err = executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_request SET status = 'RESERVED'
+		  WHERE tenant_id = $1 AND request_id = $2 AND status = 'ALLOCATED'`,
+		tenant.String(), request.String())
+	if err != nil {
+		return fmt.Errorf("withdraw from wave: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("withdraw from wave: %s was not allocated", request.String())
+	}
+	return nil
+}
+
 func (store *Waves) LoadTask(ctx context.Context, tenant domain.TenantID, id domain.PickTaskID) (ports.PickTask, bool, error) {
 	querier, err := store.db.ReadExecutor(ctx)
 	if err != nil {

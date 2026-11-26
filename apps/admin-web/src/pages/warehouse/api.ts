@@ -611,6 +611,8 @@ export interface WaveRecord {
   status: string;
   releasedAt: string;
   requests: string[];
+  /** `requests` 里已经撤出的那几张：它们在这个波次里的任务作废了，请求回到了已预占。 */
+  withdrawnRequests: string[];
   tasks: WaveTaskRecord[];
 }
 

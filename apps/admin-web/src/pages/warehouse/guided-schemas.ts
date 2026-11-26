@@ -611,6 +611,19 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       { path: 'packagingMaterial', label: '预取选用包材编码（可选）', kind: 'text', placeholder: 'SYN-BOX-01' },
     ],
   },
+  'wave-withdraw': {
+    fields: [
+      { path: 'waveId', label: '波次号', kind: 'text', required: true, placeholder: 'WAVE-01' },
+      {
+        path: 'requests',
+        label: '要撤出的出库请求号',
+        kind: 'string-list',
+        required: true,
+        placeholder: 'OBR-01, OBR-02',
+        hint: '逗号或换行分隔。只撤还没拣过的单；有一张撤不了就一张都不撤',
+      },
+    ],
+  },
   'allocation-strategy': {
     fields: [
       { path: 'revision', label: '采用修订号', kind: 'integer', required: true, placeholder: '1', hint: '采用内置参考分配策略，修订从 1 起连续' },

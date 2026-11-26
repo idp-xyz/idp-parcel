@@ -232,10 +232,14 @@ func waveRowBodyOf(row ports.WaveRow) waveRowBody {
 	if requests == nil {
 		requests = []string{}
 	}
+	withdrawn := row.Withdrawn
+	if withdrawn == nil {
+		withdrawn = []string{}
+	}
 	return waveRowBody{
 		WaveID: row.WaveID, WarehouseCode: row.WarehouseCode, Operator: row.Operator,
 		Prefetch: row.Prefetch, Status: row.Status, ReleasedAt: rfc3339(row.ReleasedAt),
-		Requests: requests, Tasks: tasks,
+		Requests: requests, WithdrawnRequests: withdrawn, Tasks: tasks,
 	}
 }
 
@@ -438,14 +442,16 @@ type waveResponse struct {
 }
 
 type waveRowBody struct {
-	WaveID        string         `json:"waveId"`
-	WarehouseCode string         `json:"warehouseCode"`
-	Operator      string         `json:"operator"`
-	Prefetch      bool           `json:"prefetch"`
-	Status        string         `json:"status"`
-	ReleasedAt    string         `json:"releasedAt"`
-	Requests      []string       `json:"requests"`
-	Tasks         []waveTaskBody `json:"tasks"`
+	WaveID        string   `json:"waveId"`
+	WarehouseCode string   `json:"warehouseCode"`
+	Operator      string   `json:"operator"`
+	Prefetch      bool     `json:"prefetch"`
+	Status        string   `json:"status"`
+	ReleasedAt    string   `json:"releasedAt"`
+	Requests      []string `json:"requests"`
+	// WithdrawnRequests 是 requests 里已经撤出的那几张。
+	WithdrawnRequests []string       `json:"withdrawnRequests"`
+	Tasks             []waveTaskBody `json:"tasks"`
 }
 
 type waveTaskBody struct {

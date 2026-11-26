@@ -240,7 +240,7 @@ func (handler *WaveHandler) consumeStaged(ctx context.Context, request domain.Ou
 		return fmt.Errorf("confirm outbound: %w", err)
 	}
 	staging := map[string]struct{}{}
-	for _, task := range tasks {
+	for _, task := range countedTasks(tasks) {
 		if task.Staging.String() != "" && task.Goods == parcel.Goods {
 			staging[task.Staging.String()] = struct{}{}
 		}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,6 +90,10 @@ func TestWaveReadAnswersOneWaveByItsID(t *testing.T) {
 	if response.Code != http.StatusOK || found.Outcome != "WAVE_FOUND" || found.Wave == nil ||
 		found.Wave.Status != ports.WavePicking || len(found.Wave.Requests) != 1 || len(found.Wave.Tasks) != 2 {
 		t.Fatalf("读到的波次 = %d %s", response.Code, response.Body.String())
+	}
+	// 没有撤出的也答空列表，不省掉这一格：调用方不必分「没撤过」与「旧答复没有这一格」。
+	if !strings.Contains(response.Body.String(), `"withdrawnRequests":[]`) {
+		t.Fatalf("没带撤出的那一格：%s", response.Body.String())
 	}
 
 	response, missing := waveRead(t, endpoint, "/warehouse-fulfillment-wave?waveId=SYN-WAVE-99")

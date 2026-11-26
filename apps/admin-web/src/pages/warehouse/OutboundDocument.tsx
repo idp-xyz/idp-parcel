@@ -81,7 +81,8 @@ export function OutboundDocument({
   const parcels = body?.parcels ?? [];
   const confirmations = body?.confirmations ?? [];
   const returnTasks = body?.returnTasks ?? [];
-  const picked = pickTasks.reduce((sum, task) => sum + task.picked, 0);
+  // 只数拣满与少拣的：迟到的任务是作废之后才拣出来的，货要回库，不算这张单的已拣。
+  const picked = pickTasks.reduce((sum, task) => (task.status === 'DONE' || task.status === 'SHORT' ? sum + task.picked : sum), 0);
   // 要发按明细行合计：代理仓的单不预占，读口答的预占需求是 0。
   const wanted = lines.reduce((sum, line) => sum + line.quantity, 0);
   // 拣出去的那部分预占已经放开，账上不再占着；所以「占没占够」只在拣完之前问，并把已拣的算进去。

@@ -14,6 +14,7 @@ import (
 // WaveService 是放波次与采用分配策略转交的编排。
 type WaveService interface {
 	Release(ctx context.Context, command application.ReleaseWaveCommand) (application.WaveResult, error)
+	Withdraw(ctx context.Context, command application.WithdrawWaveCommand) (application.WaveResult, error)
 	Adopt(ctx context.Context, command application.AdoptStrategyCommand) (application.WaveResult, error)
 	Pick(ctx context.Context, command application.PickCommand) (application.WaveResult, error)
 	Check(ctx context.Context, command application.CheckCommand) (application.WaveResult, error)
@@ -39,13 +40,14 @@ func (UnconfiguredIntake) IntakeAllocationStrategy(context.Context, *http.Reques
 	return application.AdoptStrategyCommand{}, ErrAccessChannelNotConfigured
 }
 
-// WaveReleaseAuthenticator 认证放波次。
+// WaveReleaseAuthenticator 认证放波次。放出后撤单挂同一种运营决定：能把单放进波次的人，也能把它撤出来。
 type WaveReleaseAuthenticator interface {
 	AuthenticateWaveRelease(ctx context.Context, bearerToken string) (OperatorIdentity, error)
 }
 
 type WaveReleaseIntake interface {
 	IntakeWaveRelease(ctx context.Context, request *http.Request) (application.ReleaseWaveCommand, error)
+	IntakeWaveWithdrawal(ctx context.Context, request *http.Request) (application.WithdrawWaveCommand, error)
 }
 
 type OperatorWaveIntake struct {
@@ -73,10 +75,28 @@ func (intake *OperatorWaveIntake) IntakeWaveRelease(ctx context.Context, request
 	return command, nil
 }
 
+func (intake *OperatorWaveIntake) IntakeWaveWithdrawal(ctx context.Context, request *http.Request) (application.WithdrawWaveCommand, error) {
+	identity, err := intake.authenticator.AuthenticateWaveRelease(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.WithdrawWaveCommand{}, err
+	}
+	command, err := registrationjson.WithdrawWaveCommand(requestBody(request))
+	if err != nil {
+		return application.WithdrawWaveCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	command.Operator = identity.Registrant
+	return command, nil
+}
+
 type UnconfiguredWaveIntake struct{}
 
 func (UnconfiguredWaveIntake) IntakeWaveRelease(context.Context, *http.Request) (application.ReleaseWaveCommand, error) {
 	return application.ReleaseWaveCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredWaveIntake) IntakeWaveWithdrawal(context.Context, *http.Request) (application.WithdrawWaveCommand, error) {
+	return application.WithdrawWaveCommand{}, ErrAccessChannelNotConfigured
 }
 
 func NewAdoptAllocationStrategyEndpoint(intake AllocationStrategyIntake, waves WaveService) http.Handler {
@@ -113,6 +133,28 @@ func NewReleaseWaveEndpoint(intake WaveReleaseIntake, waves WaveService) http.Ha
 			return
 		}
 		result, err := waves.Release(request.Context(), command)
+		if err != nil {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeWaveAnswer(response, request, result)
+	})
+}
+
+// NewWithdrawFromWaveEndpoint 交回放出后撤单的入口（POST /warehouse-fulfillment-wave-withdrawals）。
+func NewWithdrawFromWaveEndpoint(intake WaveReleaseIntake, waves WaveService) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		command, err := intake.IntakeWaveWithdrawal(request.Context(), request)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		result, err := waves.Withdraw(request.Context(), command)
 		if err != nil {
 			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
@@ -530,7 +572,7 @@ func writeWaveAnswer(response http.ResponseWriter, request *http.Request, result
 		result.Outcome() == application.WaveConfirmed || result.Outcome() == application.WaveRecorded ||
 		result.Outcome() == application.WaveCorrected || result.Outcome() == application.WavePending ||
 		result.Outcome() == application.WavePosted ||
-		result.Outcome() == application.WaveSubmitted {
+		result.Outcome() == application.WaveSubmitted || result.Outcome() == application.WaveWithdrawn {
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, outboundAnswer{Outcome: name})

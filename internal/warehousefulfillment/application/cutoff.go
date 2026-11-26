@@ -143,6 +143,8 @@ func (handler *WaveHandler) cutOff(ctx context.Context, command CutoffCommand, r
 	if err != nil {
 		return CutoffOutcomeInvalid, none, fmt.Errorf("cut off outbound: %w", err)
 	}
+	// 要回库的只有算这张请求已拣的货。迟到的任务在迟到那一刻已经排过自己的回库，再排一次是同一条回库任务。
+	tasks = countedTasks(tasks)
 	if command.Sequence == 0 {
 		if request.Status() == domain.OutboundPacked || request.Status() == domain.OutboundPartiallyCancelled {
 			return CutoffStatusMismatch, none, nil

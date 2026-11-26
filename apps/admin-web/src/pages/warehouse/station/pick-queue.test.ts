@@ -21,7 +21,7 @@ function task(taskId: string, locationCode: string, overrides: Partial<WaveTaskR
 }
 
 function wave(waveId: string, tasks: WaveTaskRecord[], warehouseCode = 'SYN-WH-01'): WaveRecord {
-  return { waveId, warehouseCode, operator: 'op', prefetch: false, status: 'RELEASED', releasedAt: '2026-11-25T08:00:00Z', requests: [], tasks };
+  return { waveId, warehouseCode, operator: 'op', prefetch: false, status: 'RELEASED', releasedAt: '2026-11-25T08:00:00Z', requests: [], withdrawnRequests: [], tasks };
 }
 
 const scope = { warehouse: 'SYN-WH-01', wave: null };

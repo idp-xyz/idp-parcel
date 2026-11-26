@@ -39,6 +39,7 @@ const (
 	WavePaused
 	WaveOtherAuthority
 	WaveInputRejected
+	WaveWithdrawn
 )
 
 func (outcome WaveOutcome) String() string {
@@ -91,6 +92,8 @@ func (outcome WaveOutcome) String() string {
 		return "OTHER_PRODUCTION_AUTHORITY"
 	case WaveInputRejected:
 		return "INPUT_NOT_ACCEPTED"
+	case WaveWithdrawn:
+		return "WITHDRAWN"
 	default:
 		return ""
 	}
@@ -501,13 +504,12 @@ func (handler *WaveHandler) Check(ctx context.Context, command CheckCommand) (Wa
 	if err != nil {
 		return WaveResult{}, fmt.Errorf("check outbound: %w", err)
 	}
-	var picked int64
 	for _, task := range tasks {
 		if task.Status == "OPEN" {
 			return WaveResult{outcome: WaveStatusMismatch}, nil
 		}
-		picked += task.Picked
 	}
+	picked := pickedQuantity(tasks)
 	matched = command.Observed == picked && command.Observed > 0
 	next := request.Status()
 	outcome := WaveMismatch
@@ -553,11 +555,7 @@ func (handler *WaveHandler) Pack(ctx context.Context, command PackCommand) (Wave
 	if err != nil {
 		return WaveResult{}, fmt.Errorf("pack outbound: %w", err)
 	}
-	var picked int64
-	for _, task := range tasks {
-		picked += task.Picked
-	}
-	if !parcelsConserve(command.Parcels, picked) {
+	if !parcelsConserve(command.Parcels, pickedQuantity(tasks)) {
 		return WaveResult{outcome: WaveContentInvalid}, nil
 	}
 	stored := make([]ports.PackParcel, 0, len(command.Parcels))

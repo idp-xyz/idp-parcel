@@ -390,6 +390,40 @@ func ReleaseWaveCommand(reader io.Reader) (application.ReleaseWaveCommand, error
 	return application.ReleaseWaveCommand{ID: id, Warehouse: warehouse, Requests: requests, Prefetch: prefetch, Packaging: packaging}, nil
 }
 
+type waveWithdrawalDocument struct {
+	carriedIdentity
+	WaveID   *string   `json:"waveId"`
+	Requests *[]string `json:"requests"`
+}
+
+// WithdrawWaveCommand 把放出后撤单译成命令。
+func WithdrawWaveCommand(reader io.Reader) (application.WithdrawWaveCommand, error) {
+	var none application.WithdrawWaveCommand
+	document, err := decodeDocument[waveWithdrawalDocument](reader, "wave withdrawal")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	id, err := requiredText("waveId", document.WaveID, domain.NewWaveID)
+	if err != nil {
+		return none, err
+	}
+	if document.Requests == nil || len(*document.Requests) == 0 {
+		return none, malformed("requests is required")
+	}
+	requests := make([]domain.OutboundRequestID, 0, len(*document.Requests))
+	for _, raw := range *document.Requests {
+		request, err := domain.NewOutboundRequestID(raw)
+		if err != nil {
+			return none, malformed("requests must not be blank")
+		}
+		requests = append(requests, request)
+	}
+	return application.WithdrawWaveCommand{ID: id, Requests: requests}, nil
+}
+
 type pickDocument struct {
 	carriedIdentity
 	FactID    *string `json:"factId"`

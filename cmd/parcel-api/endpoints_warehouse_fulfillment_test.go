@@ -302,6 +302,9 @@ type unwiredWave struct{}
 func (unwiredWave) Release(context.Context, warehouseapp.ReleaseWaveCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
 }
+func (unwiredWave) Withdraw(context.Context, warehouseapp.WithdrawWaveCommand) (warehouseapp.WaveResult, error) {
+	return warehouseapp.WaveResult{}, errOrchestrationNotWired
+}
 func (unwiredWave) Adopt(context.Context, warehouseapp.AdoptStrategyCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
 }
@@ -1026,6 +1029,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		"/warehouse-fulfillment-storage-day-closes":                   {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-allocation-strategy-adoptions":        {http.MethodPost, faceRegistryWrite},
 		"/warehouse-fulfillment-waves":                                {http.MethodPost, faceOperationDecision},
+		"/warehouse-fulfillment-wave-withdrawals":                     {http.MethodPost, faceOperationDecision},
 		"/warehouse-fulfillment-stock":                                {http.MethodGet, faceOperationsRead},
 		"/v1/warehouse/reads/stock":                                   {http.MethodGet, faceCustomerClient},
 		internalJobsLine:                                              {http.MethodGet, faceOperationsRead},
@@ -1145,6 +1149,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 			"/warehouse-fulfillment-outbound-confirmation-corrections":    accessidentity.DecisionOutboundConfirmationCorrection,
 			"/warehouse-fulfillment-outbound-confirmation-replenishments": accessidentity.DecisionStockAdjustmentApproval,
 			"/warehouse-fulfillment-waves":                                accessidentity.DecisionWaveRelease,
+			"/warehouse-fulfillment-wave-withdrawals":                     accessidentity.DecisionWaveRelease,
 		}
 		if kind, writesOnBehalf := decisionLines[pattern]; writesOnBehalf && line.face.decision != kind {
 			t.Fatalf("%s 的决定种类 = %s，want %s", pattern, line.face.decision, kind)
@@ -1290,6 +1295,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-storage-day-closes":            {status, code},
 			"/warehouse-fulfillment-allocation-strategy-adoptions": {status, code},
 			"/warehouse-fulfillment-waves":                         {status, code},
+			"/warehouse-fulfillment-wave-withdrawals":              {status, code},
 			"/warehouse-fulfillment-stock":                         {status, code},
 			internalJobsLine:                                       {status, code},
 			internalJobLine:                                        {status, code},
@@ -1424,6 +1430,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-return-pre-advices":            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-return-dispositions":           {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-waves":                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-wave-withdrawals":              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-stock":                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			internalJobsLine:                                       {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			internalJobLine:                                        {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1551,6 +1558,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			"/warehouse-fulfillment-storage-day-closes":            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-allocation-strategy-adoptions": {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-waves":                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			"/warehouse-fulfillment-wave-withdrawals":              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-stock":                         {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			internalJobsLine:                                       {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			internalJobLine:                                        {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
