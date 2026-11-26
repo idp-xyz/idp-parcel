@@ -13,7 +13,7 @@ import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
 import { listWaves, type WaveRecord } from './api';
 import { DocumentLink } from './document-page';
-import { pickStationHash } from './station/stations';
+import { packStationHash, pickStationHash, sortStationHash } from './station/stations';
 import { ToteList } from './ToteList';
 import { openDocument, useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
@@ -104,11 +104,12 @@ function WaveList() {
     // 已取消的波次没有下一步：任务都作废了。
     if (row.status !== 'CANCELLED') {
       actions.push({
-        label: open.length > 0 ? `去拣货（还有 ${open.length} 格）` : '去复核打包',
+        label: open.length > 0 ? `去拣货（还有 ${open.length} 格）` : row.batchPick ? '去分拣' : '去复核打包',
         onRun: () => {
-          // 还有没拣的格去全屏的拣货工位，只做这个波次；拣完了去复核打包，那几步还在旧的作业台页里
+          // 还有没拣的格去全屏的拣货工位，只做这个波次；拣完了，合并拣货的波次去分拣，别的去复核打包
           if (open.length > 0) enterStation(pickStationHash(row.waveId));
-          else window.location.hash = '#/warehouse-workstation';
+          else if (row.batchPick) enterStation(sortStationHash(row.waveId));
+          else enterStation(packStationHash());
         },
       });
     }

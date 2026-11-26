@@ -814,6 +814,41 @@ export function matchSingleUnitOrder(warehouse: string, code: string): Promise<A
   return exchangeMasterData<SingleUnitMatchBody>(`/warehouse-fulfillment-single-unit-match?${params.toString()}`);
 }
 
+export interface SortPlanLineRecord {
+  goodsCode: string;
+  unit: string;
+  /** 拣出来的件数、已经投放进箱的件数、拣货的人还没拿回来的件数，都按基本单位。 */
+  picked: number;
+  sorted: number;
+  open: number;
+}
+
+export interface SortPlanRequestRecord {
+  requestId: string;
+  documentNumber?: string;
+  ownerAccount: string;
+  status: string;
+  /** 这张出库单此刻绑着的周转箱；还没有箱是空数组。 */
+  totes: string[];
+  lines: SortPlanLineRecord[];
+}
+
+export interface SortPlanBody {
+  /** SORT_PLAN_FOUND；这个波次不用分拣（逐单拣或单品单件）答 SORT_NOT_REQUIRED；没有这个波次答 WAVE_NOT_FOUND。 */
+  outcome: string;
+  waveId?: string;
+  warehouseCode?: string;
+  status?: string;
+  /** 波次里还没打包、没取消的出库单；一张都没有时不带。 */
+  requests?: SortPlanRequestRecord[];
+}
+
+/** 一个合并拣货的波次此刻的分拣情况：各张出库单绑着的箱，每种货拣出来几件、分了几件、还有几件没拣回来。 */
+export function getSortPlan(waveId: string): Promise<ApiResult<SortPlanBody>> {
+  const params = new URLSearchParams({ waveId });
+  return exchangeMasterData<SortPlanBody>(`/warehouse-fulfillment-wave-sort?${params.toString()}`);
+}
+
 /** 按波次号读一张。逐字相等，只在本租户；没有这个波次答 `WAVE_NOT_FOUND`、不带 `wave`，不答 404。 */
 export function getWave(waveId: string): Promise<ApiResult<WaveOneBody>> {
   const params = new URLSearchParams({ waveId });

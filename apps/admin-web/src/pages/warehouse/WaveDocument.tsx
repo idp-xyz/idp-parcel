@@ -8,7 +8,7 @@ import { getWave } from './api';
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { openPrint } from './print-sheet';
 import { pickListSheet } from './print-forms';
-import { packStationHash, pickStationHash } from './station/stations';
+import { packStationHash, pickStationHash, sortStationHash } from './station/stations';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
 import { wavePickingNote, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
@@ -70,16 +70,23 @@ export function WaveDocument({ waveId }: { waveId: string }) {
                 打印拣货单
               </Button>
               {/* 已取消的波次没有下一步：任务都作废了，没有可拣的，也没有拣出来等复核的。 */}
+              {/* 合并拣货的波次：拣货的人一边拿回来，分拣的人就可以一边分，所以还没拣完时也摆「去分拣」。 */}
+              {wave.status !== 'CANCELLED' && wave.batchPick && open.length > 0 ? (
+                <Button type="button" variant="outline" onClick={() => enterStation(sortStationHash(waveId))}>
+                  去分拣
+                </Button>
+              ) : null}
               {wave.status === 'CANCELLED' ? null : (
                 <Button
                   type="button"
                   className={primaryActionClass}
                   onClick={() => {
                     if (open.length > 0) enterStation(pickStationHash(waveId));
+                    else if (wave.batchPick) enterStation(sortStationHash(waveId));
                     else enterStation(packStationHash());
                   }}
                 >
-                  {open.length > 0 ? '去拣货' : '去复核打包'}
+                  {open.length > 0 ? '去拣货' : wave.batchPick ? '去分拣' : '去复核打包'}
                 </Button>
               )}
             </>

@@ -8,6 +8,7 @@ import {
   dispatchStationHash,
   receiveStationHash,
   resolveStationRoute,
+  sortStationHash,
   stationEntries,
   stationEntryOf,
   stationHomeHash,
@@ -19,16 +20,24 @@ function route(hash: string) {
   return resolveStationRoute(address);
 }
 
-test('六个工位都可进，次序与名字照屏幕示意', () => {
+test('七个工位都可进：分拣排在拣货后面，它是合并拣货的后一半', () => {
   deepEqual(
     stationEntries.map((entry) => entry.name),
-    ['拣货', '复核打包', '收货', '发货交接', '上架与移库', '盘点清点'],
+    ['拣货', '分拣', '复核打包', '收货', '发货交接', '上架与移库', '盘点清点'],
   );
   deepEqual(
     stationEntries.filter((entry) => entry.ready).map((entry) => entry.id),
-    ['pick', 'pack', 'receive', 'dispatch', 'putaway', 'count'],
+    ['pick', 'sort', 'pack', 'receive', 'dispatch', 'putaway', 'count'],
   );
-  equal(new Set(stationEntries.map((entry) => entry.id)).size, 6);
+  equal(new Set(stationEntries.map((entry) => entry.id)).size, 7);
+});
+
+test('分拣地址落到分拣工位；波次号取查询串里的 wave，没给就是先选波次', () => {
+  equal(sortStationHash(), '#/station/sort');
+  equal(sortStationHash('SYN-WAVE-03'), '#/station/sort?wave=SYN-WAVE-03');
+  deepEqual(route('#/station/sort'), { kind: 'sort', wave: null });
+  deepEqual(route('#/station/sort?wave=SYN-WAVE-03'), { kind: 'sort', wave: 'SYN-WAVE-03' });
+  deepEqual(route('#/station/sort?wave=%20'), { kind: 'sort', wave: null });
 });
 
 test('每个工位都有一句说明，没有英文码', () => {

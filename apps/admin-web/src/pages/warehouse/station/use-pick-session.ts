@@ -71,6 +71,8 @@ export interface PickSession {
   refreshing: boolean;
   /** 刷新没读成时的原因（第一次读不成走 load 的 error）；队列还是刷新之前的样子，屏上要说清它可能不是最新的。 */
   refreshError: string | null;
+  /** 这一趟读到过合并拣货的格：这些货拿回来要先分拣，拣完时指去分拣台。 */
+  sorting: boolean;
   scan: (raw: string) => void;
   changeQuantity: (text: string) => { ok: true } | { ok: false; reason: string };
   confirmShortPick: () => void;
@@ -91,6 +93,7 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [sorting, setSorting] = useState(false);
 
   const stateRef = useRef<PickState | null>(null);
   // 没送到时「再送一次」用的就是它：事实号在铸这一笔时定下，之后送几次都是它。
@@ -197,6 +200,7 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
         return;
       }
       setLoad({ phase: 'ready', queue: answer.queue });
+      if (answer.queue.cells.some((cell) => cell.batch === true)) setSorting(true);
       const current = stateRef.current;
       if (current !== null) apply(reloadQueue(current, answer.queue.cells));
     });
@@ -271,6 +275,7 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
     verdict,
     refreshing,
     refreshError,
+    sorting,
     scan,
     changeQuantity,
     confirmShortPick,

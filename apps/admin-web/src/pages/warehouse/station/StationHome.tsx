@@ -3,7 +3,7 @@ import { stationHash } from '../../../shell/station-address';
 import { legacyWorkstationHash, stationEntries, type StationEntry } from './stations';
 import { stationButtonClass, stationPrimaryClass } from './StationFrame';
 
-// 选工位：列六个工位。做好的可以进；还在仓内作业台里的，写明这一点并链到那一页——不摆点不动的假按钮。
+// 选工位：列出各个工位。做好的可以进；还在仓内作业台里的，写明这一点并链到那一页——不摆点不动的假按钮。
 
 function StationCard({ entry, highlighted }: { entry: StationEntry; highlighted: boolean }) {
   return (

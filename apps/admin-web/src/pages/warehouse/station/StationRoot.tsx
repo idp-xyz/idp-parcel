@@ -7,6 +7,7 @@ import { MoreStation } from './MoreStation';
 import { PackStation } from './PackStation';
 import { ReceiveStation } from './ReceiveStation';
 import { PickStation } from './PickStation';
+import { SortStation } from './SortStation';
 import { StationFrame } from './StationFrame';
 import { StationHome } from './StationHome';
 import { resolveStationRoute } from './stations';
@@ -28,6 +29,8 @@ export function StationRoot({ hash }: { hash: string }) {
         route.kind === 'pick' ? (
           // 设备或波次一换就是新的一趟：状态、本趟的认码缓存都从头来
           <PickStation key={`${bound.deviceId}|${route.wave ?? ''}`} device={bound} wave={route.wave} onChangeDevice={onChangeDevice} />
+        ) : route.kind === 'sort' ? (
+          <SortStation key={`${bound.deviceId}|${route.wave ?? ''}`} device={bound} wave={route.wave} onChangeDevice={onChangeDevice} />
         ) : route.kind === 'pack' ? (
           // 设备或地址里的出库请求号一换也是新的一趟
           <PackStation key={`${bound.deviceId}|${route.request ?? ''}`} device={bound} request={route.request} onChangeDevice={onChangeDevice} />

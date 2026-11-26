@@ -1,11 +1,11 @@
-// 作业台的六个工位、它们的地址，以及地址落到哪个工位上（纯 TypeScript，node:test 直接测）。
+// 作业台的各个工位、它们的地址，以及地址落到哪个工位上（纯 TypeScript，node:test 直接测）。
 //
-// 六个工位分几笔做出来；做好一个，把它的 `ready` 改成真并在 resolveStationRoute 里给它一支。没做好的仍在旧的仓内作业台页里，
+// 工位分几笔做出来；做好一个，把它的 `ready` 改成真并在 resolveStationRoute 里给它一支。没做好的仍在旧的仓内作业台页里，
 // 选工位页如实这样写、链过去，不摆点不动的假入口。
 
 import { stationHash, type StationAddress } from '../../../shell/station-address';
 
-export type StationId = 'pick' | 'pack' | 'receive' | 'dispatch' | 'putaway' | 'count';
+export type StationId = 'pick' | 'sort' | 'pack' | 'receive' | 'dispatch' | 'putaway' | 'count';
 
 export interface StationEntry {
   id: StationId;
@@ -18,6 +18,7 @@ export interface StationEntry {
 
 export const stationEntries: readonly StationEntry[] = [
   { id: 'pick', name: '拣货', summary: '按波次里还没拣的格，逐格扫库位、扫商品，扫满自动提交。', ready: true },
+  { id: 'sort', name: '分拣', summary: '合并拣货拿回来的货，一件一件扫，分进各张出库单的周转箱。', ready: true },
   { id: 'pack', name: '复核打包', summary: '扫出库单号，逐件复核，再选包材称重打包。', ready: true },
   { id: 'receive', name: '收货', summary: '扫入库预报，逐件扫货，一次提交一批收货。', ready: true },
   { id: 'dispatch', name: '发货交接', summary: '扫出库单号，逐个包裹确认交出。', ready: true },
@@ -33,6 +34,11 @@ export const stationHomeHash = stationHash(null);
 /** 拣货工位的地址。给了波次号就只做那个波次，不给就是本仓全部波次。 */
 export function pickStationHash(wave?: string): string {
   return stationHash('pick', { wave });
+}
+
+/** 分拣工位的地址。给了波次号就分那个波次，不给就先选一个合并拣货的波次。 */
+export function sortStationHash(wave?: string): string {
+  return stationHash('sort', { wave });
 }
 
 /** 复核打包工位的地址。给了出库请求号就直接去做那一张单，不给就等人扫出库单号。 */
@@ -68,13 +74,14 @@ export type StationRoute =
   /** 选工位。 */
   | { kind: 'home' }
   | { kind: 'pick'; wave: string | null }
+  | { kind: 'sort'; wave: string | null }
   | { kind: 'pack'; request: string | null }
   | { kind: 'receive'; advice: string | null }
   | { kind: 'dispatch'; request: string | null }
   | { kind: 'putaway' }
   | { kind: 'count'; count: string | null }
   | { kind: 'more' }
-  /** 词是六个工位之一，但全屏的还没做好：说明它还在仓内作业台里。 */
+  /** 词是工位之一，但全屏的还没做好：说明它还在仓内作业台里。 */
   | { kind: 'not-ready'; entry: StationEntry }
   /** 词不是任何一个工位。 */
   | { kind: 'unknown'; station: string };
@@ -95,6 +102,8 @@ export function resolveStationRoute(address: StationAddress): StationRoute {
   switch (entry.id) {
     case 'pick':
       return { kind: 'pick', wave: textOf(address, 'wave') };
+    case 'sort':
+      return { kind: 'sort', wave: textOf(address, 'wave') };
     case 'pack':
       return { kind: 'pack', request: textOf(address, 'request') };
     case 'receive':

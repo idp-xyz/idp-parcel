@@ -77,7 +77,7 @@ export function workFactPrefillFor(
   return values;
 }
 
-const commonHeaderFields = (usesOccurredAt: boolean, usesDeviceSequence: boolean): GuidedFieldSpec[] => [
+export const commonHeaderFields = (usesOccurredAt: boolean, usesDeviceSequence: boolean): GuidedFieldSpec[] => [
   { path: 'factId', label: '作业事实标识（端侧自动签发，重放留原值）', kind: 'text', required: true },
   { path: 'warehouse', label: '作业仓库（须等于所选设备绑定仓）', kind: 'text', required: true },
   ...(usesOccurredAt ? [{ path: 'occurredAt', label: '发生时刻', kind: 'datetime' as const, required: true }] : []),
