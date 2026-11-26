@@ -463,12 +463,20 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 		}
 	} else {
 		// 租户给这个仓登记了「拣货必须用周转箱」时，不带箱的这一笔不成立。没登记这条规则就不要求。
+		// 单品单件波次不受这一条管：箱是用来把各张单的货分开的，而这种波次的货合在一起拿、复核打包时扫货配单，
+		// 一个箱里本来就装着好几张单的货，绑不到其中哪一张上。
 		required, err := handler.toteRequired(ctx, command.Tenant, request.Warehouse())
 		if err != nil {
 			return WaveResult{}, fmt.Errorf("pick: %w", err)
 		}
 		if required {
-			return WaveResult{outcome: WaveToteRequired}, nil
+			single, err := handler.waves.IsSingleUnitWave(ctx, command.Tenant, task.WaveID)
+			if err != nil {
+				return WaveResult{}, fmt.Errorf("pick: %w", err)
+			}
+			if !single {
+				return WaveResult{outcome: WaveToteRequired}, nil
+			}
 		}
 	}
 	if err := handler.postPick(ctx, request, task, command); err != nil {

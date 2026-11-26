@@ -105,6 +105,8 @@ type WaveStore interface {
 	LoadWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]domain.OutboundRequestID, bool, error)
 	SaveWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, warehouse domain.WarehouseCode, operator domain.Registrant, prefetch bool, at time.Time, requests []domain.OutboundRequestID, tasks []PickTask) error
 	LoadWaveMembers(ctx context.Context, tenant domain.TenantID, id domain.WaveID) ([]WaveMember, bool, error)
+	// IsSingleUnitWave 回答这个波次是不是单品单件波次；没有这个波次答否。
+	IsSingleUnitWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) (bool, error)
 	// WithdrawFromWave 记下撤出、作废这张请求在这个波次里待执行的任务，并把请求从已放波次改回已预占。
 	WithdrawFromWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID, request domain.OutboundRequestID, operator domain.Registrant, at time.Time) error
 	LoadTask(ctx context.Context, tenant domain.TenantID, id domain.PickTaskID) (PickTask, bool, error)

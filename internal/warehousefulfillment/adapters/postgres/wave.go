@@ -158,6 +158,24 @@ func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id dom
 	return refreshWaveStatus(ctx, executor, tenant, `target.wave_id = $2`, id.String())
 }
 
+func (store *Waves) IsSingleUnitWave(ctx context.Context, tenant domain.TenantID, id domain.WaveID) (bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, err
+	}
+	var single bool
+	err = querier.QueryRow(ctx,
+		`SELECT single_unit FROM warehouse_fulfillment.wave WHERE tenant_id = $1 AND wave_id = $2`,
+		tenant.String(), id.String()).Scan(&single)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("single unit wave: %w", err)
+	}
+	return single, nil
+}
+
 // waveIsSingleUnit 是「单品单件波次」的那一条规则：波次里有出库请求，并且每一张要拣的都只有一件——
 // 预占需求合计是 1 个基本单位（套装按组件展开之后算）。放出之后不往波次里加单，所以放出时算一次就定了；
 // 迁移回填已有波次时用的也是这一条。

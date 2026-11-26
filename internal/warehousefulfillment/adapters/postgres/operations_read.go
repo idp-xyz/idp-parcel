@@ -159,11 +159,14 @@ const waveRowSelection = `wave_id, warehouse_code, operator_id, prefetch, status
 	   FROM warehouse_fulfillment.wave_request member
 	  WHERE member.tenant_id = $1 AND member.wave_id = listed.wave_id) AS members,
 	(SELECT coalesce(jsonb_agg(jsonb_build_object(
-	            'taskId', task.task_id, 'requestId', task.request_id, 'locationCode', task.location_code,
+	            'taskId', task.task_id, 'requestId', task.request_id, 'ownerAccount', request.owner_account_id,
+	            'locationCode', task.location_code,
 	            'stagingLocation', coalesce(task.staging_location, ''), 'goodsCode', task.goods_code, 'unit', task.unit_name,
 	            'stockState', task.stock_state, 'quantity', task.quantity, 'picked', task.picked, 'status', task.status
 	        ) ORDER BY task.task_id), '[]'::jsonb)
 	   FROM warehouse_fulfillment.pick_task task
+	   JOIN warehouse_fulfillment.outbound_request request
+	     ON request.tenant_id = task.tenant_id AND request.request_id = task.request_id
 	  WHERE task.tenant_id = $1 AND task.wave_id = listed.wave_id) AS tasks`
 
 const waveListed = `WITH listed AS (
@@ -286,6 +289,7 @@ func scanWaveRow(row interface{ Scan(dest ...any) error }) (ports.WaveRow, error
 	var picks []struct {
 		TaskID          string `json:"taskId"`
 		RequestID       string `json:"requestId"`
+		OwnerAccount    string `json:"ownerAccount"`
 		LocationCode    string `json:"locationCode"`
 		StagingLocation string `json:"stagingLocation"`
 		GoodsCode       string `json:"goodsCode"`
@@ -300,7 +304,8 @@ func scanWaveRow(row interface{ Scan(dest ...any) error }) (ports.WaveRow, error
 	}
 	for _, task := range picks {
 		item.Tasks = append(item.Tasks, ports.WaveTaskRow{
-			TaskID: task.TaskID, RequestID: task.RequestID, LocationCode: task.LocationCode, StagingLocation: task.StagingLocation,
+			TaskID: task.TaskID, RequestID: task.RequestID, OwnerAccount: task.OwnerAccount,
+			LocationCode: task.LocationCode, StagingLocation: task.StagingLocation,
 			GoodsCode: task.GoodsCode, Unit: task.Unit, StockState: task.StockState,
 			Quantity: task.Quantity, Picked: task.Picked, Status: task.Status,
 		})

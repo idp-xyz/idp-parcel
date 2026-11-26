@@ -595,6 +595,8 @@ export interface OutboundRequestListBody {
 export interface WaveTaskRecord {
   taskId: string;
   requestId: string;
+  /** 这条任务所属出库单的货主。商品编码只在一位货主之内唯一，合并同一种货时要靠它分开。 */
+  ownerAccount?: string;
   locationCode: string;
   stagingLocation?: string;
   goodsCode: string;

@@ -100,8 +100,10 @@ var WavePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 
 // WaveTaskRow 是波次列表项带出的一条拣货任务。
 type WaveTaskRow struct {
-	TaskID          string
-	RequestID       string
+	TaskID    string
+	RequestID string
+	// OwnerAccount 是这条任务所属出库请求的货主。商品编码只在一位货主之内唯一，合并同一种货时靠它分开。
+	OwnerAccount    string
 	LocationCode    string
 	StagingLocation string
 	GoodsCode       string

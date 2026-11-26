@@ -110,7 +110,14 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
     const submitted = current?.submission ?? null;
     if (current !== null) applyRef.current(applyVerdict(current, answered));
     // 少拣成立之后，后端会在这个波次里换别的库位补这几件；添出来的格在后端，重读队列才看得到。
-    if (answered.verdict === 'done' && answered.outcome === 'PICKED' && submitted !== null && submitted.quantity < submitted.cell.quantity) {
+    // 合成一格拿的不算：它没拿够不是短拣，没拿到的任务原样留在队里，后端没有添新的格
+    if (
+      answered.verdict === 'done' &&
+      answered.outcome === 'PICKED' &&
+      submitted !== null &&
+      submitted.cell.members === undefined &&
+      submitted.quantity < submitted.cell.quantity
+    ) {
       setTick((value) => value + 1);
     }
   }, []);

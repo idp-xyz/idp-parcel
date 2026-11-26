@@ -295,7 +295,7 @@ func waveRowBodyOf(row ports.WaveRow) waveRowBody {
 	tasks := make([]waveTaskBody, 0, len(row.Tasks))
 	for _, task := range row.Tasks {
 		tasks = append(tasks, waveTaskBody{
-			TaskID: task.TaskID, RequestID: task.RequestID, LocationCode: task.LocationCode,
+			TaskID: task.TaskID, RequestID: task.RequestID, OwnerAccount: task.OwnerAccount, LocationCode: task.LocationCode,
 			StagingLocation: task.StagingLocation, GoodsCode: task.GoodsCode, Unit: task.Unit,
 			StockState: task.StockState, Quantity: task.Quantity, Picked: task.Picked, Status: task.Status,
 		})
@@ -530,8 +530,10 @@ type waveRowBody struct {
 }
 
 type waveTaskBody struct {
-	TaskID          string `json:"taskId"`
-	RequestID       string `json:"requestId"`
+	TaskID    string `json:"taskId"`
+	RequestID string `json:"requestId"`
+	// OwnerAccount 是这条任务所属出库请求的货主。
+	OwnerAccount    string `json:"ownerAccount"`
 	LocationCode    string `json:"locationCode"`
 	StagingLocation string `json:"stagingLocation,omitempty"`
 	GoodsCode       string `json:"goodsCode"`

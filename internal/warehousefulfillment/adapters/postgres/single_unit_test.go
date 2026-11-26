@@ -96,6 +96,31 @@ func TestSingleUnitRequestsAndWavesAreToldApartByWhatHasToBePicked(t *testing.T)
 	}
 }
 
+// Covers: 单品单件波次不受「拣货必须用周转箱」管——它的货合在一起拿，绑不到哪一张单上；同一个仓里别的波次仍受管。
+// 波次读口的每条任务带着货主，合并同一种货时靠它分开。
+func TestASingleUnitWaveIsPickedWithoutTotesEvenWhereTotesAreRequired(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	if world.requireTotes(t, handler, "SYN-WH-01", 1, true).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("必须用箱没有登记成")
+	}
+	one, two := reserve("REQ-SINGLE-NO-TOTE", 1), reserve("REQ-DOUBLE-NEEDS-TOTE", 2)
+	single := world.releaseRequests(t, handler, "WAVE-SINGLE-NO-TOTE", one)
+	other := world.releaseRequests(t, handler, "WAVE-DOUBLE-NEEDS-TOTE", two)
+	if single.Outcome() != application.WaveAllocated || other.Outcome() != application.WaveAllocated {
+		t.Fatalf("放出 %s / %s", single.Outcome(), other.Outcome())
+	}
+	row := world.waveRow(t, "WAVE-SINGLE-NO-TOTE")
+	if !row.SingleUnit || len(row.Tasks) != 1 || row.Tasks[0].OwnerAccount != "SYN-OWNER-01" {
+		t.Fatalf("单品单件波次 %+v", row)
+	}
+	if got := world.pick(t, handler, single.Tasks()[0].ID, 1).Outcome(); got != application.WavePicked {
+		t.Fatalf("单品单件波次不带箱 = %s", got)
+	}
+	if got := world.pick(t, handler, other.Tasks()[0].ID, 2).Outcome(); got != application.WaveToteRequired {
+		t.Fatalf("别的波次不带箱 = %s", got)
+	}
+}
+
 // Covers: 一个单品单件的请求与一个两件的请求放进同一个波次，这个波次不是单品单件波次。
 func TestAWaveWithOneLargerRequestIsNotASingleUnitWave(t *testing.T) {
 	world, handler, reserve := twoCellWorld(t)
