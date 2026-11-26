@@ -487,8 +487,8 @@ export function WmsStatusTabs({
 }
 
 /**
- * 列表顶上单独一行的队列签：一队一个签，选中的那一队下面压一道线。签多了横向滚，不折成两行——折行之后
- * 筛选区的高度随签的多少变，表头跟着上下跳。数量的写法同 WmsStatusTabs：没答出来的不写数，也不写成 0。
+ * 工作台工具条里的队列签：一队一个签，选中的那一队下面压一道线，样子照公司主体页的状态筛选。工具条窄了它跟着折行。
+ * 数量的写法同 WmsStatusTabs：没答出来的不写数，也不写成 0。
  */
 export function WmsQueueTabs({
   value,
@@ -500,7 +500,7 @@ export function WmsQueueTabs({
   onChange: (next: string) => void;
 }) {
   return (
-    <div role="tablist" aria-label="按状态看" className="flex items-stretch gap-1">
+    <div role="tablist" aria-label="按状态看" className="flex flex-wrap items-stretch gap-x-1">
       {tabs.map((tab) => {
         const active = tab.value === value;
         const waiting = typeof tab.count === 'number' && tab.count > 0;
@@ -536,8 +536,10 @@ export function WmsQueueTabs({
 
 /**
  * 列表里一格两行：上面是人认的那个值（名称、单号），下面是辅助的小字（编码、时刻、地址）。没有辅助值就只有一行。
- * 两行各自截断，全文在悬停里；`code` 为真时小字用等宽体，编码才对得齐。按内容定宽的列里它最宽到 18rem；
- * `fill` 为真是放在吃宽度的列里，跟着列宽走、不设上限。
+ * 两行各自截断，全文在悬停里；`code` 为真时小字用等宽体，编码才对得齐。按内容定宽的列里它最宽到 18rem。
+ *
+ * `fill` 为真是放在吃宽度的列里：跟着列宽走、不设上限，最窄留 11rem。里面那层 `w-0 min-w-full` 是让长文字不把列撑开——
+ * 表格按内容算列宽，一行不折的长地址会要走它的全长；宽度记成零，它就不参与算列宽，再用最小宽度铺满算出来的那一列。
  */
 export function WmsTwoLine({
   primary,
@@ -552,12 +554,24 @@ export function WmsTwoLine({
   fill?: boolean;
   title?: string;
 }) {
-  return (
-    <div className={`${fill ? '' : 'max-w-[18rem]'} leading-tight`} title={title}>
+  const lines = (
+    <>
       <div className="truncate type-body text-idpxyz-text">{primary}</div>
       {secondary ? (
         <div className={`mt-0.5 truncate type-caption text-idpxyz-textMuted ${code ? 'font-mono' : ''}`}>{secondary}</div>
       ) : null}
+    </>
+  );
+  if (fill) {
+    return (
+      <div className="min-w-[11rem] leading-tight" title={title}>
+        <div className="w-0 min-w-full">{lines}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="max-w-[18rem] leading-tight" title={title}>
+      {lines}
     </div>
   );
 }

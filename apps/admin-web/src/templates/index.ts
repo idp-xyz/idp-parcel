@@ -18,6 +18,7 @@ export {
   type WorkbenchColumn,
   type WorkbenchKpi,
   type WorkbenchChip,
+  type WorkbenchSelection,
 } from './WorkbenchPageTemplate';
 export { toggleWorkbenchSort, type WorkbenchSort } from './workbench';
 export {

@@ -3,7 +3,9 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Inbox, RefreshCw, Search } from 'lucid
 import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { useSplitResize, useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
+import { clearSelection, selectedOnPage, toggleAllOnPage, toggleSelected } from './list-selection';
 import { skeletonOf } from './loading-shape';
+import { PageSelectAllCheckbox, checkboxClass, stopRowEvent } from './selection-checkbox';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from './state-slot';
 import { stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
 import { useTabViewRef } from './workspace-view-state';
@@ -27,6 +29,12 @@ export interface WorkbenchChip {
   count?: number;
   active: boolean;
   onClick: () => void;
+}
+
+/** 圈进批量动作的行，按 rowKey 记。 */
+export interface WorkbenchSelection {
+  selected: ReadonlySet<string>;
+  onChange: (next: Set<string>) => void;
 }
 
 export interface WorkbenchColumn<Row> {
@@ -67,8 +75,20 @@ export interface WorkbenchPageTemplateProps<Row> {
   rowKey: (row: Row) => string;
   selectedKey: string | null;
   onSelect: (key: string | null) => void;
+  /**
+   * 多选：给了才长出复选列与批量栏，不给时 DOM 里没有一个复选框。它和 selectedKey 是两件事——selectedKey 是右栏在看哪一行，
+   * 这里是圈进批量动作的那几行；勾一行不开详情。选中集由调用方持有，换页、换筛选清不清由它定。
+   */
+  selection?: WorkbenchSelection;
+  /** 有勾选时工具条下面那一栏里的动作。「已选 N 项」与「取消选择」是栏的固定件；没给 selection 时它无处可长。 */
+  bulkActions?: ReactNode;
   /** 需要人处理的行（橙底）；判据是业务决定，模板只摆。 */
   rowAttention?: (row: Row) => boolean;
+  /**
+   * 一行里各格怎么纵向对齐。缺省居中。`baseline` 让各格的第一行字落在同一条线上：行里有的格是两行（名称加编码）、
+   * 有的只有一行或一枚徽章时，居中会让单行的值悬在邻格两行字的中间，横着读视线要上下跳。
+   */
+  rowAlign?: 'middle' | 'baseline';
   sort?: WorkbenchSort;
   onSort?: (key: string) => void;
   /** ready 态下筛没了时的那句话；与 viewState 的空态（册上本来就没有）是两件事。 */
@@ -99,8 +119,8 @@ function focusOf(target: EventTarget | null): WorkbenchFocus {
  * 可点指标 + 刷新 + 主动作）· 工具条（`/` 聚焦的检索 + 带计数的状态胶囊）· 可拖分隔的主从分栏 · 表头点排序、关注行
  * 橙底、选中行左侧强调条 · ↑/↓ 换行、Esc 收详情。
  *
- * 与参照页的差别都是本仓规矩逼出来的：页面态走 StateSlot（未配置 ≠ 暂无数据）；没有批量勾选列与分页位——今天接它的
- * 册既没有批量命令端点，读口也不分页，摆出来就是假动作；键盘只在本标签是工作区活动标签时生效，壳层会把非活动标签
+ * 与参照页的差别都是本仓规矩逼出来的：页面态走 StateSlot（未配置 ≠ 暂无数据）；批量勾选列只在调用方接了 selection 时
+ * 才长（有批量命令端点的册才接，没有的摆出来就是假动作），没有分页位——翻页条由页面自己摆；键盘只在本标签是工作区活动标签时生效，壳层会把非活动标签
  * 留在 DOM 里。行上不接双击：第一击开栏会收列、行跟着重排，第二击可能落到另一行上；开整页对象归详情栏的动作。
  */
 export function WorkbenchPageTemplate<Row>({
@@ -121,7 +141,10 @@ export function WorkbenchPageTemplate<Row>({
   rowKey,
   selectedKey,
   onSelect,
+  selection,
+  bulkActions,
   rowAttention,
+  rowAlign = 'middle',
   sort,
   onSort,
   noMatchText,
@@ -266,6 +289,10 @@ export function WorkbenchPageTemplate<Row>({
       <ArrowUp className="h-3 w-3" aria-hidden="true" />
     );
 
+  // 缺省不加类：格的纵向对齐照浏览器对表格格的缺省（居中），与没有这个口时样子相同。
+  const cellAlign = rowAlign === 'baseline' ? 'align-baseline' : '';
+  const selectedCount = selection?.selected.size ?? 0;
+
   const onRowKeyDown = (event: ReactKeyboardEvent<HTMLTableRowElement>, key: string) => {
     if (event.target !== event.currentTarget || event.key !== 'Enter') return;
     event.preventDefault();
@@ -287,11 +314,22 @@ export function WorkbenchPageTemplate<Row>({
       <table className="w-full type-body">
         <thead className="sticky top-0 z-10 bg-idpxyz-panelBg">
           <tr className="border-b border-idpxyz-border text-left text-idpxyz-breadcrumb">
+            {selection && (
+              // 宽度写成很小的百分比而不只是 w-8：别的列都按内容定了宽、又没有一列吃宽度时（列表窄到把文字列收起之后），
+              // 表多出来的宽度会全落到这一列上，勾选框旁边空出一大块。
+              <th scope="col" className="py-2 pl-6 pr-0 text-center" style={{ width: '1%' }}>
+                <PageSelectAllCheckbox
+                  state={selectedOnPage(selection.selected, keys)}
+                  disabled={keys.length === 0}
+                  onToggle={() => selection.onChange(toggleAllOnPage(selection.selected, keys))}
+                />
+              </th>
+            )}
             {visibleColumns.map((column, index) => (
               <th
                 key={column.key}
                 scope="col"
-                className={`px-3 py-2 font-medium ${index === 0 ? 'pl-6' : ''} ${column.right ? 'text-right' : ''} ${
+                className={`px-3 py-2 font-medium ${index === 0 && !selection ? 'pl-6' : ''} ${column.right ? 'text-right' : ''} ${
                   index === visibleColumns.length - 1 ? 'pr-6' : ''
                 }`}
                 style={column.width ? { width: column.width } : undefined}
@@ -346,10 +384,22 @@ export function WorkbenchPageTemplate<Row>({
                       }`
                 }`}
               >
+                {selection && (
+                  // 勾一行是圈进批量动作，不是看它：格内的点击不冒泡成行的单击，详情栏不跟着开合。
+                  <td className={`py-2.5 pl-6 pr-0 text-center ${cellAlign}`} onClick={stopRowEvent}>
+                    <input
+                      type="checkbox"
+                      className={checkboxClass}
+                      aria-label={`选择 ${key}`}
+                      checked={selection.selected.has(key)}
+                      onChange={() => selection.onChange(toggleSelected(selection.selected, key))}
+                    />
+                  </td>
+                )}
                 {visibleColumns.map((column, index) => (
                   <td
                     key={column.key}
-                    className={`px-3 py-2.5 ${index === 0 ? 'pl-6' : ''} ${column.right ? 'text-right' : ''} ${
+                    className={`px-3 py-2.5 ${cellAlign} ${index === 0 && !selection ? 'pl-6' : ''} ${column.right ? 'text-right' : ''} ${
                       index === visibleColumns.length - 1 ? 'pr-6' : ''
                     }`}
                   >
@@ -476,6 +526,22 @@ export function WorkbenchPageTemplate<Row>({
         {toolbarRight && <span className="ml-auto type-body text-idpxyz-breadcrumb">{toolbarRight}</span>}
       </div>
 
+      {/* 批量栏：工具条之下、列表之上，有勾选才出，不留空条。不随页面态收起——勾选在重取中仍成立。 */}
+      {selection && selectedCount > 0 && (
+        <div
+          role="toolbar"
+          aria-label="批量动作"
+          className="flex shrink-0 items-center gap-2 border-b border-idpxyz-border bg-idpxyz-activeItem px-6 py-1.5"
+        >
+          <span className="type-body font-medium text-idpxyz-textBright">已选 {selectedCount} 项</span>
+          <span aria-hidden="true" className="mx-1 h-3 w-px bg-idpxyz-border" />
+          {bulkActions}
+          <Button variant="ghost" size="sm" className="ml-auto shrink-0" onClick={() => selection.onChange(clearSelection())}>
+            取消选择
+          </Button>
+        </div>
+      )}
+
       <div ref={split.containerRef} className="flex min-h-0 flex-1 overflow-hidden">
         <div
           data-pane="list"
@@ -497,7 +563,7 @@ export function WorkbenchPageTemplate<Row>({
               // 加载骨架摆成表的样子：顶对齐、列数随真表、首格与真表 pl-6 对齐（骨架格自带 px-3）。居中放会让几行
               // 骨架浮在页面中下部，上面一大片空，读起来像页面坏了。
               <div className="px-3">
-                <StateSlot state={{ ...viewState, cols: viewState.cols ?? visibleColumns.length }} override={stateOverride} />
+                <StateSlot state={{ ...viewState, cols: viewState.cols ?? visibleColumns.length + (selection ? 1 : 0) }} override={stateOverride} />
               </div>
             ) : (
               <div className="flex h-full items-center justify-center">

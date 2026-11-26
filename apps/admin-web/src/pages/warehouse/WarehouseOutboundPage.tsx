@@ -1,22 +1,25 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Plus, Send } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
-import { ListPageTemplate } from '../../templates';
-import type { InspectorAction, InspectorContent } from '../../templates/inspector';
+import { WorkbenchPageTemplate, toggleWorkbenchSort, type WorkbenchColumn, type WorkbenchSort } from '../../templates';
+import type { TemplateViewState } from '../../templates/state-slot';
+import { useTabViewState } from '../../templates/workspace-view-state';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { enterStation } from '../../shell/enter-station';
 import type { CatalogueConditions } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { heldCataloguePage } from '../party/held-catalogue-page';
+import { CursorPagerBar, pastFirstPage } from '../shipment-request/cursor-pager';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer, type ActionDrawerControl } from './ActionDrawer';
 import { listOutboundRequests, type OutboundRequestRecord } from './api';
 import { DocumentLink } from './document-page';
-import { linesSummary, nameOf, packColumns, shortInstant, wmsSurfaceClass } from './list-cells';
+import { fitColumnWidth, linesSummary, nameOf, shortInstant, waitedSortParam } from './list-cells';
 import { OutboundDocument } from './OutboundDocument';
 import { outboundNextStep, outboundSettled } from './outbound-next-step';
-import { openDocument, useDocumentParts } from './use-document';
+import { useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
 import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueTabs, WmsTwoLine } from './wms-ui';
@@ -30,8 +33,16 @@ const queueStatuses = ['PENDING_POLICY', 'PARTIALLY_RESERVED', 'RESERVED', 'ALLO
 const settledStatuses = ['SHIPPED', 'CANCELLED'] as const;
 const dispatchWords = ['PRODUCT_NETWORK', 'OWNER_LABEL', 'PICKUP'] as const;
 
-const newestFirst = '-receivedAt';
-const oldestFirst = 'receivedAt';
+// 「已等」是唯一能排的列（读口只按受理时刻排）。等得久的在前、刚受理的在前，各是它的降序与升序。
+const waitedKey = 'waited';
+const longestWaitFirst: WorkbenchSort = { key: waitedKey, dir: -1 };
+const newestFirst: WorkbenchSort = { key: waitedKey, dir: 1 };
+
+/** 卡在预占上、要人拿主意的两种状态：这样的行在列表里带底色。 */
+const stuck = (row: OutboundRequestRecord) => row.status === 'PARTIALLY_RESERVED' || row.status === 'PENDING_POLICY';
+
+/** 按内容定宽的列里，一格的内容不折行：列宽是照它算的，折了行列就被挤窄。 */
+const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{content}</span>;
 
 /** 出库单：列表与每一张出库单各占自己的标签，同一个模块按地址里有没有单据键分。 */
 export function WarehouseOutboundPage() {
@@ -39,15 +50,23 @@ export function WarehouseOutboundPage() {
   return parts ? <OutboundDocument requestId={parts[0]} /> : <OutboundList />;
 }
 
+/**
+ * 出库单列表，摆在单据工作台上：一行工具条（检索、各队的签、筛选），点一行在右边开这张单——看它、做它的动作都在栏里，
+ * 不必另开标签；单号仍是链接，点了开整页。勾选是另一件事：圈几张同仓、已预占的单合并放波次。翻页条在页底。
+ *
+ * 检索词、选的队、筛选、排序与看的是哪一行记在标签的视图状态上：切到别的标签再回来还在。勾选不记——它是对眼前这一页
+ * 几张单的临时圈定，换队就清。
+ */
 function OutboundList() {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
-  const [keyword, setKeyword] = useState('');
-  const [status, setStatus] = useState<string>('ALL');
-  const [owner, setOwner] = useState('');
-  const [warehouse, setWarehouse] = useState('');
-  const [dispatch, setDispatch] = useState('');
-  const [sort, setSort] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [keyword, setKeyword] = useTabViewState('warehouse-outbound.keyword', '');
+  const [status, setStatus] = useTabViewState<string>('warehouse-outbound.status', 'ALL');
+  const [owner, setOwner] = useTabViewState('warehouse-outbound.owner', '');
+  const [warehouse, setWarehouse] = useTabViewState('warehouse-outbound.warehouse', '');
+  const [dispatch, setDispatch] = useTabViewState('warehouse-outbound.dispatch', '');
+  const [chosenSort, setChosenSort] = useTabViewState<WorkbenchSort | null>('warehouse-outbound.sort', null);
+  const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-outbound.open', null);
+  const [checked, setChecked] = useState<Set<string>>(() => new Set());
   const [refreshes, setRefreshes] = useState(0);
 
   const settled = useSettledKeyword(keyword);
@@ -56,16 +75,19 @@ function OutboundList() {
   if (warehouse) baseFilters.warehouseCode = [warehouse];
   if (dispatch) baseFilters.dispatch = [dispatch];
   const base: CatalogueConditions = { q: settled, filters: baseFilters };
-  // 选了某一队之后按受理先后排，放得最久的在最上面；看全部或已了结的，最新的在上面。人改过排序就照他的。
+  // 选了某一队之后等得最久的在最上面；看全部或已了结的，最新受理的在上面。人点过表头就照他的。
   const inQueue = (queueStatuses as readonly string[]).includes(status);
-  const effectiveSort = sort ?? (inQueue ? oldestFirst : newestFirst);
+  const sort = chosenSort ?? (inQueue ? longestWaitFirst : newestFirst);
   const conditions: CatalogueConditions = {
     ...base,
-    sort: effectiveSort,
+    sort: waitedSortParam(sort.dir),
     filters: status === 'ALL' ? baseFilters : { ...baseFilters, status: [status] },
   };
-  const { answer, pagination, retry } = useCatalogueCursor(conditions, listOutboundRequests);
-  const rows = answer?.kind === 'outcome' ? answer.body.requests : [];
+  const { answer, previous, pagination, retry } = useCatalogueCursor(conditions, listOutboundRequests);
+  // 重取在途时垫着上一页的行：不然每做完一个动作，列表退回骨架、详情栏跟着收起再打开，栏里刚做完的那张单要重读一遍。
+  // 垫着的只是行，各队的数量仍只认各自那一问。
+  const held = heldCataloguePage(answer, previous, (body) => body.requests.length > 0);
+  const rows = answer?.kind === 'outcome' ? answer.body.requests : (held?.body.requests ?? []);
   const counts = useStatusCounts(listOutboundRequests, base, 'status', queueStatuses, refreshes);
   const refresh = () => {
     retry();
@@ -76,13 +98,6 @@ function OutboundList() {
     () => new Set(drawer.lookups.warehouses.filter((w) => w.kind === 'AGENT').map((w) => w.warehouseCode)),
     [drawer.lookups.warehouses],
   );
-  const now = new Date();
-
-  const selectedRecords = rows.filter((row) => selected.has(row.requestId));
-  const sameWarehouse = new Set(selectedRecords.map((row) => row.warehouseCode)).size === 1;
-  const allReserved = selectedRecords.every((row) => row.status === 'RESERVED');
-  const canBulkWave = selectedRecords.length > 0 && sameWarehouse && allReserved;
-
   const ownerNames = useMemo(
     () => new Map(drawer.lookups.owners.map((account) => [account.accountId, account.customerPartyName ?? ''])),
     [drawer.lookups.owners],
@@ -91,16 +106,28 @@ function OutboundList() {
     () => new Map(drawer.lookups.warehouses.map((w) => [w.warehouseCode, w.name ?? ''])),
     [drawer.lookups.warehouses],
   );
+  const now = new Date();
+
+  // 勾选只算眼前这一页上的：换了筛选或翻了页之后还留着的勾看不见也点不到，批量栏上的张数不该把它们算进去。
+  const checkedRecords = rows.filter((row) => checked.has(row.requestId));
+  const checkedHere = new Set(checkedRecords.map((row) => row.requestId));
+  const sameWarehouse = new Set(checkedRecords.map((row) => row.warehouseCode)).size === 1;
+  const allReserved = checkedRecords.every((row) => row.status === 'RESERVED');
+  const canBulkWave = checkedRecords.length > 0 && sameWarehouse && allReserved;
+
   // 人认名称，编码放在下面那一行；名册里没有名称的只摆编码。
   const named = (names: ReadonlyMap<string, string>, code: string) => {
     const name = nameOf(names, code);
-    return name ? <WmsTwoLine primary={name} secondary={code} code title={`${name} · ${code}`} /> : <span className="font-mono">{code}</span>;
+    return name ? <WmsTwoLine primary={name} secondary={code} code title={`${name} · ${code}`} /> : <span className="whitespace-nowrap font-mono">{code}</span>;
   };
 
-  const columns = packColumns<OutboundRequestRecord>([
+  // 列表变窄时（开了详情栏、或窗口小）从次要的列收起：先收商品、发运、仓库、货主，收件人最后；单号、状态、件数、
+  // 已等与下一步一直在。各个门槛是这一列出现时整张表刚好摆得下的列表宽度。
+  const columns: WorkbenchColumn<OutboundRequestRecord>[] = [
     {
-      id: 'id',
+      key: 'id',
       header: '出库单',
+      width: fitColumnWidth,
       render: (row) => (
         <WmsTwoLine
           primary={
@@ -113,97 +140,94 @@ function OutboundList() {
         />
       ),
     },
-    { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} /> },
-    { id: 'owner', header: '货主', render: (row) => named(ownerNames, row.ownerAccount) },
-    { id: 'warehouse', header: '仓库', render: (row) => named(warehouseNames, row.warehouseCode) },
-    { id: 'dispatch', header: '发运', render: (row) => labelOf(row.dispatch) },
+    { key: 'status', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.status} /> },
+    { key: 'owner', header: '货主', width: fitColumnWidth, minListWidth: 880, render: (row) => named(ownerNames, row.ownerAccount) },
+    { key: 'warehouse', header: '仓库', width: fitColumnWidth, minListWidth: 1060, render: (row) => named(warehouseNames, row.warehouseCode) },
+    { key: 'dispatch', header: '发运', width: fitColumnWidth, minListWidth: 1150, render: (row) => nowrap(labelOf(row.dispatch)) },
     {
-      id: 'recipient',
+      key: 'recipient',
       header: '收件人',
+      minListWidth: 700,
       render: (row) => <WmsTwoLine fill primary={row.recipient} secondary={row.address} title={`${row.recipient}\n${row.address}`} />,
     },
     {
-      id: 'lines',
+      key: 'lines',
       header: '商品',
+      minListWidth: 1340,
       render: (row) => {
         const summary = linesSummary(row.lines);
-        if (summary.first === '') return <span className="text-idpxyz-textMuted">没有商品行</span>;
+        if (summary.first === '') return <span className="whitespace-nowrap text-idpxyz-textMuted">没有商品行</span>;
         return <WmsTwoLine fill primary={<span className="font-mono">{summary.first}</span>} secondary={summary.rest} title={summary.all} />;
       },
     },
     {
-      id: 'qty',
-      header: '件数',
-      align: 'right',
+      key: 'qty',
+      header: nowrap('件数'),
+      right: true,
+      width: fitColumnWidth,
       // 只在卡在预占的两种状态上说占到多少：拣出去的那部分预占已经放开，拣完之后的 0 不是缺货。
       render: (row) => {
         const wanted = row.lines.reduce((sum, line) => sum + line.quantity, 0);
-        const stuck = row.status === 'PARTIALLY_RESERVED' || row.status === 'PENDING_POLICY';
         return (
-          <div className="leading-tight">
+          <div className="whitespace-nowrap leading-tight">
             <div className="tabular-nums">{wanted}</div>
-            {stuck ? <div className="mt-0.5 type-caption text-[color:var(--ds-status-warning-fg)]">只占到 {row.reservedQuantity}</div> : null}
+            {stuck(row) ? <div className="mt-0.5 type-caption text-[color:var(--ds-status-warning-fg)]">只占到 {row.reservedQuantity}</div> : null}
           </div>
         );
       },
     },
     {
-      id: 'age',
-      header: '已等',
-      align: 'right',
-      className: 'tabular-nums',
+      key: 'age',
+      header: nowrap('已等'),
+      right: true,
+      width: fitColumnWidth,
+      sortKey: waitedKey,
       // 已了结的单不写等了多久：它不在等谁。受理的时刻在单号下面那一行。
-      render: (row) => (outboundSettled(row.status) ? <span className="text-idpxyz-textMuted">—</span> : elapsedLabel(row.receivedAt, now) || '—'),
+      render: (row) =>
+        outboundSettled(row.status) ? (
+          <span className="text-idpxyz-textMuted">—</span>
+        ) : (
+          <span className="whitespace-nowrap tabular-nums">{elapsedLabel(row.receivedAt, now) || '—'}</span>
+        ),
     },
     {
-      id: 'next',
-      header: '下一步',
+      key: 'next',
+      header: nowrap('下一步'),
+      width: fitColumnWidth,
       render: (row) => <NextStepCell row={row} agentWarehouse={agentWarehouses.has(row.warehouseCode)} drawer={drawer} />,
     },
-  ], ['recipient', 'lines']);
+  ];
 
-  const inspectorOf = (row: OutboundRequestRecord): InspectorContent => {
-    const actions: InspectorAction[] = [{ label: '打开出库单', onRun: () => openDocument(moduleId, [row.requestId]) }];
-    if (row.status === 'RESERVED' && drawer.has('wave-release')) {
-      actions.push({ label: '放波次', onRun: () => drawer.open('wave-release', { warehouse: row.warehouseCode, requests: row.requestId }) });
-    }
-    if ((row.status === 'RESERVED' || row.status === 'PARTIALLY_RESERVED' || row.status === 'PENDING_POLICY') && drawer.has('outbound-split')) {
-      actions.push({ label: '拆单', onRun: () => drawer.open('outbound-split', { requestId: row.requestId }) });
-    }
-    if (row.status !== 'SHIPPED' && row.status !== 'CANCELLED' && drawer.has('outbound-cutoff')) {
-      actions.push({ label: '截单', onRun: () => drawer.open('outbound-cutoff', { requestId: row.requestId }) });
-    }
-    if (row.dispatch === 'OWNER_LABEL' && drawer.has('owner-label')) {
-      actions.push({ label: '登记货主面单', onRun: () => drawer.open('owner-label', { requestId: row.requestId }) });
-    }
-    return {
-      title: row.documentNumber ?? row.requestId,
-      subtitle: labelOf(row.status),
-      sections: [
-        {
-          kind: 'summary',
-          fields: [
-            { label: '货主', value: [nameOf(ownerNames, row.ownerAccount), row.ownerAccount].filter(Boolean).join(' · ') },
-            { label: '仓库', value: [nameOf(warehouseNames, row.warehouseCode), row.warehouseCode].filter(Boolean).join(' · ') },
-            { label: '发运方式', value: labelOf(row.dispatch) },
-            { label: '收件人', value: row.recipient },
-            { label: '收件地址', value: row.address },
-            { label: '明细', value: row.lines.map((line) => `${line.goodsCode}×${line.quantity}`).join('、') || '没有商品行', mono: true },
-          ],
-        },
-        { kind: 'actions', actions },
-        { kind: 'audit', fields: [{ label: '来源 / 受理时刻', value: `${labelOf(row.origin)} · ${formatInstant(row.receivedAt)}` }] },
-      ],
-    };
+  const narrowed = settled.trim() !== '' || status !== 'ALL' || owner !== '' || warehouse !== '' || dispatch !== '';
+  const clearFilters = () => {
+    setKeyword('');
+    setStatus('ALL');
+    setOwner('');
+    setWarehouse('');
+    setDispatch('');
+    setChecked(new Set());
   };
+  const viewState: TemplateViewState = held
+    ? { kind: 'ready' }
+    : catalogueViewState(answer, rows.length, refresh, {
+        module: info,
+        endpoint: 'GET /warehouse-fulfillment-outbound-request-list',
+        emptyTitle: '还没有出库单',
+        emptyDescription: '点右上角「代录出库单」新建，或等货主经客户接口提交。',
+        narrowed: narrowed || pastFirstPage(pagination),
+      });
+  // 垫着上一页时翻页条照那一页写，两个钮按了不动：拿上一页的游标去翻，翻的是一组可能已经换掉的条件。
+  const shownPagination = pagination ?? held?.pagination;
 
   return (
     <>
-      <ListPageTemplate<OutboundRequestRecord>
-        moduleId={moduleId}
+      <WorkbenchPageTemplate<OutboundRequestRecord>
         title={info.title}
-        description="点状态看那一队，数量是当前筛选下各队还有几张。点单号打开出库单；勾选同一个仓、已预占的几张可以合并放波次。"
-        headerActions={
+        viewStateKey={moduleId}
+        subtitle="点一队看那一队的单；点一行在右边看这张单、做它的下一步"
+        onRefresh={refresh}
+        refreshing={answer === null}
+        primaryAction={
           drawer.has('outbound-request') ? (
             <Button type="button" className={primaryActionClass} onClick={() => drawer.open('outbound-request')}>
               <Plus className="mr-1 h-3.5 w-3.5" />
@@ -211,57 +235,63 @@ function OutboundList() {
             </Button>
           ) : undefined
         }
-        search={{ value: keyword, onChange: setKeyword, placeholder: '搜出库单号、货主、仓、收件人、来源键' }}
-        sort={{
-          value: effectiveSort,
-          onChange: setSort,
-          options: [
-            { value: newestFirst, label: '最新受理的在前' },
-            { value: oldestFirst, label: '放得最久的在前' },
-          ],
-        }}
-        tabs={
-          <WmsQueueTabs
-            value={status}
-            onChange={(next) => {
-              setStatus(next);
-              setSelected(new Set());
-            }}
-            tabs={[
-              { value: 'ALL', label: '全部' },
-              ...queueStatuses.map((code) => ({ value: code, label: labelOf(code), count: counts[code] })),
-              ...settledStatuses.map((code) => ({ value: code, label: labelOf(code) })),
-            ]}
-          />
+        search={{ value: keyword, onChange: setKeyword, placeholder: '搜出库单号、货主、仓、收件人…' }}
+        extraFilters={
+          <>
+            <WmsQueueTabs
+              value={status}
+              onChange={(next) => {
+                setStatus(next);
+                setChecked(new Set());
+              }}
+              tabs={[
+                { value: 'ALL', label: '全部' },
+                ...queueStatuses.map((code) => ({ value: code, label: labelOf(code), count: counts[code] })),
+                ...settledStatuses.map((code) => ({ value: code, label: labelOf(code) })),
+              ]}
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <WmsFilterSelect
+                label="货主"
+                value={owner}
+                onChange={setOwner}
+                options={drawer.lookups.owners.map((account) => ({
+                  value: account.accountId,
+                  label: account.customerPartyName ? `${account.customerPartyName} · ${account.accountId}` : account.accountId,
+                }))}
+              />
+              <WmsFilterSelect
+                label="仓库"
+                value={warehouse}
+                onChange={setWarehouse}
+                options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: w.name ? `${w.name} · ${w.warehouseCode}` : w.warehouseCode }))}
+              />
+              <WmsFilterSelect
+                label="发运"
+                value={dispatch}
+                onChange={setDispatch}
+                options={dispatchWords.map((word) => ({ value: word, label: labelOf(word) }))}
+              />
+              {narrowed ? (
+                <button
+                  type="button"
+                  className="whitespace-nowrap type-body text-idpxyz-textMuted hover:text-idpxyz-textBright focus-visible:underline focus-visible:outline-none"
+                  onClick={clearFilters}
+                >
+                  清除
+                </button>
+              ) : null}
+            </div>
+          </>
         }
-        filters={
-          <div className="flex items-center gap-3">
-            <WmsFilterSelect
-              label="货主"
-              value={owner}
-              onChange={setOwner}
-              options={drawer.lookups.owners.map((account) => ({
-                value: account.accountId,
-                label: account.customerPartyName ? `${account.customerPartyName} · ${account.accountId}` : account.accountId,
-              }))}
-            />
-            <WmsFilterSelect
-              label="仓库"
-              value={warehouse}
-              onChange={setWarehouse}
-              options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: w.name ? `${w.name} · ${w.warehouseCode}` : w.warehouseCode }))}
-            />
-            <WmsFilterSelect
-              label="发运"
-              value={dispatch}
-              onChange={setDispatch}
-              options={dispatchWords.map((word) => ({ value: word, label: labelOf(word) }))}
-            />
-          </div>
-        }
-        selection={{ selected, onChange: setSelected }}
-        bulkActions={{
-          extra: drawer.has('wave-release') ? (
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.requestId}
+        selectedKey={openKey}
+        onSelect={setOpenKey}
+        selection={{ selected: checkedHere, onChange: setChecked }}
+        bulkActions={
+          drawer.has('wave-release') ? (
             <Button
               type="button"
               size="sm"
@@ -270,39 +300,36 @@ function OutboundList() {
               title={canBulkWave ? '把勾选的出库单合成一个波次放出去' : '只有同一个仓、状态都是已预占的出库单才能合并放波次'}
               onClick={() =>
                 drawer.open('wave-release', {
-                  warehouse: selectedRecords[0]?.warehouseCode ?? '',
-                  requests: selectedRecords.map((row) => row.requestId).join(', '),
+                  warehouse: checkedRecords[0]?.warehouseCode ?? '',
+                  requests: checkedRecords.map((row) => row.requestId).join(', '),
                 })
               }
             >
               <Send className="mr-1 h-3.5 w-3.5" />
-              {`合并放波次（${selectedRecords.length} 张）`}
+              {`合并放波次（${checkedRecords.length} 张）`}
             </Button>
-          ) : undefined,
-        }}
-        columns={columns}
-        surfaceClassName={wmsSurfaceClass}
-        rows={rows}
-        rowKey={(row) => row.requestId}
-        inspector={inspectorOf}
-        onRowOpen={(row) => openDocument(moduleId, [row.requestId])}
-        pagination={pagination}
-        emptyRowsNote="当前筛选下没有出库单"
-        viewState={catalogueViewState(answer, rows.length, refresh, {
-          module: info,
-          endpoint: 'GET /warehouse-fulfillment-outbound-request-list',
-          emptyTitle: '还没有出库单',
-          emptyDescription: '点右上角「代录出库单」新建，或等货主经客户接口提交。',
-          narrowed: settled.trim() !== '' || status !== 'ALL' || owner !== '' || warehouse !== '' || dispatch !== '',
-        })}
+          ) : undefined
+        }
+        rowAttention={stuck}
+        rowAlign="baseline"
+        sort={sort}
+        onSort={(key) => setChosenSort(toggleWorkbenchSort(sort, key))}
+        noMatchText="当前筛选下没有出库单"
+        onClearFilters={clearFilters}
+        renderDetail={(key) => (
+          // 换一行就是换一张单：按键重挂，上一张单读到一半的答复与没关的表单不带过来。
+          <OutboundDocument key={key} requestId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }} />
+        )}
+        viewState={viewState}
       />
+      {shownPagination && viewState.kind === 'ready' ? <CursorPagerBar pagination={shownPagination} /> : null}
       <ActionDrawer
         moduleId={moduleId}
         active={drawer.active}
         lookups={drawer.lookups}
         onClose={drawer.close}
         onSubmitted={() => {
-          setSelected(new Set());
+          setChecked(new Set());
           refresh();
         }}
       />
@@ -322,8 +349,8 @@ function NextStepCell({
 }) {
   const next = outboundNextStep(row.status, agentWarehouse, undefined, row.requestId);
   if (next === null) return <span className="text-idpxyz-textMuted">—</span>;
-  if (next.kind === 'wait') return <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{next.label}</span>;
-  if (next.kind === 'wave' && !drawer.has('wave-release')) return <span className="text-idpxyz-textMuted">等放波次</span>;
+  if (next.kind === 'wait') return <span className="whitespace-nowrap type-caption text-[color:var(--ds-status-warning-fg)]">{next.label}</span>;
+  if (next.kind === 'wave' && !drawer.has('wave-release')) return <span className="whitespace-nowrap text-idpxyz-textMuted">等放波次</span>;
   // 能做的一步在每一行上是同一个样子的钮，不论它是就地开表单还是去别的页：操作者要认的是「这一单现在该做什么」，
   // 不是这一步落在哪里。
   return (
@@ -332,9 +359,9 @@ function NextStepCell({
       size="sm"
       variant="outline"
       // 字用链接色：表里除了状态徽章只有能点的东西带颜色，灰描边灰字的钮在一排灰字里找不出来。
-      className="text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
+      className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
       onClick={(event) => {
-        // 行上的单击是预览：这一下只做这一步，不顺带把行选进右栏。
+        // 行上的单击是开详情：这一下只做这一步，不顺带把详情栏开合一次。
         event.stopPropagation();
         if (next.kind === 'wave') drawer.open('wave-release', { warehouse: row.warehouseCode, requests: row.requestId });
         else if (next.kind === 'station') enterStation(next.hash);

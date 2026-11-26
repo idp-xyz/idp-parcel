@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
@@ -13,7 +13,7 @@ import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { outboundNextStep, outboundReservationOpen } from './outbound-next-step';
 import { outboundTrack } from './outbound-track';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable } from './wms-ui';
 
 const shipmentModule = 'shipment-request-inquiry';
@@ -30,8 +30,19 @@ const lineNumber = (lineIndex: number) => String(lineIndex + 1);
  *
  * 没发生过的那几块不画（还没放波次就没有拣货任务那一块）：走到哪一步由头区下面的进度条说，正文只摆已经有的东西。
  * 明细行例外，它是单据本身。
+ *
+ * 同一张页也摆在出库单列表的详情栏里（给了 `panel`）：点一行就在栏里看这张单、做它的动作，不必另开一张标签。
+ * 栏与列表要对得上：栏里做完一个动作要告诉列表重取（那一行的状态与各队的数量都变了）；列表那头做了动作或按了刷新，
+ * 栏里这张单也要重读——不然行上已经是「已放波次」，栏里还摆着「放波次」的钮。两头都走 `revision`：列表每重取一次它加一，
+ * 栏见它变了就重读。
  */
-export function OutboundDocument({ requestId }: { requestId: string }) {
+export function OutboundDocument({
+  requestId,
+  panel,
+}: {
+  requestId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const [printNote, setPrintNote] = useState('');
   const notePrint = (result: { ok: true } | { ok: false; reason: string }) => {
     setPrintNote(result.ok ? '' : result.reason);
@@ -39,6 +50,14 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
   const back = useReturnToList('warehouse-outbound');
   const { answer, loading, reload } = useKeyedLoad(requestId, getOutboundRequestDetail);
+  // 挂上时已经读过一次，只在列表之后又重取时跟着重读。
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
   const body: OutboundRequestDetailBody | undefined = answer?.kind === 'outcome' ? answer.body : undefined;
   const request = body?.request;
   const failure = readFailureMessage(answer) ?? (body && !request ? `没有 ${requestId} 这张出库单。它可能属于别的公司，或标识有误。` : null);
@@ -92,6 +111,7 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument('warehouse-outbound', [requestId]) } : undefined}
         stepper={
           track ? (
             <WmsStepper
@@ -446,7 +466,8 @@ export function OutboundDocument({ requestId }: { requestId: string }) {
         active={drawer.active}
         lookups={drawer.lookups}
         onClose={drawer.close}
-        onSubmitted={reload}
+        // 在栏里只告诉列表重取：列表重取会让 revision 变，这张单跟着重读，不必自己再读一遍。
+        onSubmitted={panel ? panel.onChanged : reload}
       />
     </>
   );

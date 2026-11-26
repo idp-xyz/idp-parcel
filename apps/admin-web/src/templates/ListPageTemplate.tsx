@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   PageHeader,
@@ -41,9 +41,9 @@ import {
   toggleAllOnPage,
   toggleSelected,
   type CsvCellText,
-  type PageSelectionState,
 } from './list-selection';
 import { skeletonOf } from './loading-shape';
+import { PageSelectAllCheckbox, checkboxClass, stopRowEvent } from './selection-checkbox';
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
 import { useInspector } from './inspector-context';
 import { useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
@@ -170,11 +170,6 @@ export interface ListPageTemplateProps<Row> {
   moduleId?: string;
   /** 页头右侧动作区（如「导出」按钮）。 */
   headerActions?: ReactNode;
-  /**
-   * 页头之下、过滤条之上单独的一行，给「按哪一队看」这种主分队用（如按状态分的签）。它和筛选不是一回事：分队决定
-   * 这张表是哪一份待办，筛选是在这一份里再收窄；挤进过滤条会把它和下拉混成一排，签一多过滤条就折行。不传就没有这一行。
-   */
-  tabs?: ReactNode;
   /** 不传则不渲染搜索框——过滤条整体仍在，便于只有下拉筛选的页面。 */
   search?: ListSearchProps;
   /** 过滤控件（下拉、chip 等）由调用方提供：筛选维度是业务决定，模板不预设。 */
@@ -189,11 +184,6 @@ export interface ListPageTemplateProps<Row> {
   /** 过滤条右端的统计摘要（如「共 N 条」）。 */
   filterSummary?: ReactNode;
   columns: ListColumn<Row>[];
-  /**
-   * 附加到表所在那块表面（带边框的滚动口）上的类。给一组页面统一表的样子用：表面多宽、行线、表头的底，都从这一处
-   * 往里指（`[&_tbody_td]:…`），不必给模板的每个格各开一个口。不传时表面与今天同。
-   */
-  surfaceClassName?: string;
   rows: Row[];
   rowKey: (row: Row) => string;
   /** 多选。不传则无复选列、无动作栏，与今天同。 */
@@ -286,42 +276,6 @@ function CursorPaginationBar({ pagination }: { pagination: ListCursorPaginationP
   );
 }
 
-// 复选用原生 input 而不是 ui-primitives 的 Checkbox（Radix，渲成 button）：表格里一列几十个复选，原生控件自带 indeterminate 三态、
-// 键盘与 AT 语义，且与仓内既有表单（party/* 的 checkbox）同一个控件；accent 色让它吃主题令牌。
-const checkboxClass = 'accent-idpxyz-accent';
-
-// 表头复选。indeterminate 只是 DOM 属性、不是 HTML 特性，React 声明不了它，只能在提交后对着节点设；
-// checked 只在「全」时为真——「部分」既不算勾也不算空，由 indeterminate 表达。
-function PageSelectAllCheckbox({
-  state,
-  disabled,
-  onToggle,
-}: {
-  state: PageSelectionState;
-  disabled: boolean;
-  onToggle: () => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = state === 'some';
-  }, [state]);
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      className={checkboxClass}
-      aria-label="选择本页全部"
-      checked={state === 'all'}
-      disabled={disabled}
-      onChange={onToggle}
-    />
-  );
-}
-
-// 复选格上截住指针事件：选择不等于预览（蓝图 10.5），格内的点击不冒泡成行的 onRowClick，双击不冒泡成 onRowOpen。
-// Enter 不必截——行的 onKeyDown 只认 target 是行本身的按键，复选框上的 Enter 到不了那条分支。
-const stopRowEvent = (event: SyntheticEvent) => event.stopPropagation();
-
 // 本机下载：Blob → 对象 URL → 隐藏 <a download> 点一下。URL 延后释放：部分浏览器在 click 返回时尚未开始读 Blob，同步 revoke 会下到空文件。
 function downloadTextFile(fileName: string, text: string, mimeType: string) {
   const url = URL.createObjectURL(new Blob([text], { type: mimeType }));
@@ -350,7 +304,6 @@ export function ListPageTemplate<Row>({
   breadcrumb,
   moduleId,
   headerActions,
-  tabs,
   search,
   filters,
   sort,
@@ -358,7 +311,6 @@ export function ListPageTemplate<Row>({
   moreFilters,
   filterSummary,
   columns,
-  surfaceClassName,
   rows,
   rowKey,
   selection,
@@ -551,11 +503,6 @@ export function ListPageTemplate<Row>({
         {headerActions && <PageHeaderActions>{headerActions}</PageHeaderActions>}
       </PageHeader>
 
-      {/* 主分队一行：签多了横向滚、不折行，下面各区的位置不随签的多少变。 */}
-      {tabs != null && tabs !== false && (
-        <div className="shrink-0 overflow-x-auto overflow-y-hidden border-b border-idpxyz-border px-4">{tabs}</div>
-      )}
-
       {/* 黄金标准 9.2 顺序：搜索 → 主筛选 → 排序 → 视图 → 保存视图 → 更多筛选 → 右端计数。位不够宽时横向滚，不换行。 */}
       <FilterBar className="overflow-x-auto">
         {search && (
@@ -613,7 +560,7 @@ export function ListPageTemplate<Row>({
               页底，页面上不留一块没有归属的空地；滚动发生在容器内，表头吸顶对着容器的滚动口。翻页条留在容器外的页底，
               它的位置不随行数变。 */}
           <div className="flex min-h-0 flex-1 flex-col p-2">
-            <div className={`min-h-0 flex-1 overflow-auto rounded-md border border-idpxyz-border bg-idpxyz-sidebar ${surfaceClassName ?? ''}`}>
+            <div className="min-h-0 flex-1 overflow-auto rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
               <Table stickyHeader>
                   <TableHeader>
                     <TableRow>

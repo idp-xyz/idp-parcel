@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Maximize2, RefreshCw, X } from 'lucide-react';
 import { PageHeader, PageHeaderActions, PageHeaderContent, PageHeaderTitle } from '@idpxyz/ui-patterns';
 import { Button } from '@idpxyz/ui-primitives';
 import { CodeRef } from '../../components/CodeRef';
@@ -28,6 +28,7 @@ export function WmsDocumentPage({
   onBack,
   onReload,
   aside,
+  panel,
   children,
 }: {
   /** 单据种类的叫法：出库单、波次、入库预报。 */
@@ -47,9 +48,61 @@ export function WmsDocumentPage({
   onReload?: () => void;
   /** 右栏：关联单据一类看不见也不缺的辅助内容，只在宽屏显示。 */
   aside?: ReactNode;
+  /**
+   * 摆在列表的详情栏里时给：头区收成两行（单号与状态一行、动作一行可换行），「返回列表」换成「整页打开」与「关闭」，
+   * 关联单据那一栏排到正文下面——栏只有半屏宽，照整页的排法动作会挤出栏外、右栏会把正文挤窄。
+   */
+  panel?: { onClose: () => void; onOpenPage: () => void };
   children: ReactNode;
 }) {
   const ready = !loading && !error;
+  if (panel) {
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-idpxyz-editor">
+        <div className="shrink-0 border-b border-idpxyz-border px-4 py-3">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="type-section font-semibold text-idpxyz-textBright">{kind}</span>
+                {title ? <CodeRef value={title} title={`${kind}号`} /> : null}
+                {ready ? badge : null}
+              </div>
+              {ready && subtitle ? <p className="mt-1 type-caption leading-4 text-idpxyz-textMuted">{subtitle}</p> : null}
+            </div>
+            {onReload ? (
+              <Button type="button" variant="ghost" size="icon" disabled={loading} title="刷新" aria-label="刷新" onClick={onReload}>
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              </Button>
+            ) : null}
+            <Button type="button" variant="ghost" size="icon" title="整页打开" aria-label="整页打开" onClick={panel.onOpenPage}>
+              <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" title="关闭详情" aria-label="关闭详情" onClick={panel.onClose}>
+              <X className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
+          {ready && actions ? <div className="mt-2.5 flex flex-wrap items-center gap-2">{actions}</div> : null}
+        </div>
+        {ready && stepper ? <div className="shrink-0 overflow-x-auto border-b border-idpxyz-border px-4 py-2.5">{stepper}</div> : null}
+        {loading ? (
+          <div className="flex flex-1 items-center justify-center overflow-auto">
+            <StateSlot state={{ kind: 'loading', shape: 'detail' }} />
+          </div>
+        ) : error ? (
+          <div className="flex flex-1 items-center justify-center overflow-auto">
+            <StateSlot state={{ kind: 'error', title: `没有取到这${measure}${kind}`, description: error, onRetry: onReload }} />
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-auto">
+            <div className="flex flex-col gap-5 p-4">
+              {children}
+              {aside}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <PageHeader className="items-start">
