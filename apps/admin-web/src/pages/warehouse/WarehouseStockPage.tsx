@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Button, Input, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
+import {
+  currentCursorAfter,
+  cursorPageNumber,
+  cursorPageSummary,
+  cursorTrailFor,
+  nextCursorPage,
+  previousCursorPage,
+  startCursorTrail,
+  type CursorTrail,
+} from '../../templates/cursor-pagination';
 import { formatInstant } from '../catalogue-view';
 import { queryOwnerStock, type ApiResult, type StockReadBody, type StockViewKind } from './api';
 import { internalOpsActionSpecs } from './actions';
@@ -32,7 +42,8 @@ function stockRowCount(body: StockReadBody, view: StockViewKind): number {
   if (view === 'cartons') return (body.cartons ?? []).length;
   if (view === 'summary') return (body.summary ?? []).length;
   if (view === 'holds') return (body.holds ?? []).length;
-  return (body.movements ?? []).length;
+  // 流水由读口翻页，不在取回的行上切。
+  return 0;
 }
 
 const thClass = 'px-3 py-2 text-left type-caption font-medium text-idpxyz-textMuted border-b border-idpxyz-border whitespace-nowrap';
@@ -52,12 +63,24 @@ export function WarehouseStockPage() {
   const [tick, setTick] = useState(0);
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
   const [paging, setPaging] = useState({ conditions: '', page: 1 });
+  const [trail, setTrail] = useState<CursorTrail>(() => startCursorTrail(''));
 
   useEffect(() => {
     if (owner === '' && lookups.owners.length > 0) {
       setOwner(lookups.owners[0].accountId);
     }
   }, [lookups.owners, owner]);
+
+  // 页码与游标都跟着查阅条件记：货主、仓或视图一换，就把记下的丢掉、从第一页看起——换回原来的条件也是第一页，
+  // 不接着上次翻到的地方。在渲染里比对着改，换条件的那一次渲染就已经是第一页，不会先带着旧游标问一次。
+  // 流水由读口按游标一页一页答；其余四种看法读口答整份，翻页是在取回的行上切。
+  const conditions = `${owner.trim()}|${warehouse}|${view}`;
+  if (trail.query !== conditions) {
+    setTrail(startCursorTrail(conditions));
+    setPaging({ conditions, page: 1 });
+  }
+  const cursor = cursorTrailFor(trail, conditions);
+  const after = view === 'movements' ? currentCursorAfter(cursor) : null;
 
   useEffect(() => {
     const trimmed = owner.trim();
@@ -67,7 +90,7 @@ export function WarehouseStockPage() {
     }
     let cancelled = false;
     setLoading(true);
-    void queryOwnerStock(trimmed, warehouse, view).then((res) => {
+    void queryOwnerStock(trimmed, warehouse, view, after).then((res) => {
       if (!cancelled) {
         setAnswer(res);
         setLoading(false);
@@ -76,7 +99,7 @@ export function WarehouseStockPage() {
     return () => {
       cancelled = true;
     };
-  }, [owner, warehouse, view, tick]);
+  }, [owner, warehouse, view, tick, after]);
 
   const openAction = (id: string, prefill?: GuidedFormValues) => {
     const target = targetMap.get(id);
@@ -86,11 +109,29 @@ export function WarehouseStockPage() {
 
   const body = answer?.kind === 'outcome' ? answer.body : null;
 
-  // 页码跟着查阅条件记：货主、仓或视图一换，记下的页码对不上新条件，就从第一页看起。
-  const conditions = `${owner.trim()}|${warehouse}|${view}`;
   const total = body ? stockRowCount(body, view) : 0;
   const page = stockPageClamp(paging.conditions === conditions ? paging.page : 1, total);
   const turnTo = (next: number) => setPaging({ conditions, page: next });
+
+  const movementPage = body?.page ?? null;
+  const movementPageNumber = cursorPageNumber(cursor);
+  // 在读下一页时旧答复还在屏上，它的 next 已经用过了，把钮按住。
+  const pager =
+    view === 'movements'
+      ? {
+          summary: cursorPageSummary(movementPageNumber, movementPage?.size ?? 0, movementPage?.total ?? null),
+          canPrevious: !loading && movementPageNumber > 1,
+          canNext: !loading && movementPage !== null && movementPage.next !== null,
+          onPrevious: () => setTrail(previousCursorPage(cursor)),
+          onNext: () => setTrail(nextCursorPage(cursor, movementPage?.next ?? null)),
+        }
+      : {
+          summary: stockPageSummary(page, total),
+          canPrevious: page > 1,
+          canNext: page < stockPageCount(total),
+          onPrevious: () => turnTo(page - 1),
+          onNext: () => turnTo(page + 1),
+        };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
@@ -437,7 +478,7 @@ export function WarehouseStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {stockPageSlice(body.movements ?? [], page).map((mov, index) => (
+                    {(body.movements ?? []).map((mov, index) => (
                       <tr key={`${mov.warehouse}-${mov.source ?? ''}-${mov.occurredAt}-${index}`} className="hover:bg-idpxyz-hover/40">
                         <td className={monoTd}>{mov.warehouse}</td>
                         <td className={tdClass}>{mov.reason}</td>
@@ -460,15 +501,8 @@ export function WarehouseStockPage() {
         ) : null}
       </div>
 
-      {body && owner.trim() !== '' ? (
-        <WmsPagerBar
-          summary={stockPageSummary(page, total, view !== 'movements')}
-          canPrevious={page > 1}
-          canNext={page < stockPageCount(total)}
-          onPrevious={() => turnTo(page - 1)}
-          onNext={() => turnTo(page + 1)}
-        />
-      ) : null}
+      {/* 翻到后面某一页没读成时翻页条仍在：没有它就退不回上一页。 */}
+      {owner.trim() !== '' && (body || (view === 'movements' && movementPageNumber > 1)) ? <WmsPagerBar {...pager} /> : null}
 
       <ActionDrawer
         moduleId="warehouse-stock"

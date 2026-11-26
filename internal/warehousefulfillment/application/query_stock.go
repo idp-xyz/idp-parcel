@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
@@ -110,6 +111,8 @@ type StockSnapshot struct {
 	Summary   []StockSummaryView
 	Holds     []StockHoldView
 	Movements []StockMovementView
+	// MovementPage 只在看流水时有：流水是翻页答的，其余几种看法答整份、没有这一格。
+	MovementPage *cataloguepage.Page
 }
 
 // StockQuery 是一次查阅。仓可以不点名，点了就只看那一个仓。
@@ -120,6 +123,9 @@ type StockQuery struct {
 	View      StockView
 	Customer  bool
 	Now       time.Time
+	// Page 与 Limit 只有看流水时用：Page 由 ports.StockMovementPages 解出，Limit 是页大小。
+	Page  cataloguepage.Query
+	Limit int
 }
 
 // QueryStockHandler 如实答读那一刻的账。一个仓都没登记时答空。
@@ -158,7 +164,7 @@ func (handler *QueryStockHandler) Query(ctx context.Context, query StockQuery) (
 		return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
 	}
 	if !configured {
-		return StockSnapshot{}, nil
+		return emptyStock(query), nil
 	}
 	if query.Warehouse.String() != "" {
 		warehouse, found, err := handler.warehouses.LoadLatestWarehouse(ctx, query.Tenant, query.Warehouse)
@@ -166,7 +172,7 @@ func (handler *QueryStockHandler) Query(ctx context.Context, query StockQuery) (
 			return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
 		}
 		if !found || warehouse.Content().Kind() == domain.WarehouseKindAgent {
-			return StockSnapshot{}, nil
+			return emptyStock(query), nil
 		}
 	}
 	switch query.View {
@@ -181,6 +187,15 @@ func (handler *QueryStockHandler) Query(ctx context.Context, query StockQuery) (
 	default:
 		return StockSnapshot{}, fmt.Errorf("query stock: 不认识的看法")
 	}
+}
+
+// emptyStock 是没有账可答时的空答复。看流水时仍带 page 一格：一行也没有也是一页，调用方不必区分「没有流水」与「这一口不翻页」。
+func emptyStock(query StockQuery) StockSnapshot {
+	if query.View != StockViewMovements {
+		return StockSnapshot{}
+	}
+	page := cataloguepage.NewPage(query.Limit, "", 0)
+	return StockSnapshot{MovementPage: &page}
 }
 
 func (handler *QueryStockHandler) cells(ctx context.Context, query StockQuery) (StockSnapshot, error) {
@@ -303,12 +318,13 @@ func (handler *QueryStockHandler) holds(ctx context.Context, query StockQuery) (
 }
 
 func (handler *QueryStockHandler) movements(ctx context.Context, query StockQuery) (StockSnapshot, error) {
-	rows, err := handler.reads.ListMovements(ctx, query.Tenant, query.Owner, query.Warehouse, 200)
+	listed, err := handler.reads.ListMovements(ctx, query.Tenant, query.Owner, query.Warehouse, query.Limit, query.Page)
 	if err != nil {
 		return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
 	}
-	movements := make([]StockMovementView, 0, len(rows))
-	for _, row := range rows {
+	page := listed.Page(query.Limit)
+	movements := make([]StockMovementView, 0, len(listed.Rows))
+	for _, row := range listed.Rows {
 		view := StockMovementView{Warehouse: row.Warehouse, Reason: row.Reason, Occurred: row.Occurred}
 		if !query.Customer {
 			view.Source = row.Source
@@ -323,7 +339,7 @@ func (handler *QueryStockHandler) movements(ctx context.Context, query StockQuer
 		}
 		movements = append(movements, view)
 	}
-	return StockSnapshot{Movements: movements}, nil
+	return StockSnapshot{Movements: movements, MovementPage: &page}, nil
 }
 
 func (handler *QueryStockHandler) allocatable(ctx context.Context, tenant domain.TenantID, warehouse, location, state string) (bool, error) {

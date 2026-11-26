@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 )
 
@@ -48,8 +49,9 @@ type StockFreezeRow struct {
 	FrozenAt     time.Time
 }
 
-// StockMovementRow 是一笔已入账的流水头。
+// StockMovementRow 是一笔已入账的流水头。ID 只用来给翻页定位：它随游标交给运营面，不进答复里的行。
 type StockMovementRow struct {
+	ID        string
 	Warehouse string
 	Reason    string
 	Source    string
@@ -72,6 +74,7 @@ type StockReadStore interface {
 	ListCellBalances(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) ([]StockCellBalance, error)
 	ListCartonBalances(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) ([]StockCartonBalance, error)
 	ListActiveFreezes(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) ([]StockFreezeRow, error)
-	ListMovements(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, limit int) ([]StockMovementRow, error)
+	// ListMovements 按 StockMovementPages 解出的查询取一页流水，带下一页的游标与同一组条件下的总数。
+	ListMovements(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, limit int, query cataloguepage.Query) (cataloguepage.Result[StockMovementRow], error)
 	CartonBill(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, carton domain.CartonNumber) ([]domain.CartonContentLine, error)
 }

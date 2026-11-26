@@ -2,13 +2,16 @@ package warehousehttp
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"net/url"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
 // StockReader 是库存读口转交的编排。
@@ -26,7 +29,7 @@ func NewQueryStockEndpoint(intake CatalogueIntake, reader StockReader) http.Hand
 			writeIntakeProblem(response, err)
 			return
 		}
-		query, reason := operatorStockQuery(request, identity.Tenant)
+		query, reason := operatorStockQuery(request, identity.Tenant, identity.Limit)
 		if reason != "" {
 			writeMalformed(response, reason)
 			return
@@ -60,12 +63,15 @@ func NewQueryCustomerStockEndpoint(intake CustomerInboundPreAdvicePorts, reader 
 			writeCustomerProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed, "")
 			return
 		}
-		writeJSON(response, http.StatusOK, stockSnapshotBody(snapshot))
+		body := stockSnapshotBody(snapshot)
+		// 货主面不翻页（见 customerStockQuery），page 里的游标不交出去。
+		body.Page = nil
+		writeJSON(response, http.StatusOK, body)
 	})
 }
 
-func operatorStockQuery(request *http.Request, tenant domain.TenantID) (application.StockQuery, string) {
-	values, reason := stockQueryValues(request, "ownerAccount", "warehouseCode", "view")
+func operatorStockQuery(request *http.Request, tenant domain.TenantID, limit int) (application.StockQuery, string) {
+	values, reason := stockQueryValues(request, "ownerAccount", "warehouseCode", "view", stockAfterQueryKey)
 	if reason != "" {
 		return application.StockQuery{}, reason
 	}
@@ -81,7 +87,8 @@ func operatorStockQuery(request *http.Request, tenant domain.TenantID) (applicat
 	if reason != "" {
 		return application.StockQuery{}, reason
 	}
-	return application.StockQuery{Tenant: tenant, Owner: owner, Warehouse: warehouse, View: view, Now: time.Now()}, ""
+	query := application.StockQuery{Tenant: tenant, Owner: owner, Warehouse: warehouse, View: view, Now: time.Now()}
+	return stockPaging(query, values, limit)
 }
 
 func customerStockQuery(request *http.Request, tenant domain.TenantID, owner domain.OwnerAccountID) (application.StockQuery, string) {
@@ -97,7 +104,56 @@ func customerStockQuery(request *http.Request, tenant domain.TenantID, owner dom
 	if reason != "" {
 		return application.StockQuery{}, reason
 	}
-	return application.StockQuery{Tenant: tenant, Owner: owner, Warehouse: warehouse, View: view, Customer: true, Now: time.Now()}, ""
+	query := application.StockQuery{Tenant: tenant, Owner: owner, Warehouse: warehouse, View: view, Customer: true, Now: time.Now()}
+	if view != application.StockViewMovements {
+		return query, ""
+	}
+	// 货主面的流水不翻页，照旧只答最早入账的一页：游标里带着末行的流水标识与入账时刻，这两格货主面都不给，
+	// 游标又不防解读。要让货主面翻页，先得定这两格能不能随游标交出去。
+	conditions := stockMovementConditions(query)
+	conditions.Set("sort", "postedAt")
+	return stockMovementPage(query, conditions, operatorCatalogueReadLimit)
+}
+
+const stockAfterQueryKey = "after"
+
+// stockPaging 给运营面流水那一种看法解出翻页。其余看法答整份、不翻页，带了 after 即拒：收下不用，调用方会以为自己翻到了下一页。
+func stockPaging(query application.StockQuery, values map[string]string, limit int) (application.StockQuery, string) {
+	after, carried := values[stockAfterQueryKey]
+	if query.View != application.StockViewMovements {
+		if carried {
+			return application.StockQuery{}, "after is only taken by the movements view"
+		}
+		return query, ""
+	}
+	conditions := stockMovementConditions(query)
+	if carried {
+		conditions.Set(stockAfterQueryKey, after)
+	}
+	return stockMovementPage(query, conditions, limit)
+}
+
+// stockMovementConditions 按已经判过的货主、仓与看法重写一份交给共用件的条件，不拿原始查询串去解：仓没给与给了空串
+// 要是同一份列表，调用方带来的 q 与 sort 读口不收，也不该有路进到解码里。
+func stockMovementConditions(query application.StockQuery) url.Values {
+	conditions := url.Values{"ownerAccount": {query.Owner.String()}, "view": {string(query.View)}}
+	if warehouse := query.Warehouse.String(); warehouse != "" {
+		conditions.Set("warehouseCode", warehouse)
+	}
+	return conditions
+}
+
+func stockMovementPage(query application.StockQuery, conditions url.Values, limit int) (application.StockQuery, string) {
+	page, err := ports.StockMovementPages.Decode(conditions)
+	if err != nil {
+		var malformed *cataloguepage.MalformedQuery
+		if errors.As(err, &malformed) {
+			return application.StockQuery{}, malformed.Reason
+		}
+		return application.StockQuery{}, "the paging parameters could not be read"
+	}
+	query.Page, query.Limit = page, limit
+	return query, ""
 }
 
 func stockQueryValues(request *http.Request, allowed ...string) (map[string]string, string) {
@@ -196,6 +252,7 @@ func stockSnapshotBody(snapshot application.StockSnapshot) stockReadBody {
 		}
 		body.Movements = append(body.Movements, item)
 	}
+	body.Page = snapshot.MovementPage
 	return body
 }
 
@@ -206,6 +263,8 @@ type stockReadBody struct {
 	Summary   []stockSummaryBody  `json:"summary,omitempty"`
 	Holds     []stockHoldBody     `json:"holds,omitempty"`
 	Movements []stockMovementBody `json:"movements,omitempty"`
+	// Page 只在看流水时有：只有那一种看法翻页。
+	Page *cataloguepage.Page `json:"page,omitempty"`
 }
 
 type stockCellBody struct {

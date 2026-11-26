@@ -6,6 +6,7 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
@@ -139,42 +140,64 @@ func (store *StockReads) ListActiveFreezes(ctx context.Context, tenant domain.Te
 	return listed, nil
 }
 
-func (store *StockReads) ListMovements(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, limit int) ([]ports.StockMovementRow, error) {
+// q 那一格是共用件要求的落列：它不接受一册没有检索列。库存读口不收 q（见 ports.StockMovementPages），这一列用不到。
+var stockMovementListBinding = ports.StockMovementPages.MustBind(cataloguepage.Columns{
+	Sorts:    map[string]string{"postedAt": "posted_at"},
+	Identity: []string{"movement_id"},
+	Keyword:  []string{"reason"},
+})
+
+func (store *StockReads) ListMovements(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.StockMovementRow], error) {
+	fail := func(err error) (cataloguepage.Result[ports.StockMovementRow], error) {
+		return cataloguepage.Result[ports.StockMovementRow]{}, fmt.Errorf("list movements: %w", err)
+	}
+	const source = "warehouse_fulfillment.stock_movement"
+	plan, err := stockMovementListBinding.Plan(query,
+		"tenant_id = $1 AND owner_account_id = $2 AND ($3 = '' OR warehouse_code = $3)",
+		[]any{tenant.String(), owner.String(), warehouse.String()}, limit)
+	if err != nil {
+		return fail(err)
+	}
 	querier, err := store.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list movements: %w", err)
+		return fail(err)
 	}
-	if limit <= 0 {
-		limit = 200
+	var total int64
+	if err := querier.QueryRow(ctx, plan.CountSQL(source), plan.Args...).Scan(&total); err != nil {
+		return fail(err)
 	}
 	headers, err := querier.Query(ctx,
-		`SELECT movement_id, warehouse_code, reason, source_reference, occurred_at, posted_at
-		   FROM warehouse_fulfillment.stock_movement
-		  WHERE tenant_id = $1 AND owner_account_id = $2
-		    AND ($3 = '' OR warehouse_code = $3)
-		  ORDER BY posted_at, movement_id
-		  LIMIT $4`,
-		tenant.String(), owner.String(), warehouse.String(), limit)
+		plan.PageSQL("movement_id, warehouse_code, reason, source_reference, occurred_at, posted_at", source), plan.PageArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list movements: %w", err)
+		return fail(err)
 	}
-	defer headers.Close()
-	var listed []ports.StockMovementRow
-	var ids []string
+	var fetched []ports.StockMovementRow
 	for headers.Next() {
-		var id string
 		var row ports.StockMovementRow
-		if err := headers.Scan(&id, &row.Warehouse, &row.Reason, &row.Source, &row.Occurred, &row.Posted); err != nil {
-			return nil, fmt.Errorf("list movements: %w", err)
+		if err := headers.Scan(&row.ID, &row.Warehouse, &row.Reason, &row.Source, &row.Occurred, &row.Posted); err != nil {
+			headers.Close()
+			return fail(err)
 		}
-		listed = append(listed, row)
-		ids = append(ids, id)
+		fetched = append(fetched, row)
 	}
+	headers.Close()
 	if err := headers.Err(); err != nil {
-		return nil, fmt.Errorf("list movements: %w", err)
+		return fail(err)
 	}
-	if len(ids) == 0 {
-		return listed, nil
+	// 位置取扫回来的 posted_at 与 movement_id，就是 ORDER BY 用的那两列。
+	page, err := cataloguepage.Finish(query, fetched, limit, total, func(row ports.StockMovementRow, _ string) cataloguepage.Position {
+		return cataloguepage.Position{Value: cataloguepage.FormatInstant(row.Posted), Identity: []string{row.ID}}
+	})
+	if err != nil {
+		return fail(err)
+	}
+	if len(page.Rows) == 0 {
+		return page, nil
+	}
+	// 行只取本页的：多取来判有没有下一页的那一笔已经切掉了。
+	ids := make([]string, 0, len(page.Rows))
+	for _, row := range page.Rows {
+		ids = append(ids, row.ID)
 	}
 	lines, err := querier.Query(ctx,
 		`SELECT movement_id, location_code, goods_code, unit_name, stock_state, quantity_delta
@@ -183,7 +206,7 @@ func (store *StockReads) ListMovements(ctx context.Context, tenant domain.Tenant
 		  ORDER BY movement_id, position`,
 		tenant.String(), ids)
 	if err != nil {
-		return nil, fmt.Errorf("list movements: %w", err)
+		return fail(err)
 	}
 	defer lines.Close()
 	byID := map[string][]ports.StockMovementLineRow{}
@@ -191,17 +214,17 @@ func (store *StockReads) ListMovements(ctx context.Context, tenant domain.Tenant
 		var id string
 		var line ports.StockMovementLineRow
 		if err := lines.Scan(&id, &line.Location, &line.Goods, &line.Unit, &line.State, &line.Delta); err != nil {
-			return nil, fmt.Errorf("list movements: %w", err)
+			return fail(err)
 		}
 		byID[id] = append(byID[id], line)
 	}
 	if err := lines.Err(); err != nil {
-		return nil, fmt.Errorf("list movements: %w", err)
+		return fail(err)
 	}
-	for index, id := range ids {
-		listed[index].Lines = byID[id]
+	for index := range page.Rows {
+		page.Rows[index].Lines = byID[page.Rows[index].ID]
 	}
-	return listed, nil
+	return page, nil
 }
 
 func (store *StockReads) CartonBill(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, carton domain.CartonNumber) ([]domain.CartonContentLine, error) {

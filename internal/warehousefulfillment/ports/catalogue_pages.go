@@ -115,6 +115,22 @@ var UnclaimedArrivalPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Selectors: []string{"receivedFrom", "receivedTo"},
 })
 
+// StockMovementPages 是库存读口里流水那一种看法的翻页声明（ADR-0144）。流水只追加、越积越多，是库存读口里唯一不能一次答完的
+// 一种；其余几种看法答的是读那一刻的整份账，不翻页。
+//
+// 只开入账时刻一个可排维，缺省新的在前：查阅流水是从最近的一笔往回看，旧的在前时操作者要翻到末页才看得到刚入的账。
+// 行标识是流水标识一段。货主、仓与看法是读口自己消费的键，列作选择器进游标摘要——换了货主或仓，上一份列表的游标就不成立。
+// 调用方给不了 q 与 sort：读口在解码之前就拒收这两个键。货主面不翻页，由读口自己指定旧的在前、只取第一页。
+var StockMovementPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-stock-movements",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "postedAt", Kind: cataloguepage.Instant},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "postedAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Selectors:   []string{"ownerAccount", "warehouseCode", "view"},
+})
+
 // StockImportPages 是运营查阅建账导入列表的查询声明（UC-WF-006）。筛选维覆盖货主、仓与状态。
 var StockImportPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "warehouse-fulfillment-stock-imports",

@@ -21,7 +21,7 @@ test('行数少了之后，停在末页之外的页收回到末页', () => {
   deepEqual(stockPageSlice(rows, 5, 3), [7]);
 });
 
-test('整份快照说共多少条，有上限的流水说读到多少条', () => {
-  equal(stockPageSummary(2, 7, true, 3), '第 2 / 3 页 · 共 7 条');
-  equal(stockPageSummary(1, 7, false, 3), '第 1 / 3 页 · 读到 7 条');
+test('翻页条说第几页、共多少条，页码超出时按末页说', () => {
+  equal(stockPageSummary(2, 7, 3), '第 2 / 3 页 · 共 7 条');
+  equal(stockPageSummary(9, 7, 3), '第 3 / 3 页 · 共 7 条');
 });

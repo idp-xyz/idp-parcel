@@ -467,6 +467,8 @@ export interface StockReadBody {
     postedAt?: string;
     lines?: ReadonlyArray<{ location?: string; goodsCode: string; unit: string; stockState: string; delta: number }>;
   }>;
+  /** 只在看流水时有：五种看法里只有流水翻页，其余答整份。 */
+  page?: CataloguePage;
 }
 
 /** 册别在条件的选择器里，请求路径按它选；选择器本身不进查询串。 */
@@ -540,9 +542,12 @@ export function queryOwnerStock(
   ownerAccount: string,
   warehouseCode: string,
   view: StockViewKind,
+  after: string | null = null,
 ): Promise<ApiResult<StockReadBody>> {
   const params = new URLSearchParams({ ownerAccount, view });
   if (warehouseCode.trim() !== '') params.set('warehouseCode', warehouseCode.trim());
+  // 读口只在看流水时收 after，别的看法带了它会被拒。
+  if (view === 'movements' && after !== null && after !== '') params.set('after', after);
   return exchangeMasterData<StockReadBody>(`/warehouse-fulfillment-stock?${params.toString()}`);
 }
 
