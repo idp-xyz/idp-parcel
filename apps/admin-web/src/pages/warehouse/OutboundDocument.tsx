@@ -12,7 +12,13 @@ import { getOutboundRequestDetail, type OutboundRequestDetailBody } from './api'
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { outboundNextStep, outboundReservationOpen } from './outbound-next-step';
 import { outboundTrack } from './outbound-track';
-import { canRecordPartialShipmentConsent, partialShipmentSummary } from './partial-shipment';
+import {
+  awaitsShortPickDisposal,
+  canRecordPartialShipmentConsent,
+  partialShipmentSummary,
+  shortPickDisposalChoice,
+  shortPickDisposalLine,
+} from './partial-shipment';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { openDocument, useReturnToList } from './use-document';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable } from './wms-ui';
@@ -95,6 +101,12 @@ export function OutboundDocument({
   const partial = partialShipmentSummary(body?.partialShipment);
   // 代录的同意只在它就是适用的那一层时摆依据：被后面的规则盖过的不在这里占地方。
   const consent = body?.partialShipment?.source === 'ORDER_CONSENT' ? body.partialShipment.consent : undefined;
+  const disposal = body?.shortPickDisposal ?? undefined;
+  // 拣不齐、换不出别的库位的单停在已预占：这时摆货主许了的那一个处置，或说清为什么不摆。
+  const stuckShort =
+    request !== undefined && !agentWarehouse && awaitsShortPickDisposal(request.status, pickTasks, picked)
+      ? shortPickDisposalChoice(body?.partialShipment, picked, request.wantedQuantity, Boolean(request.prefetchShipmentId))
+      : null;
 
   return (
     <>
@@ -140,6 +152,11 @@ export function OutboundDocument({
               drawer.has('outbound-split') ? (
                 <Button type="button" variant="outline" onClick={() => drawer.open('outbound-split', { requestId: request.requestId })}>
                   拆单
+                </Button>
+              ) : null}
+              {stuckShort?.action === 'short-shipment' && drawer.has('short-shipment') ? (
+                <Button type="button" variant="outline" onClick={() => drawer.open('short-shipment', { requestId: request.requestId })}>
+                  按已拣数量发货
                 </Button>
               ) : null}
               {canRecordPartialShipmentConsent(request.status) && drawer.has('partial-shipment-consent') ? (
@@ -290,6 +307,12 @@ export function OutboundDocument({
                       {layer}
                     </span>
                   ))}
+                  {stuckShort ? <span className="type-caption text-idpxyz-text">{stuckShort.note}</span> : null}
+                  {disposal ? (
+                    <span className="break-all type-caption text-idpxyz-textMuted">
+                      {shortPickDisposalLine(disposal)} · {disposal.operator} · {formatInstant(disposal.recordedAt)}
+                    </span>
+                  ) : null}
                 </WmsAsideBlock>
               ) : null}
               <WmsAsideBlock title="来源">

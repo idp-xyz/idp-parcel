@@ -3,7 +3,7 @@ import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue
 import type { CatalogueConditions, CataloguePage } from '../catalogue-query';
 import { catalogueRequestPath } from '../catalogue-query';
 import { asCatalogueRegistration, asStockImportWrite, type CatalogueRegistrationBody, type StockImportWriteBody } from './answers';
-import type { PartialShipmentAnswer } from './partial-shipment';
+import type { PartialShipmentAnswer, ShortPickDisposalAnswer } from './partial-shipment';
 import {
   catalogueReadPath,
   catalogueWritePaths,
@@ -930,6 +930,8 @@ export interface OutboundRequestDetailBody {
   outcome: string;
   request?: OutboundRequestRecord;
   partialShipment?: PartialShipmentAnswer;
+  /** 拣不齐之后照部分发货规则办过的那一次；没办过是 null。 */
+  shortPickDisposal?: ShortPickDisposalAnswer | null;
   lines?: ReadonlyArray<{
     lineIndex: number;
     goodsCode: string;

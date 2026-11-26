@@ -15,6 +15,7 @@ import (
 type WaveService interface {
 	Release(ctx context.Context, command application.ReleaseWaveCommand) (application.WaveResult, error)
 	Withdraw(ctx context.Context, command application.WithdrawWaveCommand) (application.WaveResult, error)
+	ShipPicked(ctx context.Context, command application.ShipPickedCommand) (application.WaveResult, error)
 	Adopt(ctx context.Context, command application.AdoptStrategyCommand) (application.WaveResult, error)
 	Pick(ctx context.Context, command application.PickCommand) (application.WaveResult, error)
 	Check(ctx context.Context, command application.CheckCommand) (application.WaveResult, error)
@@ -48,6 +49,7 @@ type WaveReleaseAuthenticator interface {
 type WaveReleaseIntake interface {
 	IntakeWaveRelease(ctx context.Context, request *http.Request) (application.ReleaseWaveCommand, error)
 	IntakeWaveWithdrawal(ctx context.Context, request *http.Request) (application.WithdrawWaveCommand, error)
+	IntakeShortShipment(ctx context.Context, request *http.Request) (application.ShipPickedCommand, error)
 }
 
 type OperatorWaveIntake struct {
@@ -89,7 +91,25 @@ func (intake *OperatorWaveIntake) IntakeWaveWithdrawal(ctx context.Context, requ
 	return command, nil
 }
 
+func (intake *OperatorWaveIntake) IntakeShortShipment(ctx context.Context, request *http.Request) (application.ShipPickedCommand, error) {
+	identity, err := intake.authenticator.AuthenticateWaveRelease(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.ShipPickedCommand{}, err
+	}
+	command, err := registrationjson.ShipPickedCommand(requestBody(request))
+	if err != nil {
+		return application.ShipPickedCommand{}, asMalformed(err)
+	}
+	command.Tenant = identity.Tenant
+	command.Operator = identity.Registrant
+	return command, nil
+}
+
 type UnconfiguredWaveIntake struct{}
+
+func (UnconfiguredWaveIntake) IntakeShortShipment(context.Context, *http.Request) (application.ShipPickedCommand, error) {
+	return application.ShipPickedCommand{}, ErrAccessChannelNotConfigured
+}
 
 func (UnconfiguredWaveIntake) IntakeWaveRelease(context.Context, *http.Request) (application.ReleaseWaveCommand, error) {
 	return application.ReleaseWaveCommand{}, ErrAccessChannelNotConfigured
@@ -133,6 +153,29 @@ func NewReleaseWaveEndpoint(intake WaveReleaseIntake, waves WaveService) http.Ha
 			return
 		}
 		result, err := waves.Release(request.Context(), command)
+		if err != nil {
+			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		writeWaveAnswer(response, request, result)
+	})
+}
+
+// NewShipPickedEndpoint 交回按已拣数量发货的入口（POST /warehouse-fulfillment-outbound-short-shipments）。
+// 与放波次、撤单挂同一种运营决定：都是管波次的人处置一张单在波次里的去留。
+func NewShipPickedEndpoint(intake WaveReleaseIntake, waves WaveService) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.Header().Set("Allow", http.MethodPost)
+			httpapi.WriteProblem(response, request, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		command, err := intake.IntakeShortShipment(request.Context(), request)
+		if err != nil {
+			writeReceiptProblem(response, request, err)
+			return
+		}
+		result, err := waves.ShipPicked(request.Context(), command)
 		if err != nil {
 			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
@@ -572,7 +615,8 @@ func writeWaveAnswer(response http.ResponseWriter, request *http.Request, result
 		result.Outcome() == application.WaveConfirmed || result.Outcome() == application.WaveRecorded ||
 		result.Outcome() == application.WaveCorrected || result.Outcome() == application.WavePending ||
 		result.Outcome() == application.WavePosted ||
-		result.Outcome() == application.WaveSubmitted || result.Outcome() == application.WaveWithdrawn {
+		result.Outcome() == application.WaveSubmitted || result.Outcome() == application.WaveWithdrawn ||
+		result.Outcome() == application.WaveShortShipped {
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, outboundAnswer{Outcome: name})

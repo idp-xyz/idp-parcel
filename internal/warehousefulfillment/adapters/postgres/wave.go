@@ -1346,6 +1346,65 @@ func (store *Waves) SaveCutoff(ctx context.Context, tenant domain.TenantID, key,
 	return nil
 }
 
+func (store *Waves) LoadShortPickDisposal(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (ports.ShortPickDisposal, bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.ShortPickDisposal{}, false, err
+	}
+	disposal := ports.ShortPickDisposal{Request: request}
+	var remainder *string
+	err = querier.QueryRow(ctx,
+		`SELECT partial_shipment, partial_shipment_source, wanted, shipped, remainder_request_id, operator_id, recorded_at
+		   FROM warehouse_fulfillment.outbound_short_pick_disposal
+		  WHERE tenant_id = $1 AND request_id = $2`,
+		tenant.String(), request.String()).Scan(&disposal.Rule, &disposal.Source, &disposal.Wanted, &disposal.Shipped,
+		&remainder, &disposal.Operator, &disposal.RecordedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.ShortPickDisposal{}, false, nil
+	}
+	if err != nil {
+		return ports.ShortPickDisposal{}, false, fmt.Errorf("load short pick disposal: %w", err)
+	}
+	disposal.Remainder = valueOrEmpty(remainder)
+	return disposal, true, nil
+}
+
+// SaveShortPickDisposal 三件事在一处做：落册、放开没拣到的预占、请求进已拣货。请求不是已预占时整份不成立——
+// 调用方在拿到入账次序之后读过状态，这里再认一次是防它在别处被改成了别的写法。
+func (store *Waves) SaveShortPickDisposal(ctx context.Context, tenant domain.TenantID, disposal ports.ShortPickDisposal) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save short pick disposal: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.outbound_short_pick_disposal (
+		    tenant_id, request_id, partial_shipment, partial_shipment_source, wanted, shipped,
+		    remainder_request_id, operator_id, recorded_at)
+		 VALUES ($1,$2,$3,$4,$5,$6, NULLIF($7,''), $8, $9)`,
+		tenant.String(), disposal.Request.String(), disposal.Rule, disposal.Source, disposal.Wanted, disposal.Shipped,
+		disposal.Remainder, disposal.Operator, disposal.RecordedAt.UTC()); err != nil {
+		return fmt.Errorf("save short pick disposal: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_reservation
+		    SET quantity = 0, from_unlabeled = 0
+		  WHERE tenant_id = $1 AND request_id = $2`,
+		tenant.String(), disposal.Request.String()); err != nil {
+		return fmt.Errorf("save short pick disposal: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.outbound_request SET status = 'PICKED'
+		  WHERE tenant_id = $1 AND request_id = $2 AND status = 'RESERVED'`,
+		tenant.String(), disposal.Request.String())
+	if err != nil {
+		return fmt.Errorf("save short pick disposal: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("save short pick disposal: %s was not reserved", disposal.Request.String())
+	}
+	return nil
+}
+
 func (store *Waves) ReleaseReservations(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) error {
 	executor, err := store.db.RequireExecutor(ctx)
 	if err != nil {

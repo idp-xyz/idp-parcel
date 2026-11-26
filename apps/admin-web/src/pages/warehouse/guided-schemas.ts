@@ -619,6 +619,18 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       { path: 'packagingMaterial', label: '预取选用包材编码（可选）', kind: 'text', placeholder: 'SYN-BOX-01' },
     ],
   },
+  'short-shipment': {
+    fields: [
+      {
+        path: 'requestId',
+        label: '出库请求号',
+        kind: 'text',
+        required: true,
+        placeholder: 'OBR-01',
+        hint: '拣到的发走，没拣到的不再发；提交之后撤不回',
+      },
+    ],
+  },
   'wave-withdraw': {
     fields: [
       { path: 'waveId', label: '波次号', kind: 'text', required: true, placeholder: 'WAVE-01' },

@@ -50,6 +50,20 @@ type WaveMember struct {
 	Withdrawn bool
 }
 
+// ShortPickDisposal 是一张请求拣不齐之后照货主的部分发货规则办的那一次。一张请求只办一次。
+// Rule 是当时照的规则（少发或拆单发），Source 是它出自哪一层；规则之后改了，这一次照的仍是记下的。
+// Remainder 只在拆单发时有，是没拣到的那部分拆成的请求。
+type ShortPickDisposal struct {
+	Request    domain.OutboundRequestID
+	Rule       string
+	Source     string
+	Wanted     int64
+	Shipped    int64
+	Remainder  string
+	Operator   string
+	RecordedAt time.Time
+}
+
 // ShortSpot 是一个库位上的一种货：这位货主在这里有少拣留下的拣货差异还没了结。
 type ShortSpot struct {
 	Location domain.LocationCode
@@ -99,6 +113,9 @@ type WaveStore interface {
 	// InsertOpenTask 往已放出的波次里添一条待执行任务：少拣之后换格补拣，或库内移库把一条任务拆成两格。
 	InsertOpenTask(ctx context.Context, tenant domain.TenantID, task PickTask) error
 	TasksOf(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) ([]PickTask, error)
+	LoadShortPickDisposal(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (ShortPickDisposal, bool, error)
+	// SaveShortPickDisposal 记下这一次处置，放开这张请求没拣到的预占，并把请求从已预占改成已拣货。
+	SaveShortPickDisposal(ctx context.Context, tenant domain.TenantID, disposal ShortPickDisposal) error
 	SaveCheck(ctx context.Context, tenant domain.TenantID, fact domain.PickFactID, request domain.OutboundRequestID, observed int64, matched bool, at time.Time, next domain.OutboundStatus) error
 	LoadCheck(ctx context.Context, tenant domain.TenantID, fact domain.PickFactID) (observed int64, matched bool, found bool, err error)
 	SavePack(ctx context.Context, tenant domain.TenantID, fact domain.PickFactID, request domain.OutboundRequestID, parcels []PackParcel, at time.Time) error

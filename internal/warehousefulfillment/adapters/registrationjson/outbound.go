@@ -489,6 +489,28 @@ func WithdrawWaveCommand(reader io.Reader) (application.WithdrawWaveCommand, err
 	return application.WithdrawWaveCommand{ID: id, Requests: requests}, nil
 }
 
+type shortPickDisposalDocument struct {
+	carriedIdentity
+	RequestID *string `json:"requestId"`
+}
+
+// ShipPickedCommand 把按已拣数量发货译成命令。载荷只点名请求：能不能少发照货主的规则，不由这一次提交说。
+func ShipPickedCommand(reader io.Reader) (application.ShipPickedCommand, error) {
+	var none application.ShipPickedCommand
+	document, err := decodeDocument[shortPickDisposalDocument](reader, "short shipment")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	request, err := requiredText("requestId", document.RequestID, domain.NewOutboundRequestID)
+	if err != nil {
+		return none, err
+	}
+	return application.ShipPickedCommand{Request: request}, nil
+}
+
 type pickDocument struct {
 	carriedIdentity
 	FactID    *string `json:"factId"`

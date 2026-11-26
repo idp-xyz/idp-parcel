@@ -110,6 +110,10 @@ export const warehouseActionOutcomeLabels: Record<string, string> = {
   SPLIT: '已拆单',
   ALLOCATED: '已放波次并生成拣货任务',
   WITHDRAWN: '已从波次撤出，出库单回到已预占',
+  SHORT_SHIPPED: '已按已拣数量发货：没拣到的预占放开，出库单进已拣货，往下按已拣数量复核打包',
+  PARTIAL_SHIPMENT_NOT_CONFIGURED: '这张单没写明拣不齐时怎么发，货主也没登记默认，不能少发',
+  PARTIAL_SHIPMENT_NOT_ALLOWED: '货主对这张单许的不是少发，不能按已拣数量发货',
+  PREFETCH_STANDS: '这张单放波次时已按全量预取过估算委托，委托上的申报件数改不了；等有货了再放波次，或截单',
   // 这个词几个口都答，指的东西不一样：撤单是没有这个波次，放波次是点名的出库单找不到或不在这个仓，
   // 更正出库确认是没有这条确认。所以只说对不上，不说是哪一样。
   WAVE_NOT_FOUND: '查无此记录：波次、出库单或确认事实对不上',
@@ -465,6 +469,17 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     grant: 'WAVE_RELEASE',
     snapshotHint:
       '填 waveId 与 requests（要撤出的出库请求标识数组）。只撤还没拣过的单：撤出后它在这个波次里的拣货任务作废，出库单回到已预占，可以再放进别的波次；点名的几张里有一张撤不了，就一张都不撤。' +
+      noActorNote,
+  },
+  {
+    id: 'short-shipment',
+    label: '按已拣数量发货',
+    title: '拣不齐的出库单按已拣数量发货',
+    endpoint: '/warehouse-fulfillment-outbound-short-shipments',
+    grant: 'WAVE_RELEASE',
+    snapshotHint:
+      '填 requestId。只办停在「拣不齐、等处置」的单：任务都有了结果、已有货拣进待出库、还有没拣到的预占。'
+      + '货主许了少发才成立（这张单提交时写的、受理后代录的同意或货主登记的默认）；成立后没拣到的不再发，这一步撤不回。' +
       noActorNote,
   },
   {

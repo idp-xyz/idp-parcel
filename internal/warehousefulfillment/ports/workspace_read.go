@@ -75,7 +75,6 @@ type AgentConnectorOverview struct {
 	RegisteredAt  time.Time
 }
 
-// OutboundRequestDetail 是单张出库单的 360° 全链路详情，供管理台与作业台复核打包直接使用。
 // PartialShipmentDetail 是一张请求此刻适用的部分发货规则，连同三层各自写的是什么。
 // Rule 与 Source 为空是哪一层都没写明。
 type PartialShipmentDetail struct {
@@ -89,17 +88,31 @@ type PartialShipmentDetail struct {
 	ConsentAt       *time.Time
 }
 
+// ShortPickDisposalDetail 是这张请求拣不齐之后照部分发货规则办过的那一次；没办过就没有。
+type ShortPickDisposalDetail struct {
+	Rule             string
+	Source           string
+	Wanted           int64
+	Shipped          int64
+	RemainderRequest string
+	Operator         string
+	RecordedAt       time.Time
+}
+
+// OutboundRequestDetail 是单张出库单的 360° 全链路详情，供管理台与作业台复核打包直接使用。
 type OutboundRequestDetail struct {
 	PartialShipment PartialShipmentDetail
-	Request         OutboundRequestRow
-	Lines           []OutboundRequestDetailLine
-	Reservations    []OutboundReservationDetail
-	Waves           []string
-	PickTasks       []OutboundPickTaskDetail
-	Checks          []OutboundCheckDetail
-	Parcels         []OutboundParcelDetail
-	Confirmations   []OutboundConfirmationDetail
-	ReturnTasks     []OutboundReturnTaskDetail
+	// ShortPickDisposal 为空是没办过拣不齐的处置。
+	ShortPickDisposal *ShortPickDisposalDetail
+	Request           OutboundRequestRow
+	Lines             []OutboundRequestDetailLine
+	Reservations      []OutboundReservationDetail
+	Waves             []string
+	PickTasks         []OutboundPickTaskDetail
+	Checks            []OutboundCheckDetail
+	Parcels           []OutboundParcelDetail
+	Confirmations     []OutboundConfirmationDetail
+	ReturnTasks       []OutboundReturnTaskDetail
 }
 
 type OutboundRequestDetailLine struct {

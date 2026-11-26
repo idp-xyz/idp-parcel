@@ -290,14 +290,16 @@ func NewQueryOutboundRequestDetailEndpoint(intake CatalogueIntake, queries Works
 				"receivedAt": rfc3339(req.ReceivedAt), "reservedQuantity": req.ReservedQuantity, "wantedQuantity": req.WantedQuantity,
 			},
 			"partialShipment": partialShipmentBodyOf(detail.PartialShipment),
-			"lines":           lines,
-			"reservations":    reservations,
-			"waves":           waves,
-			"pickTasks":       tasks,
-			"checks":          checks,
-			"parcels":         parcels,
-			"confirmations":   confirmations,
-			"returnTasks":     returnTasks,
+			// 没办过拣不齐的处置时这一格是 null。
+			"shortPickDisposal": shortPickDisposalBodyOf(detail.ShortPickDisposal),
+			"lines":             lines,
+			"reservations":      reservations,
+			"waves":             waves,
+			"pickTasks":         tasks,
+			"checks":            checks,
+			"parcels":           parcels,
+			"confirmations":     confirmations,
+			"returnTasks":       returnTasks,
 		})
 	})
 }
@@ -715,6 +717,21 @@ func NewQueryAgentOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQuer
 			"results":    results,
 		})
 	})
+}
+
+// shortPickDisposalBodyOf 答这张请求拣不齐之后办过的那一次处置：照的规则与出处、要发与实发、谁在何时办的。
+func shortPickDisposalBodyOf(disposal *ports.ShortPickDisposalDetail) any {
+	if disposal == nil {
+		return nil
+	}
+	body := map[string]any{
+		"rule": disposal.Rule, "source": disposal.Source, "wanted": disposal.Wanted, "shipped": disposal.Shipped,
+		"operator": disposal.Operator, "recordedAt": rfc3339(disposal.RecordedAt),
+	}
+	if disposal.RemainderRequest != "" {
+		body["remainderRequestId"] = disposal.RemainderRequest
+	}
+	return body
 }
 
 // partialShipmentBodyOf 答一张请求此刻适用的部分发货规则。configured 为假是三层都没写明：

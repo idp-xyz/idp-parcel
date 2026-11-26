@@ -297,6 +297,21 @@ func (store *WorkspaceReads) OutboundRequestDetail(
 	if out.PartialShipment, err = partialShipmentDetail(ctx, querier, tenant, out.Request); err != nil {
 		return out, false, fmt.Errorf("%s: partial shipment: %w", op, err)
 	}
+	var disposal ports.ShortPickDisposalDetail
+	var remainder *string
+	err = querier.QueryRow(ctx,
+		`SELECT partial_shipment, partial_shipment_source, wanted, shipped, remainder_request_id, operator_id, recorded_at
+		   FROM warehouse_fulfillment.outbound_short_pick_disposal
+		  WHERE tenant_id = $1 AND request_id = $2`,
+		tenant.String(), requestID).Scan(&disposal.Rule, &disposal.Source, &disposal.Wanted, &disposal.Shipped,
+		&remainder, &disposal.Operator, &disposal.RecordedAt)
+	switch {
+	case err == nil:
+		disposal.RemainderRequest = valueOrEmpty(remainder)
+		out.ShortPickDisposal = &disposal
+	case !errors.Is(err, pgx.ErrNoRows):
+		return out, false, fmt.Errorf("%s: short pick disposal: %w", op, err)
+	}
 
 	// 明细行
 	{

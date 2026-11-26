@@ -40,6 +40,10 @@ const (
 	WaveOtherAuthority
 	WaveInputRejected
 	WaveWithdrawn
+	WaveShortShipped
+	WavePartialShipmentNotConfigured
+	WavePartialShipmentNotAllowed
+	WavePrefetchStands
 )
 
 func (outcome WaveOutcome) String() string {
@@ -94,6 +98,14 @@ func (outcome WaveOutcome) String() string {
 		return "INPUT_NOT_ACCEPTED"
 	case WaveWithdrawn:
 		return "WITHDRAWN"
+	case WaveShortShipped:
+		return "SHORT_SHIPPED"
+	case WavePartialShipmentNotConfigured:
+		return "PARTIAL_SHIPMENT_NOT_CONFIGURED"
+	case WavePartialShipmentNotAllowed:
+		return "PARTIAL_SHIPMENT_NOT_ALLOWED"
+	case WavePrefetchStands:
+		return "PREFETCH_STANDS"
 	default:
 		return ""
 	}

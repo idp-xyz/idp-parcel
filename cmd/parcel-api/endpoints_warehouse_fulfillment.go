@@ -530,6 +530,9 @@ func init() {
 			"/warehouse-fulfillment-wave-withdrawals": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionWaveRelease), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-outbound-short-shipments": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionWaveRelease), warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-picks": {
 				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
 				ownIntake: true, warehouseFulfillment: true,
@@ -973,6 +976,7 @@ func init() {
 			allocationStrategy := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveRelease := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveWithdrawal := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			shortShipment := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			pick := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			outboundCheck := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			pack := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -1182,6 +1186,7 @@ func init() {
 				allocationStrategy = warehousehttp.NewAdoptAllocationStrategyEndpoint(channels.allocationStrategy(), wiring.waves)
 				waveRelease = warehousehttp.NewReleaseWaveEndpoint(channels.waveRelease(), wiring.waves)
 				waveWithdrawal = warehousehttp.NewWithdrawFromWaveEndpoint(channels.waveRelease(), wiring.waves)
+				shortShipment = warehousehttp.NewShipPickedEndpoint(channels.waveRelease(), wiring.waves)
 				plainPick := warehousehttp.UnconfiguredPickIntake{}
 				if wiring.pickIntake != nil {
 					pick = warehousehttp.NewRecordPickEndpoint(wiring.pickIntake, wiring.waves)
@@ -1378,6 +1383,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-allocation-strategy-adoptions", Handler: allocationStrategy},
 				{Pattern: "/warehouse-fulfillment-waves", Handler: waveRelease},
 				{Pattern: "/warehouse-fulfillment-wave-withdrawals", Handler: waveWithdrawal},
+				{Pattern: "/warehouse-fulfillment-outbound-short-shipments", Handler: shortShipment},
 				{Pattern: "/warehouse-fulfillment-picks", Handler: pick},
 				{Pattern: "/warehouse-fulfillment-outbound-checks", Handler: outboundCheck},
 				{Pattern: "/warehouse-fulfillment-packs", Handler: pack},
