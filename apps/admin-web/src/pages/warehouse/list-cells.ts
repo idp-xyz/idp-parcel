@@ -39,8 +39,8 @@ export function packColumns<Row>(columns: ReadonlyArray<ListColumn<Row>>, flex: 
 }
 
 /**
- * 仓配列表那块表面的样子，交给列表模板的 surfaceClassName。三件事：
- * - 表面最宽到 120rem，超宽屏上多出来的留在表外，不把一行拉到两千多像素宽；
+ * 仓配列表那块表面的样子，交给列表模板的 surfaceClassName。表面总是撑满它所在的那一栏，不设最宽：
+ * 设了上限，超宽屏上表的右边就空出一块，读起来像没排完；多出来的宽度由吃宽度的列去用。
  * - 行与行之间一道比表框淡的细线：行宽了没有线眼睛会串行，线和表框一样重又显得满屏是线。颜色取正文色的一成不到，
  *   三套主题下都比各自的边框色淡；主题色是裸 CSS 变量，淡一档只能用 color-mix 写，`/NN` 生不出样式；
  * - 表头一条与表面分得开的底、字用正文色，和表体分开。底色是往表面色里掺一点正文色：现成的悬停色在深色主题下
@@ -52,11 +52,9 @@ export function packColumns<Row>(columns: ReadonlyArray<ListColumn<Row>>, flex: 
  * 这些类是从表面往里指的，格里要是再套一张表也会被指到；往别的页上用之前先看那一页的格里有没有。
  */
 export const wmsSurfaceClass = [
-  'max-w-[120rem]',
   '[&_tbody_td]:align-baseline',
   '[&_tbody_td]:border-b',
   '[&_tbody_td]:border-[color:color-mix(in_srgb,var(--idpxyz-text)_8%,transparent)]',
-  '[&_tbody_tr:last-child_td]:border-b-0',
   '[&_thead_th]:bg-[color-mix(in_srgb,var(--idpxyz-text)_7%,var(--idpxyz-sidebar))]',
   '[&_thead_th]:text-idpxyz-text',
 ].join(' ');
