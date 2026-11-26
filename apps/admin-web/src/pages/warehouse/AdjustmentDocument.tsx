@@ -116,7 +116,7 @@ export function AdjustmentDocument({ adjustmentId }: { adjustmentId: string }) {
               <span>提交不改库存账。批准后才按这些行入账：调增增加库存，调减与销毁扣减库存；驳回不改账，这张调整就此结束。</span>
               <span className="type-caption text-idpxyz-textMuted">提交人能否自己批准，由租户登记的批准职责规则决定。</span>
               {canApprove || canReject ? null : (
-                <span className="type-caption text-amber-600 dark:text-amber-400">{hiddenDecisionHint('批准与驳回', '库存调整批准')}</span>
+                <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{hiddenDecisionHint('批准与驳回', '库存调整批准')}</span>
               )}
             </WmsAsideBlock>
           ) : undefined

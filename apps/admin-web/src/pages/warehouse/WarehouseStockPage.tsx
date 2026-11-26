@@ -217,7 +217,7 @@ export function WarehouseStockPage() {
         {owner.trim() === '' ? (
           <p className="type-body text-idpxyz-textMuted">请先在上方选择一个货主客户账户。</p>
         ) : answer && answer.kind !== 'outcome' ? (
-          <div className="rounded border border-rose-500/30 bg-rose-500/10 p-4 type-body text-rose-700 dark:text-rose-300">
+          <div className="rounded border border-[color:var(--ds-status-danger-border)] bg-[color:var(--ds-status-danger-bg-subtle)] p-4 type-body text-idpxyz-text">
             {answer.kind === 'callerProblem'
               ? answer.detail || problemNote(answer.code)
               : answer.kind === 'noAnswer'

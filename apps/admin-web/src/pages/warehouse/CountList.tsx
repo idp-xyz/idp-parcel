@@ -86,7 +86,7 @@ export function CountList({ filters }: { filters: QueueFilters }) {
       // 差异是结束盘点时才出的，还没结束的不写 0 / 0。
       render: (row) =>
         row.status === 'COUNTED' ? (
-          <span className={row.pendingDifferences > 0 ? 'text-amber-600 dark:text-amber-400' : undefined}>{`${row.pendingDifferences} / ${row.differenceCount}`}</span>
+          <span className={row.pendingDifferences > 0 ? 'text-[color:var(--ds-status-warning-fg)]' : undefined}>{`${row.pendingDifferences} / ${row.differenceCount}`}</span>
         ) : (
           '—'
         ),
@@ -234,7 +234,7 @@ function NextStepCell({ row, drawer }: { row: StockCountRecord; drawer: ActionDr
   if (next.kind === 'review') {
     // 批与驳回落在某一条差异上，要先打开盘点单；没有批准授予的人只看得到还剩几条。
     if (!drawer.has('count-approve') && !drawer.has('count-reject')) {
-      return <span className="type-caption text-amber-600 dark:text-amber-400">{row.pendingDifferences} 条差异待批</span>;
+      return <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{row.pendingDifferences} 条差异待批</span>;
     }
     return (
       <button

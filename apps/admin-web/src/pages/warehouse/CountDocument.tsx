@@ -160,7 +160,7 @@ export function CountDocument({ countId }: { countId: string }) {
         const direction = differenceDirection(row);
         if (direction === null) return '—';
         return (
-          <span className={direction === 'gain' ? 'text-blue-700 dark:text-blue-300' : 'text-rose-700 dark:text-rose-300'}>
+          <span className={direction === 'gain' ? 'text-[color:var(--ds-status-info-fg)]' : 'text-[color:var(--ds-status-danger-fg)]'}>
             {differenceDirectionLabels[direction]} {signedGap(differenceGap(row))} {row.unit}
           </span>
         );
@@ -330,7 +330,7 @@ export function CountDocument({ countId }: { countId: string }) {
                 <WmsAsideBlock title="开始盘点会怎样">
                   <span>开始后盘点范围里的库存进入作业锁定，到结束或作废才放开。</span>
                   {drawer.has('count-start') ? null : (
-                    <span className="type-caption text-amber-600 dark:text-amber-400">{hiddenDecisionHint('开始、结束与作废', '库存盘点')}</span>
+                    <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{hiddenDecisionHint('开始、结束与作废', '库存盘点')}</span>
                   )}
                 </WmsAsideBlock>
               ) : null}
@@ -338,7 +338,7 @@ export function CountDocument({ countId }: { countId: string }) {
                 <WmsAsideBlock title="结束盘点会怎样">
                   <span>每个库位都要有清点录入才能结束。结束时按每个库位最后一次的清点数与账面比对，不一致的各成一条差异，等批准或驳回。</span>
                   {drawer.has('count-complete') ? null : (
-                    <span className="type-caption text-amber-600 dark:text-amber-400">{hiddenDecisionHint('开始、结束与作废', '库存盘点')}</span>
+                    <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{hiddenDecisionHint('开始、结束与作废', '库存盘点')}</span>
                   )}
                 </WmsAsideBlock>
               ) : null}
@@ -347,7 +347,7 @@ export function CountDocument({ countId }: { countId: string }) {
                   <span>批准后按清点数调整库存账：盘盈增加库存，盘亏扣减库存；驳回不改账，这条差异就此结束。</span>
                   <span className={mutedText}>清点人能否自己批准，由租户登记的批准职责规则决定。</span>
                   {mayDecide ? null : (
-                    <span className="type-caption text-amber-600 dark:text-amber-400">{hiddenDecisionHint('批准与驳回', '库存调整批准')}</span>
+                    <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{hiddenDecisionHint('批准与驳回', '库存调整批准')}</span>
                   )}
                 </WmsAsideBlock>
               ) : null}
@@ -359,7 +359,7 @@ export function CountDocument({ countId }: { countId: string }) {
                       {status === 'PENDING' ? null : countedLocations.has(location) ? (
                         <span className={mutedText}>已清点</span>
                       ) : (
-                        <span className="type-caption text-amber-600 dark:text-amber-400">{status === 'VOID' ? '没录入' : '还没清点'}</span>
+                        <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{status === 'VOID' ? '没录入' : '还没清点'}</span>
                       )}
                     </div>
                   ))}

@@ -35,7 +35,7 @@ function BlockNote({ title, tone, children }: { title: string; tone?: 'danger'; 
       <p
         className={`rounded-lg border px-4 py-5 type-body ${
           tone === 'danger'
-            ? 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300'
+            ? 'border-[color:var(--ds-status-danger-border)] bg-[color:var(--ds-status-danger-bg-subtle)] text-idpxyz-text'
             : 'border-idpxyz-border bg-idpxyz-panel text-idpxyz-textMuted'
         }`}
       >

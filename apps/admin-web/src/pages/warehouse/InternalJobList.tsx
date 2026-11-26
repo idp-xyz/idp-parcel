@@ -53,7 +53,7 @@ export function InternalJobList({ filters }: { filters: QueueFilters }) {
       className: 'whitespace-nowrap',
       render: (row) => {
         const signal = jobSignal(row.kind, row.lines);
-        return signal.warn ? <span className="text-amber-600 dark:text-amber-400">{signal.text}</span> : signal.text;
+        return signal.warn ? <span className="text-[color:var(--ds-status-warning-fg)]">{signal.text}</span> : signal.text;
       },
     },
     { id: 'occurred', header: '发生时刻', className: mono, render: (row) => formatInstant(row.occurredAt) },

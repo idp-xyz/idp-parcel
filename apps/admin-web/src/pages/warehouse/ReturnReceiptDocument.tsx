@@ -243,7 +243,7 @@ export function ReturnReceiptDocument({ factId }: { factId: string }) {
                       这件货入了退货暂存位 {receipt.locationCode}，还没记去向。点页头「处置」，记下它是良品上架、转次品、销毁还是退还货主。
                     </p>
                     {canDispose ? null : (
-                      <span className="type-caption text-amber-600 dark:text-amber-400">{hiddenDecisionHint('处置', '退货代录')}</span>
+                      <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{hiddenDecisionHint('处置', '退货代录')}</span>
                     )}
                   </>
                 )}

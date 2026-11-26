@@ -80,7 +80,7 @@ export function InternalJobDocument({ factId }: { factId: string }) {
       '—'
     );
   // 为零的账上不足与被占用不写数字，免得一屏零里找不到有数的那几格。
-  const shortCell = (value: number) => (value > 0 ? <span className="text-amber-600 dark:text-amber-400">{value}</span> : '—');
+  const shortCell = (value: number) => (value > 0 ? <span className="text-[color:var(--ds-status-warning-fg)]">{value}</span> : '—');
 
   const columns: WmsSubColumn<InternalJobLineRecord>[] = [{ id: 'line', header: '行', mono: true, render: (_line, index) => String(index + 1) }];
   // 一笔作业可以带几个货主；只有一个时它写在上面的信息格里，不占每行。

@@ -46,10 +46,14 @@ export function packColumns<Row>(columns: ReadonlyArray<ListColumn<Row>>, flex: 
  * - 表头一条与表面分得开的底、字用正文色，和表体分开。底色是往表面色里掺一点正文色：现成的悬停色在深色主题下
  *   和表面只差几级灰，看不出是一条带；掺出来的在三套主题下都差出同样的一档。它是实色，吸顶时盖得住滚过去的行。
  *
+ * - 一行里各格的第一行字落在同一条基线上。有的格是两行（名称加编码），有的只有一行（发运、件数）或是一枚徽章、
+ *   一个钮：都按居中摆的话，单行的值会悬在邻格两行字的中间，横着读一行时视线要上下跳。
+ *
  * 这些类是从表面往里指的，格里要是再套一张表也会被指到；往别的页上用之前先看那一页的格里有没有。
  */
 export const wmsSurfaceClass = [
   'max-w-[120rem]',
+  '[&_tbody_td]:align-baseline',
   '[&_tbody_td]:border-b',
   '[&_tbody_td]:border-[color:color-mix(in_srgb,var(--idpxyz-text)_8%,transparent)]',
   '[&_tbody_tr:last-child_td]:border-b-0',

@@ -176,7 +176,7 @@ export function UnclaimedDocument({ arrivalId }: { arrivalId: string }) {
                   {rule ? (
                     <>
                       <span>认领期限 {durationLabel(rule.claimWindowSeconds)}，自到货发生起算。</span>
-                      <span className={windowElapsed ? 'text-amber-600 dark:text-amber-400' : 'text-idpxyz-textMuted'}>
+                      <span className={windowElapsed ? 'text-[color:var(--ds-status-warning-fg)]' : 'text-idpxyz-textMuted'}>
                         {windowElapsed ? '期限已过，可以按规则处置。' : deadline ? `到 ${formatInstant(deadline.toISOString())} 为止，期限内只能认领。` : ''}
                       </span>
                       <span className="type-caption text-idpxyz-textMuted">
@@ -185,7 +185,7 @@ export function UnclaimedDocument({ arrivalId }: { arrivalId: string }) {
                     </>
                   ) : (
                     <>
-                      <span className="text-amber-600 dark:text-amber-400">{arrival.warehouseCode} 仓还没登记处置规则，处置会答未配置。</span>
+                      <span className="text-[color:var(--ds-status-warning-fg)]">{arrival.warehouseCode} 仓还没登记处置规则，处置会答未配置。</span>
                       <button
                         type="button"
                         className="self-start text-[color:var(--ds-text-link-hover)] hover:underline"

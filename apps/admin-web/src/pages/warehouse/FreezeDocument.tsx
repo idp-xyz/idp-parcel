@@ -85,7 +85,7 @@ export function FreezeDocument({ freezeId }: { freezeId: string }) {
               <WmsAsideBlock title="冻结中会怎样">
                 <span>冻着的数量不能被出库分配，库内作业（上架、移库、转换）也取不走它。</span>
                 <span className="type-caption text-idpxyz-textMuted">解冻是整份解冻，不能只解一部分；解冻后数量回到可用量。</span>
-                {canUnfreeze ? null : <span className="type-caption text-amber-600 dark:text-amber-400">{hiddenDecisionHint('解冻', '库存冻结')}</span>}
+                {canUnfreeze ? null : <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{hiddenDecisionHint('解冻', '库存冻结')}</span>}
               </WmsAsideBlock>
             ) : record.status === 'UNFROZEN' ? (
               <WmsAsideBlock title="已解冻">

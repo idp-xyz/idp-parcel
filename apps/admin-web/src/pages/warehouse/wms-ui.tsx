@@ -9,28 +9,19 @@ import {
   DialogHeader,
 } from '@idpxyz/ui-primitives';
 import { chipClass } from '../../components/registration';
+import { statusToneBanner, statusToneSurface } from '../../components/status-tone';
 import { useCloseOnHashChange } from './use-close-on-hash';
 
 export type WmsTone = 'success' | 'info' | 'warning' | 'danger' | 'neutral';
 
-// 底色的透明度只取 Tailwind 刻度上有的档（5 的倍数）：写成 `/12` 生不出样式，徽章就只剩一圈淡边、没有底。
+// 徽章的颜色取主题运行时按当前主题写好的语义状态色，写法同 StatusPill：淡底、语气描边、正文色的字，语气色只落在圆点上。
+// 不用 Tailwind 色板加 `dark:`——`dark:` 跟的是系统偏好而不是应用主题（见 components/status-tone.ts 文件头），应用浅色而
+// 系统深色时字会变成 300 色阶落在浅底上，读不出来。
 const toneClasses: Record<WmsTone, { pill: string; dot: string }> = {
-  success: {
-    pill: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25',
-    dot: 'bg-emerald-500',
-  },
-  info: {
-    pill: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/25',
-    dot: 'bg-blue-500',
-  },
-  warning: {
-    pill: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
-    dot: 'bg-amber-500',
-  },
-  danger: {
-    pill: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/25',
-    dot: 'bg-rose-500',
-  },
+  success: { pill: statusToneBanner.success, dot: statusToneSurface.success },
+  info: { pill: statusToneBanner.info, dot: statusToneSurface.info },
+  warning: { pill: statusToneBanner.warning, dot: statusToneSurface.warning },
+  danger: { pill: statusToneBanner.danger, dot: statusToneSurface.danger },
   neutral: {
     pill: 'bg-idpxyz-hover text-idpxyz-textMuted border-idpxyz-border',
     dot: 'bg-idpxyz-textMuted',
@@ -253,7 +244,7 @@ export function WmsStepper({
               <span
                 className={`type-caption whitespace-nowrap ${
                   stuck
-                    ? 'font-semibold text-amber-700 dark:text-amber-300'
+                    ? 'font-semibold text-[color:var(--ds-status-warning-fg)]'
                     : active
                       ? 'font-semibold text-idpxyz-textBright'
                       : done
@@ -273,7 +264,7 @@ export function WmsStepper({
           className={`ml-auto inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 type-caption font-medium ${
             failedTone === 'neutral'
               ? 'border-idpxyz-border bg-idpxyz-hover text-idpxyz-textMuted'
-              : 'border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-300'
+              : 'border-[color:var(--ds-status-danger-border)] bg-[color:var(--ds-status-danger-bg-subtle)] text-idpxyz-text'
           }`}
         >
           {failedTone === 'neutral' ? null : <X className="h-3 w-3" />}
@@ -336,7 +327,7 @@ export function WmsDetailModal({
           {loading ? (
             <p className="py-8 text-center type-body text-idpxyz-textMuted">正在加载单据完整明细…</p>
           ) : error ? (
-            <div className="rounded border border-rose-500/30 bg-rose-500/10 p-4 type-body text-rose-700 dark:text-rose-300">
+            <div className="rounded border border-[color:var(--ds-status-danger-border)] bg-[color:var(--ds-status-danger-bg-subtle)] p-4 type-body text-idpxyz-text">
               {error}
             </div>
           ) : (

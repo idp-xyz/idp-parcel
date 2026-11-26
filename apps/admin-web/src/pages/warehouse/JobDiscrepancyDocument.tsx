@@ -151,7 +151,7 @@ export function JobDiscrepancyDocument({ discrepancyId }: { discrepancyId: strin
                   <span className={mutedText}>账上做不成这一笔（货不够、被冻结或正在盘点）时批准不成立，账不动。驳回不改账，这条差异就此结束。</span>
                   <span className={mutedText}>作业的操作者能否自己批准，由租户登记的批准职责规则决定。</span>
                   {canApprove || canReject ? null : (
-                    <span className="type-caption text-amber-600 dark:text-amber-400">{hiddenDecisionHint('批准与驳回', '库存调整批准')}</span>
+                    <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{hiddenDecisionHint('批准与驳回', '库存调整批准')}</span>
                   )}
                 </WmsAsideBlock>
               ) : null}
@@ -166,7 +166,7 @@ export function JobDiscrepancyDocument({ discrepancyId }: { discrepancyId: strin
                 ) : jobLoad.loading ? (
                   <span className={mutedText}>正在读这次作业……</span>
                 ) : jobFailure ? (
-                  <span className="type-caption text-amber-600 dark:text-amber-400">没能读到这次作业：{jobFailure}</span>
+                  <span className="type-caption text-[color:var(--ds-status-warning-fg)]">没能读到这次作业：{jobFailure}</span>
                 ) : (
                   <span className={mutedText}>没有读到这次作业，只能看差异本身。</span>
                 )}

@@ -43,7 +43,7 @@ const columns: ListColumn<WaveRecord>[] = [
     className: mono,
     render: (row) => {
       const open = openTasksOf(row);
-      return <span className={open > 0 ? 'text-amber-600 dark:text-amber-400' : undefined}>{`${open} / ${row.tasks.length}`}</span>;
+      return <span className={open > 0 ? 'text-[color:var(--ds-status-warning-fg)]' : undefined}>{`${open} / ${row.tasks.length}`}</span>;
     },
   },
   { id: 'prefetch', header: '预取面单', render: (row) => (row.prefetch ? '是' : '否') },

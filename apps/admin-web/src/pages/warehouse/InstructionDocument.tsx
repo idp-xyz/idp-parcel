@@ -157,7 +157,7 @@ export function InstructionDocument({ instructionId }: { instructionId: string }
               <WmsAsideBlock title="作废会怎样">
                 <span>作废后这份指令不再执行，也不动库存账。已执行的指令不能作废。</span>
                 {canVoid ? null : (
-                  <span className="type-caption text-amber-600 dark:text-amber-400">{hiddenDecisionHint('作废', instructionGrantLabel(record.kind))}</span>
+                  <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{hiddenDecisionHint('作废', instructionGrantLabel(record.kind))}</span>
                 )}
               </WmsAsideBlock>
             </>

@@ -142,7 +142,7 @@ function OutboundList() {
         return (
           <div className="leading-tight">
             <div className="tabular-nums">{wanted}</div>
-            {stuck ? <div className="mt-0.5 type-caption text-amber-600 dark:text-amber-400">只占到 {row.reservedQuantity}</div> : null}
+            {stuck ? <div className="mt-0.5 type-caption text-[color:var(--ds-status-warning-fg)]">只占到 {row.reservedQuantity}</div> : null}
           </div>
         );
       },
@@ -322,7 +322,7 @@ function NextStepCell({
 }) {
   const next = outboundNextStep(row.status, agentWarehouse, undefined, row.requestId);
   if (next === null) return <span className="text-idpxyz-textMuted">—</span>;
-  if (next.kind === 'wait') return <span className="type-caption text-amber-600 dark:text-amber-400">{next.label}</span>;
+  if (next.kind === 'wait') return <span className="type-caption text-[color:var(--ds-status-warning-fg)]">{next.label}</span>;
   if (next.kind === 'wave' && !drawer.has('wave-release')) return <span className="text-idpxyz-textMuted">等放波次</span>;
   // 能做的一步在每一行上是同一个样子的钮，不论它是就地开表单还是去别的页：操作者要认的是「这一单现在该做什么」，
   // 不是这一步落在哪里。
