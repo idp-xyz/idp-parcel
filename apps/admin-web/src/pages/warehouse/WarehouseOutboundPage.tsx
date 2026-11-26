@@ -1,7 +1,8 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Plus, Send } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { WorkbenchPageTemplate, toggleWorkbenchSort, type WorkbenchColumn, type WorkbenchSort } from '../../templates';
+import { retainSelectedRows } from '../../templates/list-selection';
 import type { TemplateViewState } from '../../templates/state-slot';
 import { useTabViewState } from '../../templates/workspace-view-state';
 import { primaryActionClass } from '../../components/primary-action';
@@ -17,6 +18,7 @@ import { ActionDrawer, useActionDrawer, type ActionDrawerControl } from './Actio
 import { listOutboundRequests, type OutboundRequestRecord } from './api';
 import { DocumentLink } from './document-page';
 import { fitColumnWidth, linesSummary, nameOf, shortInstant, waitedSortParam } from './list-cells';
+import { hiddenInBasket, mergeWaveBlocker, refreshedBasket, waveReleaseTookEffect } from './outbound-basket';
 import { OutboundDocument } from './OutboundDocument';
 import { outboundNextStep, outboundSettled } from './outbound-next-step';
 import {
@@ -50,6 +52,10 @@ const newestFirst: WorkbenchSort = { key: waitedKey, dir: 1 };
 /** 卡在预占上、要人拿主意的两种状态：这样的行在列表里带底色。 */
 const stuck = (row: OutboundRequestRecord) => row.status === 'PARTIALLY_RESERVED' || row.status === 'PENDING_POLICY';
 
+const rowKeyOf = (row: OutboundRequestRecord) => row.requestId;
+// 没有行时交同一个空数组：每次渲染交一个新的，照着它做的副作用就每次渲染都跑。
+const noRows: OutboundRequestRecord[] = [];
+
 /** 按内容定宽的列里，一格的内容不折行：列宽是照它算的，折了行列就被挤窄。 */
 const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{content}</span>;
 
@@ -67,8 +73,11 @@ export function WarehouseOutboundPage() {
  * 各队的数量不摆在工具条里：十个带数的签平铺开要占两行，而它们说的是「哪一队积压了多少」，是这一页的概况，
  * 标题行右边本来空着。按哪一队筛在工具条的状态下拉里也能选，两处是同一个筛选。
  *
- * 检索词、选的队、筛选、排序与看的是哪一行记在标签的视图状态上：切到别的标签再回来还在。勾选不记——它是对眼前这一页
- * 几张单的临时圈定，换队就清。
+ * 检索词、选的队、筛选、排序与看的是哪一行记在标签的视图状态上：切到别的标签再回来还在。
+ *
+ * 勾选是一篮，不跟着眼前显示的内容走（outbound-basket.ts 文件头）：切队、检索、换筛选、翻页都留着，只在点「取消选择」
+ * 或合并放波次放成了之后清。批量栏只要篮里有单就在，说清有几张不在眼前这一页；「只看已选」把篮里的单摆出来核对。
+ * 篮子不记进标签的视图状态：它是一次批量动作的暂存，页面重挂之后行可能已经变了。
  */
 function OutboundList() {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
@@ -80,7 +89,10 @@ function OutboundList() {
   const [dispatch, setDispatch] = useTabViewState('warehouse-outbound.dispatch', '');
   const [chosenSort, setChosenSort] = useTabViewState<WorkbenchSort | null>('warehouse-outbound.sort', null);
   const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-outbound.open', null);
-  const [checked, setChecked] = useState<Set<string>>(() => new Set());
+  const [basket, setBasket] = useState<ReadonlyMap<string, OutboundRequestRecord>>(() => new Map());
+  const [onlyBasket, setOnlyBasket] = useState(false);
+  // 开着的放波次表单放的是不是篮里的这一批：行上的「放波次」也开同一张表单，那一种放成了不该清篮子。
+  const mergingBasket = useRef(false);
   const [refreshes, setRefreshes] = useState(0);
 
   const settled = useSettledKeyword(keyword);
@@ -100,7 +112,15 @@ function OutboundList() {
   // 重取在途时垫着上一页的行：不然每做完一个动作，列表退回骨架、详情栏跟着收起再打开，栏里刚做完的那张单要重读一遍。
   // 垫着的只是行，各队的数量仍只认各自那一问。
   const held = heldCataloguePage(answer, previous, (body) => body.requests.length > 0);
-  const rows = answer?.kind === 'outcome' ? answer.body.requests : (held?.body.requests ?? []);
+  const pageRows = answer?.kind === 'outcome' ? answer.body.requests : (held?.body.requests ?? noRows);
+  useEffect(() => {
+    setBasket((current) => refreshedBasket(current, pageRows, rowKeyOf));
+  }, [pageRows]);
+  // 篮子空了「只看已选」就没有可看的，回到列表。
+  const showingBasket = onlyBasket && basket.size > 0;
+  const basketRecords = useMemo(() => [...basket.values()], [basket]);
+  const checkedKeys = useMemo(() => new Set(basket.keys()), [basket]);
+  const rows = showingBasket ? basketRecords : pageRows;
   const counts = useStatusCounts(listOutboundRequests, base, 'status', countedStatuses, refreshes);
   const refresh = () => {
     retry();
@@ -121,12 +141,17 @@ function OutboundList() {
   );
   const now = new Date();
 
-  // 勾选只算眼前这一页上的：换了筛选或翻了页之后还留着的勾看不见也点不到，批量栏上的张数不该把它们算进去。
-  const checkedRecords = rows.filter((row) => checked.has(row.requestId));
-  const checkedHere = new Set(checkedRecords.map((row) => row.requestId));
-  const sameWarehouse = new Set(checkedRecords.map((row) => row.warehouseCode)).size === 1;
-  const allReserved = checkedRecords.every((row) => row.status === 'RESERVED');
-  const canBulkWave = checkedRecords.length > 0 && sameWarehouse && allReserved;
+  // 勾上的行连同它的内容记进篮子：翻走之后页面手里没有它了，而能不能合并放波次要照行来判。
+  const changeChecked = (next: Set<string>) => setBasket((current) => retainSelectedRows(current, next, rows, rowKeyOf));
+  const hiddenChecked = hiddenInBasket(basket, pageRows, rowKeyOf);
+  const mergeBlocker = mergeWaveBlocker(basketRecords);
+  // 换了队、检索词、筛选或排序，是要看那一份列表：正在「只看已选」的话先回到列表。篮子不动。
+  const narrowing =
+    <Value,>(apply: (value: Value) => void) =>
+    (value: Value) => {
+      apply(value);
+      setOnlyBasket(false);
+    };
 
   // 人认名称，编码放在下面那一行；名册里没有名称的只摆编码。
   const named = (names: ReadonlyMap<string, string>, code: string) => {
@@ -211,11 +236,7 @@ function OutboundList() {
     },
   ];
 
-  // 换一队就把勾清掉：勾的是眼前这一队里的几张单。
-  const chooseQueue = (next: string) => {
-    setQueue(next);
-    setChecked(new Set());
-  };
+  const chooseQueue = narrowing(setQueue);
   // 标题行上的各队：数量是当前检索与筛选下这一队还有几张。点一下看这一队，再点一下回到全部。
   const queueStats: WmsQueueStat[] = workingQueues.map((id) => ({
     id,
@@ -233,9 +254,10 @@ function OutboundList() {
     setOwner('');
     setWarehouse('');
     setDispatch('');
-    setChecked(new Set());
+    setOnlyBasket(false);
   };
-  const viewState: TemplateViewState = held
+  // 只看已选时摆的是篮里的行，读口这一问答成什么样都不改它：照就绪摆。
+  const viewState: TemplateViewState = held || showingBasket
     ? { kind: 'ready' }
     : catalogueViewState(answer, rows.length, refresh, {
         module: info,
@@ -245,7 +267,8 @@ function OutboundList() {
         narrowed: narrowed || pastFirstPage(pagination),
       });
   // 垫着上一页时翻页条照那一页写，两个钮按了不动：拿上一页的游标去翻，翻的是一组可能已经换掉的条件。
-  const shownPagination = pagination ?? held?.pagination;
+  // 只看已选时摆的不是读口的某一页，没有页可翻。
+  const shownPagination = showingBasket ? undefined : (pagination ?? held?.pagination);
 
   return (
     <>
@@ -264,7 +287,7 @@ function OutboundList() {
             </Button>
           ) : undefined
         }
-        search={{ value: keyword, onChange: setKeyword, placeholder: '搜出库单号、货主、仓、收件人…' }}
+        search={{ value: keyword, onChange: narrowing(setKeyword), placeholder: '搜出库单号、货主、仓、收件人…' }}
         extraFilters={
           <>
             <WmsFilterSelect
@@ -276,7 +299,7 @@ function OutboundList() {
             <WmsFilterSelect
               label="货主"
               value={owner}
-              onChange={setOwner}
+              onChange={narrowing(setOwner)}
               options={drawer.lookups.owners.map((account) => ({
                 value: account.accountId,
                 label: account.customerPartyName ? `${account.customerPartyName} · ${account.accountId}` : account.accountId,
@@ -285,13 +308,13 @@ function OutboundList() {
             <WmsFilterSelect
               label="仓库"
               value={warehouse}
-              onChange={setWarehouse}
+              onChange={narrowing(setWarehouse)}
               options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: w.name ? `${w.name} · ${w.warehouseCode}` : w.warehouseCode }))}
             />
             <WmsFilterSelect
               label="发运"
               value={dispatch}
-              onChange={setDispatch}
+              onChange={narrowing(setDispatch)}
               options={dispatchWords.map((word) => ({ value: word, label: labelOf(word) }))}
             />
             {narrowed ? (
@@ -310,31 +333,44 @@ function OutboundList() {
         rowKey={(row) => row.requestId}
         selectedKey={openKey}
         onSelect={setOpenKey}
-        selection={{ selected: checkedHere, onChange: setChecked }}
+        selection={{ selected: checkedKeys, onChange: changeChecked }}
         bulkActions={
-          drawer.has('wave-release') ? (
-            <Button
-              type="button"
-              size="sm"
-              className={primaryActionClass}
-              disabled={!canBulkWave}
-              title={canBulkWave ? '把勾选的出库单合成一个波次放出去' : '只有同一个仓、状态都是已预占的出库单才能合并放波次'}
-              onClick={() =>
-                drawer.open('wave-release', {
-                  warehouse: checkedRecords[0]?.warehouseCode ?? '',
-                  requests: checkedRecords.map((row) => row.requestId).join(', '),
-                })
-              }
-            >
-              <Send className="mr-1 h-3.5 w-3.5" />
-              {`合并放波次（${checkedRecords.length} 张）`}
+          <>
+            {hiddenChecked > 0 && !showingBasket ? (
+              <span className="whitespace-nowrap type-body text-idpxyz-textMuted">其中 {hiddenChecked} 张不在当前列表</span>
+            ) : null}
+            <Button type="button" size="sm" variant="outline" aria-pressed={showingBasket} onClick={() => setOnlyBasket(!showingBasket)}>
+              {showingBasket ? '回到列表' : '只看已选'}
             </Button>
-          ) : undefined
+            {drawer.has('wave-release') ? (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  className={primaryActionClass}
+                  disabled={mergeBlocker !== null}
+                  title={mergeBlocker ?? '把勾选的出库单合成一个波次放出去'}
+                  onClick={() => {
+                    mergingBasket.current = true;
+                    drawer.open('wave-release', {
+                      warehouse: basketRecords[0]?.warehouseCode ?? '',
+                      requests: basketRecords.map(rowKeyOf).join(', '),
+                    });
+                  }}
+                >
+                  <Send className="mr-1 h-3.5 w-3.5" />
+                  {`合并放波次（${basketRecords.length} 张）`}
+                </Button>
+                {/* 钮按不动时把原因写在旁边：悬停才看得到的话，人只知道按不动、不知道该去掉哪一张。 */}
+                {mergeBlocker ? <span className="type-caption text-idpxyz-textMuted">{mergeBlocker}</span> : null}
+              </>
+            ) : null}
+          </>
         }
         rowAttention={stuck}
         rowAlign="baseline"
         sort={sort}
-        onSort={(key) => setChosenSort(toggleWorkbenchSort(sort, key))}
+        onSort={(key) => narrowing(setChosenSort)(toggleWorkbenchSort(sort, key))}
         noMatchText="当前筛选下没有出库单"
         onClearFilters={clearFilters}
         renderDetail={(key) => (
@@ -348,9 +384,16 @@ function OutboundList() {
         moduleId={moduleId}
         active={drawer.active}
         lookups={drawer.lookups}
-        onClose={drawer.close}
-        onSubmitted={() => {
-          setChecked(new Set());
+        onClose={() => {
+          mergingBasket.current = false;
+          drawer.close();
+        }}
+        onSubmitted={(outcome) => {
+          // 只在篮里的这一批放成了才清篮子：别的动作、或没放成的答复，勾着的单留着，改完不必重新勾一遍。
+          if (mergingBasket.current && waveReleaseTookEffect(outcome)) {
+            setBasket(new Map());
+            setOnlyBasket(false);
+          }
           refresh();
         }}
       />
