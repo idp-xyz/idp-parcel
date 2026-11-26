@@ -9,7 +9,7 @@ import {
   DialogHeader,
 } from '@idpxyz/ui-primitives';
 import { chipClass } from '../../components/registration';
-import { statusToneBanner, statusToneSurface } from '../../components/status-tone';
+import { statusToneBanner, statusToneSurface, statusToneText } from '../../components/status-tone';
 import { useCloseOnHashChange } from './use-close-on-hash';
 
 export type WmsTone = 'success' | 'info' | 'warning' | 'danger' | 'neutral';
@@ -486,47 +486,50 @@ export function WmsStatusTabs({
   );
 }
 
+export interface WmsQueueStat {
+  id: string;
+  label: string;
+  /** 这一队有几张；没答出来是 null，写「—」，不写成 0。 */
+  count: number | null;
+  /** 正按这一队筛着。 */
+  active: boolean;
+  /** 这一队有单就是等人拿主意的：数字用警示色。 */
+  attention?: boolean;
+  onClick: () => void;
+}
+
 /**
- * 工作台工具条里的队列签：一队一个签，选中的那一队下面压一道线，样子照公司主体页的状态筛选。工具条窄了它跟着折行。
- * 数量的写法同 WmsStatusTabs：没答出来的不写数，也不写成 0。
+ * 工作台标题行上的各队数量：一队一格，上面是队名、下面是数字，点一下看这一队。样子照工作台模板的指标格。
+ *
+ * 不走模板的 kpis：那一组在窗口不到 2xl 宽时固定另起一行，而这里只有几格、标题行摆得下——另起一行的话，
+ * 把它从工具条里拿出来省下的那一行高度就又还回去了。摆在标题旁的插槽里，放不下时才跟着标题行折行。
+ * 一张也没有的队数字压淡。选中的那一格上了底色，语气色在那层底上对比不够，数字改用正文亮色。
  */
-export function WmsQueueTabs({
-  value,
-  tabs,
-  onChange,
-}: {
-  value: string;
-  tabs: ReadonlyArray<{ value: string; label: string; count?: number | null }>;
-  onChange: (next: string) => void;
-}) {
+export function WmsQueueStats({ items }: { items: readonly WmsQueueStat[] }) {
   return (
-    <div role="tablist" aria-label="按状态看" className="flex flex-wrap items-stretch gap-x-1">
-      {tabs.map((tab) => {
-        const active = tab.value === value;
-        const waiting = typeof tab.count === 'number' && tab.count > 0;
+    <div role="group" aria-label="各队还有几张" className="flex items-center gap-x-2">
+      <span aria-hidden="true" className="mr-1 h-7 w-px shrink-0 bg-idpxyz-border" />
+      {items.map((item) => {
+        const tone = item.active
+          ? 'text-idpxyz-textBright'
+          : item.count === null || item.count === 0
+            ? 'text-idpxyz-textMuted'
+            : item.attention
+              ? statusToneText.warning
+              : 'text-idpxyz-textBright';
         return (
           <button
-            key={tab.value}
+            key={item.id}
             type="button"
-            role="tab"
-            aria-selected={active}
-            className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-2.5 py-2 type-body focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-idpxyz-accent ${
-              active
-                ? 'border-idpxyz-accent font-medium text-idpxyz-textBright'
-                : 'border-transparent text-idpxyz-textMuted hover:text-idpxyz-text'
+            aria-pressed={item.active}
+            title={item.active ? `正在看「${item.label}」，再点一下看全部` : `只看「${item.label}」`}
+            className={`flex shrink-0 flex-col items-start gap-0.5 rounded px-2 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-idpxyz-accent ${
+              item.active ? 'bg-idpxyz-activeItem ring-1 ring-idpxyz-accent' : 'hover:bg-idpxyz-hover'
             }`}
-            onClick={() => onChange(tab.value)}
+            onClick={item.onClick}
           >
-            {tab.label}
-            {typeof tab.count === 'number' ? (
-              <span
-                className={`rounded-full px-1.5 type-caption tabular-nums ${
-                  waiting ? 'bg-idpxyz-activeItem font-semibold text-idpxyz-textBright' : 'bg-idpxyz-hover text-idpxyz-textMuted'
-                }`}
-              >
-                {tab.count}
-              </span>
-            ) : null}
+            <span className="whitespace-nowrap type-caption leading-none text-idpxyz-breadcrumb">{item.label}</span>
+            <span className={`type-title font-semibold leading-none tabular-nums ${tone}`}>{item.count === null ? '—' : item.count}</span>
           </button>
         );
       })}

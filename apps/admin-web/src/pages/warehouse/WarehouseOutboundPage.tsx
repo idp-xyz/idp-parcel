@@ -19,18 +19,27 @@ import { DocumentLink } from './document-page';
 import { fitColumnWidth, linesSummary, nameOf, shortInstant, waitedSortParam } from './list-cells';
 import { OutboundDocument } from './OutboundDocument';
 import { outboundNextStep, outboundSettled } from './outbound-next-step';
+import {
+  allQueues,
+  attentionQueue,
+  countedStatuses,
+  isWorkingQueue,
+  knownQueue,
+  queueCount,
+  queueStatusesOf,
+  settledQueues,
+  workingQueues,
+} from './outbound-queues';
 import { useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
 import { elapsedLabel } from './waiting';
-import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueTabs, WmsTwoLine } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
 const moduleId = 'warehouse-outbound';
 const info = moduleInfoById[moduleId];
 
-// 签的先后照一张出库单往下走的先后；卡在预占的两种排在已预占前面，它们最需要人看。已出库与已取消放最后、不数：
-// 那两队只增不减，数出来的不是待办。
-const queueStatuses = ['PENDING_POLICY', 'PARTIALLY_RESERVED', 'RESERVED', 'ALLOCATED', 'PICKED', 'CHECKED', 'PACKED'] as const;
-const settledStatuses = ['SHIPPED', 'CANCELLED'] as const;
+/** 一队在页上的叫法：待处理是两种卡住状态合起来的一队，其余各队就叫它那个状态的名字。 */
+const queueLabel = (queue: string) => (queue === attentionQueue ? '待处理' : labelOf(queue));
 const dispatchWords = ['PRODUCT_NETWORK', 'OWNER_LABEL', 'PICKUP'] as const;
 
 // 「已等」是唯一能排的列（读口只按受理时刻排）。等得久的在前、刚受理的在前，各是它的降序与升序。
@@ -51,8 +60,12 @@ export function WarehouseOutboundPage() {
 }
 
 /**
- * 出库单列表，摆在单据工作台上：一行工具条（检索、各队的签、筛选），点一行在右边开这张单——看它、做它的动作都在栏里，
- * 不必另开标签；单号仍是链接，点了开整页。勾选是另一件事：圈几张同仓、已预占的单合并放波次。翻页条在页底。
+ * 出库单列表，摆在单据工作台上：标题行上是各队还有几张、点了就看那一队，下面一行工具条（检索与筛选），点一行在右边开这张单——
+ * 看它、做它的动作都在栏里，不必另开标签；单号仍是链接，点了开整页。勾选是另一件事：圈几张同仓、已预占的单合并放波次。
+ * 翻页条在页底。
+ *
+ * 各队的数量不摆在工具条里：十个带数的签平铺开要占两行，而它们说的是「哪一队积压了多少」，是这一页的概况，
+ * 标题行右边本来空着。按哪一队筛在工具条的状态下拉里也能选，两处是同一个筛选。
  *
  * 检索词、选的队、筛选、排序与看的是哪一行记在标签的视图状态上：切到别的标签再回来还在。勾选不记——它是对眼前这一页
  * 几张单的临时圈定，换队就清。
@@ -60,7 +73,8 @@ export function WarehouseOutboundPage() {
 function OutboundList() {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
   const [keyword, setKeyword] = useTabViewState('warehouse-outbound.keyword', '');
-  const [status, setStatus] = useTabViewState<string>('warehouse-outbound.status', 'ALL');
+  const [storedQueue, setQueue] = useTabViewState<string>('warehouse-outbound.status', allQueues);
+  const queue = knownQueue(storedQueue);
   const [owner, setOwner] = useTabViewState('warehouse-outbound.owner', '');
   const [warehouse, setWarehouse] = useTabViewState('warehouse-outbound.warehouse', '');
   const [dispatch, setDispatch] = useTabViewState('warehouse-outbound.dispatch', '');
@@ -76,19 +90,18 @@ function OutboundList() {
   if (dispatch) baseFilters.dispatch = [dispatch];
   const base: CatalogueConditions = { q: settled, filters: baseFilters };
   // 选了某一队之后等得最久的在最上面；看全部或已了结的，最新受理的在上面。人点过表头就照他的。
-  const inQueue = (queueStatuses as readonly string[]).includes(status);
-  const sort = chosenSort ?? (inQueue ? longestWaitFirst : newestFirst);
+  const sort = chosenSort ?? (isWorkingQueue(queue) ? longestWaitFirst : newestFirst);
   const conditions: CatalogueConditions = {
     ...base,
     sort: waitedSortParam(sort.dir),
-    filters: status === 'ALL' ? baseFilters : { ...baseFilters, status: [status] },
+    filters: queue === allQueues ? baseFilters : { ...baseFilters, status: queueStatusesOf(queue) },
   };
   const { answer, previous, pagination, retry } = useCatalogueCursor(conditions, listOutboundRequests);
   // 重取在途时垫着上一页的行：不然每做完一个动作，列表退回骨架、详情栏跟着收起再打开，栏里刚做完的那张单要重读一遍。
   // 垫着的只是行，各队的数量仍只认各自那一问。
   const held = heldCataloguePage(answer, previous, (body) => body.requests.length > 0);
   const rows = answer?.kind === 'outcome' ? answer.body.requests : (held?.body.requests ?? []);
-  const counts = useStatusCounts(listOutboundRequests, base, 'status', queueStatuses, refreshes);
+  const counts = useStatusCounts(listOutboundRequests, base, 'status', countedStatuses, refreshes);
   const refresh = () => {
     retry();
     setRefreshes((count) => count + 1);
@@ -198,10 +211,25 @@ function OutboundList() {
     },
   ];
 
-  const narrowed = settled.trim() !== '' || status !== 'ALL' || owner !== '' || warehouse !== '' || dispatch !== '';
+  // 换一队就把勾清掉：勾的是眼前这一队里的几张单。
+  const chooseQueue = (next: string) => {
+    setQueue(next);
+    setChecked(new Set());
+  };
+  // 标题行上的各队：数量是当前检索与筛选下这一队还有几张。点一下看这一队，再点一下回到全部。
+  const queueStats: WmsQueueStat[] = workingQueues.map((id) => ({
+    id,
+    label: queueLabel(id),
+    count: queueCount(counts, id),
+    active: queue === id,
+    attention: id === attentionQueue,
+    onClick: () => chooseQueue(queue === id ? allQueues : id),
+  }));
+
+  const narrowed = settled.trim() !== '' || queue !== allQueues || owner !== '' || warehouse !== '' || dispatch !== '';
   const clearFilters = () => {
     setKeyword('');
-    setStatus('ALL');
+    setQueue(allQueues);
     setOwner('');
     setWarehouse('');
     setDispatch('');
@@ -224,7 +252,8 @@ function OutboundList() {
       <WorkbenchPageTemplate<OutboundRequestRecord>
         title={info.title}
         viewStateKey={moduleId}
-        subtitle="点一队看那一队的单；点一行在右边看这张单、做它的下一步"
+        subtitle="点一行在右边看这张单、做它的下一步"
+        titleAside={<WmsQueueStats items={queueStats} />}
         onRefresh={refresh}
         refreshing={answer === null}
         primaryAction={
@@ -238,50 +267,42 @@ function OutboundList() {
         search={{ value: keyword, onChange: setKeyword, placeholder: '搜出库单号、货主、仓、收件人…' }}
         extraFilters={
           <>
-            <WmsQueueTabs
-              value={status}
-              onChange={(next) => {
-                setStatus(next);
-                setChecked(new Set());
-              }}
-              tabs={[
-                { value: 'ALL', label: '全部' },
-                ...queueStatuses.map((code) => ({ value: code, label: labelOf(code), count: counts[code] })),
-                ...settledStatuses.map((code) => ({ value: code, label: labelOf(code) })),
-              ]}
+            <WmsFilterSelect
+              label="状态"
+              value={queue === allQueues ? '' : queue}
+              onChange={(next) => chooseQueue(next === '' ? allQueues : next)}
+              options={[...workingQueues, ...settledQueues].map((id) => ({ value: id, label: queueLabel(id) }))}
             />
-            <div className="flex flex-wrap items-center gap-3">
-              <WmsFilterSelect
-                label="货主"
-                value={owner}
-                onChange={setOwner}
-                options={drawer.lookups.owners.map((account) => ({
-                  value: account.accountId,
-                  label: account.customerPartyName ? `${account.customerPartyName} · ${account.accountId}` : account.accountId,
-                }))}
-              />
-              <WmsFilterSelect
-                label="仓库"
-                value={warehouse}
-                onChange={setWarehouse}
-                options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: w.name ? `${w.name} · ${w.warehouseCode}` : w.warehouseCode }))}
-              />
-              <WmsFilterSelect
-                label="发运"
-                value={dispatch}
-                onChange={setDispatch}
-                options={dispatchWords.map((word) => ({ value: word, label: labelOf(word) }))}
-              />
-              {narrowed ? (
-                <button
-                  type="button"
-                  className="whitespace-nowrap type-body text-idpxyz-textMuted hover:text-idpxyz-textBright focus-visible:underline focus-visible:outline-none"
-                  onClick={clearFilters}
-                >
-                  清除
-                </button>
-              ) : null}
-            </div>
+            <WmsFilterSelect
+              label="货主"
+              value={owner}
+              onChange={setOwner}
+              options={drawer.lookups.owners.map((account) => ({
+                value: account.accountId,
+                label: account.customerPartyName ? `${account.customerPartyName} · ${account.accountId}` : account.accountId,
+              }))}
+            />
+            <WmsFilterSelect
+              label="仓库"
+              value={warehouse}
+              onChange={setWarehouse}
+              options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: w.name ? `${w.name} · ${w.warehouseCode}` : w.warehouseCode }))}
+            />
+            <WmsFilterSelect
+              label="发运"
+              value={dispatch}
+              onChange={setDispatch}
+              options={dispatchWords.map((word) => ({ value: word, label: labelOf(word) }))}
+            />
+            {narrowed ? (
+              <button
+                type="button"
+                className="whitespace-nowrap type-body text-idpxyz-textMuted hover:text-idpxyz-textBright focus-visible:underline focus-visible:outline-none"
+                onClick={clearFilters}
+              >
+                清除
+              </button>
+            ) : null}
           </>
         }
         columns={columns}
