@@ -299,7 +299,7 @@ func NewQueryOutboundRequestDetailEndpoint(intake CatalogueIntake, queries Works
 				"lengthValue": p.LengthValue, "widthValue": p.WidthValue, "heightValue": p.HeightValue,
 				"dimensionUnit": p.DimensionUnit, "shipmentRequestId": p.ShipmentRequestID,
 				"confirmationState": p.ConfirmationState, "cutoffState": p.CutoffState,
-				"ownerLabel": p.OwnerLabel, "lines": pLines,
+				"ownerLabel": p.OwnerLabel, "lines": pLines, "serials": p.Serials,
 			})
 		}
 		confirmations := make([]map[string]any, 0, len(detail.Confirmations))

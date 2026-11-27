@@ -651,6 +651,7 @@ export const workFactSpecs: readonly WorkFactSpec[] = [
             { path: 'goodsCode', label: '商品编码', kind: 'text', required: true, placeholder: 'SYN-GOODS-01' },
             { path: 'unit', label: '计量单位', kind: 'text', required: true, placeholder: '件' },
             { path: 'quantity', label: '装入数量', kind: 'integer', required: true, placeholder: '4' },
+            { path: 'serials', label: '序列号（跟踪序列号时每件一个）', kind: 'string-list' },
           ],
         },
       ],

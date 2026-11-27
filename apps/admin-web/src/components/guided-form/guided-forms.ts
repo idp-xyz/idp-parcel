@@ -273,8 +273,7 @@ function parseField(
       }
       return { present: true, value: trimmed };
     case 'string-list': {
-      const items = trimmed
-        .split(/[\n,，]+/)
+      const items = (Array.isArray(raw) ? raw.map((item) => String(item)) : trimmed.split(/[\n,，]+/))
         .map((item) => item.trim())
         .filter((item) => item !== '');
       if (items.length === 0) {

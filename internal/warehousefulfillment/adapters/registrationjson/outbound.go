@@ -627,17 +627,18 @@ func CheckCommand(reader io.Reader) (application.CheckCommand, error) {
 }
 
 type packLineDocument struct {
-	Sequence   *int    `json:"sequence"`
-	Packaging  *string `json:"packagingMaterial"`
-	Weight     *string `json:"weight"`
-	WeightUnit *string `json:"weightUnit"`
-	Length     *string `json:"length"`
-	Width      *string `json:"width"`
-	Height     *string `json:"height"`
-	Dimension  *string `json:"dimensionUnit"`
-	GoodsCode  *string `json:"goodsCode"`
-	Unit       *string `json:"unit"`
-	Quantity   *int64  `json:"quantity"`
+	Sequence   *int      `json:"sequence"`
+	Packaging  *string   `json:"packagingMaterial"`
+	Weight     *string   `json:"weight"`
+	WeightUnit *string   `json:"weightUnit"`
+	Length     *string   `json:"length"`
+	Width      *string   `json:"width"`
+	Height     *string   `json:"height"`
+	Dimension  *string   `json:"dimensionUnit"`
+	GoodsCode  *string   `json:"goodsCode"`
+	Unit       *string   `json:"unit"`
+	Quantity   *int64    `json:"quantity"`
+	Serials    *[]string `json:"serials"`
 }
 
 type packDocument struct {
@@ -726,10 +727,17 @@ func PackCommand(reader io.Reader) (application.PackCommand, error) {
 		parcels = append(parcels, application.PackParcelCommand{
 			Sequence: *item.Sequence, Packaging: packaging, Weight: weight, WeightUnit: weightUnit,
 			Length: length, Width: width, Height: height, Dimension: dimension,
-			Goods: goods, Unit: unit, Quantity: *item.Quantity,
+			Goods: goods, Unit: unit, Quantity: *item.Quantity, Serials: parcelSerials(item.Serials),
 		})
 	}
 	return application.PackCommand{FactID: fact, Request: request, Warehouse: warehouse, Parcels: parcels}, nil
+}
+
+func parcelSerials(raw *[]string) []string {
+	if raw == nil {
+		return nil
+	}
+	return append([]string(nil), (*raw)...)
 }
 
 // ShortagePolicyCommand 把缺货处置译成命令。租户与登记人由 Intake 填。

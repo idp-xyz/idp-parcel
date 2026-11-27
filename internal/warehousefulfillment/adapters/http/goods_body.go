@@ -16,6 +16,7 @@ type goodsBody struct {
 	PackagingLevels       []goodsLevelBody            `json:"packagingLevels"`
 	TrackBatch            bool                        `json:"trackBatch"`
 	TrackExpiry           bool                        `json:"trackExpiry"`
+	TrackSerial           bool                        `json:"trackSerial"`
 	Aliases               []goodsAliasBody            `json:"aliases"`
 	Composite             bool                        `json:"composite"`
 	Composition           *goodsCompositionBody       `json:"composition,omitempty"`
@@ -38,6 +39,7 @@ type customerGoodsBody struct {
 	PackagingLevels       []goodsLevelBody                    `json:"packagingLevels"`
 	TrackBatch            bool                                `json:"trackBatch"`
 	TrackExpiry           bool                                `json:"trackExpiry"`
+	TrackSerial           bool                                `json:"trackSerial"`
 	Aliases               []goodsAliasBody                    `json:"aliases"`
 	Composite             bool                                `json:"composite"`
 	Composition           *goodsCompositionBody               `json:"composition,omitempty"`
@@ -155,7 +157,7 @@ func goodsBodiesOfRows(rows []ports.GoodsRow) []goodsBody {
 func goodsBodyOfRow(row ports.GoodsRow) goodsBody {
 	body := goodsBody{
 		OwnerAccount: row.OwnerAccount, GoodsCode: row.GoodsCode, Revision: row.Revision,
-		Name: row.Name, BaseUnit: row.BaseUnit, TrackBatch: row.TrackBatch, TrackExpiry: row.TrackExpiry,
+		Name: row.Name, BaseUnit: row.BaseUnit, TrackBatch: row.TrackBatch, TrackExpiry: row.TrackExpiry, TrackSerial: row.TrackSerial,
 		Composite: row.Composite, SubmissionPath: row.SubmissionPath, EvidenceReference: row.EvidenceReference,
 		Registrant: row.Registrant, RegisteredAt: rfc3339(row.RegisteredAt),
 		PackagingLevels: goodsLevelBodies(row.PackagingLevels), Aliases: goodsAliasBodies(row.Aliases),
@@ -194,6 +196,7 @@ func customerGoodsBodyOfRow(row ports.GoodsRow) customerGoodsBody {
 		PackagingLevels:       full.PackagingLevels,
 		TrackBatch:            full.TrackBatch,
 		TrackExpiry:           full.TrackExpiry,
+		TrackSerial:           full.TrackSerial,
 		Aliases:               full.Aliases,
 		Composite:             full.Composite,
 		Composition:           full.Composition,
@@ -217,6 +220,7 @@ func customerGoodsBodyOfRevision(revision domain.GoodsRevision) customerGoodsBod
 		PackagingLevels:      full.PackagingLevels,
 		TrackBatch:           full.TrackBatch,
 		TrackExpiry:          full.TrackExpiry,
+		TrackSerial:          full.TrackSerial,
 		Aliases:              full.Aliases,
 		Composite:            full.Composite,
 		Composition:          full.Composition,
@@ -452,7 +456,7 @@ func goodsBodyOfRevision(revision domain.GoodsRevision) goodsBody {
 	return goodsBodyOfRow(ports.GoodsRow{
 		OwnerAccount: revision.Owner().String(), GoodsCode: revision.Code().String(), Revision: revision.Revision(),
 		Name: content.Name().String(), BaseUnit: content.BaseUnit().String(), PackagingLevels: levels,
-		TrackBatch: content.TrackBatch(), TrackExpiry: content.TrackExpiry(), Aliases: aliases,
+		TrackBatch: content.TrackBatch(), TrackExpiry: content.TrackExpiry(), TrackSerial: content.TrackSerial(), Aliases: aliases,
 		Composite: content.Composite(), OutboundMode: outbound, Components: components, Declaration: declared,
 		DeclaredMeasurements: measurements, SubmissionPath: revision.Submission().Path().String(),
 		EvidenceReference: evidence, Registrant: revision.Registrant().String(), RegisteredAt: revision.RegisteredAt(),

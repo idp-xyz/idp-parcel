@@ -179,6 +179,7 @@ export function GoodsDocument({
                 { label: '基本单位', value: goods.baseUnit },
                 { label: '批次', value: goods.trackBatch ? '记批' : '不记批' },
                 { label: '效期', value: goods.trackExpiry ? '记效期' : '不记效期' },
+                { label: '序列号', value: goods.trackSerial ? '出库要记' : '不记' },
                 { label: '组合', value: goods.composite ? '是' : '否' },
                 { label: '登记', value: `${goods.registrant} · ${formatInstant(goods.registeredAt)}` },
               ]}

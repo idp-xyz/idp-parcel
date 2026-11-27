@@ -240,7 +240,7 @@ export const receivingActionSpecs: readonly WarehouseActionSpec[] = [
     endpoint: '/warehouse-fulfillment-goods-on-behalf',
     grant: 'GOODS_RECORD_ON_BEHALF',
     snapshotHint:
-      '填 ownerAccount、decisionId、evidenceReference、goodsCode、basisRevision（首版填 0）、name、baseUnit、trackBatch、trackExpiry，以及可选包装层级、别名、组合与申报资料。' +
+      '填 ownerAccount、decisionId、evidenceReference、goodsCode、basisRevision（首版填 0）、name、baseUnit、trackBatch、trackExpiry、trackSerial，以及可选包装层级、别名、组合与申报资料。' +
       noActorNote,
   },
   {

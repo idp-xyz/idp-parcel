@@ -201,6 +201,7 @@ type OutboundParcelDetail struct {
 	CutoffState       string
 	OwnerLabel        string
 	Lines             []OutboundParcelLineDetail
+	Serials           []string
 }
 
 type OutboundConfirmationDetail struct {

@@ -27,6 +27,7 @@ type ownerGoodsDocument struct {
 	PackagingLevels      []goodsLevelDocument       `json:"packagingLevels"`
 	TrackBatch           *bool                      `json:"trackBatch"`
 	TrackExpiry          *bool                      `json:"trackExpiry"`
+	TrackSerial          *bool                      `json:"trackSerial"`
 	Aliases              []goodsAliasDocument       `json:"aliases"`
 	Composition          *goodsCompositionDocument  `json:"composition"`
 	Declaration          *goodsDeclarationDocument  `json:"declaration"`
@@ -82,7 +83,7 @@ func ReadOwnerGoods(reader io.Reader) (OwnerGoodsFields, error) {
 	}
 	content, err := domain.NewGoodsContent(domain.GoodsContentSpec{
 		Name: name, BaseUnit: baseUnit, PackagingLevels: levels,
-		TrackBatch: boolOrFalse(document.TrackBatch), TrackExpiry: boolOrFalse(document.TrackExpiry),
+		TrackBatch: boolOrFalse(document.TrackBatch), TrackExpiry: boolOrFalse(document.TrackExpiry), TrackSerial: boolOrFalse(document.TrackSerial),
 		Aliases: aliases, Composite: composite, OutboundMode: outbound, Components: components,
 		Declaration: declaration, DeclaredMeasurements: measurements,
 	})

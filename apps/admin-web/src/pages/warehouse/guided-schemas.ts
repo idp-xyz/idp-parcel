@@ -306,6 +306,7 @@ export const receivingGuidedForms: Record<string, GuidedFormDefinition> = {
       { path: 'baseUnit', label: '基本单位', kind: 'text', required: true, placeholder: '件' },
       { path: 'trackBatch', label: '跟踪批号', kind: 'boolean' },
       { path: 'trackExpiry', label: '跟踪效期', kind: 'boolean' },
+      { path: 'trackSerial', label: '跟踪序列号', kind: 'boolean' },
       {
         path: 'packagingLevels',
         label: '包装层级（可选）',

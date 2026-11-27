@@ -600,6 +600,25 @@ func (store *WorkspaceReads) OutboundRequestDetail(
 				out.Parcels[i].Lines = append(out.Parcels[i].Lines, line)
 			}
 			lRows.Close()
+			sRows, err := querier.Query(ctx,
+				`SELECT serial_number
+				   FROM warehouse_fulfillment.outbound_parcel_serial
+				  WHERE tenant_id = $1 AND request_id = $2 AND parcel_sequence = $3
+				  ORDER BY serial_index`,
+				tenant.String(), requestID, out.Parcels[i].ParcelSequence,
+			)
+			if err != nil {
+				return out, false, fmt.Errorf("%s: parcel serials: %w", op, err)
+			}
+			for sRows.Next() {
+				var serial string
+				if err := sRows.Scan(&serial); err != nil {
+					sRows.Close()
+					return out, false, fmt.Errorf("%s: parcel serials: %w", op, err)
+				}
+				out.Parcels[i].Serials = append(out.Parcels[i].Serials, serial)
+			}
+			sRows.Close()
 		}
 	}
 

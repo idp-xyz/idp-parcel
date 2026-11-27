@@ -495,6 +495,11 @@ export function OutboundDocument({
                   },
                   { id: 'lines', header: '内件', render: (parcel) => parcel.lines.map((item) => `${item.goodsCode}×${item.quantity}`).join('、') || '—' },
                   {
+                    id: 'serials',
+                    header: '序列号',
+                    render: (parcel) => (parcel.serials && parcel.serials.length > 0 ? parcel.serials.join('、') : '—'),
+                  },
+                  {
                     id: 'shipment',
                     header: '运单委托 / 面单',
                     render: (parcel) =>

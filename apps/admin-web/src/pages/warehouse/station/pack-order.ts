@@ -36,6 +36,8 @@ export interface PackGoods {
   unit: string;
   /** 已拣的件数合计：复核点的、打包装的都以它为准。 */
   quantity: number;
+  /** 当前修订写了跟踪序列号。没读到之前是 false，打包口仍会按修订再判。 */
+  trackSerial?: boolean;
 }
 
 /** 在工位上做的这一张单。 */

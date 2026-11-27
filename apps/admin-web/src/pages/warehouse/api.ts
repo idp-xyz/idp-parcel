@@ -364,6 +364,7 @@ export interface GoodsRecord {
   packagingLevels?: ReadonlyArray<{ name: string; factor: number }>;
   trackBatch: boolean;
   trackExpiry: boolean;
+  trackSerial?: boolean;
   aliases?: ReadonlyArray<{ code: string; type: string; platform?: string; validity?: { from?: string; to?: string } }>;
   composite: boolean;
   composition?: { outboundMode: string; components: ReadonlyArray<{ code: string; quantity: number }> };
@@ -1176,6 +1177,7 @@ export interface OutboundRequestDetailBody {
     cutoffState?: string;
     ownerLabel?: string;
     lines: ReadonlyArray<{ goodsCode: string; unit: string; quantity: number }>;
+    serials?: readonly string[];
   }>;
   confirmations?: ReadonlyArray<{
     factId: string;

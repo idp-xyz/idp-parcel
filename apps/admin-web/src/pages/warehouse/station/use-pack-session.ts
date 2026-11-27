@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { findGoodsByCode, getOutboundRequestDetail, listOutboundRequests, listTotes, matchSingleUnitOrder } from '../api';
+import { findGoodsByCode, getGoodsCurrent, getOutboundRequestDetail, listOutboundRequests, listTotes, matchSingleUnitOrder } from '../api';
 import { workFactSpecs, type WorkFactSpec } from '../work-fact';
 import type { GuidedFormValues } from '../guided-forms';
 import { browserStorage } from './device-binding';
@@ -32,7 +32,7 @@ import {
   type PackStep,
   type ParcelPatch,
 } from './pack-flow';
-import { liveOrderFinder, loadPackQueue, openedOf, type OrderFinder, type PackQueue } from './pack-order';
+import { liveOrderFinder, loadPackQueue, openedOf, type OrderFinder, type PackGoods, type PackQueue } from './pack-order';
 import { liveLoadPackagingList, livePackagingFinder, type PackagingFinder, type PackagingList } from './pack-packaging';
 import { checkFactValues, packFactValues, type PackagingMaterial } from './pack-parcels';
 import { scanAfterMatch, withSingleUnitMatch, withToteLookup } from './pack-tote';
@@ -103,6 +103,20 @@ export interface PackSession {
   dismiss: () => void;
   refreshQueue: () => void;
   loadPackagingChoices: () => void;
+}
+
+/** 打开单时读当前修订。读不到就当不跟踪，打包口仍按修订拒掉带了号或不齐的。 */
+async function serialFlags(owner: string, goods: readonly PackGoods[]): Promise<PackGoods[]> {
+  const flags = new Map<string, boolean>();
+  await Promise.all(
+    goods.map(async (item) => {
+      if (flags.has(item.goodsCode)) return;
+      const answer = await getGoodsCurrent(owner, item.goodsCode);
+      const tracked = answer.kind === 'outcome' && answer.body.goods?.trackSerial === true;
+      flags.set(item.goodsCode, tracked);
+    }),
+  );
+  return goods.map((item) => ({ ...item, trackSerial: flags.get(item.goodsCode) === true }));
 }
 
 export function usePackSession({ deviceId, warehouse, request, cue }: PackSessionInput): PackSession {
@@ -194,9 +208,13 @@ export function usePackSession({ deviceId, warehouse, request, cue }: PackSessio
           });
           return;
         case 'open-order':
-          void getOutboundRequestDetail(effect.requestId).then((answer) => {
-            const opened = openedOf(answer);
-            if (opened.kind === 'order') ownersRef.current.set(opened.order.requestId, opened.order.ownerAccount);
+          void getOutboundRequestDetail(effect.requestId).then(async (answer) => {
+            let opened = openedOf(answer);
+            if (opened.kind === 'order') {
+              ownersRef.current.set(opened.order.requestId, opened.order.ownerAccount);
+              const goods = await serialFlags(opened.order.ownerAccount, opened.order.goods);
+              opened = { ...opened, order: { ...opened.order, goods } };
+            }
             applyRef.current(orderOpened(stateRef.current, effect.requestId, opened));
             const again = scanAfterMatch(matchedRef.current, effect.requestId, stateRef.current.phase);
             matchedRef.current = null;
@@ -216,7 +234,7 @@ export function usePackSession({ deviceId, warehouse, request, cue }: PackSessio
           mint(checkSpec, checkFactValues(effect.order, effect.observed), checkOutcomeLabels);
           return;
         case 'submit-pack':
-          mint(packSpec, packFactValues(effect.order, effect.parcels), packOutcomeLabels);
+          mint(packSpec, packFactValues(effect.order, effect.parcels, effect.serials), packOutcomeLabels);
           return;
         case 'resend':
           if (attemptRef.current !== null) send(attemptRef.current);

@@ -714,6 +714,15 @@ func (store *Waves) SavePack(ctx context.Context, tenant domain.TenantID, fact d
 			tenant.String(), request.String(), parcel.Sequence, parcel.Goods.String(), parcel.Unit.String(), parcel.Quantity); err != nil {
 			return fmt.Errorf("save parcel line: %w", err)
 		}
+		for index, serial := range parcel.Serials {
+			if _, err := executor.Exec(ctx,
+				`INSERT INTO warehouse_fulfillment.outbound_parcel_serial (
+				    tenant_id, request_id, parcel_sequence, serial_index, serial_number
+				 ) VALUES ($1,$2,$3,$4,$5)`,
+				tenant.String(), request.String(), parcel.Sequence, index, serial); err != nil {
+				return fmt.Errorf("save parcel serial: %w", err)
+			}
+		}
 	}
 	tag, err := executor.Exec(ctx,
 		`UPDATE warehouse_fulfillment.outbound_request SET status = 'PACKED'
@@ -780,7 +789,35 @@ func (store *Waves) ParcelsOf(ctx context.Context, tenant domain.TenantID, reque
 		}
 		parcels = append(parcels, parcel)
 	}
-	return parcels, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list parcels: %w", err)
+	}
+	serialRows, err := querier.Query(ctx,
+		`SELECT parcel_sequence, serial_number
+		   FROM warehouse_fulfillment.outbound_parcel_serial
+		  WHERE tenant_id = $1 AND request_id = $2
+		  ORDER BY parcel_sequence, serial_index`,
+		tenant.String(), request.String())
+	if err != nil {
+		return nil, fmt.Errorf("list parcel serials: %w", err)
+	}
+	defer serialRows.Close()
+	bySequence := map[int][]string{}
+	for serialRows.Next() {
+		var sequence int
+		var serial string
+		if err := serialRows.Scan(&sequence, &serial); err != nil {
+			return nil, fmt.Errorf("list parcel serials: %w", err)
+		}
+		bySequence[sequence] = append(bySequence[sequence], serial)
+	}
+	if err := serialRows.Err(); err != nil {
+		return nil, fmt.Errorf("list parcel serials: %w", err)
+	}
+	for index := range parcels {
+		parcels[index].Serials = bySequence[parcels[index].Sequence]
+	}
+	return parcels, nil
 }
 
 func (store *Waves) MarkShipment(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, shipmentRequestID, declaredParcelID string) error {

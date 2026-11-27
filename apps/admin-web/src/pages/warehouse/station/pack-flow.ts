@@ -113,6 +113,10 @@ export interface PackState {
   order: PackOrder | null;
   /** 复核：各种货已扫几件，键是 goodsKey。 */
   counted: Readonly<Record<string, number>>;
+  /** 已记下的序列号，键是 goodsKey。不跟踪的货没有这一格。 */
+  serials: Readonly<Record<string, readonly string[]>>;
+  /** 复核时这一件还等着扫序列号。 */
+  awaitingSerial: string | null;
   parcels: readonly ParcelDraft[];
   nextKey: number;
   /** 这一趟打包好了几张。 */
@@ -134,7 +138,7 @@ export type PackEffect =
   | { kind: 'identify'; order: PackOrder; code: string }
   | { kind: 'identify-packaging'; code: string }
   | { kind: 'submit-check'; order: PackOrder; observed: number }
-  | { kind: 'submit-pack'; order: PackOrder; parcels: readonly ParcelDraft[] }
+  | { kind: 'submit-pack'; order: PackOrder; parcels: readonly ParcelDraft[]; serials: Readonly<Record<string, readonly string[]>> }
   | { kind: 'resend' }
   /** 队列已经不是现在的样子（做完、记下了、换了单）：重读。 */
   | { kind: 'refresh-queue' };
@@ -178,6 +182,8 @@ function blank(warehouse: string): PackState {
     warehouse,
     order: null,
     counted: {},
+    serials: {},
+    awaitingSerial: null,
     parcels: [],
     nextKey: 1,
     done: 0,
@@ -303,6 +309,8 @@ export function orderOpened(state: PackState, requestId: string, opened: OrderOp
         order,
         pending: null,
         counted: {},
+        serials: {},
+        awaitingSerial: null,
         feedback: { kind: 'waiting', text: `${earlier}逐件扫单里的货，扫齐了自动提交复核。` },
       });
     }
@@ -318,9 +326,64 @@ function goodsNamed(order: PackOrder, goodsCode: string): readonly PackGoods[] {
 /** 这一格又扫对了一件：够数（合计等于已拣合计）就自动提交复核。 */
 function counting(state: PackState, goods: PackGoods, scanned?: string): PackStep {
   const key = goodsKey(goods);
+  if (goods.trackSerial === true) {
+    return step(
+      {
+        ...state,
+        phase: 'checking',
+        pending: null,
+        awaitingSerial: key,
+        feedback: { kind: 'waiting', text: `对。${goods.goodsCode} 这件要序列号。`, ...(scanned === undefined ? {} : { scanned }) },
+      },
+      'ok',
+    );
+  }
+  return countedPiece(state, goods, scanned);
+}
+
+function countedPiece(state: PackState, goods: PackGoods, scanned?: string): PackStep {
+  const key = goodsKey(goods);
   const counted = { ...state.counted, [key]: countOf(state, goods) + 1 };
   const text = `对。${goods.goodsCode} 已扫 ${counted[key]} / ${goods.quantity}。`;
-  return afterCounts({ ...state, counted }, text, scanned);
+  return afterCounts({ ...state, counted, awaitingSerial: null }, text, scanned);
+}
+
+function serialGap(state: PackState): PackGoods | null {
+  if (state.order === null) return null;
+  for (const goods of state.order.goods) {
+    if (goods.trackSerial !== true) continue;
+    const have = state.serials[goodsKey(goods)]?.length ?? 0;
+    if (have < goods.quantity) return goods;
+  }
+  return null;
+}
+
+function acceptPackSerial(state: PackState, goods: PackGoods, serial: string): PackStep {
+  const canonical = serial.trim();
+  if (canonical === '') return nothing(state);
+  const key = goodsKey(goods);
+  const taken = Object.values(state.serials).some((list) => list.includes(canonical));
+  if (taken || goodsNamed(state.order as PackOrder, canonical).length > 0) {
+    return wrong(state, taken ? `${canonical} 这张单里已经有了。` : '这是商品码。还要序列号。', serial);
+  }
+  const serials = { ...state.serials, [key]: [...(state.serials[key] ?? []), canonical] };
+  const left = goods.quantity - serials[key].length;
+  const text = left === 0 ? `${goods.goodsCode} 的序列号齐了。` : `${goods.goodsCode} 还要 ${left} 个序列号。`;
+  return step({ ...state, serials, feedback: { kind: 'ok', text, scanned: serial } }, 'ok');
+}
+
+function acceptSerial(state: PackState, serial: string): PackStep {
+  const key = state.awaitingSerial;
+  const goods = state.order?.goods.find((item) => goodsKey(item) === key);
+  if (key === null || goods === undefined) return nothing(state);
+  const canonical = serial.trim();
+  if (canonical === '') return nothing(state);
+  const taken = Object.values(state.serials).some((list) => list.includes(canonical));
+  if (taken || goodsNamed(state.order as PackOrder, canonical).length > 0) {
+    return wrong(state, taken ? `${canonical} 这张单里已经有了。` : '这是商品码。这一件还要序列号。', serial);
+  }
+  const serials = { ...state.serials, [key]: [...(state.serials[key] ?? []), canonical] };
+  return countedPiece({ ...state, serials, awaitingSerial: null }, goods, serial);
 }
 
 function afterCounts(state: PackState, text: string, scanned?: string): PackStep {
@@ -608,7 +671,7 @@ export function packagingIdentified(state: PackState, code: string, lookup: Pack
 /** 打包提交前能不能点；能就按草稿交出整张单。 */
 export function submitPack(state: PackState): PackStep {
   if (state.phase !== 'packing' || state.order === null) return nothing(state);
-  if (!judgePack(state.order, state.parcels).ok) return nothing(state);
+  if (!judgePack(state.order, state.parcels, state.serials).ok) return nothing(state);
   const order = state.order;
   const parcels = state.parcels;
   return step(
@@ -619,7 +682,7 @@ export function submitPack(state: PackState): PackStep {
       feedback: { kind: 'waiting', text: `正在提交 ${order.number} 的打包（${parcels.length} 个包裹）…` },
     },
     undefined,
-    [{ kind: 'submit-pack', order, parcels }],
+    [{ kind: 'submit-pack', order, parcels, serials: state.serials }],
   );
 }
 
@@ -627,8 +690,8 @@ export function submitPack(state: PackState): PackStep {
 
 /**
  * 扫到一个码。码是扫描框规范化过的；这里再规范一次，空的不算。各阶段的判定：
- * 等扫出库单号 → 去认是哪张单（effect: find-order）；复核逐件扫 → 等于单里某种货的商品编码当场算对，扫够了再扫算错，别的要去认
- * （effect: identify）；打包 → 当包材码去核（effect: identify-packaging）。读口在途与提交的阶段不收扫码。
+ * 等扫出库单号 → 去认是哪张单（effect: find-order）；复核逐件扫 → 等于单里某种货的商品编码当场算对，跟踪序列号的货下一扫是序列号，扫够了再扫算错，别的要去认
+ * （effect: identify）；打包 → 跟踪的货还缺号时先收序列号，齐了当包材码去核（effect: identify-packaging）。读口在途与提交的阶段不收扫码。
  */
 export function scanCode(state: PackState, raw: string): PackStep {
   const code = normalizeScan(raw);
@@ -639,9 +702,13 @@ export function scanCode(state: PackState, raw: string): PackStep {
         { kind: 'find-order', code },
       ]);
     case 'checking':
+      if (state.awaitingSerial !== null) return acceptSerial(state, code);
       return scanGoods(state, code);
-    case 'packing':
+    case 'packing': {
+      const gap = serialGap(state);
+      if (gap !== null) return acceptPackSerial(state, gap, code);
       return scanPackaging(state, code);
+    }
     default:
       return nothing(state);
   }
@@ -876,7 +943,7 @@ const wrongHeadlines: Partial<Record<PackPhase, string>> = {
 export function packHeadline(state: PackState): string {
   if (state.order === null) return '';
   if (state.parcels.length === 0) return '点「再加一个包裹」';
-  const judged = judgePack(state.order, state.parcels);
+  const judged = judgePack(state.order, state.parcels, state.serials);
   if (judged.ok) return '都填好了，提交打包';
   if (judged.at === undefined) {
     const line = packBalance(state.order, state.parcels).find((item) => item.assigned !== item.expected);
@@ -923,7 +990,13 @@ export function packScreen(state: PackState, queue: PackQueue | null): PackScree
       const sum = countedTotal(state);
       return {
         label,
-        headline: wrongNow ? (wrongHeadlines.checking as string) : sum > total ? `已经扫了 ${sum} 件，比该有的多` : `逐件扫，还差 ${total - sum} 件`,
+        headline: wrongNow
+          ? (wrongHeadlines.checking as string)
+          : state.awaitingSerial !== null
+            ? '扫这件的序列号'
+            : sum > total
+              ? `已经扫了 ${sum} 件，比该有的多`
+              : `逐件扫，还差 ${total - sum} 件`,
         counter: `这张单已扫 ${sum} / ${total}`,
       };
     }
@@ -1009,7 +1082,7 @@ export function packActions(state: PackState): PackActions {
     changeCount: state.phase === 'checking',
     mismatch: mismatchPlan(state) !== null,
     addParcel: state.phase === 'packing',
-    submitPack: state.phase === 'packing' && state.order !== null && judgePack(state.order, state.parcels).ok,
+    submitPack: state.phase === 'packing' && state.order !== null && judgePack(state.order, state.parcels, state.serials).ok,
     backToForm: state.phase === 'pack-refused',
     leave: leavable.includes(state.phase) && state.order !== null,
     resend: state.phase === 'check-unsent' || state.phase === 'pack-unsent' || state.phase === 'pack-pending',
@@ -1042,9 +1115,9 @@ export function scanPlaceholder(state: PackState): string {
     case 'pack-refused':
       return '先点「回去改」';
     case 'packing':
-      return '扫包材码，或敲进去按回车';
+      return serialGap(state) === null ? '扫包材码，或敲进去按回车' : '扫这件的序列号';
     case 'checking':
-      return '扫商品码，或敲进去按回车';
+      return state.awaitingSerial === null ? '扫商品码，或敲进去按回车' : '扫这件的序列号';
     default:
       return '扫出库单号，或敲进去按回车';
   }

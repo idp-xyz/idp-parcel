@@ -45,7 +45,7 @@ import {
   type PackState,
   type PackStep,
 } from './pack-flow';
-import type { OrderLookup, OrderOpened, PackGoods, PackOrder, PackQueue } from './pack-order';
+import { goodsKey, type OrderLookup, type OrderOpened, type PackGoods, type PackOrder, type PackQueue } from './pack-order';
 import type { PackagingMaterial } from './pack-parcels';
 import { pickStationHash } from './stations';
 import { judgeWorkFactAnswer, type WorkFactVerdict } from './work-fact-submit';
@@ -371,6 +371,34 @@ test('扫到单里的货：加一件，扫对的声音，屏上写已扫几比�
   const screen = packScreen(step.state, QUEUE);
   equal(screen.headline, '逐件扫，还差 4 件');
   equal(screen.counter, '这张单已扫 1 / 5');
+});
+
+test('跟踪序列号的货扫到商品先要序列号，号记下才算一件；不跟踪的货不出现这一步', () => {
+  const key = goodsKey(G1);
+  const tracked = order({ goods: [{ ...G1, quantity: 1, trackSerial: true }] });
+  const asked = scanCode(checking(tracked), 'SYN-GOODS-01');
+  equal(countedTotal(asked.state), 0);
+  equal(asked.state.awaitingSerial, key);
+  equal(packScreen(asked.state, QUEUE).headline, '扫这件的序列号');
+  equal(scanPlaceholder(asked.state), '扫这件的序列号');
+  const again = scanCode(asked.state, 'SYN-GOODS-01');
+  equal(again.state.feedback.kind, 'wrong');
+  equal(countedTotal(again.state), 0);
+  const piece = scanCode(asked.state, 'SN-1');
+  equal(countedTotal(piece.state), 1);
+  equal(piece.state.awaitingSerial, null);
+  deepEqual(piece.state.serials[key], ['SN-1']);
+
+  const plain = scanCode(checking(), 'SYN-GOODS-01');
+  equal(plain.state.awaitingSerial, null);
+  equal(countedTotal(plain.state), 1);
+  equal(scanPlaceholder(plain.state), '扫商品码，或敲进去按回车');
+
+  const direct = packing(order({ status: 'CHECKED', goods: [{ ...G1, quantity: 1, trackSerial: true }] }));
+  equal(scanPlaceholder(direct), '扫这件的序列号');
+  const noted = scanCode(direct, 'SN-9');
+  deepEqual(noted.state.serials[key], ['SN-9']);
+  equal(scanPlaceholder(noted.state), '扫包材码，或敲进去按回车');
 });
 
 test('逐件扫：货的先后不论；扫齐的那一下自动提交复核，提交的是实点总数，不再收扫码', () => {

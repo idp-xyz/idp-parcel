@@ -104,7 +104,7 @@ function GoodsList() {
       header: nowrap('批次 / 效期'),
       width: fitColumnWidth,
       minListWidth: 860,
-      render: (row) => nowrap(`${row.trackBatch ? '记批' : '不记批'} / ${row.trackExpiry ? '记效期' : '不记效期'}`),
+      render: (row) => nowrap(`${row.trackBatch ? '记批' : '不记批'} / ${row.trackExpiry ? '记效期' : '不记效期'} / ${row.trackSerial ? '记序列号' : '不记序列号'}`),
     },
     { key: 'composite', header: '组合', width: fitColumnWidth, minListWidth: 1040, render: (row) => nowrap(row.composite ? '是' : '否') },
     { key: 'rev', header: '修订', width: fitColumnWidth, render: (row) => <span className="whitespace-nowrap tabular-nums">{`r${row.revision}`}</span> },
