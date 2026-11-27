@@ -115,6 +115,72 @@ func TestAShortPickKeepsTheRequestInTheWaveUntilItsOtherTasksSettle(t *testing.T
 	}
 }
 
+// Covers: 到了库位一件都没有，拣到 0 件也收：照少拣办——记一笔差异、差的整条在同一个波次里换别的库位补——
+// 没有货移进待出库，任务上不记放货位。同一个事实号再交一遍答已有结果。换出来的格拣完，请求照常是已拣货。
+func TestAPickOfNothingIsAShortPickOfTheWholeTask(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	request := reserve("REQ-EMPTY-MOVE", 3)
+	released := world.releaseRequests(t, handler, "WAVE-EMPTY-MOVE", request)
+	if released.Outcome() != application.WaveAllocated || len(released.Tasks()) != 1 || released.Tasks()[0].Location.String() != "SYN-LOC-STORE" {
+		t.Fatalf("放出 %s %+v", released.Outcome(), released.Tasks())
+	}
+	empty := world.pick(t, handler, released.Tasks()[0].ID, 0)
+	if empty.Outcome() != application.WavePicked || len(empty.Tasks()) != 2 {
+		t.Fatalf("拣到 0 件 %s，交回 %d 条任务", empty.Outcome(), len(empty.Tasks()))
+	}
+	recorded := taskAt(t, empty.Tasks(), "SYN-LOC-STORE")
+	if recorded.Status != "SHORT" || recorded.Picked != 0 || recorded.Staging.String() != "" {
+		t.Fatalf("没拣到的那条任务 %+v，要是短拣、已拣 0、不记放货位", recorded)
+	}
+	replacement := taskAt(t, empty.Tasks(), "SYN-LOC-STORE-2")
+	if replacement.Quantity != 3 || replacement.Status != "OPEN" {
+		t.Fatalf("换出来的任务 %+v，要整 3 件", replacement)
+	}
+	if world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 0 || world.stockUnitAt(t, "SYN-LOC-STORE", "件") != 6 || reservedQuantity(t, world) != 3 {
+		t.Fatalf("一件都没动：待出库 %d，原库位 %d，预占 %d", world.stockUnitAt(t, "SYN-LOC-OUT", "件"), world.stockUnitAt(t, "SYN-LOC-STORE", "件"), reservedQuantity(t, world))
+	}
+	if world.requestStatus(t, request) != "ALLOCATED" || world.waveRow(t, "WAVE-EMPTY-MOVE").Status != ports.WavePicking {
+		t.Fatalf("换出了别的格之后请求 %s", world.requestStatus(t, request))
+	}
+	_, _, waves := world.liveCounting(t)
+	if differences := pickDifferencesOf(t, waves, ""); len(differences) != 1 || differences[0].Quantity != 3 || differences[0].Picked != 0 || differences[0].Status != "PENDING" {
+		t.Fatalf("差异 %+v，要一笔待了结的 3 件", differences)
+	}
+	if again := world.pick(t, handler, released.Tasks()[0].ID, 0); again.Outcome() != application.WaveExisting {
+		t.Fatalf("同一个事实号再交 = %s", again.Outcome())
+	}
+	if world.pick(t, handler, replacement.ID, 3).Outcome() != application.WavePicked || world.requestStatus(t, request) != "PICKED" {
+		t.Fatalf("换出来的那一格拣完之后请求 %s", world.requestStatus(t, request))
+	}
+}
+
+// Covers: 一张请求的每一格都一件没有、也换不出别的格：任务都有了结果，请求回到已预占等货；
+// 一件都没拣到，它不算「拣不齐、等处置」——没有货在待出库，不办少发也不拆单，等有货了再放。
+func TestARequestWithNothingPickedGoesBackToReservedWithoutADisposal(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	request := reserve("REQ-EMPTY-ALL", 10)
+	released := world.releaseRequests(t, handler, "WAVE-EMPTY-ALL", request)
+	if released.Outcome() != application.WaveAllocated || len(released.Tasks()) != 2 {
+		t.Fatalf("放出 %s，任务 %d 条", released.Outcome(), len(released.Tasks()))
+	}
+	for _, task := range released.Tasks() {
+		if got := world.pick(t, handler, task.ID, 0); got.Outcome() != application.WavePicked || len(got.Tasks()) != 1 {
+			t.Fatalf("%s 拣到 0 件 = %s，交回 %d 条任务", task.Location, got.Outcome(), len(got.Tasks()))
+		}
+	}
+	if world.requestStatus(t, request) != "RESERVED" || world.waveRow(t, "WAVE-EMPTY-ALL").Status != ports.WaveCompleted || reservedQuantity(t, world) != 10 {
+		t.Fatalf("都没拣到之后请求 %s，波次 %s，预占 %d", world.requestStatus(t, request), world.waveRow(t, "WAVE-EMPTY-ALL").Status, reservedQuantity(t, world))
+	}
+	_, _, waves := world.liveCounting(t)
+	tasks, err := waves.TasksOf(t.Context(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if application.AwaitsShortPickDisposal(domain.OutboundReserved, tasks) {
+		t.Fatal("一件都没拣到的请求不该算等处置")
+	}
+}
+
 // Covers: 同一张请求的两条任务被两个人同时拣完，请求是已拣货、预占扣到零。
 // 第一笔拣完先不提交，第二笔随后拣另一条、卡在这位货主的入账次序上，确认它真的卡住了才放第一笔提交——
 // 第二笔判断用的预占与任务是排到之后读的，不是排队之前读的那份旧的。

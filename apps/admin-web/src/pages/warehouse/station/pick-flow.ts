@@ -375,9 +375,15 @@ function ordersOf(cell: PickCell): number {
   return new Set((cell.members ?? []).map((member) => member.requestId)).size;
 }
 
-/** 分下去的几份里，没记满的那一条（它会成短拣）；都记满了为 undefined。照 allotMembers 的分法至多一条。 */
-const shortAllotment = (members: readonly PickAllotment[]): PickAllotment | undefined =>
-  members.find((member) => member.quantity < member.cell.quantity);
+/** 分下去的几份里分到了一些、但没记满的那一条；照 allotMembers 的分法至多一条，没有为 undefined。 */
+const partialAllotment = (members: readonly PickAllotment[]): PickAllotment | undefined =>
+  members.find((member) => member.quantity > 0 && member.quantity < member.cell.quantity);
+
+/** 一件都没分到的那几条：它们按 0 件交，也是短拣。 */
+const emptyAllotments = (members: readonly PickAllotment[]): PickAllotment[] => members.filter((member) => member.quantity === 0);
+
+/** 有没有哪一条没记满（含一件都没分到的）：有就是有短拣，后端会换别的库位补。 */
+const anyShortAllotment = (members: readonly PickAllotment[]): boolean => members.some((member) => member.quantity < member.cell.quantity);
 
 // 没用箱时不带 tote 这一格：报文里不带箱号才是「没用箱」，空串后端不收。
 function withTote<T extends object>(value: T, tote: string | undefined): T & { tote?: string } {
@@ -565,7 +571,7 @@ export function judgeQuantity(text: string, wanted: number): QuantityJudgement {
   if (trimmed === '') return { ok: false, reason: '请填数量。' };
   if (!/^\d+$/.test(trimmed)) return { ok: false, reason: '数量要填整数。' };
   const value = Number.parseInt(trimmed, 10);
-  if (value < 1) return { ok: false, reason: '至少 1 件。一件都拣不到的格，用「跳过这一格」。' };
+  if (value < 1) return { ok: false, reason: '至少 1 件。这一格一件都没有的话，点「少拣」按 0 件提交。' };
   if (value > wanted) return { ok: false, reason: `最多 ${wanted} 件，这一格要拣的就是这么多。` };
   return { ok: true, value };
 }
@@ -596,37 +602,45 @@ export interface ShortPickPlan {
   staging: string;
 }
 
-/** 少拣要满足：在等商品的阶段，已扫的数在 1 与应拣之间（不含应拣：够数就已经自动提交了）。不满足答 null。 */
+/**
+ * 少拣要满足：已经到了这一格（扫过库位，在等周转箱或等商品），已扫的数比应拣少（够数就已经自动提交了）。不满足答 null。
+ * 已扫 0 件也算：到了库位一件都没有，按 0 件交，后端照少拣办。等周转箱那一步也能点——没有货就不用先定箱。
+ */
 export function shortPickPlan(state: PickState): ShortPickPlan | null {
-  if (state.phase !== 'goods' || state.staging === null) return null;
+  if ((state.phase !== 'goods' && state.phase !== 'tote') || state.staging === null) return null;
   const cell = state.queue[0];
-  if (state.counted < 1 || state.counted >= cell.quantity) return null;
-  return { cell, quantity: state.counted, short: cell.quantity - state.counted, staging: state.staging };
+  const counted = state.phase === 'goods' ? state.counted : 0;
+  if (counted >= cell.quantity) return null;
+  return { cell, quantity: counted, short: cell.quantity - counted, staging: state.staging };
 }
+
+const reallocationNote = '盘点盘过之前，这个库位的这种货不再派人来拣。';
 
 /**
  * 少拣确认框里的话：这几件移进待出库库位、这一格记成短拣并记一笔差额、差的由系统换别的库位补。
- * 合成一格拿的不一样：拿到的件数按任务的先后分下去，分到了但没分满的那一条记短拣，一件都没分到的任务原样留着，
- * 不记短拣——一件都没拣到的任务后端不收。单品单件的每条任务只有一件，所以没有「没分满」的那一条。
+ * 合成一格拿的：拿到的件数按任务的先后分下去，分到了但没分满的那一条、一件都没分到的那几条都记短拣。
+ * 单品单件的每条任务只有一件，所以没有「没分满」的那一条。
  */
 export function shortPickLines(plan: ShortPickPlan): string[] {
+  const moved =
+    plan.quantity === 0 ? '到了库位一件都没有，没有货移进待出库库位。' : `这 ${plan.quantity} 件移进待出库库位 ${plan.staging}`;
   if (plan.cell.members !== undefined && plan.cell.batch === true) {
     const allotted = allotMembers(plan.cell, plan.quantity);
-    const partial = shortAllotment(allotted);
-    const untouched = plan.cell.members.length - allotted.length;
-    const full = allotted.length - (partial === undefined ? 0 : 1);
+    const partial = partialAllotment(allotted);
+    const empty = emptyAllotments(allotted).length;
+    const full = allotted.length - empty - (partial === undefined ? 0 : 1);
     const lines = [
       `这一格是 ${ordersOf(plan.cell)} 张出库单合着拿的 ${plan.cell.goodsCode}，共要 ${plan.cell.quantity} 件，现在只拿到 ${plan.quantity} 件。`,
-      `这 ${plan.quantity} 件移进待出库库位 ${plan.staging}，按任务的先后分给各张出库单：${full} 条任务记满。`,
+      plan.quantity === 0 ? moved : `${moved}，按任务的先后分给各张出库单：${full} 条任务记满。`,
     ];
     if (partial !== undefined) {
       lines.push(
         `出库单 ${partial.cell.requestId} 在这一格要 ${partial.cell.quantity} 件，只分到 ${partial.quantity} 件，记成「短拣」并记一笔短拣差异；差的 ${partial.cell.quantity - partial.quantity} 件系统会在这个波次里换别的库位补，换不出就等这张单别的格拣完后回到「已预占」。`,
       );
     }
-    if (untouched > 0) {
+    if (empty > 0) {
       lines.push(
-        `还有 ${untouched} 条任务一件都没分到，它们原样留着、排到队尾。这个库位确实没货了，到波次页把这几张单撤出，再为这个库位建盘点。`,
+        `${plan.quantity === 0 ? '这' : '还有'} ${empty} 条任务一件都没分到，各按 0 件记成「短拣」并记一笔短拣差异；差的由系统在这个波次里换别的库位补，换不出的那几张单回到「已预占」等货。${reallocationNote}`,
       );
     }
     return lines;
@@ -634,36 +648,38 @@ export function shortPickLines(plan: ShortPickPlan): string[] {
   if (plan.cell.members !== undefined) {
     return [
       `这一格是 ${plan.cell.quantity} 张单品单件的出库单合着拿的 ${plan.cell.goodsCode}，现在只拿到 ${plan.quantity} 件。`,
-      `这 ${plan.quantity} 件移进待出库库位 ${plan.staging}，各记给一张出库单。`,
-      `剩下的 ${plan.short} 张出库单没有拣到，它们在这一格的任务原样留着、排到队尾。这个库位确实没货了，到波次页把这几张单撤出，再为这个库位建盘点。`,
+      plan.quantity === 0 ? moved : `${moved}，各记给一张出库单。`,
+      `${plan.quantity === 0 ? '这' : '剩下的'} ${plan.short} 张出库单没有拣到，各按 0 件记成「短拣」并记一笔短拣差异；系统会在这个波次里换别的库位补，换不出的回到「已预占」等货。${reallocationNote}`,
     ];
   }
   return [
     `这一格要拣 ${plan.cell.quantity} 件 ${plan.cell.goodsCode}，现在只记 ${plan.quantity} 件。`,
-    `这 ${plan.quantity} 件移进待出库库位 ${plan.staging}。`,
-    `这一格记成「短拣」，提交之后不能再拣，差额记一笔短拣差异；盘点盘过之前，这个库位的这种货不再派人来拣。差的 ${plan.short} 件系统会在这个波次里换别的库位补：换得出就添进余下的格，换不出就等这张出库单别的格拣完后回到「已预占」。`,
+    plan.quantity === 0 ? moved : `${moved}。`,
+    `这一格记成「短拣」，提交之后不能再拣，差额记一笔短拣差异；${reallocationNote}差的 ${plan.short} 件系统会在这个波次里换别的库位补：换得出就添进余下的格，换不出就等这张出库单别的格拣完后回到「已预占」。`,
   ];
 }
 
-/** 确认之后提交：按已扫的数。 */
+/** 确认之后提交：按已扫的数。一件都没拣到时不带周转箱——没有货放进去，后端也不绑。 */
 export function submitShortPick(state: PickState): PickStep {
   const plan = shortPickPlan(state);
   if (plan === null) return { state, effects: [] };
   if (plan.cell.members !== undefined) {
-    return submitMembers(state, plan.cell, plan.quantity, {
+    return submitMembers({ ...state, counted: plan.quantity }, plan.cell, plan.quantity, {
       kind: 'waiting',
       text: `按 ${plan.quantity} 件提交这一格，分开记给各张出库单（还差 ${plan.short} 件没拿到）…`,
     });
   }
+  const tote = plan.quantity === 0 ? undefined : toteOfCell(state, plan.cell);
   return step(
     {
       ...state,
       phase: 'submitting',
-      submission: withTote({ cell: plan.cell, quantity: plan.quantity }, toteOfCell(state, plan.cell)),
+      counted: plan.quantity,
+      submission: withTote({ cell: plan.cell, quantity: plan.quantity }, tote),
       feedback: { kind: 'waiting', text: `按 ${plan.quantity} 件提交这一格（短拣，差 ${plan.short} 件）…` },
     },
     undefined,
-    [withTote({ kind: 'submit' as const, cell: plan.cell, quantity: plan.quantity }, toteOfCell(state, plan.cell))],
+    [withTote({ kind: 'submit' as const, cell: plan.cell, quantity: plan.quantity }, tote)],
   );
 }
 
@@ -756,9 +772,9 @@ export function taskGoneAfter(outcome: string | undefined): boolean {
 function successText(sub: PickSubmission, staging: string | null, verdict: WorkFactVerdict): string {
   if (verdict.outcome !== 'PICKED') return verdict.headline;
   const place = staging ?? '待出库库位';
-  return sub.quantity < sub.cell.quantity
-    ? `这一格按 ${sub.quantity} 件记成短拣（应拣 ${sub.cell.quantity} 件，差 ${sub.cell.quantity - sub.quantity} 件）。${sub.quantity} 件已放到 ${place}。差的若换得出别的库位，会添进余下的格。`
-    : `这一格拣好了：${sub.quantity} 件 ${sub.cell.goodsCode} 放到了 ${place}。`;
+  if (sub.quantity >= sub.cell.quantity) return `这一格拣好了：${sub.quantity} 件 ${sub.cell.goodsCode} 放到了 ${place}。`;
+  const moved = sub.quantity === 0 ? '' : `${sub.quantity} 件已放到 ${place}。`;
+  return `这一格按 ${sub.quantity} 件记成短拣（应拣 ${sub.cell.quantity} 件，差 ${sub.cell.quantity - sub.quantity} 件）。${moved}差的若换得出别的库位，会添进余下的格。`;
 }
 
 /** 后端答了：成了就这一格出队、进下一格；没送到等「再送一次」；没成说明原因等「下一格」。 */
@@ -781,23 +797,20 @@ export function applyVerdict(state: PickState, verdict: WorkFactVerdict): PickSt
           [{ kind: 'submit', cell: batch.members[sent].cell, quantity: batch.members[sent].quantity }],
         );
       }
-      const rest = state.queue.filter((cell) => cell.taskId !== sub.cell.taskId);
-      // 合着拿没拿够的：一件都没分到的那几条任务原样留着，合成小一点的一格排到队尾
-      const leftover = batch === null ? null : withoutMembers(sub.cell, batch.members);
-      const queue = leftover === null ? rest : [...rest, leftover];
+      // 合着拿的每条任务都交过了（没分到的按 0 件交），这一格整个出队，没有留在队里的任务
+      const queue = state.queue.filter((cell) => cell.taskId !== sub.cell.taskId);
       return step(
         {
           ...state,
           phase: queue.length === 0 ? 'finished' : 'location',
           queue,
           done: state.done + 1,
-          // 没拿够而留下的那一格是队里新添的一格，总数跟着加：总数始终是已拣完的格数加队里还有的格数
           total: state.done + 1 + queue.length,
           counted: 0,
           submission: null,
           batch: null,
           gone: false,
-          feedback: { kind: 'ok', text: batch === null ? successText(sub, state.staging, verdict) : batchText(sub, batch.members, leftover, state.staging) },
+          feedback: { kind: 'ok', text: batch === null ? successText(sub, state.staging, verdict) : batchText(sub, batch.members, state.staging) },
         },
         'ok',
       );
@@ -836,8 +849,8 @@ export function applyVerdict(state: PickState, verdict: WorkFactVerdict): PickSt
 }
 
 /**
- * 合成的一格去掉已经交过的那几条任务：还剩的仍合成一格，都交完了为 null。
- * 交过而没记满的那一条也去掉——它在后端已是短拣，不能再拣；差的件数由后端换别的库位补。
+ * 合成的一格去掉已经交过的那几条任务：还剩的仍合成一格，都交完了为 null。只在交到一半后端没成时用——
+ * 都交成了的话没有剩下的。交过而没记满的那一条也去掉：它在后端已是短拣，不能再拣。
  */
 function withoutMembers(cell: PickCell, taken: readonly PickAllotment[]): PickCell | null {
   const gone = new Set(taken.map((member) => member.cell.taskId));
@@ -850,29 +863,35 @@ function withoutMembers(cell: PickCell, taken: readonly PickAllotment[]): PickCe
 
 const allottedTo = (members: readonly PickAllotment[]): number => members.reduce((sum, member) => sum + member.quantity, 0);
 
-function batchText(sub: PickSubmission, members: readonly PickAllotment[], leftover: PickCell | null, staging: string | null): string {
+function batchText(sub: PickSubmission, members: readonly PickAllotment[], staging: string | null): string {
   const place = staging ?? '待出库库位';
   if (sub.quantity >= sub.cell.quantity) {
     return `这一格拣好了：${sub.quantity} 件 ${sub.cell.goodsCode} 分开记给了 ${members.length} 张出库单，放到了 ${place}。`;
   }
-  const partial = shortAllotment(members);
+  const partial = partialAllotment(members);
+  const empty = emptyAllotments(members).length;
+  const got = members.length - empty;
   const short =
     partial === undefined
       ? ''
-      : `出库单 ${partial.cell.requestId} 只记到 ${partial.quantity} 件（要 ${partial.cell.quantity} 件），按短拣记了；差的若换得出别的库位，会添进余下的格。`;
-  const left = leftover === null ? '' : `还有 ${leftover.members?.length ?? 0} 条任务一件都没拣到，排到了队尾。`;
-  return `这一格拿到 ${sub.quantity} 件 ${sub.cell.goodsCode}，记给了 ${members.length} 张出库单，放到了 ${place}。${short}${left}`;
+      : `出库单 ${partial.cell.requestId} 只记到 ${partial.quantity} 件（要 ${partial.cell.quantity} 件），按短拣记了。`;
+  const none = empty === 0 ? '' : `${got === 0 ? '' : '还有 '}${empty} 条任务一件都没拣到，按 0 件记成了短拣。`;
+  const head =
+    sub.quantity === 0
+      ? `这一格一件 ${sub.cell.goodsCode} 都没拿到。`
+      : `这一格拿到 ${sub.quantity} 件 ${sub.cell.goodsCode}，记给了 ${got} 条任务，放到了 ${place}。`;
+  return `${head}${short}${none}差的若换得出别的库位，会添进余下的格。`;
 }
 
 /**
  * 这一笔记成之后要不要重读队列。短拣成立后，后端会在这个波次里换别的库位补差的那几件；添出来的格在后端，重读才看得到。
- * 合成一格拿的要等最后一条记成：交到一半时队列不让换。它没拿够而一件都没分到的任务不是短拣，后端没有为它们添格。
+ * 合成一格拿的要等最后一条记成：交到一半时队列不让换。一件都没分到、按 0 件交的任务也是短拣，后端同样为它们添格。
  */
 export function reloadAfter(before: PickState, verdict: WorkFactVerdict): boolean {
   if (verdict.verdict !== 'done' || verdict.outcome !== 'PICKED' || before.submission === null) return false;
   const batch = before.batch;
   if (batch === null) return before.submission.quantity < before.submission.cell.quantity;
-  return batch.sent + 1 >= batch.members.length && shortAllotment(batch.members) !== undefined;
+  return batch.sent + 1 >= batch.members.length && anyShortAllotment(batch.members);
 }
 
 /** 「再送一次」：用同一个事实号（由接线的一方保留那一笔 attempt）。 */

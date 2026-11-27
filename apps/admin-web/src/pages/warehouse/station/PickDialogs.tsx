@@ -115,8 +115,10 @@ export function ShortPickDialog({
       >
         <DialogHeader>
           <div>
-            <DialogTitle>少拣这一格？</DialogTitle>
-            <DialogDescription className="mt-1">确认之后按已扫的数提交，提交了就不能改。</DialogDescription>
+            <DialogTitle>{plan.quantity === 0 ? '这一格一件都没有？' : '少拣这一格？'}</DialogTitle>
+            <DialogDescription className="mt-1">
+              {plan.quantity === 0 ? '确认之后按 0 件提交，这一格记成短拣，提交了就不能改。' : '确认之后按已扫的数提交，提交了就不能改。'}
+            </DialogDescription>
           </div>
         </DialogHeader>
         <DialogBody>

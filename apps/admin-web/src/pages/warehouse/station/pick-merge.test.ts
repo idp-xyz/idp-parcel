@@ -124,24 +124,59 @@ test('合成的一格扫满后逐条提交，都记成才出队', () => {
   ok(finished.state.feedback.text.includes('记给了 3 张出库单'));
 });
 
-// Covers: 没拿够时按拿到的件数记给头几张出库单；没拿到的那几条任务不记短拣，仍合成一格排到队尾。
-test('合成的一格没拿够：拿到几件记几张，剩下的留在队尾', () => {
+// Covers: 没拿够时按拿到的件数记给头几张出库单；没拿到的那几条任务各按 0 件交、记成短拣（后端换别的库位补），
+// 这一格交完整个出队，最后一条记成之后重读队列。
+test('合成的一格没拿够：拿到几件记几张，没拿到的按 0 件记短拣', () => {
   const cell = mergedCell(3);
-  let state = scanCode(atGoods([cell]), 'SKU-1').state;
+  const state = scanCode(atGoods([cell]), 'SKU-1').state;
   const plan = shortPickPlan(state);
   equal(plan?.quantity, 1);
   equal(plan?.short, 2);
-  ok(plan !== null && shortPickLines(plan).some((line) => line.includes('原样留着')));
-  const submitted = submitShortPick(state);
-  equal(submitted.state.phase, 'submitting');
-  ok(submitted.effects[0].kind === 'submit' && submitted.effects[0].cell.taskId === 'T-1');
-  state = applyVerdict(submitted.state, done).state;
-  equal(state.phase, 'location');
-  equal(state.done, 1);
-  equal(state.queue.length, 1);
-  equal(state.queue[0].quantity, 2);
-  deepEqual(state.queue[0].members?.map((member) => member.taskId), ['T-2', 'T-3']);
-  equal(pickProgress(state), '第 2 格，共 2 格');
+  ok(plan !== null && shortPickLines(plan).some((line) => line.includes('剩下的 2 张出库单没有拣到，各按 0 件记成「短拣」')));
+  const sent: Array<[string, number]> = [];
+  let step = submitShortPick(state);
+  equal(step.state.phase, 'submitting');
+  for (;;) {
+    const effect = step.effects[0];
+    if (effect === undefined || effect.kind !== 'submit') break;
+    sent.push([effect.cell.taskId, effect.quantity]);
+    equal(reloadAfter(step.state, done), sent.length === 3);
+    step = applyVerdict(step.state, done);
+  }
+  deepEqual(sent, [
+    ['T-1', 1],
+    ['T-2', 0],
+    ['T-3', 0],
+  ]);
+  equal(step.state.phase, 'finished');
+  equal(step.state.done, 1);
+  equal(step.state.queue.length, 0);
+  ok(step.state.feedback.text.includes('还有 2 条任务一件都没拣到，按 0 件记成了短拣'));
+  equal(pickProgress(step.state), '已拣完，共 1 格');
+});
+
+// Covers: 到了库位一件都没有：没扫商品也能点少拣，合成一格的每条任务都按 0 件交；等周转箱那一步也能点，交出去不带箱号。
+test('一件都没拿到：每条任务按 0 件记短拣', () => {
+  const state = atGoods([mergedCell(2)]);
+  const plan = shortPickPlan(state);
+  equal(plan?.quantity, 0);
+  equal(plan?.short, 2);
+  ok(plan !== null && shortPickLines(plan).some((line) => line.includes('到了库位一件都没有')));
+  const first = submitShortPick(state);
+  ok(first.effects[0].kind === 'submit' && first.effects[0].cell.taskId === 'T-1' && first.effects[0].quantity === 0);
+  const second = applyVerdict(first.state, done);
+  ok(second.effects[0].kind === 'submit' && second.effects[0].cell.taskId === 'T-2' && second.effects[0].quantity === 0);
+  equal(reloadAfter(second.state, done), true);
+  const settled = applyVerdict(second.state, done).state;
+  equal(settled.phase, 'finished');
+  ok(settled.feedback.text.includes('一件 SKU-1 都没拿到'));
+
+  const lone = cellsOfWaves([wave('W-1', false, [task('T-1', 'OBR-1', 'L-1', { quantity: 2 })])], scope);
+  const asking = scanCode(setToteMode(startPick({ cells: lone, staging: 'OUT-1' }), true).state, 'L-1').state;
+  equal(asking.phase, 'tote');
+  const empty = submitShortPick(asking);
+  deepEqual(empty.effects, [{ kind: 'submit', cell: lone[0], quantity: 0 }]);
+  equal(reloadAfter(empty.state, done), true);
 });
 
 // Covers: 交到一半后端没成：已记成的几张是真的记下了，屏上说清；「下一格」去掉记成的，余下的仍合成一格排到队尾。
@@ -241,16 +276,17 @@ test('合并拣货的一格扫满后按各条任务的件数逐条提交', () =>
   ok(step.state.feedback.text.includes('6 件 SKU-1 分开记给了 3 张出库单'));
 });
 
-// Covers: 合并拣货的一格没拿够：按任务先后分，前面的记满，轮到的那一条按剩下的记成短拣、不留在队里（后端换别的库位补），
-// 一件都没分到的任务原样留着排到队尾；最后一条记成之后要重读队列，交到一半时不读。
-test('合并拣货的一格没拿够：前面的记满，轮到的记短拣，没分到的留在队尾', () => {
+// Covers: 合并拣货的一格没拿够：按任务先后分，前面的记满，轮到的那一条按剩下的记成短拣，一件都没分到的按 0 件记成短拣，
+// 都不留在队里（后端换别的库位补）；最后一条记成之后要重读队列，交到一半时不读。
+test('合并拣货的一格没拿够：前面的记满，轮到的与没分到的都记短拣', () => {
   const state = scanTimes(atGoods([batchCell()]), 4);
   const plan = shortPickPlan(state);
   equal(plan?.quantity, 4);
   equal(plan?.short, 2);
   const lines = plan === null ? [] : shortPickLines(plan);
+  ok(lines.some((line) => line.includes('1 条任务记满')));
   ok(lines.some((line) => line.includes('出库单 OBR-2 在这一格要 2 件，只分到 1 件')));
-  ok(lines.some((line) => line.includes('还有 1 条任务一件都没分到')));
+  ok(lines.some((line) => line.includes('还有 1 条任务一件都没分到，各按 0 件记成「短拣」')));
   const first = submitShortPick(state);
   ok(first.effects[0].kind === 'submit' && first.effects[0].cell.taskId === 'T-1' && first.effects[0].quantity === 3);
   equal(reloadAfter(first.state, done), false);
@@ -258,24 +294,35 @@ test('合并拣货的一格没拿够：前面的记满，轮到的记短拣，�
   const effect = second.effects[0];
   ok(effect.kind === 'submit' && effect.cell.taskId === 'T-2' && effect.quantity === 1 && effect.cell.quantity === 2);
   equal(second.effects.length, 1);
-  equal(reloadAfter(second.state, done), true);
-  const settled = applyVerdict(second.state, done).state;
-  equal(settled.phase, 'location');
+  equal(reloadAfter(second.state, done), false);
+  const third = applyVerdict(second.state, done);
+  ok(third.effects[0].kind === 'submit' && third.effects[0].cell.taskId === 'T-3' && third.effects[0].quantity === 0);
+  equal(reloadAfter(third.state, done), true);
+  const settled = applyVerdict(third.state, done).state;
+  equal(settled.phase, 'finished');
   equal(settled.done, 1);
-  deepEqual(settled.queue[0].members, [{ taskId: 'T-3', waveId: 'W-B', requestId: 'OBR-3', quantity: 1 }]);
-  equal(settled.queue[0].quantity, 1);
+  equal(settled.queue.length, 0);
   ok(settled.feedback.text.includes('出库单 OBR-2 只记到 1 件（要 2 件），按短拣记了'));
-  equal(pickProgress(settled), '第 2 格，共 2 格');
+  ok(settled.feedback.text.includes('还有 1 条任务一件都没拣到，按 0 件记成了短拣'));
 });
 
-// Covers: 没拿够而正好分到整条任务为止时没有短拣：不重读队列，没分到的任务留在队尾。
-test('合并拣货的一格没拿够而正好分到整条任务：没有短拣', () => {
-  const submitted = submitShortPick(scanTimes(atGoods([batchCell()]), 3));
-  equal(reloadAfter(submitted.state, done), false);
-  const settled = applyVerdict(submitted.state, done);
-  equal(settled.effects.length, 0);
-  deepEqual(settled.state.queue[0].members?.map((member) => member.taskId), ['T-2', 'T-3']);
-  equal(settled.state.queue[0].quantity, 3);
+// Covers: 没拿够而正好分到整条任务为止：没有「分到一半」的那一条，但没分到的两条照样按 0 件记短拣，交完重读队列。
+test('合并拣货的一格没拿够而正好分到整条任务：没分到的按 0 件记短拣', () => {
+  let step = submitShortPick(scanTimes(atGoods([batchCell()]), 3));
+  const sent: Array<[string, number]> = [];
+  for (;;) {
+    const effect = step.effects[0];
+    if (effect === undefined || effect.kind !== 'submit') break;
+    sent.push([effect.cell.taskId, effect.quantity]);
+    equal(reloadAfter(step.state, done), sent.length === 3);
+    step = applyVerdict(step.state, done);
+  }
+  deepEqual(sent, [
+    ['T-1', 3],
+    ['T-2', 0],
+    ['T-3', 0],
+  ]);
+  equal(step.state.queue.length, 0);
 });
 
 // Covers: 合并拣货的一格交到一半没成：屏上说清记下了几条共几件、还有几件没记；「下一格」把余下的任务合成一格排到队尾。

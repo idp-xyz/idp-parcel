@@ -140,6 +140,18 @@ test('要设备序号与发生时刻的作业，序号就是占下的那一个',
 });
 
 test('装不出来时说是哪一格不合，不送出去', () => {
+  const wrong = prepareWorkFact({
+    spec: specOf('pick'),
+    deviceId: device,
+    warehouse: 'SYN-WH-01',
+    sequence: 1,
+    values: { taskId: 'PKT-1', quantity: '-1', targetLocation: 'SYN-LOC-OUT-01' },
+    now: at,
+  });
+  equal(wrong.ok, false);
+  if (!wrong.ok) ok(wrong.reason.includes('实拣数量'), wrong.reason);
+
+  // 拣到 0 件装得出来：到了库位一件都没有，后端照少拣办
   const zero = prepareWorkFact({
     spec: specOf('pick'),
     deviceId: device,
@@ -148,8 +160,7 @@ test('装不出来时说是哪一格不合，不送出去', () => {
     values: { taskId: 'PKT-1', quantity: '0', targetLocation: 'SYN-LOC-OUT-01' },
     now: at,
   });
-  equal(zero.ok, false);
-  if (!zero.ok) ok(zero.reason.includes('实拣数量'), zero.reason);
+  equal(zero.ok, true);
 
   const missing = prepareWorkFact({
     spec: specOf('pick'),

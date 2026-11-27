@@ -194,6 +194,25 @@ func TestASortPutNamesTheWaveTheRequestTheGoodsAndTheTote(t *testing.T) {
 	}
 }
 
+// 拣到 0 件是「到了库位一件都没有」：收，这时不要放货位；拣到了货就得有放货位；负数不收。
+func TestAPickOfNothingNeedsNoStagingLocation(t *testing.T) {
+	head := `{"factId":"SYN-FACT-01","taskId":"SYN-TASK-01","warehouse":"SYN-WH-01"`
+	empty, err := registrationjson.PickCommand(strings.NewReader(head + `,"quantity":0}`))
+	if err != nil || empty.Quantity != 0 || empty.Target.String() != "" {
+		t.Fatalf("拣到 0 件：%v %+v", err, empty)
+	}
+	for name, body := range map[string]string{
+		"拣到了货却没有放货位": head + `,"quantity":1}`,
+		"负数":         head + `,"quantity":-1,"targetLocation":"SYN-LOC-OUT"}`,
+		"没写数量":       head + `,"targetLocation":"SYN-LOC-OUT"}`,
+		"放货位是空白":     head + `,"quantity":0,"targetLocation":" "}`,
+	} {
+		if _, err := registrationjson.PickCommand(strings.NewReader(body)); err == nil {
+			t.Errorf("%s：没有被拒", name)
+		}
+	}
+}
+
 // 拣货事实可以带箱号，不带就是没用箱；带了空白的不收。由人放开周转箱带仓与一个箱号，操作者取自身份。
 func TestAPickMayNameAToteAndAReleaseNamesOne(t *testing.T) {
 	pick := `{"factId":"SYN-FACT-01","taskId":"SYN-TASK-01","warehouse":"SYN-WH-01","quantity":2,"targetLocation":"SYN-LOC-OUT"`

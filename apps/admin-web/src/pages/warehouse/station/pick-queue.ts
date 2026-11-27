@@ -54,19 +54,17 @@ export function memberCell(cell: PickCell, member: PickMember): PickCell {
 }
 
 /**
- * 合成的一格拿到了 `quantity` 件，按任务的先后分下去：排在前面的任务记满，轮到的那一条不够就按剩下的记（它会成短拣），
- * 排在后面、一件都没分到的任务不在交回的名单里——一件都没拣到的任务后端不收，它们原样留着。
+ * 合成的一格拿到了 `quantity` 件，按任务的先后分下去：排在前面的任务记满，轮到的那一条不够就按剩下的记，
+ * 排在后面、一件都没分到的任务按 0 件记。后两种都是短拣，后端各自换别的库位补；每条任务都在交回的名单里，
+ * 这一格交完就没有留在队里的任务。
  */
 export function allotMembers(cell: PickCell, quantity: number): { cell: PickCell; quantity: number }[] {
-  const allotted: { cell: PickCell; quantity: number }[] = [];
-  let left = quantity;
-  for (const member of cell.members ?? []) {
-    if (left <= 0) break;
+  let left = Math.max(0, quantity);
+  return (cell.members ?? []).map((member) => {
     const given = Math.min(member.quantity, left);
-    allotted.push({ cell: memberCell(cell, member), quantity: given });
     left -= given;
-  }
-  return allotted;
+    return { cell: memberCell(cell, member), quantity: given };
+  });
 }
 
 /** 一次最多翻几页（每页读口最多 200 个波次）。 */
