@@ -62,7 +62,9 @@ const columns: WorkbenchColumn<OperatorRecord>[] = [
   {
     key: 'name',
     header: '姓名',
-    render: (row) => (row.name ? <span className="type-body">{row.name}</span> : <span className="text-idpxyz-textMuted">没登</span>),
+    // 不折行：右栏开着时这一列被挤窄，两个字的「没登」会折成两行。
+    render: (row) =>
+      row.name ? <span className="whitespace-nowrap type-body">{row.name}</span> : <span className="whitespace-nowrap text-idpxyz-textMuted">没登</span>,
   },
   {
     key: 'subject',
@@ -158,10 +160,10 @@ function NameForm({ operator, onRecorded, onClose }: { operator: OperatorRecord;
   };
   return (
     <section className="flex flex-col gap-3 rounded border border-idpxyz-border bg-idpxyz-inputBg p-3">
-      <h3 className="type-value font-medium text-idpxyz-text">姓名</h3>
+      <h3 className="type-value font-medium text-idpxyz-text">{operator.name ? '改姓名' : '登姓名'}</h3>
       <TextInput label="姓名" value={draft} onChange={setDraft} placeholder="这个人的名字" mono={false} />
       <p className="type-caption text-idpxyz-breadcrumb">
-        存在本系统的库里，能查阅运营数据的人都看得到。只填名字，不填电话、证件号这些。留空再保存就是删掉。
+        存在本系统的库里，能查阅运营数据的人都看得到。只填名字，不填电话、证件号这些。{operator.name ? '清空再保存就是删掉。' : ''}
       </p>
       {problem ? <p className="type-body text-idpxyz-danger">{problem}</p> : null}
       {answer?.kind === 'outcome' ? (
@@ -174,7 +176,8 @@ function NameForm({ operator, onRecorded, onClose }: { operator: OperatorRecord;
           取消
         </Button>
         <Button variant="default" size="sm" className={`${primaryActionClass} type-body`} disabled={problem !== null || unchanged || busy} onClick={submit}>
-          {busy ? '保存中…' : draft.trim() === '' ? '删掉姓名' : '保存姓名'}
+          {/* 只有本来登着姓名、现在清空了，才是删。 */}
+          {busy ? '保存中…' : operator.name && draft.trim() === '' ? '删掉姓名' : '保存姓名'}
         </Button>
       </div>
     </section>
