@@ -1,4 +1,5 @@
 import { Button } from '@idpxyz/ui-primitives';
+import { useEffect, useRef } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
 import { formatInstant } from '../catalogue-view';
 import { receivingActionSpecs } from './actions';
@@ -8,7 +9,7 @@ import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { claimDeadline, claimPrefill, claimWindowElapsed, unclaimedNextStep, unclaimedTrack } from './unclaimed-next-step';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useDisposalRules } from './use-disposal-rules';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { durationLabel, elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsTone } from './wms-ui';
 
@@ -17,12 +18,33 @@ const moduleId = 'warehouse-unclaimed';
 /**
  * 待认领到货页：一件没人认的到货，现场怎么观察的、有什么线索、谁认领过又撤销过、最后怎么处置的。
  * 认领与撤销认领、按规则处置都在头区，按它此刻的状态摆；货被认领后要去作业台收货入账。
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一行留着上一件，新的读到再换。
  */
-export function UnclaimedDocument({ arrivalId }: { arrivalId: string }) {
+export function UnclaimedDocument({
+  arrivalId,
+  panel,
+}: {
+  arrivalId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(receivingActionSpecs);
   const back = useReturnToList(moduleId);
-  const rules = useDisposalRules(0);
-  const { answer, loading, reload } = useKeyedLoad(arrivalId, getUnclaimedArrivalDetail);
+  const rules = useDisposalRules(panel?.revision ?? 0);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(arrivalId, getUnclaimedArrivalDetail, { holdPrevious: panel !== undefined });
+  const shownId = useRef(arrivalId);
+  useEffect(() => {
+    if (shownId.current === arrivalId) return;
+    shownId.current = arrivalId;
+    drawer.close();
+  }, [arrivalId, drawer]);
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
+  const afterWrite = panel ? panel.onChanged : reload;
   const arrival: UnclaimedArrivalRecord | undefined = answer?.kind === 'outcome' ? answer.body.arrival : undefined;
   const failure =
     readFailureMessage(answer) ?? (answer?.kind === 'outcome' && !arrival ? `没有 ${arrivalId} 这件待认领到货。它可能属于别的公司，或到货号有误。` : null);
@@ -111,10 +133,13 @@ export function UnclaimedDocument({ arrivalId }: { arrivalId: string }) {
             </>
           ) : undefined
         }
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [arrivalId]) } : undefined}
         stepper={
           track ? (
             <WmsStepper
@@ -298,7 +323,7 @@ export function UnclaimedDocument({ arrivalId }: { arrivalId: string }) {
           </>
         ) : null}
       </WmsDocumentPage>
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={afterWrite} />
     </>
   );
 }
