@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { exchangeMasterData } from './catalogue-api';
-import { heldGrantsOf, mayAdministerAccess, mayMakeDecision, mayReadOperations, mayWriteRegistry, type HeldGrants, type OperatorGrantsResponseBody } from './operator-grants';
+import { heldGrantsFromSelfQuery, mayAdministerAccess, mayMakeDecision, mayReadOperations, mayWriteRegistry, type HeldGrants, type OperatorGrantsResponseBody } from './operator-grants';
 
 // 一页加载只问一次：各页的写入口都要这同一个答案，而操作者换授予要整页重载才重新问（授予在铸造那一刻取，
 // 令牌之外没有会话态）。在途与答出的都记在模块级，各页同时挂载也只发一次请求；答出的值留着，后挂载的页第一帧就拿到，
@@ -12,10 +12,7 @@ function loadHeldGrants(): Promise<HeldGrants | undefined> {
   if (pending === null) {
     pending = exchangeMasterData<OperatorGrantsResponseBody>('/operator-grants')
       .then((answer) => {
-        // 自查口以主数据与运营查阅读守口。答「没有授予」时这个人连查阅都没有，登记写、运营决定也无从谈起——
-        // 记成一份空的持有，页面据此收起写入口。别的答不出（未配置、依赖故障）仍是不知道，入口照摆。
-        if (answer.kind === 'notGranted') return { faces: new Set<string>(), decisions: new Set<string>() };
-        return heldGrantsOf(answer);
+        return heldGrantsFromSelfQuery(answer);
       })
       .then((held) => {
         if (held === undefined) pending = null;

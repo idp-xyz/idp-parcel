@@ -10,7 +10,10 @@ import {
   deliveryHandoverConfirmationDecision,
   effectiveTimeJudgmentDecision,
   entryHint,
+  heldGrantsFromSelfQuery,
   heldGrantsOf,
+  mayAdministerAccess,
+  mayReadOperations,
   hiddenDecisionHint,
   hiddenEntryHint,
   mayMakeDecision,
@@ -43,6 +46,15 @@ test('答不出一律是不知道', () => {
   equal(heldGrantsOf({ kind: 'noAnswer', status: 503, code: 'IDENTITY_DEPENDENCY_UNAVAILABLE' }), undefined);
   equal(heldGrantsOf({ kind: 'transport', message: 'ECONNREFUSED' }), undefined);
   equal(heldGrantsOf(null), undefined);
+});
+
+test('自查口没有授予只确定没有查阅，写与管理入口仍照摆', () => {
+  const held = heldGrantsFromSelfQuery({ kind: 'notGranted' });
+  ok(held?.readProbeRefused);
+  equal(mayReadOperations(held), false);
+  equal(mayAdministerAccess(held), true);
+  equal(mayWriteRegistry(held), true);
+  equal(mayMakeDecision(held, 'MANUAL_REVIEW_COMPLETION'), true);
 });
 
 test('明确没有登记册配置写授予才收起写入口', () => {

@@ -19,9 +19,21 @@ export const registryWriteFace = 'REGISTRY_CONFIGURATION_WRITE';
 /** 主数据与运营查阅读，原词取自 accessidentity.CapabilityMasterDataAndOperationsRead。 */
 export const operationsReadFace = 'MASTER_DATA_AND_OPERATIONS_READ';
 
-/** 明确知道没有主数据与运营查阅读才是 false；还不知道时不当成没有。 */
+/** 明确知道没有主数据与运营查阅读才是 false；还不知道时不当成没有。自查口被挡住时查阅面确定没有。 */
 export function mayReadOperations(held: HeldGrants | undefined): boolean {
-  return held === undefined || held.faces.has(operationsReadFace);
+  if (held === undefined) return true;
+  if (held.readProbeRefused) return false;
+  return held.faces.has(operationsReadFace);
+}
+
+/**
+ * 自查口的判读。没有授予只确定没有查阅面；其余各态交给 heldGrantsOf，答不出仍是不知道。
+ */
+export function heldGrantsFromSelfQuery(answer: ApiResult<OperatorGrantsResponseBody> | null): HeldGrants | undefined {
+  if (answer?.kind === 'notGranted') {
+    return { faces: new Set(), decisions: new Set(), readProbeRefused: true };
+  }
+  return heldGrantsOf(answer);
 }
 
 /** 操作者接入管理：操作者册的写面与本租户操作者册查阅的能力面（ADR-0363），原词取自 accessidentity.CapabilityOperatorAccessAdministration。 */
@@ -30,6 +42,11 @@ export const operatorAccessAdministrationFace = 'OPERATOR_ACCESS_ADMINISTRATION'
 export interface HeldGrants {
   faces: ReadonlySet<string>;
   decisions: ReadonlySet<string>;
+  /**
+   * 自查口被主数据与运营查阅读挡住。查阅面确定没有；写、管理、运营决定这份答复没查到，入口照摆。
+   * 首个管理员往往只有操作者接入管理，自查口答没有授予并不等于他没有那一格。
+   */
+  readProbeRefused?: boolean;
 }
 
 /**
@@ -74,19 +91,24 @@ export const supplierBillAuditDecision = 'SUPPLIER_BILL_AUDIT';
 /** 把一段挂成争议与对争议再审，与审核应付分开授予，原词取自 accessidentity.DecisionSupplierBillDisputeDecision（ADR-0357 决定二）。 */
 export const supplierBillDisputeDecision = 'SUPPLIER_BILL_DISPUTE_DECISION';
 
+/** 自查口被查阅授予挡住时，写与管理面没查到，不当成明确没有。 */
+function writeFacesKnown(held: HeldGrants): boolean {
+  return held.readProbeRefused !== true;
+}
+
 /** 运营决定入口摆不摆：同登记入口，明确知道没有那一种运营决定授予才收起，不知道就摆。 */
 export function mayMakeDecision(held: HeldGrants | undefined, decision: string): boolean {
-  return held === undefined || held.decisions.has(decision);
+  return held === undefined || !writeFacesKnown(held) || held.decisions.has(decision);
 }
 
 /** 登记与发布入口摆不摆：明确知道没有登记册配置写授予才收起，不知道就摆。 */
 export function mayWriteRegistry(held: HeldGrants | undefined): boolean {
-  return held === undefined || held.faces.has(registryWriteFace);
+  return held === undefined || !writeFacesKnown(held) || held.faces.has(registryWriteFace);
 }
 
 /** 操作者页的写入口摆不摆：同 mayWriteRegistry 的口径，只有明确知道没有操作者接入管理授予才收起。 */
 export function mayAdministerAccess(held: HeldGrants | undefined): boolean {
-  return held === undefined || held.faces.has(operatorAccessAdministrationFace);
+  return held === undefined || !writeFacesKnown(held) || held.faces.has(operatorAccessAdministrationFace);
 }
 
 /** 入口按授予收起时，原本指向它的文案改说这一句：说谁能用，不让人去找本页没有摆出的签或按钮。 */
