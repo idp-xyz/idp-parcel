@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"net/url"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/postgres"
@@ -37,6 +38,22 @@ func TestPreAdviceCatalogueListsOneOwnerAndFindsByDocumentNumber(t *testing.T) {
 	}
 	if len(page.Rows[0].Notices()) != 1 || page.Rows[0].CurrentNotice().Version() != 1 {
 		t.Fatalf("告知版本 = %d", len(page.Rows[0].Notices()))
+	}
+	advised, err := ports.PreAdvicePages.Decode(url.Values{"status": {"ADVISED"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	narrowed, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, advised)
+	if err != nil || narrowed.Total != 1 || len(narrowed.Rows) != 1 || narrowed.Rows[0].Status() != domain.PreAdviceAdvised {
+		t.Fatalf("已预报 total=%d rows=%d err=%v", narrowed.Total, len(narrowed.Rows), err)
+	}
+	closed, err := ports.PreAdvicePages.Decode(url.Values{"status": {"CLOSED"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	none, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, closed)
+	if err != nil || none.Total != 0 || len(none.Rows) != 0 {
+		t.Fatalf("已完结 total=%d err=%v", none.Total, err)
 	}
 	other, err := catalogue.ListPreAdvices(t.Context(), tenant, valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-02"), 20, query)
 	if err != nil || other.Total != 0 || len(other.Rows) != 0 {

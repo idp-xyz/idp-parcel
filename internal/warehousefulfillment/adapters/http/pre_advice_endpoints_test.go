@@ -190,6 +190,7 @@ func TestTheUnconfiguredIntakeAnswersPreAdviceLinesWithoutReadingAnything(t *tes
 
 type scriptedPreAdviceQueries struct {
 	list          []application.PreAdviceReading
+	last          cataloguepage.Query
 	one           application.PreAdviceReading
 	oneFound      bool
 	byNumber      application.PreAdviceReading
@@ -211,9 +212,10 @@ func readingOf(advice domain.PreAdvice) application.PreAdviceReading {
 }
 
 func (queries *scriptedPreAdviceQueries) ListPreAdvices(
-	context.Context, domain.TenantID, domain.OwnerAccountID, int, cataloguepage.Query,
+	_ context.Context, _ domain.TenantID, _ domain.OwnerAccountID, _ int, query cataloguepage.Query,
 ) (cataloguepage.Result[application.PreAdviceReading], error) {
 	queries.calls++
+	queries.last = query
 	return cataloguepage.Result[application.PreAdviceReading]{Rows: queries.list, Total: int64(len(queries.list))}, nil
 }
 
@@ -324,6 +326,20 @@ func TestPreAdviceReadsOmitAnEmptyNumberAndKeepNoticeHistoryOnTheSingleRead(t *t
 	assertProblem(t, "unknown query key", bad, http.StatusBadRequest, "MALFORMED_REQUEST")
 	if queries.calls != 0 {
 		t.Fatal("坏查询不该问读口")
+	}
+
+	narrowed := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&status=ADVISED")
+	if narrowed.Code != http.StatusOK {
+		t.Fatalf("按状态 %d %s", narrowed.Code, narrowed.Body.String())
+	}
+	if got := queries.last.Filters["status"]; len(got) != 1 || got[0] != "ADVISED" {
+		t.Fatalf("状态没交给读口：%v", queries.last.Filters)
+	}
+	queries.calls = 0
+	unknown := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&status=NOPE")
+	assertProblem(t, "unknown status", unknown, http.StatusBadRequest, "MALFORMED_REQUEST")
+	if queries.calls != 0 {
+		t.Fatal("词表外的状态不该问读口")
 	}
 }
 

@@ -27,7 +27,7 @@ func NewPreAdviceCatalogue(db *bentopg.DB) (*PreAdviceCatalogue, error) {
 var _ ports.PreAdviceRead = (*PreAdviceCatalogue)(nil)
 
 const preAdviceListed = `WITH listed AS (
-        SELECT pre_advice_id, warehouse_code
+        SELECT pre_advice_id, warehouse_code, status
           FROM warehouse_fulfillment.inbound_pre_advice
          WHERE tenant_id = $1 AND owner_account_id = $2
      )`
@@ -36,6 +36,7 @@ var preAdviceListBinding = ports.PreAdvicePages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"preAdviceId": "pre_advice_id"},
 	Identity: []string{"pre_advice_id"},
 	Keyword:  []string{"pre_advice_id", "warehouse_code"},
+	Filters:  map[string]string{"status": "status"},
 })
 
 func (catalogue *PreAdviceCatalogue) ListPreAdvices(
