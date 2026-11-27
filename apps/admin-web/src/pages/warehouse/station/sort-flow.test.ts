@@ -59,6 +59,50 @@ test('扫到的货先归已经有箱的单；没有箱的单要先扫一个空�
   equal(sortScreen(none.state).headline, '拿一个空箱，扫箱号');
 });
 
+// Covers: 两个工位同时分一个波次，屏上的情况会旧：后端说这张单已经分够了（或已复核、取消），手里这一件不放一边——
+// 分拣情况重读回来，照这种货当场改归还要它的单，直接到扫箱确认；没有单要了才说它多出来了。
+// 别的货主名下同名的货不借用；重读没回来之前人扫了下一个码，那一件就算放一边了。
+test('后端说这张单不收了：重读后手里这一件改归别的单', () => {
+  const atTote = scanCode(twoOrders(), 'SKU-1').state;
+  const submitted = scanCode(atTote, 'T-2').state;
+  for (const outcome of ['CONTENT_INVALID', 'STATUS_MISMATCH']) {
+    const refused = applyVerdict(submitted, refusedWith(outcome));
+    equal(refused.state.phase, 'unit');
+    deepEqual(refused.effects, [{ kind: 'reload' }]);
+    deepEqual(refused.state.rehome, { goodsCode: 'SKU-1', ownerAccount: 'OWNER-1' });
+    ok(refused.state.feedback.text.includes('货先拿在手里'));
+
+    // 重读回来：OBR-2 已经分够，OBR-1 还要 2 件
+    const fresh = [order('OBR-1'), order('OBR-2', { totes: ['T-2'], lines: [{ goodsCode: 'SKU-1', unit: '件', picked: 2, sorted: 2, open: 0 }] })];
+    const rehomed = reloadPlan(refused.state, fresh);
+    equal(rehomed.state.phase, 'tote');
+    equal(rehomed.state.rehome, null);
+    equal(rehomed.cue, 'ok');
+    deepEqual(rehomed.state.target, { requestId: 'OBR-1', goodsCode: 'SKU-1', quantity: 1, adding: false });
+    ok(rehomed.state.feedback.text.includes('手里这一件改归别的单') && rehomed.state.feedback.text.includes('归出库单 DOC-OBR-1'));
+
+    // 重读回来没有单要它了：说清是多出来的，回到等货
+    const full = fresh.map((item) => ({ ...item, lines: [{ goodsCode: 'SKU-1', unit: '件', picked: 2, sorted: 2, open: 0 }] }));
+    const spare = reloadPlan(refused.state, full);
+    equal(spare.state.phase, 'unit');
+    equal(spare.state.rehome, null);
+    ok(spare.state.feedback.text.includes('多出来的'));
+
+    // 别的货主名下同一个编码的货不是这一件
+    const foreign = reloadPlan(refused.state, [order('OBR-9', { ownerAccount: 'OWNER-2' })]);
+    equal(foreign.state.phase, 'unit');
+    ok(foreign.state.feedback.text.includes('没有单要这种货'));
+
+    // 没等到重读就扫了下一个码：不再替那一件找单
+    const moved = scanCode(refused.state, 'SKU-1').state;
+    equal(moved.rehome, null);
+    equal(reloadPlan({ ...moved, phase: 'unit' }, fresh).state.phase, 'unit');
+  }
+  // 箱不认不是「这张单不收了」：手里这一件还归它，换一个箱
+  equal(applyVerdict(submitted, refusedWith('TOTE_IN_USE')).state.rehome, null);
+  equal(applyVerdict(submitted, refusedWith('WAVE_NOT_FOUND')).state.rehome, null);
+});
+
 // Covers: 扫箱确认才提交：扫到这张单的箱，提交一件；记成之后这张单的已分数加一，回到等货，进度跟着变。
 test('扫箱确认后提交一件，记成后回到等货', () => {
   const atTote = scanCode(twoOrders(), 'SKU-1').state;

@@ -83,6 +83,11 @@ export interface SortState {
   submission: SortSubmission | null;
   /** 这一趟投放了几件。 */
   put: number;
+  /**
+   * 手里这一件要另找一张单：后端说原来那张单不收了（别的工位刚把它分够，或它已经复核、取消），货还在手里。
+   * 分拣情况重读回来之后照这种货再归一次单，不用把它放一边重扫。货主一并记着——商品编码只在一位货主之内唯一。
+   */
+  rehome: { goodsCode: string; ownerAccount: string } | null;
 }
 
 export type SortEffect =
@@ -102,13 +107,24 @@ export interface SortStep {
 const waiting: SortFeedback = { kind: 'waiting', text: '等你扫货。' };
 
 export function startSort(waveId: string, orders: readonly SortOrder[]): SortState {
-  return { waveId, phase: 'unit', orders, target: null, feedback: waiting, submission: null, put: 0 };
+  return { waveId, phase: 'unit', orders, target: null, feedback: waiting, submission: null, put: 0, rehome: null };
 }
 
-/** 重读回来的分拣情况换上去。认货、扫箱、提交在途时不换：那一步是照旧的那一份判的，换了就对不上。 */
+/**
+ * 重读回来的分拣情况换上去。认货、扫箱、提交在途时不换：那一步是照旧的那一份判的，换了就对不上。
+ * 手里有一件等着另找单时（rehome），照新读到的情况当场再归一次：两个工位同时分一个波次，各自屏上的情况都会旧，
+ * 后端拒掉的那一件不该让人放一边重扫。
+ */
 export function reloadPlan(state: SortState, orders: readonly SortOrder[]): SortStep {
   if (state.phase !== 'unit') return { state, effects: [] };
-  return { state: { ...state, orders }, effects: [] };
+  const rehome = state.rehome;
+  const fresh: SortState = { ...state, orders, rehome: null };
+  if (rehome === null) return { state: fresh, effects: [] };
+  const again = assign(fresh, rehome.goodsCode, (order) =>
+    order.ownerAccount === rehome.ownerAccount && order.lines.some((line) => line.goodsCode === rehome.goodsCode) ? rehome.goodsCode : null,
+  );
+  if (again.state.phase !== 'tote') return again;
+  return { ...again, state: { ...again.state, feedback: { ...again.state.feedback, text: `原来那张单不收了，手里这一件改归别的单。${again.state.feedback.text}` } } };
 }
 
 const step = (state: SortState, cue?: ScanCue, effects: readonly SortEffect[] = []): SortStep =>
@@ -210,9 +226,11 @@ function assign(state: SortState, code: string, goodsOf: (order: SortOrder) => s
 }
 
 /** 扫到一个码。等货时认货，等箱时认箱；别的阶段不收。 */
-export function scanCode(state: SortState, raw: string): SortStep {
+export function scanCode(input: SortState, raw: string): SortStep {
   const code = normalizeScan(raw);
-  if (code === '') return { state, effects: [] };
+  if (code === '') return { state: input, effects: [] };
+  // 等着另找单的那一件还没等到重读，人已经扫了下一个码：那一件算放一边了，不再替它找单
+  const state: SortState = input.rehome === null ? input : { ...input, rehome: null };
   switch (state.phase) {
     case 'unit': {
       const holder = toteHolder(state, code);
@@ -337,8 +355,8 @@ export const sortOutcomeLabels: Readonly<Record<string, string>> = {
   EXISTING_RESULT: '这一次投放之前已经记过了（同一个作业事实号），这次没有重复记。',
   CONTENT_CONFLICT: '这个作业事实号已经记过一笔内容不同的投放，这一笔没有记。',
   CONTENT_INVALID:
-    '后端不认这一笔，没有记：这张单的这种货已经分够了，或者还没拣回来，也可能这个波次不用分拣。这一件先放一边，屏上的分拣情况已经重读。',
-  STATUS_MISMATCH: '这张单现在不能再分货：它已经复核过，或已经取消。这一笔没有记，这一件先放一边。',
+    '后端不认这一笔，没有记：这张单的这种货已经分够了（多半是别的工位刚分过），或者还没拣回来，也可能这个波次不用分拣。货先拿在手里，正在重读分拣情况，给它另找一张单。',
+  STATUS_MISMATCH: '这张单现在不能再分货：它已经复核过，或已经取消。这一笔没有记。货先拿在手里，正在重读分拣情况，给它另找一张单。',
   WAVE_NOT_FOUND: '找不到这个波次或这张出库单。这一笔没有记。',
   NOT_CONFIGURED: '未配置：本租户还没有登记仓，这一笔没有记。',
   TOTE_IN_USE: '这个箱上绑着别的出库单，这一笔没有记。货先别放进去，换一个空箱再扫。',
@@ -395,12 +413,22 @@ export function applyVerdict(state: SortState, verdict: WorkFactVerdict): SortSt
         );
       }
       return step(
-        { ...state, phase: 'unit', target: null, submission: null, feedback: { kind: 'wrong', text: verdict.headline } },
+        {
+          ...state,
+          phase: 'unit',
+          target: null,
+          submission: null,
+          rehome: rehomeAfter(verdict.outcome) ? { goodsCode: put.goodsCode, ownerAccount: orderOf(state, put.requestId)?.ownerAccount ?? '' } : null,
+          feedback: { kind: 'wrong', text: verdict.headline },
+        },
         'wrong',
         verdict.outcome === undefined ? [] : [{ kind: 'reload' }],
       );
   }
 }
+
+/** 后端拒掉的缘由是「这张单不收这一件了」时，货还在手里、可以归别的单：分够了（内容不合）或单已复核、取消（状态不符）。 */
+const rehomeAfter = (outcome: string | undefined): boolean => outcome === 'CONTENT_INVALID' || outcome === 'STATUS_MISMATCH';
 
 /** 「再送一次」：用同一个事实号。 */
 export function resend(state: SortState): SortStep {
