@@ -101,6 +101,27 @@ func TestAWaveRuleDocumentNamesItsConditionsAndARunNamesTheRule(t *testing.T) {
 			t.Errorf("规则，%s：没有被拒", name)
 		}
 	}
+	timed, err := registrationjson.RegisterWaveRuleCommand(strings.NewReader(
+		`{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","revision":3,"name":"小件","maxRequests":20,"releaseTimes":["09:00","14:00"]}`), tenant, operator)
+	if err != nil || len(timed.ReleaseTimes) != 2 || timed.ReleaseTimes[1] != "14:00" || len(plain.ReleaseTimes) != 0 {
+		t.Fatalf("带时点的规则 %+v：%v", timed, err)
+	}
+	due, err := registrationjson.RunDueWaveRulesCommand(strings.NewReader(`{}`))
+	if err != nil || due.Warehouse != "" || due.Operator.String() != "" {
+		t.Fatalf("放到点的规则译出的命令 %+v：%v", due, err)
+	}
+	if one, err := registrationjson.RunDueWaveRulesCommand(strings.NewReader(`{"warehouse":"SYN-WH-01"}`)); err != nil || one.Warehouse != "SYN-WH-01" {
+		t.Fatalf("只看一个仓 %+v：%v", one, err)
+	}
+	for name, body := range map[string]string{
+		"仓是空白":   `{"warehouse":" "}`,
+		"自己带了时刻": `{"at":"2026-11-27T09:00:00Z"}`,
+		"带了操作者":  `{"registrant":"someone"}`,
+	} {
+		if _, err := registrationjson.RunDueWaveRulesCommand(strings.NewReader(body)); err == nil {
+			t.Errorf("放到点的规则，%s：没有被拒", name)
+		}
+	}
 	run, err := registrationjson.RunWaveRuleCommand(strings.NewReader(`{"warehouse":"SYN-WH-01","ruleCode":"SYN-RULE-A","runId":"SYN-RUN-1"}`))
 	if err != nil || run.Warehouse.String() != "SYN-WH-01" || run.Rule.String() != "SYN-RULE-A" || run.RunID.String() != "SYN-RUN-1" || run.Operator.String() != "" {
 		t.Fatalf("成波译出的命令 %+v：%v", run, err)

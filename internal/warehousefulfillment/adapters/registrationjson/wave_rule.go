@@ -26,6 +26,8 @@ type waveRuleDocument struct {
 	MaxUnits    *int64 `json:"maxUnits"`
 	BatchPick   *bool  `json:"batchPick"`
 	Deactivated *bool  `json:"deactivated"`
+	// ReleaseTimes 是每天到点放的时点（HH:MM，按仓的业务时区）；不带是只由人点。格式由用例核。
+	ReleaseTimes *[]string `json:"releaseTimes"`
 }
 
 // RegisterWaveRuleCommand 把成波规则的登记译成命令。一个波次最多几张（maxRequests）必须带：
@@ -63,6 +65,9 @@ func RegisterWaveRuleCommand(reader io.Reader, tenant domain.TenantID, operator 
 		Deactivated: document.Deactivated != nil && *document.Deactivated,
 		Operator:    operator,
 	}
+	if document.ReleaseTimes != nil {
+		command.ReleaseTimes = *document.ReleaseTimes
+	}
 	if document.MaxLines != nil {
 		if *document.MaxLines < 1 {
 			return none, malformed("maxLines must be a positive integer")
@@ -96,6 +101,33 @@ func RegisterWaveRuleCommand(reader io.Reader, tenant domain.TenantID, operator 
 		default:
 			return none, malformed("profile is not a wave rule profile")
 		}
+	}
+	return command, nil
+}
+
+type dueWaveRulesDocument struct {
+	carriedIdentity
+	// Warehouse 不带是本租户各仓的规则都看。
+	Warehouse *string `json:"warehouse"`
+}
+
+// RunDueWaveRulesCommand 把「放到点的规则」译成命令。此刻是几点由服务端的钟定，载荷里不带时刻。
+func RunDueWaveRulesCommand(reader io.Reader) (application.RunDueWaveRulesCommand, error) {
+	var none application.RunDueWaveRulesCommand
+	document, err := decodeDocument[dueWaveRulesDocument](reader, "due wave rules")
+	if err != nil {
+		return none, err
+	}
+	if err := document.refuseCarriedIdentity(); err != nil {
+		return none, err
+	}
+	var command application.RunDueWaveRulesCommand
+	if document.Warehouse != nil {
+		warehouse, err := domain.NewWarehouseCode(*document.Warehouse)
+		if err != nil {
+			return none, malformed("warehouse must not be blank")
+		}
+		command.Warehouse = warehouse.String()
 	}
 	return command, nil
 }

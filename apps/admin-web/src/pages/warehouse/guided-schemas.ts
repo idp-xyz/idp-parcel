@@ -716,6 +716,13 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
         hint: '加上下一张单会超就另起一个波次；一张单自己就超了的单独成一个波次',
       },
       { path: 'maxUnits', label: '一个波次最多几件（不填是不限）', kind: 'integer', placeholder: '200', hint: '按基本单位算；规矩同行数' },
+      {
+        path: 'releaseTimes',
+        label: '每天几点放（不填是只由人点）',
+        kind: 'string-list',
+        placeholder: '09:00, 14:00',
+        hint: '24 小时制 HH:MM，按这个仓的业务时区，逗号或换行分隔。到点要靠部署方的定时任务来调「放到点的规则」这一口，产品自己不计时；仓没登记业务时区时到点不放',
+      },
       { path: 'ownerAccount', label: '只圈这位货主的（不填是不限）', kind: 'text', lookup: 'owner', placeholder: 'SYN-OWNER-01' },
       { path: 'dispatch', label: '只圈这种发运方式的（不选是不限）', kind: 'select', options: dispatchOptions },
       {

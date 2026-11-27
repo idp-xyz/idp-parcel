@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -36,7 +37,9 @@ type RegisterWaveRuleCommand struct {
 	MaxUnits    int64
 	BatchPick   bool
 	Deactivated bool
-	Operator    domain.Registrant
+	// ReleaseTimes 是每天到点放的时点，HH:MM，按仓的业务时区；空是只由人点。
+	ReleaseTimes []string
+	Operator     domain.Registrant
 }
 
 // RegisterWaveRule 成波规则是租户按仓定的：圈哪些单、一个波次多大、怎么拣，产品不替他定，也不带一条默认的规则。
@@ -49,6 +52,10 @@ func (handler *WaveHandler) RegisterWaveRule(ctx context.Context, command Regist
 	if command.Operator.String() == "" || command.Warehouse.String() == "" || command.Code.String() == "" || command.Revision < 1 ||
 		name == "" || command.MaxRequests < 1 || command.MaxRequests > maxRequestsPerRuleWave || command.MaxLines < 0 || command.MaxUnits < 0 ||
 		!knownWaveRuleProfile(command.Profile) {
+		return WaveResult{outcome: WaveContentInvalid}, nil
+	}
+	releaseTimes, ok := normalizedReleaseTimes(command.ReleaseTimes)
+	if !ok {
 		return WaveResult{outcome: WaveContentInvalid}, nil
 	}
 	warehouse, found, err := handler.toteWarehouses.LoadLatestWarehouse(ctx, command.Tenant, command.Warehouse)
@@ -64,7 +71,7 @@ func (handler *WaveHandler) RegisterWaveRule(ctx context.Context, command Regist
 	rule := ports.WaveRule{
 		Warehouse: command.Warehouse, Code: command.Code, Revision: command.Revision, Name: name, Owner: command.Owner,
 		Dispatch: command.Dispatch, Profile: command.Profile, MaxRequests: command.MaxRequests, MaxLines: command.MaxLines,
-		MaxUnits: command.MaxUnits, BatchPick: command.BatchPick, Deactivated: command.Deactivated,
+		MaxUnits: command.MaxUnits, BatchPick: command.BatchPick, Deactivated: command.Deactivated, ReleaseTimes: releaseTimes,
 	}
 	current, found, err := handler.waves.LoadWaveRule(ctx, command.Tenant, command.Warehouse, command.Code)
 	if err != nil {
@@ -94,7 +101,7 @@ func knownWaveRuleProfile(profile string) bool {
 func sameWaveRule(left, right ports.WaveRule) bool {
 	return left.Name == right.Name && left.Owner == right.Owner && left.Dispatch == right.Dispatch && left.Profile == right.Profile &&
 		left.MaxRequests == right.MaxRequests && left.MaxLines == right.MaxLines && left.MaxUnits == right.MaxUnits &&
-		left.BatchPick == right.BatchPick && left.Deactivated == right.Deactivated
+		left.BatchPick == right.BatchPick && left.Deactivated == right.Deactivated && slices.Equal(left.ReleaseTimes, right.ReleaseTimes)
 }
 
 // RunWaveRuleCommand 按一条成波规则把这个仓里圈得到的已预占请求放成波次。RunID 是这一次执行的号，

@@ -34,13 +34,17 @@ const rule = (ruleCode: string, more: Partial<WaveRuleRecord> = {}): WaveRuleRec
 
 // Covers: 一条规则圈什么、怎么放说成一句话；三个圈单条件都没带时说这个仓已预占的单都圈。
 test('规则说成一句话：不带的条件不提，都不带就是都圈', () => {
-  equal(waveRuleSummary(rule('A')), '这个仓已预占的出库单都圈，一个波次最多 20 张，逐单拣');
+  equal(waveRuleSummary(rule('A')), '这个仓已预占的出库单都圈，一个波次最多 20 张，逐单拣，只由人点');
   equal(
     waveRuleSummary(rule('B', { ownerAccount: 'OWNER-1', dispatch: 'PICKUP', profile: 'SINGLE_UNIT', maxRequests: 50 })),
-    '货主 OWNER-1，到仓自提，只圈单品单件，一个波次最多 50 张，逐单拣',
+    '货主 OWNER-1，到仓自提，只圈单品单件，一个波次最多 50 张，逐单拣，只由人点',
   );
-  equal(waveRuleSummary(rule('C', { profile: 'MULTI_UNIT', batchPick: true })), '只圈不是单品单件的，一个波次最多 20 张，合并拣货');
-  equal(waveRuleSummary(rule('D', { maxLines: 60, maxUnits: 200 })), '这个仓已预占的出库单都圈，一个波次最多 20 张、60 行、200 件，逐单拣');
+  equal(waveRuleSummary(rule('C', { profile: 'MULTI_UNIT', batchPick: true })), '只圈不是单品单件的，一个波次最多 20 张，合并拣货，只由人点');
+  equal(waveRuleSummary(rule('D', { maxLines: 60, maxUnits: 200 })), '这个仓已预占的出库单都圈，一个波次最多 20 张、60 行、200 件，逐单拣，只由人点');
+  equal(
+    waveRuleSummary(rule('E', { releaseTimes: ['09:00', '14:00'] })),
+    '这个仓已预占的出库单都圈，一个波次最多 20 张，逐单拣，每天 09:00、14:00 到点放（仓的业务时区）',
+  );
   // 限了行数或件数时波次会切得更碎，估计只说得出至少几个
   ok(waveRulePreviewText(rule('D', { maxUnits: 200 }), 45).includes('放成至少 3 个波次'));
 });
@@ -148,6 +152,7 @@ test('登记规则的报文：不限的条件不带键', () => {
     maxRequests: '20',
     maxLines: '60',
     maxUnits: '200',
+    releaseTimes: '09:00, 14:00',
     ownerAccount: 'OWNER-1',
     dispatch: 'PICKUP',
     profile: 'SINGLE_UNIT',
@@ -162,6 +167,7 @@ test('登记规则的报文：不限的条件不带键', () => {
     maxRequests: 20,
     maxLines: 60,
     maxUnits: 200,
+    releaseTimes: ['09:00', '14:00'],
     ownerAccount: 'OWNER-1',
     dispatch: 'PICKUP',
     profile: 'SINGLE_UNIT',

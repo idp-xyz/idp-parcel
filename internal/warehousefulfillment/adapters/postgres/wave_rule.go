@@ -21,14 +21,14 @@ func (store *Waves) LoadWaveRule(ctx context.Context, tenant domain.TenantID, wa
 	var owner, dispatch *string
 	err = querier.QueryRow(ctx,
 		`SELECT revision, rule_name, owner_account_id, dispatch, profile, max_requests, coalesce(max_lines, 0), coalesce(max_units, 0),
-		        batch_pick, deactivated, operator_id, registered_at
+		        batch_pick, deactivated, operator_id, registered_at, release_times
 		   FROM warehouse_fulfillment.wave_rule
 		  WHERE tenant_id = $1 AND warehouse_code = $2 AND rule_code = $3
 		  ORDER BY revision DESC
 		  LIMIT 1`,
 		tenant.String(), warehouse.String(), code.String()).Scan(
 		&rule.Revision, &rule.Name, &owner, &dispatch, &rule.Profile, &rule.MaxRequests, &rule.MaxLines, &rule.MaxUnits,
-		&rule.BatchPick, &rule.Deactivated, &rule.Operator, &rule.RegisteredAt)
+		&rule.BatchPick, &rule.Deactivated, &rule.Operator, &rule.RegisteredAt, &rule.ReleaseTimes)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.WaveRule{}, false, nil
 	}
@@ -47,13 +47,101 @@ func (store *Waves) SaveWaveRule(ctx context.Context, tenant domain.TenantID, ru
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO warehouse_fulfillment.wave_rule (
 		    tenant_id, warehouse_code, rule_code, revision, rule_name, owner_account_id, dispatch, profile,
-		    max_requests, batch_pick, deactivated, operator_id, registered_at, max_lines, max_units
-		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14, 0),NULLIF($15, 0))`,
+		    max_requests, batch_pick, deactivated, operator_id, registered_at, max_lines, max_units, release_times
+		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14, 0),NULLIF($15, 0),$16)`,
 		tenant.String(), rule.Warehouse.String(), rule.Code.String(), rule.Revision, rule.Name,
 		optionalText(rule.Owner, rule.Owner != ""), optionalText(rule.Dispatch, rule.Dispatch != ""), rule.Profile,
 		rule.MaxRequests, rule.BatchPick, rule.Deactivated, rule.Operator, rule.RegisteredAt.UTC(),
-		int64(rule.MaxLines), rule.MaxUnits); err != nil {
+		int64(rule.MaxLines), rule.MaxUnits, append([]string{}, rule.ReleaseTimes...)); err != nil {
 		return fmt.Errorf("save wave rule: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) ScheduledWaveRules(ctx context.Context, tenant domain.TenantID, warehouse string) ([]ports.WaveRule, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// 先取每条规则最新的一版，再挑登了时点、没停用的：停用的一版盖住了它之前登过时点的那些版。
+	rows, err := querier.Query(ctx,
+		`SELECT warehouse_code, rule_code, revision, rule_name, coalesce(owner_account_id, ''), coalesce(dispatch, ''), profile,
+		        max_requests, coalesce(max_lines, 0), coalesce(max_units, 0), batch_pick, release_times
+		   FROM (SELECT DISTINCT ON (warehouse_code, rule_code) *
+		           FROM warehouse_fulfillment.wave_rule
+		          WHERE tenant_id = $1 AND ($2 = '' OR warehouse_code = $2)
+		          ORDER BY warehouse_code, rule_code, revision DESC) latest
+		  WHERE NOT latest.deactivated AND cardinality(latest.release_times) > 0
+		  ORDER BY warehouse_code, rule_code`,
+		tenant.String(), warehouse)
+	if err != nil {
+		return nil, fmt.Errorf("scheduled wave rules: %w", err)
+	}
+	defer rows.Close()
+	var rules []ports.WaveRule
+	for rows.Next() {
+		var rule ports.WaveRule
+		var code, house string
+		if err := rows.Scan(&house, &code, &rule.Revision, &rule.Name, &rule.Owner, &rule.Dispatch, &rule.Profile,
+			&rule.MaxRequests, &rule.MaxLines, &rule.MaxUnits, &rule.BatchPick, &rule.ReleaseTimes); err != nil {
+			return nil, fmt.Errorf("scheduled wave rules: %w", err)
+		}
+		if rule.Warehouse, err = domain.NewWarehouseCode(house); err != nil {
+			return nil, fmt.Errorf("scheduled wave rules: %w", err)
+		}
+		if rule.Code, err = domain.NewWaveRuleCode(code); err != nil {
+			return nil, fmt.Errorf("scheduled wave rules: %w", err)
+		}
+		rules = append(rules, rule)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scheduled wave rules: %w", err)
+	}
+	return rules, nil
+}
+
+// ClaimWaveRuleSlot 靠主键挡重：另一笔事务正在办同一个时点时，这一句等它了结——它提交了答否，它回滚了这里占下。
+func (store *Waves) ClaimWaveRuleSlot(ctx context.Context, tenant domain.TenantID, rule ports.WaveRule, date, slot, runID, operator string, at time.Time) (bool, error) {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("claim wave rule slot: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.wave_rule_slot (
+		    tenant_id, warehouse_code, rule_code, slot_date, slot_time, run_id, operator_id, settled_at
+		 ) VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8)
+		 ON CONFLICT DO NOTHING`,
+		tenant.String(), rule.Warehouse.String(), rule.Code.String(), date, slot, runID, operator, at.UTC())
+	if err != nil {
+		return false, fmt.Errorf("claim wave rule slot: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+func (store *Waves) SettleWaveRuleSlot(ctx context.Context, tenant domain.TenantID, rule ports.WaveRule, date, slot, outcome string) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("settle wave rule slot: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`UPDATE warehouse_fulfillment.wave_rule_slot SET outcome = $6
+		  WHERE tenant_id = $1 AND warehouse_code = $2 AND rule_code = $3 AND slot_date = $4::date AND slot_time = $5`,
+		tenant.String(), rule.Warehouse.String(), rule.Code.String(), date, slot, outcome); err != nil {
+		return fmt.Errorf("settle wave rule slot: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) ReleaseWaveRuleSlot(ctx context.Context, tenant domain.TenantID, rule ports.WaveRule, date, slot string) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("release wave rule slot: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`DELETE FROM warehouse_fulfillment.wave_rule_slot
+		  WHERE tenant_id = $1 AND warehouse_code = $2 AND rule_code = $3 AND slot_date = $4::date AND slot_time = $5`,
+		tenant.String(), rule.Warehouse.String(), rule.Code.String(), date, slot); err != nil {
+		return fmt.Errorf("release wave rule slot: %w", err)
 	}
 	return nil
 }

@@ -22,6 +22,8 @@ export interface WaveRuleRecord {
   /** 一个波次最多几行、最多几件（基本单位）；不带是不限。 */
   maxLines?: number;
   maxUnits?: number;
+  /** 每天到点放的时点，HH:MM，按仓的业务时区；不带是只由人点。到点由部署方的定时任务来触发，产品里没有定时器。 */
+  releaseTimes?: readonly string[];
   batchPick: boolean;
   deactivated: boolean;
   operator: string;
@@ -49,6 +51,7 @@ export function waveRuleSummary(rule: WaveRuleRecord): string {
   if (rule.maxUnits) caps.push(`${rule.maxUnits} 件`);
   parts.push(`一个波次最多 ${caps.join('、')}`);
   parts.push(rule.batchPick ? '合并拣货' : '逐单拣');
+  parts.push(rule.releaseTimes && rule.releaseTimes.length > 0 ? `每天 ${rule.releaseTimes.join('、')} 到点放（仓的业务时区）` : '只由人点');
   return parts.join('，');
 }
 

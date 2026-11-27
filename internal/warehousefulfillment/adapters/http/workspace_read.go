@@ -193,6 +193,9 @@ func NewQuerySettingsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQ
 			if item.MaxUnits > 0 {
 				rule["maxUnits"] = item.MaxUnits
 			}
+			if len(item.ReleaseTimes) > 0 {
+				rule["releaseTimes"] = item.ReleaseTimes
+			}
 			waveRules = append(waveRules, rule)
 		}
 		writeJSON(response, http.StatusOK, map[string]any{

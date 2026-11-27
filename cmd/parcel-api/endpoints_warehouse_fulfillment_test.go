@@ -353,6 +353,9 @@ func (unwiredWave) RegisterWaveRule(context.Context, warehouseapp.RegisterWaveRu
 func (unwiredWave) RunWaveRule(context.Context, warehouseapp.RunWaveRuleCommand) (warehouseapp.WaveRuleRunResult, error) {
 	return warehouseapp.WaveRuleRunResult{}, errOrchestrationNotWired
 }
+func (unwiredWave) RunDueWaveRules(context.Context, warehouseapp.RunDueWaveRulesCommand) (warehouseapp.DueWaveRulesResult, error) {
+	return warehouseapp.DueWaveRulesResult{}, errOrchestrationNotWired
+}
 func (unwiredWave) AssignWave(context.Context, warehouseapp.AssignWaveCommand) (warehouseapp.WaveResult, error) {
 	return warehouseapp.WaveResult{}, errOrchestrationNotWired
 }
@@ -863,6 +866,7 @@ const (
 	sortPutsLine                = "/warehouse-fulfillment-sort-puts"
 	waveClaimsLine              = "/warehouse-fulfillment-wave-claims"
 	waveAssignmentsLine         = "/warehouse-fulfillment-wave-assignments"
+	waveRuleDueRunsLine         = "/warehouse-fulfillment-wave-rule-due-runs"
 	sortPlanLine                = "/warehouse-fulfillment-wave-sort"
 	outboundChecksLine          = "/warehouse-fulfillment-outbound-checks"
 	packsLine                   = "/warehouse-fulfillment-packs"
@@ -1072,6 +1076,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		sortPutsLine:                                                  {http.MethodPost, faceWorkFact},
 		waveClaimsLine:                                                {http.MethodPost, faceWorkFact},
 		waveAssignmentsLine:                                           {http.MethodPost, faceOperationDecision},
+		waveRuleDueRunsLine:                                           {http.MethodPost, faceOperationDecision},
 		sortPlanLine:                                                  {http.MethodGet, faceOperationsRead},
 		"/warehouse-fulfillment-outbound-checks":                      {http.MethodPost, faceWorkFact},
 		"/warehouse-fulfillment-packs":                                {http.MethodPost, faceWorkFact},
@@ -1245,6 +1250,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 			"/warehouse-fulfillment-tote-releases":                        accessidentity.DecisionWaveRelease,
 			"/warehouse-fulfillment-wave-rule-runs":                       accessidentity.DecisionWaveRelease,
 			waveAssignmentsLine:                                           accessidentity.DecisionWaveRelease,
+			waveRuleDueRunsLine:                                           accessidentity.DecisionWaveRelease,
 		}
 		if kind, writesOnBehalf := decisionLines[pattern]; writesOnBehalf && line.face.decision != kind {
 			t.Fatalf("%s 的决定种类 = %s，want %s", pattern, line.face.decision, kind)
@@ -1360,6 +1366,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			sortPutsLine:                                                {status, code},
 			waveClaimsLine:                                              {status, code},
 			waveAssignmentsLine:                                         {status, code},
+			waveRuleDueRunsLine:                                         {status, code},
 			sortPlanLine:                                                {status, code},
 			outboundChecksLine:                                          {status, code},
 			packsLine:                                                   {status, code},
@@ -1511,6 +1518,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			sortPutsLine:                                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			waveClaimsLine:                                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			waveAssignmentsLine:                                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			waveRuleDueRunsLine:                                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			outboundChecksLine:                                          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packsLine:                                                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			returnsLine:                                                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1655,6 +1663,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			sortPutsLine:                                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			waveClaimsLine:                                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			waveAssignmentsLine:                                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			waveRuleDueRunsLine:                                         {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			outboundChecksLine:                                          {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			packsLine:                                                   {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			returnsLine:                                                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},

@@ -70,6 +70,10 @@ const (
 	WaveUnassigned
 	// WaveAssignedToOther 是这个波次派给了别人：领不了，它的任务也拣不了。
 	WaveAssignedToOther
+	// WaveDueRulesRun 是「放到点的规则」办了至少一个时点。
+	WaveDueRulesRun
+	// WaveNothingDue 是此刻没有到点而还没办过的时点。
+	WaveNothingDue
 )
 
 func (outcome WaveOutcome) String() string {
@@ -166,6 +170,10 @@ func (outcome WaveOutcome) String() string {
 		return "UNASSIGNED"
 	case WaveAssignedToOther:
 		return "WAVE_ASSIGNED_TO_OTHER"
+	case WaveDueRulesRun:
+		return "DUE_RULES_RUN"
+	case WaveNothingDue:
+		return "NOTHING_DUE"
 	default:
 		return ""
 	}

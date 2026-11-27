@@ -512,6 +512,9 @@ func init() {
 			"/warehouse-fulfillment-wave-rule-runs": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionWaveRelease), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-wave-rule-due-runs": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionWaveRelease), warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-wave-assignments": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionWaveRelease), warehouseFulfillment: true,
 			},
@@ -1020,6 +1023,7 @@ func init() {
 			waveRule := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveRuleRun := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveAssignment := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			waveRuleDueRun := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveClaim := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentConnector := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentStatement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -1243,6 +1247,7 @@ func init() {
 				waveRule = warehousehttp.NewRegisterWaveRuleEndpoint(channels.waveRules(), wiring.waves)
 				waveRuleRun = warehousehttp.NewRunWaveRuleEndpoint(channels.waveRelease(), wiring.waves)
 				waveAssignment = warehousehttp.NewAssignWaveEndpoint(channels.waveRelease(), wiring.waves)
+				waveRuleDueRun = warehousehttp.NewRunDueWaveRulesEndpoint(channels.waveRelease(), wiring.waves)
 				agentConnector = warehousehttp.NewRegisterAgentConnectorEndpoint(channels.agentIntake(), wiring.agents)
 				agentStatement = warehousehttp.NewRecordAgentStatementEndpoint(channels.agentIntake(), wiring.agents)
 				agentResult = warehousehttp.NewRecordAgentResultEndpoint(channels.agentIntake(), wiring.agents)
@@ -1455,6 +1460,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-wave-rules", Handler: waveRule},
 				{Pattern: "/warehouse-fulfillment-wave-rule-runs", Handler: waveRuleRun},
 				{Pattern: "/warehouse-fulfillment-wave-assignments", Handler: waveAssignment},
+				{Pattern: "/warehouse-fulfillment-wave-rule-due-runs", Handler: waveRuleDueRun},
 				{Pattern: "/warehouse-fulfillment-wave-claims", Handler: waveClaim},
 				{Pattern: "/warehouse-fulfillment-agent-connectors", Handler: agentConnector},
 				{Pattern: "/warehouse-fulfillment-agent-stock-statements", Handler: agentStatement},

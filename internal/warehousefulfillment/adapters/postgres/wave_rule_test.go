@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -323,6 +324,103 @@ func TestAWaveRuleCutsWavesByUnitsAndLines(t *testing.T) {
 	}
 }
 
+func (world receiptWorld) runDueWaveRules(t *testing.T, handler *application.WaveHandler) application.DueWaveRulesResult {
+	t.Helper()
+	var result application.DueWaveRulesResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var runErr error
+		result, runErr = handler.RunDueWaveRules(ctx, application.RunDueWaveRulesCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Operator: valueOf(t, domain.NewRegistrant, "scheduler-1"),
+		})
+		return runErr
+	})
+	if err != nil {
+		t.Fatalf("放到点的规则：%v", err)
+	}
+	return result
+}
+
+// Covers: 规则登了每天的时点（按仓的业务时区，理成从早到晚不重复；不是 HH:MM 的不收）。「放到点的规则」只办今天已经过了、
+// 还没办过的时点，一个时点只办一次：没到点不放，办过之后才受理的单等下一个时点，到点时没有可放的也算办过。
+// 第二天同一个时点重新算。仓的业务时区没登记的规则算不出到没到点，列成未配置、不放。
+func TestDueWaveRulesReleaseEachPassedSlotOnce(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	scheduled := func(command *application.RegisterWaveRuleCommand) {
+		command.MaxRequests, command.ReleaseTimes = 10, []string{"14:00", "09:00", "09:00"}
+	}
+	if got := world.registerWaveRule(t, handler, waveRuleCommand(t, "SYN-RULE-DUE", 1, scheduled)); got != application.WaveStrategyRegistered {
+		t.Fatalf("登记带时点的规则 = %s", got)
+	}
+	for _, bad := range []string{"25:00", "9:00", "09:60", "noon"} {
+		wrong := func(command *application.RegisterWaveRuleCommand) { command.ReleaseTimes = []string{bad} }
+		if got := world.registerWaveRule(t, handler, waveRuleCommand(t, "SYN-RULE-BAD-TIME", 1, wrong)); got != application.WaveContentInvalid {
+			t.Fatalf("时点 %q = %s", bad, got)
+		}
+	}
+	mustSave(t, world.transactor, world.warehouses, revisionFixture(t, "SYN-TENANT-01", "SYN-WH-NO-TZ", 1, func(spec *domain.WarehouseContentSpec) {
+		spec.BusinessTimeZone = domain.BusinessTimeZone{}
+	}))
+	nowhere := waveRuleCommand(t, "SYN-RULE-NO-TZ", 1, func(command *application.RegisterWaveRuleCommand) {
+		command.Warehouse, command.ReleaseTimes = valueOf(t, domain.NewWarehouseCode, "SYN-WH-NO-TZ"), []string{"00:01"}
+	})
+	if got := world.registerWaveRule(t, handler, nowhere); got != application.WaveStrategyRegistered {
+		t.Fatalf("给没登记时区的仓登规则 = %s", got)
+	}
+	reads, err := adapter.NewWorkspaceReads(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overview, err := reads.SettingsOverview(t.Context(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"))
+	if err != nil || len(overview.WaveRules) != 2 || len(overview.WaveRules[0].ReleaseTimes) != 2 ||
+		overview.WaveRules[0].ReleaseTimes[0] != "09:00" || overview.WaveRules[0].ReleaseTimes[1] != "14:00" {
+		t.Fatalf("设置总览里的时点 %+v：%v", overview.WaveRules, err)
+	}
+	// 测试仓的业务时区是东八区：当地几点就是协调世界时减八小时。
+	at := func(day, hour, minute int) *application.WaveHandler {
+		later := world
+		later.clock = fixedClock{at: time.Date(2026, 11, day, hour-8, minute, 0, 0, time.UTC)}
+		return later.waves(t)
+	}
+	first := reserve("REQ-DUE-1", 2)
+	early := world.runDueWaveRules(t, at(27, 8, 30))
+	if early.Outcome() != application.WaveNothingDue || len(early.Runs()) != 0 || world.requestStatus(t, first) != "RESERVED" {
+		t.Fatalf("没到点 %s：%+v", early.Outcome(), early.Runs())
+	}
+	if unscheduled := early.Unscheduled(); len(unscheduled) != 1 || unscheduled[0].Warehouse != "SYN-WH-NO-TZ" || unscheduled[0].Rule != "SYN-RULE-NO-TZ" {
+		t.Fatalf("没登记时区的规则 %+v", unscheduled)
+	}
+	morning := world.runDueWaveRules(t, at(27, 9, 10))
+	if runs := morning.Runs(); morning.Outcome() != application.WaveDueRulesRun || len(runs) != 1 || runs[0].Slot != "09:00" || runs[0].Date != "2026-11-27" ||
+		runs[0].RunID != "SYN-RULE-DUE-20261127-0900" || runs[0].Result.Outcome() != application.WaveAllocated || runs[0].Result.Released() != 1 {
+		t.Fatalf("九点那一个时点 %s：%+v", morning.Outcome(), runs)
+	}
+	if row := world.waveRow(t, "SYN-RULE-DUE-20261127-0900-01"); row.Operator != "scheduler-1" || row.RuleCode != "SYN-RULE-DUE" {
+		t.Fatalf("到点放出的波次 %+v", row)
+	}
+	second := reserve("REQ-DUE-2", 2)
+	if again := world.runDueWaveRules(t, at(27, 9, 20)); again.Outcome() != application.WaveNothingDue || world.requestStatus(t, second) != "RESERVED" {
+		t.Fatalf("同一个时点再调 %s，之后受理的单 %s", again.Outcome(), world.requestStatus(t, second))
+	}
+	afternoon := world.runDueWaveRules(t, at(27, 14, 5))
+	if runs := afternoon.Runs(); len(runs) != 1 || runs[0].Slot != "14:00" || runs[0].Result.Released() != 1 || world.requestStatus(t, second) != "ALLOCATED" {
+		t.Fatalf("十四点那一个时点 %+v", runs)
+	}
+	// 第二天：九点的时点重新算；十四点到点时没有可放的也算办过，之后受理的单不被它放走。
+	third := reserve("REQ-DUE-3", 1)
+	nextMorning := world.runDueWaveRules(t, at(28, 9, 5))
+	if runs := nextMorning.Runs(); len(runs) != 1 || runs[0].Date != "2026-11-28" || runs[0].Result.Released() != 1 || world.requestStatus(t, third) != "ALLOCATED" {
+		t.Fatalf("第二天九点 %+v", runs)
+	}
+	empty := world.runDueWaveRules(t, at(28, 14, 10))
+	if runs := empty.Runs(); empty.Outcome() != application.WaveDueRulesRun || len(runs) != 1 || runs[0].Result.Outcome() != application.WaveNothingToRelease {
+		t.Fatalf("到点时没有可放的 %s：%+v", empty.Outcome(), runs)
+	}
+	fourth := reserve("REQ-DUE-4", 1)
+	if late := world.runDueWaveRules(t, at(28, 14, 20)); late.Outcome() != application.WaveNothingDue || world.requestStatus(t, fourth) != "RESERVED" {
+		t.Fatalf("办过的空时点之后 %s，之后受理的单 %s", late.Outcome(), world.requestStatus(t, fourth))
+	}
+}
+
 func (world receiptWorld) releasePartial(t *testing.T, handler *application.WaveHandler, id string, requests ...domain.OutboundRequestID) application.WaveResult {
 	t.Helper()
 	var result application.WaveResult
@@ -451,6 +549,16 @@ func TestWritingWaveRulesRefusesToRunOutsideATransaction(t *testing.T) {
 	}
 	if err := waves.TagWaveRun(context.Background(), tenant, valueOf(t, domain.NewWaveID, "WAVE-1"), rule, "SYN-RUN-1"); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("TagWaveRun：%v", err)
+	}
+	slotRule := ports.WaveRule{Warehouse: warehouse, Code: rule}
+	if _, err := waves.ClaimWaveRuleSlot(context.Background(), tenant, slotRule, "2026-11-27", "09:00", "SYN-RUN-1", "scheduler-1", preAdviceNumberingInstant); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("ClaimWaveRuleSlot：%v", err)
+	}
+	if err := waves.SettleWaveRuleSlot(context.Background(), tenant, slotRule, "2026-11-27", "09:00", "ALLOCATED"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SettleWaveRuleSlot：%v", err)
+	}
+	if err := waves.ReleaseWaveRuleSlot(context.Background(), tenant, slotRule, "2026-11-27", "09:00"); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("ReleaseWaveRuleSlot：%v", err)
 	}
 	err = waves.SaveAllocationException(context.Background(), tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"),
 		ports.AllocationExceptionFromWave, "WAVE-1", preAdviceNumberingInstant)

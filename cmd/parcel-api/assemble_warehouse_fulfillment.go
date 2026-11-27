@@ -1179,6 +1179,12 @@ func (registration transactionalWave) RunWaveRule(ctx context.Context, command w
 	})
 }
 
+func (registration transactionalWave) RunDueWaveRules(ctx context.Context, command warehouseapp.RunDueWaveRulesCommand) (warehouseapp.DueWaveRulesResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.DueWaveRulesResult, error) {
+		return registration.inner.RunDueWaveRules(txCtx, command)
+	})
+}
+
 func (registration transactionalWave) AssignWave(ctx context.Context, command warehouseapp.AssignWaveCommand) (warehouseapp.WaveResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
 		return registration.inner.AssignWave(txCtx, command)

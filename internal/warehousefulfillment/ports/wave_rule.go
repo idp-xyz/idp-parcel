@@ -26,10 +26,12 @@ type WaveRule struct {
 	Profile     string
 	MaxRequests int
 	// MaxLines 与 MaxUnits 是一个波次最多几行、最多几件（基本单位）；0 是不限。
-	MaxLines     int
-	MaxUnits     int64
-	BatchPick    bool
-	Deactivated  bool
+	MaxLines    int
+	MaxUnits    int64
+	BatchPick   bool
+	Deactivated bool
+	// ReleaseTimes 是每天到点放的时点，HH:MM，按仓的业务时区，从早到晚不重复；空是只由人点。
+	ReleaseTimes []string
 	Operator     string
 	RegisteredAt time.Time
 }
@@ -64,6 +66,14 @@ type WaveRuleStore interface {
 	WaveRuleCandidates(ctx context.Context, tenant domain.TenantID, rule WaveRule, limit int) (requests []domain.OutboundRequestID, total int, err error)
 	LoadWaveRuleRun(ctx context.Context, tenant domain.TenantID, runID string) (WaveRuleRun, bool, error)
 	SaveWaveRuleRun(ctx context.Context, tenant domain.TenantID, run WaveRuleRun) error
+	// ScheduledWaveRules 列出登了时点、最新一版没停用的规则；warehouse 为空是本租户各仓的。按仓、规则码排。
+	ScheduledWaveRules(ctx context.Context, tenant domain.TenantID, warehouse string) ([]WaveRule, error)
+	// ClaimWaveRuleSlot 占下一条规则在一个业务日的一个时点；已经有人占过（办过，或另一笔事务正在办）答否。
+	ClaimWaveRuleSlot(ctx context.Context, tenant domain.TenantID, rule WaveRule, date, slot, runID, operator string, at time.Time) (bool, error)
+	// SettleWaveRuleSlot 记下这个时点办的结果。
+	SettleWaveRuleSlot(ctx context.Context, tenant domain.TenantID, rule WaveRule, date, slot, outcome string) error
+	// ReleaseWaveRuleSlot 放开占下的时点：这一次没办成（未配置、撞号），下一次调用再办。
+	ReleaseWaveRuleSlot(ctx context.Context, tenant domain.TenantID, rule WaveRule, date, slot string) error
 	// AnyWaveStartingWith 回答有没有波次号以这个前缀开头的波次。按规则成波放出的波次号是执行号加序号，
 	// 动手之前用它核有没有撞号。
 	AnyWaveStartingWith(ctx context.Context, tenant domain.TenantID, prefix string) (bool, error)
@@ -97,6 +107,7 @@ type WaveRuleOverview struct {
 	MaxRequests   int
 	MaxLines      int
 	MaxUnits      int64
+	ReleaseTimes  []string
 	BatchPick     bool
 	Deactivated   bool
 	Operator      string
