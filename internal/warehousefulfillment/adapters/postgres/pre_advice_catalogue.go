@@ -36,7 +36,7 @@ var preAdviceListBinding = ports.PreAdvicePages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"preAdviceId": "pre_advice_id"},
 	Identity: []string{"pre_advice_id"},
 	Keyword:  []string{"pre_advice_id", "warehouse_code"},
-	Filters:  map[string]string{"status": "status"},
+	Filters:  map[string]string{"status": "status", "warehouseCode": "warehouse_code"},
 })
 
 func (catalogue *PreAdviceCatalogue) ListPreAdvices(

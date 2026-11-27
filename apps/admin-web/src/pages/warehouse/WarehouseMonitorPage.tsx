@@ -490,14 +490,12 @@ async function loadLines(node: MonitorNode, warehouse: string, owner: string, st
     };
   }
   if (node.id === 'pre-advice') {
-    const answer = await listOwnerPreAdvices(owner.trim(), '', after, pageSize);
+    const answer = await listOwnerPreAdvices(owner.trim(), '', after, pageSize, '', warehouse.trim());
     if (answer.kind !== 'outcome') return { headers: [], lines: [], note: '入库预报没读成。', next: null };
-    const warehouseCode = warehouse.trim();
-    const rows = (answer.body.preAdvices ?? []).filter((row) => warehouseCode === '' || row.warehouseCode === warehouseCode);
     return {
       headers: ['预报', '仓', '状态'],
-      lines: rows.map((row) => ({ key: row.preAdviceId, cells: [row.documentNumber ?? row.preAdviceId, row.warehouseCode, row.status], hash: documentHash('warehouse-pre-advices', [owner.trim(), row.preAdviceId]) })),
-      note: '仓是在这一页上留下的，读口不按仓筛。',
+      lines: (answer.body.preAdvices ?? []).map((row) => ({ key: row.preAdviceId, cells: [row.documentNumber ?? row.preAdviceId, row.warehouseCode, row.status], hash: documentHash('warehouse-pre-advices', [owner.trim(), row.preAdviceId]) })),
+      note: '',
       next: answer.body.page?.next ?? null,
       total: answer.body.page?.total ?? null,
     };

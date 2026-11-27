@@ -335,6 +335,13 @@ func TestPreAdviceReadsOmitAnEmptyNumberAndKeepNoticeHistoryOnTheSingleRead(t *t
 	if got := queries.last.Filters["status"]; len(got) != 1 || got[0] != "ADVISED" {
 		t.Fatalf("状态没交给读口：%v", queries.last.Filters)
 	}
+	byWarehouse := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&warehouseCode=SYN-WH-01")
+	if byWarehouse.Code != http.StatusOK {
+		t.Fatalf("按仓 %d %s", byWarehouse.Code, byWarehouse.Body.String())
+	}
+	if got := queries.last.Filters["warehouseCode"]; len(got) != 1 || got[0] != "SYN-WH-01" {
+		t.Fatalf("仓没交给读口：%v", queries.last.Filters)
+	}
 	queries.calls = 0
 	unknown := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&status=NOPE")
 	assertProblem(t, "unknown status", unknown, http.StatusBadRequest, "MALFORMED_REQUEST")

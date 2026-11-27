@@ -51,6 +51,22 @@ func TestPreAdviceCatalogueListsOneOwnerAndFindsByDocumentNumber(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	here, err := ports.PreAdvicePages.Decode(url.Values{"warehouseCode": {"SYN-WH-01"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inWarehouse, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, here)
+	if err != nil || inWarehouse.Total != 1 || len(inWarehouse.Rows) != 1 {
+		t.Fatalf("这个仓 total=%d rows=%d err=%v", inWarehouse.Total, len(inWarehouse.Rows), err)
+	}
+	elsewhere, err := ports.PreAdvicePages.Decode(url.Values{"warehouseCode": {"SYN-WH-OTHER"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherWarehouse, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, elsewhere)
+	if err != nil || otherWarehouse.Total != 0 || len(otherWarehouse.Rows) != 0 {
+		t.Fatalf("别的仓 total=%d err=%v", otherWarehouse.Total, err)
+	}
 	none, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, closed)
 	if err != nil || none.Total != 0 || len(none.Rows) != 0 {
 		t.Fatalf("已完结 total=%d err=%v", none.Total, err)
