@@ -25,10 +25,9 @@ const warehouseKindOptions: readonly GuidedSelectOption[] = [
 ];
 
 const arrivalModeOptions: readonly GuidedSelectOption[] = [
-  { value: 'PARCEL', label: '包裹（PARCEL）' },
-  { value: 'CARTON', label: '整箱（CARTON）' },
+  { value: 'FULL_CONTAINER', label: '整柜（FULL_CONTAINER）' },
   { value: 'PALLET', label: '托盘（PALLET）' },
-  { value: 'LOOSE', label: '散货（LOOSE）' },
+  { value: 'LOOSE_CARTON', label: '散箱（LOOSE_CARTON）' },
 ];
 
 const inboundModeOptions: readonly GuidedSelectOption[] = [
@@ -301,7 +300,7 @@ export const receivingGuidedForms: Record<string, GuidedFormDefinition> = {
       { path: 'decisionId', label: '决定标识', kind: 'text', required: true, placeholder: 'DEC-GOODS-01' },
       { path: 'evidenceReference', label: '依据引用', kind: 'text', required: true, placeholder: 'EVID-01' },
       { path: 'goodsCode', label: '商品编码', kind: 'text', required: true, placeholder: 'SYN-GOODS-01' },
-      { path: 'basisRevision', label: '基于的修订号', kind: 'integer', required: true, allowZero: true, placeholder: '0', hint: '首版填 0，改资料填当前修订号' },
+      { path: 'basisRevision', label: '基于的修订号', kind: 'integer', allowZero: true, omitWhenZero: true, placeholder: '留空', hint: '首版留空。改资料填当前修订号；填 0 会当成给了基准 0' },
       { path: 'name', label: '商品名称', kind: 'text', required: true, placeholder: '示例商品' },
       { path: 'baseUnit', label: '基本单位', kind: 'text', required: true, placeholder: '件' },
       { path: 'trackBatch', label: '跟踪批号', kind: 'boolean' },

@@ -1677,6 +1677,18 @@ func TestAPickupHandoverStaysUnconfiguredUntilACredentialIsRegistered(t *testing
 	}
 }
 
+func TestAPickupHandoverConfirmsWhenTheCredentialIsWrittenOnIt(t *testing.T) {
+	world, handler, request := packedOutbound(t, "REQ-CONFIRM-PICKUP-OK", domain.DispatchPickup, "", 4)
+	command := confirmCommand(t, request, "SYN-FACT-PICKUP-OK", application.ConfirmKindPickup, false)
+	command.ValidFrom = time.Time{}
+	command.ValidUntil = time.Time{}
+	command.PickupParty = "演示提货人"
+	command.PickupCredential = "SYN-PICKUP-1"
+	if world.confirmCommand(t, handler, command).Outcome() != application.WaveConfirmed || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 0 || requestStatus(t, world, request) != "SHIPPED" {
+		t.Fatal("写了自提凭证、没带放行区间，应当确认出库")
+	}
+}
+
 func TestOutboundConfirmationHandoffRefusesToRunOutsideATransaction(t *testing.T) {
 	world := newReceiptWorld(t)
 	store, err := outbox.NewStore(world.db)

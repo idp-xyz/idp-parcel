@@ -173,7 +173,7 @@ test('跨字段与明细行校验在提交前拦住不完整输入', () => {
   });
   equal(okGoods.ok, true);
   if (okGoods.ok) {
-    equal(okGoods.payload.basisRevision, 0);
+    equal('basisRevision' in okGoods.payload, false);
     equal(okGoods.payload.trackBatch, false);
     equal(okGoods.payload.trackExpiry, true);
   }

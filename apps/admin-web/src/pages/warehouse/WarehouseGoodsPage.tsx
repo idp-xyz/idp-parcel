@@ -154,7 +154,7 @@ function GoodsList() {
         refreshing={answer === null}
         primaryAction={
           drawer.has('goods-on-behalf') && owner !== '' ? (
-            <Button type="button" className={primaryActionClass} onClick={() => drawer.open('goods-on-behalf', { ownerAccount: owner, basisRevision: '0' })}>
+            <Button type="button" className={primaryActionClass} onClick={() => drawer.open('goods-on-behalf', { ownerAccount: owner })}>
               <Plus className="mr-1 h-3.5 w-3.5" />
               代录新商品
             </Button>

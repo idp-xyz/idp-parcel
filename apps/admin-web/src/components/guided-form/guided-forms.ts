@@ -53,8 +53,10 @@ export interface GuidedFieldSpec {
   rowLabel?: string;
   /** kind 为 boolean 且为可选停用/标志位时，false 不写入报文（保持缺省即不传）。 */
   omitWhenFalse?: boolean;
-  /** kind 为 integer 时是否允许 0（如商品首版 basisRevision=0、代理仓库存声明 quantity=0）。 */
+  /** kind 为 integer 时是否允许 0（如代理仓库存声明 quantity=0）。 */
   allowZero?: boolean;
+  /** kind 为 integer 时，0 不写入报文。商品首版的基准就是不带，带了 0 会被当成给了基准 0。 */
+  omitWhenZero?: boolean;
   /** kind 为 rows 且允许空数组（如空库位清点 lines: []）时，无行仍输出 [] 而不是省略该键。 */
   emitEmptyArray?: boolean;
 }
@@ -245,6 +247,7 @@ function parseField(
         errors[errorKey] = field.allowZero ? `${field.label}请填非负整数` : `${field.label}请填正整数`;
         return { present: false, value: undefined };
       }
+      if (parsed === 0 && field.omitWhenZero) return { present: false, value: undefined };
       return { present: true, value: parsed };
     }
     case 'signed-integer': {

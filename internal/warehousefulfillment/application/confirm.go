@@ -131,6 +131,7 @@ func (handler *WaveHandler) Confirm(ctx context.Context, command ConfirmCommand)
 	if !seen {
 		return WaveResult{outcome: WaveStatusMismatch}, nil
 	}
+	// 自提凭证写在这一笔交付上：写了这一格就齐。放行区间没带就不核，带了才要求发生时刻落在里面。
 	missing, err := handler.releaseGaps(ctx, command, request, parcel, parcels)
 	if err != nil {
 		return WaveResult{}, fmt.Errorf("confirm outbound: %w", err)
@@ -201,7 +202,8 @@ func onlyGap(missing []string, gap string) bool {
 func (handler *WaveHandler) releaseGaps(ctx context.Context, command ConfirmCommand, request domain.OutboundRequest, parcel ports.PackParcel, parcels []ports.PackParcel) ([]string, error) {
 	var missing []string
 	occurred := command.OccurredAt.UTC()
-	if command.ValidFrom.IsZero() || command.ValidUntil.IsZero() || occurred.Before(command.ValidFrom.UTC()) || !occurred.Before(command.ValidUntil.UTC()) {
+	windowGiven := !command.ValidFrom.IsZero() || !command.ValidUntil.IsZero()
+	if windowGiven && (command.ValidFrom.IsZero() || command.ValidUntil.IsZero() || occurred.Before(command.ValidFrom.UTC()) || !occurred.Before(command.ValidUntil.UTC())) {
 		missing = append(missing, gapInterval)
 	}
 	switch request.Dispatch() {
@@ -226,7 +228,9 @@ func (handler *WaveHandler) releaseGaps(ctx context.Context, command ConfirmComm
 			missing = append(missing, gapLabelCount)
 		}
 	case domain.DispatchPickup:
-		missing = append(missing, gapCredential)
+		if strings.TrimSpace(command.PickupCredential) == "" {
+			missing = append(missing, gapCredential)
+		}
 	}
 	return missing, nil
 }

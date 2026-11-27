@@ -162,7 +162,7 @@ export const receivingActionSpecs: readonly WarehouseActionSpec[] = [
     endpoint: '/warehouse-fulfillment-inbound-pre-advice-on-behalf',
     grant: 'INBOUND_PRE_ADVICE_RECORD_ON_BEHALF',
     snapshotHint:
-      '填 ownerAccount、decisionId、evidenceReference、warehouseCode、arrivalMode（PARCEL / CARTON / PALLET / LOOSE）、inboundMode（BY_GOODS / BY_CARTON）、expectedAt（RFC 3339），按入库方式填 goodsLines 或 cartons。' +
+      '填 ownerAccount、decisionId、evidenceReference、warehouseCode、arrivalMode（FULL_CONTAINER / PALLET / LOOSE_CARTON）、inboundMode（BY_GOODS / BY_CARTON）、expectedAt（RFC 3339），按入库方式填 goodsLines 或 cartons。' +
       noActorNote,
   },
   {
@@ -240,7 +240,7 @@ export const receivingActionSpecs: readonly WarehouseActionSpec[] = [
     endpoint: '/warehouse-fulfillment-goods-on-behalf',
     grant: 'GOODS_RECORD_ON_BEHALF',
     snapshotHint:
-      '填 ownerAccount、decisionId、evidenceReference、goodsCode、basisRevision（首版填 0）、name、baseUnit、trackBatch、trackExpiry、trackSerial，以及可选包装层级、别名、组合与申报资料。' +
+      '填 ownerAccount、decisionId、evidenceReference、goodsCode、name、baseUnit、trackBatch、trackExpiry、trackSerial，改资料再填 basisRevision（当前修订号），以及可选包装层级、别名、组合与申报资料。首版不带 basisRevision。' +
       noActorNote,
   },
   {
