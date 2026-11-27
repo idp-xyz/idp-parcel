@@ -27,10 +27,12 @@ export function useKeyedLoad<T>(
   activeKey: string | null,
   load: (key: string) => Promise<ApiResult<T>>,
   options?: { holdPrevious?: boolean },
-): { answer: ApiResult<T> | null; loading: boolean; reload: () => void; held: boolean } {
+): { answer: ApiResult<T> | null; loading: boolean; reload: () => void; held: boolean; reloading: boolean } {
   const holdPrevious = options?.holdPrevious ?? false;
   const [slot, setSlot] = useState<{ key: string; answer: ApiResult<T> | null } | null>(null);
   const [reloads, setReloads] = useState(0);
+  // 同一把键再读的那一问还在途。换键不记在这里：那种是 held，上一张还摆着。
+  const [reloading, setReloading] = useState(false);
   const reload = useCallback(() => setReloads((count) => count + 1), []);
 
   useEffect(() => {
@@ -39,16 +41,19 @@ export function useKeyedLoad<T>(
     if (!holdPrevious) {
       setSlot((current) => (current?.key === activeKey ? current : { key: activeKey, answer: null }));
     }
+    setReloading(true);
     void load(activeKey).then((answer) => {
-      if (!cancelled) setSlot({ key: activeKey, answer });
+      if (cancelled) return;
+      setSlot({ key: activeKey, answer });
+      setReloading(false);
     });
     return () => {
       cancelled = true;
     };
   }, [activeKey, load, reloads, holdPrevious]);
 
-  if (!activeKey) return { answer: null, loading: false, reload, held: false };
-  if (!slot || slot.answer === null) return { answer: null, loading: true, reload, held: false };
-  if (slot.key !== activeKey) return { answer: slot.answer, loading: true, reload, held: true };
-  return { answer: slot.answer, loading: false, reload, held: false };
+  if (!activeKey) return { answer: null, loading: false, reload, held: false, reloading: false };
+  if (!slot || slot.answer === null) return { answer: null, loading: true, reload, held: false, reloading: false };
+  if (slot.key !== activeKey) return { answer: slot.answer, loading: true, reload, held: true, reloading: false };
+  return { answer: slot.answer, loading: false, reload, held: false, reloading };
 }

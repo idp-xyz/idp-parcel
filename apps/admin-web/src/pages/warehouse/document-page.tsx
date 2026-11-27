@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { ArrowLeft, Maximize2, RefreshCw, X } from 'lucide-react';
 import { PageHeader, PageHeaderActions, PageHeaderContent, PageHeaderTitle } from '@idpxyz/ui-patterns';
 import { Button } from '@idpxyz/ui-primitives';
+import { useToast } from '@idpxyz/ui-theme-runtime';
 import { CodeRef } from '../../components/CodeRef';
 import { StateSlot } from '../../templates/state-slot';
 import { openDocument } from './use-document';
@@ -27,6 +28,8 @@ export function WmsDocumentPage({
   error,
   onBack,
   onReload,
+  /** 同一张单被点了刷新、这一问还在途。换到另一张不走这里。 */
+  reloading = false,
   busy = false,
   aside,
   panel,
@@ -47,6 +50,8 @@ export function WmsDocumentPage({
   error?: string | null;
   onBack: () => void;
   onReload?: () => void;
+  /** 同一张单被点了刷新、这一问还在途。换到另一张不走这里。 */
+  reloading?: boolean;
   /**
    * 详情栏换到下一张、新的还没读到：头和正文留着上一张，只是不能点。加载只让右上角那个刷新标转起来，不另写一行——多出来的字会把栏撑一下再收回去。
    * 新的到了由调用方换上。关闭、整页打开在换的过程中也能用。
@@ -62,9 +67,38 @@ export function WmsDocumentPage({
   children: ReactNode;
 }) {
   const ready = !loading && !error;
+  const { addToast } = useToast();
+  // 只报点了刷新标的那一次，而且要先看到它在转再看到停：换行时标也转，那种不报。
+  const refreshRequested = useRef(false);
+  const refreshSeen = useRef(false);
+  useEffect(() => {
+    if (!refreshRequested.current) return;
+    // 换到另一张时这一问作废，不把那次刷新的结果报出来。
+    if (busy) {
+      refreshRequested.current = false;
+      refreshSeen.current = false;
+      return;
+    }
+    if (reloading) {
+      refreshSeen.current = true;
+      return;
+    }
+    if (!refreshSeen.current) return;
+    refreshRequested.current = false;
+    refreshSeen.current = false;
+    if (error) addToast({ type: 'error', title: '刷新未形成答案', message: error });
+    else addToast({ type: 'success', title: '已刷新' });
+  }, [reloading, busy, error, addToast]);
+  const requestReload = () => {
+    if (!onReload || reloading || loading || busy) return;
+    refreshRequested.current = true;
+    refreshSeen.current = false;
+    onReload();
+  };
+  const reading = busy || reloading;
   if (panel) {
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-idpxyz-editor" aria-busy={busy || undefined}>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-idpxyz-editor" aria-busy={reading || undefined}>
         {/* 头区与下面的进度条说的是同一件事——这张单是什么、走到哪了：有进度条时两块之间不画线，线只画在进度条下面一道。 */}
         <div className={`shrink-0 px-4 ${ready && stepper ? 'pb-1 pt-3' : 'border-b border-idpxyz-border py-3'}`}>
           {/* 刷新、整页打开、关闭钉在右上角，不参与换行：栏再窄，关闭也在老地方。右边留出它们的位置。 */}
@@ -82,8 +116,8 @@ export function WmsDocumentPage({
             </div>
             <div className="absolute right-0 top-0 flex items-center">
               {onReload ? (
-                <Button type="button" variant="ghost" size="icon" disabled={loading || busy} title={busy ? '正在读取' : '刷新'} aria-label={busy ? '正在读取' : '刷新'} onClick={onReload}>
-                  <RefreshCw className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`} aria-hidden="true" />
+                <Button type="button" variant="ghost" size="icon" disabled={loading || reading} title={reading ? '正在读取' : '刷新'} aria-label={reading ? '正在读取' : '刷新'} onClick={requestReload}>
+                  <RefreshCw className={`h-3.5 w-3.5 ${reading ? 'animate-spin' : ''}`} aria-hidden="true" />
                 </Button>
               ) : null}
               <Button type="button" variant="ghost" size="icon" title="整页打开" aria-label="整页打开" onClick={panel.onOpenPage}>
@@ -129,8 +163,8 @@ export function WmsDocumentPage({
         <PageHeaderActions>
           {ready ? actions : null}
           {onReload ? (
-            <Button type="button" variant="outline" disabled={loading} onClick={onReload}>
-              <RefreshCw className="mr-1 h-3.5 w-3.5" />
+            <Button type="button" variant="outline" disabled={loading || reloading} onClick={requestReload}>
+              <RefreshCw className={`mr-1 h-3.5 w-3.5 ${reloading ? 'animate-spin' : ''}`} />
               刷新
             </Button>
           ) : null}

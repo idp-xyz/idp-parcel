@@ -36,7 +36,7 @@ export function WaveDocument({
   const back = useReturnToList('warehouse-waves');
   const [assignOpen, setAssignOpen] = useState(false);
   const names = useOperatorNames();
-  const { answer, loading, reload, held } = useKeyedLoad(waveId, getWave, { holdPrevious: panel !== undefined });
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(waveId, getWave, { holdPrevious: panel !== undefined });
   const shownId = useRef(waveId);
   useEffect(() => {
     if (shownId.current === waveId) return;
@@ -88,6 +88,7 @@ export function WaveDocument({
           ) : undefined
         }
         loading={held ? false : loading}
+        reloading={reloading}
         busy={held}
         error={failure}
         onBack={back}

@@ -59,7 +59,7 @@ export function OutboundDocument({
   const drawer = useActionDrawer(outboundWaveActionSpecs);
   const back = useReturnToList('warehouse-outbound');
   // 列表里换一行时留着上一张，新的读到再换上。整页打开的那一张没有「上一张」。
-  const { answer, loading, reload, held } = useKeyedLoad(requestId, getOutboundRequestDetail, { holdPrevious: panel !== undefined });
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(requestId, getOutboundRequestDetail, { holdPrevious: panel !== undefined });
   const shownId = useRef(requestId);
   useEffect(() => {
     if (shownId.current === requestId) return;
@@ -137,6 +137,7 @@ export function OutboundDocument({
         }
         badge={request ? <WmsBadge code={request.status} /> : undefined}
         loading={held ? false : loading}
+        reloading={reloading}
         busy={held}
         error={failure}
         onBack={back}
