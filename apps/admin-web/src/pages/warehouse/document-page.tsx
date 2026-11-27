@@ -102,12 +102,12 @@ export function WmsDocumentPage({
         {/* 头区与下面的进度条说的是同一件事——这张单是什么、走到哪了：有进度条时两块之间不画线，线只画在进度条下面一道。 */}
         <div className={`shrink-0 px-4 ${ready && stepper ? 'pb-1 pt-3' : 'border-b border-idpxyz-border py-3'}`}>
           {/* 刷新、整页打开、关闭钉在右上角，不跟动作钮一起换行：栏再窄，关闭也在老地方。
-              动作钮是一组，放得下整组留在这一行，放不下整组换到下一行并靠右。小字在下一行，用满整行。 */}
+              动作钮是一组，放得下整组留在这一行，放不下整组换到下一行并从左边排。小字在下一行，用满整行。 */}
           <div>
             <div className="flex items-start gap-2">
-              {/* 动作钮是一组：这一行放得下就整组留在单号右边，放不下整组换到下一行，并且靠右。
-                  组自己不换行，也不被拉满整行——拉满之后靠右只作用在盒子上，钮还是从左边排。 */}
-              <div className={`flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 ${busy ? 'pointer-events-none' : ''}`}>
+              {/* 动作钮是一组：这一行放得下就整组留在单号右边（单号那一格吃掉余宽）。放不下整组换到下一行，从左边排。
+                  组自己不换行，也不被拉满整行。 */}
+              <div className={`flex min-w-0 flex-1 flex-wrap items-center gap-2 ${busy ? 'pointer-events-none' : ''}`}>
                 <div className="flex min-w-0 grow items-center gap-2">
                   <span className="type-section font-semibold text-idpxyz-textBright">{kind}</span>
                   {title ? <CodeRef value={title} title={`${kind}号`} /> : null}
