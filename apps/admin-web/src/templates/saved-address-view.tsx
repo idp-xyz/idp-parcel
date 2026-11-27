@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
 import { Button, Input } from '@idpxyz/ui-primitives';
+import { hashBelongsToTab } from '../shell/workspace-state';
 import { addressQueryWithoutView, hashForSavedView } from './address-query';
 import { useOwnAddressChange } from './use-own-address-change';
 import {
@@ -53,12 +55,30 @@ export function useAddressSavedViews(
   dialog: ReactNode;
 } {
   const active = enabled && moduleId !== undefined && !skippedModules.has(moduleId);
+  const tabId = useWorkspaceTabPanel()?.tabId;
   const [hash, setHash] = useState(() => (typeof window === 'undefined' ? '' : window.location.hash));
   const [views, setViews] = useState<SavedView[]>([]);
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState('');
 
   useOwnAddressChange(() => setHash(window.location.hash));
+
+  // 只带 view id 的跳转在捕获阶段补上存下的查询串，冒泡阶段听地址的检索词读到的就是补完的地址。
+  // 等这次渲染之后再补，保活的列表已经按空筛选重算了。地址上已经有筛选（人改过，或跳转本身带了查询串）不动。
+  useEffect(() => {
+    if (!active || !moduleId) return;
+    const listener = () => {
+      const current = window.location.hash;
+      if (tabId !== undefined && !hashBelongsToTab(current, tabId)) return;
+      if (addressQueryWithoutView(current) !== '') return;
+      const id = savedViewIdFromHash(current);
+      if (!id) return;
+      const named = viewFor(moduleId, id);
+      if (named) applyStored(moduleId, named);
+    };
+    window.addEventListener('hashchange', listener, true);
+    return () => window.removeEventListener('hashchange', listener, true);
+  }, [active, moduleId, tabId]);
 
   useEffect(() => {
     if (!active || !moduleId) return;
