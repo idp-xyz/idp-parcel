@@ -2,6 +2,20 @@
 // （prism-web `shared/workbench/DocumentWorkbench.tsx`）：键盘优先、表头点排序。模板本体依赖 ESM-only 的
 // @idpxyz 原语，run-tests 的 CommonJS 发射加载不了它，要钉的规则抬到这里用 node:test 钉。
 
+/** 右边详情栏的最小宽度。再窄，单号和动作钮就挤到没法看。 */
+export const workbenchDetailMinWidth = 480;
+
+/**
+ * 左边列表分栏百分比的上限：右边至少留出详情栏的最小宽度。
+ * 分栏拖动本身只限制在两成到八成之间，宽屏上八成仍会把详情栏压得很窄。
+ * 容器还没量到（宽度为零）时不额外封顶。
+ */
+export function listRatioCap(containerWidth: number, detailMin: number): number {
+  if (containerWidth <= 0) return 80;
+  const listPx = Math.max(0, containerWidth - detailMin);
+  return Math.min(80, (listPx / containerWidth) * 100);
+}
+
 /** 表头排序态。dir 1 升序、-1 降序。 */
 export interface WorkbenchSort {
   key: string;

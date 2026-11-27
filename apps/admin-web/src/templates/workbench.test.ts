@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { scrollDeltaToReveal, stepSelection, toggleWorkbenchSort, workbenchKeyAction } from './workbench';
+import { listRatioCap, scrollDeltaToReveal, stepSelection, toggleWorkbenchSort, workbenchDetailMinWidth, workbenchKeyAction } from './workbench';
 
 // Covers: 同列翻方向，换列从降序起。
 test('toggleWorkbenchSort：同列翻方向、换列从降序起', () => {
@@ -36,6 +36,14 @@ test('stepSelection：起点、到头与被筛掉的选中', () => {
   equal(stepSelection(keys, 'a', 'select-previous'), 'a');
   equal(stepSelection(keys, 'gone', 'select-next'), 'a');
   equal(stepSelection([], 'a', 'select-next'), null);
+});
+
+// Covers: 详情栏至少留出最小宽度；容器还没量到时不封顶；容器比最小宽度还窄时列表让到零。
+test('listRatioCap：右边详情栏留出最小宽度', () => {
+  equal(listRatioCap(0, workbenchDetailMinWidth), 80);
+  equal(listRatioCap(1000, 480), 52);
+  equal(listRatioCap(400, 480), 0);
+  equal(listRatioCap(2000, 480), 76);
 });
 
 // Covers: 表头粘在顶上，滚回被它挡住的行要多滚出一个表头；行在表头之下且没出底边时不动；出了底边只补那一截。

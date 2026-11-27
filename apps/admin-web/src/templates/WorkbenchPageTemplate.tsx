@@ -7,7 +7,7 @@ import { clearSelection, selectedOnPage, toggleAllOnPage, toggleSelected } from 
 import { skeletonOf } from './loading-shape';
 import { PageSelectAllCheckbox, checkboxClass, stopRowEvent } from './selection-checkbox';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from './state-slot';
-import { scrollDeltaToReveal, stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
+import { listRatioCap, scrollDeltaToReveal, stepSelection, workbenchDetailMinWidth, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
 import { useTabViewRef } from './workspace-view-state';
 
 /** 命令头里的一格指标。可点即筛选，active 表示它正是当前筛选。custom 替换数值位（如进度条）。 */
@@ -180,6 +180,20 @@ export function WorkbenchPageTemplate<Row>({
     return () => observer.disconnect();
   }, [hasResponsiveColumns]);
   const split = useSplitResize('horizontal');
+  const [splitWidth, setSplitWidth] = useState(0);
+  useLayoutEffect(() => {
+    const container = split.containerRef.current;
+    if (!container) return;
+    const measure = () => {
+      if (container.clientWidth > 0) setSplitWidth(container.clientWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [split.containerRef]);
+  // 拖动条只把列表限在两成到八成。宽屏上八成仍会把右边压得很窄，这里再按详情栏的最小宽度封一次。
+  const listRatio = Math.min(split.ratio, listRatioCap(splitWidth, workbenchDetailMinWidth));
   const ready = viewState.kind === 'ready';
   const detailOpen = ready && selectedKey !== null && rows.some((row) => rowKey(row) === selectedKey);
   // 详情栏开合与分栏比例一变，列表宽就变，在绘制前重量一次。只靠 ResizeObserver 时，它回调里的 setState 排到下一帧，
@@ -572,7 +586,7 @@ export function WorkbenchPageTemplate<Row>({
         <div
           data-pane="list"
           className="flex min-h-0 min-w-0 flex-col bg-idpxyz-panelBg"
-          style={detailOpen ? { flex: `0 0 ${split.ratio}%` } : { flex: '1 1 100%' }}
+          style={detailOpen ? { flex: `0 0 ${listRatio}%`, minWidth: 0 } : { flex: '1 1 100%' }}
         >
           <div
             ref={listRef}
@@ -608,7 +622,7 @@ export function WorkbenchPageTemplate<Row>({
               aria-label="拖动调整列表与详情的宽度"
               onMouseDown={split.handleMouseDown}
             />
-            <div data-pane="detail" className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
+            <div data-pane="detail" className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%', minWidth: workbenchDetailMinWidth }}>
               {renderDetail(selectedKey)}
             </div>
           </>
