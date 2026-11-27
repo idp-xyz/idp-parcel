@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import { X } from 'lucide-react';
 import { Button, Input, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
+import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
+import type { TemplateViewState } from '../../templates/state-slot';
+import { useTabViewState } from '../../templates/workspace-view-state';
+import { statusToneText } from '../../components/status-tone';
 import { moduleInfoById } from '../../navigation';
 import {
   currentCursorAfter,
@@ -13,22 +17,24 @@ import {
   type CursorTrail,
 } from '../../templates/cursor-pagination';
 import { catalogueDefaultPageSize, cataloguePageSizes } from '../catalogue-query';
-import { formatInstant } from '../catalogue-view';
+import { useSettledKeyword } from '../use-catalogue-cursor';
+import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { queryOwnerStock, type ApiResult, type StockReadBody, type StockViewKind } from './api';
 import { internalOpsActionSpecs } from './actions';
 import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
-import { problemNote } from './presentation';
-import { useWarehouseLookups } from './use-catalogues';
-import { WmsPagerBar } from './wms-ui';
+import { fitColumnWidth, nameOf, shortInstant } from './list-cells';
+import { useWarehouseLookups, type WarehouseLookups } from './use-catalogues';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsPagerBar, WmsTwoLine } from './wms-ui';
 
 const info = moduleInfoById['warehouse-stock'];
 
-const stockStateLabels: Record<string, string> = {
-  GOOD: '良品',
-  DEFECTIVE: '次品',
-};
+type Cell = NonNullable<StockReadBody['cells']>[number];
+type Carton = NonNullable<StockReadBody['cartons']>[number];
+type Summary = NonNullable<StockReadBody['summary']>[number];
+type Hold = NonNullable<StockReadBody['holds']>[number];
+type Movement = NonNullable<StockReadBody['movements']>[number];
 
 const holdKindLabels: Record<string, string> = {
   FROZEN: '手动冻结',
@@ -37,39 +43,90 @@ const holdKindLabels: Record<string, string> = {
   CARTON_FROZEN: '整箱冻结',
 };
 
-const thClass = 'px-3 py-2 text-left type-caption font-medium text-idpxyz-textMuted border-b border-idpxyz-border whitespace-nowrap';
-// 行线用不带透明度的主题色：主题色是裸 CSS 变量，`/60` 这类透明度写法生不出样式，线会落回浏览器缺省的浅灰，
-// 在深色主题下是一条白线。
-const tdClass = 'px-3 py-2 type-body text-idpxyz-text border-b border-idpxyz-border align-top';
-const monoTd = `${tdClass} font-mono whitespace-nowrap`;
+const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{content}</span>;
 
-/** 实时库存查询页：全部五视图以结构化数据表展示（零原始 JSON），每条库存格/整箱直接带出冻结、次品转良品与库存调整弹窗。 */
+function allowedSize(value: number): number {
+  return (cataloguePageSizes as readonly number[]).includes(value) ? value : catalogueDefaultPageSize;
+}
+
+function ageText(ageDays: number | undefined, age: string | undefined): string {
+  if (ageDays !== undefined) return `${ageDays} 天`;
+  return age ?? '未配置';
+}
+
+/**
+ * 数量按能不能动上色，零保持淡色，免得一表都是颜色。
+ * 在库是事实，不上色。冻着、被作业锁住用警示色；已经答应给出库的预占、还能分配的用提示色；
+ * 可发有数用成功色，库里有货却一件都发不出用危险色。流水里增加是成功色，减少是危险色。
+ */
+function Qty({
+  value,
+  kind,
+  onHand = 0,
+}: {
+  value: number;
+  kind: 'onHand' | 'frozen' | 'reserved' | 'locked' | 'allocatable' | 'free' | 'delta';
+  /** 可发为 0 时用来判断是空库位，还是有货发不出。 */
+  onHand?: number;
+}) {
+  const tone =
+    kind === 'delta'
+      ? value > 0
+        ? statusToneText.success
+        : value < 0
+          ? statusToneText.danger
+          : 'text-idpxyz-textMuted'
+      : value === 0
+        ? kind === 'free' && onHand > 0
+          ? statusToneText.danger
+          : 'text-idpxyz-textMuted'
+        : kind === 'onHand'
+          ? 'text-idpxyz-text'
+          : kind === 'frozen' || kind === 'locked'
+            ? statusToneText.warning
+            : kind === 'reserved' || kind === 'allocatable'
+              ? statusToneText.info
+              : statusToneText.success;
+  const text = kind === 'delta' && value > 0 ? `+${value}` : String(value);
+  return <span className={`whitespace-nowrap tabular-nums ${tone}`}>{text}</span>;
+}
+
+function named(names: ReadonlyMap<string, string>, code: string) {
+  const name = nameOf(names, code);
+  return name ? <WmsTwoLine primary={name} secondary={code} code title={`${name} · ${code}`} /> : <span className="whitespace-nowrap font-mono">{code}</span>;
+}
+
+/** 实时库存。五种看法共用一次查阅：要一位货主，仓可以不限。检索词按商品、条码、库位或箱号交给读口，先收窄再翻页。流水按游标翻，其余四种按页码向读口要。 */
 export function WarehouseStockPage() {
   const lookups = useWarehouseLookups();
   const targetMap = useWarehouseTargetMap(internalOpsActionSpecs);
-
-  const [owner, setOwner] = useState('');
-  const [warehouse, setWarehouse] = useState('');
-  const [view, setView] = useState<StockViewKind>('cells');
-  const [answer, setAnswer] = useState<ApiResult<StockReadBody> | null>(null);
+  const [storedOwner, setOwner] = useTabViewState('warehouse-stock.owner', '');
+  const [warehouse, setWarehouse] = useTabViewState('warehouse-stock.warehouse', '');
+  const [keyword, setKeyword] = useTabViewState('warehouse-stock.keyword', '');
+  const [view, setView] = useTabViewState<StockViewKind>('warehouse-stock.view', 'cells');
+  const [openByView, setOpenByView] = useTabViewState<Partial<Record<StockViewKind, string | null>>>('warehouse-stock.open', {});
+  const [storedMovementSize, setMovementSize] = useTabViewState('warehouse-stock.movementSize', catalogueDefaultPageSize);
+  const [storedSheetSize, setSheetSize] = useTabViewState('warehouse-stock.sheetSize', catalogueDefaultPageSize);
+  const [slot, setSlot] = useState<{ scope: string; answer: ApiResult<StockReadBody> } | null>(null);
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
   const [paging, setPaging] = useState({ conditions: '', page: 1 });
   const [trail, setTrail] = useState<CursorTrail>(() => startCursorTrail(''));
-  const [movementSize, setMovementSize] = useState(catalogueDefaultPageSize);
-  const [sheetSize, setSheetSize] = useState(catalogueDefaultPageSize);
+
+  const owner = storedOwner;
+  const settled = useSettledKeyword(keyword);
+  const movementSize = allowedSize(storedMovementSize);
+  const sheetSize = allowedSize(storedSheetSize);
+  const openKey = openByView[view] ?? null;
+  const setOpenKey = (key: string | null) => setOpenByView((current) => ({ ...current, [view]: key }));
 
   useEffect(() => {
-    if (owner === '' && lookups.owners.length > 0) {
-      setOwner(lookups.owners[0].accountId);
-    }
-  }, [lookups.owners, owner]);
+    if (owner === '' && lookups.owners.length > 0) setOwner(lookups.owners[0].accountId);
+  }, [lookups.owners, owner, setOwner]);
 
-  // 页码与游标都跟着查阅条件记：货主、仓或视图一换，就把记下的丢掉、从第一页看起——换回原来的条件也是第一页，
-  // 不接着上次翻到的地方。在渲染里比对着改，换条件的那一次渲染就已经是第一页，不会先带着旧游标问一次。
-  // 流水按游标翻。其余四种按页码向读口要，页大小一换就回到第一页。
-  const conditions = `${owner.trim()}|${warehouse}|${view}|${view === 'movements' ? movementSize : sheetSize}`;
+  // 页码与游标跟着查阅条件：货主、仓、看法、检索词或页大小一换就从第一页看起。流水按游标翻，其余四种按页码。
+  const conditions = `${owner.trim()}|${warehouse}|${view}|${settled.trim()}|${view === 'movements' ? movementSize : sheetSize}`;
   if (trail.query !== conditions) {
     setTrail(startCursorTrail(conditions));
     setPaging({ conditions, page: 1 });
@@ -77,13 +134,11 @@ export function WarehouseStockPage() {
   const cursor = cursorTrailFor(trail, conditions);
   const after = view === 'movements' ? currentCursorAfter(cursor) : null;
   const sheetPage = paging.conditions === conditions ? paging.page : 1;
+  const scope = `${owner.trim()}|${warehouse}|${view}|${settled.trim()}`;
 
   useEffect(() => {
     const trimmed = owner.trim();
-    if (!trimmed) {
-      setAnswer(null);
-      return;
-    }
+    if (!trimmed) return;
     let cancelled = false;
     setLoading(true);
     void queryOwnerStock(
@@ -93,33 +148,27 @@ export function WarehouseStockPage() {
       after,
       view === 'movements' ? movementSize : sheetSize,
       view === 'movements' ? undefined : sheetPage,
+      settled,
     ).then((res) => {
       if (!cancelled) {
-        setAnswer(res);
+        setSlot({ scope, answer: res });
         setLoading(false);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [owner, warehouse, view, tick, after, movementSize, sheetSize, sheetPage]);
+  }, [owner, warehouse, view, settled, tick, after, movementSize, sheetSize, sheetPage, scope]);
 
-  const openAction = (id: string, prefill?: GuidedFormValues) => {
-    const target = targetMap.get(id);
-    if (!target) return;
-    setDrawer((current) => ({ target, prefill, nonce: (current?.nonce ?? 0) + 1 }));
-  };
-
+  const answer = slot && slot.scope === scope ? slot.answer : null;
   const body = answer?.kind === 'outcome' ? answer.body : null;
-
   const movementPage = body?.page ?? null;
   const movementPageNumber = cursorPageNumber(cursor);
   const book = body?.book ?? null;
-  // 在读下一页时旧答复还在屏上，它的 next 已经用过了，把钮按住。
   const pager =
     view === 'movements'
       ? {
-          summary: cursorPageSummary(movementPageNumber, movementPage?.size ?? 0, movementPage?.total ?? null),
+          summary: cursorPageSummary(movementPageNumber, movementPage?.size ?? movementSize, movementPage?.total ?? null),
           canPrevious: !loading && movementPageNumber > 1,
           canNext: !loading && movementPage !== null && movementPage.next !== null,
           onPrevious: () => setTrail(previousCursorPage(cursor)),
@@ -135,74 +184,146 @@ export function WarehouseStockPage() {
           pageSize: { value: sheetSize, options: cataloguePageSizes, onChange: setSheetSize },
         };
 
+  const openAction = (id: string, prefill?: GuidedFormValues) => {
+    const target = targetMap.get(id);
+    if (!target) return;
+    setDrawer((current) => ({ target, prefill, nonce: (current?.nonce ?? 0) + 1 }));
+  };
+  const can = (id: string) => targetMap.has(id);
+  const warehouseNames = useMemo(
+    () => new Map(lookups.warehouses.map((item) => [item.warehouseCode, item.name ?? ''])),
+    [lookups.warehouses],
+  );
+  const ownerNames = useMemo(
+    () => new Map(lookups.owners.map((account) => [account.accountId, account.customerPartyName ?? ''])),
+    [lookups.owners],
+  );
+  const refresh = () => setTick((count) => count + 1);
+  const chooseView = (next: string) => {
+    setView(next as StockViewKind);
+  };
+
+  const narrowed = warehouse !== '' || settled.trim() !== '' || (view === 'movements' ? movementPageNumber > 1 : sheetPage > 1);
+  const rowCount =
+    view === 'cells'
+      ? (body?.cells?.length ?? 0)
+      : view === 'cartons'
+        ? (body?.cartons?.length ?? 0)
+        : view === 'summary'
+          ? (body?.summary?.length ?? 0)
+          : view === 'holds'
+            ? (body?.holds?.length ?? 0)
+            : (body?.movements?.length ?? 0);
+  const emptyTitle =
+    view === 'cells'
+      ? '当前没有商品库存格'
+      : view === 'cartons'
+        ? '当前没有整箱库存'
+        : view === 'summary'
+          ? '当前没有汇总'
+          : view === 'holds'
+            ? '当前没有冻结或占用'
+            : '当前没有库存流水';
+  const viewState: TemplateViewState =
+    owner.trim() === ''
+      ? lookups.loaded
+        ? { kind: 'empty', title: '还没有货主客户账户', description: '库存按货主记。先在国际小包那边的「客户」里登记货主的客户账户。' }
+        : { kind: 'loading', shape: 'table' }
+      : answer === null
+        ? { kind: 'loading', shape: 'table' }
+        : catalogueViewState(answer, rowCount, refresh, {
+            module: info,
+            endpoint: 'GET /warehouse-fulfillment-stock',
+            emptyTitle,
+            emptyDescription: '换个商品、库位或箱号，或换一个货主、仓库再查。流水只保留已经入账的变动。',
+            narrowed,
+          });
+
+  const frame = {
+    lookups,
+    owner,
+    setOwner,
+    warehouse,
+    setWarehouse,
+    view,
+    chooseView,
+    ownerNames,
+    warehouseNames,
+    openKey,
+    setOpenKey,
+    viewState,
+    refreshing: loading,
+    onRefresh: refresh,
+    pager: owner.trim() !== '' && (body !== null || (view === 'movements' && movementPageNumber > 1)) && (viewState.kind === 'ready' || view === 'movements') ? pager : undefined,
+    can,
+    openAction,
+    keyword,
+    setKeyword,
+    unfreeze: can('stock-unfreeze') ? (
+      <Button type="button" variant="outline" onClick={() => openAction('stock-unfreeze')}>
+        按冻结号解冻
+      </Button>
+    ) : undefined,
+  };
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <div className="px-6 pt-5 pb-3 border-b border-idpxyz-border bg-idpxyz-sidebar space-y-3 shrink-0">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="type-title font-bold text-idpxyz-textBright">{info.title}</h1>
-            <p className="mt-1 type-body text-idpxyz-textMuted">
-              按货主与仓库查阅实时账面库存，直接从商品格或整箱发起冻结、解冻、次品转良品或库存调整。
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {targetMap.has('stock-unfreeze') ? (
-              <Button type="button" variant="outline" onClick={() => openAction('stock-unfreeze')}>
-                按冻结号解冻
-              </Button>
-            ) : null}
-            <Button type="button" variant="outline" disabled={loading || owner.trim() === ''} onClick={() => setTick((n) => n + 1)}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-              {loading ? '查询中…' : '刷新库存'}
-            </Button>
-          </div>
-        </div>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {view === 'cells' ? <CellSheet frame={frame} cells={body?.cells ?? []} /> : null}
+      {view === 'cartons' ? <CartonSheet frame={frame} cartons={body?.cartons ?? []} /> : null}
+      {view === 'summary' ? <SummarySheet frame={frame} summary={body?.summary ?? []} /> : null}
+      {view === 'holds' ? <HoldSheet frame={frame} holds={body?.holds ?? []} /> : null}
+      {view === 'movements' ? <MovementSheet frame={frame} movements={body?.movements ?? []} /> : null}
+      <ActionDrawer moduleId="warehouse-stock" active={drawer} lookups={lookups} onClose={() => setDrawer(null)} onSubmitted={refresh} />
+    </div>
+  );
+}
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="type-caption text-idpxyz-textMuted">货主：</span>
-            {lookups.owners.length > 0 ? (
-              <select
-                className="h-8 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body text-idpxyz-text"
-                value={lookups.owners.some((o) => o.accountId === owner) ? owner : ''}
-                onChange={(event) => {
-                  if (event.target.value) setOwner(event.target.value);
-                }}
-              >
-                <option value="">选择货主…</option>
-                {lookups.owners.map((acct) => (
-                  <option key={acct.accountId} value={acct.accountId}>
-                    {acct.customerPartyName ? `${acct.accountId} · ${acct.customerPartyName}` : acct.accountId}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <Input
-              className="h-8 w-44 font-mono type-body"
-              value={owner}
-              onChange={(event) => setOwner(event.target.value)}
-              placeholder="货主账户编码"
-            />
-          </div>
+interface Frame {
+  lookups: WarehouseLookups;
+  owner: string;
+  setOwner: (value: string) => void;
+  warehouse: string;
+  setWarehouse: (value: string) => void;
+  view: StockViewKind;
+  chooseView: (next: string) => void;
+  ownerNames: ReadonlyMap<string, string>;
+  warehouseNames: ReadonlyMap<string, string>;
+  openKey: string | null;
+  setOpenKey: (key: string | null) => void;
+  viewState: TemplateViewState;
+  refreshing: boolean;
+  onRefresh: () => void;
+  pager: ComponentProps<typeof WmsPagerBar> | undefined;
+  can: (id: string) => boolean;
+  openAction: (id: string, prefill?: GuidedFormValues) => void;
+  keyword: string;
+  setKeyword: (value: string) => void;
+  unfreeze: ReactNode;
+}
 
-          <div className="flex items-center gap-1.5">
-            <span className="type-caption text-idpxyz-textMuted">仓库：</span>
-            <select
-              className="h-8 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body text-idpxyz-text"
-              value={warehouse}
-              onChange={(event) => setWarehouse(event.target.value)}
-            >
-              <option value="">全部仓库</option>
-              {lookups.warehouses.map((w) => (
-                <option key={w.warehouseCode} value={w.warehouseCode}>
-                  {`${w.warehouseCode} · ${w.name}`}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <Tabs value={view} onValueChange={(next) => setView(next as StockViewKind)}>
+function StockFrame<Row>({
+  frame,
+  columns,
+  rows,
+  rowKey,
+  noMatch,
+  renderDetail,
+}: {
+  frame: Frame;
+  columns: WorkbenchColumn<Row>[];
+  rows: Row[];
+  rowKey: (row: Row) => string;
+  noMatch: string;
+  renderDetail: (key: string) => ReactNode;
+}) {
+  const ownerName = nameOf(frame.ownerNames, frame.owner.trim());
+  return (
+    <WorkbenchPageTemplate<Row>
+      title={info.title}
+      viewStateKey="warehouse-stock"
+      subtitle={frame.owner.trim() === '' ? '先选定一位货主' : `正在看${ownerName || frame.owner.trim()}的账面`}
+      titleAside={
+        <Tabs value={frame.view} onValueChange={frame.chooseView}>
           <TabsList>
             <TabsTrigger value="cells">商品库存格</TabsTrigger>
             <TabsTrigger value="cartons">整箱库存</TabsTrigger>
@@ -211,308 +332,416 @@ export function WarehouseStockPage() {
             <TabsTrigger value="movements">库存流水</TabsTrigger>
           </TabsList>
         </Tabs>
-      </div>
+      }
+      onRefresh={frame.onRefresh}
+      refreshing={frame.refreshing}
+      primaryAction={frame.unfreeze}
+      search={{ value: frame.keyword, onChange: frame.setKeyword, placeholder: '搜商品、条码、库位或箱号' }}
+      extraFilters={
+        <>
+          <label className="inline-flex items-center gap-1.5 type-body text-idpxyz-textMuted">
+            <span className="whitespace-nowrap">货主</span>
+            <select
+              className="h-7 max-w-[16rem] rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body text-idpxyz-text focus:border-idpxyz-accent focus:outline-none"
+              value={frame.lookups.owners.some((account) => account.accountId === frame.owner) ? frame.owner : ''}
+              onChange={(event) => {
+                if (event.target.value) frame.setOwner(event.target.value);
+              }}
+            >
+              {frame.lookups.owners.length === 0 ? <option value="">没有货主客户账户</option> : null}
+              {frame.lookups.owners.map((account) => (
+                <option key={account.accountId} value={account.accountId}>
+                  {account.customerPartyName ? `${account.customerPartyName} · ${account.accountId}` : account.accountId}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Input className="h-7 w-40 font-mono type-body" value={frame.owner} onChange={(event) => frame.setOwner(event.target.value)} placeholder="货主账户编码" />
+          <WmsFilterSelect
+            label="仓库"
+            value={frame.warehouse}
+            onChange={frame.setWarehouse}
+            options={frame.lookups.warehouses.map((warehouse) => ({
+              value: warehouse.warehouseCode,
+              label: warehouse.name ? `${warehouse.name} · ${warehouse.warehouseCode}` : warehouse.warehouseCode,
+            }))}
+          />
+        </>
+      }
+      columns={columns}
+      rows={rows}
+      rowKey={rowKey}
+      selectedKey={frame.openKey}
+      onSelect={frame.setOpenKey}
+      rowAlign="baseline"
+      noMatchText={noMatch}
+      renderDetail={renderDetail}
+      viewState={frame.viewState}
+      listFooter={frame.pager ? <WmsPagerBar {...frame.pager} /> : undefined}
+    />
+  );
+}
 
-      <div className="flex-1 overflow-auto p-6">
-        {owner.trim() === '' ? (
-          <p className="type-body text-idpxyz-textMuted">请先在上方选择一个货主客户账户。</p>
-        ) : answer && answer.kind !== 'outcome' ? (
-          <div className="rounded border border-[color:var(--ds-status-danger-border)] bg-[color:var(--ds-status-danger-bg-subtle)] p-4 type-body text-idpxyz-text">
-            {answer.kind === 'callerProblem'
-              ? answer.detail || problemNote(answer.code)
-              : answer.kind === 'noAnswer'
-                ? problemNote(answer.code)
-                : answer.kind === 'transport'
-                  ? answer.message
-                  : answer.kind === 'notGranted'
-                    ? '当前账号没有查询该货主库存的授予。'
-                    : answer.kind === 'loginRequired'
-                      ? '请先登录后再查询库存。'
-                      : '该能力在当前租户尚未配置。'}
+function stepButton(label: string, onClick: () => void) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+    >
+      {label}
+    </Button>
+  );
+}
+
+function SideDetail({ kind, code, badge, subtitle, children, onClose }: { kind: string; code: string; badge?: ReactNode; subtitle?: string; children: ReactNode; onClose: () => void }) {
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-idpxyz-editor">
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-idpxyz-border px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="type-section font-semibold text-idpxyz-textBright">{kind}</span>
+            <span className="font-mono">{code}</span>
+            {badge}
           </div>
-        ) : loading && !body ? (
-          <p className="type-body text-idpxyz-textMuted">正在查询实时库存…</p>
-        ) : body ? (
-          <div className="rounded-lg border border-idpxyz-border bg-idpxyz-sidebar overflow-x-auto">
-            {view === 'cells' ? (
-              (body.cells ?? []).length === 0 ? (
-                <p className="p-6 type-body text-idpxyz-textMuted">当前条件下没有商品库存格。</p>
-              ) : (
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-idpxyz-editor/60">
-                      <th className={thClass}>仓库 / 库位</th>
-                      <th className={thClass}>商品编码</th>
-                      <th className={thClass}>单位 / 状态</th>
-                      <th className={thClass}>批次 / 批号 / 效期</th>
-                      <th className={thClass}>账面 / 冻结 / 可用</th>
-                      <th className={thClass}>库龄</th>
-                      <th className={thClass}>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(body.cells ?? []).map((cell, index) => (
-                      <tr key={`${cell.warehouse}-${cell.location ?? ''}-${cell.goodsCode}-${cell.inboundBatchId}-${index}`}>
-                        <td className={monoTd}>{`${cell.warehouse} / ${cell.location ?? '代理仓(无库位)'}`}</td>
-                        <td className={monoTd}>
-                          {cell.goodsCode}
-                          {cell.labelAlias ? <span className="ml-1 type-caption text-idpxyz-textMuted">({cell.labelAlias})</span> : null}
-                        </td>
-                        <td className={tdClass}>{`${cell.unit} · ${stockStateLabels[cell.stockState] ?? cell.stockState}`}</td>
-                        <td className={monoTd}>
-                          {cell.inboundBatchId}
-                          {cell.batchNumber ? ` · 批:${cell.batchNumber}` : ''}
-                          {cell.expiryDate ? ` · 效:${cell.expiryDate}` : ''}
-                        </td>
-                        <td className={monoTd}>{`${cell.quantity} / ${cell.frozen} / ${cell.available}`}</td>
-                        <td className={monoTd}>{cell.ageDays !== undefined ? `${cell.ageDays} 天` : cell.age ?? '未配置'}</td>
-                        <td className={tdClass}>
-                          <div className="flex flex-wrap gap-1.5">
-                            {targetMap.has('stock-freeze') && cell.location ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  openAction('stock-freeze', {
-                                    warehouse: cell.warehouse,
-                                    ownerAccount: owner.trim(),
-                                    locationCode: cell.location ?? '',
-                                    goodsCode: cell.goodsCode,
-                                    unit: cell.unit,
-                                    stockState: cell.stockState,
-                                    inboundBatchId: cell.inboundBatchId,
-                                    quantity: String(Math.max(1, cell.available)),
-                                  })
-                                }
-                              >
-                                冻结
-                              </Button>
-                            ) : null}
-                            {targetMap.has('condition-restore') && cell.stockState === 'DEFECTIVE' && cell.location ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  openAction('condition-restore', {
-                                    warehouse: cell.warehouse,
-                                    ownerAccount: owner.trim(),
-                                    locationCode: cell.location ?? '',
-                                    goodsCode: cell.goodsCode,
-                                    unit: cell.unit,
-                                    stockState: 'DEFECTIVE',
-                                    inboundBatchId: cell.inboundBatchId,
-                                    quantity: String(Math.max(1, cell.available)),
-                                  })
-                                }
-                              >
-                                次转良
-                              </Button>
-                            ) : null}
-                            {targetMap.has('adjustment-submit') && cell.location ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  openAction('adjustment-submit', {
-                                    warehouse: cell.warehouse,
-                                    ownerAccount: owner.trim(),
-                                    lines: [
-                                      {
-                                        kind: 'DECREASE',
-                                        locationCode: cell.location ?? '',
-                                        goodsCode: cell.goodsCode,
-                                        unit: cell.unit,
-                                        stockState: cell.stockState,
-                                        quantity: '1',
-                                        inboundBatchId: cell.inboundBatchId,
-                                      },
-                                    ],
-                                  })
-                                }
-                              >
-                                调账
-                              </Button>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )
-            ) : null}
-
-            {view === 'cartons' ? (
-              (body.cartons ?? []).length === 0 ? (
-                <p className="p-6 type-body text-idpxyz-textMuted">当前条件下没有整箱库存。</p>
-              ) : (
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-idpxyz-editor/60">
-                      <th className={thClass}>仓库 / 库位</th>
-                      <th className={thClass}>整箱箱号</th>
-                      <th className={thClass}>箱内清单</th>
-                      <th className={thClass}>冻结/占用</th>
-                      <th className={thClass}>入库时刻 / 库龄</th>
-                      <th className={thClass}>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(body.cartons ?? []).map((carton) => (
-                      <tr key={`${carton.warehouse}-${carton.cartonNumber}`}>
-                        <td className={monoTd}>{`${carton.warehouse} / ${carton.location ?? '—'}`}</td>
-                        <td className={monoTd}>{carton.cartonNumber}</td>
-                        <td className={tdClass}>
-                          {carton.bill && carton.bill.length > 0
-                            ? carton.bill.map((b) => `${b.goodsCode}×${b.quantity}`).join('，')
-                            : '未报清单'}
-                        </td>
-                        <td className={tdClass}>{carton.held ? '已冻结/锁定' : '可用'}</td>
-                        <td className={monoTd}>
-                          {`${formatInstant(carton.inboundAt)} · ${carton.ageDays !== undefined ? `${carton.ageDays} 天` : carton.age ?? '未配置'}`}
-                        </td>
-                        <td className={tdClass}>
-                          {targetMap.has('stock-freeze') && !carton.held ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                openAction('stock-freeze', {
-                                  warehouse: carton.warehouse,
-                                  ownerAccount: owner.trim(),
-                                  cartonNumber: carton.cartonNumber,
-                                })
-                              }
-                            >
-                              冻结整箱
-                            </Button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )
-            ) : null}
-
-            {view === 'summary' ? (
-              (body.summary ?? []).length === 0 ? (
-                <p className="p-6 type-body text-idpxyz-textMuted">当前条件下没有汇总数据。</p>
-              ) : (
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-idpxyz-editor/60">
-                      <th className={thClass}>仓库</th>
-                      <th className={thClass}>商品编码</th>
-                      <th className={thClass}>单位 / 状态</th>
-                      <th className={thClass}>在库</th>
-                      <th className={thClass}>可分配</th>
-                      <th className={thClass}>冻结</th>
-                      <th className={thClass}>出库预占</th>
-                      <th className={thClass}>作业锁</th>
-                      <th className={thClass}>立即可用</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(body.summary ?? []).map((row, index) => (
-                      <tr key={`${row.warehouse}-${row.goodsCode}-${row.unit}-${row.stockState}-${index}`}>
-                        <td className={monoTd}>{row.warehouse}</td>
-                        <td className={monoTd}>{row.goodsCode}</td>
-                        <td className={tdClass}>{`${row.unit} · ${stockStateLabels[row.stockState] ?? row.stockState}`}</td>
-                        <td className={monoTd}>{row.onHand}</td>
-                        <td className={monoTd}>{row.allocatable}</td>
-                        <td className={monoTd}>{row.frozen}</td>
-                        <td className={monoTd}>{row.reserved}</td>
-                        <td className={monoTd}>{row.locked}</td>
-                        <td className={`${monoTd} font-semibold text-idpxyz-textBright`}>{row.available}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )
-            ) : null}
-
-            {view === 'holds' ? (
-              (body.holds ?? []).length === 0 ? (
-                <p className="p-6 type-body text-idpxyz-textMuted">当前没有冻结或占用记录。</p>
-              ) : (
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-idpxyz-editor/60">
-                      <th className={thClass}>类型</th>
-                      <th className={thClass}>仓库 / 库位</th>
-                      <th className={thClass}>商品 / 整箱</th>
-                      <th className={thClass}>数量</th>
-                      <th className={thClass}>原因 / 操作者</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(body.holds ?? []).map((hold, index) => (
-                      <tr key={`${hold.kind}-${hold.warehouse}-${hold.goodsCode ?? hold.cartonNumber ?? ''}-${index}`}>
-                        <td className={tdClass}>{holdKindLabels[hold.kind] ?? hold.kind}</td>
-                        <td className={monoTd}>{`${hold.warehouse} / ${hold.location ?? '—'}`}</td>
-                        <td className={monoTd}>{hold.cartonNumber ? `整箱 ${hold.cartonNumber}` : `${hold.goodsCode ?? '—'} (${hold.unit ?? ''})`}</td>
-                        <td className={monoTd}>{hold.quantity}</td>
-                        <td className={tdClass}>{`${hold.reason ?? '—'}${hold.operator ? ` · ${hold.operator}` : ''}`}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )
-            ) : null}
-
-            {view === 'movements' ? (
-              (body.movements ?? []).length === 0 ? (
-                <p className="p-6 type-body text-idpxyz-textMuted">当前条件下没有库存变动流水。</p>
-              ) : (
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-idpxyz-editor/60">
-                      <th className={thClass}>仓库</th>
-                      <th className={thClass}>变动原因</th>
-                      <th className={thClass}>来源事实 / 单据</th>
-                      <th className={thClass}>明细变动</th>
-                      <th className={thClass}>发生时刻</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(body.movements ?? []).map((mov, index) => (
-                      <tr key={`${mov.warehouse}-${mov.source ?? ''}-${mov.occurredAt}-${index}`}>
-                        <td className={monoTd}>{mov.warehouse}</td>
-                        <td className={tdClass}>{mov.reason}</td>
-                        <td className={monoTd}>{mov.source ?? '—'}</td>
-                        <td className={tdClass}>
-                          {(mov.lines ?? []).map((line, i) => (
-                            <div key={i} className="font-mono type-caption">
-                              {`${line.location ?? '仓'} · ${line.goodsCode}(${line.unit}/${stockStateLabels[line.stockState] ?? line.stockState}) ${line.delta > 0 ? `+${line.delta}` : line.delta}`}
-                            </div>
-                          ))}
-                        </td>
-                        <td className={monoTd}>{formatInstant(mov.occurredAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )
-            ) : null}
-          </div>
-        ) : null}
+          {subtitle ? <p className="mt-1 type-caption text-idpxyz-textMuted">{subtitle}</p> : null}
+        </div>
+        <Button type="button" variant="ghost" size="icon" title="关闭详情" aria-label="关闭详情" onClick={onClose}>
+          <X className="h-4 w-4" aria-hidden="true" />
+        </Button>
       </div>
-
-      {/* 翻到后面某一页没读成时翻页条仍在：没有它就退不回上一页。 */}
-      {owner.trim() !== '' && (body || (view === 'movements' && movementPageNumber > 1)) ? <WmsPagerBar {...pager} /> : null}
-
-      <ActionDrawer
-        moduleId="warehouse-stock"
-        active={drawer}
-        lookups={lookups}
-        onClose={() => setDrawer(null)}
-        onSubmitted={() => setTick((n) => n + 1)}
-      />
+      <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4 type-body">{children}</div>
     </div>
+  );
+}
+
+function CellSheet({ frame, cells }: { frame: Frame; cells: readonly Cell[] }) {
+  const owner = frame.owner.trim();
+  const columns: WorkbenchColumn<Cell & { key: string }>[] = [
+    {
+      key: 'place',
+      header: '库位',
+      width: fitColumnWidth,
+      render: (row) =>
+        row.location ? (
+          <WmsTwoLine primary={<span className="font-mono">{row.location}</span>} secondary={nameOf(frame.warehouseNames, row.warehouse) || row.warehouse} code title={`${row.warehouse} / ${row.location}`} />
+        ) : (
+          <WmsTwoLine primary="代理仓，无库位" secondary={row.warehouse} code />
+        ),
+    },
+    {
+      key: 'goods',
+      header: '商品',
+      render: (row) => <WmsTwoLine fill primary={<span className="font-mono">{row.goodsCode}</span>} secondary={row.labelAlias} title={row.goodsCode} />,
+    },
+    { key: 'state', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.stockState} /> },
+    { key: 'qty', header: nowrap('在库'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.quantity} kind="onHand" /> },
+    { key: 'frozen', header: nowrap('冻着'), right: true, width: fitColumnWidth, minListWidth: 980, render: (row) => <Qty value={row.frozen} kind="frozen" /> },
+    { key: 'available', header: nowrap('可发'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.available} kind="free" onHand={row.quantity} /> },
+    { key: 'age', header: nowrap('库龄'), right: true, width: fitColumnWidth, minListWidth: 1120, render: (row) => nowrap(ageText(row.ageDays, row.age)) },
+    {
+      key: 'next',
+      header: nowrap('下一步'),
+      width: fitColumnWidth,
+      render: (row) => {
+        const step = cellStep(frame, row);
+        return step ? stepButton(step.label, step.run) : <span className="text-idpxyz-textMuted">—</span>;
+      },
+    },
+  ];
+  const rows = cells.map((cell, index) => ({ ...cell, key: `${cell.warehouse}/${cell.location ?? ''}/${cell.goodsCode}/${cell.inboundBatchId}/${index}` }));
+  return (
+    <StockFrame
+      frame={frame}
+      columns={columns}
+      rows={rows}
+      rowKey={(row) => row.key}
+      noMatch="当前条件下没有商品库存格"
+      renderDetail={(key) => {
+        const row = rows.find((item) => item.key === key);
+        if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这一格。</p>;
+        return (
+          <SideDetail kind="库存格" code={row.goodsCode} badge={<WmsBadge code={row.stockState} />} subtitle={row.location ?? '代理仓，无库位'} onClose={() => frame.setOpenKey(null)}>
+            <p>{named(frame.warehouseNames, row.warehouse)}</p>
+            <p>
+              在库 <Qty value={row.quantity} kind="onHand" /> · 冻着 <Qty value={row.frozen} kind="frozen" /> · 可发{' '}
+              <Qty value={row.available} kind="free" onHand={row.quantity} /> {row.unit}
+            </p>
+            <p className="font-mono">入库批次 {row.inboundBatchId}</p>
+            <p className="font-mono">批号 {row.batchNumber || '—'} · 效期 {row.expiryDate || '—'}</p>
+            {row.labelAlias ? <p className="font-mono">贴标 {row.labelAlias}</p> : null}
+            <p>库龄 {ageText(row.ageDays, row.age)}</p>
+            <div className="flex flex-wrap gap-2">
+              {frame.can('stock-freeze') && row.location ? stepButton('冻结', () => frame.openAction('stock-freeze', freezeCell(owner, row))) : null}
+              {frame.can('condition-restore') && row.stockState === 'DEFECTIVE' && row.location
+                ? stepButton('次转良', () => frame.openAction('condition-restore', restoreCell(owner, row)))
+                : null}
+              {frame.can('adjustment-submit') && row.location ? stepButton('调账', () => frame.openAction('adjustment-submit', adjustCell(owner, row))) : null}
+            </div>
+          </SideDetail>
+        );
+      }}
+    />
+  );
+}
+
+function cellStep(frame: Frame, row: Cell): { label: string; run: () => void } | null {
+  const owner = frame.owner.trim();
+  if (!row.location) return null;
+  if (frame.can('stock-freeze')) return { label: '冻结', run: () => frame.openAction('stock-freeze', freezeCell(owner, row)) };
+  if (row.stockState === 'DEFECTIVE' && frame.can('condition-restore')) return { label: '次转良', run: () => frame.openAction('condition-restore', restoreCell(owner, row)) };
+  if (frame.can('adjustment-submit')) return { label: '调账', run: () => frame.openAction('adjustment-submit', adjustCell(owner, row)) };
+  return null;
+}
+
+function freezeCell(owner: string, cell: Cell): GuidedFormValues {
+  return {
+    warehouse: cell.warehouse,
+    ownerAccount: owner,
+    locationCode: cell.location ?? '',
+    goodsCode: cell.goodsCode,
+    unit: cell.unit,
+    stockState: cell.stockState,
+    inboundBatchId: cell.inboundBatchId,
+    quantity: String(Math.max(1, cell.available)),
+  };
+}
+
+function restoreCell(owner: string, cell: Cell): GuidedFormValues {
+  return { ...freezeCell(owner, cell), stockState: 'DEFECTIVE' };
+}
+
+function adjustCell(owner: string, cell: Cell): GuidedFormValues {
+  return {
+    warehouse: cell.warehouse,
+    ownerAccount: owner,
+    lines: [
+      {
+        kind: 'DECREASE',
+        locationCode: cell.location ?? '',
+        goodsCode: cell.goodsCode,
+        unit: cell.unit,
+        stockState: cell.stockState,
+        quantity: '1',
+        inboundBatchId: cell.inboundBatchId,
+      },
+    ],
+  };
+}
+
+function CartonSheet({ frame, cartons }: { frame: Frame; cartons: readonly Carton[] }) {
+  const owner = frame.owner.trim();
+  const columns: WorkbenchColumn<Carton>[] = [
+    { key: 'carton', header: '箱号', width: fitColumnWidth, render: (row) => <span className="whitespace-nowrap font-mono">{row.cartonNumber}</span> },
+    {
+      key: 'place',
+      header: '库位',
+      width: fitColumnWidth,
+      render: (row) => (
+        <WmsTwoLine
+          primary={<span className="font-mono">{row.location ?? '—'}</span>}
+          secondary={nameOf(frame.warehouseNames, row.warehouse) || row.warehouse}
+          code
+        />
+      ),
+    },
+    {
+      key: 'bill',
+      header: '箱内清单',
+      render: (row) => {
+        const text = row.bill && row.bill.length > 0 ? row.bill.map((line) => `${line.goodsCode}×${line.quantity}`).join('，') : '未报清单';
+        return <WmsTwoLine fill primary={text} title={text} />;
+      },
+    },
+    { key: 'held', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge label={row.held ? '已冻结' : '可用'} tone={row.held ? 'warning' : 'success'} /> },
+    { key: 'age', header: nowrap('库龄'), right: true, width: fitColumnWidth, render: (row) => nowrap(ageText(row.ageDays, row.age)) },
+    {
+      key: 'next',
+      header: nowrap('下一步'),
+      width: fitColumnWidth,
+      render: (row) =>
+        frame.can('stock-freeze') && !row.held
+          ? stepButton('冻结整箱', () => frame.openAction('stock-freeze', { warehouse: row.warehouse, ownerAccount: owner, cartonNumber: row.cartonNumber }))
+          : <span className="text-idpxyz-textMuted">—</span>,
+    },
+  ];
+  return (
+    <StockFrame
+      frame={frame}
+      columns={columns}
+      rows={[...cartons]}
+      rowKey={(row) => `${row.warehouse}/${row.cartonNumber}`}
+      noMatch="当前条件下没有整箱库存"
+      renderDetail={(key) => {
+        const row = cartons.find((item) => `${item.warehouse}/${item.cartonNumber}` === key);
+        if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这只箱。</p>;
+        const bill = row.bill && row.bill.length > 0 ? row.bill.map((line) => `${line.goodsCode}×${line.quantity}`).join('，') : '未报清单';
+        return (
+          <SideDetail kind="整箱" code={row.cartonNumber} badge={<WmsBadge label={row.held ? '已冻结' : '可用'} tone={row.held ? 'warning' : 'success'} />} subtitle={row.location ?? '—'} onClose={() => frame.setOpenKey(null)}>
+            <p>{named(frame.warehouseNames, row.warehouse)}</p>
+            <p>{bill}</p>
+            <p className="font-mono type-caption text-idpxyz-textMuted">入库 {formatInstant(row.inboundAt)} · 库龄 {ageText(row.ageDays, row.age)}</p>
+            {frame.can('stock-freeze') && !row.held
+              ? stepButton('冻结整箱', () => frame.openAction('stock-freeze', { warehouse: row.warehouse, ownerAccount: owner, cartonNumber: row.cartonNumber }))
+              : null}
+          </SideDetail>
+        );
+      }}
+    />
+  );
+}
+
+function SummarySheet({ frame, summary }: { frame: Frame; summary: readonly Summary[] }) {
+  const columns: WorkbenchColumn<Summary & { key: string }>[] = [
+    { key: 'goods', header: '商品', width: fitColumnWidth, render: (row) => <span className="whitespace-nowrap font-mono">{row.goodsCode}</span> },
+    { key: 'warehouse', header: '仓', width: fitColumnWidth, render: (row) => named(frame.warehouseNames, row.warehouse) },
+    { key: 'state', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.stockState} /> },
+    { key: 'unit', header: '单位', width: fitColumnWidth, minListWidth: 900, render: (row) => nowrap(row.unit) },
+    { key: 'onHand', header: nowrap('在库'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.onHand} kind="onHand" /> },
+    { key: 'allocatable', header: nowrap('可分配'), right: true, width: fitColumnWidth, minListWidth: 980, render: (row) => <Qty value={row.allocatable} kind="allocatable" /> },
+    { key: 'frozen', header: nowrap('冻着'), right: true, width: fitColumnWidth, minListWidth: 1080, render: (row) => <Qty value={row.frozen} kind="frozen" /> },
+    { key: 'reserved', header: nowrap('已预占'), right: true, width: fitColumnWidth, minListWidth: 1160, render: (row) => <Qty value={row.reserved} kind="reserved" /> },
+    { key: 'locked', header: nowrap('锁着'), right: true, width: fitColumnWidth, minListWidth: 1240, render: (row) => <Qty value={row.locked} kind="locked" /> },
+    { key: 'available', header: nowrap('可发'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.available} kind="free" onHand={row.onHand} /> },
+  ];
+  const rows = summary.map((row, index) => ({ ...row, key: `${row.warehouse}/${row.goodsCode}/${row.unit}/${row.stockState}/${index}` }));
+  return (
+    <StockFrame
+      frame={frame}
+      columns={columns}
+      rows={rows}
+      rowKey={(row) => row.key}
+      noMatch="当前条件下没有汇总"
+      renderDetail={(key) => {
+        const row = rows.find((item) => item.key === key);
+        if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这一行。</p>;
+        return (
+          <SideDetail kind="库存汇总" code={row.goodsCode} badge={<WmsBadge code={row.stockState} />} subtitle={row.unit} onClose={() => frame.setOpenKey(null)}>
+            <p>{named(frame.warehouseNames, row.warehouse)}</p>
+            <p>
+              在库 <Qty value={row.onHand} kind="onHand" /> · 可分配 <Qty value={row.allocatable} kind="allocatable" /> · 冻着 <Qty value={row.frozen} kind="frozen" />
+            </p>
+            <p>
+              已预占 <Qty value={row.reserved} kind="reserved" /> · 锁着 <Qty value={row.locked} kind="locked" /> · 可发{' '}
+              <Qty value={row.available} kind="free" onHand={row.onHand} />
+            </p>
+          </SideDetail>
+        );
+      }}
+    />
+  );
+}
+
+function HoldSheet({ frame, holds }: { frame: Frame; holds: readonly Hold[] }) {
+  const columns: WorkbenchColumn<Hold & { key: string }>[] = [
+    { key: 'kind', header: '类型', width: fitColumnWidth, render: (row) => nowrap(holdKindLabels[row.kind] ?? row.kind) },
+    {
+      key: 'place',
+      header: '库位',
+      width: fitColumnWidth,
+      render: (row) => (
+        <WmsTwoLine primary={<span className="font-mono">{row.location ?? '—'}</span>} secondary={nameOf(frame.warehouseNames, row.warehouse) || row.warehouse} code />
+      ),
+    },
+    {
+      key: 'goods',
+      header: '商品 / 整箱',
+      render: (row) =>
+        row.cartonNumber ? (
+          <WmsTwoLine primary="整箱" secondary={row.cartonNumber} code />
+        ) : (
+          <WmsTwoLine primary={<span className="font-mono">{row.goodsCode ?? '—'}</span>} secondary={row.unit} />
+        ),
+    },
+    {
+      key: 'qty',
+      header: nowrap('数量'),
+      right: true,
+      width: fitColumnWidth,
+      render: (row) => <Qty value={row.quantity} kind={row.kind === 'RESERVED' ? 'reserved' : 'frozen'} />,
+    },
+    {
+      key: 'reason',
+      header: '原因',
+      minListWidth: 1000,
+      render: (row) => <WmsTwoLine fill primary={row.reason || '—'} secondary={row.operator} title={row.reason ?? ''} />,
+    },
+  ];
+  const rows = holds.map((hold, index) => ({ ...hold, key: `${hold.kind}/${hold.warehouse}/${hold.goodsCode ?? hold.cartonNumber ?? ''}/${index}` }));
+  return (
+    <StockFrame
+      frame={frame}
+      columns={columns}
+      rows={rows}
+      rowKey={(row) => row.key}
+      noMatch="当前没有冻结或占用记录"
+      renderDetail={(key) => {
+        const row = rows.find((item) => item.key === key);
+        if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这一条。</p>;
+        return (
+          <SideDetail kind={holdKindLabels[row.kind] ?? row.kind} code={row.cartonNumber ?? row.goodsCode ?? '—'} subtitle={row.location ?? '—'} onClose={() => frame.setOpenKey(null)}>
+            <p>{named(frame.warehouseNames, row.warehouse)}</p>
+            <p>
+              数量 <Qty value={row.quantity} kind={row.kind === 'RESERVED' ? 'reserved' : 'frozen'} /> {row.unit ?? ''}
+            </p>
+            <p>原因 {row.reason || '—'}</p>
+            <p className="font-mono type-caption text-idpxyz-textMuted">操作者 {row.operator || '—'}{row.frozenAt ? ` · ${formatInstant(row.frozenAt)}` : ''}</p>
+          </SideDetail>
+        );
+      }}
+    />
+  );
+}
+
+function MovementSheet({ frame, movements }: { frame: Frame; movements: readonly Movement[] }) {
+  const now = new Date();
+  const columns: WorkbenchColumn<Movement & { key: string }>[] = [
+    { key: 'warehouse', header: '仓', width: fitColumnWidth, render: (row) => named(frame.warehouseNames, row.warehouse) },
+    { key: 'reason', header: '原因', render: (row) => <WmsTwoLine fill primary={labelOf(row.reason)} title={row.reason} /> },
+    { key: 'source', header: '来源', width: fitColumnWidth, minListWidth: 980, render: (row) => <span className="whitespace-nowrap font-mono">{row.source ?? '—'}</span> },
+    {
+      key: 'at',
+      header: nowrap('发生'),
+      right: true,
+      width: fitColumnWidth,
+      render: (row) => (
+        <span className="whitespace-nowrap tabular-nums" title={formatInstant(row.occurredAt)}>
+          {shortInstant(row.occurredAt, now) || '—'}
+        </span>
+      ),
+    },
+  ];
+  const rows = movements.map((movement, index) => ({ ...movement, key: `${movement.warehouse}/${movement.source ?? ''}/${movement.occurredAt}/${index}` }));
+  return (
+    <StockFrame
+      frame={frame}
+      columns={columns}
+      rows={rows}
+      rowKey={(row) => row.key}
+      noMatch="当前条件下没有库存变动流水"
+      renderDetail={(key) => {
+        const row = rows.find((item) => item.key === key);
+        if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这一笔。</p>;
+        return (
+          <SideDetail kind="库存流水" code={labelOf(row.reason)} subtitle={row.source ?? '—'} onClose={() => frame.setOpenKey(null)}>
+            <p>{named(frame.warehouseNames, row.warehouse)}</p>
+            <p className="font-mono type-caption text-idpxyz-textMuted">发生 {formatInstant(row.occurredAt)}{row.postedAt ? ` · 入账 ${formatInstant(row.postedAt)}` : ''}</p>
+            <ul className="space-y-1 font-mono type-caption">
+              {(row.lines ?? []).map((line, index) => (
+                <li key={index}>
+                  {`${line.location ?? '仓'} · ${line.goodsCode} ${line.unit} ${labelOf(line.stockState)} `}
+                  <Qty value={line.delta} kind="delta" />
+                </li>
+              ))}
+            </ul>
+          </SideDetail>
+        );
+      }}
+    />
   );
 }

@@ -537,10 +537,18 @@ export function listOwnerPreAdvices(
   return exchangeMasterData<PreAdviceListBody>(`/warehouse-fulfillment-inbound-pre-advices?${params.toString()}`);
 }
 
-export function listOwnerGoods(ownerAccount: string, keyword: string, after: string | null = null): Promise<ApiResult<GoodsListBody>> {
+export function listOwnerGoods(
+  ownerAccount: string,
+  keyword: string,
+  after: string | null = null,
+  pageSize?: number,
+  sort?: string,
+): Promise<ApiResult<GoodsListBody>> {
   const params = new URLSearchParams({ ownerAccount });
   if (keyword.trim() !== '') params.set('q', keyword.trim());
   if (after !== null && after !== '') params.set('after', after);
+  if (pageSize !== undefined && pageSize > 0) params.set('pageSize', String(pageSize));
+  if (sort !== undefined && sort !== '') params.set('sort', sort);
   return exchangeMasterData<GoodsListBody>(`/warehouse-fulfillment-goods?${params.toString()}`);
 }
 
@@ -551,9 +559,11 @@ export function queryOwnerStock(
   after: string | null = null,
   pageSize?: number,
   page?: number,
+  keyword?: string,
 ): Promise<ApiResult<StockReadBody>> {
   const params = new URLSearchParams({ ownerAccount, view });
   if (warehouseCode.trim() !== '') params.set('warehouseCode', warehouseCode.trim());
+  if (keyword !== undefined && keyword.trim() !== '') params.set('q', keyword.trim());
   // 流水收 after 与 pageSize。其余四种收 page 与 pageSize，带了 after 会被拒。
   if (view === 'movements') {
     if (after !== null && after !== '') params.set('after', after);

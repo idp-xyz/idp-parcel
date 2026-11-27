@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
@@ -27,11 +27,11 @@ import {
   signedGap,
   type CountEntryRow,
 } from './count-flow';
-import { countsAdjustmentsModule } from './counts-adjustments-address';
+import { countKind, countsAdjustmentsModule } from './counts-adjustments-address';
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { discrepancyStatusLabel } from './stock-approval-flow';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsSubColumn, type WmsTone } from './wms-ui';
 
 const moduleId = countsAdjustmentsModule;
@@ -55,12 +55,34 @@ function decidedNote(row: DifferenceRecord): string {
  * 盘点页：一份盘点从开始到差异批完的全部。盘点的价值在差异——账面与清点不一致的行单独列出，标明盘盈还是盘亏、差多少，
  * 一致的行不混进去；清点录入是这些差异的依据，每个库位以最后一次为准。开始、结束并出差异与作废在头区按状态做，
  * 批准与驳回落在每一条差异上（一次只能批一条，所以按钮跟着行走）。
+ *
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一行留着上一张，新的读到再换。栏里做完一个动作告诉列表重取，
+ * 列表重取会让 `revision` 变，这张单跟着重读。
  */
-export function CountDocument({ countId }: { countId: string }) {
+export function CountDocument({
+  countId,
+  panel,
+}: {
+  countId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(internalOpsActionSpecs);
   const back = useReturnToList(moduleId);
   const complete = countId !== '';
-  const { answer, loading, reload } = useKeyedLoad(complete ? countId : null, getCountDetail);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(complete ? countId : null, getCountDetail, { holdPrevious: panel !== undefined });
+  const shownId = useRef(countId);
+  useEffect(() => {
+    if (shownId.current === countId) return;
+    shownId.current = countId;
+    drawer.close();
+  }, [countId, drawer]);
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
   const body: StockCountDetailBody | undefined = answer?.kind === 'outcome' ? answer.body : undefined;
   const count = body?.count;
   const failure =
@@ -268,10 +290,13 @@ export function CountDocument({ countId }: { countId: string }) {
             </>
           ) : undefined
         }
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [countKind, count?.countId ?? countId]) } : undefined}
         stepper={
           track ? (
             <WmsStepper
@@ -417,7 +442,7 @@ export function CountDocument({ countId }: { countId: string }) {
           </>
         ) : null}
       </WmsDocumentPage>
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={panel ? panel.onChanged : reload} />
     </>
   );
 }

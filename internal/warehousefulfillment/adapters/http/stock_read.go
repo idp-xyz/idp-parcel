@@ -6,10 +6,13 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	"go.idp.xyz/idp-parcel/internal/platform/storable"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
@@ -72,7 +75,7 @@ func NewQueryCustomerStockEndpoint(intake CustomerInboundPreAdvicePorts, reader 
 }
 
 func operatorStockQuery(request *http.Request, tenant domain.TenantID, limit int) (application.StockQuery, string) {
-	values, reason := stockQueryValues(request, "ownerAccount", "warehouseCode", "view", stockAfterQueryKey, stockPageSizeQueryKey, stockPageQueryKey)
+	values, reason := stockQueryValues(request, "ownerAccount", "warehouseCode", "view", "q", stockAfterQueryKey, stockPageSizeQueryKey, stockPageQueryKey)
 	if reason != "" {
 		return application.StockQuery{}, reason
 	}
@@ -88,8 +91,27 @@ func operatorStockQuery(request *http.Request, tenant domain.TenantID, limit int
 	if reason != "" {
 		return application.StockQuery{}, reason
 	}
-	query := application.StockQuery{Tenant: tenant, Owner: owner, Warehouse: warehouse, View: view, Now: time.Now()}
+	keyword, reason := stockKeyword(values["q"])
+	if reason != "" {
+		return application.StockQuery{}, reason
+	}
+	query := application.StockQuery{Tenant: tenant, Owner: owner, Warehouse: warehouse, View: view, Keyword: keyword, Now: time.Now()}
 	return stockPaging(query, values, limit)
+}
+
+// stockKeyword 按目录册检索词的同一条规矩收 q：去掉首尾空白，空串即不检索。货主面不走这里。
+func stockKeyword(raw string) (string, string) {
+	keyword := strings.TrimSpace(raw)
+	if keyword == "" {
+		return "", ""
+	}
+	if !storable.Text(keyword) {
+		return "", "q contains a character that cannot be stored"
+	}
+	if utf8.RuneCountInString(keyword) > cataloguepage.MaxKeywordRunes {
+		return "", "q must be at most 100 characters"
+	}
+	return keyword, ""
 }
 
 func customerStockQuery(request *http.Request, tenant domain.TenantID, owner domain.OwnerAccountID) (application.StockQuery, string) {
@@ -193,12 +215,15 @@ func stockPageSizeAllowed(size int) bool {
 	return false
 }
 
-// stockMovementConditions 按已经判过的货主、仓与看法重写一份交给共用件的条件，不拿原始查询串去解：仓没给与给了空串
-// 要是同一份列表，调用方带来的 q 与 sort 读口不收，也不该有路进到解码里。
+// stockMovementConditions 按已经判过的货主、仓、看法与检索词重写一份交给共用件的条件，不拿原始查询串去解：
+// 仓没给与给了空串要是同一份列表。sort 不在这里，解码之前就被拒了。q 空着就不写，免得一份没检索的游标对不上。
 func stockMovementConditions(query application.StockQuery) url.Values {
 	conditions := url.Values{"ownerAccount": {query.Owner.String()}, "view": {string(query.View)}}
 	if warehouse := query.Warehouse.String(); warehouse != "" {
 		conditions.Set("warehouseCode", warehouse)
+	}
+	if query.Keyword != "" {
+		conditions.Set("q", query.Keyword)
 	}
 	return conditions
 }

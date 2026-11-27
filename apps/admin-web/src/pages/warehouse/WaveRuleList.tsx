@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Plus, X } from 'lucide-react';
 import { Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
-import type { InspectorAction, InspectorContent } from '../../templates/inspector';
+import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
+import { cursorPageSummary } from '../../templates/cursor-pagination';
+import type { TemplateViewState } from '../../templates/state-slot';
+import { useTabViewState } from '../../templates/workspace-view-state';
 import { primaryActionClass } from '../../components/primary-action';
 import { statusToneBanner } from '../../components/status-tone';
 import { moduleInfoById } from '../../navigation';
@@ -23,25 +25,16 @@ import {
   type DueWaveRulesBody,
   type WaveRuleRecord,
 } from './wave-rule';
-import { WmsBadge, WmsFilterSelect } from './wms-ui';
+import { fitColumnWidth, nameOf } from './list-cells';
+import { WmsBadge, WmsFilterSelect, WmsPagerBar, WmsTwoLine } from './wms-ui';
 
 const moduleId = 'warehouse-waves';
 const info = moduleInfoById[moduleId];
-const mono = 'whitespace-nowrap font-mono type-body leading-4';
+const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{content}</span>;
 
-const columns: ListColumn<WaveRuleRecord>[] = [
-  { id: 'code', header: '规则码', className: mono, render: (row) => row.ruleCode },
-  { id: 'name', header: '规则名', className: 'whitespace-nowrap', render: (row) => row.name },
-  {
-    id: 'state',
-    header: '状态',
-    render: (row) => <WmsBadge code={row.deactivated ? 'CANCELLED' : 'ACTIVE'} label={row.deactivated ? '已停用' : '在用'} />,
-  },
-  { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
-  { id: 'summary', header: '圈什么、怎么放', render: (row) => waveRuleSummary(row) },
-  { id: 'revision', header: '版本', align: 'right', className: mono, render: (row) => `第 ${row.revision} 版` },
-  { id: 'at', header: '登记时刻', className: mono, render: (row) => formatInstant(row.registeredAt) },
-];
+function ruleKey(row: WaveRuleRecord): string {
+  return `${row.warehouseCode}/${row.ruleCode}`;
+}
 
 /**
  * 成波规则：各仓登记过的规则各自最新的一版。在这里登记、改、停用，从某一行直接按它成波；
@@ -51,66 +44,90 @@ export function WaveRuleList() {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
   const [answer, setAnswer] = useState<ApiResult<SettingsOverviewBody> | null>(null);
   const [tick, setTick] = useState(0);
-  const [warehouse, setWarehouse] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(catalogueDefaultPageSize);
+  const [warehouse, setWarehouse] = useTabViewState('warehouse-waves.rules.warehouse', '');
+  const [page, setPage] = useTabViewState('warehouse-waves.rules.page', 1);
+  const [pageSize, setPageSize] = useTabViewState('warehouse-waves.rules.pageSize', catalogueDefaultPageSize);
+  const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-waves.rules.open', null);
   const [running, setRunning] = useState<{ warehouse: string; rule: string } | null>(null);
   const [dueOpen, setDueOpen] = useState(false);
   const refresh = useCallback(() => setTick((value) => value + 1), []);
+  const size = (cataloguePageSizes as readonly number[]).includes(pageSize) ? pageSize : catalogueDefaultPageSize;
 
   useEffect(() => {
     let cancelled = false;
-    void getSettingsOverview({ page, pageSize, warehouse: warehouse || undefined }).then((loaded) => {
+    void getSettingsOverview({ page, pageSize: size, warehouse: warehouse || undefined }).then((loaded) => {
       if (!cancelled) setAnswer(loaded);
     });
     return () => {
       cancelled = true;
     };
-  }, [tick, page, pageSize, warehouse]);
+  }, [tick, page, size, warehouse]);
 
   const rows = answer?.kind === 'outcome' ? [...(answer.body.waveRules ?? [])] : [];
   const book = answer?.kind === 'outcome' ? answer.body.waveRuleBook : undefined;
-  const warehouseNames = new Map(drawer.lookups.warehouses.map((w) => [w.warehouseCode, w.name ?? '']));
+  const warehouseNames = useMemo(
+    () => new Map(drawer.lookups.warehouses.map((item) => [item.warehouseCode, item.name ?? ''])),
+    [drawer.lookups.warehouses],
+  );
 
-  const inspectorOf = (row: WaveRuleRecord): InspectorContent => {
-    const actions: InspectorAction[] = [];
-    if (!row.deactivated && drawer.has('wave-release')) {
-      actions.push({ label: '按这条规则成波', onRun: () => setRunning({ warehouse: row.warehouseCode, rule: row.ruleCode }) });
-    }
-    if (drawer.has('wave-rule')) {
-      actions.push({ label: '改这条规则（登下一版）', onRun: () => drawer.open('wave-rule', waveRulePrefill(row)) });
-      actions.push(
-        row.deactivated
-          ? { label: '重新启用', onRun: () => drawer.open('wave-rule', waveRulePrefill(row, { deactivated: false })) }
-          : { label: '停用这条规则', onRun: () => drawer.open('wave-rule', waveRulePrefill(row, { deactivated: true })) },
-      );
-    }
-    return {
-      title: row.name,
-      subtitle: `${row.warehouseCode} · ${row.ruleCode}`,
-      sections: [
-        {
-          kind: 'summary',
-          fields: [
-            { label: '圈什么、怎么放', value: waveRuleSummary(row) },
-            { label: '每天的时点', value: waveRuleTimesLabel(row), mono: true },
-          ],
-        },
-        { kind: 'status', items: [{ label: '状态', word: row.deactivated ? '已停用' : '在用' }] },
-        { kind: 'actions', actions },
-        { kind: 'audit', fields: [{ label: `第 ${row.revision} 版`, value: `${row.operator} · ${formatInstant(row.registeredAt)}`, mono: true }] },
-      ],
-    };
-  };
+  const columns: WorkbenchColumn<WaveRuleRecord>[] = [
+    {
+      key: 'name',
+      header: '规则',
+      width: fitColumnWidth,
+      render: (row) => <WmsTwoLine primary={row.name} secondary={row.ruleCode} code title={`${row.name} · ${row.ruleCode}`} />,
+    },
+    {
+      key: 'state',
+      header: '状态',
+      width: fitColumnWidth,
+      render: (row) => <WmsBadge code={row.deactivated ? 'CANCELLED' : 'ACTIVE'} label={row.deactivated ? '已停用' : '在用'} />,
+    },
+    {
+      key: 'warehouse',
+      header: '仓',
+      width: fitColumnWidth,
+      minListWidth: 760,
+      render: (row) => {
+        const name = nameOf(warehouseNames, row.warehouseCode);
+        return name ? <WmsTwoLine primary={name} secondary={row.warehouseCode} code title={`${name} · ${row.warehouseCode}`} /> : <span className="whitespace-nowrap font-mono">{row.warehouseCode}</span>;
+      },
+    },
+    { key: 'summary', header: '圈什么、怎么放', render: (row) => <span className="type-body">{waveRuleSummary(row)}</span> },
+    {
+      key: 'next',
+      header: nowrap('下一步'),
+      width: fitColumnWidth,
+      render: (row) => (
+        <RuleStep
+          row={row}
+          canRun={!row.deactivated && drawer.has('wave-release')}
+          canEdit={drawer.has('wave-rule')}
+          onRun={() => setRunning({ warehouse: row.warehouseCode, rule: row.ruleCode })}
+          onEdit={() => drawer.open('wave-rule', waveRulePrefill(row, row.deactivated ? { deactivated: false } : undefined))}
+        />
+      ),
+    },
+  ];
+
+  const viewState: TemplateViewState = catalogueViewState(answer, book?.total ?? rows.length, refresh, {
+    module: info,
+    endpoint: 'GET /warehouse-fulfillment-settings-overview',
+    emptyTitle: '未配置：还没有登记成波规则',
+    emptyDescription: '点右上角「登记成波规则」，按仓登一条：圈哪些单、一个波次最多几张、怎么拣、每天几点放。',
+    narrowed: warehouse !== '',
+  });
 
   return (
     <>
-      <ListPageTemplate<WaveRuleRecord>
-        moduleId={moduleId}
+      <WorkbenchPageTemplate<WaveRuleRecord>
         title="成波规则"
-        description="各仓登记的成波规则：圈哪些已预占的出库单、一个波次多大、怎么拣、每天几点放。规则是你们自己定的，没登记的仓没有规则，放波次照旧由人勾单。"
-        headerActions={
-          <div className="flex flex-wrap gap-2">
+        viewStateKey={`${moduleId}.rules`}
+        subtitle="点一行在右边看这条规则。没登记的仓没有规则，放波次照旧由人勾单。"
+        onRefresh={refresh}
+        refreshing={answer === null}
+        primaryAction={
+          <>
             {drawer.has('wave-release') ? (
               <Button type="button" variant="outline" onClick={() => setDueOpen(true)}>
                 放到点的规则
@@ -126,9 +143,9 @@ export function WaveRuleList() {
                 登记成波规则
               </Button>
             ) : null}
-          </div>
+          </>
         }
-        filters={
+        extraFilters={
           <WmsFilterSelect
             label="仓库"
             value={warehouse}
@@ -136,36 +153,60 @@ export function WaveRuleList() {
               setWarehouse(next);
               setPage(1);
             }}
-            options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: `${w.warehouseCode} · ${w.name}` }))}
+            options={drawer.lookups.warehouses.map((item) => ({
+              value: item.warehouseCode,
+              label: item.name ? `${item.name} · ${item.warehouseCode}` : item.warehouseCode,
+            }))}
           />
         }
         columns={columns}
         rows={rows}
-        rowKey={(row) => `${row.warehouseCode}/${row.ruleCode}`}
-        inspector={inspectorOf}
-        emptyRowsNote="这个仓没有登记成波规则"
-        pagination={
-          book
-            ? {
-                page: book.page,
-                pageSize: book.pageSize,
-                total: book.total,
-                onPageChange: setPage,
-                onPageSizeChange: (next) => {
+        rowKey={ruleKey}
+        selectedKey={openKey}
+        onSelect={setOpenKey}
+        rowAlign="baseline"
+        noMatchText="这个仓没有登记成波规则"
+        onClearFilters={() => {
+          setWarehouse('');
+          setPage(1);
+        }}
+        renderDetail={(key) => {
+          const row = rows.find((item) => ruleKey(item) === key);
+          if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这条规则。</p>;
+          return (
+            <RuleDetail
+              row={row}
+              onClose={() => setOpenKey(null)}
+              onRun={!row.deactivated && drawer.has('wave-release') ? () => setRunning({ warehouse: row.warehouseCode, rule: row.ruleCode }) : undefined}
+              onEdit={drawer.has('wave-rule') ? () => drawer.open('wave-rule', waveRulePrefill(row)) : undefined}
+              onRetire={
+                drawer.has('wave-rule')
+                  ? () => drawer.open('wave-rule', waveRulePrefill(row, { deactivated: !row.deactivated }))
+                  : undefined
+              }
+            />
+          );
+        }}
+        viewState={viewState}
+        listFooter={
+          book && viewState.kind === 'ready' ? (
+            <WmsPagerBar
+              summary={cursorPageSummary(book.page, book.pageSize, book.total)}
+              canPrevious={page > 1}
+              canNext={page * size < book.total}
+              onPrevious={() => setPage(page - 1)}
+              onNext={() => setPage(page + 1)}
+              pageSize={{
+                value: size,
+                options: cataloguePageSizes,
+                onChange: (next) => {
                   setPageSize(next);
                   setPage(1);
                 },
-                pageSizeOptions: [...cataloguePageSizes],
-              }
-            : undefined
+              }}
+            />
+          ) : undefined
         }
-        viewState={catalogueViewState(answer, book?.total ?? rows.length, refresh, {
-          module: info,
-          endpoint: 'GET /warehouse-fulfillment-settings-overview',
-          emptyTitle: '未配置：还没有登记成波规则',
-          emptyDescription: '点右上角「登记成波规则」，按仓登一条：圈哪些单、一个波次最多几张、怎么拣、每天几点放。',
-          narrowed: warehouse !== '',
-        })}
       />
       <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
       <WaveRuleRunDialog
@@ -178,6 +219,93 @@ export function WaveRuleList() {
       />
       <DueWaveRulesDialog open={dueOpen} onClose={() => setDueOpen(false)} warehouse={warehouse} />
     </>
+  );
+}
+
+function RuleStep({
+  row,
+  canRun,
+  canEdit,
+  onRun,
+  onEdit,
+}: {
+  row: WaveRuleRecord;
+  canRun: boolean;
+  canEdit: boolean;
+  onRun: () => void;
+  onEdit: () => void;
+}) {
+  const run = !row.deactivated;
+  const enabled = run ? canRun : canEdit;
+  const label = run ? '按它成波' : '重新启用';
+  if (!enabled) return <span className="whitespace-nowrap text-idpxyz-textMuted">{label}</span>;
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
+      onClick={(event) => {
+        event.stopPropagation();
+        if (run) onRun();
+        else onEdit();
+      }}
+    >
+      {label}
+    </Button>
+  );
+}
+
+function RuleDetail({
+  row,
+  onClose,
+  onRun,
+  onEdit,
+  onRetire,
+}: {
+  row: WaveRuleRecord;
+  onClose: () => void;
+  onRun?: () => void;
+  onEdit?: () => void;
+  onRetire?: () => void;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-idpxyz-editor">
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-idpxyz-border px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="type-section font-semibold text-idpxyz-textBright">{row.name}</span>
+            <WmsBadge code={row.deactivated ? 'CANCELLED' : 'ACTIVE'} label={row.deactivated ? '已停用' : '在用'} />
+          </div>
+          <p className="mt-1 font-mono type-caption text-idpxyz-textMuted">{row.warehouseCode} · {row.ruleCode}</p>
+        </div>
+        <Button type="button" variant="ghost" size="icon" title="关闭详情" aria-label="关闭详情" onClick={onClose}>
+          <X className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4 type-body">
+        <p>{waveRuleSummary(row)}</p>
+        <p className="font-mono type-caption text-idpxyz-textMuted">每天的时点 {waveRuleTimesLabel(row)}</p>
+        <p className="font-mono type-caption text-idpxyz-textMuted">第 {row.revision} 版 · {row.operator} · {formatInstant(row.registeredAt)}</p>
+        <div className="flex flex-wrap gap-2">
+          {onRun ? (
+            <Button type="button" size="sm" variant="outline" onClick={onRun}>
+              按它成波
+            </Button>
+          ) : null}
+          {onEdit ? (
+            <Button type="button" size="sm" variant="outline" onClick={onEdit}>
+              改下一版
+            </Button>
+          ) : null}
+          {onRetire ? (
+            <Button type="button" size="sm" variant="outline" onClick={onRetire}>
+              {row.deactivated ? '重新启用' : '停用'}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
 

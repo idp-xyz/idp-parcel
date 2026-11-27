@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
@@ -118,12 +119,15 @@ type StockSnapshot struct {
 }
 
 // StockQuery 是一次查阅。仓可以不点名，点了就只看那一个仓。
+// Keyword 是运营面的检索词，空串即不收窄。先按它收窄再切页：库存格、整箱、汇总、占用认商品编码、商品名称、
+// 条码与平台商品码、贴标别名、库位与箱号；流水的收窄在读面，游标摘要里带着同一个词。
 type StockQuery struct {
 	Tenant    domain.TenantID
 	Owner     domain.OwnerAccountID
 	Warehouse domain.WarehouseCode
 	View      StockView
 	Customer  bool
+	Keyword   string
 	Now       time.Time
 	// Page 与 Limit 在看流水时是游标与页大小。Number 大于 0 时，Limit 是库存格、整箱、汇总、占用的页大小，Number 是页码。
 	Page   cataloguepage.Query
@@ -214,7 +218,11 @@ func (handler *QueryStockHandler) cells(ctx context.Context, query StockQuery) (
 	if err != nil {
 		return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
 	}
-	// 汇总要先看完整的账。库存格按页取时，只给这一页逐格问可分配与库龄。
+	rows, err = handler.narrowCells(ctx, query, rows)
+	if err != nil {
+		return StockSnapshot{}, err
+	}
+	// 汇总要先看完整的账。库存格按页取时，只给这一页逐格问可分配与库龄。收窄在切页之前，book 的总数才是收窄之后的。
 	if query.View == StockViewCells && query.Number > 0 {
 		window, book := ports.CutBook(rows, query.Number, query.Limit)
 		cells, err := handler.cellViews(ctx, query, window, freezes)
@@ -279,6 +287,10 @@ func (handler *QueryStockHandler) cartons(ctx context.Context, query StockQuery)
 	freezes, err := handler.reads.ListActiveFreezes(ctx, query.Tenant, query.Owner, query.Warehouse)
 	if err != nil {
 		return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
+	}
+	rows, err = handler.narrowCartons(ctx, query, rows)
+	if err != nil {
+		return StockSnapshot{}, err
 	}
 	var book *ports.Book
 	if query.Number > 0 {
@@ -348,6 +360,10 @@ func (handler *QueryStockHandler) holds(ctx context.Context, query StockQuery) (
 		return StockSnapshot{}, err
 	}
 	holds = append(holds, reserved...)
+	holds, err = handler.narrowHolds(ctx, query, holds)
+	if err != nil {
+		return StockSnapshot{}, err
+	}
 	if query.Number > 0 {
 		window, book := ports.CutBook(holds, query.Number, query.Limit)
 		return StockSnapshot{Holds: window, Book: &book}, nil
@@ -578,4 +594,149 @@ func textOf(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+// stockWords 是一次检索。needle 已去掉首尾空白并转成小写；names 的键是商品编码，值是当前修订的名称与各识别码，同样小写。
+// 登记册没接上时 names 是空的：编码、库位、箱号与贴标别名仍认，名称和条码对不上。
+type stockWords struct {
+	needle string
+	names  map[string]string
+}
+
+func (handler *QueryStockHandler) narrowCells(ctx context.Context, query StockQuery, rows []ports.StockCellBalance) ([]ports.StockCellBalance, error) {
+	words, err := handler.stockWords(ctx, query, cellGoods(rows))
+	if err != nil || words.needle == "" {
+		return rows, err
+	}
+	kept := make([]ports.StockCellBalance, 0, len(rows))
+	for _, row := range rows {
+		if words.matches(row.Goods, row.Warehouse, row.Location, textOf(row.Alias)) {
+			kept = append(kept, row)
+		}
+	}
+	return kept, nil
+}
+
+func (handler *QueryStockHandler) narrowCartons(ctx context.Context, query StockQuery, rows []ports.StockCartonBalance) ([]ports.StockCartonBalance, error) {
+	if strings.TrimSpace(query.Keyword) == "" {
+		return rows, nil
+	}
+	bills := make([][]domain.CartonContentLine, len(rows))
+	codes := make([]string, 0)
+	for index, row := range rows {
+		warehouse, err := domain.NewWarehouseCode(row.Warehouse)
+		if err != nil {
+			return nil, fmt.Errorf("query stock: %w", err)
+		}
+		carton, err := domain.NewCartonNumber(row.Carton)
+		if err != nil {
+			return nil, fmt.Errorf("query stock: %w", err)
+		}
+		bill, err := handler.reads.CartonBill(ctx, query.Tenant, query.Owner, warehouse, carton)
+		if err != nil {
+			return nil, fmt.Errorf("query stock: %w", err)
+		}
+		bills[index] = bill
+		for _, line := range bill {
+			codes = append(codes, line.Goods().String())
+		}
+	}
+	words, err := handler.stockWords(ctx, query, codes)
+	if err != nil {
+		return nil, err
+	}
+	kept := make([]ports.StockCartonBalance, 0, len(rows))
+	for index, row := range rows {
+		if words.matches("", row.Warehouse, row.Location, row.Carton) {
+			kept = append(kept, row)
+			continue
+		}
+		for _, line := range bills[index] {
+			if words.matches(line.Goods().String()) {
+				kept = append(kept, row)
+				break
+			}
+		}
+	}
+	return kept, nil
+}
+
+func (handler *QueryStockHandler) narrowHolds(ctx context.Context, query StockQuery, holds []StockHoldView) ([]StockHoldView, error) {
+	codes := make([]string, 0, len(holds))
+	for _, hold := range holds {
+		if hold.Goods != "" {
+			codes = append(codes, hold.Goods)
+		}
+	}
+	words, err := handler.stockWords(ctx, query, codes)
+	if err != nil || words.needle == "" {
+		return holds, err
+	}
+	kept := make([]StockHoldView, 0, len(holds))
+	for _, hold := range holds {
+		if words.matches(hold.Goods, hold.Warehouse, hold.Location, hold.Carton) {
+			kept = append(kept, hold)
+		}
+	}
+	return kept, nil
+}
+
+func (handler *QueryStockHandler) stockWords(ctx context.Context, query StockQuery, codes []string) (stockWords, error) {
+	needle := strings.ToLower(strings.TrimSpace(query.Keyword))
+	words := stockWords{needle: needle, names: map[string]string{}}
+	if needle == "" || handler.goods == nil {
+		return words, nil
+	}
+	seen := map[string]bool{}
+	for _, code := range codes {
+		if code == "" || seen[code] {
+			continue
+		}
+		seen[code] = true
+		goods, err := domain.NewGoodsCode(code)
+		if err != nil {
+			continue
+		}
+		revision, found, err := handler.goods.LoadLatestGoods(ctx, query.Tenant, query.Owner, goods)
+		if err != nil {
+			return stockWords{}, fmt.Errorf("query stock: %w", err)
+		}
+		if !found {
+			continue
+		}
+		var text strings.Builder
+		text.WriteString(strings.ToLower(revision.Content().Name().String()))
+		for _, alias := range revision.Content().Aliases() {
+			text.WriteByte(' ')
+			text.WriteString(strings.ToLower(alias.Code().String()))
+		}
+		words.names[code] = text.String()
+	}
+	return words, nil
+}
+
+func cellGoods(rows []ports.StockCellBalance) []string {
+	codes := make([]string, 0, len(rows))
+	for _, row := range rows {
+		codes = append(codes, row.Goods)
+	}
+	return codes
+}
+
+func (words stockWords) matches(goods string, fields ...string) bool {
+	if words.needle == "" {
+		return true
+	}
+	if goods != "" && strings.Contains(strings.ToLower(goods), words.needle) {
+		return true
+	}
+	if name := words.names[goods]; name != "" && strings.Contains(name, words.needle) {
+		return true
+	}
+	for _, field := range fields {
+		if field != "" && strings.Contains(strings.ToLower(field), words.needle) {
+			return true
+		}
+	}
+	return false
 }

@@ -73,7 +73,8 @@ export interface WorkbenchPageTemplateProps<Row> {
   onRefresh?: () => void;
   refreshing?: boolean;
   primaryAction?: ReactNode;
-  search: { value: string; onChange: (value: string) => void; placeholder?: string };
+  /** 不传就不摆检索框。读口没有检索词的册子不摆一个按了没有用的框。 */
+  search?: { value: string; onChange: (value: string) => void; placeholder?: string };
   statusChips?: WorkbenchChip[];
   extraFilters?: ReactNode;
   toolbarRight?: ReactNode;
@@ -568,20 +569,22 @@ export function WorkbenchPageTemplate<Row>({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-idpxyz-border px-6 py-2.5">
-        <div className="flex w-64 items-center gap-2 rounded border border-idpxyz-border bg-idpxyz-inputBg px-3 py-1.5 type-body focus-within:border-idpxyz-accent focus-within:ring-1 focus-within:ring-idpxyz-accent">
-          <Search className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
-          <input
-            ref={searchRef}
-            type="text"
-            value={search.value}
-            onChange={(event) => search.onChange(event.target.value)}
-            placeholder={search.placeholder ?? '搜索…'}
-            aria-label={search.placeholder ?? '搜索'}
-            className="min-w-0 flex-1 bg-transparent text-idpxyz-text placeholder-idpxyz-breadcrumb outline-none"
-            onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
-          />
-          <kbd className="rounded border border-idpxyz-border px-1 type-body text-idpxyz-breadcrumb">/</kbd>
-        </div>
+        {search ? (
+          <div className="flex w-64 items-center gap-2 rounded border border-idpxyz-border bg-idpxyz-inputBg px-3 py-1.5 type-body focus-within:border-idpxyz-accent focus-within:ring-1 focus-within:ring-idpxyz-accent">
+            <Search className="h-3.5 w-3.5 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
+            <input
+              ref={searchRef}
+              type="text"
+              value={search.value}
+              onChange={(event) => search.onChange(event.target.value)}
+              placeholder={search.placeholder ?? '搜索…'}
+              aria-label={search.placeholder ?? '搜索'}
+              className="min-w-0 flex-1 bg-transparent text-idpxyz-text placeholder-idpxyz-breadcrumb outline-none"
+              onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
+            />
+            <kbd className="rounded border border-idpxyz-border px-1 type-body text-idpxyz-breadcrumb">/</kbd>
+          </div>
+        ) : null}
         {statusChips && statusChips.length > 0 && (
           <div className="flex flex-wrap items-center gap-1">
             {statusChips.map((chip) => (

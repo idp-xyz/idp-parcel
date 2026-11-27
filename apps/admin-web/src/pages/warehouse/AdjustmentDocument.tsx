@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { formatInstant } from '../catalogue-view';
@@ -6,11 +7,11 @@ import { internalOpsActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
 import { findAdjustment, type StockAdjustmentLineRecord } from './api';
 import { lotLabel } from './count-flow';
-import { countsAdjustmentsModule } from './counts-adjustments-address';
+import { adjustmentKind, countsAdjustmentsModule } from './counts-adjustments-address';
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { adjustmentStatusLabel, adjustmentTotals, adjustmentTrack, kindQuantities, signedAdjustmentQuantity } from './stock-approval-flow';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsSubColumn } from './wms-ui';
 
 const moduleId = countsAdjustmentsModule;
@@ -18,12 +19,36 @@ const moduleId = countsAdjustmentsModule;
 /**
  * 库存调整页：为什么调、调哪些库位的哪些商品、各调多少。提交只是登记，不改库存账；批准才按这些行入账，驳回就此结束。
  * 批准与驳回在头区做——批准的人在这里核完每一行再下手。
+ *
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一行留着上一张，新的读到再换。栏里做完一个动作告诉列表重取，
+ * 列表重取会让 `revision` 变，这张单跟着重读。
  */
-export function AdjustmentDocument({ adjustmentId }: { adjustmentId: string }) {
+export function AdjustmentDocument({
+  adjustmentId,
+  panel,
+}: {
+  adjustmentId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(internalOpsActionSpecs);
   const back = useReturnToList(moduleId);
   const complete = adjustmentId !== '';
-  const { answer, loading, reload } = useKeyedLoad(complete ? adjustmentId : null, findAdjustment);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(complete ? adjustmentId : null, findAdjustment, {
+    holdPrevious: panel !== undefined,
+  });
+  const shownId = useRef(adjustmentId);
+  useEffect(() => {
+    if (shownId.current === adjustmentId) return;
+    shownId.current = adjustmentId;
+    drawer.close();
+  }, [adjustmentId, drawer]);
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
   const found = answer?.kind === 'outcome' ? answer.body : undefined;
   const record = found?.record;
   const failure =
@@ -79,10 +104,17 @@ export function AdjustmentDocument({ adjustmentId }: { adjustmentId: string }) {
         title={record?.adjustmentId ?? adjustmentId}
         subtitle={record ? [`货主 ${record.ownerAccount}`, `仓 ${record.warehouseCode}`, `提交于 ${formatInstant(record.submittedAt)}`].join(' · ') : undefined}
         badge={record ? <WmsBadge code={record.status} label={adjustmentStatusLabel(record.status)} /> : undefined}
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={
+          panel
+            ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [adjustmentKind, record?.adjustmentId ?? adjustmentId]) }
+            : undefined
+        }
         stepper={
           track ? (
             <WmsStepper
@@ -169,7 +201,7 @@ export function AdjustmentDocument({ adjustmentId }: { adjustmentId: string }) {
           </>
         ) : null}
       </WmsDocumentPage>
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={panel ? panel.onChanged : reload} />
     </>
   );
 }
