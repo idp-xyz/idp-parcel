@@ -68,6 +68,9 @@ func NewQueryPostIntakeDispositionRequestsEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		listed, err := reader.ListUnansweredPostIntakeDispositionRequests(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不伪装成空清单：把一次该重试的故障读成「没有等回应的请求」，卡住的包裹就更没人看见了。

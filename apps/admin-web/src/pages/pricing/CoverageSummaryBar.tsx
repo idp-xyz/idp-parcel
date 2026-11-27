@@ -86,7 +86,7 @@ export function CoverageSummaryBar({
 
   const asOf = answer.body.asOf;
   const rows = answer.body.series.map((record) => coverageRowOf(record, asOf));
-  const pager = pagination !== undefined && (pastFirstPage(pagination) || pagination.next !== null) ? pagination : undefined;
+  const pager = pagination;
   if (rows.length === 0 && !pastFirstPage(pagination)) {
     return (
       <div className="shrink-0 px-4 pt-3 type-body leading-4 text-idpxyz-textMuted">

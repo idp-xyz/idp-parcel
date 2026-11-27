@@ -567,6 +567,9 @@ func NewQueryUnclaimedArrivalsEndpoint(intake CatalogueIntake, queries Unclaimed
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListUnclaimedArrivals(request.Context(), query.Tenant, query.Limit, pageQuery, receivedFrom, receivedTo)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "unclaimed arrivals list did not form an answer")

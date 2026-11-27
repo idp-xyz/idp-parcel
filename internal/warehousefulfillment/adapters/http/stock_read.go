@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
@@ -71,7 +72,7 @@ func NewQueryCustomerStockEndpoint(intake CustomerInboundPreAdvicePorts, reader 
 }
 
 func operatorStockQuery(request *http.Request, tenant domain.TenantID, limit int) (application.StockQuery, string) {
-	values, reason := stockQueryValues(request, "ownerAccount", "warehouseCode", "view", stockAfterQueryKey)
+	values, reason := stockQueryValues(request, "ownerAccount", "warehouseCode", "view", stockAfterQueryKey, stockPageSizeQueryKey, stockPageQueryKey)
 	if reason != "" {
 		return application.StockQuery{}, reason
 	}
@@ -116,21 +117,80 @@ func customerStockQuery(request *http.Request, tenant domain.TenantID, owner dom
 }
 
 const stockAfterQueryKey = "after"
+const stockPageSizeQueryKey = "pageSize"
+const stockPageQueryKey = "page"
 
-// stockPaging 给运营面流水那一种看法解出翻页。其余看法答整份、不翻页，带了 after 即拒：收下不用，调用方会以为自己翻到了下一页。
+// stockPaging 给运营面解出翻页。流水用游标：pageSize 只收与目录册相同的几档，没给仍用渠道契约，page 不收。
+// 库存格、整箱、汇总、占用用页码：带了 page 或 pageSize 才按页交回，都不带则答整份。带了 after 即拒。
 func stockPaging(query application.StockQuery, values map[string]string, limit int) (application.StockQuery, string) {
 	after, carried := values[stockAfterQueryKey]
-	if query.View != application.StockViewMovements {
-		if carried {
-			return application.StockQuery{}, "after is only taken by the movements view"
+	if query.View == application.StockViewMovements {
+		if _, paged := values[stockPageQueryKey]; paged {
+			return application.StockQuery{}, "page is only taken by the balance views"
 		}
-		return query, ""
+		conditions := stockMovementConditions(query)
+		if carried {
+			conditions.Set(stockAfterQueryKey, after)
+		}
+		if pageSize, sized := values[stockPageSizeQueryKey]; sized {
+			conditions.Set(stockPageSizeQueryKey, pageSize)
+		}
+		paged, reason := stockMovementPage(query, conditions, limit)
+		if reason != "" {
+			return paged, reason
+		}
+		if paged.Page.PageSize > 0 {
+			paged.Limit = paged.Page.PageSize
+		}
+		return paged, ""
 	}
-	conditions := stockMovementConditions(query)
 	if carried {
-		conditions.Set(stockAfterQueryKey, after)
+		return application.StockQuery{}, "after is only taken by the movements view"
 	}
-	return stockMovementPage(query, conditions, limit)
+	page, size, reason, on := stockBook(values)
+	if reason != "" {
+		return application.StockQuery{}, reason
+	}
+	if on {
+		query.Number = page
+		query.Limit = size
+	}
+	return query, ""
+}
+
+// stockBook 解库存格、整箱、汇总、占用的页码。两个键都没给就是不按页。理由不回显取值。
+func stockBook(values map[string]string) (page int, size int, reason string, on bool) {
+	_, hasPage := values[stockPageQueryKey]
+	_, hasSize := values[stockPageSizeQueryKey]
+	if !hasPage && !hasSize {
+		return 0, 0, "", false
+	}
+	size = cataloguepage.DefaultPageSize
+	if hasSize {
+		parsed, err := strconv.Atoi(values[stockPageSizeQueryKey])
+		if err != nil || !stockPageSizeAllowed(parsed) {
+			return 0, 0, "pageSize must be 20, 50, 100 or 200", true
+		}
+		size = parsed
+	}
+	page = 1
+	if hasPage {
+		parsed, err := strconv.Atoi(values[stockPageQueryKey])
+		if err != nil || parsed < 1 || parsed > 1_000_000 {
+			return 0, 0, "page must be an integer from 1", true
+		}
+		page = parsed
+	}
+	return page, size, "", true
+}
+
+func stockPageSizeAllowed(size int) bool {
+	for _, allowed := range cataloguepage.PageSizes {
+		if size == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 // stockMovementConditions 按已经判过的货主、仓与看法重写一份交给共用件的条件，不拿原始查询串去解：仓没给与给了空串
@@ -253,6 +313,9 @@ func stockSnapshotBody(snapshot application.StockSnapshot) stockReadBody {
 		body.Movements = append(body.Movements, item)
 	}
 	body.Page = snapshot.MovementPage
+	if snapshot.Book != nil {
+		body.Book = &stockBookBody{Page: snapshot.Book.Page, PageSize: snapshot.Book.PageSize, Total: snapshot.Book.Total}
+	}
 	return body
 }
 
@@ -263,8 +326,16 @@ type stockReadBody struct {
 	Summary   []stockSummaryBody  `json:"summary,omitempty"`
 	Holds     []stockHoldBody     `json:"holds,omitempty"`
 	Movements []stockMovementBody `json:"movements,omitempty"`
-	// Page 只在看流水时有：只有那一种看法翻页。
+	// Page 只在看流水时有：流水按游标翻页。
 	Page *cataloguepage.Page `json:"page,omitempty"`
+	// Book 只在库存格、整箱、汇总、占用按页取时有。
+	Book *stockBookBody `json:"book,omitempty"`
+}
+
+type stockBookBody struct {
+	Page     int `json:"page"`
+	PageSize int `json:"pageSize"`
+	Total    int `json:"total"`
 }
 
 type stockCellBody struct {

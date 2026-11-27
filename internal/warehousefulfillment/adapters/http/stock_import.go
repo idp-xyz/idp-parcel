@@ -157,6 +157,9 @@ func NewQueryStockImportsEndpoint(intake CatalogueIntake, queries StockImportQue
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.List(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "stock import list did not form an answer")

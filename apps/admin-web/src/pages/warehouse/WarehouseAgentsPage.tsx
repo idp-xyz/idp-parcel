@@ -6,7 +6,7 @@ import type { InspectorAction, InspectorContent } from '../../templates/inspecto
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
-import type { CatalogueConditions } from '../catalogue-query';
+import { catalogueDefaultPageSize, cataloguePageSizes, type CatalogueConditions } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { getAgentOverview, listOutboundRequests, type AgentOverviewBody, type OutboundRequestRecord } from './api';
@@ -18,7 +18,7 @@ import type { GuidedFormValues } from './guided-forms';
 import { useWarehouseLookups } from './use-catalogues';
 import { DocumentLink } from './document-page';
 import { openDocument } from './use-document';
-import { labelOf, WmsBadge, WmsDetailModal, WmsKpiStrip, WmsSubTable } from './wms-ui';
+import { labelOf, WmsBadge, WmsDetailModal, WmsKpiStrip, WmsPagerBar, WmsSubTable } from './wms-ui';
 
 // 代理仓的单也是出库单：明细在出库单页上看，这一页只管转出与回录代理仓的结果。
 const outboundModule = 'warehouse-outbound';
@@ -63,6 +63,10 @@ export function WarehouseAgentsPage() {
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [ledger, setLedger] = useState<ApiResult<AgentOverviewBody> | null>(null);
+  const [ledgerSize, setLedgerSize] = useState(catalogueDefaultPageSize);
+  const [connectorsPage, setConnectorsPage] = useState(1);
+  const [statementsPage, setStatementsPage] = useState(1);
+  const [resultsPage, setResultsPage] = useState(1);
   const settled = useSettledKeyword(keyword);
 
   const conditions: CatalogueConditions = {
@@ -86,15 +90,22 @@ export function WarehouseAgentsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void getAgentOverview().then((next) => {
+    void getAgentOverview({ pageSize: ledgerSize, connectorsPage, statementsPage, resultsPage }).then((next) => {
       if (!cancelled) setLedger(next);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ledgerSize, connectorsPage, statementsPage, resultsPage]);
 
   const overview = ledger?.kind === 'outcome' ? ledger.body : null;
+  const ledgerPages = overview?.pages;
+  const changeLedgerSize = (next: number) => {
+    setLedgerSize(next);
+    setConnectorsPage(1);
+    setStatementsPage(1);
+    setResultsPage(1);
+  };
 
   const inspectorOf = (row: OutboundRequestRecord): InspectorContent => {
     const actions: InspectorAction[] = [{ label: '打开出库单', onRun: () => openDocument(outboundModule, [row.requestId]) }];
@@ -147,7 +158,7 @@ export function WarehouseAgentsPage() {
               onClick={() => setLedgerOpen(true)}
             >
               {overview
-                ? `连接器 ${overview.connectors.length} · 声明 ${overview.statements.length} · 回传 ${overview.results.length}`
+                ? `连接器 ${ledgerPages?.connectors.total ?? overview.connectors.length} · 声明 ${ledgerPages?.statements.total ?? overview.statements.length} · 回传 ${ledgerPages?.results.total ?? overview.results.length}`
                 : '连接器、声明与回传'}
             </Button>
             <Button
@@ -207,14 +218,14 @@ export function WarehouseAgentsPage() {
       >
         <WmsKpiStrip
           items={[
-            { label: '连接器', value: overview?.connectors.length ?? '—', tone: (overview?.connectors.length ?? 0) > 0 ? 'success' : 'warning' },
-            { label: '库存声明', value: overview?.statements.length ?? '—' },
-            { label: '履约回传', value: overview?.results.length ?? '—' },
+            { label: '连接器', value: ledgerPages?.connectors.total ?? overview?.connectors.length ?? '—', tone: (ledgerPages?.connectors.total ?? overview?.connectors.length ?? 0) > 0 ? 'success' : 'warning' },
+            { label: '库存声明', value: ledgerPages?.statements.total ?? overview?.statements.length ?? '—' },
+            { label: '履约回传', value: ledgerPages?.results.total ?? overview?.results.length ?? '—' },
           ]}
         />
         <WmsSubTable
           title="连接器"
-          count={overview?.connectors.length ?? 0}
+          count={ledgerPages?.connectors.total ?? overview?.connectors.length ?? 0}
           emptyText="还没有代理仓连接器。到仓配规则设置里登记。"
           rows={overview?.connectors ?? []}
           rowKey={(row) => row.warehouseCode}
@@ -223,9 +234,19 @@ export function WarehouseAgentsPage() {
             { id: 'at', header: '登记时刻', mono: true, render: (row) => formatInstant(row.registeredAt) },
           ]}
         />
+        {ledgerPages ? (
+          <WmsPagerBar
+            summary={`第 ${ledgerPages.connectors.page} / ${Math.max(1, Math.ceil(ledgerPages.connectors.total / ledgerPages.connectors.pageSize))} 页 · 共 ${ledgerPages.connectors.total} 条`}
+            canPrevious={connectorsPage > 1}
+            canNext={connectorsPage * ledgerSize < ledgerPages.connectors.total}
+            onPrevious={() => setConnectorsPage((current) => current - 1)}
+            onNext={() => setConnectorsPage((current) => current + 1)}
+            pageSize={{ value: ledgerSize, options: cataloguePageSizes, onChange: changeLedgerSize }}
+          />
+        ) : null}
         <WmsSubTable
           title="库存声明"
-          count={overview?.statements.length ?? 0}
+          count={ledgerPages?.statements.total ?? overview?.statements.length ?? 0}
           emptyText="还没有代理仓库存声明。"
           rows={overview?.statements ?? []}
           rowKey={(row) => row.sourceId}
@@ -238,9 +259,18 @@ export function WarehouseAgentsPage() {
             { id: 'until', header: '有效至', mono: true, render: (row) => formatInstant(row.validUntil) },
           ]}
         />
+        {ledgerPages ? (
+          <WmsPagerBar
+            summary={`第 ${ledgerPages.statements.page} / ${Math.max(1, Math.ceil(ledgerPages.statements.total / ledgerPages.statements.pageSize))} 页 · 共 ${ledgerPages.statements.total} 条`}
+            canPrevious={statementsPage > 1}
+            canNext={statementsPage * ledgerSize < ledgerPages.statements.total}
+            onPrevious={() => setStatementsPage((current) => current - 1)}
+            onNext={() => setStatementsPage((current) => current + 1)}
+          />
+        ) : null}
         <WmsSubTable
           title="履约回传"
-          count={overview?.results.length ?? 0}
+          count={ledgerPages?.results.total ?? overview?.results.length ?? 0}
           emptyText="还没有代理仓回传打包、交接或拒单。"
           rows={overview?.results ?? []}
           rowKey={(row) => row.resultId}
@@ -251,6 +281,15 @@ export function WarehouseAgentsPage() {
             { id: 'at', header: '回传时刻', mono: true, render: (row) => formatInstant(row.reportedAt) },
           ]}
         />
+        {ledgerPages ? (
+          <WmsPagerBar
+            summary={`第 ${ledgerPages.results.page} / ${Math.max(1, Math.ceil(ledgerPages.results.total / ledgerPages.results.pageSize))} 页 · 共 ${ledgerPages.results.total} 条`}
+            canPrevious={resultsPage > 1}
+            canNext={resultsPage * ledgerSize < ledgerPages.results.total}
+            onPrevious={() => setResultsPage((current) => current - 1)}
+            onNext={() => setResultsPage((current) => current + 1)}
+          />
+        ) : null}
       </WmsDetailModal>
       <ActionDrawer
         moduleId="warehouse-agents"

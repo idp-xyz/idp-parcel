@@ -87,6 +87,9 @@ func NewQueryPreAdvicesEndpoint(intake CatalogueIntake, queries PreAdviceQueries
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListPreAdvices(request.Context(), query.Tenant, owner, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "inbound pre-advice list did not form an answer", "ownerAccount", owner.String())

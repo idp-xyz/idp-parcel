@@ -37,6 +37,17 @@ func TestStockReadAnswersTheLedgerWithoutMovingIt(t *testing.T) {
 	}
 	reader := world.stockReader(t)
 	cells := world.readStock(t, reader, application.StockViewCells, false)
+	if cells.Book != nil {
+		t.Fatal("不带页码应答整份")
+	}
+	first := world.readStockBook(t, reader, application.StockViewCells, 1, 1)
+	if first.Book == nil || first.Book.Total != len(cells.Cells) || len(first.Cells) != 1 {
+		t.Fatalf("库存格第一页 %+v 共 %d", first.Book, len(first.Cells))
+	}
+	past := world.readStockBook(t, reader, application.StockViewCells, first.Book.Total+1, 1)
+	if past.Book == nil || past.Book.Total != len(cells.Cells) || len(past.Cells) != 0 {
+		t.Fatalf("库存格越过末页 %+v 行 %d", past.Book, len(past.Cells))
+	}
 	store := cellNamed(t, cells.Cells, "SYN-LOC-STORE")
 	if store.Quantity != 10 || store.Frozen != 4 || store.Available != 6 || !store.Allocatable || store.Location == "" || !store.AgeConfigured || store.AgeDays != 0 {
 		t.Fatalf("存储格 %+v", store)
@@ -88,6 +99,16 @@ func (world receiptWorld) stockReader(t *testing.T) *application.QueryStockHandl
 		t.Fatal(err)
 	}
 	return application.NewQueryStockHandler(reads, world.warehouses, world.warehouses, world.locations, world.zones, nil, nil)
+}
+
+func (world receiptWorld) readStockBook(t *testing.T, reader *application.QueryStockHandler, view application.StockView, page, size int) application.StockSnapshot {
+	t.Helper()
+	query := application.StockQuery{
+		Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Owner: valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"),
+		Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), View: view, Now: world.clock.Now(),
+		Number: page, Limit: size,
+	}
+	return world.queryStock(t, reader, query)
 }
 
 func (world receiptWorld) readStock(t *testing.T, reader *application.QueryStockHandler, view application.StockView, customer bool) application.StockSnapshot {

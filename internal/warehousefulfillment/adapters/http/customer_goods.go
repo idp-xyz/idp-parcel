@@ -227,7 +227,11 @@ func NewListCustomerGoodsEndpoint(intake CustomerGoodsPorts, reader GoodsCatalog
 			writeCustomerQueryProblem(response, request, err)
 			return
 		}
-		page, err := reader.ListGoods(request.Context(), identity.Tenant, identity.Owner, operatorCatalogueReadLimit, pageQuery)
+		limit := operatorCatalogueReadLimit
+		if pageQuery.PageSize > 0 {
+			limit = pageQuery.PageSize
+		}
+		page, err := reader.ListGoods(request.Context(), identity.Tenant, identity.Owner, limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "customer goods list did not form an answer",
 				"ownerAccount", identity.Owner.String())
@@ -238,7 +242,7 @@ func NewListCustomerGoodsEndpoint(intake CustomerGoodsPorts, reader GoodsCatalog
 			Outcome:      outcomeGoodsListed,
 			OwnerAccount: identity.Owner.String(),
 			Goods:        customerGoodsBodiesOfRows(page.Rows),
-			Page:         page.Page(operatorCatalogueReadLimit),
+			Page:         page.Page(limit),
 		})
 	})
 }

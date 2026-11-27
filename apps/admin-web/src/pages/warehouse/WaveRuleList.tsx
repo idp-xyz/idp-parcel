@@ -7,6 +7,7 @@ import { primaryActionClass } from '../../components/primary-action';
 import { statusToneBanner } from '../../components/status-tone';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
+import { catalogueDefaultPageSize, cataloguePageSizes } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
@@ -51,22 +52,24 @@ export function WaveRuleList() {
   const [answer, setAnswer] = useState<ApiResult<SettingsOverviewBody> | null>(null);
   const [tick, setTick] = useState(0);
   const [warehouse, setWarehouse] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(catalogueDefaultPageSize);
   const [running, setRunning] = useState<{ warehouse: string; rule: string } | null>(null);
   const [dueOpen, setDueOpen] = useState(false);
   const refresh = useCallback(() => setTick((value) => value + 1), []);
 
   useEffect(() => {
     let cancelled = false;
-    void getSettingsOverview().then((loaded) => {
+    void getSettingsOverview({ page, pageSize, warehouse: warehouse || undefined }).then((loaded) => {
       if (!cancelled) setAnswer(loaded);
     });
     return () => {
       cancelled = true;
     };
-  }, [tick]);
+  }, [tick, page, pageSize, warehouse]);
 
-  const all = answer?.kind === 'outcome' ? (answer.body.waveRules ?? []) : [];
-  const rows = warehouse === '' ? [...all] : all.filter((rule) => rule.warehouseCode === warehouse);
+  const rows = answer?.kind === 'outcome' ? [...(answer.body.waveRules ?? [])] : [];
+  const book = answer?.kind === 'outcome' ? answer.body.waveRuleBook : undefined;
   const warehouseNames = new Map(drawer.lookups.warehouses.map((w) => [w.warehouseCode, w.name ?? '']));
 
   const inspectorOf = (row: WaveRuleRecord): InspectorContent => {
@@ -129,7 +132,10 @@ export function WaveRuleList() {
           <WmsFilterSelect
             label="仓库"
             value={warehouse}
-            onChange={setWarehouse}
+            onChange={(next) => {
+              setWarehouse(next);
+              setPage(1);
+            }}
             options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: `${w.warehouseCode} · ${w.name}` }))}
           />
         }
@@ -138,7 +144,22 @@ export function WaveRuleList() {
         rowKey={(row) => `${row.warehouseCode}/${row.ruleCode}`}
         inspector={inspectorOf}
         emptyRowsNote="这个仓没有登记成波规则"
-        viewState={catalogueViewState(answer, rows.length, refresh, {
+        pagination={
+          book
+            ? {
+                page: book.page,
+                pageSize: book.pageSize,
+                total: book.total,
+                onPageChange: setPage,
+                onPageSizeChange: (next) => {
+                  setPageSize(next);
+                  setPage(1);
+                },
+                pageSizeOptions: [...cataloguePageSizes],
+              }
+            : undefined
+        }
+        viewState={catalogueViewState(answer, book?.total ?? rows.length, refresh, {
           module: info,
           endpoint: 'GET /warehouse-fulfillment-settings-overview',
           emptyTitle: '未配置：还没有登记成波规则',

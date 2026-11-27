@@ -96,6 +96,9 @@ func NewQueryRoutePlansEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		ctx := request.Context()
 		tenant := query.Scope.Tenant()
 		limit := query.Limit

@@ -95,6 +95,9 @@ func serveRecordList[Record any, Body any](
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := read(request, values, query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -666,6 +669,9 @@ func NewQueryUnadmittedObjectsEndpoint(intake CatalogueQueryIntake, reader Unadm
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
+		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
 		}
 		listed, err := reader.ListUnadmittedObjects(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {

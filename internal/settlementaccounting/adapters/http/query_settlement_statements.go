@@ -95,6 +95,9 @@ func serveCustomerStatements(
 		writePageQueryProblem(response, err)
 		return
 	}
+	if pageQuery.PageSize > 0 {
+		limit = pageQuery.PageSize
+	}
 	page, err := reader.ListCustomerStatements(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -170,6 +173,9 @@ func serveSupplierBillReceptions(
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return
+	}
+	if pageQuery.PageSize > 0 {
+		limit = pageQuery.PageSize
 	}
 	filter := ports.SupplierBillReceptionFilter{
 		Claim: values.Get("claim"), Supplier: values.Get("supplier"), SupplierBillNumber: values.Get("supplierBillNumber"),
@@ -383,6 +389,9 @@ func NewQueryDisputedCustomerStatementsEndpoint(
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
+		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
 		}
 		listed, err := reader.ListDisputedCustomerStatements(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {

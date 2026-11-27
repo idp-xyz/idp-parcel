@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -19,6 +20,9 @@ type Query struct {
 	Keyword string
 	// After 是上一页末行的位置，读面取严格排在它之后的行；nil 即第一页。
 	After *Position
+	// PageSize 是调用方选的页大小；0 即没选，读口沿用渠道契约。只在选了的时候进游标摘要，
+	// 所以不带这一参数的旧游标仍然有效。
+	PageSize int
 
 	catalogue *Catalogue
 	digest    string
@@ -106,6 +110,16 @@ func (catalogue *Catalogue) Decode(values url.Values) (Query, error) {
 				return Query{}, malformed("检索词 q 超过 %d 个字符", MaxKeywordRunes)
 			}
 			query.Keyword = keyword
+		case key == keyPageSize:
+			value, err := single(key, given)
+			if err != nil {
+				return Query{}, err
+			}
+			size, err := strconv.Atoi(value)
+			if err != nil || !pageSizeAllowed(size) {
+				return Query{}, malformed("pageSize 只接受 20、50、100 或 200")
+			}
+			query.PageSize = size
 		case key == keyAfter:
 			value, err := single(key, given)
 			if err != nil {
@@ -151,6 +165,37 @@ func (catalogue *Catalogue) Decode(values url.Values) (Query, error) {
 		query.After = &position
 	}
 	return query, nil
+}
+
+// ChosenPageSize 只读 pageSize。没给这一键答 0，读口沿用渠道契约。给了却不在允许的几档里，答畸形，理由不回显取值。
+// 端点把原始查询串整段交给另一上下文解码时用它，好让答复里的 page.size 与那一次实际读的行数是同一个数。
+func ChosenPageSize(raw string) (int, error) {
+	values, err := ParseQuery(raw)
+	if err != nil {
+		return 0, err
+	}
+	given, present := values[keyPageSize]
+	if !present {
+		return 0, nil
+	}
+	value, err := single(keyPageSize, given)
+	if err != nil {
+		return 0, err
+	}
+	size, err := strconv.Atoi(value)
+	if err != nil || !pageSizeAllowed(size) {
+		return 0, malformed("pageSize 只接受 20、50、100 或 200")
+	}
+	return size, nil
+}
+
+func pageSizeAllowed(size int) bool {
+	for _, allowed := range PageSizes {
+		if size == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 func single(key string, given []string) (string, error) {

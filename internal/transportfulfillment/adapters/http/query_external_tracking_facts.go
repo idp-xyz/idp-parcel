@@ -90,6 +90,9 @@ func NewQueryExternalTrackingFactsEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListCurrentExternalTrackingFacts(request.Context(), query.Scope.Tenant(), source, filter, query.Limit, pageQuery)
 		if err != nil {

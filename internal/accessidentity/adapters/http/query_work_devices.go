@@ -119,7 +119,11 @@ func NewQueryWorkDevicesEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
-		result, err := catalogue.ListDevices(request.Context(), tenant, operatorCatalogueReadLimit, query)
+		limit := operatorCatalogueReadLimit
+		if query.PageSize > 0 {
+			limit = query.PageSize
+		}
+		result, err := catalogue.ListDevices(request.Context(), tenant, limit, query)
 		if err != nil {
 			// 读不回是答案未形成，不是空册。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -132,7 +136,7 @@ func NewQueryWorkDevicesEndpoint(
 		writeJSON(response, http.StatusOK, workDeviceListResponse{
 			Outcome: outcomeWorkDevicesListed,
 			Devices: bodies,
-			Page:    result.Page(operatorCatalogueReadLimit),
+			Page:    result.Page(limit),
 		})
 	}), nil
 }

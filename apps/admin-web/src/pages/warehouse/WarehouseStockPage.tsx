@@ -12,6 +12,7 @@ import {
   startCursorTrail,
   type CursorTrail,
 } from '../../templates/cursor-pagination';
+import { catalogueDefaultPageSize, cataloguePageSizes } from '../catalogue-query';
 import { formatInstant } from '../catalogue-view';
 import { queryOwnerStock, type ApiResult, type StockReadBody, type StockViewKind } from './api';
 import { internalOpsActionSpecs } from './actions';
@@ -19,7 +20,6 @@ import { ActionDrawer, type ActiveDrawerAction } from './ActionDrawer';
 import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { problemNote } from './presentation';
-import { stockPageClamp, stockPageCount, stockPageSlice, stockPageSummary } from './stock-page';
 import { useWarehouseLookups } from './use-catalogues';
 import { WmsPagerBar } from './wms-ui';
 
@@ -36,15 +36,6 @@ const holdKindLabels: Record<string, string> = {
   LOCKED: '作业锁',
   CARTON_FROZEN: '整箱冻结',
 };
-
-function stockRowCount(body: StockReadBody, view: StockViewKind): number {
-  if (view === 'cells') return (body.cells ?? []).length;
-  if (view === 'cartons') return (body.cartons ?? []).length;
-  if (view === 'summary') return (body.summary ?? []).length;
-  if (view === 'holds') return (body.holds ?? []).length;
-  // 流水由读口翻页，不在取回的行上切。
-  return 0;
-}
 
 const thClass = 'px-3 py-2 text-left type-caption font-medium text-idpxyz-textMuted border-b border-idpxyz-border whitespace-nowrap';
 // 行线用不带透明度的主题色：主题色是裸 CSS 变量，`/60` 这类透明度写法生不出样式，线会落回浏览器缺省的浅灰，
@@ -66,6 +57,8 @@ export function WarehouseStockPage() {
   const [drawer, setDrawer] = useState<ActiveDrawerAction | null>(null);
   const [paging, setPaging] = useState({ conditions: '', page: 1 });
   const [trail, setTrail] = useState<CursorTrail>(() => startCursorTrail(''));
+  const [movementSize, setMovementSize] = useState(catalogueDefaultPageSize);
+  const [sheetSize, setSheetSize] = useState(catalogueDefaultPageSize);
 
   useEffect(() => {
     if (owner === '' && lookups.owners.length > 0) {
@@ -75,14 +68,15 @@ export function WarehouseStockPage() {
 
   // 页码与游标都跟着查阅条件记：货主、仓或视图一换，就把记下的丢掉、从第一页看起——换回原来的条件也是第一页，
   // 不接着上次翻到的地方。在渲染里比对着改，换条件的那一次渲染就已经是第一页，不会先带着旧游标问一次。
-  // 流水由读口按游标一页一页答；其余四种看法读口答整份，翻页是在取回的行上切。
-  const conditions = `${owner.trim()}|${warehouse}|${view}`;
+  // 流水按游标翻。其余四种按页码向读口要，页大小一换就回到第一页。
+  const conditions = `${owner.trim()}|${warehouse}|${view}|${view === 'movements' ? movementSize : sheetSize}`;
   if (trail.query !== conditions) {
     setTrail(startCursorTrail(conditions));
     setPaging({ conditions, page: 1 });
   }
   const cursor = cursorTrailFor(trail, conditions);
   const after = view === 'movements' ? currentCursorAfter(cursor) : null;
+  const sheetPage = paging.conditions === conditions ? paging.page : 1;
 
   useEffect(() => {
     const trimmed = owner.trim();
@@ -92,7 +86,14 @@ export function WarehouseStockPage() {
     }
     let cancelled = false;
     setLoading(true);
-    void queryOwnerStock(trimmed, warehouse, view, after).then((res) => {
+    void queryOwnerStock(
+      trimmed,
+      warehouse,
+      view,
+      after,
+      view === 'movements' ? movementSize : sheetSize,
+      view === 'movements' ? undefined : sheetPage,
+    ).then((res) => {
       if (!cancelled) {
         setAnswer(res);
         setLoading(false);
@@ -101,7 +102,7 @@ export function WarehouseStockPage() {
     return () => {
       cancelled = true;
     };
-  }, [owner, warehouse, view, tick, after]);
+  }, [owner, warehouse, view, tick, after, movementSize, sheetSize, sheetPage]);
 
   const openAction = (id: string, prefill?: GuidedFormValues) => {
     const target = targetMap.get(id);
@@ -111,12 +112,9 @@ export function WarehouseStockPage() {
 
   const body = answer?.kind === 'outcome' ? answer.body : null;
 
-  const total = body ? stockRowCount(body, view) : 0;
-  const page = stockPageClamp(paging.conditions === conditions ? paging.page : 1, total);
-  const turnTo = (next: number) => setPaging({ conditions, page: next });
-
   const movementPage = body?.page ?? null;
   const movementPageNumber = cursorPageNumber(cursor);
+  const book = body?.book ?? null;
   // 在读下一页时旧答复还在屏上，它的 next 已经用过了，把钮按住。
   const pager =
     view === 'movements'
@@ -126,13 +124,15 @@ export function WarehouseStockPage() {
           canNext: !loading && movementPage !== null && movementPage.next !== null,
           onPrevious: () => setTrail(previousCursorPage(cursor)),
           onNext: () => setTrail(nextCursorPage(cursor, movementPage?.next ?? null)),
+          pageSize: { value: movementSize, options: cataloguePageSizes, onChange: setMovementSize },
         }
       : {
-          summary: stockPageSummary(page, total),
-          canPrevious: page > 1,
-          canNext: page < stockPageCount(total),
-          onPrevious: () => turnTo(page - 1),
-          onNext: () => turnTo(page + 1),
+          summary: cursorPageSummary(book?.page ?? sheetPage, book?.pageSize ?? sheetSize, book?.total ?? null),
+          canPrevious: !loading && sheetPage > 1,
+          canNext: !loading && book !== null && sheetPage * (book.pageSize || sheetSize) < book.total,
+          onPrevious: () => setPaging({ conditions, page: sheetPage - 1 }),
+          onNext: () => setPaging({ conditions, page: sheetPage + 1 }),
+          pageSize: { value: sheetSize, options: cataloguePageSizes, onChange: setSheetSize },
         };
 
   return (
@@ -251,7 +251,7 @@ export function WarehouseStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {stockPageSlice(body.cells ?? [], page).map((cell, index) => (
+                    {(body.cells ?? []).map((cell, index) => (
                       <tr key={`${cell.warehouse}-${cell.location ?? ''}-${cell.goodsCode}-${cell.inboundBatchId}-${index}`}>
                         <td className={monoTd}>{`${cell.warehouse} / ${cell.location ?? '代理仓(无库位)'}`}</td>
                         <td className={monoTd}>
@@ -361,7 +361,7 @@ export function WarehouseStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {stockPageSlice(body.cartons ?? [], page).map((carton) => (
+                    {(body.cartons ?? []).map((carton) => (
                       <tr key={`${carton.warehouse}-${carton.cartonNumber}`}>
                         <td className={monoTd}>{`${carton.warehouse} / ${carton.location ?? '—'}`}</td>
                         <td className={monoTd}>{carton.cartonNumber}</td>
@@ -418,7 +418,7 @@ export function WarehouseStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {stockPageSlice(body.summary ?? [], page).map((row, index) => (
+                    {(body.summary ?? []).map((row, index) => (
                       <tr key={`${row.warehouse}-${row.goodsCode}-${row.unit}-${row.stockState}-${index}`}>
                         <td className={monoTd}>{row.warehouse}</td>
                         <td className={monoTd}>{row.goodsCode}</td>
@@ -451,7 +451,7 @@ export function WarehouseStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {stockPageSlice(body.holds ?? [], page).map((hold, index) => (
+                    {(body.holds ?? []).map((hold, index) => (
                       <tr key={`${hold.kind}-${hold.warehouse}-${hold.goodsCode ?? hold.cartonNumber ?? ''}-${index}`}>
                         <td className={tdClass}>{holdKindLabels[hold.kind] ?? hold.kind}</td>
                         <td className={monoTd}>{`${hold.warehouse} / ${hold.location ?? '—'}`}</td>

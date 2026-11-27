@@ -1,7 +1,7 @@
 import type { RegistrationResponseBody } from '../../components/registration';
 import { exchangeMasterData, postMasterData, postWorkFact, type ApiResult } from '../catalogue-api';
 import type { CatalogueConditions, CataloguePage } from '../catalogue-query';
-import { catalogueRequestPath } from '../catalogue-query';
+import { catalogueDefaultPageSize, cataloguePageSizes, catalogueRequestPath } from '../catalogue-query';
 import { asCatalogueRegistration, asStockImportWrite, type CatalogueRegistrationBody, type StockImportWriteBody } from './answers';
 import type { PartialShipmentAnswer, ShortPickDisposalAnswer } from './partial-shipment';
 import type { AllocationExceptionRecord, DueWaveRulesBody, WaveRuleRecord, WaveRuleRunBody } from './wave-rule';
@@ -469,8 +469,10 @@ export interface StockReadBody {
     postedAt?: string;
     lines?: ReadonlyArray<{ location?: string; goodsCode: string; unit: string; stockState: string; delta: number }>;
   }>;
-  /** 只在看流水时有：五种看法里只有流水翻页，其余答整份。 */
+  /** 只在看流水时有：流水按游标翻页。 */
   page?: CataloguePage;
+  /** 库存格、整箱、汇总、占用按页取时有。不带页码的读口不答这一格，行是整份。 */
+  book?: { page: number; pageSize: number; total: number };
 }
 
 /** 册别在条件的选择器里，请求路径按它选；选择器本身不进查询串。 */
@@ -526,10 +528,12 @@ export function listOwnerPreAdvices(
   ownerAccount: string,
   keyword: string,
   after: string | null = null,
+  pageSize?: number,
 ): Promise<ApiResult<PreAdviceListBody>> {
   const params = new URLSearchParams({ ownerAccount });
   if (keyword.trim() !== '') params.set('q', keyword.trim());
   if (after !== null && after !== '') params.set('after', after);
+  if (pageSize !== undefined) params.set('pageSize', String(pageSize));
   return exchangeMasterData<PreAdviceListBody>(`/warehouse-fulfillment-inbound-pre-advices?${params.toString()}`);
 }
 
@@ -545,11 +549,19 @@ export function queryOwnerStock(
   warehouseCode: string,
   view: StockViewKind,
   after: string | null = null,
+  pageSize?: number,
+  page?: number,
 ): Promise<ApiResult<StockReadBody>> {
   const params = new URLSearchParams({ ownerAccount, view });
   if (warehouseCode.trim() !== '') params.set('warehouseCode', warehouseCode.trim());
-  // 读口只在看流水时收 after，别的看法带了它会被拒。
-  if (view === 'movements' && after !== null && after !== '') params.set('after', after);
+  // 流水收 after 与 pageSize。其余四种收 page 与 pageSize，带了 after 会被拒。
+  if (view === 'movements') {
+    if (after !== null && after !== '') params.set('after', after);
+    if (pageSize !== undefined) params.set('pageSize', String(pageSize));
+  } else if (pageSize !== undefined) {
+    params.set('pageSize', String(pageSize));
+    params.set('page', String(page ?? 1));
+  }
   return exchangeMasterData<StockReadBody>(`/warehouse-fulfillment-stock?${params.toString()}`);
 }
 
@@ -1037,8 +1049,10 @@ export interface SettingsOverviewBody {
   }>;
   /** 登记过「拣货必须用周转箱」的仓各自最新的一版；没登记的仓不在里面，那是未配置。 */
   toteRequirements?: ReadonlyArray<{ warehouseCode: string; revision: number; required: boolean; operator: string; registeredAt: string }>;
-  /** 各仓登记过的成波规则各自最新的一版，停用的也在里面；没登记规则的仓不在里面。 */
+  /** 各仓登记过的成波规则各自最新的一版，停用的也在里面；没登记规则的仓不在里面。按页取时只是这一页。 */
   waveRules?: ReadonlyArray<WaveRuleRecord>;
+  /** 按页取成波规则时有。不带页码的总览不答这一格，waveRules 是整份。 */
+  waveRuleBook?: { page: number; pageSize: number; total: number };
   approvalDuty: { configured: boolean; revision?: number; distinctSubjects?: boolean; operator?: string; registeredAt?: string };
   disposalRules: ReadonlyArray<DisposalRuleRecord>;
   chargeUnits: ReadonlyArray<{ warehouseCode: string; revision: number; weightUnit: string; volumeUnit: string; registeredAt: string }>;
@@ -1064,8 +1078,17 @@ export function runDueWaveRules(warehouse?: string): Promise<ApiResult<DueWaveRu
   return postMasterData<DueWaveRulesBody>('/warehouse-fulfillment-wave-rule-due-runs', warehouse ? { warehouse } : {});
 }
 
-export function getSettingsOverview(): Promise<ApiResult<SettingsOverviewBody>> {
-  return exchangeMasterData<SettingsOverviewBody>('/warehouse-fulfillment-settings-overview');
+export function getSettingsOverview(query?: {
+  page?: number;
+  pageSize?: number;
+  warehouse?: string;
+}): Promise<ApiResult<SettingsOverviewBody>> {
+  const params = new URLSearchParams();
+  if (query?.page !== undefined) params.set('page', String(query.page));
+  if (query?.pageSize !== undefined) params.set('pageSize', String(query.pageSize));
+  if (query?.warehouse) params.set('warehouse', query.warehouse);
+  const text = params.toString();
+  return exchangeMasterData<SettingsOverviewBody>(text === '' ? '/warehouse-fulfillment-settings-overview' : `/warehouse-fulfillment-settings-overview?${text}`);
 }
 
 export interface OutboundRequestDetailBody {
@@ -1559,8 +1582,7 @@ export function getReturnsOverview(): Promise<ApiResult<ReturnsOverviewBody>> {
   return exchangeMasterData<ReturnsOverviewBody>('/warehouse-fulfillment-returns-overview');
 }
 
-export const returnsPageSizes = [20, 50, 100, 200] as const;
-export const returnsDefaultPageSize = 50;
+export { cataloguePageSizes as returnsPageSizes, catalogueDefaultPageSize as returnsDefaultPageSize };
 
 export interface ReturnsPageBody {
   outcome: string;
@@ -1643,8 +1665,27 @@ export interface AgentOverviewBody {
     dimensionUnit?: string;
     reportedAt: string;
   }>;
+  /** 按页取时有，三张表各一页。不带页码的总览不答这一格。 */
+  pages?: {
+    connectors: { page: number; pageSize: number; total: number };
+    statements: { page: number; pageSize: number; total: number };
+    results: { page: number; pageSize: number; total: number };
+  };
 }
 
-export function getAgentOverview(): Promise<ApiResult<AgentOverviewBody>> {
-  return exchangeMasterData<AgentOverviewBody>('/warehouse-fulfillment-agent-overview');
+export function getAgentOverview(query?: {
+  pageSize: number;
+  connectorsPage: number;
+  statementsPage: number;
+  resultsPage: number;
+}): Promise<ApiResult<AgentOverviewBody>> {
+  const params = new URLSearchParams();
+  if (query) {
+    params.set('pageSize', String(query.pageSize));
+    params.set('connectorsPage', String(query.connectorsPage));
+    params.set('statementsPage', String(query.statementsPage));
+    params.set('resultsPage', String(query.resultsPage));
+  }
+  const text = params.toString();
+  return exchangeMasterData<AgentOverviewBody>(text === '' ? '/warehouse-fulfillment-agent-overview' : `/warehouse-fulfillment-agent-overview?${text}`);
 }

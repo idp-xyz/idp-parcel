@@ -144,6 +144,9 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		tenant := query.Scope.Tenant()
 
 		switch registry {

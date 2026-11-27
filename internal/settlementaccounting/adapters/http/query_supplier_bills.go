@@ -252,6 +252,9 @@ func NewQueryAuditedPayablesEndpoint(intake CatalogueQueryIntake, reader Audited
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := reader.ListAuditedPayables(request.Context(), query.Scope.Tenant(), filter, query.Limit, pageQuery)
 		if err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)

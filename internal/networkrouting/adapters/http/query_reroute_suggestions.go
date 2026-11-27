@@ -44,6 +44,9 @@ func NewQueryRerouteSuggestionsEndpoint(intake CatalogueQueryIntake, reader Rero
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := reader.ListRerouteSuggestions(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成（5xx），不伪装成空册。

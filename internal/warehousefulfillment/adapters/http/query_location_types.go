@@ -52,6 +52,9 @@ func NewQueryLocationTypesEndpoint(intake CatalogueIntake, reader LocationTypeCa
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListLocationTypes(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {

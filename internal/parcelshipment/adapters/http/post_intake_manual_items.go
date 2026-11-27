@@ -213,6 +213,9 @@ func NewQueryPostIntakeManualItemsEndpoint(intake PostIntakeManualItemQueryIntak
 				writePageQueryProblem(response, err)
 				return
 			}
+			if pageQuery.PageSize > 0 {
+				query.Limit = pageQuery.PageSize
+			}
 		}
 		var listed []ports.PostIntakeManualItem
 		var page *cataloguepage.Page

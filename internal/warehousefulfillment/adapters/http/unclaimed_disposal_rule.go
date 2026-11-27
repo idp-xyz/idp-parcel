@@ -114,6 +114,9 @@ func NewQueryDisposalRulesEndpoint(intake CatalogueIntake, reader DisposalRuleCa
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := reader.ListDisposalRules(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "unclaimed disposal rules list did not form an answer")

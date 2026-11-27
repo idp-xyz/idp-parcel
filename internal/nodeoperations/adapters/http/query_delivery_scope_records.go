@@ -152,6 +152,9 @@ func NewQueryDeliveryPreAdvicesEndpoint(intake CatalogueQueryIntake, reader Deli
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		filter, ok := catalogueFilterOf(values, preAdviceFilterKeys)
 		if !ok {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
@@ -207,6 +210,9 @@ func NewQueryDeliveryHandoverNotesEndpoint(intake CatalogueQueryIntake, reader D
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
+		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
 		}
 		filter, ok := catalogueFilterOf(values, handoverNoteFilterKeys)
 		if !ok {

@@ -74,6 +74,9 @@ func NewQueryControlReleaseRefusalsEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		listed, err := reader.ListUnhandledControlReleaseRefusals(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不伪装成空册：把一次该重试的故障读成「没有积压」，积压就更没人看见了。

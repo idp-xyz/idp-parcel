@@ -33,6 +33,8 @@ test('检索词去首尾空白、空即缺席；空维与空排序不出现', ()
   equal(catalogueConditionsQuery({ q: '  SYN-ACCOUNT  ' }), 'q=SYN-ACCOUNT');
   equal(catalogueConditionsQuery({ q: '   ', sort: '', filters: { status: [] } }), '');
   equal(catalogueConditionsQuery({}), '');
+  equal(catalogueConditionsQuery({ pageSize: 50 }), 'pageSize=50');
+  equal(catalogueRequestPath('/commercial-customer-accounts', { pageSize: 50 }, 'c1'), '/commercial-customer-accounts?pageSize=50&after=c1');
 });
 
 // Covers: 中文、空格、& 与 = 这类字符按查询串编码，服务端解回的正是原值（检索词原样下推，不在前端改写）。

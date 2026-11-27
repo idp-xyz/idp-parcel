@@ -15,10 +15,17 @@ const MaxKeywordRunes = 100
 
 // 翻页、排序与检索的参数名在各册之间同名同义，筛选维与册子选择器都不得占用。
 const (
-	keyAfter   = "after"
-	keySort    = "sort"
-	keyKeyword = "q"
+	keyAfter    = "after"
+	keySort     = "sort"
+	keyKeyword  = "q"
+	keyPageSize = "pageSize"
 )
+
+// 操作者列表可选的页大小。缺省不写进查询时仍由渠道契约定（通常 200）；写了就只收这几档。
+// 与退货列表同一组数。
+var PageSizes = []int{20, 50, 100, 200}
+
+const DefaultPageSize = 50
 
 // ValueKind 是游标里一格值的形状。游标对客户端不透明，却不防篡改：解码时按它校验，伪造的值才会在
 // 接入面答 400，而不是带进 SQL 变成 500。

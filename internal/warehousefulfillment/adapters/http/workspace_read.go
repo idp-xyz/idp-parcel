@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -175,8 +177,15 @@ func NewQuerySettingsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQ
 			})
 		}
 		// 停用的规则也列：它在册，只是不能再按它成波。货主、发运方式没限的不带那一格。
-		waveRules := make([]map[string]any, 0, len(overview.WaveRules))
-		for _, item := range overview.WaveRules {
+		// 带了 page 或 pageSize 才按页交回；都不带则整份交回，规则设置页的说明要用全部规则。
+		rules := overview.WaveRules
+		booked, book, reason := waveRuleBook(request, &rules)
+		if reason != "" {
+			writeMalformed(response, reason)
+			return
+		}
+		waveRules := make([]map[string]any, 0, len(rules))
+		for _, item := range rules {
 			rule := map[string]any{
 				"warehouseCode": item.WarehouseCode, "ruleCode": item.RuleCode, "revision": item.Revision, "name": item.Name,
 				"profile": item.Profile, "maxRequests": item.MaxRequests, "batchPick": item.BatchPick, "deactivated": item.Deactivated,
@@ -199,7 +208,7 @@ func NewQuerySettingsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQ
 			}
 			waveRules = append(waveRules, rule)
 		}
-		writeJSON(response, http.StatusOK, map[string]any{
+		body := map[string]any{
 			"waveRules":          waveRules,
 			"toteRequirements":   toteRequirements,
 			"outcome":            "SETTINGS_OVERVIEW_LOADED",
@@ -211,7 +220,11 @@ func NewQuerySettingsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQ
 			"chargeAging":        agings,
 			"chargeProjects":     projects,
 			"agentConnectors":    connectors,
-		})
+		}
+		if booked {
+			body["waveRuleBook"] = stockBookBody{Page: book.Page, PageSize: book.PageSize, Total: book.Total}
+		}
+		writeJSON(response, http.StatusOK, body)
 	})
 }
 
@@ -359,6 +372,9 @@ func NewQueryFreezesEndpoint(intake CatalogueIntake, queries WorkspaceQueries) h
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListFreezes(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "freeze list did not form an answer")
@@ -401,6 +417,9 @@ func NewQueryCountsEndpoint(intake CatalogueIntake, queries WorkspaceQueries) ht
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
+		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
 		}
 		page, err := queries.ListCounts(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
@@ -520,6 +539,9 @@ func NewQueryAdjustmentsEndpoint(intake CatalogueIntake, queries WorkspaceQuerie
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListAdjustments(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "adjustment list did not form an answer")
@@ -570,6 +592,9 @@ func NewQueryJobDiscrepanciesEndpoint(intake CatalogueIntake, queries WorkspaceQ
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListJobDiscrepancies(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "job discrepancy list did not form an answer")
@@ -614,6 +639,9 @@ func NewQueryInstructionsEndpoint(intake CatalogueIntake, queries WorkspaceQueri
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
+		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
 		}
 		page, err := queries.ListInstructions(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
@@ -780,7 +808,32 @@ func receiptJSON(receipt ports.ReturnReceiptRow) map[string]any {
 	return item
 }
 
+// waveRuleBook 在带了 page 或 pageSize 时按仓筛过再切页。warehouse 单独出现时只筛、不切页。理由不回显取值。
+func waveRuleBook(request *http.Request, rules *[]ports.WaveRuleOverview) (bool, ports.Book, string) {
+	values, reason := overviewValues(request)
+	if reason != "" {
+		return false, ports.Book{}, reason
+	}
+	if warehouse := values.Get("warehouse"); warehouse != "" {
+		kept := make([]ports.WaveRuleOverview, 0, len(*rules))
+		for _, rule := range *rules {
+			if rule.WarehouseCode == warehouse {
+				kept = append(kept, rule)
+			}
+		}
+		*rules = kept
+	}
+	page, size, reason, on := oneBook(values, "page")
+	if reason != "" || !on {
+		return false, ports.Book{}, reason
+	}
+	window, book := ports.CutBook(*rules, page, size)
+	*rules = window
+	return true, book, ""
+}
+
 // NewQueryAgentOverviewEndpoint 返回代理仓连接器、库存声明与回执记录（GET /warehouse-fulfillment-agent-overview）。
+// 带了 pageSize 或某一张表的页码才按页交回；都不带则三张表整份交回。
 func NewQueryAgentOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQueries) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if refuseMethod(response, request, http.MethodGet) {
@@ -795,6 +848,11 @@ func NewQueryAgentOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQuer
 		if err != nil {
 			slog.ErrorContext(request.Context(), "agent overview did not form an answer")
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		pages, reason := agentBooks(request, &overview)
+		if reason != "" {
+			writeMalformed(response, reason)
 			return
 		}
 		connectors := make([]map[string]any, 0, len(overview.Connectors))
@@ -820,13 +878,126 @@ func NewQueryAgentOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQuer
 				"dimensionUnit": r.DimensionUnit, "reportedAt": rfc3339(r.ReportedAt),
 			})
 		}
-		writeJSON(response, http.StatusOK, map[string]any{
+		body := map[string]any{
 			"outcome":    "AGENT_OVERVIEW_LOADED",
 			"connectors": connectors,
 			"statements": statements,
 			"results":    results,
-		})
+		}
+		if pages != nil {
+			body["pages"] = pages
+		}
+		writeJSON(response, http.StatusOK, body)
 	})
+}
+
+func agentBooks(request *http.Request, overview *ports.AgentOverview) (map[string]stockBookBody, string) {
+	values, reason := overviewValues(request)
+	if reason != "" {
+		return nil, reason
+	}
+	size, sized, reason := bookSize(values)
+	if reason != "" {
+		return nil, reason
+	}
+	connectorsPage, connectorsOn, reason := namedPage(values, "connectorsPage")
+	if reason != "" {
+		return nil, reason
+	}
+	statementsPage, statementsOn, reason := namedPage(values, "statementsPage")
+	if reason != "" {
+		return nil, reason
+	}
+	resultsPage, resultsOn, reason := namedPage(values, "resultsPage")
+	if reason != "" {
+		return nil, reason
+	}
+	if !sized && !connectorsOn && !statementsOn && !resultsOn {
+		return nil, ""
+	}
+	if !sized {
+		size = cataloguepage.DefaultPageSize
+	}
+	if !connectorsOn {
+		connectorsPage = 1
+	}
+	if !statementsOn {
+		statementsPage = 1
+	}
+	if !resultsOn {
+		resultsPage = 1
+	}
+	connectors, connectorsBook := ports.CutBook(overview.Connectors, connectorsPage, size)
+	statements, statementsBook := ports.CutBook(overview.Statements, statementsPage, size)
+	results, resultsBook := ports.CutBook(overview.Results, resultsPage, size)
+	overview.Connectors, overview.Statements, overview.Results = connectors, statements, results
+	return map[string]stockBookBody{
+		"connectors": {Page: connectorsBook.Page, PageSize: connectorsBook.PageSize, Total: connectorsBook.Total},
+		"statements": {Page: statementsBook.Page, PageSize: statementsBook.PageSize, Total: statementsBook.Total},
+		"results":    {Page: resultsBook.Page, PageSize: resultsBook.PageSize, Total: resultsBook.Total},
+	}, ""
+}
+
+func overviewValues(request *http.Request) (url.Values, string) {
+	if request.URL.RawQuery == "" {
+		return url.Values{}, ""
+	}
+	values, err := cataloguepage.ParseQuery(request.URL.RawQuery)
+	if err != nil {
+		return nil, "查询串里有解不开的一段"
+	}
+	return values, ""
+}
+
+func oneBook(values url.Values, pageKey string) (page int, size int, reason string, on bool) {
+	size, sized, reason := bookSize(values)
+	if reason != "" {
+		return 0, 0, reason, false
+	}
+	page, paged, reason := namedPage(values, pageKey)
+	if reason != "" {
+		return 0, 0, reason, false
+	}
+	if !sized && !paged {
+		return 0, 0, "", false
+	}
+	if !sized {
+		size = cataloguepage.DefaultPageSize
+	}
+	if !paged {
+		page = 1
+	}
+	return page, size, "", true
+}
+
+func bookSize(values url.Values) (int, bool, string) {
+	given, present := values["pageSize"]
+	if !present {
+		return 0, false, ""
+	}
+	if len(given) != 1 {
+		return 0, true, "pageSize 只能给一次"
+	}
+	size, err := strconv.Atoi(given[0])
+	if err != nil || !stockPageSizeAllowed(size) {
+		return 0, true, "pageSize 只接受 20、50、100 或 200"
+	}
+	return size, true, ""
+}
+
+func namedPage(values url.Values, key string) (int, bool, string) {
+	given, present := values[key]
+	if !present {
+		return 0, false, ""
+	}
+	if len(given) != 1 {
+		return 0, true, key + " 只能给一次"
+	}
+	page, err := strconv.Atoi(given[0])
+	if err != nil || page < 1 || page > 1_000_000 {
+		return 0, true, key + " 须是从 1 起的整数"
+	}
+	return page, true, ""
 }
 
 // outboundTotesBodyOf 答这张请求绑过的周转箱；还绑着的不带 releasedAt。没绑过是空数组。

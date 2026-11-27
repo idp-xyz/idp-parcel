@@ -13,7 +13,7 @@ import { Button } from '@idpxyz/ui-primitives';
 import { useSplitResize } from '@idpxyz/ui-workspace';
 import { loadingRevealDelayMs, revealClass, useDelayedReveal } from '../../components/use-delayed-reveal';
 import { cursorPagerControls } from '../../templates/cursor-pagination';
-import type { ListCursorPaginationProps } from '../../templates/ListPageTemplate';
+import { CursorPageSizeSelect, type ListCursorPaginationProps } from '../../templates/ListPageTemplate';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from '../../templates/state-slot';
 import type { WorkbenchSort } from '../../templates/workbench';
 import { useTabViewRef } from '../../templates/workspace-view-state';
@@ -401,6 +401,7 @@ export function PartyWorkbench<Row>({
             </span>
             {ready && pagination && pager ? (
               <nav aria-label="翻页" className="flex items-center gap-1" data-cursor-pagination>
+                <CursorPageSizeSelect control={pagination.pageSize} />
                 <Button variant="ghost" size="sm" disabled={held || !pager.canPrevious} onClick={pagination.onPrevious}>
                   <ChevronLeft className="h-3 w-3" aria-hidden="true" />
                   上一页

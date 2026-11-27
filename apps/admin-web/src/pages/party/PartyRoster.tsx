@@ -4,6 +4,7 @@ import { Button } from '@idpxyz/ui-primitives';
 import { statusToneSurface } from '../../components/status-tone';
 import { revealClass, useDelayedReveal } from '../../components/use-delayed-reveal';
 import { cursorPagerControls } from '../../templates/cursor-pagination';
+import { CursorPageSizeSelect } from '../../templates/ListPageTemplate';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from '../../templates/state-slot';
 import { labelFor, toneFor, type StatusTone } from '../../vocabulary/status';
 import { partyFooterPageText } from './business-parties-workbench';
@@ -196,6 +197,7 @@ export function PartyRoster<Row>({
           </span>
           {ready && pagination && pager ? (
             <nav aria-label="翻页" className="flex shrink-0 items-center gap-0.5" data-cursor-pagination>
+              <CursorPageSizeSelect control={pagination.pageSize} />
               <Button
                 variant="ghost"
                 size="icon"

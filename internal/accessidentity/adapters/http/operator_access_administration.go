@@ -152,14 +152,18 @@ func NewQueryOperatorsEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
-		result, err := catalogue.ListOperators(request.Context(), administrator.TenantID, operatorCatalogueReadLimit, query)
+		limit := operatorCatalogueReadLimit
+		if query.PageSize > 0 {
+			limit = query.PageSize
+		}
+		result, err := catalogue.ListOperators(request.Context(), administrator.TenantID, limit, query)
 		if err != nil {
 			// 读不回是答案未形成，不是空册。
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
 		body := operatorsResponseOf(issuer, result.Rows)
-		body.Page = result.Page(operatorCatalogueReadLimit)
+		body.Page = result.Page(limit)
 		writeJSON(response, http.StatusOK, body)
 	}), nil
 }

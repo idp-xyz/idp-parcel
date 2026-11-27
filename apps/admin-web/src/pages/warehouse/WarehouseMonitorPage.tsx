@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
+import { catalogueDefaultPageSize, cataloguePageSizes } from '../catalogue-query';
+import { cursorPageSummary } from '../../templates/cursor-pagination';
 import {
   getOutboundRequestDetail,
   listAdjustments,
@@ -48,6 +50,8 @@ interface View {
   lines: MonitorLine[];
   note: string;
   next: string | null;
+  total?: number | null;
+  book?: { page: number; pageSize: number; total: number } | null;
 }
 
 export function WarehouseMonitorPage() {
@@ -58,6 +62,8 @@ export function WarehouseMonitorPage() {
   const [status, setStatus] = useState('');
   const [nonce, setNonce] = useState(0);
   const [cursor, setCursor] = useState<MonitorCursor>(monitorCursorStart);
+  const [pageSize, setPageSize] = useState(catalogueDefaultPageSize);
+  const [sheetPage, setSheetPage] = useState(1);
   const [stack, setStack] = useState<View[]>([]);
   const [view, setView] = useState<View>({ title: opening.label, headers: [], lines: [], note: '', next: null });
   const [loading, setLoading] = useState(true);
@@ -70,14 +76,14 @@ export function WarehouseMonitorPage() {
     const timer = setTimeout(() => {
       const mine = ++generation.current;
       void (async () => {
-        const next = await readView(node, warehouse, owner, status, cursor.after);
+        const next = await readView(node, warehouse, owner, status, cursor.after, pageSize, sheetPage);
         if (mine !== generation.current) return;
         setView(next);
         setLoading(false);
       })();
     }, 250);
     return () => clearTimeout(timer);
-  }, [node, warehouse, owner, status, nonce, cursor.after]);
+  }, [node, warehouse, owner, status, nonce, cursor.after, pageSize, sheetPage]);
 
   const drill = async (line: MonitorLine) => {
     if (line.drillTasks) {
@@ -126,11 +132,13 @@ export function WarehouseMonitorPage() {
     setNode(item);
     setStatus('');
     setCursor(monitorCursorStart());
+    setSheetPage(1);
   };
 
   const narrow = (apply: () => void) => {
     apply();
     setCursor(monitorCursorStart());
+    setSheetPage(1);
   };
 
   return (
@@ -226,11 +234,29 @@ export function WarehouseMonitorPage() {
             不然每翻一页它都要消失再出现一次。 */}
         {stack.length === 0 ? (
           <WmsPagerBar
-            summary={`第 ${cursor.trail.length} 页`}
-            canPrevious={!loading && monitorCursorCanPrevious(cursor)}
-            canNext={!loading && view.next !== null}
-            onPrevious={() => setCursor(monitorCursorPrevious(cursor))}
-            onNext={() => { const next = view.next; if (next !== null) setCursor(monitorCursorNext(cursor, next)); }}
+            summary={monitorIsSheet(node)
+              ? cursorPageSummary(view.book?.page ?? sheetPage, pageSize, view.book?.total ?? null)
+              : cursorPageSummary(cursor.trail.length, pageSize, view.total ?? null)}
+            canPrevious={!loading && (monitorIsSheet(node) ? sheetPage > 1 : monitorCursorCanPrevious(cursor))}
+            canNext={!loading && (monitorIsSheet(node) ? view.book != null && sheetPage * pageSize < view.book.total : view.next !== null)}
+            onPrevious={() => (monitorIsSheet(node) ? setSheetPage((current) => Math.max(1, current - 1)) : setCursor(monitorCursorPrevious(cursor)))}
+            onNext={() => {
+              if (monitorIsSheet(node)) {
+                setSheetPage((current) => current + 1);
+                return;
+              }
+              const next = view.next;
+              if (next !== null) setCursor(monitorCursorNext(cursor, next));
+            }}
+            pageSize={!node.unavailable ? {
+              value: pageSize,
+              options: cataloguePageSizes,
+              onChange: (next) => {
+                setPageSize(next);
+                setCursor(monitorCursorStart());
+                setSheetPage(1);
+              },
+            } : undefined}
           />
         ) : null}
       </div>
@@ -244,26 +270,36 @@ function monitorCellClass(header: string): string {
   return monoHeaders.has(header) ? 'whitespace-nowrap font-mono' : 'whitespace-nowrap';
 }
 
-async function readView(node: MonitorNode, warehouse: string, owner: string, status: string, after: string | null): Promise<View> {
+function monitorTakesPageSize(node: MonitorNode): boolean {
+  return !node.unavailable && node.id !== 'cells' && node.id !== 'cartons';
+}
+
+function monitorIsSheet(node: MonitorNode): boolean {
+  return node.id === 'cells' || node.id === 'cartons';
+}
+
+async function readView(node: MonitorNode, warehouse: string, owner: string, status: string, after: string | null, pageSize: number, sheetPage: number): Promise<View> {
   if (node.unavailable) return { title: node.label, headers: [], lines: [], note: node.unavailable, next: null };
   if (node.needsOwner && owner.trim() === '') {
     return { title: node.label, headers: [], lines: [], note: '这个对象按货主取数。先填货主，再看。不替你选一个货主。', next: null };
   }
-  const loaded = await loadLines(node, warehouse, owner, status, after);
+  const loaded = await loadLines(node, warehouse, owner, status, after, pageSize, sheetPage);
   return { title: node.label, ...loaded };
 }
 
-async function loadLines(node: MonitorNode, warehouse: string, owner: string, status: string, after: string | null): Promise<Omit<View, 'title'>> {
-  const conditions = { filters: monitorFilters(node, warehouse, owner, status) };
+async function loadLines(node: MonitorNode, warehouse: string, owner: string, status: string, after: string | null, pageSize: number, sheetPage: number): Promise<Omit<View, 'title'>> {
+  const conditions = monitorTakesPageSize(node)
+    ? { filters: monitorFilters(node, warehouse, owner, status), pageSize }
+    : { filters: monitorFilters(node, warehouse, owner, status) };
   if (node.id === 'outbound') {
     const answer = await listOutboundRequests(conditions, after);
     if (answer.kind !== 'outcome') return { headers: outboundHeaders, lines: [], note: '出库单没读成。', next: null };
-    return { headers: outboundHeaders, lines: outboundLines(answer.body.requests ?? []), note: '点单号打开这张单。要看拣货任务，点这一行的「拣货任务」。', next: answer.body.page?.next ?? null };
+    return { headers: outboundHeaders, lines: outboundLines(answer.body.requests ?? []), note: '点单号打开这张单。要看拣货任务，点这一行的「拣货任务」。', next: answer.body.page?.next ?? null, total: answer.body.page?.total ?? null };
   }
   if (node.id === 'waves') {
     const answer = await listWaves(conditions, after);
     if (answer.kind !== 'outcome') return { headers: waveHeaders, lines: [], note: '波次没读成。', next: null };
-    return { headers: waveHeaders, lines: waveLines(answer.body.waves ?? []), note: '点波次号打开波次。点「拣货任务」看这一波的每一格。', next: answer.body.page?.next ?? null };
+    return { headers: waveHeaders, lines: waveLines(answer.body.waves ?? []), note: '点波次号打开波次。点「拣货任务」看这一波的每一格。', next: answer.body.page?.next ?? null, total: answer.body.page?.total ?? null };
   }
   if (node.id === 'unclaimed') {
     const answer = await listUnclaimedArrivals(conditions, after);
@@ -273,10 +309,11 @@ async function loadLines(node: MonitorNode, warehouse: string, owner: string, st
       lines: (answer.body.arrivals ?? []).map((row) => ({ key: row.arrivalId, cells: [row.arrivalId, row.warehouseCode, row.status], hash: documentHash('warehouse-unclaimed', [row.arrivalId]) })),
       note: '',
       next: answer.body.page?.next ?? null,
+      total: answer.body.page?.total ?? null,
     };
   }
   if (node.id === 'pre-advice') {
-    const answer = await listOwnerPreAdvices(owner.trim(), '', after);
+    const answer = await listOwnerPreAdvices(owner.trim(), '', after, pageSize);
     if (answer.kind !== 'outcome') return { headers: [], lines: [], note: '入库预报没读成。', next: null };
     const warehouseCode = warehouse.trim();
     const rows = (answer.body.preAdvices ?? []).filter((row) => warehouseCode === '' || row.warehouseCode === warehouseCode);
@@ -285,24 +322,27 @@ async function loadLines(node: MonitorNode, warehouse: string, owner: string, st
       lines: rows.map((row) => ({ key: row.preAdviceId, cells: [row.documentNumber ?? row.preAdviceId, row.warehouseCode, row.status], hash: documentHash('warehouse-pre-advices', [owner.trim(), row.preAdviceId]) })),
       note: '仓是在这一页上留下的，读口不按仓筛。',
       next: answer.body.page?.next ?? null,
+      total: answer.body.page?.total ?? null,
     };
   }
   if (node.id === 'cells' || node.id === 'cartons') {
-    const answer = await queryOwnerStock(owner.trim(), warehouse.trim(), node.id === 'cells' ? 'cells' : 'cartons');
+    const answer = await queryOwnerStock(owner.trim(), warehouse.trim(), node.id === 'cells' ? 'cells' : 'cartons', null, pageSize, sheetPage);
     if (answer.kind !== 'outcome') return { headers: [], lines: [], note: '库存没读成。', next: null };
     if (node.id === 'cells') {
       return {
         headers: ['库位', '商品', '状态', '在库'],
         lines: (answer.body.cells ?? []).map((cell) => ({ key: `${cell.location}|${cell.goodsCode}|${cell.inboundBatchId}`, cells: [cell.location ?? '', cell.goodsCode, cell.stockState, String(cell.quantity)] })),
-        note: '这一位货主的库存格。仓填了就只问这个仓。这一口不分页。',
+        note: '这一位货主的库存格。仓填了就只问这个仓。',
         next: null,
+        book: answer.body.book ?? null,
       };
     }
     return {
       headers: ['箱号', '库位'],
       lines: (answer.body.cartons ?? []).map((carton) => ({ key: carton.cartonNumber, cells: [carton.cartonNumber, carton.location ?? ''] })),
-      note: '这一位货主的整箱。仓填了就只问这个仓。这一口不分页。',
+      note: '这一位货主的整箱。仓填了就只问这个仓。',
       next: null,
+      book: answer.body.book ?? null,
     };
   }
   if (node.id === 'counts') {
@@ -313,6 +353,7 @@ async function loadLines(node: MonitorNode, warehouse: string, owner: string, st
       lines: (answer.body.counts ?? []).map((row) => ({ key: row.countId, cells: [row.countId, row.warehouseCode, row.status, String(row.locations.length)], hash: documentHash(countsAdjustmentsModule, [countKind, row.countId]) })),
       note: '',
       next: answer.body.page?.next ?? null,
+      total: answer.body.page?.total ?? null,
     };
   }
   if (node.id === 'adjustments') {
@@ -323,6 +364,7 @@ async function loadLines(node: MonitorNode, warehouse: string, owner: string, st
       lines: (answer.body.adjustments ?? []).map((row) => ({ key: row.adjustmentId, cells: [row.adjustmentId, row.ownerAccount, row.warehouseCode, row.status], hash: documentHash(countsAdjustmentsModule, [adjustmentKind, row.adjustmentId]) })),
       note: '',
       next: answer.body.page?.next ?? null,
+      total: answer.body.page?.total ?? null,
     };
   }
   if (node.id === 'freezes') {
@@ -333,6 +375,7 @@ async function loadLines(node: MonitorNode, warehouse: string, owner: string, st
       lines: (answer.body.freezes ?? []).map((row) => ({ key: row.freezeId, cells: [row.freezeId, row.ownerAccount, row.warehouseCode, row.status], hash: documentHash(processingModule, [freezeKind, row.freezeId]) })),
       note: '',
       next: answer.body.page?.next ?? null,
+      total: answer.body.page?.total ?? null,
     };
   }
   return { headers: [], lines: [], note: '', next: null };

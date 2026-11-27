@@ -113,6 +113,9 @@ func NewQueryOutboundRequestsEndpoint(intake CatalogueIntake, queries OutboundRe
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.List(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "outbound request list did not form an answer")
@@ -177,6 +180,9 @@ func NewQueryWavesEndpoint(intake CatalogueIntake, queries WaveQueries) http.Han
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
+		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
 		}
 		page, err := queries.ListWaves(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
@@ -295,6 +301,9 @@ func NewQueryPickDifferencesEndpoint(intake CatalogueIntake, queries WaveQueries
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListPickDifferences(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "pick difference list did not form an answer")
@@ -388,6 +397,9 @@ func NewQueryChargeOccurrencesEndpoint(intake CatalogueIntake, queries ChargeOcc
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListOccurrences(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "charge occurrence list did not form an answer")
@@ -440,6 +452,12 @@ func NewQueryWarehouseAdoptionsEndpoint(intake CatalogueIntake, queries Warehous
 			writeIntakeProblem(response, err)
 			return
 		}
+		if chosen, err := cataloguepage.ChosenPageSize(request.URL.RawQuery); err != nil {
+			writePageQueryProblem(response, err)
+			return
+		} else if chosen > 0 {
+			query.Limit = chosen
+		}
 		page, err := queries.ListAdoptions(request.Context(), query.Tenant, query.Limit, request.URL.RawQuery)
 		if err != nil {
 			var malformed *cataloguepage.MalformedQuery
@@ -482,6 +500,12 @@ func NewQueryWarehouseChargeRequestsEndpoint(intake CatalogueIntake, queries War
 		if err != nil {
 			writeIntakeProblem(response, err)
 			return
+		}
+		if chosen, err := cataloguepage.ChosenPageSize(request.URL.RawQuery); err != nil {
+			writePageQueryProblem(response, err)
+			return
+		} else if chosen > 0 {
+			query.Limit = chosen
 		}
 		page, err := queries.ListRequests(request.Context(), query.Tenant, query.Limit, request.URL.RawQuery)
 		if err != nil {

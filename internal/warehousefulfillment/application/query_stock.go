@@ -111,8 +111,10 @@ type StockSnapshot struct {
 	Summary   []StockSummaryView
 	Holds     []StockHoldView
 	Movements []StockMovementView
-	// MovementPage 只在看流水时有：流水是翻页答的，其余几种看法答整份、没有这一格。
+	// MovementPage 只在看流水时有：流水按游标翻页。
 	MovementPage *cataloguepage.Page
+	// Book 只在库存格、整箱、汇总、占用按页取时有。页码从 1 起。
+	Book *ports.Book
 }
 
 // StockQuery 是一次查阅。仓可以不点名，点了就只看那一个仓。
@@ -123,9 +125,10 @@ type StockQuery struct {
 	View      StockView
 	Customer  bool
 	Now       time.Time
-	// Page 与 Limit 只有看流水时用：Page 由 ports.StockMovementPages 解出，Limit 是页大小。
-	Page  cataloguepage.Query
-	Limit int
+	// Page 与 Limit 在看流水时是游标与页大小。Number 大于 0 时，Limit 是库存格、整箱、汇总、占用的页大小，Number 是页码。
+	Page   cataloguepage.Query
+	Limit  int
+	Number int
 }
 
 // QueryStockHandler 如实答读那一刻的账。一个仓都没登记时答空。
@@ -191,11 +194,15 @@ func (handler *QueryStockHandler) Query(ctx context.Context, query StockQuery) (
 
 // emptyStock 是没有账可答时的空答复。看流水时仍带 page 一格：一行也没有也是一页，调用方不必区分「没有流水」与「这一口不翻页」。
 func emptyStock(query StockQuery) StockSnapshot {
-	if query.View != StockViewMovements {
-		return StockSnapshot{}
+	if query.View == StockViewMovements {
+		page := cataloguepage.NewPage(query.Limit, "", 0)
+		return StockSnapshot{MovementPage: &page}
 	}
-	page := cataloguepage.NewPage(query.Limit, "", 0)
-	return StockSnapshot{MovementPage: &page}
+	if query.Number > 0 {
+		book := ports.Book{Page: query.Number, PageSize: query.Limit}
+		return StockSnapshot{Book: &book}
+	}
+	return StockSnapshot{}
 }
 
 func (handler *QueryStockHandler) cells(ctx context.Context, query StockQuery) (StockSnapshot, error) {
@@ -207,11 +214,39 @@ func (handler *QueryStockHandler) cells(ctx context.Context, query StockQuery) (
 	if err != nil {
 		return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
 	}
+	// 汇总要先看完整的账。库存格按页取时，只给这一页逐格问可分配与库龄。
+	if query.View == StockViewCells && query.Number > 0 {
+		window, book := ports.CutBook(rows, query.Number, query.Limit)
+		cells, err := handler.cellViews(ctx, query, window, freezes)
+		if err != nil {
+			return StockSnapshot{}, err
+		}
+		return StockSnapshot{Cells: cells, Book: &book}, nil
+	}
+	cells, err := handler.cellViews(ctx, query, rows, freezes)
+	if err != nil {
+		return StockSnapshot{}, err
+	}
+	if query.View == StockViewCells {
+		return StockSnapshot{Cells: cells}, nil
+	}
+	summary := summarize(cells, freezes)
+	if err := handler.applyReservations(ctx, query, summary); err != nil {
+		return StockSnapshot{}, err
+	}
+	if query.Number > 0 {
+		window, book := ports.CutBook(summary, query.Number, query.Limit)
+		return StockSnapshot{Summary: window, Book: &book}, nil
+	}
+	return StockSnapshot{Summary: summary}, nil
+}
+
+func (handler *QueryStockHandler) cellViews(ctx context.Context, query StockQuery, rows []ports.StockCellBalance, freezes []ports.StockFreezeRow) ([]StockCellView, error) {
 	cells := make([]StockCellView, 0, len(rows))
 	for _, row := range rows {
 		allocatable, err := handler.allocatable(ctx, query.Tenant, row.Warehouse, row.Location, row.State)
 		if err != nil {
-			return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
+			return nil, fmt.Errorf("query stock: %w", err)
 		}
 		frozen := frozenOnCell(freezes, row)
 		available := int64(0)
@@ -220,7 +255,7 @@ func (handler *QueryStockHandler) cells(ctx context.Context, query StockQuery) (
 		}
 		ageDays, configured, err := handler.age(ctx, query.Tenant, row.Warehouse, row.InboundAt, query.Now)
 		if err != nil {
-			return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
+			return nil, fmt.Errorf("query stock: %w", err)
 		}
 		cell := StockCellView{
 			Warehouse: row.Warehouse, Goods: row.Goods, Unit: row.Unit, State: row.State,
@@ -233,14 +268,7 @@ func (handler *QueryStockHandler) cells(ctx context.Context, query StockQuery) (
 		}
 		cells = append(cells, cell)
 	}
-	if query.View == StockViewCells {
-		return StockSnapshot{Cells: cells}, nil
-	}
-	summary := summarize(cells, freezes)
-	if err := handler.applyReservations(ctx, query, summary); err != nil {
-		return StockSnapshot{}, err
-	}
-	return StockSnapshot{Summary: summary}, nil
+	return cells, nil
 }
 
 func (handler *QueryStockHandler) cartons(ctx context.Context, query StockQuery) (StockSnapshot, error) {
@@ -251,6 +279,12 @@ func (handler *QueryStockHandler) cartons(ctx context.Context, query StockQuery)
 	freezes, err := handler.reads.ListActiveFreezes(ctx, query.Tenant, query.Owner, query.Warehouse)
 	if err != nil {
 		return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
+	}
+	var book *ports.Book
+	if query.Number > 0 {
+		window, cut := ports.CutBook(rows, query.Number, query.Limit)
+		rows = window
+		book = &cut
 	}
 	cartons := make([]StockCartonView, 0, len(rows))
 	for _, row := range rows {
@@ -279,7 +313,7 @@ func (handler *QueryStockHandler) cartons(ctx context.Context, query StockQuery)
 		}
 		cartons = append(cartons, view)
 	}
-	return StockSnapshot{Cartons: cartons}, nil
+	return StockSnapshot{Cartons: cartons, Book: book}, nil
 }
 
 func (handler *QueryStockHandler) holds(ctx context.Context, query StockQuery) (StockSnapshot, error) {
@@ -314,6 +348,10 @@ func (handler *QueryStockHandler) holds(ctx context.Context, query StockQuery) (
 		return StockSnapshot{}, err
 	}
 	holds = append(holds, reserved...)
+	if query.Number > 0 {
+		window, book := ports.CutBook(holds, query.Number, query.Limit)
+		return StockSnapshot{Holds: window, Book: &book}, nil
+	}
 	return StockSnapshot{Holds: holds}, nil
 }
 

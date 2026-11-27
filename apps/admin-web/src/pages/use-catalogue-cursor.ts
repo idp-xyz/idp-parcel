@@ -8,7 +8,13 @@ import {
   catalogueCursorRequest,
   startCatalogueCursor,
 } from './catalogue-cursor';
-import { catalogueConditionsQuery, type CatalogueConditions, type CataloguePage } from './catalogue-query';
+import {
+  catalogueConditionsQuery,
+  catalogueDefaultPageSize,
+  cataloguePageSizes,
+  type CatalogueConditions,
+  type CataloguePage,
+} from './catalogue-query';
 
 export interface CatalogueCursor<Body> {
   /** 此刻这一问的答复；还在途是 null（加载中）。 */
@@ -33,7 +39,10 @@ export function useCatalogueCursor<C extends CatalogueConditions, Body extends {
   conditions: C,
   load: (conditions: C, after: string | null) => Promise<ApiResult<Body>>,
 ): CatalogueCursor<Body> {
-  const signature = catalogueConditionsQuery(conditions);
+  const [pageSize, setPageSize] = useState(catalogueDefaultPageSize);
+  // 页大小是条件的一部分：换档之后旧游标对不上这一档，签名一变就回第一页。
+  const sized = { ...conditions, pageSize };
+  const signature = catalogueConditionsQuery(sized);
   const [stored, dispatch] = useReducer(catalogueCursorReducer<Body>, signature, startCatalogueCursor<Body>);
   // 条件变了：这一帧就按第一页算，同时把它记进状态——组件可以在渲染里更新自己的状态，React 丢掉这一帧、带着新状态重渲。
   const state = catalogueCursorReducer(stored, { kind: 'conditions', signature });
@@ -42,13 +51,13 @@ export function useCatalogueCursor<C extends CatalogueConditions, Body extends {
 
   useEffect(() => {
     let cancelled = false;
-    void load(conditions, request.after).then((answer) => {
+    void load(sized, request.after).then((answer) => {
       if (!cancelled) dispatch({ kind: 'answered', key: request.key, answer });
     });
     return () => {
       cancelled = true;
     };
-    // conditions 不作依赖：它的签名已在 request.key 里，而它本身每次渲染都是新对象，作依赖会每次渲染重取。
+    // sized 不作依赖：它的签名已在 request.key 里，而它本身每次渲染都是新对象，作依赖会每次渲染重取。
   }, [load, request.key]);
 
   const answer = catalogueCursorAnswer(state);
@@ -68,6 +77,7 @@ export function useCatalogueCursor<C extends CatalogueConditions, Body extends {
             next: page.next,
             onPrevious: () => dispatch({ kind: 'previous' }),
             onNext: (next) => dispatch({ kind: 'next', next }),
+            pageSize: { value: pageSize, options: cataloguePageSizes, onChange: setPageSize },
           },
   };
 }

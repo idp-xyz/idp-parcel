@@ -85,6 +85,9 @@ func NewQueryCustomerContractsEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListCustomerContracts(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
@@ -129,6 +132,9 @@ func NewQuerySupplierAgreementsEndpoint(
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
+		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
 		}
 
 		page, err := reader.ListSupplierAgreements(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)

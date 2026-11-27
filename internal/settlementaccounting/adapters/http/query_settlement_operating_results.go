@@ -99,6 +99,9 @@ func serveOperatingResults(
 		writePageQueryProblem(response, err)
 		return
 	}
+	if pageQuery.PageSize > 0 {
+		limit = pageQuery.PageSize
+	}
 	adoption, err := reader.OperatingBasisAdoption(request.Context(), tenant)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -177,6 +180,9 @@ func serveCostAllocations(
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return
+	}
+	if pageQuery.PageSize > 0 {
+		limit = pageQuery.PageSize
 	}
 	page, err := reader.ListCostAllocations(request.Context(), tenant, limit, pageQuery)
 	if err != nil {

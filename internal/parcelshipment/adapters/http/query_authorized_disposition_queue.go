@@ -61,6 +61,9 @@ func NewQueryAuthorizedDispositionQueueEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListAwaitingAuthorizedDisposition(request.Context(), query.Scope, query.Limit, pageQuery)
 		if err != nil {

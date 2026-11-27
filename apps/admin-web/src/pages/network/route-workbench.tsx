@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import {
+  CursorPageSizeSelect,
   WorkbenchPageTemplate,
   toggleWorkbenchSort,
   type ListCursorPaginationProps,
@@ -180,9 +181,9 @@ export function RouteWorkbench<Row>({
 
 /** 读口分页的上一页 / 下一页：页码与总数照答复回显，末页（next 为 null）下一页钮不能按。 */
 function CursorPager({ pagination }: { pagination: ListCursorPaginationProps }) {
-  if (pagination.page <= 1 && pagination.next === null) return null;
   return (
     <span className="inline-flex items-center gap-1">
+      <CursorPageSizeSelect control={pagination.pageSize} />
       <Button variant="ghost" size="sm" className="h-6 px-2 type-body" disabled={pagination.page <= 1} onClick={pagination.onPrevious}>
         上一页
       </Button>

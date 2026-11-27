@@ -297,7 +297,11 @@ func NewListCustomerInboundPreAdvicesEndpoint(intake CustomerInboundPreAdvicePor
 			writeCustomerQueryProblem(response, request, err)
 			return
 		}
-		page, err := queries.ListPreAdvices(request.Context(), identity.Tenant, identity.Owner, operatorCatalogueReadLimit, pageQuery)
+		limit := operatorCatalogueReadLimit
+		if pageQuery.PageSize > 0 {
+			limit = pageQuery.PageSize
+		}
+		page, err := queries.ListPreAdvices(request.Context(), identity.Tenant, identity.Owner, limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "customer inbound pre-advice list did not form an answer",
 				"ownerAccount", identity.Owner.String())
@@ -306,7 +310,7 @@ func NewListCustomerInboundPreAdvicesEndpoint(intake CustomerInboundPreAdvicePor
 		}
 		writeJSON(response, http.StatusOK, customerPreAdviceListResponse{
 			Outcome: outcomePreAdvicesListed, OwnerAccount: identity.Owner.String(),
-			PreAdvices: customerPreAdviceBodiesOf(page.Rows), Page: page.Page(operatorCatalogueReadLimit),
+			PreAdvices: customerPreAdviceBodiesOf(page.Rows), Page: page.Page(limit),
 		})
 	})
 }

@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-// 退货列表的页大小。目录册不收调用方的页大小；这一口是用户点名要能改每页多少条，所以只开这几档。
+// 退货列表的页大小。与目录册、库存按页取的那几档相同。
 var ReturnsPageSizes = []int{20, 50, 100, 200}
 
 const ReturnsDefaultPageSize = 50
