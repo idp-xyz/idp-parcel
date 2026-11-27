@@ -298,6 +298,62 @@ func TestAPickReducesTheReservationOfTheGoodsItPicked(t *testing.T) {
 	}
 }
 
+// Covers: 一张请求的两行点了同一种货的两个批号：拣哪一批扣哪一行。拣走的是第二行点的那一批时，头一行的预占不动——
+// 扣错了行，拆出缺货部分时写出来的就是拣到的那一批的批号。
+func TestAPickReducesTheReservationOfTheBatchItPicked(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	request := reserve("REQ-REDUCE-BATCH", 6)
+	released := world.releaseRequests(t, handler, "WAVE-REDUCE-BATCH", request)
+	if released.Outcome() != application.WaveAllocated || len(released.Tasks()) != 1 {
+		t.Fatalf("放出 %s", released.Outcome())
+	}
+	task := released.Tasks()[0]
+	// 账上这一批记成批号 B-2；预占摆成两行：头一行点 B-1 三件，第二行点 B-2 三件。
+	for label, statement := range map[string]string{
+		"给入库批次记批号": `UPDATE warehouse_fulfillment.inbound_batch SET batch_number = 'B-2' WHERE tenant_id = 'SYN-TENANT-01' AND inbound_batch_id = $2 AND $1 <> ''`,
+		"头一行点 B-1": `UPDATE warehouse_fulfillment.outbound_reservation SET batch_number = 'B-1', quantity = 3, wanted = 3, from_unlabeled = LEAST(from_unlabeled, 3)
+		                  WHERE tenant_id = 'SYN-TENANT-01' AND request_id = $1 AND line_index = 0 AND $2 <> ''`,
+		"第二行点 B-2": `INSERT INTO warehouse_fulfillment.outbound_reservation
+		                    (tenant_id, request_id, line_index, goods_code, stock_state, batch_number, quantity, from_unlabeled, wanted)
+		                  SELECT 'SYN-TENANT-01', $1, 1, 'SYN-GOODS-01', 'GOOD', 'B-2', 3, 0, 3 WHERE $2 <> ''`,
+	} {
+		if _, err := world.pool.Exec(t.Context(), statement, request.String(), task.Inbound.String()); err != nil {
+			t.Fatalf("%s：%v", label, err)
+		}
+	}
+	waves, err := adapter.NewWaves(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.Picked = 3
+	task.Status = "SHORT"
+	task.Staging = valueOf(t, domain.NewLocationCode, "SYN-LOC-OUT")
+	if err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		return waves.SavePick(ctx, valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), task, domain.OutboundAllocated, "SDC-REDUCE-BATCH", "SYN-FACT-REDUCE-BATCH", 3, preAdviceNumberingInstant)
+	}); err != nil {
+		t.Fatalf("拣 B-2 那一批：%v", err)
+	}
+	lines := map[int]int64{}
+	rows, err := world.pool.Query(t.Context(),
+		`SELECT line_index, quantity FROM warehouse_fulfillment.outbound_reservation
+		  WHERE tenant_id = 'SYN-TENANT-01' AND request_id = $1`, request.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var index int
+		var quantity int64
+		if err := rows.Scan(&index, &quantity); err != nil {
+			t.Fatal(err)
+		}
+		lines[index] = quantity
+	}
+	if lines[0] != 3 || lines[1] != 0 {
+		t.Fatalf("预占各行 %v：点 B-1 的头一行应仍是 3，点 B-2 的第二行应扣到 0", lines)
+	}
+}
+
 // liveCounting 照生产装配的口径建盘点与盘点差额批准两个编排：占用按账上的预占、冻结、盘点锁与待执行任务算，
 // 并接上拣货差异。用不看占用的编排去测，「预占还指着这批货时盘点开不开得了」这一步等于没测。
 func (world receiptWorld) liveCounting(t *testing.T) (*application.CountHandler, *application.CountApprovalHandler, *adapter.Waves) {

@@ -131,6 +131,47 @@ func TestAnAgentWarehouseIsHandedOffAndAMissingWarehouseIsNotSaved(t *testing.T)
 	}
 }
 
+// Covers: 拆出来的请求可以再拆：它成为已拆单、仍指着自己的父请求，再拆出的两份指着它；预占合计不变。
+func TestASplitChildCanBeSplitAgain(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedStorageStock(t, 10)
+	handler := world.outbound(t)
+	accepted := world.acceptOutbound(t, handler, outboundCommand(t, "REQ-OB-TWICE", 10))
+	parent, ok := accepted.Request()
+	if accepted.Outcome() != application.OutboundReserved || !ok {
+		t.Fatalf("受理 %s", accepted.Outcome())
+	}
+	first := world.splitOutbound(t, handler, parent.ID(), 6, 4)
+	if first.Outcome() != application.OutboundSplitResult || len(first.Children()) != 2 {
+		t.Fatalf("头一次拆 %s", first.Outcome())
+	}
+	child := first.Children()[0]
+	second := world.splitOutbound(t, handler, child.ID(), 4, 2)
+	if second.Outcome() != application.OutboundSplitResult || len(second.Children()) != 2 {
+		t.Fatalf("拆出来的请求再拆 = %s", second.Outcome())
+	}
+	if parentStatus(t, world, child.ID()) != "SPLIT" || reservedQuantity(t, world) != 10 {
+		t.Fatalf("再拆之后它的状态 %s，预占合计 %d", parentStatus(t, world, child.ID()), reservedQuantity(t, world))
+	}
+	var grandparent string
+	if err := world.pool.QueryRow(t.Context(),
+		`SELECT parent_request_id FROM warehouse_fulfillment.outbound_request WHERE tenant_id = $1 AND request_id = $2`,
+		"SYN-TENANT-01", child.ID().String()).Scan(&grandparent); err != nil {
+		t.Fatal(err)
+	}
+	if grandparent != parent.ID().String() {
+		t.Fatalf("再拆之后它指着的父请求 = %s, want %s", grandparent, parent.ID())
+	}
+	for _, grandchild := range second.Children() {
+		if got := grandchild.Parent(); got != child.ID() {
+			t.Fatalf("再拆出的那一份指着 %v，要指着被拆的那一张", got)
+		}
+	}
+	if again := world.splitOutbound(t, handler, child.ID(), 4, 2); again.Outcome() != application.OutboundExisting {
+		t.Fatalf("同样的拆法再交 = %s", again.Outcome())
+	}
+}
+
 // Covers: 尚未分配的请求拆成两份，数量合起来才成立。原请求已拆单并放开预占，两份各自再占。合起来不等、已经拒绝的都不改原请求。
 func TestSplittingAnOutboundRequestReleasesTheOriginalReservation(t *testing.T) {
 	world := newReceiptWorld(t)
