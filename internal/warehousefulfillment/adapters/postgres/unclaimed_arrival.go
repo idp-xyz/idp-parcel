@@ -579,7 +579,7 @@ func (store *UnclaimedArrivals) ListUnclaimedArrivals(
 	if err != nil {
 		return fail(err)
 	}
-	return page, nil
+	return withListedFacets(ctx, querier, unclaimedArrivalListBinding, unclaimedArrivalListed, query, []any{tenant.String()}, page)
 }
 
 type storedUnclaimedArrival struct {

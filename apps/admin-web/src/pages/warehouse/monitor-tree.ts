@@ -55,8 +55,8 @@ export interface MonitorLine {
   /** 往下看的按钮上的字。没有这一列就不画。 */
   drillLabel?: string;
   drillOutbound?: string;
-  /** 波次展开出来的任务，已经在列表行上，不必再问。 */
-  drillTasks?: MonitorLine[];
+  /** 点下去再按号读这一张波次的任务。列表不嵌每一条。 */
+  drillWave?: string;
   drillStock?: { owner: string; warehouse: string; location: string; goods: string };
 }
 
@@ -76,13 +76,6 @@ export interface MonitorTask {
   quantity: number;
   picked: number;
   status: string;
-}
-
-export interface MonitorWave {
-  waveId: string;
-  warehouseCode: string;
-  requests: readonly string[];
-  tasks: readonly MonitorTask[];
 }
 
 export const outboundHeaders = ['出库单', '货主', '仓', '状态', '发运'];
@@ -110,16 +103,36 @@ export function outboundLines(rows: readonly MonitorOutbound[]): MonitorLine[] {
   }));
 }
 
-export function waveLines(rows: readonly MonitorWave[]): MonitorLine[] {
+export function waveLines(
+  rows: readonly {
+    waveId: string;
+    warehouseCode: string;
+    requests: readonly string[];
+    openTasks?: number;
+    doneTasks?: number;
+    shortTasks?: number;
+    cancelledTasks?: number;
+  }[],
+): MonitorLine[] {
   return rows.map((row) => ({
     key: row.waveId,
-    cells: [row.waveId, row.warehouseCode, String(row.requests.length), String(row.tasks.length)],
+    cells: [
+      row.waveId,
+      row.warehouseCode,
+      String(row.requests.length),
+      String((row.openTasks ?? 0) + (row.doneTasks ?? 0) + (row.shortTasks ?? 0) + (row.cancelledTasks ?? 0)),
+    ],
     hash: documentHash('warehouse-waves', [row.waveId]),
     drillLabel: '拣货任务',
-    drillTasks: row.tasks.map((task) => ({
-      key: task.taskId,
-      cells: [task.taskId, task.locationCode, task.goodsCode, String(task.quantity), String(task.picked), task.status],
-    })),
+    drillWave: row.waveId,
+  }));
+}
+
+/** 按号读到的波次任务。这一层没有货主，不再钻库存格。 */
+export function waveTaskLines(tasks: readonly MonitorTask[]): MonitorLine[] {
+  return tasks.map((task) => ({
+    key: task.taskId,
+    cells: [task.taskId, task.locationCode, task.goodsCode, String(task.quantity), String(task.picked), task.status],
   }));
 }
 

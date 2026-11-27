@@ -680,7 +680,13 @@ export interface WaveRecord {
   requests: string[];
   /** `requests` 里已经撤出的那几张：它们在这个波次里的任务作废了，请求回到了已预占。 */
   withdrawnRequests: string[];
-  tasks: WaveTaskRecord[];
+  /** 列表上各状态的条数。按号读的那一张不靠这四格，任务在 `tasks` 里。 */
+  openTasks?: number;
+  doneTasks?: number;
+  shortTasks?: number;
+  cancelledTasks?: number;
+  /** 按号读的那一张才有。列表不嵌每一条任务。 */
+  tasks?: WaveTaskRecord[];
 }
 
 export interface WaveOneBody {
@@ -786,6 +792,94 @@ export function listWaves(
 ): Promise<ApiResult<WaveListBody>> {
   return exchangeMasterData<WaveListBody>(
     catalogueRequestPath('/warehouse-fulfillment-wave-list', conditions, after),
+  );
+}
+
+interface PickTaskRow {
+  taskId: string;
+  waveId: string;
+  requestId: string;
+  ownerAccount?: string;
+  locationCode: string;
+  zoneCode?: string;
+  goodsCode: string;
+  unit: string;
+  stockState: string;
+  quantity: number;
+  status: string;
+  warehouseCode: string;
+  singleUnit?: boolean;
+  batchPick?: boolean;
+  assignee?: string;
+  zoneAssignee?: string;
+  releasedAt: string;
+}
+
+interface PickTaskListBody {
+  outcome: string;
+  tasks: PickTaskRow[];
+  page: CataloguePage;
+}
+
+/** 待执行的任务按波次收回拣货工位已经认得的形状。这一问里没有的任务（拣满、少拣、作废）不在其中。 */
+function wavesOfOpenTasks(tasks: readonly PickTaskRow[]): WaveRecord[] {
+  const waves: WaveRecord[] = [];
+  const byWave = new Map<string, WaveRecord>();
+  for (const task of tasks) {
+    let wave = byWave.get(task.waveId);
+    if (wave === undefined) {
+      wave = {
+        waveId: task.waveId,
+        warehouseCode: task.warehouseCode,
+        operator: '',
+        prefetch: false,
+        status: 'RELEASED',
+        releasedAt: task.releasedAt,
+        ...(task.singleUnit === true ? { singleUnit: true } : {}),
+        ...(task.batchPick === true ? { batchPick: true } : {}),
+        ...(task.assignee ? { assignee: task.assignee } : {}),
+        requests: [],
+        withdrawnRequests: [],
+        tasks: [],
+      };
+      byWave.set(task.waveId, wave);
+      waves.push(wave);
+    }
+    if (task.zoneCode && task.zoneAssignee && !wave.zoneAssignees?.some((entry) => entry.zoneCode === task.zoneCode)) {
+      wave.zoneAssignees = [...(wave.zoneAssignees ?? []), { zoneCode: task.zoneCode, assignee: task.zoneAssignee }];
+    }
+    const listed = wave.tasks ?? [];
+    wave.tasks = listed;
+    listed.push({
+      taskId: task.taskId,
+      requestId: task.requestId,
+      ...(task.ownerAccount ? { ownerAccount: task.ownerAccount } : {}),
+      locationCode: task.locationCode,
+      ...(task.zoneCode ? { zoneCode: task.zoneCode } : {}),
+      goodsCode: task.goodsCode,
+      unit: task.unit,
+      stockState: task.stockState,
+      quantity: task.quantity,
+      picked: 0,
+      status: task.status,
+    });
+  }
+  return waves;
+}
+
+/** 拣货工位看本仓全部波次时用的读口：只要待执行的任务，收回波次的形状给队列去排。 */
+export function listOpenPickTasks(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<WaveListBody>> {
+  return exchangeMasterData<PickTaskListBody>(catalogueRequestPath('/warehouse-fulfillment-pick-tasks', conditions, after)).then(
+    (answer) => {
+      if (answer.kind !== 'outcome') return answer;
+      return {
+        ...answer,
+        body: { outcome: 'WAVES_LISTED', waves: wavesOfOpenTasks(answer.body.tasks), page: answer.body.page },
+      };
+    },
   );
 }
 
@@ -1012,7 +1106,7 @@ export interface PreAdviceByNumberBody {
   preAdvice?: PreAdviceRecord;
 }
 
-/** 按单据号取一张入库预报。逐字相等，只在本租户；找不到答 found 为假，不答 404。 */
+/** 作业台认单。扫到的码可以是单据号，也可以是预报标识；单据号优先。找不到答 found 为假，不答 404。货主那一问仍只认单据号。 */
 export function getPreAdviceByNumber(documentNumber: string): Promise<ApiResult<PreAdviceByNumberBody>> {
   const params = new URLSearchParams({ documentNumber });
   return exchangeMasterData<PreAdviceByNumberBody>(`/warehouse-fulfillment-inbound-pre-advice-by-number?${params.toString()}`);

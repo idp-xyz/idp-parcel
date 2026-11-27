@@ -163,7 +163,7 @@ func (store *OutboundRequests) List(
 			return fail(err)
 		}
 	}
-	return cataloguepage.Finish(query, items, limit, total, func(item ports.OutboundRequestRow, sortField string) cataloguepage.Position {
+	page, err := cataloguepage.Finish(query, items, limit, total, func(item ports.OutboundRequestRow, sortField string) cataloguepage.Position {
 		switch sortField {
 		case "requestId":
 			return cataloguepage.Position{Value: item.RequestID, Identity: []string{item.RequestID}}
@@ -171,17 +171,21 @@ func (store *OutboundRequests) List(
 			return cataloguepage.Position{Value: cataloguepage.FormatInstant(item.ReceivedAt), Identity: []string{item.RequestID}}
 		}
 	})
+	if err != nil {
+		return fail(err)
+	}
+	return withListedFacets(ctx, querier, outboundRequestListBinding, outboundRequestListed, query, []any{tenant.String()}, page)
 }
 
-// 波次的一行连同它的出库请求与拣货任务在同一句里取出：状态、成员与任务是同一刻的，不会状态说拣货中、
-// 任务却都已经拣完。成员与任务各聚成一个 JSON 数组，只对取到的这一页算。$1 是租户，与 waveListed 用的是同一个参数。
-const waveRowSelection = `wave_id, warehouse_code, operator_id, prefetch, status, released_at, single_unit, batch_pick, coalesce(rule_code, ''), coalesce(assignee, ''),
-	(SELECT coalesce(jsonb_agg(jsonb_build_object(
+// 波次的成员、任务与库区指派在同一句里取出，只对取到的这一页算。$1 是租户，与 waveListed 用的是同一个参数。
+// 按号读的那一张展开每一条任务。列表只要各状态的条数：进度与下一步用得上，不必把任务都嵌进行里。
+const waveMembersSQL = `(SELECT coalesce(jsonb_agg(jsonb_build_object(
 	            'requestId', member.request_id, 'withdrawn', member.withdrawn_at IS NOT NULL
 	        ) ORDER BY member.request_id), '[]'::jsonb)
 	   FROM warehouse_fulfillment.wave_request member
-	  WHERE member.tenant_id = $1 AND member.wave_id = listed.wave_id) AS members,
-	(SELECT coalesce(jsonb_agg(jsonb_build_object(
+	  WHERE member.tenant_id = $1 AND member.wave_id = listed.wave_id)`
+
+const waveTasksSQL = `(SELECT coalesce(jsonb_agg(jsonb_build_object(
 	            'taskId', task.task_id, 'requestId', task.request_id, 'ownerAccount', request.owner_account_id,
 	            'locationCode', task.location_code,
 	            'zoneCode', coalesce((SELECT place.zone_code
@@ -195,10 +199,26 @@ const waveRowSelection = `wave_id, warehouse_code, operator_id, prefetch, status
 	   FROM warehouse_fulfillment.pick_task task
 	   JOIN warehouse_fulfillment.outbound_request request
 	     ON request.tenant_id = task.tenant_id AND request.request_id = task.request_id
-	  WHERE task.tenant_id = $1 AND task.wave_id = listed.wave_id) AS tasks,
-	(SELECT coalesce(jsonb_agg(jsonb_build_object('zoneCode', zoned.zone_code, 'assignee', zoned.assignee) ORDER BY zoned.zone_code), '[]'::jsonb)
+	  WHERE task.tenant_id = $1 AND task.wave_id = listed.wave_id)`
+
+const waveTaskCountsSQL = `(SELECT jsonb_build_object(
+	            'open', count(*) FILTER (WHERE task.status = 'OPEN'),
+	            'done', count(*) FILTER (WHERE task.status = 'DONE'),
+	            'short', count(*) FILTER (WHERE task.status = 'SHORT'),
+	            'cancelled', count(*) FILTER (WHERE task.status NOT IN ('OPEN', 'DONE', 'SHORT'))
+	        )
+	   FROM warehouse_fulfillment.pick_task task
+	  WHERE task.tenant_id = $1 AND task.wave_id = listed.wave_id)`
+
+const waveZonesSQL = `(SELECT coalesce(jsonb_agg(jsonb_build_object('zoneCode', zoned.zone_code, 'assignee', zoned.assignee) ORDER BY zoned.zone_code), '[]'::jsonb)
 	   FROM warehouse_fulfillment.wave_zone_assignee zoned
-	  WHERE zoned.tenant_id = $1 AND zoned.wave_id = listed.wave_id) AS zone_assignees`
+	  WHERE zoned.tenant_id = $1 AND zoned.wave_id = listed.wave_id)`
+
+const waveRowHead = `wave_id, warehouse_code, operator_id, prefetch, status, released_at, single_unit, batch_pick, coalesce(rule_code, ''), coalesce(assignee, ''), `
+
+const waveRowSelection = waveRowHead + waveMembersSQL + ` AS members, ` + waveTasksSQL + ` AS tasks, ` + waveZonesSQL + ` AS zone_assignees`
+
+const waveListSelection = waveRowHead + waveMembersSQL + ` AS members, ` + waveTaskCountsSQL + ` AS task_counts, ` + waveZonesSQL + ` AS zone_assignees`
 
 const waveListed = `WITH listed AS (
 	SELECT wave_id, warehouse_code, operator_id, prefetch, prefetch::text AS prefetch_word, status, released_at,
@@ -249,14 +269,14 @@ func (store *Waves) ListWaves(
 	if err := querier.QueryRow(ctx, waveListed+" "+plan.CountSQL("listed"), plan.Args...).Scan(&total); err != nil {
 		return fail(err)
 	}
-	rows, err := querier.Query(ctx, waveListed+" "+plan.PageSQL(waveRowSelection, "listed"), plan.PageArgs...)
+	rows, err := querier.Query(ctx, waveListed+" "+plan.PageSQL(waveListSelection, "listed"), plan.PageArgs...)
 	if err != nil {
 		return fail(err)
 	}
 	defer rows.Close()
 	var items []ports.WaveRow
 	for rows.Next() {
-		item, err := scanWaveRow(rows)
+		item, err := scanWaveListRow(rows)
 		if err != nil {
 			return fail(err)
 		}
@@ -265,7 +285,7 @@ func (store *Waves) ListWaves(
 	if err := rows.Err(); err != nil {
 		return fail(err)
 	}
-	return cataloguepage.Finish(query, items, limit, total, func(item ports.WaveRow, sortField string) cataloguepage.Position {
+	page, err := cataloguepage.Finish(query, items, limit, total, func(item ports.WaveRow, sortField string) cataloguepage.Position {
 		switch sortField {
 		case "waveId":
 			return cataloguepage.Position{Value: item.WaveID, Identity: []string{item.WaveID}}
@@ -273,6 +293,10 @@ func (store *Waves) ListWaves(
 			return cataloguepage.Position{Value: cataloguepage.FormatInstant(item.ReleasedAt), Identity: []string{item.WaveID}}
 		}
 	})
+	if err != nil {
+		return fail(err)
+	}
+	return withListedFacets(ctx, querier, waveListBinding, waveListed, query, []any{tenant.String()}, page)
 }
 
 // LoadWaveRow 按波次号读一张，形状与列表的一行相同。没有这个波次时 found 为假。
@@ -298,19 +322,14 @@ func (store *Waves) LoadWaveRow(ctx context.Context, tenant domain.TenantID, wav
 	return item, true, nil
 }
 
-// scanWaveRow 读 waveRowSelection 取出的一行，把成员与任务两个 JSON 数组解开。
-func scanWaveRow(row interface{ Scan(dest ...any) error }) (ports.WaveRow, error) {
-	var item ports.WaveRow
-	var members, tasks, zoned []byte
-	if err := row.Scan(&item.WaveID, &item.WarehouseCode, &item.Operator, &item.Prefetch, &item.Status, &item.ReleasedAt, &item.SingleUnit, &item.BatchPick, &item.RuleCode, &item.Assignee, &members, &tasks, &zoned); err != nil {
-		return ports.WaveRow{}, err
-	}
+// attachWaveSide 将 JSON 化的成员与库区指派附到波次行上。
+func attachWaveSide(item *ports.WaveRow, members, zoned []byte) error {
 	var zones []struct {
 		ZoneCode string `json:"zoneCode"`
 		Assignee string `json:"assignee"`
 	}
 	if err := json.Unmarshal(zoned, &zones); err != nil {
-		return ports.WaveRow{}, fmt.Errorf("wave zone assignees: %w", err)
+		return fmt.Errorf("wave zone assignees: %w", err)
 	}
 	for _, zone := range zones {
 		item.ZoneAssignees = append(item.ZoneAssignees, ports.WaveZoneAssigneeRow{ZoneCode: zone.ZoneCode, Assignee: zone.Assignee})
@@ -320,13 +339,49 @@ func scanWaveRow(row interface{ Scan(dest ...any) error }) (ports.WaveRow, error
 		Withdrawn bool   `json:"withdrawn"`
 	}
 	if err := json.Unmarshal(members, &listed); err != nil {
-		return ports.WaveRow{}, fmt.Errorf("wave members: %w", err)
+		return fmt.Errorf("wave members: %w", err)
 	}
 	for _, member := range listed {
 		item.Requests = append(item.Requests, member.RequestID)
 		if member.Withdrawn {
 			item.Withdrawn = append(item.Withdrawn, member.RequestID)
 		}
+	}
+	return nil
+}
+
+// scanWaveListRow 读列表的一行：成员与库区指派照旧，任务只留下各状态的条数。
+func scanWaveListRow(row interface{ Scan(dest ...any) error }) (ports.WaveRow, error) {
+	var item ports.WaveRow
+	var members, counts, zoned []byte
+	if err := row.Scan(&item.WaveID, &item.WarehouseCode, &item.Operator, &item.Prefetch, &item.Status, &item.ReleasedAt, &item.SingleUnit, &item.BatchPick, &item.RuleCode, &item.Assignee, &members, &counts, &zoned); err != nil {
+		return ports.WaveRow{}, err
+	}
+	if err := attachWaveSide(&item, members, zoned); err != nil {
+		return ports.WaveRow{}, err
+	}
+	var tallies struct {
+		Open      int64 `json:"open"`
+		Done      int64 `json:"done"`
+		Short     int64 `json:"short"`
+		Cancelled int64 `json:"cancelled"`
+	}
+	if err := json.Unmarshal(counts, &tallies); err != nil {
+		return ports.WaveRow{}, fmt.Errorf("wave task counts: %w", err)
+	}
+	item.OpenTasks, item.DoneTasks, item.ShortTasks, item.CancelledTasks = tallies.Open, tallies.Done, tallies.Short, tallies.Cancelled
+	return item, nil
+}
+
+// scanWaveRow 读按号那一张：成员、每一条任务与库区指派。
+func scanWaveRow(row interface{ Scan(dest ...any) error }) (ports.WaveRow, error) {
+	var item ports.WaveRow
+	var members, tasks, zoned []byte
+	if err := row.Scan(&item.WaveID, &item.WarehouseCode, &item.Operator, &item.Prefetch, &item.Status, &item.ReleasedAt, &item.SingleUnit, &item.BatchPick, &item.RuleCode, &item.Assignee, &members, &tasks, &zoned); err != nil {
+		return ports.WaveRow{}, err
+	}
+	if err := attachWaveSide(&item, members, zoned); err != nil {
+		return ports.WaveRow{}, err
 	}
 	var picks []struct {
 		TaskID          string `json:"taskId"`
@@ -435,12 +490,16 @@ func (store *Waves) ListPickDifferences(
 	if err := rows.Err(); err != nil {
 		return fail(err)
 	}
-	return cataloguepage.Finish(query, items, limit, total, func(item ports.PickDifferenceRow, sortField string) cataloguepage.Position {
+	page, err := cataloguepage.Finish(query, items, limit, total, func(item ports.PickDifferenceRow, sortField string) cataloguepage.Position {
 		if sortField == "differenceId" {
 			return cataloguepage.Position{Value: item.DifferenceID, Identity: []string{item.DifferenceID}}
 		}
 		return cataloguepage.Position{Value: cataloguepage.FormatInstant(order[item.DifferenceID]), Identity: []string{item.DifferenceID}}
 	})
+	if err != nil {
+		return fail(err)
+	}
+	return withListedFacets(ctx, querier, pickDifferenceListBinding, pickDifferenceListed, query, []any{tenant.String()}, page)
 }
 
 const chargeOccurrenceListColumns = `

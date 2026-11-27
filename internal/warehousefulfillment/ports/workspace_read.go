@@ -244,7 +244,7 @@ var StockFreezePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
 		{Name: "target", Vocabulary: []string{"GOODS", "CARTON"}},
-		{Name: "status", Vocabulary: []string{"FROZEN", "UNFROZEN"}},
+		{Name: "status", Vocabulary: []string{"FROZEN", "UNFROZEN"}, Facet: true},
 	},
 })
 
@@ -285,7 +285,7 @@ var StockCountPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
 		{Name: "ownerAccount"},
-		{Name: "status", Vocabulary: []string{"PENDING", "COUNTING", "COUNTED", "VOID"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "COUNTING", "COUNTED", "VOID"}, Facet: true},
 	},
 })
 
@@ -376,7 +376,7 @@ var StockAdjustmentPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
-		{Name: "status", Vocabulary: []string{"PENDING", "POSTED", "REJECTED"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "POSTED", "REJECTED"}, Facet: true},
 	},
 })
 
@@ -423,7 +423,7 @@ var JobDiscrepancyPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
-		{Name: "status", Vocabulary: []string{"PENDING", "APPROVED", "REJECTED"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "APPROVED", "REJECTED"}, Facet: true},
 	},
 })
 
@@ -470,7 +470,7 @@ var InstructionPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
 		{Name: "kind", Vocabulary: []string{"PROCESS", "DISASSEMBLE", "RELABEL"}},
-		{Name: "status", Vocabulary: []string{"PENDING", "DONE", "VOID"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "DONE", "VOID"}, Facet: true},
 	},
 })
 

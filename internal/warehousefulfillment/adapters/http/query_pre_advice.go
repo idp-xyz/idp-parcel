@@ -33,6 +33,7 @@ type PreAdviceQueries interface {
 		tenant domain.TenantID,
 		number domain.DocumentNumber,
 	) (application.PreAdviceReading, bool, error)
+	PreAdviceByCode(ctx context.Context, tenant domain.TenantID, code string) (application.PreAdviceReading, bool, error)
 }
 
 var _ PreAdviceQueries = (*application.QueryPreAdviceHandler)(nil)
@@ -46,10 +47,11 @@ const (
 )
 
 type preAdviceListResponse struct {
-	Outcome      string             `json:"outcome"`
-	OwnerAccount string             `json:"ownerAccount"`
-	PreAdvices   []preAdviceBody    `json:"preAdvices"`
-	Page         cataloguepage.Page `json:"page"`
+	Outcome      string               `json:"outcome"`
+	OwnerAccount string               `json:"ownerAccount"`
+	PreAdvices   []preAdviceBody      `json:"preAdvices"`
+	Page         cataloguepage.Page   `json:"page"`
+	Facets       cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 type preAdviceOneResponse struct {
@@ -109,7 +111,7 @@ func NewQueryPreAdvicesEndpoint(intake CatalogueIntake, queries PreAdviceQueries
 		}
 		writeJSON(response, http.StatusOK, preAdviceListResponse{
 			Outcome: outcomePreAdvicesListed, OwnerAccount: owner.String(),
-			PreAdvices: operatorPreAdviceBodies(page.Rows), Page: page.Page(query.Limit),
+			PreAdvices: operatorPreAdviceBodies(page.Rows), Page: page.Page(query.Limit), Facets: page.Facets,
 		})
 	})
 }
@@ -149,8 +151,9 @@ func NewQueryPreAdviceEndpoint(intake CatalogueIntake, queries PreAdviceQueries)
 	})
 }
 
-// NewQueryPreAdviceByNumberEndpoint 交回按单据号查阅的入口（GET /warehouse-fulfillment-inbound-pre-advice-by-number?documentNumber=…）。
-// 逐字找，只在本租户。找不到答 found 为假，不答 404。
+// NewQueryPreAdviceByNumberEndpoint 交回作业台认单的入口（GET /warehouse-fulfillment-inbound-pre-advice-by-number?documentNumber=…）。
+// 参数沿用 documentNumber：扫到的码可以是单据号，也可以是预报标识。单据号优先。找不到答 found 为假，不答 404。
+// 货主那一问仍只认单据号。
 func NewQueryPreAdviceByNumberEndpoint(intake CatalogueIntake, queries PreAdviceQueries) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if refuseMethod(response, request, http.MethodGet) {
@@ -166,7 +169,7 @@ func NewQueryPreAdviceByNumberEndpoint(intake CatalogueIntake, queries PreAdvice
 			writeMalformed(response, reason)
 			return
 		}
-		reading, found, err := queries.PreAdviceByDocumentNumber(request.Context(), query.Tenant, number)
+		reading, found, err := queries.PreAdviceByCode(request.Context(), query.Tenant, number.String())
 		if err != nil {
 			slog.ErrorContext(request.Context(), "inbound pre-advice by document number did not form an answer")
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)

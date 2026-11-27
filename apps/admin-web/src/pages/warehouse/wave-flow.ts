@@ -93,6 +93,23 @@ export interface WaveProgress {
   percent: number;
 }
 
+/** 列表上的进度：有任务明细就数明细，否则用列表给出的各状态条数。 */
+export function listedWaveProgress(row: {
+  tasks?: ReadonlyArray<{ status: string }>;
+  openTasks?: number;
+  doneTasks?: number;
+  shortTasks?: number;
+  cancelledTasks?: number;
+}): WaveProgress {
+  if (row.tasks !== undefined && row.tasks.length > 0) return waveProgress(row.tasks);
+  const open = row.openTasks ?? 0;
+  const done = row.doneTasks ?? 0;
+  const short = row.shortTasks ?? 0;
+  const cancelled = row.cancelledTasks ?? 0;
+  const counted = open + done + short;
+  return { tasks: counted, open, done, short, cancelled, percent: counted === 0 ? 0 : Math.floor(((done + short) / counted) * 100) };
+}
+
 export function waveProgress(tasks: ReadonlyArray<{ status: string }>): WaveProgress {
   let open = 0;
   let done = 0;

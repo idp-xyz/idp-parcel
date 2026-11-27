@@ -90,6 +90,9 @@ export async function postMasterData<Body>(
   return classifyMasterDataResponse<Body>(response, body);
 }
 
+/** 作业台提交一笔等到这一限。到了就停，工位用同一个事实号再送，不另铸一笔。 */
+export const workFactTimeoutMs = 20_000;
+
 /** 作业事实请求头（ADR-0149 决定二）：设备号、作业范围种类与作业范围引用。 */
 export interface WorkFactHeaders {
   deviceId: string;
@@ -118,11 +121,13 @@ export async function postWorkFact<Body>(
         'Parcel-Work-Scope-Reference': headers.scopeReference,
       }),
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(workFactTimeoutMs),
     });
   } catch (error) {
+    const timedOut = error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError');
     return {
       kind: 'transport',
-      message: error instanceof Error ? error.message : String(error),
+      message: timedOut ? '超过时限，没有送到' : error instanceof Error ? error.message : String(error),
     };
   }
 

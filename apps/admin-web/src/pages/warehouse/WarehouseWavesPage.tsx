@@ -25,7 +25,7 @@ import { WaveRuleList } from './WaveRuleList';
 import { WaveRuleRunDialog } from './WaveRuleRunDialog';
 import { useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
-import { activeWaveStatuses, settledWaveStatuses, wavePickingLabel, waveProgress, waveStatusLabel } from './wave-flow';
+import { activeWaveStatuses, listedWaveProgress, settledWaveStatuses, wavePickingLabel, waveStatusLabel } from './wave-flow';
 import { WaveDocument } from './WaveDocument';
 import { WmsBadge, WmsFilterSelect, WmsProgress, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
@@ -157,7 +157,7 @@ function WaveList() {
       key: 'progress',
       header: '已拣 / 任务',
       render: (row) => {
-        const progress = waveProgress(row.tasks);
+        const progress = listedWaveProgress(row);
         return <WmsProgress done={progress.done + progress.short} total={progress.tasks} flagged={progress.short} flaggedLabel="少拣 " />;
       },
     },
@@ -301,7 +301,7 @@ function WaveList() {
 
 /** 这一行此刻该做的一步。已取消没有下一步。点这一下只去工位，不把详情栏开合一次。 */
 function WaveNextStep({ row }: { row: WaveRecord }) {
-  const open = row.tasks.some((task) => task.status === 'OPEN');
+  const open = (activeWaveStatuses as readonly string[]).includes(row.status);
   if (row.status === 'CANCELLED') return <span className="text-idpxyz-textMuted">—</span>;
   const label = open ? '去拣货' : row.batchPick ? '去分拣' : '去复核打包';
   return (

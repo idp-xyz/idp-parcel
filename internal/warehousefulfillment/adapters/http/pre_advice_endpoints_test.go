@@ -226,6 +226,13 @@ func (queries *scriptedPreAdviceQueries) PreAdviceForOwner(
 	return queries.one, queries.oneFound, nil
 }
 
+func (queries *scriptedPreAdviceQueries) PreAdviceByCode(
+	context.Context, domain.TenantID, string,
+) (application.PreAdviceReading, bool, error) {
+	queries.calls++
+	return queries.byNumber, queries.byNumberFound, nil
+}
+
 func (queries *scriptedPreAdviceQueries) PreAdviceByDocumentNumber(
 	context.Context, domain.TenantID, domain.DocumentNumber,
 ) (application.PreAdviceReading, bool, error) {

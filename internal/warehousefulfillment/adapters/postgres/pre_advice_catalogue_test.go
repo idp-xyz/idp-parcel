@@ -114,6 +114,15 @@ func TestPreAdviceCatalogueListsOneOwnerAndFindsByDocumentNumber(t *testing.T) {
 	if err != nil || !ok || found.ID() != advice.ID() {
 		t.Fatalf("按号找到 %v %v %v", ok, found.ID(), err)
 	}
+	byCode, ok, err := catalogue.PreAdviceByCode(t.Context(), tenant, advice.ID().String())
+	gotNumber, assigned := byCode.DocumentNumber()
+	if err != nil || !ok || byCode.ID() != advice.ID() || !assigned || gotNumber.String() != number.String() {
+		t.Fatalf("按预报标识找到 %v %v %v", ok, byCode.ID(), err)
+	}
+	_, ok, err = catalogue.PreAdviceByCode(t.Context(), tenant, "IPA-NOT-THERE")
+	if err != nil || ok {
+		t.Fatalf("不存在的预报标识 ok=%v err=%v", ok, err)
+	}
 	_, ok, err = catalogue.PreAdviceByDocumentNumber(t.Context(), tenant, valueOf(t, domain.NewDocumentNumber, "IB-NOT-A-NUMBER"))
 	if err != nil || ok {
 		t.Fatalf("不存在的号 ok=%v err=%v", ok, err)

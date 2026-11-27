@@ -15,7 +15,7 @@ var WarehousePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	DefaultSort: cataloguepage.Sort{Field: "warehouseCode"},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
-		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary(), Facet: true},
 	},
 })
 
@@ -29,7 +29,7 @@ var LocationTypePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	DefaultSort: cataloguepage.Sort{Field: "locationTypeCode"},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
-		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary(), Facet: true},
 	},
 })
 
@@ -43,7 +43,7 @@ var PackagingMaterialPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	DefaultSort: cataloguepage.Sort{Field: "packagingMaterialCode"},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
-		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary(), Facet: true},
 	},
 })
 
@@ -61,7 +61,7 @@ var ZonePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
-		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary(), Facet: true},
 	},
 })
 
@@ -80,7 +80,7 @@ var LocationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
 		{Name: "zoneCode"},
-		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary(), Facet: true},
 	},
 })
 
@@ -110,7 +110,7 @@ var UnclaimedArrivalPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
 		{Name: "kind", Vocabulary: []string{"INBOUND", "RETURN"}},
-		{Name: "status", Vocabulary: []string{"UNCLAIMED", "CLAIMED", "DISPOSED"}},
+		{Name: "status", Vocabulary: []string{"UNCLAIMED", "CLAIMED", "DISPOSED"}, Facet: true},
 	},
 	Selectors: []string{"receivedFrom", "receivedTo"},
 })
@@ -144,6 +144,6 @@ var StockImportPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
-		{Name: "status", Vocabulary: []string{"PENDING", "POSTED", "REJECTED"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "POSTED", "REJECTED"}, Facet: true},
 	},
 })

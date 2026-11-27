@@ -194,11 +194,13 @@ export function placeVerdict(state: PutawayState, code: string, verdict: PlaceVe
   return { state: next, effects: [{ kind: 'submit', values: moveValues(next) }] };
 }
 
-export function stockLoaded(state: PutawayState, cells: StockCell[], cartons: StockCarton[], failed?: string): PutawayStep {
+export function stockLoaded(state: PutawayState, cells: StockCell[], cartons: StockCarton[], failed?: string, missed = false): PutawayStep {
   if (failed) {
     return hold({ ...state, feedback: { tone: 'unsent', headline: '这个库位的库存没读成', detail: failed }, cue: 'wrong' });
   }
-  return hold({ ...state, cells, cartons, feedback: { ...state.feedback, detail: cells.length + cartons.length === 0 ? '这个库位里这位货主没有货。' : state.feedback.detail } });
+  const empty = cells.length + cartons.length === 0 ? '这个库位里这位货主没有货。' : state.feedback.detail;
+  const detail = missed ? `${empty} 库存没翻完，这个库位上更后面的货这里没列。`.trim() : empty;
+  return hold({ ...state, cells, cartons, feedback: { ...state.feedback, detail } });
 }
 
 export function setQuantity(state: PutawayState, quantity: number): PutawayStep {

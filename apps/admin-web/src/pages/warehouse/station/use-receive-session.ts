@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ApiResult } from '../../catalogue-api';
 import { listCustomerAccounts } from '../../party/api';
 import { findGoodsByCode, getPreAdviceByNumber, listOwnerPreAdvices, type PreAdviceRecord } from '../api';
 import { workFactSpecs, type WorkFactSpec } from '../work-fact';
@@ -17,6 +18,7 @@ import {
   registerStray,
   resend,
   scanCode,
+  rememberedStockState,
   startReceive,
   submitReceipt,
   toggleDamage,
@@ -64,27 +66,10 @@ export interface ReceiveSessionInput {
 
 async function lookupAdvice(code: string): Promise<FoundAdvice> {
   const byNumber = await getPreAdviceByNumber(code);
-  if (byNumber.kind !== 'outcome') return { kind: 'unread', reason: `按单据号读预报没成：${describeReadFailure(byNumber)}` };
+  if (byNumber.kind !== 'outcome') return { kind: 'unread', reason: `认这张预报没成：${describeReadFailure(byNumber)}` };
   if (byNumber.body.found && byNumber.body.preAdvice) {
     const made = sheetOf(byNumber.body.preAdvice, new Date());
     return 'preAdviceId' in made ? { kind: 'sheet', sheet: made } : made;
-  }
-  const accounts = await listCustomerAccounts();
-  if (accounts.kind !== 'outcome') return { kind: 'unread', reason: `读货主名册没成：${describeReadFailure(accounts)}` };
-  for (const account of accounts.body.accounts ?? []) {
-    const listed = await listOwnerPreAdvices(account.accountId, code);
-    if (listed.kind !== 'outcome') return { kind: 'unread', reason: `读预报没成：${describeReadFailure(listed)}` };
-    const hit = (listed.body.preAdvices ?? []).find((row) => row.preAdviceId === code || row.documentNumber === code);
-    if (hit) {
-      const made = sheetOf(hit, new Date());
-      return 'preAdviceId' in made ? { kind: 'sheet', sheet: made } : made;
-    }
-    if (listed.body.page?.next) {
-      return { kind: 'unread', reason: '这位货主的预报太多，按这个码翻不完，没能确定有没有这张' };
-    }
-  }
-  if (accounts.body.page?.next) {
-    return { kind: 'unread', reason: '货主名册翻不完，没能确定有没有这张预报' };
   }
   return { kind: 'absent' };
 }
@@ -167,7 +152,7 @@ export function useReceiveSession(input: ReceiveSessionInput) {
   }, [apply, run]);
 
   useEffect(() => {
-    const started = startReceive(remembered, input.adviceId);
+    const started = startReceive(remembered, input.adviceId, storedStockState(input.warehouse));
     stateRef.current = started.state;
     setState(started.state);
     run(started.effects);
@@ -178,32 +163,43 @@ export function useReceiveSession(input: ReceiveSessionInput) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const accounts = await listCustomerAccounts();
+      const loaded = await loadOwnerAccounts();
       if (cancelled) return;
-      if (accounts.kind !== 'outcome') {
-        setQueueNote(`还没收完的预报没读成：${describeReadFailure(accounts)}`);
+      if (loaded.kind === 'failed') {
+        setQueueNote(`还没收完的预报没读成：${describeReadFailure(loaded.failure)}`);
         return;
       }
+      const accounts = loaded.accounts;
+      const ownersCut = loaded.truncated;
       const items: ReceiveQueueItem[] = [];
-      for (const account of accounts.body.accounts ?? []) {
-        const listed = await listOwnerPreAdvices(account.accountId, '');
-        if (cancelled) return;
-        if (listed.kind !== 'outcome') {
-          setQueueNote(`货主 ${account.accountId} 的预报没读成：${describeReadFailure(listed)}`);
-          continue;
-        }
-        for (const row of listed.body.preAdvices ?? []) {
-          if (row.warehouseCode !== input.warehouse) continue;
-          if (row.status !== 'ADVISED' && row.status !== 'RECEIVING') continue;
-          const made = sheetOf(row, new Date());
-          if (!('preAdviceId' in made)) continue;
-          items.push(queueItem(made));
+      let adviceCut = false;
+      for (const account of accounts) {
+        for (const status of ['ADVISED', 'RECEIVING'] as const) {
+          let after: string | null = null;
+          let pages = 0;
+          do {
+            const listed = await listOwnerPreAdvices(account.accountId, '', after, 200, status, input.warehouse);
+            if (cancelled) return;
+            if (listed.kind !== 'outcome') {
+              setQueueNote(`货主 ${account.accountId} 的预报没读成：${describeReadFailure(listed)}`);
+              after = null;
+              break;
+            }
+            for (const row of listed.body.preAdvices ?? []) {
+              const made = sheetOf(row, new Date());
+              if (!('preAdviceId' in made)) continue;
+              items.push(queueItem(made));
+            }
+            after = listed.body.page?.next ?? null;
+            pages += 1;
+          } while (after !== null && pages < maxStationPages);
+          if (after !== null) adviceCut = true;
         }
       }
       if (cancelled) return;
       setQueue(items);
       const late = items.filter((item) => item.late !== '').length;
-      const tail = accounts.body.page?.next ? '货主名册只看了第一页。' : '';
+      const tail = [ownersCut ? '货主名册没翻完。' : '', adviceCut ? '有的货主预报没翻完。' : ''].filter((part) => part !== '').join('');
       setQueueNote(`还没收完的预报 ${items.length} 张${late > 0 ? `，其中已迟 ${late} 张` : ''}。${tail}`);
     })();
     return () => {
@@ -216,7 +212,10 @@ export function useReceiveSession(input: ReceiveSessionInput) {
     queue,
     queueNote,
     scan: (code: string) => act(scanCode(stateRef.current, code)),
-    chooseState: (stockState: string) => act(chooseStockState(stateRef.current, stockState)),
+    chooseState: (stockState: string) => {
+      if (rememberedStockState(stockState) !== null) writeStockState(input.warehouse, stockState);
+      act(chooseStockState(stateRef.current, stockState));
+    },
     confirmAsk: (batch: string, expiry: string, unit: string) => act(confirmAsk(stateRef.current, batch, expiry, unit)),
     cancelAsk: () => act(cancelAsk(stateRef.current)),
     acceptStray: () => act(acceptStray(stateRef.current, identifiedRef.current)),
@@ -227,6 +226,46 @@ export function useReceiveSession(input: ReceiveSessionInput) {
     leave: () => act(leaveAdvice(stateRef.current)),
     openAdvice: (id: string) => act(scanCode({ ...stateRef.current, phase: 'waiting', advice: null }, id)),
   };
+}
+
+const maxStationPages = 5;
+
+function stockStateKey(warehouse: string): string {
+  return `idp-parcel.station.receive.stock-state.${warehouse}`;
+}
+
+function storedStockState(warehouse: string): string | null {
+  try {
+    return rememberedStockState(sessionStorage.getItem(stockStateKey(warehouse)));
+  } catch {
+    return null;
+  }
+}
+
+function writeStockState(warehouse: string, stockState: string) {
+  try {
+    sessionStorage.setItem(stockStateKey(warehouse), stockState);
+  } catch {
+    // 这一屏记不住，下回再选。
+  }
+}
+
+async function loadOwnerAccounts(): Promise<
+  { kind: 'ok'; accounts: { accountId: string }[]; truncated: boolean } | { kind: 'failed'; failure: Exclude<ApiResult<unknown>, { kind: 'outcome' }> }
+> {
+  const accounts: { accountId: string }[] = [];
+  let after: string | null = null;
+  let pages = 0;
+  let next: string | null = null;
+  do {
+    const answer = await listCustomerAccounts({ pageSize: 200 }, after);
+    if (answer.kind !== 'outcome') return { kind: 'failed', failure: answer };
+    for (const account of answer.body.accounts ?? []) accounts.push({ accountId: account.accountId });
+    next = answer.body.page?.next ?? null;
+    after = next;
+    pages += 1;
+  } while (next !== null && pages < maxStationPages);
+  return { kind: 'ok', accounts, truncated: next !== null };
 }
 
 function queueItem(sheet: AdviceSheet): ReceiveQueueItem {

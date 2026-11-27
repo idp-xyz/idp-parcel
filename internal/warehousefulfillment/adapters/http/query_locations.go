@@ -28,9 +28,10 @@ var _ LocationCatalogueReader = (*application.QueryLocationsHandler)(nil)
 const outcomeLocationsListed = "LOCATIONS_LISTED"
 
 type locationListResponse struct {
-	Outcome   string             `json:"outcome"`
-	Locations []locationBody     `json:"locations"`
-	Page      cataloguepage.Page `json:"page"`
+	Outcome   string               `json:"outcome"`
+	Locations []locationBody       `json:"locations"`
+	Page      cataloguepage.Page   `json:"page"`
+	Facets    cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 // NewQueryLocationsEndpoint 交回各库位当前修订的查阅入口（GET /warehouse-fulfillment-locations），规矩同各库区当前修订的列表口：查询
@@ -66,6 +67,7 @@ func NewQueryLocationsEndpoint(intake CatalogueIntake, reader LocationCatalogueR
 			Outcome:   outcomeLocationsListed,
 			Locations: locationBodiesOfRows(page.Rows),
 			Page:      page.Page(query.Limit),
+			Facets:    page.Facets,
 		})
 	})
 }

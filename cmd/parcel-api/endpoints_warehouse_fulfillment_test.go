@@ -406,6 +406,14 @@ func (unwiredWave) ListWaves(
 func (unwiredWave) LoadWaveRow(context.Context, warehousedomain.TenantID, string) (warehouseports.WaveRow, bool, error) {
 	return warehouseports.WaveRow{}, false, errOrchestrationNotWired
 }
+func (unwiredWave) ListPickTasks(
+	context.Context,
+	warehousedomain.TenantID,
+	int,
+	cataloguepage.Query,
+) (cataloguepage.Result[warehouseports.PickTaskListRow], error) {
+	return cataloguepage.Result[warehouseports.PickTaskListRow]{}, errOrchestrationNotWired
+}
 func (unwiredWave) ListPickDifferences(
 	context.Context,
 	warehousedomain.TenantID,
@@ -742,6 +750,12 @@ func (unwiredPreAdviceQueries) PreAdviceForOwner(
 	return warehouseapp.PreAdviceReading{}, false, errOrchestrationNotWired
 }
 
+func (unwiredPreAdviceQueries) PreAdviceByCode(
+	context.Context, warehousedomain.TenantID, string,
+) (warehouseapp.PreAdviceReading, bool, error) {
+	return warehouseapp.PreAdviceReading{}, false, errOrchestrationNotWired
+}
+
 func (unwiredPreAdviceQueries) PreAdviceByDocumentNumber(
 	context.Context,
 	warehousedomain.TenantID,
@@ -886,6 +900,7 @@ const (
 	conditionRestoreReadLine    = "/warehouse-fulfillment-condition-restore"
 	outboundRequestListLine     = "/warehouse-fulfillment-outbound-request-list"
 	waveListLine                = "/warehouse-fulfillment-wave-list"
+	pickTaskListLine            = "/warehouse-fulfillment-pick-tasks"
 	waveOneLine                 = "/warehouse-fulfillment-wave"
 	pickDifferenceListLine      = "/warehouse-fulfillment-pick-differences"
 	chargeOccurrenceListLine    = "/warehouse-fulfillment-charge-occurrences"
@@ -1131,6 +1146,7 @@ func TestTheWarehouseFulfillmentLinesDeclareTheirFacesAndTheSwitch(t *testing.T)
 		conditionRestoreReadLine:                                      {http.MethodGet, faceOperationsRead},
 		outboundRequestListLine:                                       {http.MethodGet, faceOperationsRead},
 		waveListLine:                                                  {http.MethodGet, faceOperationsRead},
+		pickTaskListLine:                                              {http.MethodGet, faceOperationsRead},
 		waveOneLine:                                                   {http.MethodGet, faceOperationsRead},
 		pickDifferenceListLine:                                        {http.MethodGet, faceOperationsRead},
 		"/warehouse-fulfillment-totes":                                {http.MethodGet, faceOperationsRead},
@@ -1420,6 +1436,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			conditionRestoreReadLine:                                    {status, code},
 			outboundRequestListLine:                                     {status, code},
 			waveListLine:                                                {status, code},
+			pickTaskListLine:                                            {status, code},
 			waveOneLine:                                                 {status, code},
 			pickDifferenceListLine:                                      {status, code},
 			"/warehouse-fulfillment-totes":                              {status, code},
@@ -1571,6 +1588,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			conditionRestoreReadLine:                                    {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			outboundRequestListLine:                                     {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			waveListLine:                                                {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+			pickTaskListLine:                                            {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			waveOneLine:                                                 {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			pickDifferenceListLine:                                      {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
 			"/warehouse-fulfillment-totes":                              {http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
@@ -1716,6 +1734,7 @@ func TestWarehouseFulfillmentLinesAskForTheGrantOfTheirOwnFace(t *testing.T) {
 			conditionRestoreReadLine:                                    {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			outboundRequestListLine:                                     {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			waveListLine:                                                {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
+			pickTaskListLine:                                            {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			waveOneLine:                                                 {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			pickDifferenceListLine:                                      {http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 			"/warehouse-fulfillment-totes":                              {http.StatusInternalServerError, "NO_ANSWER_FORMED"},

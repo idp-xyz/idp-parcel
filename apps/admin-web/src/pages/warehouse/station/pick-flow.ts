@@ -1013,6 +1013,8 @@ export function scanPlaceholder(state: PickState): string {
 
 export interface QueueScope {
   wavesRead: number;
+  /** 看本仓全部波次时读到的任务条数；没给就用波次数。 */
+  tasksRead?: number;
   truncated: boolean;
   waveMissing: boolean;
   /** 还有格没拣、但派给了别人所以没摆的波次数。 */
@@ -1021,14 +1023,15 @@ export interface QueueScope {
 
 /**
  * 队列上方要如实说的话：只看了多少、指名的波次没找到。读全了没有要说的。
- * 指名的波次是按号读的那一张，没有就是没有；只看了多少只会出在看本仓全部波次、还没拣完的波次多过页数上限的时候。
+ * 指名的波次是按号读的那一张，没有就是没有；只看了多少只会出在看本仓全部波次、待执行的任务多过页数上限的时候。
  */
 export function queueNotes(queue: QueueScope, wave: string | null): string[] {
   const notes: string[] = [];
   if (queue.waveMissing && wave !== null) {
     notes.push(`没有找到波次 ${wave}（它可能不属于本仓）。`);
   } else if (queue.truncated) {
-    notes.push(`只看了最近放出的 ${queue.wavesRead} 个还没拣完的波次；更早放出的波次里还有没拣的格，这里看不到。`);
+    const seen = queue.tasksRead ?? queue.wavesRead;
+    notes.push(`只看了 ${seen} 条还没拣的任务；更早放出的还有，这里看不到。`);
   }
   if ((queue.assignedElsewhere ?? 0) > 0) {
     notes.push(`另有 ${queue.assignedElsewhere} 个波次派给了别人（整个波次，或其中几个库区），那些格没有摆在这里。要看其中一个，在「换波次」里选它。`);

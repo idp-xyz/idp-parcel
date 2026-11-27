@@ -4,6 +4,7 @@ import { labelOf } from '../wms-ui';
 import { ScanBox } from './ScanBox';
 import { ScanFeedback } from './ScanFeedback';
 import { stationActionClass, stationButtonClass, stationPrimaryClass, StationFrame } from './StationFrame';
+import { pendingLeave } from './station-leave';
 import { useStationSound } from './use-station-sound';
 import { goodsThisTime, receiptStockStates } from './receive-sheet';
 import { receivesScan, type ReceiveState } from './receive-flow';
@@ -38,6 +39,12 @@ export function ReceiveStation({
       context={state.advice ? (state.advice.documentNumber ?? state.advice.preAdviceId) : '还没选定预报'}
       progress={progressOf(state)}
       sound={{ on: sound.on, onToggle: sound.toggle }}
+      confirmLeave={
+        pendingLeave(
+          state.phase,
+          state.goods.reduce((sum, line) => sum + line.quantity, 0) + state.cartons.length,
+        ) ?? undefined
+      }
       left={
         <div className="flex flex-col gap-4">
           <ScanFeedback kind={state.feedback.tone} text={`${state.feedback.headline}。${state.feedback.detail}`} />

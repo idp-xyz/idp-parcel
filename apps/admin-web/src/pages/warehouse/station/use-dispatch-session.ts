@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getOutboundRequestDetail, listOutboundRequests, type OutboundRequestRecord } from '../api';
+import { dispatchQueueNote, loadDispatchQueue } from './dispatch-queue';
 import { workFactSpecs, type WorkFactSpec } from '../work-fact';
 import { browserStorage } from './device-binding';
 import {
@@ -112,16 +113,14 @@ export function useDispatchSession(input: DispatchSessionInput) {
 
   useEffect(() => {
     let cancelled = false;
-    void listOutboundRequests({ filters: { status: ['PACKED'], warehouseCode: [input.warehouse] } }).then((answer) => {
+    void loadDispatchQueue({ warehouse: input.warehouse, read: listOutboundRequests }).then((answer) => {
       if (cancelled) return;
-      if (answer.kind !== 'outcome') {
-        setQueueNote(`等交出的出库单没读成：${describeReadFailure(answer)}`);
+      if (answer.kind !== 'queue') {
+        setQueueNote(`等交出的出库单没读成：${describeReadFailure(answer.failure)}`);
         return;
       }
-      const rows = answer.body.requests ?? [];
-      setQueue(rows);
-      const more = answer.body.page?.next ? '只列了第一页。' : '';
-      setQueueNote(`已打包、等交出的出库单 ${answer.body.page?.total ?? rows.length} 张。${more}`);
+      setQueue(answer.queue.rows);
+      setQueueNote(dispatchQueueNote(answer.queue));
     });
     return () => {
       cancelled = true;

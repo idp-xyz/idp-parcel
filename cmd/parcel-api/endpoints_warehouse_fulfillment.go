@@ -637,6 +637,9 @@ func init() {
 			"/warehouse-fulfillment-wave-list": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-pick-tasks": {
+				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-wave": {
 				method: http.MethodGet, face: operationsReadFace(), warehouseFulfillment: true,
 				probe: "/warehouse-fulfillment-wave?waveId=WAVE-01",
@@ -1054,6 +1057,7 @@ func init() {
 			conditionRestoreOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			outboundRequestList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			waveList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
+			pickTaskList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			waveOne := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			pickDifferenceList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
 			toteList := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodGet))
@@ -1327,6 +1331,7 @@ func init() {
 				conditionRestoreOne = warehousehttp.NewQueryConditionRestoreEndpoint(catalogueIntake, wiring.internalJobQueries)
 				outboundRequestList = warehousehttp.NewQueryOutboundRequestsEndpoint(catalogueIntake, wiring.outboundRequestQueries)
 				waveList = warehousehttp.NewQueryWavesEndpoint(catalogueIntake, wiring.waveQueries)
+				pickTaskList = warehousehttp.NewQueryPickTasksEndpoint(catalogueIntake, wiring.waveQueries)
 				waveOne = warehousehttp.NewQueryWaveEndpoint(catalogueIntake, wiring.waveQueries)
 				pickDifferenceList = warehousehttp.NewQueryPickDifferencesEndpoint(catalogueIntake, wiring.waveQueries)
 				toteList = warehousehttp.NewQueryTotesEndpoint(catalogueIntake, wiring.toteQueries)
@@ -1492,6 +1497,7 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-condition-restore", Handler: conditionRestoreOne},
 				{Pattern: "/warehouse-fulfillment-outbound-request-list", Handler: outboundRequestList},
 				{Pattern: "/warehouse-fulfillment-wave-list", Handler: waveList},
+				{Pattern: "/warehouse-fulfillment-pick-tasks", Handler: pickTaskList},
 				{Pattern: "/warehouse-fulfillment-wave", Handler: waveOne},
 				{Pattern: "/warehouse-fulfillment-pick-differences", Handler: pickDifferenceList},
 				{Pattern: "/warehouse-fulfillment-totes", Handler: toteList},

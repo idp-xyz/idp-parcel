@@ -93,7 +93,7 @@ func (catalogue *WarehouseCatalogue) ListWarehouses(
 	if err != nil {
 		return fail(err)
 	}
-	return page, nil
+	return withListedFacets(ctx, querier, warehouseListBinding, warehouseListed, query, []any{tenant.String()}, page)
 }
 
 // ListWarehouseRevisions 取一个仓册上的全部修订，按修订号升序。不在册与别的租户的同编码仓同形：空切片、无错。

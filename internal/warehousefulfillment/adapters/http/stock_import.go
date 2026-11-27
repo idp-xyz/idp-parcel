@@ -174,6 +174,7 @@ func NewQueryStockImportsEndpoint(intake CatalogueIntake, queries StockImportQue
 			Outcome: "LISTED",
 			Imports: imports,
 			Page:    page.Page(query.Limit),
+			Facets:  page.Facets,
 		})
 	})
 }
@@ -226,9 +227,10 @@ type stockImportIssue struct {
 }
 
 type stockImportListResponse struct {
-	Outcome string             `json:"outcome"`
-	Imports []stockImportBody  `json:"imports"`
-	Page    cataloguepage.Page `json:"page"`
+	Outcome string               `json:"outcome"`
+	Imports []stockImportBody    `json:"imports"`
+	Page    cataloguepage.Page   `json:"page"`
+	Facets  cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 type stockImportBody struct {

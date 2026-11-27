@@ -307,6 +307,7 @@ type unclaimedArrivalListResponse struct {
 	Outcome  string                 `json:"outcome"`
 	Arrivals []unclaimedArrivalBody `json:"arrivals"`
 	Page     cataloguepage.Page     `json:"page"`
+	Facets   cataloguepage.Facets   `json:"facets,omitempty"`
 }
 
 type unclaimedArrivalOneResponse struct {
@@ -584,6 +585,7 @@ func NewQueryUnclaimedArrivalsEndpoint(intake CatalogueIntake, queries Unclaimed
 			Outcome:  outcomeUnclaimedArrivalsListed,
 			Arrivals: arrivals,
 			Page:     page.Page(query.Limit),
+			Facets:   page.Facets,
 		})
 	})
 }

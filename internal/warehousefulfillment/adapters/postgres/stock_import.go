@@ -221,7 +221,7 @@ func (store *StockImports) List(ctx context.Context, tenant domain.TenantID, lim
 	if err := rows.Err(); err != nil {
 		return fail(err)
 	}
-	return cataloguepage.Finish(query, items, limit, total, func(item domain.StockImport, sortField string) cataloguepage.Position {
+	page, err := cataloguepage.Finish(query, items, limit, total, func(item domain.StockImport, sortField string) cataloguepage.Position {
 		switch sortField {
 		case "importId":
 			return cataloguepage.Position{Value: item.ID().String(), Identity: []string{item.ID().String()}}
@@ -229,6 +229,10 @@ func (store *StockImports) List(ctx context.Context, tenant domain.TenantID, lim
 			return cataloguepage.Position{Value: cataloguepage.FormatInstant(item.SubmittedAt()), Identity: []string{item.ID().String()}}
 		}
 	})
+	if err != nil {
+		return fail(err)
+	}
+	return withListedFacets(ctx, querier, stockImportListBinding, stockImportListed, query, []any{tenant.String()}, page)
 }
 
 type stockImportHeader struct {

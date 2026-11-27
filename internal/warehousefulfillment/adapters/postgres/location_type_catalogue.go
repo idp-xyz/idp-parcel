@@ -94,7 +94,7 @@ func (catalogue *LocationTypeCatalogue) ListLocationTypes(
 	if err != nil {
 		return fail(err)
 	}
-	return page, nil
+	return withListedFacets(ctx, querier, locationTypeListBinding, locationTypeListed, query, []any{tenant.String()}, page)
 }
 
 // ListLocationTypeRevisions 取一个库位类型册上的全部修订，按修订号升序。不在册与别的租户的同编码库位类型同形：空切片、无错。

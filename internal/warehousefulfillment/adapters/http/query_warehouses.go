@@ -28,9 +28,10 @@ var _ WarehouseCatalogueReader = (*application.QueryWarehousesHandler)(nil)
 const outcomeWarehousesListed = "WAREHOUSES_LISTED"
 
 type warehouseListResponse struct {
-	Outcome    string             `json:"outcome"`
-	Warehouses []warehouseBody    `json:"warehouses"`
-	Page       cataloguepage.Page `json:"page"`
+	Outcome    string               `json:"outcome"`
+	Warehouses []warehouseBody      `json:"warehouses"`
+	Page       cataloguepage.Page   `json:"page"`
+	Facets     cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 // NewQueryWarehousesEndpoint 交回各仓当前修订的查阅入口（GET /warehouse-fulfillment-warehouses）。查询参数按
@@ -67,6 +68,7 @@ func NewQueryWarehousesEndpoint(intake CatalogueIntake, reader WarehouseCatalogu
 			Outcome:    outcomeWarehousesListed,
 			Warehouses: warehouseBodiesOfRows(page.Rows),
 			Page:       page.Page(query.Limit),
+			Facets:     page.Facets,
 		})
 	})
 }

@@ -8,6 +8,7 @@ import { catalogueDefaultPageSize, cataloguePageSizes } from '../catalogue-query
 import { cursorPageSummary } from '../../templates/cursor-pagination';
 import {
   getOutboundRequestDetail,
+  getWave,
   listAdjustments,
   listCounts,
   listFreezes,
@@ -49,6 +50,7 @@ import {
   taskLinesFromDetail,
   waveHeaders,
   waveLines,
+  waveTaskLines,
   type MonitorLine,
   type MonitorNode,
 } from './monitor-tree';
@@ -125,9 +127,21 @@ export function WarehouseMonitorPage() {
     generation.current += 1;
     setLoading(false);
     setOpenKey(null);
-    if (line.drillTasks) {
+    if (line.drillWave) {
+      const answer = await getWave(line.drillWave);
+      if (answer.kind !== 'outcome' || !answer.body.wave) {
+        setView({ ...view, note: '这个波次没读成。' });
+        return;
+      }
+      const tasks = answer.body.wave.tasks ?? [];
       setStack((current) => [...current, view]);
-      setView({ title: `${line.cells[0]} 的拣货任务`, headers: taskHeaders, lines: line.drillTasks, note: '波次上的任务没有货主，这一层不再钻库存格。要从出库单钻下去。', next: null });
+      setView({
+        title: `${line.cells[0]} 的拣货任务`,
+        headers: taskHeaders,
+        lines: waveTaskLines(tasks),
+        note: tasks.length === 0 ? '这个波次没有拣货任务。' : '波次上的任务没有货主，这一层不再钻库存格。要从出库单钻下去。',
+        next: null,
+      });
       return;
     }
     if (line.drillOutbound) {

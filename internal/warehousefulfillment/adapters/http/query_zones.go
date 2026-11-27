@@ -28,9 +28,10 @@ var _ ZoneCatalogueReader = (*application.QueryZonesHandler)(nil)
 const outcomeZonesListed = "ZONES_LISTED"
 
 type zoneListResponse struct {
-	Outcome string             `json:"outcome"`
-	Zones   []zoneBody         `json:"zones"`
-	Page    cataloguepage.Page `json:"page"`
+	Outcome string               `json:"outcome"`
+	Zones   []zoneBody           `json:"zones"`
+	Page    cataloguepage.Page   `json:"page"`
+	Facets  cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 // NewQueryZonesEndpoint 交回各库区当前修订的查阅入口（GET /warehouse-fulfillment-zones），规矩同各仓当前修订的列表口：查询参数按
@@ -66,6 +67,7 @@ func NewQueryZonesEndpoint(intake CatalogueIntake, reader ZoneCatalogueReader) h
 			Outcome: outcomeZonesListed,
 			Zones:   zoneBodiesOfRows(page.Rows),
 			Page:    page.Page(query.Limit),
+			Facets:  page.Facets,
 		})
 	})
 }

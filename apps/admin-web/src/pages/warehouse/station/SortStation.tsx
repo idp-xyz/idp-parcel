@@ -24,6 +24,7 @@ import {
 } from './sort-flow';
 import { loadSortWaves, type SortWavesAnswer } from './sort-plan';
 import { StationFrame, stationActionClass, stationButtonClass, stationPrimaryClass } from './StationFrame';
+import { pendingLeave } from './station-leave';
 import { packStationHash, sortStationHash } from './stations';
 import { useSortSession } from './use-sort-session';
 import { useStationSound } from './use-station-sound';
@@ -245,6 +246,7 @@ function SortWave({ device, wave, onChangeDevice }: { device: WorkDeviceRecord; 
       onChangeDevice={onChangeDevice}
       context={context}
       progress={sortProgress(state)}
+      confirmLeave={pendingLeave(state.phase, 0) ?? undefined}
       sound={{ on: sound.on, onToggle: sound.toggle }}
       left={
         <div className={`flex min-h-full flex-col gap-4 p-4 md:p-6 ${panelClass[state.feedback.kind]}`}>

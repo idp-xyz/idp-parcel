@@ -783,12 +783,16 @@ func (store *WorkspaceReads) ListFreezes(
 	if err := rows.Err(); err != nil {
 		return fail(err)
 	}
-	return cataloguepage.Finish(query, items, limit, total, func(item ports.StockFreezeListRow, sortField string) cataloguepage.Position {
+	page, err := cataloguepage.Finish(query, items, limit, total, func(item ports.StockFreezeListRow, sortField string) cataloguepage.Position {
 		if sortField == "freezeId" {
 			return cataloguepage.Position{Value: item.FreezeID, Identity: []string{item.FreezeID}}
 		}
 		return cataloguepage.Position{Value: cataloguepage.FormatInstant(item.FrozenAt), Identity: []string{item.FreezeID}}
 	})
+	if err != nil {
+		return fail(err)
+	}
+	return withListedFacets(ctx, querier, freezeBinding, freezeListed, query, []any{tenant.String()}, page)
 }
 
 const countColumns = `
@@ -873,12 +877,16 @@ func (store *WorkspaceReads) ListCounts(
 			return fail(err)
 		}
 	}
-	return cataloguepage.Finish(query, items, limit, total, func(item ports.StockCountRow, sortField string) cataloguepage.Position {
+	page, err := cataloguepage.Finish(query, items, limit, total, func(item ports.StockCountRow, sortField string) cataloguepage.Position {
 		if sortField == "countId" {
 			return cataloguepage.Position{Value: item.CountID, Identity: []string{item.CountID}}
 		}
 		return cataloguepage.Position{Value: cataloguepage.FormatInstant(item.CreatedAt), Identity: []string{item.CountID}}
 	})
+	if err != nil {
+		return fail(err)
+	}
+	return withListedFacets(ctx, querier, countBinding, countListed, query, []any{tenant.String()}, page)
 }
 
 func (store *WorkspaceReads) fillCountMeta(ctx context.Context, querier bentopg.Querier, tenantID string, item *ports.StockCountRow) error {
@@ -1174,12 +1182,16 @@ func (store *WorkspaceReads) ListAdjustments(
 		}
 		lRows.Close()
 	}
-	return cataloguepage.Finish(query, items, limit, total, func(item ports.StockAdjustmentRow, sortField string) cataloguepage.Position {
+	page, err := cataloguepage.Finish(query, items, limit, total, func(item ports.StockAdjustmentRow, sortField string) cataloguepage.Position {
 		if sortField == "adjustmentId" {
 			return cataloguepage.Position{Value: item.AdjustmentID, Identity: []string{item.AdjustmentID}}
 		}
 		return cataloguepage.Position{Value: cataloguepage.FormatInstant(item.SubmittedAt), Identity: []string{item.AdjustmentID}}
 	})
+	if err != nil {
+		return fail(err)
+	}
+	return withListedFacets(ctx, querier, adjustmentBinding, adjustmentListed, query, []any{tenant.String()}, page)
 }
 
 const jobDiscrepancyColumns = `
@@ -1273,9 +1285,13 @@ func (store *WorkspaceReads) ListJobDiscrepancies(
 	if err := rows.Err(); err != nil {
 		return fail(err)
 	}
-	return cataloguepage.Finish(query, items, limit, total, func(item ports.JobDiscrepancyRow, _ string) cataloguepage.Position {
+	page, err := cataloguepage.Finish(query, items, limit, total, func(item ports.JobDiscrepancyRow, _ string) cataloguepage.Position {
 		return cataloguepage.Position{Value: item.DiscrepancyID, Identity: []string{item.DiscrepancyID}}
 	})
+	if err != nil {
+		return fail(err)
+	}
+	return withListedFacets(ctx, querier, jobDiscrepancyBinding, jobDiscrepancyListed, query, []any{tenant.String()}, page)
 }
 
 const wsInstructionColumns = `
@@ -1401,12 +1417,16 @@ func (store *WorkspaceReads) ListInstructions(
 		}
 		eRows.Close()
 	}
-	return cataloguepage.Finish(query, items, limit, total, func(item ports.InstructionRow, sortField string) cataloguepage.Position {
+	page, err := cataloguepage.Finish(query, items, limit, total, func(item ports.InstructionRow, sortField string) cataloguepage.Position {
 		if sortField == "instructionId" {
 			return cataloguepage.Position{Value: item.InstructionID, Identity: []string{item.InstructionID}}
 		}
 		return cataloguepage.Position{Value: cataloguepage.FormatInstant(item.ReceivedAt), Identity: []string{item.InstructionID}}
 	})
+	if err != nil {
+		return fail(err)
+	}
+	return withListedFacets(ctx, querier, instructionBinding, instructionListed, query, []any{tenant.String()}, page)
 }
 
 // ReturnsOverview 读取退货预报（含明细行）与退件到仓记录（含回库处置状态）。

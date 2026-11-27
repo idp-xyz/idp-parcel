@@ -3,7 +3,7 @@ import { ReloginButton } from '../../../auth/ReloginButton';
 import { TechnicalDetails, httpRows, type TechnicalRow } from '../../../components/TechnicalDetails';
 import { statusToneBanner } from '../../../components/status-tone';
 import type { WorkDeviceRecord } from '../../work-devices/api';
-import { acceptingScans, mismatchPlan, packActions, packProgress, packScreen, scanPlaceholder, type PackState } from './pack-flow';
+import { acceptingScans, countedTotal, mismatchPlan, packActions, packProgress, packScreen, scanPlaceholder, type PackState } from './pack-flow';
 import { goodsKey, queueCount, type QueueList } from './pack-order';
 import { packBalance } from './pack-parcels';
 import { CountsDialog, MismatchDialog, PackagingDialog } from './PackDialogs';
@@ -11,6 +11,7 @@ import { ParcelCard } from './ParcelCard';
 import { ScanBox } from './ScanBox';
 import { panelClass, ScanFeedback } from './ScanFeedback';
 import { StationFrame, stationActionClass, stationButtonClass, stationPrimaryClass } from './StationFrame';
+import { pendingLeave } from './station-leave';
 import { usePackSession } from './use-pack-session';
 import { useStationSound } from './use-station-sound';
 import type { WorkFactVerdict } from './work-fact-submit';
@@ -296,6 +297,7 @@ export function PackStation({ device, request, onChangeDevice }: PackStationProp
         context={context}
         progress={progress === '' ? undefined : progress}
         sound={{ on: sound.on, onToggle: sound.toggle }}
+        confirmLeave={pendingLeave(state.phase, state.phase === 'checking' || state.phase === 'resolving' ? countedTotal(state) : 0) ?? undefined}
         left={left}
         right={right}
       />

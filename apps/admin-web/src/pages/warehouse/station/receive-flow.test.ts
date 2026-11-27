@@ -71,6 +71,8 @@ test('扫单号、核暂存位、选状态之后才收货；状态不预选', ()
   const started = startReceive(null, null);
   equal(started.state.phase, 'waiting');
   equal(started.state.stockState, null);
+  equal(startReceive(null, null, 'GOOD').state.stockState, 'GOOD');
+  equal(startReceive(null, null, 'QUARANTINE').state.stockState, null);
   const finding = scanCode(started.state, 'IB-1');
   equal(finding.state.phase, 'finding');
   equal(finding.effects[0].kind, 'find');

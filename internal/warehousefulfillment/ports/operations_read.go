@@ -24,7 +24,7 @@ var OutboundRequestPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 			"RESERVED", "PARTIALLY_RESERVED", "REJECTED", "PENDING_POLICY", "HANDED_OFF",
 			"FORWARDED", "SPLIT", "ALLOCATED", "PICKED", "CHECKED", "PACKED",
 			"SHIPPED", "CANCELLED", "AWAITING_RETURN", "PARTIALLY_CANCELLED",
-		}},
+		}, Facet: true},
 		// singleUnit 是「单品单件」：这张请求要拣的只有一件（预占需求合计是 1 个基本单位）。
 		{Name: "singleUnit", Vocabulary: cataloguepage.BooleanVocabulary()},
 		// allocationException 是「放不出」：仍是已预占，最近一次放波次时分配不出、被跳过了。
@@ -105,7 +105,7 @@ var WavePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
 		{Name: "prefetch", Vocabulary: cataloguepage.BooleanVocabulary()},
-		{Name: "status", Vocabulary: []string{WaveReleased, WavePicking, WaveCompleted, WaveCancelled}},
+		{Name: "status", Vocabulary: []string{WaveReleased, WavePicking, WaveCompleted, WaveCancelled}, Facet: true},
 		{Name: "singleUnit", Vocabulary: cataloguepage.BooleanVocabulary()},
 		// batchPick 是合并拣货的波次：分拣台按它列出要分拣的波次。
 		{Name: "batchPick", Vocabulary: cataloguepage.BooleanVocabulary()},
@@ -157,7 +157,62 @@ type WaveRow struct {
 	Requests      []string
 	// Withdrawn 是 Requests 里已经撤出的那几张。
 	Withdrawn []string
-	Tasks     []WaveTaskRow
+	// Tasks 只在按号读的那一张上有。列表不嵌每一条任务。
+	Tasks []WaveTaskRow
+	// OpenTasks、DoneTasks、ShortTasks、CancelledTasks 只在列表上有，进度与下一步用这四个数。
+	// 作废与迟到都算在 CancelledTasks 里。按号读的那一张这四格是 0。
+	OpenTasks      int64
+	DoneTasks      int64
+	ShortTasks     int64
+	CancelledTasks int64
+}
+
+// 拣货任务的状态。待执行才进拣货工位的队列；拣满、少拣是已经有了结果；作废是截单或撤单；迟到是作废之后才拣出来的。
+const (
+	PickTaskOpen      = "OPEN"
+	PickTaskDone      = "DONE"
+	PickTaskShort     = "SHORT"
+	PickTaskCancelled = "CANCELLED"
+	PickTaskLate      = "LATE"
+)
+
+// PickTaskPages 是拣货任务列表的查询声明（ADR-0144）。拣货工位看本仓全部波次时按仓与状态要还没拣的任务，
+// 不再先把还没拣完的波次整页取来再自己挑待执行的。缺省按所属波次的放出时刻从新到旧，同一波次里按任务号定序。
+var PickTaskPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
+	Name: "warehouse-fulfillment-pick-tasks",
+	Sorts: []cataloguepage.SortDimension{
+		{Name: "releasedAt", Kind: cataloguepage.Instant},
+		{Name: "taskId", Kind: cataloguepage.Text},
+	},
+	DefaultSort: cataloguepage.Sort{Field: "releasedAt", Descending: true},
+	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
+	Filters: []cataloguepage.FilterDimension{
+		{Name: "warehouseCode"},
+		{Name: "waveId"},
+		{Name: "status", Vocabulary: []string{PickTaskOpen, PickTaskDone, PickTaskShort, PickTaskCancelled, PickTaskLate}},
+	},
+})
+
+// PickTaskListRow 是拣货任务列表的一行。库区与库区指派照拣货时认人的同一条规则带出：库位认得出库区、
+// 那个库区单独派了人，才有库区指派；否则认整个波次派给的人。
+type PickTaskListRow struct {
+	TaskID        string
+	WaveID        string
+	RequestID     string
+	OwnerAccount  string
+	LocationCode  string
+	ZoneCode      string
+	GoodsCode     string
+	Unit          string
+	StockState    string
+	Quantity      int64
+	Status        string
+	WarehouseCode string
+	SingleUnit    bool
+	BatchPick     bool
+	Assignee      string
+	ZoneAssignee  string
+	ReleasedAt    time.Time
 }
 
 // PickDifferencePages 是运营查阅拣货差异（少拣留下的）的查询声明（ADR-0144）。
@@ -174,7 +229,7 @@ var PickDifferencePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
-		{Name: "status", Vocabulary: []string{"PENDING", "CLOSED"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "CLOSED"}, Facet: true},
 	},
 })
 

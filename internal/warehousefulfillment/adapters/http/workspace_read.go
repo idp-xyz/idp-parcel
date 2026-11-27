@@ -356,6 +356,15 @@ func NewQueryOutboundRequestDetailEndpoint(intake CatalogueIntake, queries Works
 	})
 }
 
+// listBody 是分页列表的答复。点了名的分面随答复带出；没点名的册没有这一格。
+func listBody[Row any](outcome, key string, items any, page cataloguepage.Result[Row], limit int) map[string]any {
+	body := map[string]any{"outcome": outcome, key: items, "page": page.Page(limit)}
+	if len(page.Facets) > 0 {
+		body["facets"] = page.Facets
+	}
+	return body
+}
+
 // NewQueryFreezesEndpoint 分页列出库存冻结单（GET /warehouse-fulfillment-freezes）。
 func NewQueryFreezesEndpoint(intake CatalogueIntake, queries WorkspaceQueries) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
@@ -394,11 +403,7 @@ func NewQueryFreezesEndpoint(intake CatalogueIntake, queries WorkspaceQueries) h
 				"unfrozenAt": optRFC3339(row.UnfrozenAt), "unfreezeNote": row.UnfreezeNote,
 			})
 		}
-		writeJSON(response, http.StatusOK, map[string]any{
-			"outcome": "FREEZES_LISTED",
-			"freezes": items,
-			"page":    page.Page(query.Limit),
-		})
+		writeJSON(response, http.StatusOK, listBody("FREEZES_LISTED", "freezes", items, page, query.Limit))
 	})
 }
 
@@ -431,11 +436,7 @@ func NewQueryCountsEndpoint(intake CatalogueIntake, queries WorkspaceQueries) ht
 		for _, row := range page.Rows {
 			items = append(items, countRowMap(row))
 		}
-		writeJSON(response, http.StatusOK, map[string]any{
-			"outcome": "COUNTS_LISTED",
-			"counts":  items,
-			"page":    page.Page(query.Limit),
-		})
+		writeJSON(response, http.StatusOK, listBody("COUNTS_LISTED", "counts", items, page, query.Limit))
 	})
 }
 
@@ -568,11 +569,7 @@ func NewQueryAdjustmentsEndpoint(intake CatalogueIntake, queries WorkspaceQuerie
 				"lines": lines,
 			})
 		}
-		writeJSON(response, http.StatusOK, map[string]any{
-			"outcome":     "ADJUSTMENTS_LISTED",
-			"adjustments": items,
-			"page":        page.Page(query.Limit),
-		})
+		writeJSON(response, http.StatusOK, listBody("ADJUSTMENTS_LISTED", "adjustments", items, page, query.Limit))
 	})
 }
 
@@ -616,11 +613,7 @@ func NewQueryJobDiscrepanciesEndpoint(intake CatalogueIntake, queries WorkspaceQ
 				"rejectedBy": row.RejectedBy, "rejectedAt": optRFC3339(row.RejectedAt), "rejectReason": row.RejectReason,
 			})
 		}
-		writeJSON(response, http.StatusOK, map[string]any{
-			"outcome":       "JOB_DISCREPANCIES_LISTED",
-			"discrepancies": items,
-			"page":          page.Page(query.Limit),
-		})
+		writeJSON(response, http.StatusOK, listBody("JOB_DISCREPANCIES_LISTED", "discrepancies", items, page, query.Limit))
 	})
 }
 
@@ -674,11 +667,7 @@ func NewQueryInstructionsEndpoint(intake CatalogueIntake, queries WorkspaceQueri
 				"components": comps, "executions": execs,
 			})
 		}
-		writeJSON(response, http.StatusOK, map[string]any{
-			"outcome":      "INSTRUCTIONS_LISTED",
-			"instructions": items,
-			"page":         page.Page(query.Limit),
-		})
+		writeJSON(response, http.StatusOK, listBody("INSTRUCTIONS_LISTED", "instructions", items, page, query.Limit))
 	})
 }
 

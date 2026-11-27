@@ -3,6 +3,7 @@ import type { WorkDeviceRecord } from '../../work-devices/api';
 import { ScanBox } from './ScanBox';
 import { ScanFeedback } from './ScanFeedback';
 import { StationFrame, stationActionClass, stationPrimaryClass } from './StationFrame';
+import { pendingLeave } from './station-leave';
 import { useDispatchSession } from './use-dispatch-session';
 import { useStationSound } from './use-station-sound';
 
@@ -33,6 +34,7 @@ export function DispatchStation({
       context={state.sheet ? `${state.sheet.number} · ${state.sheet.dispatchLabel}` : '还没选定出库单'}
       progress={state.handed > 0 ? `这一趟已交 ${state.handed} 个包裹` : undefined}
       sound={{ on: sound.on, onToggle: sound.toggle }}
+      confirmLeave={pendingLeave(state.phase, 0) ?? undefined}
       left={
         <div className="flex flex-col gap-4">
           <ScanFeedback kind={state.feedback.tone} text={`${state.feedback.headline}。${state.feedback.detail}`} />
@@ -68,7 +70,7 @@ export function DispatchStation({
         ) : (
           <div className="flex flex-col gap-2">
             <div className="type-caption text-idpxyz-textMuted">{session.queueNote}</div>
-            {session.queue.slice(0, 50).map((row) => (
+            {session.queue.map((row) => (
               <button key={row.requestId} type="button" className={`${stationActionClass} h-auto justify-between py-2 text-left`} onClick={() => session.openRequest(row.requestId)}>
                 <span>{row.documentNumber ?? row.requestId}</span>
                 <span className="type-caption">{row.dispatch === 'PICKUP' ? '到仓自提' : row.dispatch === 'OWNER_LABEL' ? '货主面单' : '本产品网络'}</span>
