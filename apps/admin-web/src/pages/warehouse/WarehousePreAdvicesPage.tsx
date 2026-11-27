@@ -1,29 +1,37 @@
-import { useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
-import type { InspectorAction, InspectorContent } from '../../templates/inspector';
+import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
+import type { TemplateViewState } from '../../templates/state-slot';
+import { useTabViewState } from '../../templates/workspace-view-state';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { enterStation } from '../../shell/enter-station';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import type { CatalogueConditions } from '../catalogue-query';
+import { heldCataloguePage } from '../party/held-catalogue-page';
+import { CursorPagerBar, pastFirstPage } from '../shipment-request/cursor-pager';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { receivingActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
 import { listOwnerPreAdvices, type PreAdviceRecord } from './api';
 import { DocumentLink } from './document-page';
+import { fitColumnWidth, nameOf, shortInstant } from './list-cells';
 import { PreAdviceDocument } from './PreAdviceDocument';
-import { openDocument, useDocumentParts } from './use-document';
+import { useDocumentParts } from './use-document';
 import { receiveStationHash } from './station/stations';
 import { elapsedLabel } from './waiting';
-import { labelOf, WmsBadge, WmsStatusTabs } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
 const moduleId = 'warehouse-pre-advices';
 const info = moduleInfoById[moduleId];
-const mono = 'whitespace-nowrap font-mono type-body leading-4';
 
-const statuses = ['ADVISED', 'RECEIVING', 'CLOSED', 'CANCELLED'] as const;
+const allQueues = 'ALL';
+const workingStatuses = ['ADVISED', 'RECEIVING'] as const;
+const settledStatuses = ['CLOSED', 'CANCELLED'] as const;
+const statuses = [...workingStatuses, ...settledStatuses] as const;
+
+const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{content}</span>;
 
 function loadPreAdvices(conditions: CatalogueConditions, after: string | null) {
   const owner = conditions.selectors?.ownerAccount ?? '';
@@ -49,124 +57,160 @@ export function WarehousePreAdvicesPage() {
 function PreAdviceList() {
   const drawer = useActionDrawer(receivingActionSpecs);
   const owners = drawer.lookups.owners;
-  const [picked, setPicked] = useState('');
-  const [keyword, setKeyword] = useState('');
-  const [status, setStatus] = useState<string>('ALL');
+  const [picked, setPicked] = useTabViewState('warehouse-pre-advices.owner', '');
+  const [keyword, setKeyword] = useTabViewState('warehouse-pre-advices.keyword', '');
+  const [status, setStatus] = useTabViewState('warehouse-pre-advices.status', allQueues);
+  const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-pre-advices.open', null);
+  const [refreshes, setRefreshes] = useState(0);
   const settled = useSettledKeyword(keyword);
-  // 预报按货主归属，读口必须带货主：人没挑过就取名册里的第一家。货主写进条件签名，换货主就回到第一页。
-  const owner = picked !== '' ? picked : (owners[0]?.accountId ?? '');
-  const { answer, pagination, retry } = useCatalogueCursor({ selectors: { ownerAccount: owner }, q: settled }, loadPreAdvices);
-
-  const loaded = answer?.kind === 'outcome' ? answer.body.preAdvices : [];
-  // 读口不按状态筛，状态是在答回来的这一页里筛的。整份只有一页时签上才写数。
-  const wholeList = answer?.kind === 'outcome' && answer.body.page.next === null && (pagination?.page ?? 1) === 1;
-  const rows = status === 'ALL' ? loaded : loaded.filter((row) => row.status === status);
+  // 预报按货主归属，读口必须带货主：人没挑过、或挑的已经不在名册里，就取名册里的第一家。
+  const owner = owners.some((account) => account.accountId === picked) ? picked : (owners[0]?.accountId ?? '');
+  const { answer, previous, pagination, retry } = useCatalogueCursor({ selectors: { ownerAccount: owner }, q: settled }, loadPreAdvices);
+  const held = heldCataloguePage(answer, previous, (body) => body.preAdvices.length > 0);
+  const loaded = answer?.kind === 'outcome' ? answer.body.preAdvices : (held?.body.preAdvices ?? []);
+  // 读口不按状态筛，状态是在答回来的这一页里筛的。整份只有一页、并且这一问真是某个货主的，标题上才写数。
+  const wholeList = owner !== '' && answer?.kind === 'outcome' && answer.body.page.next === null && (pagination?.page ?? 1) === 1;
+  const queue = statuses.includes(status as (typeof statuses)[number]) ? status : allQueues;
+  const rows = queue === allQueues ? loaded : loaded.filter((row) => row.status === queue);
   const now = new Date();
+  const warehouseNames = useMemo(
+    () => new Map(drawer.lookups.warehouses.map((warehouse) => [warehouse.warehouseCode, warehouse.name ?? ''])),
+    [drawer.lookups.warehouses],
+  );
+  const refresh = () => {
+    retry();
+    setRefreshes((count) => count + 1);
+  };
 
-  const columns: ListColumn<PreAdviceRecord>[] = [
+  const namedWarehouse = (code: string) => {
+    const name = nameOf(warehouseNames, code);
+    return name ? <WmsTwoLine primary={name} secondary={code} code title={`${name} · ${code}`} /> : <span className="whitespace-nowrap font-mono">{code}</span>;
+  };
+  // 开了详情栏之后列表变窄，次要的列收起：单号、状态与下一步一直在。
+  const columns: WorkbenchColumn<PreAdviceRecord>[] = [
     {
-      id: 'id',
-      header: '入库单号',
-      className: 'whitespace-nowrap',
+      key: 'id',
+      header: '入库单',
+      width: fitColumnWidth,
       render: (row) => (
-        <DocumentLink moduleId={moduleId} parts={[row.ownerAccount, row.preAdviceId]}>
-          {row.documentNumber ?? row.preAdviceId}
-        </DocumentLink>
+        <WmsTwoLine
+          primary={
+            <DocumentLink moduleId={moduleId} parts={[row.ownerAccount, row.preAdviceId]}>
+              {row.documentNumber ?? row.preAdviceId}
+            </DocumentLink>
+          }
+          secondary={shortInstant(row.acceptedAt, now)}
+          title={`受理于 ${formatInstant(row.acceptedAt)}`}
+        />
       ),
     },
-    { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} /> },
-    { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
-    { id: 'mode', header: '到仓 / 入库', className: 'whitespace-nowrap', render: (row) => `${labelOf(row.arrivalMode)} · ${labelOf(row.inboundMode)}` },
+    { key: 'status', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.status} /> },
+    { key: 'warehouse', header: '仓', width: fitColumnWidth, minListWidth: 880, render: (row) => namedWarehouse(row.warehouseCode) },
     {
-      id: 'size',
-      header: '商品行 / 整箱',
-      align: 'right',
-      className: mono,
-      render: (row) => `${row.goodsLines?.length ?? 0} / ${row.cartons?.length ?? 0}`,
+      key: 'mode',
+      header: nowrap('到仓 / 入库'),
+      width: fitColumnWidth,
+      minListWidth: 1080,
+      render: (row) => nowrap(`${labelOf(row.arrivalMode)} · ${labelOf(row.inboundMode)}`),
     },
     {
-      id: 'expected',
-      header: '预计到达',
-      className: 'whitespace-nowrap',
+      key: 'size',
+      header: nowrap('商品行 / 整箱'),
+      right: true,
+      width: fitColumnWidth,
+      minListWidth: 1240,
+      render: (row) => <span className="whitespace-nowrap tabular-nums">{`${row.goodsLines?.length ?? 0} / ${row.cartons?.length ?? 0}`}</span>,
+    },
+    {
+      key: 'expected',
+      header: nowrap('预计到达'),
+      width: fitColumnWidth,
+      minListWidth: 1400,
       render: (row) => {
+        const expected = row.currentNotice?.expectedAt;
         const late = lateOf(row, now);
         return (
-          <span className="inline-flex items-center gap-2">
-            <span className="font-mono">{row.currentNotice ? formatInstant(row.currentNotice.expectedAt) : '—'}</span>
+          <span className="inline-flex items-center gap-2 whitespace-nowrap" title={expected ? `预计 ${formatInstant(expected)} 到` : '没有告知预计到达'}>
+            <span className="tabular-nums">{expected ? shortInstant(expected, now) : '—'}</span>
             {late ? <WmsBadge label={`已迟 ${late}`} tone="danger" /> : null}
           </span>
         );
       },
     },
-    { id: 'at', header: '受理时刻', className: mono, render: (row) => formatInstant(row.acceptedAt) },
     {
-      id: 'next',
-      header: '下一步',
-      className: 'whitespace-nowrap',
+      key: 'next',
+      header: nowrap('下一步'),
+      width: fitColumnWidth,
       render: (row) =>
         row.status === 'ADVISED' || row.status === 'RECEIVING' ? (
-          <button
+          <Button
             type="button"
-            className="text-[color:var(--ds-text-link-hover)] hover:underline"
+            size="sm"
+            variant="outline"
+            className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
             onClick={(event) => {
               event.stopPropagation();
               enterStation(receiveStationHash(row.preAdviceId));
             }}
           >
             {row.status === 'ADVISED' ? '去收货' : '接着收货'}
-          </button>
+          </Button>
         ) : (
           <span className="text-idpxyz-textMuted">—</span>
         ),
     },
   ];
 
-  const inspectorOf = (row: PreAdviceRecord): InspectorContent => {
-    const actions: InspectorAction[] = [{ label: '打开入库预报', onRun: () => openDocument(moduleId, [row.ownerAccount, row.preAdviceId]) }];
-    const open = row.status === 'ADVISED' || row.status === 'RECEIVING';
-    if (open && drawer.has('pre-advice-notice')) {
-      actions.push({ label: '更新告知', onRun: () => drawer.open('pre-advice-notice', { preAdviceId: row.preAdviceId }) });
-    }
-    if (row.status === 'ADVISED' && drawer.has('pre-advice-withdrawal')) {
-      actions.push({ label: '撤回', onRun: () => drawer.open('pre-advice-withdrawal', { preAdviceId: row.preAdviceId }) });
-    }
-    if (row.status === 'RECEIVING' && drawer.has('pre-advice-close')) {
-      actions.push({ label: '完结', onRun: () => drawer.open('pre-advice-close', { preAdviceId: row.preAdviceId }) });
-    }
-    return {
-      title: row.documentNumber ?? row.preAdviceId,
-      subtitle: labelOf(row.status),
-      sections: [
-        {
-          kind: 'summary',
-          fields: [
-            { label: '货主 / 仓库', value: `${row.ownerAccount} · ${row.warehouseCode}`, mono: true },
-            { label: '到仓 / 入库', value: `${labelOf(row.arrivalMode)} · ${labelOf(row.inboundMode)}` },
-            { label: '预计到达', value: row.currentNotice ? formatInstant(row.currentNotice.expectedAt) : '没有告知', mono: true },
-            {
-              label: '商品',
-              value: row.goodsLines?.map((line) => `${line.goodsCode}×${line.quantity}`).join('、') || '没有按商品的行',
-              mono: true,
-            },
-            { label: '整箱', value: row.cartons?.map((carton) => carton.cartonNumber).join('、') || '没有整箱', mono: true },
-          ],
-        },
-        { kind: 'actions', actions },
-        {
-          kind: 'audit',
-          fields: [{ label: '来源 / 受理时刻', value: `${labelOf(row.submissionPath)} · ${formatInstant(row.acceptedAt)}` }],
-        },
-      ],
-    };
+  const chooseQueue = (next: string) => setStatus(next);
+  const queueStats: WmsQueueStat[] = workingStatuses.map((code) => ({
+    id: code,
+    label: labelOf(code),
+    count: wholeList ? loaded.filter((row) => row.status === code).length : null,
+    active: queue === code,
+    attention: code === 'ADVISED' && wholeList && loaded.some((row) => lateOf(row, now) !== ''),
+    onClick: () => chooseQueue(queue === code ? allQueues : code),
+  }));
+  const narrowed = settled.trim() !== '' || queue !== allQueues;
+  const clearFilters = () => {
+    setKeyword('');
+    setStatus(allQueues);
   };
+  const viewState: TemplateViewState =
+    owner === ''
+      ? drawer.lookups.loaded
+        ? {
+            kind: 'empty',
+            title: '还没有货主客户账户',
+            description: '入库预报按货主归属。先在国际小包那边的「客户」里登记货主的客户账户。',
+          }
+        : { kind: 'loading', shape: 'table' }
+      : held
+        ? { kind: 'ready' }
+        : catalogueViewState(answer, loaded.length, refresh, {
+            module: info,
+            endpoint: 'GET /warehouse-fulfillment-inbound-pre-advices',
+            emptyTitle: '这位货主还没有入库预报',
+            emptyDescription: '点右上角「代录入库预报」新建，或等货主经客户接口提交。',
+            narrowed: narrowed || pastFirstPage(pagination),
+          });
+  const shownPagination = pagination ?? held?.pagination;
+  const noMatchText =
+    queue !== allQueues
+      ? wholeList
+        ? '这位货主名下没有这个状态的入库预报'
+        : '这一页里没有这个状态的入库预报。读口不按状态筛，换一页再看。'
+      : '当前检索下没有入库预报';
 
   return (
     <>
-      <ListPageTemplate<PreAdviceRecord>
-        moduleId={moduleId}
+      <WorkbenchPageTemplate<PreAdviceRecord>
         title={info.title}
-        description="货主说要来的货。点单号看预报了多少、收了多少和每一次收货；收货本身在作业台做。"
-        headerActions={
+        viewStateKey={moduleId}
+        subtitle="点一行在右边看这张预报、做它的下一步"
+        titleAside={<WmsQueueStats items={queueStats} />}
+        onRefresh={refresh}
+        refreshing={answer === null}
+        primaryAction={
           drawer.has('pre-advice-on-behalf') ? (
             <Button type="button" className={primaryActionClass} onClick={() => drawer.open('pre-advice-on-behalf', { ownerAccount: owner })}>
               <Plus className="mr-1 h-3.5 w-3.5" />
@@ -175,19 +219,13 @@ function PreAdviceList() {
           ) : undefined
         }
         search={{ value: keyword, onChange: setKeyword, placeholder: '搜预报标识或仓编码' }}
-        filters={
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <WmsStatusTabs
-              value={status}
-              onChange={setStatus}
-              tabs={[
-                { value: 'ALL', label: '全部', count: wholeList ? loaded.length : undefined },
-                ...statuses.map((code) => ({
-                  value: code,
-                  label: labelOf(code),
-                  count: wholeList ? loaded.filter((row) => row.status === code).length : undefined,
-                })),
-              ]}
+        extraFilters={
+          <>
+            <WmsFilterSelect
+              label="状态"
+              value={queue === allQueues ? '' : queue}
+              onChange={(next) => chooseQueue(next === '' ? allQueues : next)}
+              options={statuses.map((code) => ({ value: code, label: labelOf(code) }))}
             />
             <label className="inline-flex items-center gap-1.5 type-body text-idpxyz-textMuted">
               <span className="whitespace-nowrap">货主</span>
@@ -199,41 +237,43 @@ function PreAdviceList() {
                 {owners.length === 0 ? <option value="">没有货主客户账户</option> : null}
                 {owners.map((account) => (
                   <option key={account.accountId} value={account.accountId}>
-                    {account.customerPartyName ? `${account.accountId} · ${account.customerPartyName}` : account.accountId}
+                    {account.customerPartyName ? `${account.customerPartyName} · ${account.accountId}` : account.accountId}
                   </option>
                 ))}
               </select>
             </label>
-          </div>
+            {narrowed ? (
+              <button
+                type="button"
+                className="whitespace-nowrap type-body text-idpxyz-textMuted hover:text-idpxyz-textBright focus-visible:underline focus-visible:outline-none"
+                onClick={clearFilters}
+              >
+                清除
+              </button>
+            ) : null}
+          </>
         }
-        pagination={owner === '' ? undefined : pagination}
         columns={columns}
         rows={rows}
         rowKey={(row) => row.preAdviceId}
-        inspector={inspectorOf}
-        onRowOpen={(row) => openDocument(moduleId, [row.ownerAccount, row.preAdviceId])}
-        emptyRowsNote={
-          wholeList ? '这位货主名下没有这个状态的入库预报' : '这一页里没有这个状态的入库预报。读口不按状态筛，换一页再看。'
-        }
-        viewState={
-          owner === ''
-            ? drawer.lookups.loaded
-              ? {
-                  kind: 'empty',
-                  title: '还没有货主客户账户',
-                  description: '入库预报按货主归属。先在国际小包那边的「客户」里登记货主的客户账户。',
-                }
-              : { kind: 'loading', shape: 'table' }
-            : catalogueViewState(answer, loaded.length, retry, {
-                module: info,
-                endpoint: 'GET /warehouse-fulfillment-inbound-pre-advices',
-                emptyTitle: '这位货主还没有入库预报',
-                emptyDescription: '点右上角「代录入库预报」新建，或等货主经客户接口提交。',
-                narrowed: settled.trim() !== '',
-              })
-        }
+        selectedKey={openKey}
+        onSelect={setOpenKey}
+        rowAttention={(row) => lateOf(row, now) !== ''}
+        rowAlign="baseline"
+        noMatchText={noMatchText}
+        onClearFilters={narrowed ? clearFilters : undefined}
+        renderDetail={(key) => (
+          // 不按行重挂：重挂会把整栏卸掉再从加载骨架画起。换行留着上一张，新的读到再换。
+          <PreAdviceDocument
+            ownerAccount={owner}
+            preAdviceId={key}
+            panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }}
+          />
+        )}
+        viewState={viewState}
+        listFooter={owner !== '' && shownPagination && viewState.kind === 'ready' ? <CursorPagerBar pagination={shownPagination} /> : undefined}
       />
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={retry} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
     </>
   );
 }

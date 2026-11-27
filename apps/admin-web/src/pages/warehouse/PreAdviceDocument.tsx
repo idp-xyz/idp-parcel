@@ -1,4 +1,5 @@
 import { Button } from '@idpxyz/ui-primitives';
+import { useEffect, useRef } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
 import { formatInstant } from '../catalogue-view';
@@ -8,7 +9,7 @@ import { getPreAdviceDetail, type PreAdviceRecord } from './api';
 import { WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { preAdviceProgress } from './pre-advice-progress';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { inboundSheet } from './print-forms';
 import { openPrint } from './print-sheet';
 import { receiveStationHash } from './station/stations';
@@ -31,10 +32,33 @@ function loadPreAdvice(key: string) {
  * 入库预报页：货主说要来什么、实际收了多少、每一次收货记了什么。收货本身在作业台做，这里看进度并处理预报
  * （更新告知、撤回、完结、给收货差异结论）。
  */
-export function PreAdviceDocument({ ownerAccount, preAdviceId }: { ownerAccount: string; preAdviceId: string }) {
+export function PreAdviceDocument({
+  ownerAccount,
+  preAdviceId,
+  panel,
+}: {
+  ownerAccount: string;
+  preAdviceId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(receivingActionSpecs);
   const back = useReturnToList('warehouse-pre-advices');
-  const { answer, loading, reload } = useKeyedLoad(`${ownerAccount}\n${preAdviceId}`, loadPreAdvice);
+  const adviceKey = `${ownerAccount}\n${preAdviceId}`;
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(adviceKey, loadPreAdvice, { holdPrevious: panel !== undefined });
+  const shownKey = useRef(adviceKey);
+  useEffect(() => {
+    if (shownKey.current === adviceKey) return;
+    shownKey.current = adviceKey;
+    drawer.close();
+  }, [adviceKey, drawer]);
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
+  const afterWrite = panel ? panel.onChanged : reload;
   const record: PreAdviceRecord | undefined = answer?.kind === 'outcome' ? answer.body.preAdvice : undefined;
   const failure =
     readFailureMessage(answer) ??
@@ -71,10 +95,13 @@ export function PreAdviceDocument({ ownerAccount, preAdviceId }: { ownerAccount:
             </>
           ) : undefined
         }
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument('warehouse-pre-advices', [ownerAccount, preAdviceId]) } : undefined}
         stepper={
           record ? (
             <WmsStepper
@@ -327,7 +354,7 @@ export function PreAdviceDocument({ ownerAccount, preAdviceId }: { ownerAccount:
         active={drawer.active}
         lookups={drawer.lookups}
         onClose={drawer.close}
-        onSubmitted={reload}
+        onSubmitted={afterWrite}
       />
     </>
   );
