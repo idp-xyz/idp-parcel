@@ -8,6 +8,16 @@ export interface ReturnsOverviewState {
   /** 读到之前是 null。重读时留着上一份，读到了才换：做完一个动作之后表不该先闪成空白。 */
   answer: ReturnsOverviewAnswer | null;
   reload: () => void;
+  /** 点了刷新、这一问还在途。第一次读不算，免得一进页面就报「已刷新」。 */
+  reloading: boolean;
+}
+
+/** 列表的详情栏与列表共读这一份概览：换一行不用再读一遍，整份已经在手里。 */
+export interface ReturnsPanel {
+  onClose: () => void;
+  onChanged: () => void;
+  overview: ReturnsOverviewAnswer | null;
+  refreshing: boolean;
 }
 
 /**
@@ -17,19 +27,23 @@ export interface ReturnsOverviewState {
 export function useReturnsOverview(): ReturnsOverviewState {
   const [answer, setAnswer] = useState<ReturnsOverviewAnswer | null>(null);
   const [reloads, setReloads] = useState(0);
+  const [reloading, setReloading] = useState(false);
   const reload = useCallback(() => setReloads((count) => count + 1), []);
 
   useEffect(() => {
     let cancelled = false;
+    if (reloads > 0) setReloading(true);
     void getReturnsOverview().then((next) => {
-      if (!cancelled) setAnswer(next);
+      if (cancelled) return;
+      setAnswer(next);
+      setReloading(false);
     });
     return () => {
       cancelled = true;
     };
   }, [reloads]);
 
-  return { answer, reload };
+  return { answer, reload, reloading };
 }
 
 /**

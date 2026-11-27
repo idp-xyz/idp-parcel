@@ -1,7 +1,9 @@
-import { RefreshCw, TabletSmartphone } from 'lucide-react';
+import { useMemo, type ReactNode } from 'react';
+import { TabletSmartphone } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
-import type { InspectorAction, InspectorContent } from '../../templates/inspector';
+import { WorkbenchPageTemplate, toggleWorkbenchSort, type WorkbenchColumn, type WorkbenchSort } from '../../templates';
+import type { TemplateViewState } from '../../templates/state-slot';
+import { useTabViewState } from '../../templates/workspace-view-state';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
@@ -9,122 +11,156 @@ import { receivingActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer, type ActionDrawerControl } from './ActionDrawer';
 import type { ReturnReceiptRecord } from './api';
 import { DocumentLink } from './document-page';
+import { fitColumnWidth, nameOf } from './list-cells';
 import { returnReceiptKind, returnsModule as moduleId } from './return-address';
 import { ReceiptStatusBadge } from './return-badges';
 import {
-  awaitsDisposition,
   countByStatus,
   isReturnOrder,
   receiptInFilter,
-  returnDispositionText,
   returnReceiptNextStep,
   returnReceiptStatus,
   returnReceiptWaitingSince,
   sortReceipts,
-  type ReturnOrder,
   type ReturnReceiptStatus,
 } from './return-flow';
-import { openDocument } from './use-document';
+import { ReturnReceiptDocument } from './ReturnReceiptDocument';
 import type { QueueFilters } from './use-queue-filters';
-import type { ReturnsOverviewState } from './use-returns-overview';
+import type { ReturnsOverviewState, ReturnsPanel } from './use-returns-overview';
 import { elapsedLabel } from './waiting';
-import { labelOf, WmsBadge, WmsFilterSelect, WmsStatusTabs } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
 const info = moduleInfoById[moduleId];
-const mono = 'whitespace-nowrap font-mono type-body leading-4';
+const occurredKey = 'occurredAt';
+const allQueues = 'ALL';
+const homeQueue = 'AWAITING_DISPOSITION';
 
 // 签的先后：待处置是要人动手的一队，排第一；已处置、转待认领各是一个终点。概览整份都在手里，每个签都如实写数。
 const statusCodes: readonly ReturnReceiptStatus[] = ['AWAITING_DISPOSITION', 'DISPOSED', 'DIVERTED'];
 
-const goModule = (target: string) => {
-  window.location.hash = `#/${target}`;
-};
-
-/** 认不出货主的转了待认领到货，到货号读口答了就直接打开那一件，没答就去列表。 */
-function goUnclaimed(arrivalId: string | undefined) {
-  if (arrivalId) openDocument('warehouse-unclaimed', [arrivalId]);
-  else goModule('warehouse-unclaimed');
-}
+const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{content}</span>;
 
 /**
- * 退件到仓与回库处置：退件扫进暂存位后出现在这里。点作业事实号打开退货到仓。概览读口不分页、不接筛选维，状态、数量、货主与仓的
- * 筛选都在已取回的整份概览上做；要看别处刚发生的变动（比如作业台刚收的退件），点刷新重读。
+ * 退件到仓与回库处置：退件扫进暂存位后出现在这里。点一行在右边看这笔到仓，作业事实号仍进整页。概览读口不分页、不接筛选维，
+ * 状态、数量、货主与仓的筛选都在已取回的整份概览上做，所以没有翻页条。
  */
 export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOverviewState; filters: QueueFilters }) {
   const drawer = useActionDrawer(receivingActionSpecs);
-  const { answer, reload } = overview;
+  const { answer, reload, reloading } = overview;
+  const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-returns.receipt.open', null);
   const body = answer?.kind === 'outcome' ? answer.body : null;
   const all = body?.receipts ?? [];
   const loaded = body !== null;
 
-  // 数量是当前检索词、货主与仓之下各状态各有几笔；点哪个签只换看的那一队，不改数量。
+  // 数量是当前检索词、货主与仓之下各状态各有几笔；点哪一队只换看的那一队，不改数量。
   const inScope = all.filter((row) => receiptInFilter(row, filters));
   const counts = countByStatus(inScope, returnReceiptStatus);
-  const shown = filters.status === 'ALL' ? inScope : inScope.filter((row) => returnReceiptStatus(row) === filters.status);
-  // 选了待处置这一队，按到仓先后排，等得最久的在最上面；看别的，最新的在上面。看全部时没处置的排前。人改过排序就照他的。
-  const defaultOrder: ReturnOrder = filters.status === 'AWAITING_DISPOSITION' ? 'oldest' : 'newest';
+  const shown = filters.status === allQueues ? inScope : inScope.filter((row) => returnReceiptStatus(row) === filters.status);
+  // 选了待处置这一队，按到仓先后排，等得最久的在最上面；看别的，最新的在上面。看全部时没处置的排前。人点过表头就照他的。
+  const defaultOrder = filters.status === homeQueue ? 'oldest' : 'newest';
   const order = isReturnOrder(filters.sort) ? filters.sort : defaultOrder;
   const rows = sortReceipts(shown, order);
+  const sort: WorkbenchSort = { key: occurredKey, dir: order === 'oldest' ? 1 : -1 };
   const now = new Date();
+  const ownerNames = useMemo(
+    () => new Map(drawer.lookups.owners.map((account) => [account.accountId, account.customerPartyName ?? ''])),
+    [drawer.lookups.owners],
+  );
+  const warehouseNames = useMemo(
+    () => new Map(drawer.lookups.warehouses.map((warehouse) => [warehouse.warehouseCode, warehouse.name ?? ''])),
+    [drawer.lookups.warehouses],
+  );
+  const named = (names: ReadonlyMap<string, string>, code: string) => {
+    const name = nameOf(names, code);
+    return name ? <WmsTwoLine primary={name} secondary={code} code title={`${name} · ${code}`} /> : <span className="whitespace-nowrap font-mono">{code}</span>;
+  };
 
-  const columns: ListColumn<ReturnReceiptRecord>[] = [
+  // 开了详情栏之后列表变窄，次要的列收起：作业事实号、回库处置、已等与下一步一直在。
+  const columns: WorkbenchColumn<ReturnReceiptRecord>[] = [
     {
-      id: 'fact',
+      key: 'fact',
       header: '作业事实号',
-      className: 'whitespace-nowrap',
-      render: (row) => <DocumentLink moduleId={moduleId} parts={[returnReceiptKind, row.factId]} />,
+      width: fitColumnWidth,
+      render: (row) => (
+        <WmsTwoLine
+          primary={<DocumentLink moduleId={moduleId} parts={[returnReceiptKind, row.factId]} />}
+          secondary={row.trackingNumber}
+          code
+          title={`${row.factId}\n退件单号 ${row.trackingNumber}\n到仓于 ${formatInstant(row.occurredAt)}`}
+        />
+      ),
     },
-    { id: 'disp', header: '回库处置', render: (row) => <ReceiptStatusBadge receipt={row} /> },
-    { id: 'track', header: '退件单号', className: mono, render: (row) => row.trackingNumber },
-    { id: 'owner', header: '货主', className: mono, render: (row) => row.ownerAccount || '未认出' },
-    { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
-    { id: 'goods', header: '商品', className: mono, render: (row) => row.goodsCode },
-    { id: 'qty', header: '数量', className: mono, render: (row) => `${row.quantity} ${row.unit}` },
-    { id: 'state', header: '入库状态', render: (row) => <WmsBadge code={row.stockState} /> },
-    { id: 'waiting', header: '已等', align: 'right', className: 'whitespace-nowrap', render: (row) => elapsedLabel(returnReceiptWaitingSince(row), now) || '—' },
-    { id: 'next', header: '下一步', className: 'whitespace-nowrap', render: (row) => <NextStepCell row={row} drawer={drawer} /> },
+    { key: 'disp', header: '回库处置', width: fitColumnWidth, render: (row) => <ReceiptStatusBadge receipt={row} /> },
+    {
+      key: 'owner',
+      header: '货主',
+      width: fitColumnWidth,
+      minListWidth: 900,
+      render: (row) => (row.ownerAccount ? named(ownerNames, row.ownerAccount) : <span className="text-idpxyz-textMuted">未认出</span>),
+    },
+    { key: 'warehouse', header: '仓', width: fitColumnWidth, minListWidth: 1060, render: (row) => named(warehouseNames, row.warehouseCode) },
+    {
+      key: 'goods',
+      header: '商品',
+      minListWidth: 760,
+      render: (row) => <WmsTwoLine fill primary={<span className="font-mono">{row.goodsCode}</span>} title={row.goodsCode} />,
+    },
+    {
+      key: 'qty',
+      header: nowrap('数量'),
+      right: true,
+      width: fitColumnWidth,
+      minListWidth: 1100,
+      render: (row) => <span className="whitespace-nowrap tabular-nums">{`${row.quantity} ${row.unit}`}</span>,
+    },
+    { key: 'state', header: '入库状态', width: fitColumnWidth, minListWidth: 1160, render: (row) => <WmsBadge code={row.stockState} /> },
+    {
+      key: 'waiting',
+      header: nowrap('已等'),
+      right: true,
+      width: fitColumnWidth,
+      sortKey: occurredKey,
+      render: (row) => <span className="whitespace-nowrap tabular-nums">{elapsedLabel(returnReceiptWaitingSince(row), now) || '—'}</span>,
+    },
+    { key: 'next', header: nowrap('下一步'), width: fitColumnWidth, render: (row) => <NextStepCell row={row} drawer={drawer} /> },
   ];
 
-  const inspectorOf = (row: ReturnReceiptRecord): InspectorContent => {
-    const actions: InspectorAction[] = [{ label: '打开退货到仓', onRun: () => openDocument(moduleId, [returnReceiptKind, row.factId]) }];
-    if (awaitsDisposition(row) && drawer.has('return-disposition')) {
-      actions.push({ label: '回库处置', onRun: () => drawer.open('return-disposition', { factId: row.factId }) });
-    }
-    if (row.outcome === 'UNCLAIMED') {
-      actions.push({ label: '去待认领到货', onRun: () => goUnclaimed(row.arrivalId) });
-    }
-    return {
-      title: row.trackingNumber || row.factId,
-      subtitle: row.goodsCode,
-      sections: [
-        {
-          kind: 'summary',
-          fields: [
-            { label: '仓 / 库位', value: `${row.warehouseCode} · ${row.locationCode}`, mono: true },
-            { label: '数量', value: `${row.quantity} ${row.unit}`, mono: true },
-            { label: '货主', value: row.ownerAccount || '未认出', mono: true },
-            { label: '处置', value: returnDispositionText(row) },
-          ],
-        },
-        { kind: 'actions', actions },
-        { kind: 'audit', fields: [{ label: '作业事实号', value: row.factId, mono: true }] },
-      ],
-    };
+  const queueStats: WmsQueueStat[] = statusCodes.map((code) => ({
+    id: code,
+    label: labelOf(code),
+    count: loaded ? (counts[code] ?? 0) : null,
+    active: filters.status === code,
+    onClick: () => filters.setStatus(filters.status === code ? allQueues : code),
+  }));
+  const narrowed =
+    filters.keyword.trim() !== '' || filters.owner !== '' || filters.warehouse !== '' || filters.status !== homeQueue || filters.sort !== null;
+  const clearFilters = () => {
+    filters.setKeyword('');
+    filters.setOwner('');
+    filters.setWarehouse('');
+    filters.setStatus(homeQueue);
+    filters.setSort(null);
   };
+  const viewState: TemplateViewState = catalogueViewState(answer, all.length, reload, {
+    module: info,
+    endpoint: 'GET /warehouse-fulfillment-returns-overview',
+    emptyTitle: '还没有退件到仓记录',
+    emptyDescription: '在作业台扫描退件到仓后，记录会出现在这里。',
+  });
+  const panel: ReturnsPanel = { onClose: () => setOpenKey(null), onChanged: reload, overview: answer, refreshing: reloading };
 
   return (
     <>
-      <ListPageTemplate<ReturnReceiptRecord>
-        moduleId={moduleId}
+      <WorkbenchPageTemplate<ReturnReceiptRecord>
         title="到仓与回库处置"
-        description="退件扫进暂存位后出现在这里，数量是当前筛选下各状态有几笔，待处置的排在前面。还没处置的行可以做良品上架、转次品、销毁或退还货主，处置只记去向、不改库存账；认不出货主的转待认领，认领后另起一笔入库。点作业事实号打开退货到仓。"
-        headerActions={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={reload}>
-              <RefreshCw className="mr-1 h-3.5 w-3.5" />
-              刷新
-            </Button>
-            <Button type="button" variant="outline" onClick={() => goModule('warehouse-workstation')}>
+        viewStateKey="warehouse-returns-receipts"
+        subtitle="点一行在右边看这笔到仓、做它的下一步"
+        titleAside={<WmsQueueStats items={queueStats} />}
+        onRefresh={reload}
+        refreshing={reloading}
+        primaryAction={
+          <>
+            <Button type="button" variant="outline" onClick={() => { window.location.hash = '#/warehouse-workstation'; }}>
               <TabletSmartphone className="mr-1 h-3.5 w-3.5" />
               去作业台扫描到仓
             </Button>
@@ -133,26 +169,16 @@ export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOver
                 代录回库处置
               </Button>
             ) : null}
-          </div>
+          </>
         }
         search={{ value: filters.keyword, onChange: filters.setKeyword, placeholder: '搜事实号、退件单号、商品或货主' }}
-        sort={{
-          value: order,
-          onChange: filters.setSort,
-          options: [
-            { value: 'newest', label: '最新到仓的在前' },
-            { value: 'oldest', label: '等得最久的在前' },
-          ],
-        }}
-        filters={
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <WmsStatusTabs
-              value={filters.status}
-              onChange={filters.setStatus}
-              tabs={[
-                ...statusCodes.map((code) => ({ value: code, label: labelOf(code), count: loaded ? (counts[code] ?? 0) : undefined })),
-                { value: 'ALL', label: '全部', count: loaded ? inScope.length : undefined },
-              ]}
+        extraFilters={
+          <>
+            <WmsFilterSelect
+              label="状态"
+              value={filters.status === allQueues ? '' : filters.status}
+              onChange={(next) => filters.setStatus(next === '' ? allQueues : next)}
+              options={statusCodes.map((code) => ({ value: code, label: labelOf(code) }))}
             />
             <WmsFilterSelect
               label="货主"
@@ -160,37 +186,51 @@ export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOver
               onChange={filters.setOwner}
               options={drawer.lookups.owners.map((account) => ({
                 value: account.accountId,
-                label: account.customerPartyName ? `${account.accountId} · ${account.customerPartyName}` : account.accountId,
+                label: account.customerPartyName ? `${account.customerPartyName} · ${account.accountId}` : account.accountId,
               }))}
             />
             <WmsFilterSelect
               label="仓库"
               value={filters.warehouse}
               onChange={filters.setWarehouse}
-              options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: `${w.warehouseCode} · ${w.name}` }))}
+              options={drawer.lookups.warehouses.map((warehouse) => ({
+                value: warehouse.warehouseCode,
+                label: warehouse.name ? `${warehouse.name} · ${warehouse.warehouseCode}` : warehouse.warehouseCode,
+              }))}
             />
-          </div>
+            {narrowed ? (
+              <button
+                type="button"
+                className="whitespace-nowrap type-body text-idpxyz-textMuted hover:text-idpxyz-textBright focus-visible:underline focus-visible:outline-none"
+                onClick={clearFilters}
+              >
+                清除
+              </button>
+            ) : null}
+          </>
         }
         columns={columns}
         rows={rows}
         rowKey={(row) => row.factId}
-        inspector={inspectorOf}
-        onRowOpen={(row) => openDocument(moduleId, [returnReceiptKind, row.factId])}
-        emptyRowsNote="当前条件下没有退件到仓记录"
-        // 概览是整册：整册都没有到仓记录才是空态，筛没了说的是「这组条件下没有」，由 emptyRowsNote 说。
-        viewState={catalogueViewState(answer, all.length, reload, {
-          module: info,
-          endpoint: 'GET /warehouse-fulfillment-returns-overview',
-          emptyTitle: '还没有退件到仓记录',
-          emptyDescription: '在作业台扫描退件到仓后，记录会出现在这里。',
-        })}
+        selectedKey={openKey}
+        onSelect={setOpenKey}
+        rowAlign="baseline"
+        sort={sort}
+        onSort={(key) => {
+          const next = toggleWorkbenchSort(sort, key);
+          filters.setSort(next.dir === 1 ? 'oldest' : 'newest');
+        }}
+        noMatchText="当前筛选下没有退件到仓记录"
+        onClearFilters={clearFilters}
+        renderDetail={(key) => <ReturnReceiptDocument factId={key} panel={panel} />}
+        viewState={viewState}
       />
       <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
     </>
   );
 }
 
-/** 每行最右的那一格：这笔到仓记录此刻该做的一步。能就地做的是按钮，没有授予的只说在等什么。 */
+/** 每行最右的那一格：这笔到仓记录此刻该做的一步。能就地做的是一个钮，没有授予的只说在等什么。 */
 function NextStepCell({ row, drawer }: { row: ReturnReceiptRecord; drawer: ActionDrawerControl }) {
   const next = returnReceiptNextStep(returnReceiptStatus(row));
   if (next === null) return <span className="text-idpxyz-textMuted">—</span>;
@@ -200,8 +240,9 @@ function NextStepCell({ row, drawer }: { row: ReturnReceiptRecord; drawer: Actio
       type="button"
       size="sm"
       variant="outline"
+      className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
       onClick={(event) => {
-        // 行上的单击是预览：这一下只开表单，不顺带把行选进右栏。
+        // 行上的单击是开详情：这一下只开表单，不顺带把详情栏开合一次。
         event.stopPropagation();
         drawer.open('return-disposition', { factId: row.factId });
       }}

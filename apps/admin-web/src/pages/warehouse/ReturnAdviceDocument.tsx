@@ -2,7 +2,7 @@ import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { formatInstant } from '../catalogue-view';
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
-import { returnReceiptKind, returnsModule as moduleId } from './return-address';
+import { returnAdviceKind, returnReceiptKind, returnsModule as moduleId } from './return-address';
 import { ReceiptStatusBadge } from './return-badges';
 import {
   adviceLineNote,
@@ -19,8 +19,8 @@ import {
   type AdviceLineRow,
 } from './return-flow';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
-import { loadReturnsOverview } from './use-returns-overview';
+import { openDocument, useReturnToList } from './use-document';
+import { loadReturnsOverview, type ReturnsPanel } from './use-returns-overview';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsSubColumn } from './wms-ui';
 
 const mutedText = 'type-caption text-idpxyz-textMuted';
@@ -29,11 +29,16 @@ const mutedText = 'type-caption text-idpxyz-textMuted';
  * 退货预报页：货主或运营事先说有什么要退回来、到仓了没有、到仓之后怎么处置。退货只有概览一个读口，没有按号取一张的，所以这一页
  * 读整份概览，在里面按预报号认出这一张（概览是租户全册，认不出就是没有）。预报自己没有状态，进度与状态都是拿到仓记录对出来的
  * （returnAdviceStatus）。收退件在作业台做，预报页只在还没到仓时指路；到仓之后的处置落在每一笔到仓记录上，从这里点进去做。
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：栏与列表共读那一份概览，换一行就在这份里认，不再另读一遍。
  */
-export function ReturnAdviceDocument({ adviceKey }: { adviceKey: string }) {
+export function ReturnAdviceDocument({ adviceKey, panel }: { adviceKey: string; panel?: ReturnsPanel }) {
   const back = useReturnToList(moduleId);
   const complete = adviceKey !== '';
-  const { answer, loading, reload } = useKeyedLoad(complete ? adviceKey : null, loadReturnsOverview);
+  const own = useKeyedLoad(panel ? null : complete ? adviceKey : null, loadReturnsOverview);
+  const answer = panel ? panel.overview : own.answer;
+  const loading = panel ? panel.overview === null : own.loading;
+  const reloading = panel ? panel.refreshing : own.reloading;
+  const reload = panel ? panel.onChanged : own.reload;
   const overview = answer?.kind === 'outcome' ? answer.body : undefined;
   const advice = overview ? findReturnAdvice(overview.preAdvices ?? [], adviceKey) : undefined;
   const failure =
@@ -86,9 +91,11 @@ export function ReturnAdviceDocument({ adviceKey }: { adviceKey: string }) {
         ) : undefined
       }
       loading={loading}
+      reloading={reloading}
       error={failure}
       onBack={back}
       onReload={reload}
+      panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [returnAdviceKind, advice ? returnAdviceNumber(advice) : adviceKey]) } : undefined}
       stepper={
         track ? (
           <WmsStepper
