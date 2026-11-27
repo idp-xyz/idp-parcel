@@ -48,8 +48,8 @@ export function WmsDocumentPage({
   onBack: () => void;
   onReload?: () => void;
   /**
-   * 详情栏换到下一张、新的还没读到：头和正文留着上一张，只是不能点。新的到了由调用方换上，不先把整栏收成加载骨架。
-   * 关闭、整页打开、刷新不在此列，换的过程中也能用。
+   * 详情栏换到下一张、新的还没读到：头和正文留着上一张，只是不能点，也不另写一行提示——多出来的字会把栏撑一下再收回去。
+   * 新的到了由调用方换上。关闭、整页打开、刷新不在此列，换的过程中也能用。
    */
   busy?: boolean;
   /** 右栏：关联单据一类看不见也不缺的辅助内容，只在宽屏显示。 */
@@ -69,7 +69,7 @@ export function WmsDocumentPage({
         <div className={`shrink-0 px-4 ${ready && stepper ? 'pb-1 pt-3' : 'border-b border-idpxyz-border py-3'}`}>
           {/* 刷新、整页打开、关闭钉在右上角，不参与换行：栏再窄，关闭也在老地方。右边留出它们的位置。 */}
           <div className="relative pr-[6.5rem]">
-            <div className={`flex flex-wrap items-start gap-x-4 gap-y-2 ${busy ? 'pointer-events-none opacity-60' : ''}`}>
+            <div className={`flex flex-wrap items-start gap-x-4 gap-y-2 ${busy ? 'pointer-events-none' : ''}`}>
               <div className="min-w-0 flex-[1_1_18rem]">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="type-section font-semibold text-idpxyz-textBright">{kind}</span>
@@ -94,7 +94,6 @@ export function WmsDocumentPage({
               </Button>
             </div>
           </div>
-          {busy ? <p className="mt-2 type-caption text-idpxyz-textMuted">正在读取所选的这一张</p> : null}
         </div>
         {ready && stepper ? <div className="shrink-0 overflow-x-auto border-b border-idpxyz-border px-4 py-2.5">{stepper}</div> : null}
         {loading ? (
@@ -106,7 +105,7 @@ export function WmsDocumentPage({
             <StateSlot state={{ kind: 'error', title: `没有取到这${measure}${kind}`, description: error, onRetry: onReload }} />
           </div>
         ) : (
-          <div className={`min-h-0 flex-1 overflow-auto ${busy ? 'pointer-events-none opacity-60' : ''}`}>
+          <div className={`min-h-0 flex-1 overflow-auto ${busy ? 'pointer-events-none' : ''}`}>
             <div className="flex flex-col gap-5 p-4">
               {children}
               {aside}
