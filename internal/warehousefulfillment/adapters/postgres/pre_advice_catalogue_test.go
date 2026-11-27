@@ -67,6 +67,41 @@ func TestPreAdviceCatalogueListsOneOwnerAndFindsByDocumentNumber(t *testing.T) {
 	if err != nil || otherWarehouse.Total != 0 || len(otherWarehouse.Rows) != 0 {
 		t.Fatalf("别的仓 total=%d err=%v", otherWarehouse.Total, err)
 	}
+	inside, err := ports.PreAdvicePages.Decode(url.Values{
+		"expectedFrom":  {"2026-11-20T17:00:00Z"},
+		"expectedUntil": {"2026-11-20T19:00:00Z"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inWindow, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, inside)
+	if err != nil || inWindow.Total != 1 || len(inWindow.Rows) != 1 {
+		t.Fatalf("区间内 total=%d err=%v", inWindow.Total, err)
+	}
+	touching, err := ports.PreAdvicePages.Decode(url.Values{"expectedUntil": {"2026-11-20T18:00:00Z"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	onTheInstant, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, touching)
+	if err != nil || onTheInstant.Total != 1 {
+		t.Fatalf("终点等于预计到达 total=%d err=%v", onTheInstant.Total, err)
+	}
+	early, err := ports.PreAdvicePages.Decode(url.Values{"expectedUntil": {"2026-11-20T17:59:59Z"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, early)
+	if err != nil || before.Total != 0 {
+		t.Fatalf("终点早于预计到达 total=%d err=%v", before.Total, err)
+	}
+	after, err := ports.PreAdvicePages.Decode(url.Values{"expectedFrom": {"2026-11-21T00:00:00Z"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	later, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, after)
+	if err != nil || later.Total != 0 {
+		t.Fatalf("区间外 total=%d err=%v", later.Total, err)
+	}
 	none, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, closed)
 	if err != nil || none.Total != 0 || len(none.Rows) != 0 {
 		t.Fatalf("已完结 total=%d err=%v", none.Total, err)

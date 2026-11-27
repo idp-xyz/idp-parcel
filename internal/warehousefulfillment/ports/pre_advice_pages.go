@@ -16,5 +16,8 @@ var PreAdvicePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "status", Vocabulary: []string{"ADVISED", "RECEIVING", "CLOSED", "CANCELLED"}},
 		{Name: "warehouseCode"},
+		// 按现行告知的预计到达收窄。各收一个时刻，起点含、终点含；缺的一端不收窄。
+		{Name: "expectedFrom"},
+		{Name: "expectedUntil"},
 	},
 })

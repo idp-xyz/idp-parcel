@@ -342,6 +342,19 @@ func TestPreAdviceReadsOmitAnEmptyNumberAndKeepNoticeHistoryOnTheSingleRead(t *t
 	if got := queries.last.Filters["warehouseCode"]; len(got) != 1 || got[0] != "SYN-WH-01" {
 		t.Fatalf("仓没交给读口：%v", queries.last.Filters)
 	}
+	windowed := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&expectedFrom=2026-11-20T00:00:00Z")
+	if windowed.Code != http.StatusOK {
+		t.Fatalf("按预计到达 %d %s", windowed.Code, windowed.Body.String())
+	}
+	if got := queries.last.Filters["expectedFrom"]; len(got) != 1 || got[0] != "2026-11-20T00:00:00Z" {
+		t.Fatalf("预计到达没交给读口：%v", queries.last.Filters)
+	}
+	queries.calls = 0
+	badWindow := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&expectedUntil=tomorrow")
+	assertProblem(t, "bad arrival window", badWindow, http.StatusBadRequest, "MALFORMED_REQUEST")
+	if queries.calls != 0 {
+		t.Fatal("写坏的时刻不该问读口")
+	}
 	queries.calls = 0
 	unknown := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&status=NOPE")
 	assertProblem(t, "unknown status", unknown, http.StatusBadRequest, "MALFORMED_REQUEST")

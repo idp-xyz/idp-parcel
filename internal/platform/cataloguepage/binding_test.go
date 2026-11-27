@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
@@ -246,4 +247,50 @@ func TestTheTwoStatementsShareTheConditions(t *testing.T) {
 	if got := plan.PageSQL("account_id, revision", "listed"); got != want {
 		t.Fatalf("取页：得 %q", got)
 	}
+}
+
+func TestAComparisonFilterKeepsTheInstantAfterTheColumnsAreCopied(t *testing.T) {
+	spec := accountsSpec()
+	spec.Name = "SYN-accounts-window"
+	spec.Filters = append(spec.Filters, cataloguepage.FilterDimension{Name: "expectedFrom"}, cataloguepage.FilterDimension{Name: "expectedUntil"})
+	catalogue := cataloguepage.MustCatalogue(spec)
+	columns := accountsColumns()
+	columns.Filters["expectedFrom"] = "expected_at"
+	columns.Filters["expectedUntil"] = "expected_at"
+	columns.Comparisons = map[string]string{"expectedFrom": ">=", "expectedUntil": "<="}
+	binding := catalogue.MustBind(columns)
+	query := decodeOn(t, catalogue, url.Values{
+		"expectedFrom":  {"2026-11-20T17:00:00Z"},
+		"expectedUntil": {"2026-11-20T18:00:00.000Z"},
+	})
+	plan := planOf(t, binding, query)
+	if want := "(tenant_id = $1) AND expected_at >= $2 AND expected_at <= $3"; plan.Where != want {
+		t.Fatalf("条件：得 %q", plan.Where)
+	}
+	from := time.Date(2026, 11, 20, 17, 0, 0, 0, time.UTC)
+	until := time.Date(2026, 11, 20, 18, 0, 0, 0, time.UTC)
+	if len(plan.Args) != 3 || !plan.Args[1].(time.Time).Equal(from) || !plan.Args[2].(time.Time).Equal(until) {
+		t.Fatalf("参数：得 %#v", plan.Args)
+	}
+	bad := decodeOn(t, catalogue, url.Values{"expectedFrom": {"tomorrow"}})
+	if _, err := binding.Plan(bad, "tenant_id = $1", []any{tenant}, 20); err == nil {
+		t.Fatal("写坏的时刻应被拒")
+	}
+	repeated := decodeOn(t, catalogue, url.Values{"expectedFrom": {"2026-11-20T17:00:00Z", "2026-11-21T17:00:00Z"}})
+	if _, err := binding.Plan(repeated, "tenant_id = $1", []any{tenant}, 20); err == nil {
+		t.Fatal("比较维给了两个时刻应被拒")
+	}
+	columns.Comparisons["expectedFrom"] = "LIKE"
+	if _, err := catalogue.Bind(columns); err == nil {
+		t.Fatal("比较符不是 >= 或 <= 应被拒")
+	}
+}
+
+func decodeOn(t *testing.T, catalogue *cataloguepage.Catalogue, values url.Values) cataloguepage.Query {
+	t.Helper()
+	query, err := catalogue.Decode(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return query
 }

@@ -27,16 +27,26 @@ func NewPreAdviceCatalogue(db *bentopg.DB) (*PreAdviceCatalogue, error) {
 var _ ports.PreAdviceRead = (*PreAdviceCatalogue)(nil)
 
 const preAdviceListed = `WITH listed AS (
-        SELECT pre_advice_id, warehouse_code, status
-          FROM warehouse_fulfillment.inbound_pre_advice
-         WHERE tenant_id = $1 AND owner_account_id = $2
+        SELECT advice.pre_advice_id, advice.warehouse_code, advice.status, notice.expected_at
+          FROM warehouse_fulfillment.inbound_pre_advice AS advice
+          JOIN warehouse_fulfillment.inbound_pre_advice_notice AS notice
+            ON notice.tenant_id = advice.tenant_id
+           AND notice.pre_advice_id = advice.pre_advice_id
+           AND notice.version = (
+                SELECT MAX(later.version)
+                  FROM warehouse_fulfillment.inbound_pre_advice_notice AS later
+                 WHERE later.tenant_id = advice.tenant_id
+                   AND later.pre_advice_id = advice.pre_advice_id
+           )
+         WHERE advice.tenant_id = $1 AND advice.owner_account_id = $2
      )`
 
 var preAdviceListBinding = ports.PreAdvicePages.MustBind(cataloguepage.Columns{
-	Sorts:    map[string]string{"preAdviceId": "pre_advice_id"},
-	Identity: []string{"pre_advice_id"},
-	Keyword:  []string{"pre_advice_id", "warehouse_code"},
-	Filters:  map[string]string{"status": "status", "warehouseCode": "warehouse_code"},
+	Sorts:       map[string]string{"preAdviceId": "pre_advice_id"},
+	Identity:    []string{"pre_advice_id"},
+	Keyword:     []string{"pre_advice_id", "warehouse_code"},
+	Filters:     map[string]string{"status": "status", "warehouseCode": "warehouse_code", "expectedFrom": "expected_at", "expectedUntil": "expected_at"},
+	Comparisons: map[string]string{"expectedFrom": ">=", "expectedUntil": "<="},
 })
 
 func (catalogue *PreAdviceCatalogue) ListPreAdvices(

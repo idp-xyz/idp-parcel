@@ -536,11 +536,15 @@ export function listOwnerPreAdvices(
   pageSize?: number,
   status?: string,
   warehouseCode?: string,
+  expectedFrom?: string,
+  expectedUntil?: string,
 ): Promise<ApiResult<PreAdviceListBody>> {
   const params = new URLSearchParams({ ownerAccount });
   if (keyword.trim() !== '') params.set('q', keyword.trim());
   if (status !== undefined && status.trim() !== '') params.set('status', status.trim());
   if (warehouseCode !== undefined && warehouseCode.trim() !== '') params.set('warehouseCode', warehouseCode.trim());
+  if (expectedFrom !== undefined && expectedFrom.trim() !== '') params.set('expectedFrom', expectedFrom.trim());
+  if (expectedUntil !== undefined && expectedUntil.trim() !== '') params.set('expectedUntil', expectedUntil.trim());
   if (after !== null && after !== '') params.set('after', after);
   if (pageSize !== undefined) params.set('pageSize', String(pageSize));
   return exchangeMasterData<PreAdviceListBody>(`/warehouse-fulfillment-inbound-pre-advices?${params.toString()}`);

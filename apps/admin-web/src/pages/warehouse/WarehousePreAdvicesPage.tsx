@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Plus } from 'lucide-react';
-import { Button } from '@idpxyz/ui-primitives';
+import { Button, DateTimePicker } from '@idpxyz/ui-primitives';
 import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
 import type { TemplateViewState } from '../../templates/state-slot';
 import { useTabViewState } from '../../templates/workspace-view-state';
@@ -45,7 +45,9 @@ function loadPreAdvices(conditions: CatalogueConditions, after: string | null) {
     });
   }
   const status = conditions.filters?.status?.[0] ?? '';
-  return listOwnerPreAdvices(owner, conditions.q ?? '', after, conditions.pageSize, status);
+  const expectedFrom = conditions.filters?.expectedFrom?.[0] ?? '';
+  const expectedUntil = conditions.filters?.expectedUntil?.[0] ?? '';
+  return listOwnerPreAdvices(owner, conditions.q ?? '', after, conditions.pageSize, status, '', expectedFrom, expectedUntil);
 }
 
 /** 还没开始收、预计到达已经过去的预报算迟到；收货中的已经到了。 */
@@ -63,14 +65,20 @@ function PreAdviceList() {
   const [picked, setPicked] = useTabViewState('warehouse-pre-advices.owner', '');
   const [keyword, setKeyword] = useTabViewState('warehouse-pre-advices.keyword', '');
   const [status, setStatus] = useTabViewState('warehouse-pre-advices.status', allQueues);
+  const [expectedFrom, setExpectedFrom] = useTabViewState('warehouse-pre-advices.expectedFrom', '');
+  const [expectedUntil, setExpectedUntil] = useTabViewState('warehouse-pre-advices.expectedUntil', '');
   const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-pre-advices.open', null);
   const [refreshes, setRefreshes] = useState(0);
   const settled = useSettledKeyword(keyword);
   // 预报按货主归属，读口必须带货主：人没挑过、或挑的已经不在名册里，就取名册里的第一家。
   const owner = owners.some((account) => account.accountId === picked) ? picked : (owners[0]?.accountId ?? '');
   const queue = statuses.includes(status as (typeof statuses)[number]) ? status : allQueues;
-  const base: CatalogueConditions = { selectors: { ownerAccount: owner }, q: settled };
-  const conditions: CatalogueConditions = queue === allQueues ? base : { ...base, filters: { status: [queue] } };
+  const arrivalWindow: Record<string, readonly string[]> = {};
+  if (expectedFrom !== '') arrivalWindow.expectedFrom = [expectedFrom];
+  if (expectedUntil !== '') arrivalWindow.expectedUntil = [expectedUntil];
+  const base: CatalogueConditions = { selectors: { ownerAccount: owner }, q: settled, filters: arrivalWindow };
+  const conditions: CatalogueConditions =
+    queue === allQueues ? base : { ...base, filters: { ...arrivalWindow, status: [queue] } };
   const { answer, previous, pagination, retry } = useCatalogueCursor(conditions, loadPreAdvices);
   const held = heldCataloguePage(answer, previous, (body) => body.preAdvices.length > 0);
   const rows = answer?.kind === 'outcome' ? answer.body.preAdvices : (held?.body.preAdvices ?? []);
@@ -206,10 +214,12 @@ function PreAdviceList() {
     attention: code === 'ADVISED' && rows.some((row) => lateOf(row, now) !== ''),
     onClick: () => chooseQueue(queue === code ? allQueues : code),
   }));
-  const narrowed = settled.trim() !== '' || queue !== allQueues;
+  const narrowed = settled.trim() !== '' || queue !== allQueues || expectedFrom !== '' || expectedUntil !== '';
   const clearFilters = () => {
     setKeyword('');
     setStatus(allQueues);
+    setExpectedFrom('');
+    setExpectedUntil('');
   };
   const viewState: TemplateViewState =
     owner === ''
@@ -273,6 +283,25 @@ function PreAdviceList() {
                 ))}
               </select>
             </label>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="whitespace-nowrap type-body text-idpxyz-textMuted">预计到达</span>
+              <DateTimePicker
+                size="sm"
+                className="w-auto min-w-[11rem]"
+                placeholder="起点"
+                messages={{ placeholder: '起点', timeLabel: '时刻' }}
+                value={expectedFrom === '' ? undefined : new Date(expectedFrom)}
+                onChange={(date) => setExpectedFrom(date ? date.toISOString() : '')}
+              />
+              <DateTimePicker
+                size="sm"
+                className="w-auto min-w-[11rem]"
+                placeholder="终点"
+                messages={{ placeholder: '终点', timeLabel: '时刻' }}
+                value={expectedUntil === '' ? undefined : new Date(expectedUntil)}
+                onChange={(date) => setExpectedUntil(date ? date.toISOString() : '')}
+              />
+            </span>
             {narrowed ? (
               <button
                 type="button"

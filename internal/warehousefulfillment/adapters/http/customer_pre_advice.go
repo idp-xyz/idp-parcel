@@ -297,6 +297,10 @@ func NewListCustomerInboundPreAdvicesEndpoint(intake CustomerInboundPreAdvicePor
 			writeCustomerQueryProblem(response, request, err)
 			return
 		}
+		if err := arrivalWindowOf(pageQuery); err != nil {
+			writeCustomerQueryProblem(response, request, err)
+			return
+		}
 		limit := operatorCatalogueReadLimit
 		if pageQuery.PageSize > 0 {
 			limit = pageQuery.PageSize

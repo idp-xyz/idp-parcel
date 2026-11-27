@@ -2,8 +2,10 @@ package warehousehttp
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
@@ -87,11 +89,20 @@ func NewQueryPreAdvicesEndpoint(intake CatalogueIntake, queries PreAdviceQueries
 			writePageQueryProblem(response, err)
 			return
 		}
+		if err := arrivalWindowOf(pageQuery); err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
 		if pageQuery.PageSize > 0 {
 			query.Limit = pageQuery.PageSize
 		}
 		page, err := queries.ListPreAdvices(request.Context(), query.Tenant, owner, query.Limit, pageQuery)
 		if err != nil {
+			var malformed *cataloguepage.MalformedQuery
+			if errors.As(err, &malformed) {
+				writePageQueryProblem(response, malformed)
+				return
+			}
 			slog.ErrorContext(request.Context(), "inbound pre-advice list did not form an answer", "ownerAccount", owner.String())
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
@@ -178,6 +189,23 @@ func preAdvicePageQuery(request *http.Request) (cataloguepage.Query, error) {
 	}
 	delete(values, ownerAccountQueryKey)
 	return ports.PreAdvicePages.Decode(values)
+}
+
+// arrivalWindowOf 核预计到达的两端。各只收一个 RFC 3339 时刻；没给的一端不在筛选里。
+func arrivalWindowOf(query cataloguepage.Query) error {
+	for _, name := range []string{"expectedFrom", "expectedUntil"} {
+		values := query.Filters[name]
+		if len(values) == 0 {
+			continue
+		}
+		if len(values) != 1 {
+			return &cataloguepage.MalformedQuery{Reason: "筛选维 " + name + " 只收一个时刻"}
+		}
+		if _, err := time.Parse(time.RFC3339Nano, values[0]); err != nil {
+			return &cataloguepage.MalformedQuery{Reason: "筛选维 " + name + " 要写成 RFC 3339 时刻"}
+		}
+	}
+	return nil
 }
 
 func preAdviceIdentityOf(request *http.Request) (domain.OwnerAccountID, domain.PreAdviceID, string) {
