@@ -285,8 +285,8 @@ function WaveList() {
         onClearFilters={clearFilters}
         renderDetail={(key) => <WaveDocument key={key} waveId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }} />}
         viewState={viewState}
+        listFooter={shownPagination && viewState.kind === 'ready' ? <CursorPagerBar pagination={shownPagination} /> : undefined}
       />
-      {shownPagination && viewState.kind === 'ready' ? <CursorPagerBar pagination={shownPagination} /> : null}
       <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
       <WaveRuleRunDialog
         open={ruleRunOpen}

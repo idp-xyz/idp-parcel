@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { cursorPageSummary, cursorPagerControls, type ListCursorPaginationProps } from '../../templates';
 
-// ReviewFlowTemplate 与 WorkbenchPageTemplate 没有 pagination 槽，翻页条由页面自己摆。字句与两钮能不能按取模板导出的
+// 翻页条由页面自己摆，放进工作台的 listFooter 就只占左边列表那一栏。字句与两钮能不能按取模板导出的
 // cursorPageSummary / cursorPagerControls，与 ListPageTemplate 的翻页条同一口径。
 export function CursorPager({ pagination }: { pagination: ListCursorPaginationProps }) {
   const { page, size, total, next, onPrevious, onNext } = pagination;

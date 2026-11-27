@@ -91,6 +91,11 @@ export interface WorkbenchPageTemplateProps<Row> {
   rowAlign?: 'middle' | 'baseline';
   sort?: WorkbenchSort;
   onSort?: (key: string) => void;
+  /**
+   * 列表栏的底。翻页条放这里：它说的是左边这一栏的页，详情打开后也不伸到右边那一栏下面。
+   * 不给时列表栏底下什么也不加。
+   */
+  listFooter?: ReactNode;
   /** ready 态下筛没了时的那句话；与 viewState 的空态（册上本来就没有）是两件事。 */
   noMatchText: string;
   onClearFilters?: () => void;
@@ -151,6 +156,7 @@ export function WorkbenchPageTemplate<Row>({
   sort,
   onSort,
   noMatchText,
+  listFooter,
   onClearFilters,
   renderDetail,
   viewState,
@@ -574,6 +580,7 @@ export function WorkbenchPageTemplate<Row>({
               </div>
             )}
           </div>
+          {listFooter}
         </div>
         {detailOpen && selectedKey !== null && (
           <>
