@@ -192,10 +192,17 @@ func (store *Waves) LoadSortPlan(ctx context.Context, tenant domain.TenantID, wa
 		request := ports.SortPlanRequest{
 			Request: item.Request, DocumentNumber: item.DocumentNumber, Owner: item.Owner, Status: item.Status, Totes: item.Totes,
 		}
+		pending := false
 		for _, line := range item.Lines {
 			request.Lines = append(request.Lines, ports.SortPlanLine{
 				Goods: line.Goods, Unit: line.Unit, Picked: line.Picked, Sorted: line.Sorted, Open: line.Open,
 			})
+			pending = pending || line.Picked > 0 || line.Open > 0
+		}
+		// 在这个波次里一件都没拣到、也没有任务等着拣的请求不列：它的格都按 0 件记了短拣，没有货要分，
+		// 列出来只会让这个波次永远显得「没分完」。它回到了已预占，等有货了再放。
+		if !pending {
+			continue
 		}
 		plan.Requests = append(plan.Requests, request)
 	}
