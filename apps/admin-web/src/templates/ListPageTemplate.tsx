@@ -276,6 +276,38 @@ function DisabledSlot({ label, reason }: { label: string; reason: string }) {
   );
 }
 
+// 页码形、并且调用方给了页大小档位：与游标条同一句中文，不走 vendor Pagination 的英文文案。
+function NumberedPageBar({ pagination }: { pagination: ListPaginationProps }) {
+  const pages = pagination.pageSize > 0 ? Math.max(1, Math.ceil(pagination.total / pagination.pageSize)) : 1;
+  return (
+    <nav aria-label="翻页" className="flex items-center justify-between gap-4 type-caption text-idpxyz-textMuted">
+      <span className="tabular-nums">{`第 ${pagination.page} / ${pages} 页 · 共 ${pagination.total} 条`}</span>
+      <div className="flex items-center gap-1">
+        <CursorPageSizeSelect
+          control={
+            pagination.onPageSizeChange && pagination.pageSizeOptions
+              ? { value: pagination.pageSize, options: pagination.pageSizeOptions, onChange: pagination.onPageSizeChange }
+              : undefined
+          }
+        />
+        <Button variant="ghost" size="sm" disabled={pagination.page <= 1} onClick={() => pagination.onPageChange(pagination.page - 1)}>
+          <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+          上一页
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={pagination.page >= pages}
+          onClick={() => pagination.onPageChange(pagination.page + 1)}
+        >
+          下一页
+          <ChevronRight className="h-3 w-3" aria-hidden="true" />
+        </Button>
+      </div>
+    </nav>
+  );
+}
+
 // 游标形的翻页条。不用 vendor Pagination：它由 total 推能不能翻下一页，答不了「next 为 null 即末页」与「total 为 null 不显总数」，
 // 文案也是英文。上一页 / 下一页用 disabled 而不是 DisabledSlot 那种 aria-disabled + 说明：到头了不是「功能没接」，没什么要解释的。
 function CursorPaginationBar({ pagination }: { pagination: ListCursorPaginationProps }) {
@@ -711,6 +743,8 @@ export function ListPageTemplate<Row>({
             <div className="border-t border-idpxyz-border px-4 py-1.5 shrink-0">
               {pagination.mode === 'cursor' ? (
                 <CursorPaginationBar pagination={pagination} />
+              ) : pagination.pageSizeOptions ? (
+                <NumberedPageBar pagination={pagination} />
               ) : (
                 <Pagination
                   variant="table"
