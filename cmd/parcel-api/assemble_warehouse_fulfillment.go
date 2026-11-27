@@ -1179,6 +1179,18 @@ func (registration transactionalWave) RunWaveRule(ctx context.Context, command w
 	})
 }
 
+func (registration transactionalWave) AssignWave(ctx context.Context, command warehouseapp.AssignWaveCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.AssignWave(txCtx, command)
+	})
+}
+
+func (registration transactionalWave) ClaimWave(ctx context.Context, command warehouseapp.ClaimWaveCommand) (warehouseapp.WaveResult, error) {
+	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
+		return registration.inner.ClaimWave(txCtx, command)
+	})
+}
+
 func (registration transactionalWave) Sort(ctx context.Context, command warehouseapp.SortCommand) (warehouseapp.WaveResult, error) {
 	return inTransaction(ctx, registration.transactor, func(txCtx context.Context) (warehouseapp.WaveResult, error) {
 		return registration.inner.Sort(txCtx, command)

@@ -312,6 +312,21 @@ export function logout(): void {
   window.location.assign('/');
 }
 
+/**
+ * 这个会话的操作者在后端各册上记的那个串：「发行方#sub」。后端认的是访问令牌，这里取的是身份令牌的声明——
+ * 同一个发行方给同一个人签的两张令牌，这一对是一样的。它只用来在界面上认「这是不是我」（比如派给谁的波次），
+ * 不当授权用：能不能做以后端的答复为准。声明里缺一格就答 null，不猜。
+ */
+export function operatorIdOf(session: OidcSession | null): string | null {
+  const issuer = session?.claims.iss;
+  const subject = session?.claims.sub;
+  return typeof issuer === 'string' && issuer !== '' && typeof subject === 'string' && subject !== '' ? `${issuer}#${subject}` : null;
+}
+
+export async function currentOperatorId(): Promise<string | null> {
+  return operatorIdOf(await ensureSession());
+}
+
 /** 展示用：从声明里挑一个人能认出来的名字。 */
 export function displayName(session: OidcSession): string {
   const claims = session.claims;

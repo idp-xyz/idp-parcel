@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { currentOperatorId } from '../../../auth/oidc';
 import { getSettingsOverview, getWave, listTotes, listWaves } from '../api';
 import { workFactSpecs } from '../work-fact';
 import { browserStorage } from './device-binding';
@@ -189,7 +190,10 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
     let cancelled = false;
     setRefreshing(true);
     setRefreshError(null);
-    void loadPickQueue({ warehouse, wave, list: listWaves, one: getWave }).then((answer) => {
+    // 先认出此刻是谁在拣：看本仓全部波次时，派给了别人的波次不摆。认不出就不按拣货人筛。
+    void currentOperatorId()
+      .then((me) => loadPickQueue({ warehouse, wave, me, list: listWaves, one: getWave }))
+      .then((answer) => {
       if (cancelled) return;
       setRefreshing(false);
       if (answer.kind === 'failed') {

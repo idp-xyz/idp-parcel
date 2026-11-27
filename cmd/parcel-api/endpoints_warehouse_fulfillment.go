@@ -512,6 +512,13 @@ func init() {
 			"/warehouse-fulfillment-wave-rule-runs": {
 				method: http.MethodPost, face: decisionFace(accessidentity.DecisionWaveRelease), warehouseFulfillment: true,
 			},
+			"/warehouse-fulfillment-wave-assignments": {
+				method: http.MethodPost, face: decisionFace(accessidentity.DecisionWaveRelease), warehouseFulfillment: true,
+			},
+			"/warehouse-fulfillment-wave-claims": {
+				method: http.MethodPost, face: workFactFace(accessidentity.WorkScopeWarehouse),
+				ownIntake: true, warehouseFulfillment: true,
+			},
 			"/warehouse-fulfillment-tote-requirements": {
 				method: http.MethodPost, face: registryWriteFace(), warehouseFulfillment: true,
 			},
@@ -1012,6 +1019,8 @@ func init() {
 			toteRequirement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveRule := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			waveRuleRun := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			waveAssignment := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
+			waveClaim := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentConnector := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentStatement := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
 			agentResult := http.Handler(warehousehttp.NewNotEnabledEndpoint(http.MethodPost))
@@ -1233,6 +1242,7 @@ func init() {
 				toteRequirement = warehousehttp.NewRegisterToteRequirementEndpoint(channels.totes(), wiring.waves)
 				waveRule = warehousehttp.NewRegisterWaveRuleEndpoint(channels.waveRules(), wiring.waves)
 				waveRuleRun = warehousehttp.NewRunWaveRuleEndpoint(channels.waveRelease(), wiring.waves)
+				waveAssignment = warehousehttp.NewAssignWaveEndpoint(channels.waveRelease(), wiring.waves)
 				agentConnector = warehousehttp.NewRegisterAgentConnectorEndpoint(channels.agentIntake(), wiring.agents)
 				agentStatement = warehousehttp.NewRecordAgentStatementEndpoint(channels.agentIntake(), wiring.agents)
 				agentResult = warehousehttp.NewRecordAgentResultEndpoint(channels.agentIntake(), wiring.agents)
@@ -1251,7 +1261,9 @@ func init() {
 				if wiring.pickIntake != nil {
 					pick = warehousehttp.NewRecordPickEndpoint(wiring.pickIntake, wiring.waves)
 					sortPut = warehousehttp.NewRecordSortEndpoint(wiring.pickIntake, wiring.waves)
+					waveClaim = warehousehttp.NewClaimWaveEndpoint(wiring.pickIntake, wiring.waves)
 				} else {
+					waveClaim = warehousehttp.NewClaimWaveEndpoint(plainPick, wiring.waves)
 					pick = warehousehttp.NewRecordPickEndpoint(plainPick, wiring.waves)
 					sortPut = warehousehttp.NewRecordSortEndpoint(plainPick, wiring.waves)
 				}
@@ -1442,6 +1454,8 @@ func init() {
 				{Pattern: "/warehouse-fulfillment-tote-requirements", Handler: toteRequirement},
 				{Pattern: "/warehouse-fulfillment-wave-rules", Handler: waveRule},
 				{Pattern: "/warehouse-fulfillment-wave-rule-runs", Handler: waveRuleRun},
+				{Pattern: "/warehouse-fulfillment-wave-assignments", Handler: waveAssignment},
+				{Pattern: "/warehouse-fulfillment-wave-claims", Handler: waveClaim},
 				{Pattern: "/warehouse-fulfillment-agent-connectors", Handler: agentConnector},
 				{Pattern: "/warehouse-fulfillment-agent-stock-statements", Handler: agentStatement},
 				{Pattern: "/warehouse-fulfillment-agent-outbound-results", Handler: agentResult},

@@ -18,7 +18,7 @@ import { ToteList } from './ToteList';
 import { WaveRuleRunDialog } from './WaveRuleRunDialog';
 import { openDocument, useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
-import { activeWaveStatuses, settledWaveStatuses, wavePickingLabel, waveProgress, waveStatusLabel } from './wave-flow';
+import { activeWaveStatuses, settledWaveStatuses, waveAssigneeName, wavePickingLabel, waveProgress, waveStatusLabel } from './wave-flow';
 import { WaveDocument } from './WaveDocument';
 import { WmsBadge, WmsFilterSelect, WmsProgress, WmsStatusTabs } from './wms-ui';
 
@@ -33,6 +33,7 @@ const columns: ListColumn<WaveRecord>[] = [
   { id: 'profile', header: '件型', className: 'whitespace-nowrap', render: (row) => (row.singleUnit ? '单品单件' : '—') },
   { id: 'picking', header: '拣货方式', className: 'whitespace-nowrap', render: (row) => wavePickingLabel(row) },
   { id: 'rule', header: '成波规则', className: mono, render: (row) => row.ruleCode ?? '—' },
+  { id: 'assignee', header: '拣货人', className: mono, render: (row) => waveAssigneeName(row.assignee) ?? '—' },
   {
     id: 'requests',
     header: '出库单',

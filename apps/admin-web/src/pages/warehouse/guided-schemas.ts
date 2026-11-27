@@ -682,6 +682,18 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
       },
     ],
   },
+  'wave-assign': {
+    fields: [
+      { path: 'waveId', label: '波次号', kind: 'text', required: true, placeholder: 'WAVE-01' },
+      {
+        path: 'assignee',
+        label: '拣货人（不填是取消指派）',
+        kind: 'text',
+        placeholder: 'https://issuer.example#operator-sub',
+        hint: '填操作者标识「发行方#sub」，与「放波次人」一格是同一种写法',
+      },
+    ],
+  },
   'wave-rule': {
     fields: [
       { path: 'warehouse', label: '仓编码', kind: 'text', required: true, placeholder: 'SYN-WH-01' },

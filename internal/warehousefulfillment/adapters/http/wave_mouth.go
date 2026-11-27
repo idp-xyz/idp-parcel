@@ -22,6 +22,8 @@ type WaveService interface {
 	RegisterToteRequirement(ctx context.Context, command application.RegisterToteRequirementCommand) (application.WaveResult, error)
 	RegisterWaveRule(ctx context.Context, command application.RegisterWaveRuleCommand) (application.WaveResult, error)
 	RunWaveRule(ctx context.Context, command application.RunWaveRuleCommand) (application.WaveRuleRunResult, error)
+	AssignWave(ctx context.Context, command application.AssignWaveCommand) (application.WaveResult, error)
+	ClaimWave(ctx context.Context, command application.ClaimWaveCommand) (application.WaveResult, error)
 	Adopt(ctx context.Context, command application.AdoptStrategyCommand) (application.WaveResult, error)
 	Pick(ctx context.Context, command application.PickCommand) (application.WaveResult, error)
 	Sort(ctx context.Context, command application.SortCommand) (application.WaveResult, error)
@@ -60,6 +62,7 @@ type WaveReleaseIntake interface {
 	IntakeShortageSplit(ctx context.Context, request *http.Request) (application.SplitShortageCommand, error)
 	IntakeToteRelease(ctx context.Context, request *http.Request) (application.ReleaseToteCommand, error)
 	IntakeWaveRuleRun(ctx context.Context, request *http.Request) (application.RunWaveRuleCommand, error)
+	IntakeWaveAssignment(ctx context.Context, request *http.Request) (application.AssignWaveCommand, error)
 }
 
 type OperatorWaveIntake struct {
@@ -290,7 +293,7 @@ func NewPickIntake(authenticator InternalJobAuthenticator) (*PickIntake, error) 
 }
 
 func (intake *PickIntake) Intake(ctx context.Context, request *http.Request) (application.PickCommand, error) {
-	tenant, reference, err := admitWarehouseWork(ctx, request, intake.authenticator)
+	tenant, operator, reference, err := admitWarehouseWorker(ctx, request, intake.authenticator)
 	if err != nil {
 		return application.PickCommand{}, err
 	}
@@ -302,6 +305,7 @@ func (intake *PickIntake) Intake(ctx context.Context, request *http.Request) (ap
 		return application.PickCommand{}, &malformedRequest{reason: httpapi.HeaderWorkScopeReference + " must equal warehouse"}
 	}
 	command.Tenant = tenant
+	command.Operator = operator
 	return command, nil
 }
 
@@ -663,15 +667,21 @@ func confirmationDecisionEndpoint(run func(*http.Request) (application.WaveResul
 
 // admitWarehouseWork 先认证再读载荷。返回的参照留给调用方去对载荷里的仓。
 func admitWarehouseWork(ctx context.Context, request *http.Request, authenticator InternalJobAuthenticator) (domain.TenantID, string, error) {
+	tenant, _, reference, err := admitWarehouseWorker(ctx, request, authenticator)
+	return tenant, reference, err
+}
+
+// admitWarehouseWorker 与 admitWarehouseWork 同一道认证，另交回是谁在做这件事：派工要认拣货的人。
+func admitWarehouseWorker(ctx context.Context, request *http.Request, authenticator InternalJobAuthenticator) (domain.TenantID, string, string, error) {
 	device, scopeKind, reference, err := warehouseWorkScope(request)
 	if err != nil {
-		return domain.TenantID{}, "", err
+		return domain.TenantID{}, "", "", err
 	}
-	tenant, _, _, err := authenticator.AuthenticateInternalJob(ctx, httpapi.BearerToken(request), device, scopeKind, reference)
+	tenant, operator, _, err := authenticator.AuthenticateInternalJob(ctx, httpapi.BearerToken(request), device, scopeKind, reference)
 	if err != nil {
-		return domain.TenantID{}, "", err
+		return domain.TenantID{}, "", "", err
 	}
-	return tenant, reference, nil
+	return tenant, operator.String(), reference, nil
 }
 
 func writeWaveAnswer(response http.ResponseWriter, request *http.Request, result application.WaveResult) {

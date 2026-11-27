@@ -115,6 +115,9 @@ export const warehouseActionOutcomeLabels: Record<string, string> = {
   SPLIT: '已拆单',
   ALLOCATED: '已放波次并生成拣货任务',
   WITHDRAWN: '已从波次撤出，出库单回到已预占',
+  ASSIGNED: '已指派：这个波次归这位拣货人拣',
+  UNASSIGNED: '已取消指派：这个波次谁都可以拣、可以领',
+  WAVE_ASSIGNED_TO_OTHER: '这个波次已经派给了别人',
   WAVE_RULE_NOT_FOUND: '这个仓没有登记过这条成波规则',
   WAVE_RULE_DEACTIVATED: '这条成波规则已经停用',
   NOTHING_TO_RELEASE: '没有可放的出库单，一个波次也没放出',
@@ -537,6 +540,17 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     grant: 'registry',
     snapshotHint:
       '填 warehouse、revision（从 1 起连续）、required（true 必须用箱 / false 不要求）。登记成必须之后，不带箱号的拣货不成立。没登记的仓带不带箱都收。' +
+      noActorNote,
+  },
+  {
+    id: 'wave-assign',
+    label: '指派拣货人',
+    title: '把一个波次派给一个人拣，或取消指派',
+    endpoint: '/warehouse-fulfillment-wave-assignments',
+    grant: 'WAVE_RELEASE',
+    snapshotHint:
+      '填 waveId 与 assignee（拣货人的操作者标识，「发行方#sub」，可从「操作者授予」页或别的波次的拣货人一格抄）；不填 assignee 是取消指派。' +
+      '派了之后，别人拣这个波次里的任务后端不收；拣货的人也可以在拣货工位上自己领。已完成、已取消的波次不能派。' +
       noActorNote,
   },
   {

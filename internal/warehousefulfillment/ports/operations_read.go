@@ -142,6 +142,8 @@ type WaveRow struct {
 	BatchPick bool
 	// RuleCode 是放出这个波次的成波规则；由人点单放的波次为空。
 	RuleCode string
+	// Assignee 是这个波次派给了谁拣（操作者标识）；没派为空。
+	Assignee string
 	Requests []string
 	// Withdrawn 是 Requests 里已经撤出的那几张。
 	Withdrawn []string

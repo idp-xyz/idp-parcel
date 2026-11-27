@@ -4,6 +4,9 @@ import { ReloginButton } from '../../../auth/ReloginButton';
 import { TechnicalDetails, httpRows, type TechnicalRow } from '../../../components/TechnicalDetails';
 import { statusToneBanner } from '../../../components/status-tone';
 import type { WorkDeviceRecord } from '../../work-devices/api';
+import { claimWave } from '../api';
+import { waveAssigneeName } from '../wave-flow';
+import { waveClaimNote } from './pick-claim';
 import { QuantityDialog, ShortPickDialog } from './PickDialogs';
 import { acceptingScans, pickActions, pickProgress, pickScreen, queueNotes, scanPlaceholder, shortPickPlan, type PickState } from './pick-flow';
 import { allWavesChoice, waveChoices, waveOfChoice, type PickCell, type PickQueue } from './pick-queue';
@@ -138,6 +141,18 @@ export function PickStation({ device, wave, onChangeDevice }: PickStationProps) 
 
   const queue = load.phase === 'ready' ? load.queue : null;
   const actions = state === null ? null : pickActions(state);
+  const namedWave = wave === null ? undefined : queue?.waves.find((entry) => entry.waveId === wave);
+  const [claiming, setClaiming] = useState(false);
+  const [claimNote, setClaimNote] = useState<string | null>(null);
+  const claim = async () => {
+    if (wave === null || claiming) return;
+    setClaiming(true);
+    const answer = await claimWave(device.deviceId, warehouse, wave);
+    setClaiming(false);
+    setClaimNote(waveClaimNote(answer));
+    // 领到了、或发现已经派给了别人，屏上「拣货人」那一格都旧了：重读。
+    if (answer.kind === 'outcome') session.refresh();
+  };
   const screen = state === null ? null : pickScreen(state);
 
   const context =
@@ -147,6 +162,18 @@ export function PickStation({ device, wave, onChangeDevice }: PickStationProps) 
           {wave === null ? '全部波次' : '只做这个波次'}
           <WaveChooser wave={wave} queue={queue} disabled={!actions?.refresh} onOpenChange={setWaveOpen} />
         </span>
+        {/* 指名了一个波次时写明它派给了谁；还没人领的可以在这里领下来，领了之后别人拣它的格后端不收。 */}
+        {namedWave ? (
+          <span className="flex flex-wrap items-center gap-2">
+            拣货人 <span className="font-mono text-idpxyz-text">{waveAssigneeName(namedWave.assignee) ?? '还没人领'}</span>
+            {namedWave.assignee ? null : (
+              <button type="button" className={stationButtonClass} disabled={claiming || !actions?.refresh} onClick={() => void claim()}>
+                {claiming ? '正在领…' : '领这个波次'}
+              </button>
+            )}
+            {claimNote ? <span className="text-idpxyz-text">{claimNote}</span> : null}
+          </span>
+        ) : null}
         <span className="flex flex-wrap items-center gap-2">
           放货位 <span className="font-mono text-idpxyz-text">{state.staging ?? '还没扫'}</span>
           <button type="button" className={stationButtonClass} disabled={!actions?.changeStaging} onClick={session.changeStagingLocation}>

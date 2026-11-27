@@ -363,7 +363,7 @@ func waveRowBodyOf(row ports.WaveRow) waveRowBody {
 	}
 	return waveRowBody{
 		WaveID: row.WaveID, WarehouseCode: row.WarehouseCode, Operator: row.Operator,
-		Prefetch: row.Prefetch, Status: row.Status, ReleasedAt: rfc3339(row.ReleasedAt), SingleUnit: row.SingleUnit, BatchPick: row.BatchPick, RuleCode: row.RuleCode,
+		Prefetch: row.Prefetch, Status: row.Status, ReleasedAt: rfc3339(row.ReleasedAt), SingleUnit: row.SingleUnit, BatchPick: row.BatchPick, RuleCode: row.RuleCode, Assignee: row.Assignee,
 		Requests: requests, WithdrawnRequests: withdrawn, Tasks: tasks,
 	}
 }
@@ -595,7 +595,9 @@ type waveRowBody struct {
 	// BatchPick 是合并拣货的波次：货合在一起拿，拿回来再按出库单分拣。
 	BatchPick bool `json:"batchPick"`
 	// RuleCode 是放出这个波次的成波规则；由人点单放的波次不带。
-	RuleCode string   `json:"ruleCode,omitempty"`
+	RuleCode string `json:"ruleCode,omitempty"`
+	// Assignee 是这个波次派给了谁拣（操作者标识）；没派不带。
+	Assignee string   `json:"assignee,omitempty"`
 	Requests []string `json:"requests"`
 	// WithdrawnRequests 是 requests 里已经撤出的那几张。
 	WithdrawnRequests []string       `json:"withdrawnRequests"`

@@ -116,6 +116,41 @@ func TestAWaveRuleDocumentNamesItsConditionsAndARunNamesTheRule(t *testing.T) {
 	}
 }
 
+// 指派拣货人带波次号与拣货人，不带拣货人是取消指派、空白的不收；领波次带仓与波次号，领的人取自认证。
+func TestWaveAssignmentAndClaimDocuments(t *testing.T) {
+	assigned, err := registrationjson.AssignWaveCommand(strings.NewReader(`{"waveId":"WAVE-01","assignee":" https://issuer.example.invalid#picker-1 "}`))
+	if err != nil || assigned.Wave.String() != "WAVE-01" || assigned.Assignee != "https://issuer.example.invalid#picker-1" || assigned.Operator.String() != "" {
+		t.Fatalf("指派译出的命令 %+v：%v", assigned, err)
+	}
+	cleared, err := registrationjson.AssignWaveCommand(strings.NewReader(`{"waveId":"WAVE-01"}`))
+	if err != nil || cleared.Assignee != "" {
+		t.Fatalf("取消指派译出的命令 %+v：%v", cleared, err)
+	}
+	for name, body := range map[string]string{
+		"没有波次号":  `{"assignee":"picker-1"}`,
+		"拣货人是空白": `{"waveId":"WAVE-01","assignee":"  "}`,
+		"带了操作者":  `{"waveId":"WAVE-01","assignee":"picker-1","registrant":"someone"}`,
+		"带了别的格":  `{"waveId":"WAVE-01","assignedBy":"someone"}`,
+	} {
+		if _, err := registrationjson.AssignWaveCommand(strings.NewReader(body)); err == nil {
+			t.Errorf("指派，%s：没有被拒", name)
+		}
+	}
+	claim, err := registrationjson.ClaimWaveCommand(strings.NewReader(`{"warehouse":"SYN-WH-01","waveId":"WAVE-01"}`))
+	if err != nil || claim.Warehouse.String() != "SYN-WH-01" || claim.Wave.String() != "WAVE-01" || claim.Operator != "" {
+		t.Fatalf("领波次译出的命令 %+v：%v", claim, err)
+	}
+	for name, body := range map[string]string{
+		"没有仓":     `{"waveId":"WAVE-01"}`,
+		"没有波次号":   `{"warehouse":"SYN-WH-01"}`,
+		"自己写了领的人": `{"warehouse":"SYN-WH-01","waveId":"WAVE-01","operator":"picker-1"}`,
+	} {
+		if _, err := registrationjson.ClaimWaveCommand(strings.NewReader(body)); err == nil {
+			t.Errorf("领波次，%s：没有被拒", name)
+		}
+	}
+}
+
 // 分拣的一次投放带波次、请求、商品、件数与箱号，一样都不能少；件数是正整数。
 func TestASortPutNamesTheWaveTheRequestTheGoodsAndTheTote(t *testing.T) {
 	full := `{"factId":"SYN-FACT-01","warehouse":"SYN-WH-01","waveId":"WAVE-01","requestId":"OBR-1","goodsCode":"SYN-GOODS-01","quantity":2,"toteCode":"SYN-TOTE-01"}`

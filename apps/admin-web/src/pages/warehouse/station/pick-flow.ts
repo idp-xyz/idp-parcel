@@ -735,6 +735,7 @@ export const pickOutcomeLabels: Readonly<Record<string, string>> = {
   TOTE_NOT_FOUND: '这个仓没有登记过这个箱号，这一笔没有记。点「下一格」，这一格排到队尾，回头再来时换一个登记过的箱扫。',
   TOTE_NOT_ACCEPTING: '这个箱已经停用，这一笔没有记。点「下一格」，这一格排到队尾，回头再来时换一个箱扫。',
   TOTE_REQUIRED: '这个仓拣货必须用周转箱，这一笔没带箱号，没有记。点「下一格」，这一格排到队尾，回头再来时先扫箱。',
+  WAVE_ASSIGNED_TO_OTHER: '这一格所在的波次派给了别人，这一笔没有记。货放回原处；点「下一格」，这一格从你的队列里去掉。',
 };
 
 /**
@@ -745,9 +746,11 @@ export function toteRefusedAfter(outcome: string | undefined): boolean {
   return outcome === 'TOTE_IN_USE' || outcome === 'TOTE_NOT_FOUND' || outcome === 'TOTE_NOT_ACCEPTING' || outcome === 'TOTE_REQUIRED';
 }
 
-/** 后端答这条任务已经不能拣：「下一格」要把它从队列里去掉，而不是挪到队尾。 */
+/**
+ * 后端答这条任务已经不能拣，或不归这个人拣（波次派给了别人）：「下一格」要把它从队列里去掉，而不是挪到队尾。
+ */
 export function taskGoneAfter(outcome: string | undefined): boolean {
-  return outcome === 'CONTENT_CONFLICT' || outcome === 'WAVE_NOT_FOUND';
+  return outcome === 'CONTENT_CONFLICT' || outcome === 'WAVE_NOT_FOUND' || outcome === 'WAVE_ASSIGNED_TO_OTHER';
 }
 
 function successText(sub: PickSubmission, staging: string | null, verdict: WorkFactVerdict): string {
@@ -993,6 +996,8 @@ export interface QueueScope {
   wavesRead: number;
   truncated: boolean;
   waveMissing: boolean;
+  /** 还有格没拣、但派给了别人所以没摆的波次数。 */
+  assignedElsewhere?: number;
 }
 
 /**
@@ -1005,6 +1010,9 @@ export function queueNotes(queue: QueueScope, wave: string | null): string[] {
     notes.push(`没有找到波次 ${wave}（它可能不属于本仓）。`);
   } else if (queue.truncated) {
     notes.push(`只看了最近放出的 ${queue.wavesRead} 个还没拣完的波次；更早放出的波次里还有没拣的格，这里看不到。`);
+  }
+  if ((queue.assignedElsewhere ?? 0) > 0) {
+    notes.push(`另有 ${queue.assignedElsewhere} 个波次派给了别人，它们的格没有摆在这里。要看其中一个，在「换波次」里选它。`);
   }
   return notes;
 }

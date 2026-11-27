@@ -1,5 +1,5 @@
 import type { RegistrationResponseBody } from '../../components/registration';
-import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import { exchangeMasterData, postMasterData, postWorkFact, type ApiResult } from '../catalogue-api';
 import type { CatalogueConditions, CataloguePage } from '../catalogue-query';
 import { catalogueRequestPath } from '../catalogue-query';
 import { asCatalogueRegistration, asStockImportWrite, type CatalogueRegistrationBody, type StockImportWriteBody } from './answers';
@@ -624,6 +624,8 @@ export interface WaveRecord {
   batchPick?: boolean;
   /** 放出这个波次的成波规则；由人点单放的波次不带。 */
   ruleCode?: string;
+  /** 这个波次派给了谁拣（操作者标识，「发行方#sub」）；没派、没人领不带。 */
+  assignee?: string;
   requests: string[];
   /** `requests` 里已经撤出的那几张：它们在这个波次里的任务作废了，请求回到了已预占。 */
   withdrawnRequests: string[];
@@ -852,6 +854,25 @@ export interface SortPlanBody {
 export function getSortPlan(waveId: string): Promise<ApiResult<SortPlanBody>> {
   const params = new URLSearchParams({ waveId });
   return exchangeMasterData<SortPlanBody>(`/warehouse-fulfillment-wave-sort?${params.toString()}`);
+}
+
+export interface WaveClaimBody {
+  /** ASSIGNED 领到了；EXISTING_RESULT 本来就是自己的；WAVE_ASSIGNED_TO_OTHER 已经派给了别人。 */
+  outcome: string;
+  /** 这个波次此刻派给了谁。 */
+  assignee?: string;
+}
+
+/**
+ * 拣货的人在工位上领一个波次：没人领的归自己，之后别人拣它的任务后端不收。走作业事实那一面（设备与作业范围请求头），
+ * 认的是拣货这一种作业事实的授予。
+ */
+export function claimWave(deviceId: string, warehouse: string, waveId: string): Promise<ApiResult<WaveClaimBody>> {
+  return postWorkFact<WaveClaimBody>(
+    '/warehouse-fulfillment-wave-claims',
+    { warehouse, waveId },
+    { deviceId, scopeKind: 'WAREHOUSE', scopeReference: warehouse },
+  );
 }
 
 /** 按波次号读一张。逐字相等，只在本租户；没有这个波次答 `WAVE_NOT_FOUND`、不带 `wave`，不答 404。 */

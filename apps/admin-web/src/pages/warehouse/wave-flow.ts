@@ -43,6 +43,16 @@ export function wavePickingNote(wave: WavePicking): string {
   return wave.singleUnit ? '合着拿：单品单件，复核打包时扫货配单，不用分拣' : '逐单拣：货在拣货时就按出库单分开';
 }
 
+/**
+ * 拣货人示成什么：操作者标识是「发行方#sub」，发行方那一截每个人都一样、又长，界面上只摆 sub 那一截；
+ * 没有井号的原样摆。没派、没人领答 null，由调用的地方说「还没人领」。
+ */
+export function waveAssigneeName(assignee: string | undefined): string | null {
+  if (!assignee) return null;
+  const mark = assignee.lastIndexOf('#');
+  return mark < 0 || mark === assignee.length - 1 ? assignee : assignee.slice(mark + 1);
+}
+
 export const waveSteps: readonly TrackStep[] = [
   { id: 'RELEASED', label: '已放出' },
   { id: 'PICKING', label: '拣货中' },

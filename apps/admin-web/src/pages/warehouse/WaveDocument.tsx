@@ -118,6 +118,16 @@ export function WaveDocument({ waveId }: { waveId: string }) {
                   <span className="type-caption text-idpxyz-textMuted">撤出后出库单回到已预占，可以再放进别的波次；拣过的单撤不了，要走截单。</span>
                 ) : null}
               </WmsAsideBlock>
+              <WmsAsideBlock title="拣货人">
+                <span className="break-all font-mono type-caption text-idpxyz-text">{wave.assignee ?? '还没派，谁都可以拣'}</span>
+                {/* 拣完或取消的波次没有可派的任务。 */}
+                {drawer.has('wave-assign') && (wave.status === 'RELEASED' || wave.status === 'PICKING') ? (
+                  <Button type="button" size="sm" variant="outline" onClick={() => drawer.open('wave-assign', { waveId, assignee: wave.assignee ?? '' })}>
+                    {wave.assignee ? '改派或取消指派' : '指派拣货人'}
+                  </Button>
+                ) : null}
+                <span className="type-caption text-idpxyz-textMuted">派了之后别人拣这个波次的任务后端不收；拣货的人也可以在拣货工位上自己领。</span>
+              </WmsAsideBlock>
               <WmsAsideBlock title="放波次">
                 <span className="break-all font-mono type-caption text-idpxyz-textMuted">操作者 {wave.operator}</span>
                 <span className="type-caption text-idpxyz-textMuted">

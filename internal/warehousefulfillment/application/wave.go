@@ -64,6 +64,12 @@ const (
 	WaveRuleDeactivated
 	// WaveNothingToRelease 是按规则没有放出任何波次：没有圈到单，或圈到的都分配不出。
 	WaveNothingToRelease
+	// WaveAssigned 是波次派给了一个人（由人指派，或拣货的人自己领）。
+	WaveAssigned
+	// WaveUnassigned 是取消了指派。
+	WaveUnassigned
+	// WaveAssignedToOther 是这个波次派给了别人：领不了，它的任务也拣不了。
+	WaveAssignedToOther
 )
 
 func (outcome WaveOutcome) String() string {
@@ -154,6 +160,12 @@ func (outcome WaveOutcome) String() string {
 		return "WAVE_RULE_DEACTIVATED"
 	case WaveNothingToRelease:
 		return "NOTHING_TO_RELEASE"
+	case WaveAssigned:
+		return "ASSIGNED"
+	case WaveUnassigned:
+		return "UNASSIGNED"
+	case WaveAssignedToOther:
+		return "WAVE_ASSIGNED_TO_OTHER"
 	default:
 		return ""
 	}
@@ -165,7 +177,12 @@ type WaveResult struct {
 	tasks   []ports.PickTask
 	// exceptions 只在选了「放行能放的」的放波次里有：点名了而没放进波次的请求。
 	exceptions []ReleaseException
+	// assignee 只在派工、领波次与因派工被拒的答复里有：这个波次此刻派给了谁。
+	assignee string
 }
+
+// Assignee 是这个波次此刻派给了谁；与派工无关的答复为空。
+func (result WaveResult) Assignee() string { return result.assignee }
 
 // Exceptions 是这一次放波次点名了而没放进波次的请求和各自的缘由。
 func (result WaveResult) Exceptions() []ReleaseException {
@@ -204,6 +221,9 @@ type PickCommand struct {
 	Warehouse domain.WarehouseCode
 	// Tote 是拣货的人把这一格的货放进去的周转箱。没带就是没用箱。
 	Tote domain.ToteCode
+	// Operator 是拣货的人的操作者标识，取自作业事实的认证。波次派给了别人时，他拣这个波次里待执行的任务不成立。
+	// 为空是调用方没有交出是谁在拣，这时不按派工拦。
+	Operator string
 }
 
 // AdoptStrategyCommand 采用随产品发布的参考分配策略。没采用时放波次答未配置。
@@ -503,6 +523,16 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 			return WaveResult{outcome: WaveExisting, tasks: []ports.PickTask{task}}, nil
 		}
 		return WaveResult{outcome: WaveConflict}, nil
+	}
+	// 派工只管待执行的任务：作废之后才拣出来的（上面那一支）照记——货已经在手里了，要有回库任务接住它。
+	if command.Operator != "" {
+		assignee, err := handler.waves.WaveAssignee(ctx, command.Tenant, task.WaveID)
+		if err != nil {
+			return WaveResult{}, fmt.Errorf("pick: %w", err)
+		}
+		if assignee != "" && assignee != command.Operator {
+			return WaveResult{outcome: WaveAssignedToOther, assignee: assignee}, nil
+		}
 	}
 	if command.Quantity <= 0 || command.Quantity > task.Quantity-task.Picked {
 		return WaveResult{outcome: WaveContentInvalid}, nil
