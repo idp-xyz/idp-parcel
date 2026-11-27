@@ -117,8 +117,10 @@ type WaveTaskRow struct {
 	TaskID    string
 	RequestID string
 	// OwnerAccount 是这条任务所属出库请求的货主。商品编码只在一位货主之内唯一，合并同一种货时靠它分开。
-	OwnerAccount    string
-	LocationCode    string
+	OwnerAccount string
+	LocationCode string
+	// ZoneCode 是这条任务所在库位此刻所属的库区；库位在册上认不出时为空。按库区派工靠它对上人。
+	ZoneCode        string
 	StagingLocation string
 	GoodsCode       string
 	Unit            string
@@ -126,6 +128,12 @@ type WaveTaskRow struct {
 	Quantity        int64
 	Picked          int64
 	Status          string
+}
+
+// WaveZoneAssigneeRow 是波次里一个库区单独派给了谁。
+type WaveZoneAssigneeRow struct {
+	ZoneCode string
+	Assignee string
 }
 
 // WaveRow 是运营查阅波次列表的一行。
@@ -144,7 +152,9 @@ type WaveRow struct {
 	RuleCode string
 	// Assignee 是这个波次派给了谁拣（操作者标识）；没派为空。
 	Assignee string
-	Requests []string
+	// ZoneAssignees 是单独派了人的库区；没单独派的库区照 Assignee 走。
+	ZoneAssignees []WaveZoneAssigneeRow
+	Requests      []string
 	// Withdrawn 是 Requests 里已经撤出的那几张。
 	Withdrawn []string
 	Tasks     []WaveTaskRow

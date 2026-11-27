@@ -686,6 +686,13 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
     fields: [
       { path: 'waveId', label: '波次号', kind: 'text', required: true, placeholder: 'WAVE-01' },
       {
+        path: 'zoneCode',
+        label: '库区（不填是派整个波次）',
+        kind: 'text',
+        placeholder: 'SYN-ZONE-A',
+        hint: '填了就只派这个波次里这一个库区的格；没单独派的库区照整个波次的指派走',
+      },
+      {
         path: 'assignee',
         label: '拣货人（不填是取消指派）',
         kind: 'text',

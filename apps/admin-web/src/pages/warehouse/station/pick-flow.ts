@@ -1031,7 +1031,7 @@ export function queueNotes(queue: QueueScope, wave: string | null): string[] {
     notes.push(`只看了最近放出的 ${queue.wavesRead} 个还没拣完的波次；更早放出的波次里还有没拣的格，这里看不到。`);
   }
   if ((queue.assignedElsewhere ?? 0) > 0) {
-    notes.push(`另有 ${queue.assignedElsewhere} 个波次派给了别人，它们的格没有摆在这里。要看其中一个，在「换波次」里选它。`);
+    notes.push(`另有 ${queue.assignedElsewhere} 个波次派给了别人（整个波次，或其中几个库区），那些格没有摆在这里。要看其中一个，在「换波次」里选它。`);
   }
   return notes;
 }

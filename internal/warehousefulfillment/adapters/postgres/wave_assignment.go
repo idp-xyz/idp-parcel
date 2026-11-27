@@ -57,6 +57,48 @@ func (store *Waves) WaveAssignee(ctx context.Context, tenant domain.TenantID, wa
 	return valueOrEmpty(assignee), nil
 }
 
+func (store *Waves) WaveZoneAssignee(ctx context.Context, tenant domain.TenantID, wave domain.WaveID, zone domain.ZoneCode) (string, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return "", err
+	}
+	var assignee string
+	err = querier.QueryRow(ctx,
+		`SELECT assignee FROM warehouse_fulfillment.wave_zone_assignee WHERE tenant_id = $1 AND wave_id = $2 AND zone_code = $3`,
+		tenant.String(), wave.String(), zone.String()).Scan(&assignee)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("wave zone assignee: %w", err)
+	}
+	return assignee, nil
+}
+
+func (store *Waves) SaveWaveZoneAssignee(ctx context.Context, tenant domain.TenantID, wave domain.WaveID, zone domain.ZoneCode, assignee, by string, at time.Time) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save wave zone assignee: %w", err)
+	}
+	if assignee == "" {
+		if _, err := executor.Exec(ctx,
+			`DELETE FROM warehouse_fulfillment.wave_zone_assignee WHERE tenant_id = $1 AND wave_id = $2 AND zone_code = $3`,
+			tenant.String(), wave.String(), zone.String()); err != nil {
+			return fmt.Errorf("save wave zone assignee: %w", err)
+		}
+		return nil
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.wave_zone_assignee (tenant_id, wave_id, zone_code, assignee, assigned_by, assigned_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT (tenant_id, wave_id, zone_code) DO UPDATE
+		    SET assignee = EXCLUDED.assignee, assigned_by = EXCLUDED.assigned_by, assigned_at = EXCLUDED.assigned_at`,
+		tenant.String(), wave.String(), zone.String(), assignee, by, at.UTC()); err != nil {
+		return fmt.Errorf("save wave zone assignee: %w", err)
+	}
+	return nil
+}
+
 func (store *Waves) SaveWaveAssignee(ctx context.Context, tenant domain.TenantID, wave domain.WaveID, assignee, by string, at time.Time) error {
 	executor, err := store.db.RequireExecutor(ctx)
 	if err != nil {

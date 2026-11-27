@@ -533,8 +533,9 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 		return WaveResult{outcome: WaveConflict}, nil
 	}
 	// 派工只管待执行的任务：作废之后才拣出来的（上面那一支）照记——货已经在手里了，要有回库任务接住它。
+	// 任务所在的库区单独派了人就认那个人，没有才认整个波次派给的人。
 	if command.Operator != "" {
-		assignee, err := handler.waves.WaveAssignee(ctx, command.Tenant, task.WaveID)
+		assignee, err := handler.pickAssignee(ctx, command.Tenant, owning.Warehouse(), task)
 		if err != nil {
 			return WaveResult{}, fmt.Errorf("pick: %w", err)
 		}

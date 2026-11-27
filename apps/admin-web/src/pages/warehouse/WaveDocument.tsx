@@ -12,6 +12,7 @@ import { pickListSheet } from './print-forms';
 import { packStationHash, pickStationHash, sortStationHash } from './station/stations';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
+import { waveZones } from './wave-assign';
 import { WaveAssignDialog } from './WaveAssignDialog';
 import { operatorLabel } from '../operator-access/operator-names';
 import { useOperatorNames } from '../operator-access/use-operator-names';
@@ -129,13 +130,21 @@ export function WaveDocument({ waveId }: { waveId: string }) {
                 <span className="break-all font-mono type-caption text-idpxyz-text" title={wave.assignee}>
                   {operatorLabel(wave.assignee, names) ?? '还没派，谁都可以拣'}
                 </span>
+                {/* 单独派了人的库区逐个列出；没列出的库区照上面整个波次的指派走。 */}
+                {(wave.zoneAssignees ?? []).map((entry) => (
+                  <span key={entry.zoneCode} className="break-all font-mono type-caption text-idpxyz-text" title={entry.assignee}>
+                    库区 {entry.zoneCode}：{operatorLabel(entry.assignee, names)}
+                  </span>
+                ))}
                 {/* 拣完或取消的波次没有可派的任务。 */}
                 {drawer.has('wave-assign') && (wave.status === 'RELEASED' || wave.status === 'PICKING') ? (
                   <Button type="button" size="sm" variant="outline" onClick={() => setAssignOpen(true)}>
                     {wave.assignee ? '改派或取消指派' : '指派拣货人'}
                   </Button>
                 ) : null}
-                <span className="type-caption text-idpxyz-textMuted">派了之后别人拣这个波次的任务后端不收；拣货的人也可以在拣货工位上自己领。</span>
+                <span className="type-caption text-idpxyz-textMuted">
+                  派了之后别人拣这个波次的任务后端不收；拣货的人也可以在拣货工位上自己领。任务分在几个库区时，可以按库区各派一个人。
+                </span>
               </WmsAsideBlock>
               <WmsAsideBlock title="放波次">
                 <span className="break-all font-mono type-caption text-idpxyz-textMuted" title={wave.operator}>
@@ -216,6 +225,8 @@ export function WaveDocument({ waveId }: { waveId: string }) {
           waveId={waveId}
           warehouse={wave.warehouseCode}
           assignee={wave.assignee}
+          zones={waveZones(wave.tasks)}
+          zoneAssignees={wave.zoneAssignees}
           names={names}
         />
       ) : null}
