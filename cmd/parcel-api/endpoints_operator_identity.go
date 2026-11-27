@@ -21,6 +21,9 @@ type operatorIdentityWiring struct {
 	operatorGrantRevocations   http.Handler
 	workDeviceRegistrations    http.Handler
 	workDeviceDeactivations    http.Handler
+	// 操作者姓名：登在操作者接入管理面，读在主数据与运营查阅读面。
+	operatorNames    http.Handler
+	operatorNameList http.Handler
 }
 
 func init() {
@@ -35,6 +38,8 @@ func init() {
 			"/operator-grant-revocations":   {method: http.MethodPost, face: operatorAccessAdministrationFace(), ownIntake: true},
 			"/work-device-registrations":    {method: http.MethodPost, face: operatorAccessAdministrationFace(), ownIntake: true},
 			"/work-device-deactivations":    {method: http.MethodPost, face: operatorAccessAdministrationFace(), ownIntake: true},
+			"/operator-names":               {method: http.MethodPost, face: operatorAccessAdministrationFace(), ownIntake: true},
+			"/operator-name-list":           {method: http.MethodGet, face: operationsReadFace(), ownIntake: true},
 		},
 		build: func(sources endpointSources) (operatorIdentityWiring, error) {
 			workDevices, err := buildWorkDeviceCatalogue(sources.operatorMinter, sources.deviceRegistry)
@@ -86,7 +91,16 @@ func init() {
 			if err != nil {
 				return operatorIdentityWiring{}, err
 			}
+			operatorNames, err := buildOperatorName(sources.operatorMinter, sources.db.Transactor(), operatorBooks)
+			if err != nil {
+				return operatorIdentityWiring{}, err
+			}
+			operatorNameList, err := buildOperatorNameList(sources.operatorMinter, operatorBooks)
+			if err != nil {
+				return operatorIdentityWiring{}, err
+			}
 			return operatorIdentityWiring{
+				operatorNames: operatorNames, operatorNameList: operatorNameList,
 				workDevices: workDevices, operatorBinding: operatorBinding, operatorGrants: operatorGrants,
 				operators: operators, operatorRegistrations: operatorRegistrations,
 				operatorGrantRegistrations: operatorGrantRegistrations, operatorGrantRevocations: operatorGrantRevocations,
@@ -113,6 +127,10 @@ func init() {
 				{Pattern: "/operator-grant-revocations", Handler: identityhttp.OperatorGrantRevocationsHandler(wiring.operatorGrantRevocations)},
 				{Pattern: "/work-device-registrations", Handler: identityhttp.WorkDeviceRegistrationsHandler(wiring.workDeviceRegistrations)},
 				{Pattern: "/work-device-deactivations", Handler: identityhttp.WorkDeviceDeactivationsHandler(wiring.workDeviceDeactivations)},
+				// 操作者姓名：写口同属操作者接入管理面；读口是主数据与运营查阅读——拣货人、放波次人这些格要示成人名，
+				// 看得到这些格的人就得读得到名字。路径写成字面量，理由同上。
+				{Pattern: "/operator-names", Handler: identityhttp.OperatorNamesHandler(wiring.operatorNames)},
+				{Pattern: "/operator-name-list", Handler: identityhttp.OperatorNameListHandler(wiring.operatorNameList)},
 			}
 		},
 	})

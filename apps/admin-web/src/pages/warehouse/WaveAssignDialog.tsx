@@ -3,13 +3,14 @@ import { useEffect, useState } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
 import { statusToneBanner } from '../../components/status-tone';
 import { listOperators } from '../operator-access/api';
+import { noOperatorNames, operatorLabel, type OperatorNames } from '../operator-access/operator-names';
 import { postWarehouseAction, warehouseActionOutcomeLabels } from './actions';
 import { useCloseOnHashChange } from './use-close-on-hash';
 import { readFailureMessage } from './use-detail';
 import { assigneeOptions, waveAssignmentPayload, type AssigneeOption } from './wave-assign';
-import { waveAssigneeName } from './wave-flow';
 
-// 指派拣货人：从操作者册里选人，不用手抄「发行方#sub」。读不到名册（没有查阅操作者的授予）或人不在第一页时可以手填。
+// 指派拣货人：从操作者册里选人，不用手抄「发行方#sub」；登了姓名的人按姓名选。读不到名册（没有查阅操作者的授予）
+// 或人不在第一页时可以手填。
 
 const fieldClass =
   'h-9 w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body text-idpxyz-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-idpxyz-accent';
@@ -26,9 +27,11 @@ export interface WaveAssignDialogProps {
   warehouse: string;
   /** 这个波次此刻派给了谁；没派是 undefined。 */
   assignee?: string;
+  /** 登了姓名的操作者，给「现在派给了谁」那一句用；不给就示 sub。 */
+  names?: OperatorNames;
 }
 
-export function WaveAssignDialog({ open, onClose, onAssigned, waveId, warehouse, assignee }: WaveAssignDialogProps) {
+export function WaveAssignDialog({ open, onClose, onAssigned, waveId, warehouse, assignee, names = noOperatorNames }: WaveAssignDialogProps) {
   useCloseOnHashChange(open, onClose);
   const [roster, setRoster] = useState<Roster>({ phase: 'loading' });
   const [choice, setChoice] = useState('');
@@ -104,7 +107,7 @@ export function WaveAssignDialog({ open, onClose, onAssigned, waveId, warehouse,
         </DialogHeader>
         <DialogBody className="space-y-4 overflow-y-auto">
           <p className="type-body text-idpxyz-textMuted">
-            现在：{waveAssigneeName(assignee) ?? '还没派，谁都可以拣'}。派给一个人之后，别人拣这个波次的任务后端不收；选「不派」就是取消指派，谁都可以拣、可以在工位上领。
+            现在：{operatorLabel(assignee, names) ?? '还没派，谁都可以拣'}。派给一个人之后，别人拣这个波次的任务后端不收；选「不派」就是取消指派，谁都可以拣、可以在工位上领。
           </p>
           {roster.phase === 'loading' ? (
             <p role="status" className="type-body text-idpxyz-textMuted">

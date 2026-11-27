@@ -327,8 +327,10 @@ type operatorsResponse struct {
 }
 
 type operatorBody struct {
-	Issuer     string              `json:"issuer"`
-	Subject    string              `json:"subject"`
+	Issuer  string `json:"issuer"`
+	Subject string `json:"subject"`
+	// Name 是登过的姓名；没登即缺席。
+	Name       string              `json:"name,omitempty"`
 	Basis      string              `json:"basis"`
 	RecordedAt string              `json:"recordedAt"`
 	Grants     []operatorGrantBody `json:"grants"`
@@ -387,6 +389,7 @@ func operatorBodyOf(row accessidentity.OperatorCatalogueRow) operatorBody {
 	body := operatorBody{
 		Issuer:     binding.Subject().Issuer(),
 		Subject:    binding.Subject().Subject(),
+		Name:       row.Name(),
 		Basis:      binding.Basis(),
 		RecordedAt: instant(row.RecordedAt()),
 		Grants:     make([]operatorGrantBody, 0),

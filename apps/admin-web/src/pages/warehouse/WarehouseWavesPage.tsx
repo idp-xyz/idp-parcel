@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
@@ -19,7 +19,9 @@ import { WaveRuleList } from './WaveRuleList';
 import { WaveRuleRunDialog } from './WaveRuleRunDialog';
 import { openDocument, useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
-import { activeWaveStatuses, settledWaveStatuses, waveAssigneeName, wavePickingLabel, waveProgress, waveStatusLabel } from './wave-flow';
+import { operatorLabel, type OperatorNames } from '../operator-access/operator-names';
+import { useOperatorNames } from '../operator-access/use-operator-names';
+import { activeWaveStatuses, settledWaveStatuses, wavePickingLabel, waveProgress, waveStatusLabel } from './wave-flow';
 import { WaveDocument } from './WaveDocument';
 import { WmsBadge, WmsFilterSelect, WmsProgress, WmsStatusTabs } from './wms-ui';
 
@@ -27,14 +29,15 @@ const moduleId = 'warehouse-waves';
 const info = moduleInfoById[moduleId];
 const mono = 'whitespace-nowrap font-mono type-body leading-4';
 
-const columns: ListColumn<WaveRecord>[] = [
+/** 拣货人与放波次人示姓名；没登姓名的，拣货人示 sub、放波次人示完整标识（与登姓名之前一样）。 */
+const waveColumns = (names: OperatorNames): ListColumn<WaveRecord>[] => [
   { id: 'wave', header: '波次号', className: 'whitespace-nowrap', render: (row) => <DocumentLink moduleId={moduleId} parts={[row.waveId]} /> },
   { id: 'state', header: '状态', render: (row) => <WmsBadge code={row.status} label={waveStatusLabel(row.status)} /> },
   { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
   { id: 'profile', header: '件型', className: 'whitespace-nowrap', render: (row) => (row.singleUnit ? '单品单件' : '—') },
   { id: 'picking', header: '拣货方式', className: 'whitespace-nowrap', render: (row) => wavePickingLabel(row) },
   { id: 'rule', header: '成波规则', className: mono, render: (row) => row.ruleCode ?? '—' },
-  { id: 'assignee', header: '拣货人', className: mono, render: (row) => waveAssigneeName(row.assignee) ?? '—' },
+  { id: 'assignee', header: '拣货人', className: mono, render: (row) => operatorLabel(row.assignee, names) ?? '—' },
   {
     id: 'requests',
     header: '出库单',
@@ -51,7 +54,7 @@ const columns: ListColumn<WaveRecord>[] = [
     },
   },
   { id: 'prefetch', header: '预取面单', render: (row) => (row.prefetch ? '是' : '否') },
-  { id: 'operator', header: '放波次人', className: mono, render: (row) => row.operator },
+  { id: 'operator', header: '放波次人', className: mono, render: (row) => names.get(row.operator) ?? row.operator },
   { id: 'at', header: '放出时刻', className: mono, render: (row) => formatInstant(row.releasedAt) },
 ];
 
@@ -92,6 +95,8 @@ function WaveList() {
   const [status, setStatus] = useState('ALL');
   const [ruleRunOpen, setRuleRunOpen] = useState(false);
   const [refreshes, setRefreshes] = useState(0);
+  const names = useOperatorNames();
+  const columns = useMemo(() => waveColumns(names), [names]);
   const settled = useSettledKeyword(keyword);
   const base: CatalogueConditions = { q: settled, filters: warehouse ? { warehouseCode: [warehouse] } : {} };
   const conditions: CatalogueConditions = status === 'ALL' ? base : { ...base, filters: { ...base.filters, status: [status] } };
@@ -150,7 +155,7 @@ function WaveList() {
           ],
         },
         { kind: 'actions', actions },
-        { kind: 'audit', fields: [{ label: '放波次人 / 时刻', value: `${row.operator} · ${formatInstant(row.releasedAt)}`, mono: true }] },
+        { kind: 'audit', fields: [{ label: '放波次人 / 时刻', value: `${names.get(row.operator) ?? row.operator} · ${formatInstant(row.releasedAt)}`, mono: true }] },
       ],
     };
   };

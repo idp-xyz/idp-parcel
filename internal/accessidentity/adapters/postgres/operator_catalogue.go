@@ -20,12 +20,17 @@ var _ accessidentity.OperatorCatalogue = (*OperatorRegistry)(nil)
 var operatorCataloguePages = accessidentity.OperatorCataloguePages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"recordedAt": "o.recorded_at"},
 	Identity: []string{"o.issuer", "o.subject"},
-	Keyword:  []string{"o.subject", "o.basis_ref"},
+	Keyword:  []string{"o.subject", "o.basis_ref", "n.name"},
 })
+
+// operatorCatalogueSource 把姓名连进来：姓名表的主键就是操作者的主键，连上不多出行；没登姓名的操作者这一格是 NULL。
+const operatorCatalogueSource = `access_identity.operator AS o
+	LEFT JOIN access_identity.operator_name AS n ON n.issuer = o.issuer AND n.subject = o.subject`
 
 // scannedOperator 是一个操作者扫描回来的排序键列与建好的查阅行：游标位置取列上原样读回的值，不取领域对象里的副本。
 type scannedOperator struct {
 	issuer, subject string
+	name            string
 	recordedAt      time.Time
 	row             accessidentity.OperatorCatalogueRow
 }
@@ -62,14 +67,13 @@ func (registry *OperatorRegistry) ListOperators(
 		return fail(err)
 	}
 
-	const source = "access_identity.operator AS o"
 	var total int64
-	if err := querier.QueryRow(ctx, plan.CountSQL(source), plan.Args...).Scan(&total); err != nil {
+	if err := querier.QueryRow(ctx, plan.CountSQL(operatorCatalogueSource), plan.Args...).Scan(&total); err != nil {
 		return fail(err)
 	}
-	pageSQL := plan.PageSQL("o.issuer, o.subject, o.tenant_id, o.basis_ref, o.recorded_at", source)
+	pageSQL := plan.PageSQL("o.issuer, o.subject, o.tenant_id, o.basis_ref, o.recorded_at, n.name", operatorCatalogueSource)
 	rows, err := querier.Query(ctx,
-		`SELECT o.issuer, o.subject, o.basis_ref, o.recorded_at,
+		`SELECT o.issuer, o.subject, o.basis_ref, o.recorded_at, o.name,
 		        g.grant_id, g.capability_face, g.effective_starts_at, g.effective_ends_at, g.basis_ref,
 		        g.decision_kind, g.work_scope_kind, g.work_scope_ref, g.recorded_at, r.revoked_at, r.basis_ref
 		   FROM (`+pageSQL+`) AS o
@@ -101,13 +105,14 @@ func (registry *OperatorRegistry) ListOperators(
 		if err != nil {
 			return err
 		}
-		current.row = row
+		current.row = row.Named(current.name)
 		fetched = append(fetched, current)
 		return nil
 	}
 	for rows.Next() {
 		var (
 			issuer, subjectID, basis          string
+			name                              *string
 			operatorRecordedAt                time.Time
 			grantID, face, grantBasis         *string
 			startsAt, endsAt, grantRecordedAt *time.Time
@@ -115,7 +120,7 @@ func (registry *OperatorRegistry) ListOperators(
 			revokedAt                         *time.Time
 			revocationBasis                   *string
 		)
-		if err := rows.Scan(&issuer, &subjectID, &basis, &operatorRecordedAt,
+		if err := rows.Scan(&issuer, &subjectID, &basis, &operatorRecordedAt, &name,
 			&grantID, &face, &startsAt, &endsAt, &grantBasis,
 			&decisionKind, &scopeKind, &scopeRef, &grantRecordedAt, &revokedAt, &revocationBasis,
 		); err != nil {
@@ -134,6 +139,9 @@ func (registry *OperatorRegistry) ListOperators(
 				return fail(err)
 			}
 			current = scannedOperator{issuer: issuer, subject: subjectID, recordedAt: operatorRecordedAt}
+			if name != nil {
+				current.name = *name
+			}
 			grants, open = nil, true
 		}
 		if grantID == nil {

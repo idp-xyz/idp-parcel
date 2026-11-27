@@ -38,6 +38,30 @@ func buildOperatorRegistration(minter *accessidentity.OperatorMinter, transactor
 	return identityhttp.NewRegisterOperatorEndpoint(authenticator, transactor, registrar)
 }
 
+// buildOperatorName 装登操作者姓名的口：守口同操作者登记，是操作者接入管理这一格。
+func buildOperatorName(minter *accessidentity.OperatorMinter, transactor bentoapp.Transactor, book accessidentity.OperatorNameBook) (http.Handler, error) {
+	if minter == nil || transactor == nil || book == nil {
+		return nil, errors.New("operator name needs a minter, a transactor and a name book")
+	}
+	authenticator, err := identityhttp.NewOperatorAccessAdministrationAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return identityhttp.NewRecordOperatorNameEndpoint(authenticator, transactor, book)
+}
+
+// buildOperatorNameList 装操作者姓名的查阅口：守口是主数据与运营查阅读，认证件同操作者绑定。
+func buildOperatorNameList(minter *accessidentity.OperatorMinter, book accessidentity.OperatorNameBook) (http.Handler, error) {
+	if minter == nil || book == nil {
+		return nil, errors.New("operator name list needs a minter and a name book")
+	}
+	authenticator, err := identityhttp.NewOperatorCatalogueAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return identityhttp.NewQueryOperatorNamesEndpoint(authenticator, book)
+}
+
 func buildOperatorGrantRegistration(minter *accessidentity.OperatorMinter, transactor bentoapp.Transactor, registrar accessidentity.OperatorRegistrar) (http.Handler, error) {
 	if minter == nil || transactor == nil || registrar == nil {
 		return nil, errors.New("operator grant registration needs a minter, a transactor and an operator registrar")

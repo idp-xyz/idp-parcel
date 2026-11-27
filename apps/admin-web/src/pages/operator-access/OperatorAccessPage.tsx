@@ -22,8 +22,10 @@ import { useOperatorAccessGrant } from '../use-operator-grants';
 import { DetailRow } from '../party/detail-primitives';
 import { RegisterView } from '../party/RegisterView';
 import { selectClass } from '../party/PublicationFormFields';
+import { operatorNameOutcomeNote, operatorNamePayload, operatorNameProblem } from './operator-names';
 import {
   listOperators,
+  recordOperatorName,
   registerOperator,
   registerOperatorGrant,
   revokeOperatorGrant,
@@ -57,6 +59,11 @@ const standingTone: Record<GrantStanding, 'good' | 'info' | 'warn' | 'muted'> = 
 };
 
 const columns: WorkbenchColumn<OperatorRecord>[] = [
+  {
+    key: 'name',
+    header: '姓名',
+    render: (row) => (row.name ? <span className="type-body">{row.name}</span> : <span className="text-idpxyz-textMuted">没登</span>),
+  },
   {
     key: 'subject',
     header: '主体标识',
@@ -127,6 +134,50 @@ function TextInput({ label, value, onChange, placeholder, mono = true }: { label
       <span className="text-idpxyz-textMuted">{label}</span>
       <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={mono ? 'font-mono type-body' : 'type-body'} />
     </label>
+  );
+}
+
+/**
+ * 「姓名」就地表单：登、改、删是同一个口，留空保存就是删掉。姓名只给人认——波次的拣货人、放波次人这些格示它；
+ * 授权与「是不是同一个人」始终按主体标识判，所以这里不查重名。
+ */
+function NameForm({ operator, onRecorded, onClose }: { operator: OperatorRecord; onRecorded: () => void; onClose: () => void }) {
+  const [draft, setDraft] = useState(operator.name ?? '');
+  const [busy, setBusy] = useState(false);
+  const [answer, setAnswer] = useState<ApiResult<OperatorWriteResponseBody> | null>(null);
+  const problem = operatorNameProblem(draft);
+  const unchanged = draft.trim() === (operator.name ?? '');
+  const submit = () => {
+    if (problem !== null || unchanged) return;
+    setBusy(true);
+    void recordOperatorName(operatorNamePayload(operator.issuer, operator.subject, draft)).then((next) => {
+      setBusy(false);
+      setAnswer(next);
+      if (next.kind === 'outcome' && operatorNameOutcomeNote(next.body.outcome).done) onRecorded();
+    });
+  };
+  return (
+    <section className="flex flex-col gap-3 rounded border border-idpxyz-border bg-idpxyz-inputBg p-3">
+      <h3 className="type-value font-medium text-idpxyz-text">姓名</h3>
+      <TextInput label="姓名" value={draft} onChange={setDraft} placeholder="这个人的名字" mono={false} />
+      <p className="type-caption text-idpxyz-breadcrumb">
+        存在本系统的库里，能查阅运营数据的人都看得到。只填名字，不填电话、证件号这些。留空再保存就是删掉。
+      </p>
+      {problem ? <p className="type-body text-idpxyz-danger">{problem}</p> : null}
+      {answer?.kind === 'outcome' ? (
+        <p className="type-body text-idpxyz-danger">{operatorNameOutcomeNote(answer.body.outcome).text}</p>
+      ) : (
+        <WriteAnswerLine answer={answer} />
+      )}
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="outline" size="sm" className="type-body" onClick={onClose}>
+          取消
+        </Button>
+        <Button variant="default" size="sm" className={`${primaryActionClass} type-body`} disabled={problem !== null || unchanged || busy} onClick={submit}>
+          {busy ? '保存中…' : draft.trim() === '' ? '删掉姓名' : '保存姓名'}
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -314,6 +365,7 @@ function OperatorDetailPanel({
   onWritten: () => void;
 }) {
   const [granting, setGranting] = useState(false);
+  const [naming, setNaming] = useState(false);
   const [revoking, setRevoking] = useState<OperatorGrantRecord | null>(null);
   const now = new Date();
   return (
@@ -322,7 +374,9 @@ function OperatorDetailPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="break-all font-mono type-title font-semibold text-idpxyz-textBright">{operator.subject}</h2>
-            <p className="mt-0.5 type-body text-idpxyz-textMuted">操作者 · 生效中的授予 {effectiveGrantCount(operator, now)} 条</p>
+            <p className="mt-0.5 type-body text-idpxyz-textMuted">
+              {operator.name ? `${operator.name} · ` : '操作者 · '}生效中的授予 {effectiveGrantCount(operator, now)} 条
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             {!readOnly && !granting ? (
@@ -338,6 +392,16 @@ function OperatorDetailPanel({
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-3">
         <dl>
+          <DetailRow label="姓名">
+            <span className="flex flex-wrap items-center gap-2">
+              {operator.name ? operator.name : <span className="text-idpxyz-textMuted">没登，界面上示主体标识</span>}
+              {!readOnly && !naming ? (
+                <Button variant="outline" size="sm" className="type-body" onClick={() => setNaming(true)}>
+                  {operator.name ? '改姓名…' : '登姓名…'}
+                </Button>
+              ) : null}
+            </span>
+          </DetailRow>
           <DetailRow label="发行方" mono>
             {operator.issuer}
           </DetailRow>
@@ -348,6 +412,16 @@ function OperatorDetailPanel({
             {formatInstant(operator.recordedAt)}
           </DetailRow>
         </dl>
+        {naming ? (
+          <NameForm
+            operator={operator}
+            onRecorded={() => {
+              setNaming(false);
+              onWritten();
+            }}
+            onClose={() => setNaming(false)}
+          />
+        ) : null}
         {granting ? (
           <GrantForm
             operator={operator}
@@ -479,8 +553,8 @@ function useOwnSubject(): { issuer: string; subject: string } | null {
  * 与主体标识显出来——未在册的人靠它把标识交给管理员登记。
  *
  * 列表按游标翻页（ADR-0144，票 catalogue-read-pagination-rollout/14），次序是读口的缺省序（登记先后）。检索词（地址 `?q=`）停稳后
- * 下推成 q，读口只在主体标识与绑定依据上找：授予的标识与能力面挂在各个操作者名下、不是这一册的列（accessidentity 的
- * OperatorCataloguePages）。这一页原先在页内也按授予与能力面找，迁过来就只搜这两格——检索框的提示照实只写这两格，收窄在框上
+ * 下推成 q，读口只在主体标识、绑定依据与姓名上找：授予的标识与能力面挂在各个操作者名下、不是这一册的列（accessidentity 的
+ * OperatorCataloguePages）。这一页原先在页内也按授予与能力面找，迁过来就只搜这几格——检索框的提示照实只写这几格，收窄在框上
  * 看得见；页内不再补搜，补搜只对这一页成立，会让人以为整册都按授予找过了。
  */
 export function OperatorAccessPage() {
@@ -558,7 +632,7 @@ export function OperatorAccessPage() {
           </Button>
         ) : undefined
       }
-      search={{ value: search, onChange: setSearch, placeholder: '搜主体标识、登记依据' }}
+      search={{ value: search, onChange: setSearch, placeholder: '搜姓名、主体标识、登记依据' }}
       toolbarRight={pagination ? <CursorPager pagination={pagination} /> : undefined}
       columns={columns}
       rows={operators}

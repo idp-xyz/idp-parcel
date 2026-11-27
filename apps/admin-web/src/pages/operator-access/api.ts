@@ -27,6 +27,8 @@ export interface OperatorGrantRecord {
 export interface OperatorRecord {
   issuer: string;
   subject: string;
+  /** 登过的姓名；没登就没有这一格。 */
+  name?: string;
   basis: string;
   recordedAt: string;
   grants: OperatorGrantRecord[];
@@ -90,4 +92,33 @@ export interface OperatorGrantRevocationPayload {
 
 export function revokeOperatorGrant(payload: OperatorGrantRevocationPayload): Promise<ApiResult<OperatorWriteResponseBody>> {
   return postMasterData<OperatorWriteResponseBody>('/operator-grant-revocations', payload);
+}
+
+/** 登、改或删一位操作者的姓名：不带 name 是删掉。守口同上面三个写面，是操作者接入管理。 */
+export interface OperatorNamePayload {
+  issuer: string;
+  subject: string;
+  name?: string;
+}
+
+export function recordOperatorName(payload: OperatorNamePayload): Promise<ApiResult<OperatorWriteResponseBody>> {
+  return postMasterData<OperatorWriteResponseBody>('/operator-names', payload);
+}
+
+export interface OperatorNameRecord {
+  /** 操作者标识「发行方#sub」，与各册上记操作者的是同一个串。 */
+  operator: string;
+  issuer: string;
+  subject: string;
+  name: string;
+}
+
+export interface OperatorNameListResponseBody {
+  outcome: 'OPERATOR_NAMES_LISTED';
+  names: OperatorNameRecord[];
+}
+
+/** 本租户登了姓名的操作者。守口是主数据与运营查阅读：看得到拣货人这些格的人就读得到。 */
+export function listOperatorNames(): Promise<ApiResult<OperatorNameListResponseBody>> {
+  return exchangeMasterData<OperatorNameListResponseBody>('/operator-name-list');
 }

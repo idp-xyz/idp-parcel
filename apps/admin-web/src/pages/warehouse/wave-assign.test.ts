@@ -46,6 +46,10 @@ test('可选的拣货人：在这个仓有作业授予的在前，没有的写�
   const named = assigneeOptions([{ ...operator('sub-1', [grant()]), basis: '早班拣货员 小王' }, { ...operator('sub-2', [grant()]), basis: '一'.repeat(30) }], 'WH-1', now);
   equal(named[0].label, 'sub-1 · 早班拣货员 小王');
   equal(named[1].label, `sub-2 · ${'一'.repeat(24)}…`);
+  // 登了姓名的摆姓名，sub 跟在后面；依据不再摆
+  const withName = assigneeOptions([{ ...operator('sub-1', [grant()]), name: '合成甲', basis: '早班拣货员' }, { ...operator('sub-9', []), name: '合成乙' }], 'WH-1', now);
+  equal(withName[0].label, '合成甲 · sub-1');
+  equal(withName[1].label, '合成乙 · sub-9（在这个仓没有作业授予，派了也拣不了）');
 });
 
 // Covers: 指派的报文：选了人带上他，不派不带 assignee（不带才是取消指派）。

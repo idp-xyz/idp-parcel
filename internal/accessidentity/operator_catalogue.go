@@ -40,7 +40,17 @@ type OperatorCatalogueRow struct {
 	binding    OperatorBinding
 	recordedAt time.Time
 	grants     []RecordedGrantRow
+	// name 是登在 OperatorNameBook 上的姓名，没登是空串。它不是绑定的一部分：可以改、可以删，不进撞键比对。
+	name string
 }
+
+// Named 交回带上姓名的同一行。
+func (row OperatorCatalogueRow) Named(name string) OperatorCatalogueRow {
+	row.name = name
+	return row
+}
+
+func (row OperatorCatalogueRow) Name() string { return row.name }
 
 // NewOperatorCatalogueRow 的纪律同 NewOperatorStanding：混进别的主体或别的租户名下的授予即拒。
 func NewOperatorCatalogueRow(binding OperatorBinding, recordedAt time.Time, grants []RecordedGrantRow) (OperatorCatalogueRow, error) {

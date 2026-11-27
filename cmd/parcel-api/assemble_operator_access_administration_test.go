@@ -25,6 +25,7 @@ func TestOperatorAccessAdministrationAnswersFromTheOperatorChannel(t *testing.T)
 		"/operators": identityhttp.OperatorsPath, "/operator-registrations": identityhttp.OperatorRegistrationsPath,
 		"/operator-grant-registrations": identityhttp.OperatorGrantRegistrationsPath, "/operator-grant-revocations": identityhttp.OperatorGrantRevocationsPath,
 		"/work-device-registrations": identityhttp.WorkDeviceRegistrationsPath, "/work-device-deactivations": identityhttp.WorkDeviceDeactivationsPath,
+		"/operator-names": identityhttp.OperatorNamesPath, "/operator-name-list": identityhttp.OperatorNameListPath,
 	} {
 		if constant != path {
 			t.Fatalf("路径常量 = %s，端点表字面量 %s 对不上", constant, path)
@@ -117,6 +118,7 @@ func TestOperatorAccessAdministrationAnswersFromTheOperatorChannel(t *testing.T)
 		func() (http.Handler, error) {
 			return buildWorkDeviceDeactivation(writer, transactor, unusedDeviceRegistrar{})
 		},
+		func() (http.Handler, error) { return buildOperatorName(writer, transactor, unusedNameBook{}) },
 	} {
 		handler, err := build()
 		if err != nil {
@@ -130,6 +132,36 @@ func TestOperatorAccessAdministrationAnswersFromTheOperatorChannel(t *testing.T)
 			t.Fatalf("写口对登记册配置写的人：%d %s（事务 %d 笔）", response.Code, response.Body.String(), transactor.opened)
 		}
 	}
+
+	// 姓名的查阅口守的是主数据与运营查阅读：只持查阅读的人读得到，只持操作者接入管理的人读不到——两格分开授。
+	for label, probe := range map[string]struct {
+		minter *accessidentity.OperatorMinter
+		status int
+	}{
+		"查阅读": {reader, http.StatusOK}, "只持接入管理": {granted, http.StatusForbidden}, "发行方未配置": {unconfigured, http.StatusForbidden},
+	} {
+		handler, err := buildOperatorNameList(probe.minter, unusedNameBook{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(http.MethodGet, "/operator-name-list", nil)
+		request.Header.Set("Authorization", "Bearer presented.operator.token")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != probe.status {
+			t.Fatalf("姓名查阅口对%s：%d %s", label, response.Code, response.Body.String())
+		}
+	}
+}
+
+type unusedNameBook struct{}
+
+func (unusedNameBook) SaveOperatorName(context.Context, string, accessidentity.OperatorSubject, string, accessidentity.OperatorSubject) (accessidentity.OperatorNameOutcome, error) {
+	return "", errors.New("unused")
+}
+
+func (unusedNameBook) ListOperatorNames(context.Context, string) ([]accessidentity.OperatorNameRow, error) {
+	return nil, nil
 }
 
 // accessAdministratorRegister 是操作者册的替身：主体绑在 SYN-TENANT-01 上，只持操作者接入管理一格。

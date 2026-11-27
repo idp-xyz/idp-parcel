@@ -11,8 +11,8 @@ import "go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 // 缺省序是登记时刻正序，不是决定三的登记时刻倒序：迁移前即按登记先后上列，管理台显的是「谁先登的」，第一页与迁移前屏上
 // 那一页同口径。行标识是（发行方、主体），即操作者表的主键——它本就不含租户，一个主体至多绑一个租户。只放缺省那一维。
 //
-// 操作者没有状态：授予此刻生不生效是对时点的推导，不在行上存（理由见 OperatorCatalogueRow），不作筛选维。q 在主体标识与
-// 绑定依据上做字面包含；授予的标识与能力面挂在各个操作者名下、不是这一册的列，不进 q。
+// 操作者没有状态：授予此刻生不生效是对时点的推导，不在行上存（理由见 OperatorCatalogueRow），不作筛选维。q 在主体标识、
+// 绑定依据与姓名上做字面包含；授予的标识与能力面挂在各个操作者名下、不是这一册的列，不进 q。
 var OperatorCataloguePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name:        "operators",
 	Sorts:       []cataloguepage.SortDimension{{Name: "recordedAt", Kind: cataloguepage.Instant}},

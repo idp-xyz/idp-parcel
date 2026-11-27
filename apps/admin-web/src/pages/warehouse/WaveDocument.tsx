@@ -13,7 +13,9 @@ import { packStationHash, pickStationHash, sortStationHash } from './station/sta
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
 import { WaveAssignDialog } from './WaveAssignDialog';
-import { waveAssigneeName, wavePickingNote, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
+import { operatorLabel } from '../operator-access/operator-names';
+import { useOperatorNames } from '../operator-access/use-operator-names';
+import { wavePickingNote, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
 import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable } from './wms-ui';
 
 /** 波次页：一次放出去的那一批出库单，和它们的每一条拣货任务拣到哪了。 */
@@ -21,6 +23,7 @@ export function WaveDocument({ waveId }: { waveId: string }) {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
   const back = useReturnToList('warehouse-waves');
   const [assignOpen, setAssignOpen] = useState(false);
+  const names = useOperatorNames();
   const { answer, loading, reload } = useKeyedLoad(waveId, getWave);
   const wave = answer?.kind === 'outcome' ? answer.body.wave : undefined;
   const failure = readFailureMessage(answer) ?? (answer?.kind === 'outcome' && !wave ? `没有 ${waveId} 这个波次。` : null);
@@ -122,8 +125,9 @@ export function WaveDocument({ waveId }: { waveId: string }) {
                 ) : null}
               </WmsAsideBlock>
               <WmsAsideBlock title="拣货人">
+                {/* 示姓名（没登姓名的示 sub）；完整的操作者标识在悬停里。 */}
                 <span className="break-all font-mono type-caption text-idpxyz-text" title={wave.assignee}>
-                  {waveAssigneeName(wave.assignee) ?? '还没派，谁都可以拣'}
+                  {operatorLabel(wave.assignee, names) ?? '还没派，谁都可以拣'}
                 </span>
                 {/* 拣完或取消的波次没有可派的任务。 */}
                 {drawer.has('wave-assign') && (wave.status === 'RELEASED' || wave.status === 'PICKING') ? (
@@ -134,7 +138,9 @@ export function WaveDocument({ waveId }: { waveId: string }) {
                 <span className="type-caption text-idpxyz-textMuted">派了之后别人拣这个波次的任务后端不收；拣货的人也可以在拣货工位上自己领。</span>
               </WmsAsideBlock>
               <WmsAsideBlock title="放波次">
-                <span className="break-all font-mono type-caption text-idpxyz-textMuted">操作者 {wave.operator}</span>
+                <span className="break-all font-mono type-caption text-idpxyz-textMuted" title={wave.operator}>
+                  操作者 {names.get(wave.operator) ?? wave.operator}
+                </span>
                 <span className="type-caption text-idpxyz-textMuted">
                   {wave.prefetch ? '放出时为各单预取了面单' : '放出时没有预取面单'}
                 </span>
@@ -171,7 +177,7 @@ export function WaveDocument({ waveId }: { waveId: string }) {
                 { label: '拣货方式', value: wavePickingNote(wave) },
                 { label: '怎么成的波', value: wave.ruleCode ? `按成波规则 ${wave.ruleCode} 放出` : '由人点单放出' },
                 { label: '放出时刻', value: formatInstant(wave.releasedAt), mono: true },
-                { label: '放波次人', value: wave.operator, mono: true },
+                { label: '放波次人', value: names.get(wave.operator) ?? wave.operator, mono: true },
               ]}
             />
             <WmsSubTable
@@ -210,6 +216,7 @@ export function WaveDocument({ waveId }: { waveId: string }) {
           waveId={waveId}
           warehouse={wave.warehouseCode}
           assignee={wave.assignee}
+          names={names}
         />
       ) : null}
     </>

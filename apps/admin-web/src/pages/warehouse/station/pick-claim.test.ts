@@ -4,7 +4,7 @@ import { operatorIdOf, type OidcSession } from '../../../auth/oidc';
 import type { WaveRecord, WaveTaskRecord } from '../api';
 import { buildGuidedPayload } from '../guided-forms';
 import { allWarehouseGuidedForms } from '../guided-schemas';
-import { waveAssigneeName } from '../wave-flow';
+import { operatorLabel, operatorNamesOf } from '../../operator-access/operator-names';
 import { waveClaimNote } from './pick-claim';
 import { pickOutcomeLabels, queueNotes, taskGoneAfter } from './pick-flow';
 import { cellsOfWaves, loadPickQueue } from './pick-queue';
@@ -88,6 +88,8 @@ test('领波次之后的话', () => {
   equal(waveClaimNote(answered('ASSIGNED', ME)), '领到了，这个波次归你拣。');
   ok(waveClaimNote(answered('EXISTING_RESULT', ME)).includes('本来就是你的'));
   ok(waveClaimNote(answered('WAVE_ASSIGNED_TO_OTHER', OTHER)).includes('已经派给了 picker-other'));
+  // 那个人登了姓名就说姓名
+  ok(waveClaimNote(answered('WAVE_ASSIGNED_TO_OTHER', OTHER), operatorNamesOf([{ operator: OTHER, name: '合成乙' }])).includes('已经派给了 合成乙'));
   ok(waveClaimNote(answered('WAVE_ASSIGNED_TO_OTHER')).includes('已经派给了 别人'));
   ok(waveClaimNote(answered('STATUS_MISMATCH')).includes('不用领了'));
   ok(waveClaimNote(answered('WAVE_NOT_FOUND')).includes('没有这个波次'));
@@ -96,13 +98,13 @@ test('领波次之后的话', () => {
   ok(waveClaimNote({ kind: 'transport', message: '断了' }).startsWith('没领成'));
 });
 
-// Covers: 拣货人只摆 sub 那一截；操作者标识取身份令牌的发行方与 sub，缺一格不猜。
+// Covers: 拣货人没登姓名时只摆 sub 那一截；操作者标识取身份令牌的发行方与 sub，缺一格不猜。
 test('拣货人的示法与「我是谁」', () => {
-  equal(waveAssigneeName(OTHER), 'picker-other');
-  equal(waveAssigneeName('plain-operator'), 'plain-operator');
-  equal(waveAssigneeName('issuer#'), 'issuer#');
-  equal(waveAssigneeName(undefined), null);
-  equal(waveAssigneeName(''), null);
+  equal(operatorLabel(OTHER), 'picker-other');
+  equal(operatorLabel('plain-operator'), 'plain-operator');
+  equal(operatorLabel('issuer#'), 'issuer#');
+  equal(operatorLabel(undefined), null);
+  equal(operatorLabel(''), null);
   const session = (claims: Record<string, unknown>) => ({ claims }) as OidcSession;
   equal(operatorIdOf(session({ iss: 'https://issuer.example.invalid', sub: 'picker-me' })), ME);
   equal(operatorIdOf(session({ sub: 'picker-me' })), null);

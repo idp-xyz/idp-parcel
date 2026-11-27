@@ -7,10 +7,10 @@
 
 import type { ApiResult } from '../../catalogue-api';
 import type { WaveClaimBody } from '../api';
-import { waveAssigneeName } from '../wave-flow';
+import { noOperatorNames, operatorLabel, type OperatorNames } from '../../operator-access/operator-names';
 import { describeReadFailure } from './work-fact-submit';
 
-export function waveClaimNote(answer: ApiResult<WaveClaimBody>): string {
+export function waveClaimNote(answer: ApiResult<WaveClaimBody>, names: OperatorNames = noOperatorNames): string {
   if (answer.kind !== 'outcome') return `没领成：${describeReadFailure(answer)}。再点一次。`;
   switch (answer.body.outcome) {
     case 'ASSIGNED':
@@ -18,7 +18,7 @@ export function waveClaimNote(answer: ApiResult<WaveClaimBody>): string {
     case 'EXISTING_RESULT':
       return '这个波次本来就是你的。';
     case 'WAVE_ASSIGNED_TO_OTHER':
-      return `已经派给了 ${waveAssigneeName(answer.body.assignee) ?? '别人'}，没有领成。要改派找主管在波次页上改。`;
+      return `已经派给了 ${operatorLabel(answer.body.assignee, names) ?? '别人'}，没有领成。要改派找主管在波次页上改。`;
     case 'STATUS_MISMATCH':
       return '这个波次已经拣完或已取消，不用领了。';
     case 'WAVE_NOT_FOUND':

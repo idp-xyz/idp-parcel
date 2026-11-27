@@ -7,6 +7,8 @@
 export interface AssignableOperator {
   issuer: string;
   subject: string;
+  /** 登过的姓名；没登就没有。 */
+  name?: string;
   /** 登记这位操作者时写的依据。 */
   basis?: string;
   grants: ReadonlyArray<{
@@ -42,9 +44,16 @@ export function assigneeOptions(operators: readonly AssignableOperator[], wareho
   return operators
     .map((operator) => {
       const granted = grantedAt(operator, warehouse, now);
-      // sub 往往是发行方给的一串不好认的号；登记这位操作者时写的依据多半说了他是谁，摆在后面帮人认。
       const basis = (operator.basis ?? '').trim();
-      const name = basis === '' ? operator.subject : `${operator.subject} · ${basis.length > 24 ? `${basis.slice(0, 24)}…` : basis}`;
+      const personName = (operator.name ?? '').trim();
+      // 登了姓名的摆姓名，sub 跟在后面分开同名的两个人。没登的摆 sub：它往往是发行方给的一串不好认的号，
+      // 登记这位操作者时写的依据多半说了他是谁，摆在后面帮人认。
+      const name =
+        personName !== ''
+          ? `${personName} · ${operator.subject}`
+          : basis === ''
+            ? operator.subject
+            : `${operator.subject} · ${basis.length > 24 ? `${basis.slice(0, 24)}…` : basis}`;
       return {
         value: `${operator.issuer}#${operator.subject}`,
         label: granted ? name : `${name}（在这个仓没有作业授予，派了也拣不了）`,

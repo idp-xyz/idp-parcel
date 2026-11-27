@@ -221,7 +221,7 @@ func TestQueryOperatorsListsTheTenantWithVocabulary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalogue := &operatorCatalogueFake{rows: []accessidentity.OperatorCatalogueRow{row, empty}}
+	catalogue := &operatorCatalogueFake{rows: []accessidentity.OperatorCatalogueRow{row.Named("合成甲"), empty}}
 	handler := operatorsHandler(t, adminAuthenticatorFake{administrator: administrator(t)}, catalogue, "https://id.syn.example/dex")
 
 	response := serveJSON(handler, http.MethodGet, identityhttp.OperatorsPath, "")
@@ -263,6 +263,10 @@ func TestQueryOperatorsListsTheTenantWithVocabulary(t *testing.T) {
 	if first["issuer"] != "https://id.syn.example/dex" || first["subject"] != "SYN-OPERATOR-01" || first["basis"] != "SYN-BASIS-BINDING" ||
 		first["recordedAt"] != startsAt.Format(time.RFC3339Nano) {
 		t.Fatalf("first operator = %v", first)
+	}
+	// 姓名登了才在场：没登的那一位没有 name 这个键，不是空串。
+	if _, present := listed.Operators[1]["name"]; first["name"] != "合成甲" || present {
+		t.Fatalf("姓名：第一位 %v，第二位 %v", first["name"], listed.Operators[1])
 	}
 	grants := first["grants"].([]any)
 	if len(grants) != 4 {
