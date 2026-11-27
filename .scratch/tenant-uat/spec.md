@@ -94,6 +94,15 @@ Status: in-progress
 | [04](./issues/04-no-grant-copy-and-the-write-form-still-opens.md) | 没有授予的说明与仍可点开的写表单 | 第 1 站 1.18 | resolved |
 | [05](./issues/05-workbench-does-not-say-what-a-new-admin-does-first.md) | 工作台不告诉新管理员先去授权 | 第 1 站 1.13 | resolved |
 
+## 进 main
+
+代码在 `281a5d33a`，已是 `origin/main`。分支出处是 `cursor/tenant-uat` 的 `a003a8293`。重放时台账留在分支上，本笔补进。
+
+- 评审：标准轴无阻断。票面轴一处阻断，从「保存的视图」点回去时，还挂着的列表不把筛选写回地址。已在 `a003a8293` 修。探针「地址筛选的跳转带上查询串」通过。
+- 全量真库测试：同一份 41 个文件的两笔重放 `09de199a4`、`7598d9ecc` 都是 `FULL-EXIT=0`。推上的 `281a5d33a` 与 `7598d9ecc` 的这 41 个文件相同，父提交只多了退货翻页。对 `281a5d33a` 本身未再跑。
+- 种子：一次性库灌入退 0，用后删库。
+- 本笔只补台账，全量测试未跑。
+
 ## Comments
 
 - 2026-11-27：立项。环境搭好并实测：后端取证（首个管理员读 `GET /operators` 答 200，读 `GET /network-catalog?family=node` 答 403 `OPERATOR_NOT_GRANTED`，不带令牌答 401）；会话在 Cursor 自带浏览器里用首个管理员走通一次登录，落到工作台。搭建脚本 `10-backend.sh`、`20-frontend.sh` 在运行目录。
