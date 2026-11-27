@@ -86,9 +86,8 @@ func TestAuthorizationRuleCanonicalizesTheCancellationAuthorityInPartyOrder(t *t
 	}
 }
 
-// Covers: 票 17「同一请求方第二行由构造门拒」——规范化过的是与 NewCancellationAuthorityContent 同一道门：零行是缺件、
-// 请求方集外或规则空是缺件、同一请求方两行是冲突；正文缺席答缺席；别册的正文冒本册的名、本册正文挂别册的 kind 都答
-// kind 不符。四格恢复动作各不相同，不折成一个「算不出」。
+// Covers: 票 17「同一请求方第二行由构造门拒」——目录在场时规范化过的是与 NewCancellationAuthorityContent 同一道门：
+// 请求方集外或规则空是缺件、同一请求方两行是冲突。零行与正文缺席是未声明，不在这张拒表里。别册的正文冒本册的名答 kind 不符。
 func TestAuthorizationRuleCanonicalizationRefusesWhatTheCatalogueGateRefuses(t *testing.T) {
 	customer := cancellationRow(t, domain.DeclaredCustomerCancellation, "CANCEL/customer")
 
@@ -96,8 +95,6 @@ func TestAuthorizationRuleCanonicalizationRefusesWhatTheCatalogueGateRefuses(t *
 		content domain.PublicationContent
 		want    error
 	}{
-		"absent body": {domain.PublicationContent{Kind: domain.AuthorizationRuleObject}, domain.ErrPublicationContentAbsent},
-		"no rows":     {authorizationRuleContent(), domain.ErrCancellationAuthorityNotConfigured},
 		"invalid party": {authorizationRuleContent(domain.CancellationAuthorityDeclaration{
 			Party: domain.DeclaredCancellationPartyInvalid, Rule: customer.Rule,
 		}), domain.ErrCancellationAuthorityNotConfigured},
@@ -193,5 +190,46 @@ func TestAuthorizationRuleDraftsCarryTheComputedDigest(t *testing.T) {
 	}
 	if !draft.SameContentAs(again) || !draft.SameSubmissionAs(again) {
 		t.Fatal("the same catalogue under the same shell must be the same submission regardless of row order")
+	}
+}
+
+// Covers: 取消目录缺席与零行是同一份两格文档，折回后目录不在场；壳上指名价格政策不进摘要。
+func TestAuthorizationRuleWithoutACancellationCatalogueCanonicalizesToTheShellDocument(t *testing.T) {
+	absent, err := domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.AuthorizationRuleObject})
+	if err != nil {
+		t.Fatalf("absent catalogue: %v", err)
+	}
+	empty, err := domain.CanonicalizePublicationContent(authorizationRuleContent())
+	if err != nil {
+		t.Fatalf("empty catalogue: %v", err)
+	}
+	if absent.Digest() != empty.Digest() {
+		t.Fatalf("absent %s ≠ empty %s", absent.Digest(), empty.Digest())
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(absent.Document(), &keys); err != nil {
+		t.Fatalf("document keys: %v", err)
+	}
+	if _, has := keys["authorizationRule"]; has || len(keys) != 2 {
+		t.Fatalf("document = %s; want exactly {canonicalization, kind}", absent.Document())
+	}
+	rehydrated, err := domain.RehydratePublicationContent(absent.Canonicalization(), absent.Document())
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	if rehydrated.Kind != domain.AuthorizationRuleObject || rehydrated.AuthorizationRule != nil {
+		t.Fatalf("rehydrated = %#v; want kind only", rehydrated)
+	}
+
+	shell := draftShell(t, domain.AuthorizationRuleObject, "auth-price", "v1")
+	shell.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
+		domain.PriceRuleObject: commercialValue(t, domain.NewCommercialObjectID, "IDP-PRICE-RULE-CN-SG-SELL"),
+	}
+	named, err := domain.PreviewPublication(shell, domain.PublicationContent{Kind: domain.AuthorizationRuleObject})
+	if err != nil {
+		t.Fatalf("preview with a price-policy reference: %v", err)
+	}
+	if named.Digest() != absent.Digest() {
+		t.Fatalf("naming a price policy changed the digest: %s vs %s", named.Digest(), absent.Digest())
 	}
 }

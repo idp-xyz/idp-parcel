@@ -29,6 +29,7 @@ func (fake *fakeWarehouseReads) ListWarehouses(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
+	_ ports.WarehouseScope,
 ) (cataloguepage.Result[ports.WarehouseRow], error) {
 	fake.gotTenant, fake.gotLimit, fake.gotQuery = tenant.String(), limit, query
 	if fake.err != nil {
@@ -67,7 +68,7 @@ func TestQueryWarehousesAnswersTheRowsThePortGivesForTheTenantAndQuery(t *testin
 	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
 	query := firstPage(t, url.Values{"deactivated": {"false"}})
 
-	page, err := handler.ListWarehouses(t.Context(), tenant, 25, query)
+	page, err := handler.ListWarehouses(t.Context(), tenant, 25, query, ports.WarehouseScope{})
 	if err != nil || len(page.Rows) != 2 || page.Total != 2 {
 		t.Fatalf("ListWarehouses = (%d 行, 总数 %d, %v)，want 2 行", len(page.Rows), page.Total, err)
 	}
@@ -90,7 +91,7 @@ func TestQueryWarehousesAnswersAnEmptyRegisterWithEmptyListsAndNoError(t *testin
 	handler := application.NewQueryWarehousesHandler(reads, reads)
 	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-EMPTY")
 
-	page, err := handler.ListWarehouses(t.Context(), tenant, 25, firstPage(t, url.Values{}))
+	page, err := handler.ListWarehouses(t.Context(), tenant, 25, firstPage(t, url.Values{}), ports.WarehouseScope{})
 	if err != nil || len(page.Rows) != 0 || page.Total != 0 || page.Next != "" {
 		t.Fatalf("空册的列表 = (%d 行, 总数 %d, next %q, %v)，want 空页", len(page.Rows), page.Total, page.Next, err)
 	}
@@ -107,7 +108,7 @@ func TestQueryWarehousesReturnsReadFailuresInsteadOfAnEmptyList(t *testing.T) {
 	handler := application.NewQueryWarehousesHandler(reads, reads)
 	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
 
-	if _, err := handler.ListWarehouses(t.Context(), tenant, 25, firstPage(t, url.Values{})); !errors.Is(err, boom) {
+	if _, err := handler.ListWarehouses(t.Context(), tenant, 25, firstPage(t, url.Values{}), ports.WarehouseScope{}); !errors.Is(err, boom) {
 		t.Errorf("列表读不动的错误 = %v，want 带上原因上抛", err)
 	}
 	if _, err := handler.WarehouseRevisions(t.Context(), tenant, valueOf(t, domain.NewWarehouseCode, "SYN-WH-01")); !errors.Is(err, boom) {

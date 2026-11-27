@@ -6,7 +6,7 @@ import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone, wallTimeOf, wallTimeToRfc3339 } from '../moment';
 import { registerOperatorGrant, type OperatorGrantRecord, type OperatorListResponseBody, type OperatorRecord, type OperatorWriteResponseBody } from './api';
 import { planGrantChecklist } from './grant-checklist';
-import { faceLabel, operatorWriteOutcomeLabel } from './presentation';
+import { dataVisibilityKindLabels, decisionKindLabel, faceLabel, operatorWriteOutcomeLabel } from './presentation';
 
 function grantWriteLine(answer: ApiResult<OperatorWriteResponseBody>): string {
   switch (answer.kind) {
@@ -36,15 +36,19 @@ export function GrantChecklistForm({
   onClose,
 }: {
   operator: OperatorRecord;
-  vocabulary: Pick<OperatorListResponseBody, 'faces' | 'decisionKinds' | 'workScopeKinds'>;
+  vocabulary: Pick<OperatorListResponseBody, 'faces' | 'decisionKinds' | 'workScopeKinds' | 'visibilityKinds'>;
   onWritten: () => void;
   onClose: () => void;
 }) {
   const timeZone = currentDisplayTimeZone();
-  const plainFaces = vocabulary.faces.filter((face) => face !== 'OPERATION_DECISION' && face !== 'WORK_FACT_REGISTRATION');
+  const plainFaces = vocabulary.faces.filter(
+    (face) => face !== 'OPERATION_DECISION' && face !== 'WORK_FACT_REGISTRATION' && face !== 'DATA_VISIBILITY',
+  );
+  const visibilityKinds = vocabulary.visibilityKinds ?? [];
   const [chosenFaces, setChosenFaces] = useState<string[]>([]);
   const [chosenDecisions, setChosenDecisions] = useState<string[]>([]);
   const [scopes, setScopes] = useState<{ kind: string; reference: string }[]>([]);
+  const [visibilities, setVisibilities] = useState<{ kind: string; reference: string }[]>([]);
   const [prefix, setPrefix] = useState('');
   const [basis, setBasis] = useState('');
   const [startsAt, setStartsAt] = useState(() => wallTimeOf(new Date(), timeZone));
@@ -59,7 +63,7 @@ export function GrantChecklistForm({
   const plan = timeProblem
     ? null
     : planGrantChecklist(
-        { faces: chosenFaces, decisionKinds: chosenDecisions, workScopes: scopes },
+        { faces: chosenFaces, decisionKinds: chosenDecisions, workScopes: scopes, visibilities },
         {
           prefix,
           basis,
@@ -153,13 +157,13 @@ export function GrantChecklistForm({
           </legend>
           <div className="max-h-48 overflow-y-auto">
             {vocabulary.decisionKinds.map((kind) => (
-              <label key={kind} className="flex items-center gap-2 type-caption font-mono">
+              <label key={kind} className="flex items-center gap-2 type-body" title={kind}>
                 <input
                   type="checkbox"
                   checked={chosenDecisions.includes(kind)}
                   onChange={() => toggle(chosenDecisions, kind, setChosenDecisions)}
                 />
-                {kind}
+                {decisionKindLabel(kind)}
               </label>
             ))}
           </div>
@@ -204,6 +208,49 @@ export function GrantChecklistForm({
             onClick={() => setScopes([...scopes, { kind: vocabulary.workScopeKinds[0] ?? '', reference: '' }])}
           >
             加一个作业范围
+          </Button>
+        </fieldset>
+      ) : null}
+      {visibilityKinds.length > 0 ? (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="type-body text-idpxyz-textMuted">看得见的数据</legend>
+          <p className="type-caption text-idpxyz-textMuted">引用填 * 表示这一类全部。不填这一类，就是这一类什么都看不见。</p>
+          {visibilities.map((scope, index) => (
+            <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+              <select
+                className={selectClass}
+                value={scope.kind}
+                onChange={(event) =>
+                  setVisibilities(visibilities.map((item, at) => (at === index ? { ...item, kind: event.target.value } : item)))
+                }
+              >
+                {visibilityKinds.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {dataVisibilityKindLabels[kind] ?? kind}
+                  </option>
+                ))}
+              </select>
+              <Input
+                value={scope.reference}
+                onChange={(event) =>
+                  setVisibilities(visibilities.map((item, at) => (at === index ? { ...item, reference: event.target.value } : item)))
+                }
+                placeholder="标识，或 *"
+                className="font-mono type-body"
+              />
+              <Button type="button" variant="ghost" size="sm" onClick={() => setVisibilities(visibilities.filter((_, at) => at !== index))}>
+                去掉
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="type-body self-start"
+            onClick={() => setVisibilities([...visibilities, { kind: visibilityKinds[0] ?? '', reference: '' }])}
+          >
+            加一个可见范围
           </Button>
         </fieldset>
       ) : null}

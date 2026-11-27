@@ -75,7 +75,7 @@ func canonicalizeServiceProduct(content PublicationContent) (CanonicalPublicatio
 }
 
 // registerBodyOptional 答某一册的正文是不是可缺：这样的册折回快照时没有「正文缺席」可判，两格文档就是一份合法的
-// 正文面。今天只有服务产品——其余各册壳可以单独入册，但表单路径的载体必须带正文。
+// 正文面。服务产品可以不带交付条件；授权规则可以不带取消目录（方向由壳上指名的价格政策给出）。
 func registerBodyOptional(kind CommercialObjectKind) bool {
-	return kind == ServiceProductObject
+	return kind == ServiceProductObject || kind == AuthorizationRuleObject
 }

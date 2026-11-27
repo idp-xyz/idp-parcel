@@ -158,6 +158,13 @@ test('接受前财务控制策略、授权规则、客户服务规则：逐行�
     tz,
   );
   equal(valueOf(auth, '取消授权'), '客户：RULE-1；运营：RULE-2');
+  equal(valueOf(auth, '价格政策'), '不指名');
+  const direction = publicationBodySummary(
+    payload('AUTHORIZATION_RULE', { references: { PRICE_RULE: 'IDP-PRICE-RULE-CN-SG-SELL' } }),
+    tz,
+  );
+  equal(valueOf(direction, '价格政策'), 'IDP-PRICE-RULE-CN-SG-SELL');
+  equal(valueOf(direction, '取消授权'), '未声明');
   const rule = publicationBodySummary(
     payload('CUSTOMER_SERVICE_RULE', {
       customerServiceRule: {

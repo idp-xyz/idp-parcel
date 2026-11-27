@@ -1,11 +1,12 @@
-import { Input } from '@idpxyz/ui-primitives';
+import { useState } from 'react';
+import { Button, Input } from '@idpxyz/ui-primitives';
 import type { PublicationFormContext } from './PublicationDraftFlow';
 import { Field, ProblemText, Problems, selectClass } from './PublicationFormFields';
 import { itemProblemText } from './field-problem-text';
 import { listServiceProducts } from './api';
 import { serviceProductVersionChoices } from './picker-options';
 import { ObjectVersionPicker } from './reference-inputs';
-import type { DeliveryConditionDraft, DeliveryConditionLayer } from './delivery-condition-section';
+import { deliveryConditionDeclared, type DeliveryConditionDraft, type DeliveryConditionLayer } from './delivery-condition-section';
 
 /**
  * 交付条件一节的字段组（票 admin-write-faces/25；ADR-0133 决定四），产品版本表单与客户合同表单各挂一节、共用本组件：
@@ -35,26 +36,42 @@ export function DeliveryConditionFields({
   const methodLines = Object.entries(form.problems)
     .filter(([path]) => path.startsWith(`${root}.methods[`))
     .flatMap(([path, lines]) => lines.map((line) => ({ key: `${path}:${line}`, problem: itemProblemText(path.slice(root.length + 1), line) })));
+  // 整节还空着时不标星号：星号一打开就在，选填会被读成必填。填了一格之后整节都交，这时没填的格才是必填。
+  const declared = deliveryConditionDeclared(draft, layer);
+  const [opened, setOpened] = useState(false);
+  const showFields = opened || declared;
+  const star = declared ? ' *' : '';
+  const layerName = layer === 'contract' ? ' · 合同层' : ' · 产品层';
 
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="type-value font-medium text-idpxyz-text">
-        交付条件（选填）{layer === 'contract' ? ' · 合同层' : ' · 产品层'}
-      </h3>
-      {/* 交付方式的词表属租户实例登记，表单不给候选；方式是否真在所收紧的那一版产品层之内由服务端在发布那一步核，
-          预览与批准看不出放宽。合同版本信息上的产品引用不带版本号，所以收紧的产品版本要在这里另填。 */}
-      <p className="type-caption text-idpxyz-textMuted">
-        {'一格都不填，表示这一版不约定交付条件；填了任何一格，整节都会提交。交付方式每行填一种；收件范围规则与交付证明规则各填一条引用。'}
-        {layer === 'contract'
-          ? '合同层要写明所收紧的服务产品版本（产品标识 + 版本号），交付方式只能在那一版产品的范围内收紧，发布时由服务端检查。'
-          : ''}
-      </p>
-      <Problems lines={form.problems[root]} />
-      {layer === 'contract' ? (
+      <div className="flex items-center gap-3">
+        <h3 className="type-value font-medium text-idpxyz-text">交付条件（选填）{layerName}</h3>
+        {showFields ? null : (
+          <Button variant="outline" size="sm" type="button" disabled={form.locked} onClick={() => setOpened(true)}>
+            未声明
+          </Button>
+        )}
+      </div>
+      {showFields ? (
+        <p className="type-caption text-idpxyz-textMuted">
+          填了一格，整节都要交。
+          {layer === 'contract'
+            ? '合同层要写明所收紧的服务产品版本（产品标识 + 版本号），交付方式只能在那一版产品的范围内收紧，发布时由服务端检查。'
+            : ''}
+        </p>
+      ) : null}
+      {showFields && !declared && !form.locked ? (
+        <Button variant="ghost" size="sm" type="button" className="self-start" onClick={() => setOpened(false)}>
+          收起
+        </Button>
+      ) : null}
+      {showFields ? <Problems lines={form.problems[root]} /> : null}
+      {showFields && layer === 'contract' ? (
         <div className="grid grid-cols-2 gap-3">
           {/* 对象与版本一起选，两格同时落，不让人手拼版本号（票 party-commercial-uiux/13）。 */}
           <ObjectVersionPicker
-            label="所收紧的服务产品版本 *"
+            label={`所收紧的服务产品版本${star}`}
             objectPath={`${root}.tightens.objectId`}
             versionPath={`${root}.tightens.version`}
             alsoPaths={[`${root}.tightens`]}
@@ -70,7 +87,9 @@ export function DeliveryConditionFields({
           />
         </div>
       ) : null}
-      <Field label="允许的交付方式 *（一行一项）" path={`${root}.methods[i]`} problems={form.problems} as="div">
+      {showFields ? (
+        <>
+      <Field label={`允许的交付方式${star}（一行一项）`} path={`${root}.methods[i]`} problems={form.problems} as="div">
         <textarea
           className={`${selectClass} font-mono min-h-[72px]`}
           value={draft.methodsText}
@@ -85,7 +104,7 @@ export function DeliveryConditionFields({
         ))}
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="收件范围规则引用 *" path={`${root}.recipientScopeRule`} problems={form.problems}>
+        <Field label={`收件范围规则引用${star}`} path={`${root}.recipientScopeRule`} problems={form.problems}>
           <Input
             value={draft.recipientScopeRule}
             readOnly={form.locked}
@@ -94,7 +113,7 @@ export function DeliveryConditionFields({
             onChange={(event) => onPatch({ recipientScopeRule: event.target.value })}
           />
         </Field>
-        <Field label="交付证明规则引用 *" path={`${root}.proofOfDeliveryRule`} problems={form.problems}>
+        <Field label={`交付证明规则引用${star}`} path={`${root}.proofOfDeliveryRule`} problems={form.problems}>
           <Input
             value={draft.proofOfDeliveryRule}
             readOnly={form.locked}
@@ -104,6 +123,8 @@ export function DeliveryConditionFields({
           />
         </Field>
       </div>
+        </>
+      ) : null}
     </section>
   );
 }

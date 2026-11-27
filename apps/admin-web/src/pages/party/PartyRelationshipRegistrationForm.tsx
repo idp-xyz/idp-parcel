@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
@@ -25,12 +25,18 @@ import {
   useRegistrationForm,
 } from './party-registration-fields';
 import { advancedGroupOpen } from './registration-form';
+import { pointedFieldProblem } from './caller-problem-facing';
 import {
   deliveryScopeSpellingOf,
   emptyPartyRelationshipDraft,
+  firstPartyRelationshipGapPath,
   partyRelationshipFormIntro,
+  partyRelationshipGapLabels,
+  partyRelationshipGapSummary,
   partyRelationshipLocalProblems,
   partyRelationshipPayloadOf,
+  partyRelationshipServerProblems,
+  partyRelationshipSubmitGaps,
   partyRoleOptions,
   suggestedPartyRelationshipRevision,
   type PartyRelationshipDraft,
@@ -127,7 +133,11 @@ export function PartyRelationshipRegistrationForm({
     landedOutcome: 'REGISTERED',
     onLanded: onRegistered,
   });
-  const { draft, patch, problems, locked, timeZone, unsaved } = form;
+  const { draft, patch, locked, timeZone, unsaved } = form;
+  // 必填空格在点过保存之后才进问题表。按钮保持可点：点下去才是「还缺什么」的答复，不能在人还没问时把按钮变灰。
+  const [attempted, setAttempted] = useState(false);
+  const formRoot = useRef<HTMLDivElement>(null);
+  const pendingFocus = useRef<string | null>(null);
   useEffect(() => {
     onUnsavedChange?.(unsaved);
   }, [onUnsavedChange, unsaved]);
@@ -152,6 +162,20 @@ export function PartyRelationshipRegistrationForm({
   const accountListId = useId();
   // 高级组：null 即操作者还没点过，按 advancedGroupOpen 的缺省走（编号已在册时展开——这一笔是更新，让人看见序号）。
   const [advancedChoice, setAdvancedChoice] = useState<boolean | null>(null);
+  const selfHolds = selfSide === 'HOLDER';
+  const fieldLabels: Record<string, string> = {
+    ...partyRelationshipGapLabels,
+    'relationships[0].holder': self ? (selfHolds ? '本单位' : '对方') : partyRelationshipGapLabels['relationships[0].holder'],
+    'relationships[0].counterparty': self ? (selfHolds ? '对方' : '本单位') : partyRelationshipGapLabels['relationships[0].counterparty'],
+  };
+  const gaps = attempted ? partyRelationshipSubmitGaps(form.effectiveDraft) : {};
+  const serverDetail = form.state.kind === 'answered' && form.state.answer.kind === 'callerProblem' ? form.state.answer.detail : undefined;
+  const problems = {
+    ...form.problems,
+    ...gaps,
+    ...partyRelationshipServerProblems(serverDetail, form.effectiveDraft, { ...form.problems, ...gaps }),
+  };
+  const gapSummary = partyRelationshipGapSummary(gaps, (path) => fieldLabels[path] ?? path);
   const advancedOpen = advancedGroupOpen(advancedChoice, problems, advancedPaths, known !== undefined);
   const advancedSummary = form.revisionField.edited
     ? `更新序号改为 ${form.revisionField.value}`
@@ -201,7 +225,24 @@ export function PartyRelationshipRegistrationForm({
       readFace="往来单位"
     />
   );
-  const selfHolds = selfSide === 'HOLDER';
+  const focusField = (path: string | null) => {
+    if (path === null || formRoot.current === null) return;
+    const host = formRoot.current.querySelector(`[data-field-path="${CSS.escape(path)}"]`);
+    const control = host?.querySelector('input, select, textarea, button');
+    if (control instanceof HTMLElement) control.focus();
+  };
+  useEffect(() => {
+    const path = pendingFocus.current;
+    if (path === null) return;
+    pendingFocus.current = null;
+    focusField(path);
+  }, [attempted]);
+  useEffect(() => {
+    if (form.state.kind !== 'answered' || form.state.answer.kind !== 'callerProblem') return;
+    const pointed = pointedFieldProblem(form.state.answer.detail ?? '');
+    if (pointed === null) return;
+    focusField(pointed.paths[0]);
+  }, [form.state]);
   const partyCell = (side: 'holder' | 'counterparty') => (self && (side === 'holder') === selfHolds ? selfBox : partyPicker(side));
   const sentenceHint = !self
     ? '前一格是担任角色的单位，例如客户、承运商；后一格是它面对的那一方，通常是我们自己的公司主体，授权交付时是客户所属的单位。'
@@ -416,18 +457,36 @@ export function PartyRelationshipRegistrationForm({
   );
   // 动作行左边说话、右边「取消 / 保存」，主动作靠右，与对象页编辑态的页脚同一排法。JSON 快照的折叠区排在动作行之后：它自己带
   // 提交钮，是另一条路，不归上面那枚「保存」管。
+  const save = () => {
+    const nextGaps = partyRelationshipSubmitGaps(form.effectiveDraft);
+    if (!form.canSend || Object.keys(nextGaps).length > 0) {
+      const path = firstPartyRelationshipGapPath(nextGaps) ?? firstPartyRelationshipGapPath(form.problems);
+      if (attempted) focusField(path);
+      else pendingFocus.current = path;
+      setAttempted(true);
+      return;
+    }
+    form.send();
+  };
   return (
-    <div className="party-relationship-form flex flex-col gap-4">
+    <div ref={formRoot} className="party-relationship-form flex flex-col gap-4">
       {body}
       <div className="flex flex-wrap items-start justify-between gap-3 border-t border-idpxyz-border pt-3">
         <div className="min-w-0 flex-1 type-body">
-          <RegistrationAnswerNote state={form.state} owner={info.owner} outcomeLabels={partyIdentityOutcomeLabels} problemNote={problemNote} />
+          {gapSummary ? <p className="type-body leading-4 text-idpxyz-danger">{gapSummary}</p> : null}
+          <RegistrationAnswerNote
+            state={form.state}
+            owner={info.owner}
+            outcomeLabels={partyIdentityOutcomeLabels}
+            problemNote={problemNote}
+            fieldLabels={fieldLabels}
+          />
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button variant="outline" size="sm" className="type-body" disabled={locked} onClick={onCancel}>
             取消
           </Button>
-          <Button variant="default" size="sm" className={`${primaryActionClass} type-body`} onClick={form.send} disabled={locked || !form.canSend}>
+          <Button variant="default" size="sm" className={`${primaryActionClass} type-body`} onClick={save} disabled={locked || !form.canSend}>
             {locked ? '保存中…' : '保存'}
           </Button>
         </div>

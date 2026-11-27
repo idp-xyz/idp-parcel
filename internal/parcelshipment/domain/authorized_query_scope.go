@@ -77,11 +77,13 @@ func (scope AuthorizedQueryScope) CustomerAccountIDs() []CustomerAccountID {
 }
 
 // ShipmentReadScope 是委托查阅读口吃的可见范围。两种形状各自立得起来：
-// AuthorizedQueryScope 点名可见的客户账户；OperatorTenantScope 是持有主数据与运营查阅读的操作者，看见本租户全部账户。
-// 不把「空账户集」塞进 AuthorizedQueryScope 来表示全部——那个构造器拒绝空集，就是不让每个读口自己解释空的意思。
+// AuthorizedQueryScope 点名可见的客户账户。OperatorTenantScope 是操作者渠道：全部客户必须显式
+// （restrictCustomers 为假）；restrictCustomers 为真时只看见 customers，空切片是什么都看不见。
+// 不把「空账户集」塞进 AuthorizedQueryScope 来表示全部——那个构造器拒绝空集。操作者这边的空集
+// 意思相反，所以用另一份构造，不复用它（ADR-0385 决定二）。
 type ShipmentReadScope interface {
 	TenantID() TenantID
-	// RestrictedAccounts 的 restricted 为真时，读口只看见这些账户；为假时看见本租户的全部账户。
+	// RestrictedAccounts 的 restricted 为真时，读口只看见这些账户，空切片是什么都看不见；为假时看见本租户的全部账户。
 	RestrictedAccounts() (accounts []CustomerAccountID, restricted bool)
 }
 
@@ -90,10 +92,13 @@ func (scope AuthorizedQueryScope) RestrictedAccounts() ([]CustomerAccountID, boo
 	return scope.CustomerAccountIDs(), true
 }
 
-// OperatorTenantScope 是运营侧的委托查阅作用域：整个租户，不点名账户。
+// OperatorTenantScope 是运营侧的委托查阅作用域。restrictCustomers 为假看见本租户全部客户账户；
+// 为真时只看见 customers，空切片是什么都看不见。
 type OperatorTenantScope struct {
-	reference QueryScopeReference
-	tenant    TenantID
+	reference         QueryScopeReference
+	tenant            TenantID
+	restrictCustomers bool
+	customers         []CustomerAccountID
 }
 
 // NewOperatorTenantScope 要引用与租户都在。引用只进证据索引，不参与过滤。
@@ -112,5 +117,43 @@ func (scope OperatorTenantScope) Reference() QueryScopeReference { return scope.
 func (scope OperatorTenantScope) TenantID() TenantID { return scope.tenant }
 
 func (scope OperatorTenantScope) RestrictedAccounts() ([]CustomerAccountID, bool) {
-	return nil, false
+	if !scope.restrictCustomers {
+		return nil, false
+	}
+	copied := make([]CustomerAccountID, len(scope.customers))
+	copy(copied, scope.customers)
+	return copied, true
+}
+
+// NewOperatorCustomerVisibilityScope 把操作者信封上的客户可见范围折成委托查阅作用域。
+// all 为真看见本租户全部客户账户；为假时只看见 accountIDs，空切片是什么都看不见。
+func NewOperatorCustomerVisibilityScope(
+	reference QueryScopeReference,
+	tenant TenantID,
+	all bool,
+	accountIDs []string,
+) (OperatorTenantScope, error) {
+	if !reference.valid() {
+		return OperatorTenantScope{}, fmt.Errorf("%w: scope reference is required", ErrInvalidQueryScope)
+	}
+	if !tenant.valid() {
+		return OperatorTenantScope{}, fmt.Errorf("%w: tenant is required", ErrInvalidQueryScope)
+	}
+	if all {
+		return OperatorTenantScope{reference: reference, tenant: tenant}, nil
+	}
+	seen := make(map[string]struct{}, len(accountIDs))
+	accounts := make([]CustomerAccountID, 0, len(accountIDs))
+	for _, raw := range accountIDs {
+		account, err := NewCustomerAccountID(raw)
+		if err != nil {
+			return OperatorTenantScope{}, fmt.Errorf("%w: customer account: %w", ErrInvalidQueryScope, err)
+		}
+		if _, duplicated := seen[account.String()]; duplicated {
+			return OperatorTenantScope{}, fmt.Errorf("%w: duplicated customer account %s", ErrInvalidQueryScope, account)
+		}
+		seen[account.String()] = struct{}{}
+		accounts = append(accounts, account)
+	}
+	return OperatorTenantScope{reference: reference, tenant: tenant, restrictCustomers: true, customers: accounts}, nil
 }

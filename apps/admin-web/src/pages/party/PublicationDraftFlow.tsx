@@ -37,6 +37,7 @@ import {
   payloadKey,
   pendingPublicationsHash,
   problemsByField,
+  approvalExhausted,
   reachedStep,
   unclaimedProblems,
   withApproval,
@@ -192,6 +193,8 @@ export function PublicationDraftFlow({
   // 批准或发布答`已变更`：旧摘要再送也是同一个答案，按钮收回，下面另摆续办。
   const changed = changedDecisionOf(flow, key);
   const decision = decisionPanelOf(step, changed);
+  // 规则没登记时批准口的答复不会因再点一次而变（ADR-0362：登记口在受控命令行，这页不另开写口）。
+  const approveSpent = approvalExhausted(flow, key);
 
   return (
     <Card className="m-4">
@@ -201,10 +204,7 @@ export function PublicationDraftFlow({
       <CardContent className="flex flex-col gap-4">
         {/* 预览与录入送同一份载荷、服务端在同一处算内容摘要，所以批准与发布的必是预览过的那一份；表单不算摘要、
             不收批准人、不替服务端判格，录入者与批准者由操作者身份给出（ADR-0126）。这些是给开发者的，不上屏。 */}
-        <p className="type-body leading-4 text-idpxyz-textMuted">
-          {'发布分五步：填表 → 预览 → 存为待批准 → 批准 → 发布。预览会检查每一格并算出内容摘要；存为待批准之后表单锁定，要改内容请点「重新开始」。谁能批准由租户的审批职责规则决定。'}
-          <strong>发布后这一版不能修改</strong>，要改须用新的版本号再发布。
-        </p>
+        <p className="type-body leading-4 text-idpxyz-textMuted">存为待批准后内容锁定，发布后这一版不能改，要改就发新版本。</p>
 
         {prefilledFrom ? (
           <div className="flex flex-col gap-1 rounded border border-idpxyz-border px-3 py-2 type-body leading-4 text-idpxyz-text">
@@ -262,12 +262,8 @@ export function PublicationDraftFlow({
         {decision.visible ? (
           <section className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
             <h3 className="type-body font-medium text-idpxyz-text">批准与发布</h3>
-            <p className="type-body leading-4 text-idpxyz-textMuted">
-              {decision.status}
-              {decision.approve === 'ready'
-                ? '批准由租户的审批职责规则决定谁能做，批准之后才能发布；发布后这一版不能修改。'
-                : ''}
-            </p>
+            <p className="type-body leading-4 text-idpxyz-textMuted">{decision.status}</p>
+            {approveSpent ? null : (
             <div className="flex items-center gap-3 flex-wrap">
               <Button
                 variant={decision.approve === 'ready' ? 'default' : 'outline'}
@@ -288,6 +284,7 @@ export function PublicationDraftFlow({
                 {busy === 'publish' ? '发布中…' : decision.publish === 'done' ? '已发布' : '发布'}
               </Button>
             </div>
+            )}
             {changed !== null ? (
               <>
                 <p className="type-body leading-4 text-idpxyz-textMuted">

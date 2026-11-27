@@ -38,6 +38,8 @@ export interface ReferenceRowDraft {
 export interface ServiceProductDraft {
   objectId: string;
   version: string;
+  /** 给人看的名称。不进发布载荷：名称不盖进内容摘要，发布成功后另登记。留空即这一版没有名称。 */
+  displayName: string;
   scope: string;
   effectiveStartsAt: string;
   /** 留空即持续有效（载荷里缺席，不送空串）。 */
@@ -54,6 +56,7 @@ export function emptyServiceProductDraft(): ServiceProductDraft {
   return {
     objectId: '',
     version: '',
+    displayName: '',
     scope: '',
     effectiveStartsAt: '',
     effectiveEndsAt: '',
@@ -72,6 +75,7 @@ export function serviceProductDraftFromRecord(record: ServiceProductRecord): Ser
   return {
     ...emptyServiceProductDraft(),
     objectId: record.objectId,
+    displayName: record.displayName ?? '',
     scope: record.scope,
     deliveryConditions: deliveryConditionDraftFromRecord(record.deliveryConditions),
   };

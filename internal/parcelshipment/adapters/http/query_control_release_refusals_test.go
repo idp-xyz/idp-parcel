@@ -240,6 +240,14 @@ func (double *operationsReadAuthenticatorDouble) AuthenticateOperationsRead(_ co
 	return double.tenant, double.err
 }
 
+func (double *operationsReadAuthenticatorDouble) CustomerVisibility(_ context.Context, bearerToken string) (domain.TenantID, bool, []string, error) {
+	double.token = bearerToken
+	if double.err != nil {
+		return domain.TenantID{}, false, nil, double.err
+	}
+	return double.tenant, true, nil, nil
+}
+
 // Covers: AT-PS-161；ADR-0100 决定四、ADR-0293 决定一——操作者查阅 Intake 的租户只取自认证结果、页大小是渠道产品策略；认证失败原样交回、不构造查询。
 func TestTheOperatorReadIntakeTakesTheRefusalQueryScopeFromTheEnvelopeOnly(t *testing.T) {
 	authenticator := &operationsReadAuthenticatorDouble{tenant: mustValue(t, domain.NewTenantID, "TENANT-9")}

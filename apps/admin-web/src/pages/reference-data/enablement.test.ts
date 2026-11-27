@@ -6,8 +6,11 @@ import {
   actionFor,
   actionLabel,
   confirmMessage,
+  currentEnablement,
   enablementByCode,
   enablementLabel,
+  enablementStandingCounts,
+  filterByEnablementStanding,
   enablementOutcomeNote,
   enablementScopeNote,
   nextRegistration,
@@ -39,6 +42,53 @@ test('没登记过的码就是未配置，不是启用也不是停用', () => {
   equal(standingOf(byCode, 'US'), 'NOT_CONFIGURED');
   // 册上有行但全是未来生效：读回已经导出为未配置，页面照读回走。
   equal(standingOf(byCode, 'SG'), 'NOT_CONFIGURED');
+});
+
+test('登记人取此刻生效的那一笔：未来的不算，同一生效时点修订大的算', () => {
+  equal(currentEnablement(undefined, '2026-06-01T00:00:00Z'), null);
+  equal(currentEnablement(china, 'not-a-time'), null);
+  equal(currentEnablement(china, '2026-06-01T00:00:00Z')?.registeredBy, 'idp#b');
+  equal(currentEnablement(china, '2026-05-15T00:00:00Z')?.registeredBy, 'idp#a');
+  equal(currentEnablement(singapore, '2026-06-01T00:00:00Z'), null);
+  equal(currentEnablement(singapore, '2030-01-01T00:00:00Z')?.registeredBy, 'idp#a');
+
+  const tied: EnablementRecord = {
+    code: 'CN',
+    standing: 'DISABLED',
+    effectiveFrom: '2026-06-01T00:00:00Z',
+    latestRevision: 2,
+    history: [
+      { revision: 1, status: 'ENABLED', effectiveFrom: '2026-06-01T00:00:00Z', registeredBy: 'idp#a', recordedAt: '2026-06-01T00:00:00Z' },
+      { revision: 2, status: 'DISABLED', effectiveFrom: '2026-06-01T00:00:00Z', source: 'MEMO', registeredBy: 'idp#b', recordedAt: '2026-06-02T00:00:00Z' },
+    ],
+  };
+  equal(currentEnablement(tied, '2026-07-01T00:00:00Z')?.registeredBy, 'idp#b');
+  equal(currentEnablement(tied, '2026-07-01T00:00:00Z')?.source, 'MEMO');
+});
+
+test('启用状态计数三种都在，没登记的算未配置', () => {
+  deepEqual(enablementStandingCounts(['CN', 'SG', 'US'], byCode), [
+    { standing: 'ENABLED', label: '已启用', count: 1 },
+    { standing: 'DISABLED', label: '已停用', count: 0 },
+    { standing: 'NOT_CONFIGURED', label: '未配置', count: 2 },
+  ]);
+});
+
+test('启用状态筛选：全部保留次序，点一种只留这一种', () => {
+  const rows = [{ code: 'US' }, { code: 'CN' }, { code: 'SG' }];
+  deepEqual(
+    filterByEnablementStanding(rows, 'ALL', byCode).map((row) => row.code),
+    ['US', 'CN', 'SG'],
+  );
+  deepEqual(
+    filterByEnablementStanding(rows, 'ENABLED', byCode).map((row) => row.code),
+    ['CN'],
+  );
+  deepEqual(
+    filterByEnablementStanding(rows, 'NOT_CONFIGURED', byCode).map((row) => row.code),
+    ['US', 'SG'],
+  );
+  deepEqual(filterByEnablementStanding(rows, 'DISABLED', byCode), []);
 });
 
 test('状态词说人话，集外取值原样显示', () => {

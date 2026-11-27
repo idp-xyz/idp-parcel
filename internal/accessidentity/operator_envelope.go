@@ -41,10 +41,14 @@ type OperatorRequest struct {
 // 信封就等于它经过了铸造。包外仍能写出零值，所以零值做成不可用——Minted 为假、租户为空、不持有
 // 任何一格授予；消费方先问 Minted。
 type OperatorEnvelope struct {
-	tenantID  string
-	subject   OperatorSubject
-	grants    []CapabilityFace
-	decisions []DecisionKind
+	tenantID         string
+	subject          OperatorSubject
+	grants           []CapabilityFace
+	decisions        []DecisionKind
+	allCustomers     bool
+	customerAccounts []string
+	allWarehouses    bool
+	warehouseCodes   []string
 }
 
 func (envelope OperatorEnvelope) TenantID() string         { return envelope.tenantID }
@@ -135,7 +139,8 @@ func (minter *OperatorMinter) MintOperator(
 			continue
 		}
 		// 作业事实登记按作业范围授予、要带设备才铸（WorkFactMinter）；收进管理台信封的授予集，Holds 就会对整格答「是」。
-		if recorded.grant.face == CapabilityWorkFactRegistration {
+		// 数据可见范围同样不进这集：它不是端点门，范围由 foldDataVisibility 收成两份集合（ADR-0385 决定一）。
+		if recorded.grant.face == CapabilityWorkFactRegistration || recorded.grant.face == CapabilityDataVisibility {
 			continue
 		}
 		if recorded.grant.face == CapabilityOperationDecision {
@@ -148,5 +153,15 @@ func (minter *OperatorMinter) MintOperator(
 			grants = append(grants, recorded.grant.face)
 		}
 	}
-	return OperatorEnvelope{tenantID: standing.binding.tenantID, subject: subject, grants: grants, decisions: decisions}, nil
+	allCustomers, customers, allWarehouses, warehouses := foldDataVisibility(standing.grants, at)
+	return OperatorEnvelope{
+		tenantID:         standing.binding.tenantID,
+		subject:          subject,
+		grants:           grants,
+		decisions:        decisions,
+		allCustomers:     allCustomers,
+		customerAccounts: customers,
+		allWarehouses:    allWarehouses,
+		warehouseCodes:   warehouses,
+	}, nil
 }

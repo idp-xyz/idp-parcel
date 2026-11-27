@@ -307,7 +307,7 @@ func attachTrackingNumbers(
 }
 
 // readScopeSQL 把作用域折成 WHERE 的前半与参数。restricted 为假时只有租户，下一个占位从 $2 起；
-// 为真时再加上客户账户集，下一个占位从 $3 起。账户集来自作用域自己交回的副本。
+// 为真时再加上客户账户集，下一个占位从 $3 起。账户集为空时 ANY 不匹配任何行：那是什么都看不见，不是全部。
 func readScopeSQL(scope domain.ShipmentReadScope) (where string, args []any, next int) {
 	args = []any{scope.TenantID().String()}
 	accounts, restricted := scope.RestrictedAccounts()

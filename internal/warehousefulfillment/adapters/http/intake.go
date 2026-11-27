@@ -6,6 +6,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
 // WarehouseRegistrationIntake 把一次已认证的接入请求翻译成仓修订的登记命令。
@@ -46,6 +47,8 @@ type PackagingMaterialRegistrationIntake interface {
 type CatalogueQuery struct {
 	Tenant domain.TenantID
 	Limit  int
+	// Warehouses 为零值时不切仓。操作者渠道要放进信封上的范围：没授是 Restricted 且 Codes 为空。
+	Warehouses ports.WarehouseScope
 }
 
 // CatalogueIntake 把一次已认证的查阅请求翻译成查询。仓的各读口（各仓当前修订、一个仓的修订史）同属主数据与运营查阅，

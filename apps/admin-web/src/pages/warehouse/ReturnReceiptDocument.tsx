@@ -262,7 +262,7 @@ export function ReturnReceiptDocument({
                     items={[
                       { label: '处置去向', value: <ReceiptStatusBadge receipt={receipt} /> },
                       { label: '处置时刻', value: formatInstant(disposition.decidedAt), mono: true },
-                      { label: '处置人', value: dispositionActor(disposition, names), mono: Boolean(disposition.operator) && !names.has(disposition.operator) },
+                      { label: '处置人', value: dispositionActor(disposition, names), mono: disposition.operator != null && disposition.operator !== '' && !names.has(disposition.operator) },
                       { label: '来源', value: labelOf(disposition.origin) },
                       { label: '依据', value: disposition.basis || '—', mono: true },
                       { label: '处置决定号', value: disposition.decisionId, mono: true },

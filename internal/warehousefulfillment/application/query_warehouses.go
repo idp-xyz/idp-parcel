@@ -31,8 +31,9 @@ func (handler *QueryWarehousesHandler) ListWarehouses(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
+	scope ports.WarehouseScope,
 ) (cataloguepage.Result[ports.WarehouseRow], error) {
-	page, err := handler.catalogue.ListWarehouses(ctx, tenant, limit, query)
+	page, err := handler.catalogue.ListWarehouses(ctx, tenant, limit, query, scope)
 	if err != nil {
 		return cataloguepage.Result[ports.WarehouseRow]{}, fmt.Errorf("list warehouses: %w", err)
 	}

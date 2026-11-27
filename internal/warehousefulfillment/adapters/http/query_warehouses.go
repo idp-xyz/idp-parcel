@@ -18,6 +18,7 @@ type WarehouseCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
+		scope ports.WarehouseScope,
 	) (cataloguepage.Result[ports.WarehouseRow], error)
 }
 
@@ -58,7 +59,7 @@ func NewQueryWarehousesEndpoint(intake CatalogueIntake, reader WarehouseCatalogu
 			query.Limit = pageQuery.PageSize
 		}
 
-		page, err := reader.ListWarehouses(request.Context(), query.Tenant, query.Limit, pageQuery)
+		page, err := reader.ListWarehouses(request.Context(), query.Tenant, query.Limit, pageQuery, query.Warehouses)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "warehouse list did not form an answer")
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
@@ -109,7 +110,7 @@ func NewListCustomerWarehousesEndpoint(intake CustomerInboundPreAdvicePorts, rea
 		if pageQuery.PageSize > 0 {
 			limit = pageQuery.PageSize
 		}
-		page, err := reader.ListWarehouses(request.Context(), identity.Tenant, limit, pageQuery)
+		page, err := reader.ListWarehouses(request.Context(), identity.Tenant, limit, pageQuery, ports.WarehouseScope{})
 		if err != nil {
 			slog.ErrorContext(request.Context(), "customer warehouse list did not form an answer")
 			writeCustomerProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed, "")

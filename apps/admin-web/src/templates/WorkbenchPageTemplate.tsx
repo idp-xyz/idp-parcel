@@ -47,6 +47,10 @@ export interface WorkbenchColumn<Row> {
   right?: boolean;
   /** 详情栏打开时收起的次要列，让列表在窄栏里仍读得清主身份与状态。 */
   hideWhenDetailOpen?: boolean;
+  /** 只在详情里读，不进目录列。目录用来扫身份和状态；打开这一版才要看的决定放这里。 */
+  detailOnly?: boolean;
+  /** 只在目录表里。详情里同一件事由 detailOnly 的行来写，不排第二遍。 */
+  tableOnly?: boolean;
   /** 列表可用宽度达到此像素值才展示；随分栏拖动和窗口缩放更新，与详情是否打开无关。 */
   minListWidth?: number;
   width?: string;
@@ -68,6 +72,8 @@ export interface WorkbenchPageTemplateProps<Row> {
    * 它是页面级的切换，不是一册的指标，所以不进 kpis。不传不渲染，渲染逐字节同。
    */
   titleAside?: ReactNode;
+  /** 紧挨着标题的小控件，例如这一页的帮助。不进 titleAside：那边是跟标题并排的一组成块内容。 */
+  titleHelp?: ReactNode;
   kpis?: WorkbenchKpi[];
   /** 刷新钮；refreshing 由调用方按「有没有一问在途」给，收尾时模板报 toast。 */
   onRefresh?: () => void;
@@ -145,6 +151,7 @@ export function WorkbenchPageTemplate<Row>({
   savedModuleId,
   subtitle,
   titleAside,
+  titleHelp,
   kpis,
   onRefresh,
   refreshing = false,
@@ -334,6 +341,7 @@ export function WorkbenchPageTemplate<Row>({
 
   const visibleColumns = columns.filter(
     (column) =>
+      !column.detailOnly &&
       !(detailOpen && column.hideWhenDetailOpen) &&
       (column.minListWidth === undefined || listWidth === null || listWidth >= column.minListWidth),
   );
@@ -479,7 +487,10 @@ export function WorkbenchPageTemplate<Row>({
           此前是一行 overflow-x-auto，窄一点就把后面几格裁掉、不给任何提示，md 以下更是整组藏起。 */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-2 border-b border-idpxyz-border px-6 py-3">
         <div className="min-w-0 shrink-0">
-          <h1 className="type-title font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
+          <div className="flex items-center gap-1">
+            <h1 className="type-title font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
+            {titleHelp}
+          </div>
           {subtitle && <p className="truncate type-body text-idpxyz-breadcrumb">{subtitle}</p>}
         </div>
         {titleAside != null && <div className="flex shrink-0 items-center">{titleAside}</div>}

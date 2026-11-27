@@ -180,7 +180,7 @@ function PricePolicyFields({
         {/* 方案方向是发布当时价卡上下文的答复，照目录行填、表单不从选中的方案反推（ADR-0057）；方向 × 方案方向 × 转换的
             组合由服务端判（AT-PC-033），预览时以成因一句回来。 */}
         <p className={noteClass}>
-          政策方向说明这条政策定的是买价、卖价还是内部价；定价方案从价卡目录<strong>选</strong>。
+          政策方向说明这条政策定的是买价、卖价还是内部价；定价方案从价卡目录选，目录是空的就按「方案标识@版本」写上。
           <strong>方案方向照目录行上显示的方向填</strong>
           ，表单不会替你推断。绑定转换：两个方向相同时选「不转换」；方向不同时，只有卖价政策可以引用一次已冻结的采购评价。组合是否成立由服务端在预览时检查，并说明原因。
           定价方案绑定是留痕，不决定选卡；包裹的销售价按客户合同的销售价格来源选卡。
@@ -204,10 +204,11 @@ function PricePolicyFields({
                 label: `${planReferenceOf(card)} · ${card.direction} · ${card.purpose} · ${card.scope}`,
               }))
             }
-            emptyNote="价卡目录为空；先登记价卡，再发布价格政策。"
+            emptyNote="目录里还没有价卡。写下方案标识@版本，价卡以后按这个标识登记；解析时方案还不在册，答未确认。"
             optionsNote="照所选目录行上的方向填「方案方向」；表单不会替你推断。"
             unknownNote="手填，不在目录上"
-            manualPlaceholder="方案标识@方案版本（目录不可用时手填）"
+            manualWhenEmpty
+            manualPlaceholder="方案标识@方案版本"
             readFace="价卡目录"
           />
           {closedSet('pricePolicy.planDirection', '方案方向（照价卡目录上的方向）*', 'planDirection', priceDirectionOptions)}

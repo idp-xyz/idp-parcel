@@ -1,5 +1,6 @@
 // 操作者页的判读与文案（票 operator-access-administration/02）。纯函数，node:test 钉着；组件只摆。
 
+import { labelFor } from '../../vocabulary/status';
 import type { OperatorGrantRecord, OperatorRecord } from './api';
 
 /** 能力面的中文，原词取自 accessidentity.CapabilityFace 各常量；词表之外的码原样显。 */
@@ -9,21 +10,38 @@ export const capabilityFaceLabels: Record<string, string> = {
   OPERATION_DECISION: '运营决定',
   WORK_FACT_REGISTRATION: '作业事实登记',
   OPERATOR_ACCESS_ADMINISTRATION: '操作者接入管理',
+  DATA_VISIBILITY: '数据可见范围',
+};
+
+export const dataVisibilityKindLabels: Record<string, string> = {
+  CUSTOMER_ACCOUNT: '客户账户',
+  WAREHOUSE: '仓',
 };
 
 export const workScopeKindLabels: Record<string, string> = {
   NODE: '网点',
   OFFSITE: '场外',
+  WAREHOUSE: '仓库',
 };
 
 export function faceLabel(face: string): string {
   return capabilityFaceLabels[face] ?? face;
 }
 
-/** 一条授予的细分格：运营决定按决定种类、作业事实按作业范围；别的面没有细分。 */
-export function grantQualifier(grant: Pick<OperatorGrantRecord, 'decisionKind' | 'workScope'>): string {
-  if (grant.decisionKind) return grant.decisionKind;
+/** 决定种类的界面词。词表没有这一码时原样显出码，登记仍用码。 */
+export function decisionKindLabel(kind: string): string {
+  return labelFor(kind);
+}
+
+/** 一条授予的细分格：运营决定按决定种类、作业事实按作业范围、数据可见范围按种类和引用；别的面没有细分。 */
+export function grantQualifier(grant: Pick<OperatorGrantRecord, 'decisionKind' | 'workScope' | 'dataVisibility'>): string {
+  if (grant.decisionKind) return decisionKindLabel(grant.decisionKind);
   if (grant.workScope) return `${workScopeKindLabels[grant.workScope.kind] ?? grant.workScope.kind} ${grant.workScope.reference}`;
+  if (grant.dataVisibility) {
+    const kind = dataVisibilityKindLabels[grant.dataVisibility.kind] ?? grant.dataVisibility.kind;
+    if (grant.dataVisibility.reference === '*') return `${kind} 全部`;
+    return `${kind} ${grant.dataVisibility.reference}`;
+  }
   return '';
 }
 

@@ -48,7 +48,7 @@ export function VersionObjectPage<Row>({
 }) {
   const fields = row
     ? columns
-        .filter((column) => (column.id ?? column.key) !== 'new-version' && typeof column.header === 'string')
+        .filter((column) => (column.id ?? column.key) !== 'new-version' && typeof column.header === 'string' && !column.tableOnly)
         .map((column) => ({ label: column.header as string, value: column.render(row) }))
     : [];
   return (

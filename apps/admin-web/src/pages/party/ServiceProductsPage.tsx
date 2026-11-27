@@ -9,7 +9,7 @@ import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/addre
 import { useRegisterList } from './register-list';
 import { moduleInfoById } from '../../navigation';
 import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
-import { RegistrationPanel } from '../../components/registration';
+import { ServiceProductFormRegistration } from './ServiceProductFormRegistration';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
@@ -19,13 +19,7 @@ import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import { useAddressKeyword } from '../../templates/use-address-keyword';
 import { useOwnAddressChange } from '../../templates/use-own-address-change';
 import { usePushedAddress } from '../../templates/use-pushed-address';
-import {
-  commercialRegistrationEndpoints,
-  listServiceProducts,
-  productChannelOutcomeLabels,
-  registerCommercial,
-  type ServiceProductRecord,
-} from './api';
+import { listServiceProducts, type ServiceProductRecord } from './api';
 import { nextRequest, newVersionFrom, type NewVersionRequest } from './new-version';
 import { useReplaceDraftGuard } from './ReplaceDraftGuard';
 import { hasUnsavedDraft, publicationGroup } from './unsaved-guard';
@@ -35,7 +29,13 @@ import { VersionClosureDialog } from './VersionClosureDialog';
 import { VersionDetailPanel } from './VersionDetailPanel';
 import { versionHistoryOf } from './version-history';
 import { serviceProductDraftFromRecord } from './service-product-form';
-import { serviceProductsViewHash, serviceProductsViewOf, type ServiceProductsView } from './service-products-address';
+import {
+  serviceProductFormHash,
+  serviceProductFormTargetOf,
+  serviceProductsViewHash,
+  serviceProductsViewOf,
+  type ServiceProductsView,
+} from './service-products-address';
 import { RegisterView } from './RegisterView';
 import { VersionStatusChips } from './VersionStatusChips';
 import {
@@ -46,14 +46,16 @@ import {
   type VersionStatusFilter,
 } from './version-groups';
 import { StatusPill } from '../../components/StatusPill';
+import { labelFor } from '../../vocabulary/status';
+import { labelOf, registrationTitles, serviceFormLabels } from './presentation';
 import {
-  labelOf,
-  problemNote,
-  registrationSnapshotHints,
-  registrationTitles,
-  serviceFormLabels,
-} from './presentation';
+  serviceProductDeliveryAbsentNote,
+  serviceProductFollowOn,
+  serviceProductFormAbsent,
+  serviceProductFormAbsentNote,
+} from './service-product-readiness';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
+import { ServiceProductHelp } from './ServiceProductHelp';
 import { ServiceProductPublicationForm } from './ServiceProductPublicationForm';
 import { useMayWriteRegistry, useRegistryWriteGrant } from '../use-operator-grants';
 import { entryHint } from '../operator-grants';
@@ -70,15 +72,87 @@ const productFacts = (row: ServiceProductRecord): VersionFacts => ({
   effectiveStartsAt: row.effectiveStartsAt,
 });
 
-// 主列只留运营要看的：产品与版本、形态、状态、交付条件、有效期；适用范围与各标识进右栏详情的「技术详情」。
+// 主列只留扫目录要看的：产品与版本、形态、状态、交付条件、有效期。适用范围是打开这一版才读的决定，
+// 只进详情（detailOnly），不跟产品标识、版本号一起折进「技术详情」。
 // 右栏打开时收起次要列（hideWhenDetailOpen），窄栏里仍读得清主身份与状态。
-const columns: WorkbenchColumn<ServiceProductRecord>[] = [
+function openFollowOn(hash: string) {
+  window.location.hash = hash;
+}
+
+function productColumns(onRegister: ((row: ServiceProductRecord) => void) | null): WorkbenchColumn<ServiceProductRecord>[] {
+  return [
+  {
+    key: 'version-standing',
+    header: '版本',
+    detailOnly: true,
+    render: (row) => labelFor(row.status),
+  },
+  {
+    key: 'form-standing',
+    header: '服务形态',
+    detailOnly: true,
+    render: (row) =>
+      serviceProductFormAbsent(row.form) ? (
+        <div>
+          {onRegister ? (
+            <button
+              type="button"
+              className="type-body text-idpxyz-accent hover:underline"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRegister(row);
+              }}
+            >
+              未登记
+            </button>
+          ) : (
+            <span className="text-idpxyz-textMuted">未登记</span>
+          )}
+          <p className="mt-0.5 type-caption text-idpxyz-textMuted">{serviceProductFormAbsentNote}</p>
+        </div>
+      ) : (
+        labelOf(serviceFormLabels, row.form ?? '')
+      ),
+  },
+  {
+    key: 'delivery-standing',
+    header: '交付条件',
+    detailOnly: true,
+    render: (row) => (
+      <DeliveryConditionsCell conditions={row.deliveryConditions} absentNote={serviceProductDeliveryAbsentNote} />
+    ),
+  },
+  {
+    key: 'follow-on',
+    header: '引用这一版',
+    detailOnly: true,
+    render: () => (
+      <div className="flex flex-col gap-2">
+        {serviceProductFollowOn.map((item) => (
+          <div key={item.hash}>
+            <button
+              type="button"
+              className="type-body text-idpxyz-accent hover:underline"
+              onClick={(event) => {
+                event.stopPropagation();
+                openFollowOn(item.hash);
+              }}
+            >
+              {item.label}
+            </button>
+            <p className="type-caption text-idpxyz-textMuted">{item.note}</p>
+          </div>
+        ))}
+      </div>
+    ),
+  },
   {
     key: 'product',
     header: '服务产品',
     render: (row) => (
       <div className="min-w-40">
-        <p className="font-mono font-medium text-idpxyz-text">{row.objectId}</p>
+        <p className="font-medium text-idpxyz-text">{row.displayName || row.objectId}</p>
+        {row.displayName ? <p className="mt-0.5 font-mono type-body leading-4 text-idpxyz-textMuted">{row.objectId}</p> : null}
         <p className="mt-0.5 type-body leading-4 text-idpxyz-textMuted">版本 {row.version}</p>
       </div>
     ),
@@ -86,18 +160,50 @@ const columns: WorkbenchColumn<ServiceProductRecord>[] = [
   {
     key: 'form',
     header: '服务形态',
-    render: (row) => (row.form ? labelOf(serviceFormLabels, row.form) : <span className="text-idpxyz-textMuted">未登记</span>),
+    tableOnly: true,
+    render: (row) =>
+      serviceProductFormAbsent(row.form) ? (
+        onRegister ? (
+          <button
+            type="button"
+            className="type-body text-idpxyz-accent hover:underline"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRegister(row);
+            }}
+          >
+            未登记
+          </button>
+        ) : (
+          <span className="text-idpxyz-textMuted">未登记</span>
+        )
+      ) : (
+        labelOf(serviceFormLabels, row.form ?? '')
+      ),
   },
   {
     key: 'status',
     header: '状态',
+    tableOnly: true,
     render: (row) => <StatusPill code={row.status} />,
   },
   {
     key: 'delivery-conditions',
     header: '交付条件',
+    tableOnly: true,
     hideWhenDetailOpen: true,
     render: (row) => <DeliveryConditionsCell conditions={row.deliveryConditions} />,
+  },
+  {
+    key: 'scope',
+    header: '适用范围',
+    detailOnly: true,
+    render: (row) => (
+      <span className="type-body leading-4">
+        <span className="font-mono">{row.scope}</span>
+        {row.scopeName ? <span className="text-idpxyz-text"> {row.scopeName}</span> : <span className="text-idpxyz-textMuted"> 未配置</span>}
+      </span>
+    ),
   },
   {
     key: 'effective',
@@ -112,6 +218,7 @@ const columns: WorkbenchColumn<ServiceProductRecord>[] = [
     render: (row) => <span className="font-mono type-body leading-4">{formatInstant(row.publishedAt)}</span>,
   },
 ];
+}
 
 const keyOf = (row: ServiceProductRecord) => `${row.objectId}@${row.version}`;
 
@@ -127,12 +234,15 @@ function ServiceProductVersionsWorkbench({
   refreshKey,
   onStartNewVersion,
   onOpenView,
+  onRegisterForm,
 }: {
   refreshKey: number;
   /** 右栏头部的「发新版本」：把这一版带去登记视图预填（票 party-commercial-uiux/14）。 */
   onStartNewVersion: (record: ServiceProductRecord) => void;
-  /** 页头主动作：进「新增产品版本」「登记服务形态」登记视图。 */
+  /** 页头主动作：进「新增产品版本」。 */
   onOpenView: (view: ServiceProductsView) => void;
+  /** 目录「未登记」：带这一版去登记形态。 */
+  onRegisterForm: (record: ServiceProductRecord) => void;
 }) {
   // 检索词在地址里（`?q=`）：别处的引用链接带着它过来，筛到那一条；刷新与换标签回来也还在。
   const [statusFilter, setStatusFilter] = useState<VersionStatusFilter>('all');
@@ -161,11 +271,13 @@ function ServiceProductVersionsWorkbench({
     ...(answer?.kind === 'outcome' ? productKnownVersions(answer.body) : []),
     ...(unfilteredBody ? productKnownVersions(unfilteredBody) : []),
   ]);
+  const columns = productColumns(mayWrite ? onRegisterForm : null);
 
   return (
     <>
       <WorkbenchPageTemplate<ServiceProductRecord>
         title={info.title}
+        titleHelp={<ServiceProductHelp />}
         viewStateKey="service-products"
         // 渠道账号的业务使用授权还没有读口，本页不为它留列。
         subtitle="我们对外卖的服务产品及其版本、形态与交付条件；要改条款就发新版本。产品能走哪些渠道，看「渠道产品」页"
@@ -173,14 +285,9 @@ function ServiceProductVersionsWorkbench({
         refreshing={answer === null}
         primaryAction={
           mayWrite ? (
-            <>
-              <Button variant="outline" size="sm" className="type-body text-idpxyz-breadcrumb" onClick={() => onOpenView('register')}>
-                登记服务形态
-              </Button>
-              <Button variant="default" className={primaryActionClass} onClick={() => onOpenView('publish')}>
-                新增产品版本
-              </Button>
-            </>
+            <Button variant="default" className={primaryActionClass} onClick={() => onOpenView('publish')}>
+              新增产品版本
+            </Button>
           ) : undefined
         }
         search={{ value: search, onChange: setSearch, placeholder: '搜索服务产品或版本' }}
@@ -203,12 +310,11 @@ function ServiceProductVersionsWorkbench({
             <VersionDetailPanel<ServiceProductRecord>
               row={row}
               columns={columns}
-              title={(record) => ({ objectId: record.objectId, version: record.version })}
+              title={(record) => ({ objectId: record.displayName || record.objectId, version: record.version })}
               subtitle={(record) => `服务产品 · ${record.form ? labelOf(serviceFormLabels, record.form) : '形态未登记'}`}
               technical={(record) => [
                 { label: '产品标识', value: record.objectId },
                 { label: '版本号', value: record.version },
-                { label: '适用范围', value: record.scope },
                 { label: '服务形态码', value: record.form ?? '' },
               ]}
               status={(record) => record.status}
@@ -251,7 +357,7 @@ function ServiceProductVersionsWorkbench({
           emptyTitle: '还没有发布任何服务产品',
           emptyDescription: `合同、价格与接单规则都要挂在服务产品上。${entryHint(
             mayWrite,
-            '用页头的「新增产品版本」发布第一个版本；「登记服务形态」只给已有版本补形态。',
+            '用页头的「新增产品版本」发布第一个版本。版本发布后，目录里的「未登记」给这一版补形态。',
           )}`,
           narrowed: narrowed || pastFirstPage(pagination),
         })}
@@ -282,6 +388,17 @@ function ServiceProductObjectPage({ objectId, version }: VersionObjectAddress) {
     readback.retry();
     list.retry();
   };
+  const columns = productColumns(
+    mayWrite
+      ? (record) => {
+          window.location.hash = serviceProductFormHash('#/service-products', {
+            productId: record.objectId,
+            version: record.version,
+            scope: record.scope,
+          });
+        }
+      : null,
+  );
   return (
     <>
       <VersionObjectPage<ServiceProductRecord>
@@ -294,7 +411,6 @@ function ServiceProductObjectPage({ objectId, version }: VersionObjectAddress) {
         technical={(record) => [
           { label: '产品标识', value: record.objectId },
           { label: '版本号', value: record.version },
-          { label: '适用范围', value: record.scope },
           { label: '服务形态码', value: record.form ?? '' },
         ]}
         history={row ? versionHistoryOf(historyPool, row) : []}
@@ -324,8 +440,8 @@ function ServiceProductObjectPage({ objectId, version }: VersionObjectAddress) {
 }
 
 const viewTitles: Record<Exclude<ServiceProductsView, 'versions'>, { title: string; subtitle: string }> = {
-  publish: { title: '新增产品版本', subtitle: '版本壳、有效起止与引用；表单 → 预览 → 存为待批准 → 批准 → 发布' },
-  register: { title: registrationTitles['service-product-form'], subtitle: '给已有的产品版本补服务形态；改形态要发新版本' },
+  publish: { title: '新增产品版本', subtitle: '' },
+  register: { title: registrationTitles['service-product-form'], subtitle: '改形态要发新版本' },
 };
 
 /**
@@ -339,9 +455,8 @@ const viewTitles: Record<Exclude<ServiceProductsView, 'versions'>, { title: stri
  * 「表单 → 预览摘要 → 存为待批准 → 批准 → 发布」由公共半边的流程组件走；发布落定后目录读面刷新，回到目录新版本立刻可见。
  * JSON 镜像签留在商业规则与策略页作高级口，不因主路径落地而删。
  *
- * 登记视图「登记服务形态」只装服务形态一册。**服务产品版本本身不在登记视图**：版本由发布口产生（发布快照的对象类别取
- * SERVICE_PRODUCT），那是另一个用例、另一套答案代数，而形态是挂在一个已在册且已生效的版本上的内容。形态钉在产品版本上：
- * 同一版本换个形态撞的是内容冲突，改形态要发新版本。墙降之前它必然答 403「接入渠道未配置」，那是诚实答案。
+ * 登记视图「登记服务形态」只装服务形态一册，从目录「未登记」进入，带上这一版的产品、版本、适用范围。版本本身仍由发布口产生。
+ * 形态钉在已发布的版本上：同一版本换个形态撞的是内容冲突，改形态要发新版本。JSON 在该页的技术详情里，不占主路径。
  */
 export function ServiceProductsPage() {
   const grant = useRegistryWriteGrant();
@@ -392,6 +507,7 @@ export function ServiceProductsPage() {
 
   if (object) return <ServiceProductObjectPage key={`${object.objectId}@${object.version}`} {...object} />;
 
+  const formTarget = serviceProductFormTargetOf(hash);
   if (view === 'publish' || view === 'register') {
     const heading = viewTitles[view];
     return (
@@ -411,15 +527,14 @@ export function ServiceProductsPage() {
             }
           />
         ) : (
-          <RegistrationPanel
-            moduleId="service-products"
-            title={registrationTitles['service-product-form']}
-            endpoint={`POST ${commercialRegistrationEndpoints['service-product-form']}`}
-            snapshotHint={registrationSnapshotHints['service-product-form']}
-            submit={(snapshot) => registerCommercial('service-product-form', snapshot)}
-            // 形态与产品—渠道映射共用一份答案代数（服务端交回同一个 ProductChannelOutcome）。
-            outcomeLabels={productChannelOutcomeLabels}
-            problemNote={problemNote}
+          <ServiceProductFormRegistration
+            key={
+              formTarget
+                ? `${formTarget.productId}/${formTarget.version}/${formTarget.scope}`
+                : 'blank'
+            }
+            target={formTarget}
+            onRegistered={() => setRefreshKey((value) => value + 1)}
           />
         )}
         <ConfirmDialog
@@ -440,7 +555,20 @@ export function ServiceProductsPage() {
   return (
     <>
       {replaceGuard.dialog}
-      <ServiceProductVersionsWorkbench refreshKey={refreshKey} onStartNewVersion={replaceGuard.start} onOpenView={openView} />
+      <ServiceProductVersionsWorkbench
+        refreshKey={refreshKey}
+        onStartNewVersion={replaceGuard.start}
+        onOpenView={openView}
+        onRegisterForm={(record) =>
+          pushed.push(
+            serviceProductFormHash(window.location.hash, {
+              productId: record.objectId,
+              version: record.version,
+              scope: record.scope,
+            }),
+          )
+        }
+      />
     </>
   );
 }

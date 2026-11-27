@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { currentDisplayTimeZone } from '../moment';
 import type { NewVersionStart } from './new-version';
-import { listServiceProducts } from './api';
+import { listScopeNames, listServiceProducts, registerDisplayName, registerScopeName, type ScopeNameRecord } from './api';
 import { ExistingVersionsNote } from './ExistingVersionsNote';
 import { productKnownVersions } from './known-versions';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { DeliveryConditionFields } from './DeliveryConditionFields';
-import { Field, Problems, fieldLabel, useLoaded } from './PublicationFormFields';
+import { Field, Problems, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import type { DeliveryConditionDraft } from './delivery-condition-section';
 import { WallTimeField } from './party-registration-fields';
 import {
@@ -57,15 +57,28 @@ export function ServiceProductPublicationForm({ onPublished, start }: ServicePro
   // 这个对象已有哪些版本（票 party-commercial-uiux/15）：读不到就不提示，不报错。
   const knownAnswer = useLoaded(loadKnownVersions);
   const known = knownAnswer?.kind === 'outcome' ? productKnownVersions(knownAnswer.body) : null;
+  const [scopeNames, setScopeNames] = useState<ScopeNameRecord[] | null>(null);
+  const [scopeDraft, setScopeDraft] = useState({ scope: '', name: '' });
+  useEffect(() => {
+    void listScopeNames().then((answer) => {
+      if (answer.kind === 'outcome') setScopeNames(answer.body.scopes);
+    });
+  }, []);
 
   return (
     <PublicationDraftFlow
       kind="SERVICE_PRODUCT"
       title="新增服务产品版本"
       assemblePayload={() => serviceProductPayloadOf(draft, timeZone)}
+      onPublished={() => {
+        const name = draft.displayName.trim();
+        if (name !== '') {
+          void registerDisplayName(draft.objectId.trim(), draft.version.trim(), name);
+        }
+        onPublished?.();
+      }}
       fieldPaths={serviceProductFieldPaths(draft)}
       localProblems={serviceProductLocalProblems(draft, timeZone)}
-      onPublished={onPublished}
       prefilledFrom={start?.from}
       prefilledCaution={start?.caution}
       versionNote={
@@ -86,6 +99,25 @@ export function ServiceProductPublicationForm({ onPublished, start }: ServicePro
             form={form}
             timeZone={timeZone}
             onPatch={patch}
+            scopeNames={scopeNames}
+            scopeDraft={scopeDraft}
+            onScopeDraft={setScopeDraft}
+            onRegisterScope={async () => {
+              const scope = scopeDraft.scope.trim();
+              const name = scopeDraft.name.trim();
+              if (scope === '' || name === '') return;
+              const answer = await registerScopeName(scope, name);
+              if (answer.kind === 'outcome' && answer.body.outcome !== 'CONTENT_CONFLICT') {
+                setScopeNames((current) => {
+                  const next = (current ?? []).filter((item) => item.scope !== scope);
+                  next.push({ scope, name });
+                  next.sort((left, right) => left.scope.localeCompare(right.scope));
+                  return next;
+                });
+                patch({ scope });
+                setScopeDraft({ scope: '', name: '' });
+              }
+            }}
             onPatchRow={patchRow}
             onAddRow={() => patch({ references: [...draft.references, emptyReferenceRow()] })}
             onRemoveRow={(index) => patch({ references: draft.references.filter((_, at) => at !== index) })}
@@ -111,6 +143,10 @@ function ServiceProductFields({
   onPatchRow,
   onAddRow,
   onRemoveRow,
+  scopeNames,
+  scopeDraft,
+  onScopeDraft,
+  onRegisterScope,
 }: {
   draft: ServiceProductDraft;
   form: PublicationFormContext;
@@ -119,6 +155,10 @@ function ServiceProductFields({
   onPatchRow: (index: number, change: Partial<ReferenceRowDraft>) => void;
   onAddRow: () => void;
   onRemoveRow: (index: number) => void;
+  scopeNames: ScopeNameRecord[] | null;
+  scopeDraft: { scope: string; name: string };
+  onScopeDraft: (next: { scope: string; name: string }) => void;
+  onRegisterScope: () => void;
 }) {
   const field = (
     path: keyof Omit<ServiceProductDraft, 'references' | 'deliveryConditions'>,
@@ -144,21 +184,60 @@ function ServiceProductFields({
       locked={form.locked}
       timeZone={timeZone}
       note={note}
+      plain
       onChange={(value) => onPatch({ [path]: value })}
     />
   );
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 本册载荷是版本壳加一节可缺的正文；哪几格立不住由预览逐格答，表单不自判。 */}
-      <p className="type-body leading-4 text-idpxyz-textMuted">
-        这里发布服务产品的一个版本，供合同、接单规则与价格政策引用。服务形态在「登记服务形态」里登记，能走哪些渠道在「渠道产品」页登记。交付条件可以不填。
-      </p>
-
       <div className="grid grid-cols-2 gap-3">
         {field('objectId', '产品编号 *', '如 PROD-CN-SG-EXPRESS')}
+        {field('displayName', '名称', '给人看的叫法，留空就只显示编号')}
         {field('version', '版本号 *', '如 v1；改条款就用下一个版本号')}
-        {field('scope', '适用范围 *', '这个产品管哪些业务，按公司约定的写法填')}
+        <Field label="适用范围 *" path="scope" problems={form.problems}>
+          {scopeNames === null ? (
+            <p className="type-caption text-idpxyz-textMuted">正在读取范围名册。</p>
+          ) : scopeNames.length === 0 ? (
+            <p className="type-caption text-idpxyz-textMuted">未配置</p>
+          ) : (
+            <select
+              className={selectClass}
+              value={draft.scope}
+              disabled={form.locked}
+              onChange={(event) => onPatch({ scope: event.target.value })}
+            >
+              <option value="">请选择</option>
+              {scopeNames.map((item) => (
+                <option key={item.scope} value={item.scope}>
+                  {item.name} · {item.scope}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <div className="flex flex-col gap-1">
+          <span className={fieldLabel}>登记范围叫法</span>
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+            <Input
+              value={scopeDraft.scope}
+              readOnly={form.locked}
+              className="font-mono type-value"
+              placeholder="范围编号"
+              onChange={(event) => onScopeDraft({ ...scopeDraft, scope: event.target.value })}
+            />
+            <Input
+              value={scopeDraft.name}
+              readOnly={form.locked}
+              className="type-value"
+              placeholder="叫法"
+              onChange={(event) => onScopeDraft({ ...scopeDraft, name: event.target.value })}
+            />
+            <Button variant="outline" disabled={form.locked} onClick={onRegisterScope}>
+              登记
+            </Button>
+          </div>
+        </div>
         {moment('effectiveStartsAt', '开始时间 *')}
         {moment('effectiveEndsAt', '结束时间', '留空即长期有效。')}
       </div>
@@ -204,12 +283,8 @@ function ReferencesEditor({
         </Button>
       </div>
       {/* 类别是不是集合内的词由预览逐格点名；被引对象发布了没有由发布那一步答（发布未决）。 */}
-      <p className="type-caption text-idpxyz-textMuted mb-2">
-        左格填对象的类别，右格填它的编号；两格都空的行不会提交。类别填错时预览会指出；关联的对象还没发布时，这一版暂时发布不了，先发布它再来。
-      </p>
-      {rows.length === 0 ? (
-        <p className="type-caption text-idpxyz-textMuted">没有关联对象。服务产品可以不关联任何对象。</p>
-      ) : (
+      <p className="type-caption text-idpxyz-textMuted mb-2">空行不提交。</p>
+      {rows.length === 0 ? null : (
         <div className="flex flex-col gap-2">
           {rows.map((row, index) => (
             <div key={index} className="flex flex-col gap-1">

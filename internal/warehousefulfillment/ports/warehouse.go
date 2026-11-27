@@ -66,14 +66,23 @@ type WarehouseRow struct {
 	RegisteredAt        time.Time
 }
 
+// WarehouseScope 是一次仓册查阅看得见的仓。Restricted 为假看见本租户全部仓；为真时只看见 Codes，
+// 空切片是什么都看不见。零值是不限制，留给还没接上可见范围的调用。操作者渠道要把信封上的范围显式放进来：
+// 没授是 Restricted 且 Codes 为空，不是零值（ADR-0385 决定二）。
+type WarehouseScope struct {
+	Restricted bool
+	Codes      []string
+}
+
 // WarehouseCatalogueRead 是仓册的列表读口（ADR-0077）：本租户各仓的当前修订，可按是否停用筛，按 WarehousePages 分页
-// （ADR-0144）。租户在签名上、不取自查询；limit 非正拒；空册答空页，不答未配置。
+// （ADR-0144）。租户在签名上、不取自查询；limit 非正拒；空册答空页，不答未配置。scope 再切看得见的仓。
 type WarehouseCatalogueRead interface {
 	ListWarehouses(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
 		query cataloguepage.Query,
+		scope WarehouseScope,
 	) (cataloguepage.Result[WarehouseRow], error)
 }
 

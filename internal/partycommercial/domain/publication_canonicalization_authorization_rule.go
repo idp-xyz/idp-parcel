@@ -30,20 +30,22 @@ func DeclaredCancellationPartyNamed(name string) (DeclaredCancellationParty, boo
 	return closedCodeNamed(DeclaredCancellationParty.valid, DeclaredCancellationParty.String, name)
 }
 
-// canonicalizeAuthorizationRule 是 CanonicalizePublicationContent 里授权规则那一支：正文缺席与立不住的目录各答
-// 自己那一格（补正文 / 改正文），不折成一个「算不出」。
+// canonicalizeAuthorizationRule 是 CanonicalizePublicationContent 里授权规则那一支。
+//
+// 取消授权目录可缺：缺席或零行折成两格文档（规范化版本与 kind），与服务产品不带交付条件同一条边界——
+// 壳上的指名引用（价格政策）不进摘要。目录在场则仍过与发布时相同的门，立不住答改正文，不折成一个「算不出」。
 func canonicalizeAuthorizationRule(content PublicationContent) (CanonicalPublicationContent, error) {
-	if content.AuthorizationRule == nil {
-		return CanonicalPublicationContent{}, ErrPublicationContentAbsent
+	document := canonicalPublicationDocument{
+		Canonicalization: publicationCanonicalizationVersion,
+		Kind:             AuthorizationRuleObject.String(),
 	}
-	if err := content.AuthorizationRule.validate(); err != nil {
-		return CanonicalPublicationContent{}, err
+	if content.AuthorizationRule != nil && len(content.AuthorizationRule.CancellationAuthority) > 0 {
+		if err := content.AuthorizationRule.validate(); err != nil {
+			return CanonicalPublicationContent{}, err
+		}
+		document.AuthorizationRule = canonicalAuthorizationRuleBodyOf(*content.AuthorizationRule)
 	}
-	return canonicalDigestOf(canonicalPublicationDocument{
-		Canonicalization:  publicationCanonicalizationVersion,
-		Kind:              content.Kind.String(),
-		AuthorizationRule: canonicalAuthorizationRuleBodyOf(*content.AuthorizationRule),
-	})
+	return canonicalDigestOf(document)
 }
 
 // canonicalAuthorizationRuleBody 镜像批文 declarations.cancellationAuthority 的形状（行键 party / rule）。目录按

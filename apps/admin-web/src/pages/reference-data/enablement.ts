@@ -10,6 +10,7 @@ import type {
   EnablementKind,
   EnablementRecord,
   EnablementRegistrationPayload,
+  EnablementRevisionRecord,
   EnablementStanding,
 } from './api';
 
@@ -29,6 +30,55 @@ export function enablementByCode(records: readonly EnablementRecord[]): Map<stri
 /** 某个码此刻的状态：册上没有行（或没有生效的行）就是未配置。 */
 export function standingOf(byCode: ReadonlyMap<string, EnablementRecord>, code: string): EnablementStanding {
   return byCode.get(code)?.standing ?? 'NOT_CONFIGURED';
+}
+
+/** 启用状态筛：全部，或封闭三词里的一种。 */
+export type EnablementStandingChoice = 'ALL' | EnablementStanding;
+
+const standingChoiceOrder = ['ENABLED', 'DISABLED', 'NOT_CONFIGURED'] as const satisfies readonly EnablementStanding[];
+
+/** 三种状态各一格，没出现的也留着、计数是 0。次序固定，不跟着谁多谁少换。 */
+export function enablementStandingCounts(
+  codes: readonly string[],
+  byCode: ReadonlyMap<string, EnablementRecord>,
+): { standing: EnablementStanding; label: string; count: number }[] {
+  const counts = new Map<EnablementStanding, number>(standingChoiceOrder.map((standing) => [standing, 0]));
+  for (const code of codes) {
+    const standing = standingOf(byCode, code);
+    counts.set(standing, (counts.get(standing) ?? 0) + 1);
+  }
+  return standingChoiceOrder.map((standing) => ({ standing, label: enablementLabel(standing), count: counts.get(standing) ?? 0 }));
+}
+
+/** 按启用状态留行。ALL 不动次序；其余只留此刻状态正好是那一种的。 */
+export function filterByEnablementStanding<Row extends { code: string }>(
+  rows: readonly Row[],
+  choice: EnablementStandingChoice,
+  byCode: ReadonlyMap<string, EnablementRecord>,
+): Row[] {
+  if (choice === 'ALL') return [...rows];
+  return rows.filter((row) => standingOf(byCode, row.code) === choice);
+}
+
+/**
+ * 此刻生效的那一笔，登记人在这一笔上。读回只把登记人放在各修订里，不放在码的汇总上；
+ * 哪一笔说了算与 EnablementStandingAt 同一条：生效时点不晚于这份读回的 asOf，先比生效时点、再比修订。
+ * 没有这样的一笔（没登记，或全是以后才生效）就没有登记人。asOf 解析不了时不猜是谁。
+ */
+export function currentEnablement(record: EnablementRecord | undefined, asOf: string): EnablementRevisionRecord | null {
+  const at = Date.parse(asOf);
+  if (record === undefined || Number.isNaN(at)) return null;
+  let standing: EnablementRevisionRecord | null = null;
+  let standingFrom = Number.NEGATIVE_INFINITY;
+  for (const row of record.history) {
+    const from = Date.parse(row.effectiveFrom);
+    if (Number.isNaN(from) || from > at) continue;
+    if (standing === null || from > standingFrom || (from === standingFrom && row.revision > standing.revision)) {
+      standing = row;
+      standingFrom = from;
+    }
+  }
+  return standing;
 }
 
 /** 这一行能做的动作：已启用的只能停用，其余（已停用、未配置）都是启用。 */

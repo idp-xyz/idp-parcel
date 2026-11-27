@@ -42,6 +42,7 @@ func (unwiredWarehouseCatalogue) ListWarehouses(
 	warehousedomain.TenantID,
 	int,
 	cataloguepage.Query,
+	warehouseports.WarehouseScope,
 ) (cataloguepage.Result[warehouseports.WarehouseRow], error) {
 	return cataloguepage.Result[warehouseports.WarehouseRow]{}, errOrchestrationNotWired
 }

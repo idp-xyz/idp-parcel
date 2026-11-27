@@ -76,9 +76,12 @@ test('时刻格换不成时刻才是本地问题，落在该格路径上', () =>
   deepEqual(authorizationRuleLocalProblems(emptyAuthorizationRuleDraft(), 'Asia/Shanghai'), {});
 });
 
-test('没选请求方、空规则、同一请求方两行、零行都原样上送——表单不代判、不补默认', () => {
-  const undecided = payloadOf(filled({ rows: [emptyCancellationRowDraft()] }));
-  deepEqual(undecided.authorizationRule?.cancellationAuthority, [{ party: '', rule: '' }]);
+test('整节空白不出取消目录；写过字的行照原样送，空格与同一请求方两行不在这里拦', () => {
+  const blank = payloadOf(filled({ rows: [emptyCancellationRowDraft()] }));
+  equal('authorizationRule' in blank, false);
+
+  const half = payloadOf(filled({ rows: [{ party: '', rule: 'CANCEL/x' }] }));
+  deepEqual(half.authorizationRule?.cancellationAuthority, [{ party: '', rule: 'CANCEL/x' }]);
 
   const duplicated = payloadOf(
     filled({ rows: [{ party: 'CUSTOMER', rule: 'A' }, { party: 'CUSTOMER', rule: 'B' }] }),
@@ -86,7 +89,13 @@ test('没选请求方、空规则、同一请求方两行、零行都原样上�
   equal(duplicated.authorizationRule?.cancellationAuthority.length, 2);
 
   const none = payloadOf(filled({ rows: [] }));
-  deepEqual(none.authorizationRule, { cancellationAuthority: [] });
+  equal('authorizationRule' in none, false);
+});
+
+test('指名价格政策写进壳上的引用，不进取消目录', () => {
+  const payload = payloadOf(filled({ pricePolicy: ' IDP-PRICE-RULE-CN-SG-SELL ', rows: [] }));
+  deepEqual(payload.references, { PRICE_RULE: 'IDP-PRICE-RULE-CN-SG-SELL' });
+  equal('authorizationRule' in payload, false);
 });
 
 test('空草稿只有一行空行，没有任何一格带默认值', () => {
@@ -112,6 +121,7 @@ test('表单认领的路径覆盖壳、目录节与每一行的两格', () => {
     'scope',
     'effectiveStartsAt',
     'effectiveEndsAt',
+    'references.PRICE_RULE',
     'authorizationRule',
     'authorizationRule.cancellationAuthority',
     'authorizationRule.cancellationAuthority[0]',
@@ -191,6 +201,7 @@ test('基于此版本预填：抄对象、范围与目录各行，留版本号�
     scope: 'SYN-SCOPE-01',
     effectiveStartsAt: '',
     effectiveEndsAt: '',
+    pricePolicy: '',
     rows: [
       { party: 'OPERATIONS', rule: 'SYN-RULE-CANCEL-OPS-01' },
       { party: 'CUSTOMER', rule: 'SYN-RULE-CANCEL-CUSTOMER-01' },

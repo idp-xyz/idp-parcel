@@ -98,6 +98,14 @@ export function currentAnswer<Body>(entry: KeyedAnswer<Body> | null, key: string
   return entry !== null && entry.key === key ? entry.answer : null;
 }
 
+/**
+ * 再点「批准」也不会换结果。`NOT_CONFIGURED` 是租户还没登记审批职责规则（ADR-0362）：登记口在受控命令行，
+ * 这页再送同一份载体仍是这一句。按钮收回，不把「再点一次」摆成续办。
+ */
+export function approvalExhausted(flow: PublicationFlowState, key: string): boolean {
+  return outcomeOf(flow.approval, key) === 'NOT_CONFIGURED';
+}
+
 /** 对眼前这份载荷（键）已到达的最远一步。 */
 export function reachedStep(flow: PublicationFlowState, key: string): FlowStep {
   const preview = outcomeOf(flow.preview, key);

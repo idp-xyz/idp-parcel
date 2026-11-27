@@ -347,7 +347,7 @@ type fakeCatalogue struct {
 }
 
 func (catalogue *fakeCatalogue) ListWarehouses(
-	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query,
+	_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query, _ ports.WarehouseScope,
 ) (cataloguepage.Result[ports.WarehouseRow], error) {
 	catalogue.listed++
 	catalogue.gotTenant, catalogue.gotLimit, catalogue.gotQuery = tenant.String(), limit, query

@@ -108,6 +108,11 @@ func TestGrantedOperatorIsMintedIntoAnOperatorEnvelope(t *testing.T) {
 			t.Fatalf("envelope does not carry the effective grant %s", face)
 		}
 	}
+	allCustomers, customers := envelope.CustomerVisibility()
+	allWarehouses, warehouses := envelope.WarehouseVisibility()
+	if allCustomers || len(customers) != 0 || allWarehouses || len(warehouses) != 0 {
+		t.Fatal("没有数据可见范围的授予不是全部，是什么都看不见")
+	}
 }
 
 // grades 是答复代数的四格：三格对外（ADR-0100 决定四），外加依赖故障。每一格只许被自己那个哨兵认出。

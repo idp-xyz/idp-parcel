@@ -104,6 +104,8 @@ type serviceProductBody struct {
 	PublishedAt        string                 `json:"publishedAt"`
 	Form               string                 `json:"form,omitempty"`
 	DeliveryConditions *deliveryConditionBody `json:"deliveryConditions,omitempty"`
+	DisplayName        string                 `json:"displayName,omitempty"`
+	ScopeName          string                 `json:"scopeName,omitempty"`
 
 	versionClosureBody
 }
@@ -157,5 +159,7 @@ func serviceProductBodyOf(row ports.ServiceProductCatalogueRow) serviceProductBo
 	if row.HasForm {
 		body.Form = row.Form
 	}
+	body.DisplayName = row.DisplayName
+	body.ScopeName = row.ScopeName
 	return body
 }

@@ -4,13 +4,13 @@ import { accessRefusalTitle } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
 import { cancellationPartyLabels } from './presentation';
-import { listCommercialPolicies, commercialPolicyLoaders } from './api';
+import { commercialPolicyLoaders, type CommercialPolicyListResponseBody, type PricePolicyRecord } from './api';
 import { ExistingVersionsNote } from './ExistingVersionsNote';
 import { policyKnownVersions } from './known-versions';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import type { NewVersionStart } from './new-version';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
-import { Field, Problems, RowFrame, selectClass, useLoaded } from './PublicationFormFields';
+import { Field, Problems, ReferencePicker, RowFrame, selectClass, useLoaded } from './PublicationFormFields';
 import { WallTimeField } from './party-registration-fields';
 import {
   authorizationRuleFieldPaths,
@@ -31,11 +31,11 @@ const loadKnownVersions = commercialPolicyLoaders.AUTHORIZATION_RULE;
  * 五步「表单 → 预览摘要 → 存为待批准 → 批准 → 发布」由 PublicationDraftFlow 走，本组件只摆本册的几格并把草稿组成
  * 载荷（纯函数在 authorization-rule-form.ts）。
  *
- * 版本壳之外归本册的正文只有 0013 的取消授权目录：一张两列几行的表（请求方 × 规则引用）。授权授予册
- * （AuthorizedAction 一族）不经这条发布路，不在这里。
+ * 版本壳可以指名一份价格政策，给价卡做方向授权；指名不进内容摘要。取消授权目录整节留空即未声明。
+ * 授权授予册（AuthorizedAction 一族）不经这条发布路，不在这里。
  *
- * **表单不算摘要、不裁任何门、不代判**（伞票 07 硬句）：没选请求方、空规则、同一请求方两行、零行都照样送上去，
- * 答回来的是构造门的拒绝（逐格问题落在行上，跨行的判在预览上答`未受理`带成因）。**请求方下拉不内置枚举**：
+ * **表单不算摘要、不裁任何门、不代判**（伞票 07 硬句）：写过字的行照样送上去，
+ * 答回来的是构造门的拒绝（逐格问题落在行上，跨行的判在预览上答`未受理`带成因）。两格都空的行不算声明。**请求方下拉不内置枚举**：
  * 码从服务端词表读口取（票 20），中文用本页词表；读口在未配置那堵墙前时下拉显占位，不拿任何内置码顶替，
  * 也不预选任何一项。
  */
@@ -85,6 +85,7 @@ export function AuthorizationRulePublicationForm({ onPublished, start }: Authori
       {(form) => (
         <div className="flex flex-col gap-5">
           <ShellFields draft={draft} patch={patch} form={form} timeZone={timeZone} />
+          <PricePolicyReferenceField draft={draft} patch={patch} form={form} />
           <CancellationAuthorityFields draft={draft} patch={patch} patchRow={patchRow} form={form} parties={parties} />
         </div>
       )}
@@ -163,7 +164,54 @@ function ShellFields({
   );
 }
 
-// ——取消授权目录（0013）：哪种请求方被允许取消、依据哪条规则。缺行是真话（该请求方不许取消），零行是缺件——两者都由服务端说。
+// ——壳上指名价格政策。候选是价格政策册的对象；册是空的就手填对象标识。引用不进摘要。
+
+function pricePolicyReferenceOptions(body: CommercialPolicyListResponseBody) {
+  if (body.kind !== 'PRICE_POLICY') return [];
+  const seen = new Set<string>();
+  const options: { value: string; label: string }[] = [];
+  for (const policy of body.policies as PricePolicyRecord[]) {
+    if (seen.has(policy.objectId)) continue;
+    seen.add(policy.objectId);
+    options.push({ value: policy.objectId, label: `${policy.objectId} · ${policy.direction} · ${policy.version}` });
+  }
+  return options;
+}
+
+function PricePolicyReferenceField({
+  draft,
+  patch,
+  form,
+}: {
+  draft: AuthorizationRuleDraft;
+  patch: (change: Partial<AuthorizationRuleDraft>) => void;
+  form: PublicationFormContext;
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className={sectionTitle}>指名的价格政策</h3>
+      <p className="type-caption text-idpxyz-textMuted">
+        价卡登记时核的方向在这份政策上，不在授权规则自己身上。不指名也可以，那一版就不给价卡做方向授权。取消目录与这里各管各的。
+      </p>
+      <ReferencePicker
+        label="价格政策"
+        path="references.PRICE_RULE"
+        problems={form.problems}
+        value={draft.pricePolicy}
+        locked={form.locked}
+        onChange={(pricePolicy) => patch({ pricePolicy })}
+        load={commercialPolicyLoaders.PRICE_POLICY}
+        optionsOf={pricePolicyReferenceOptions}
+        emptyNote="价格政策册是空的。写下对象标识；取消目录可以整节留空。"
+        manualWhenEmpty
+        manualPlaceholder="价格政策对象标识"
+        readFace="价格政策册"
+      />
+    </section>
+  );
+}
+
+// ——取消授权目录（0013）：哪种请求方被允许取消、依据哪条规则。整节留空是未声明，不是「不许任何人取消」。写了的行里，没写到的请求方不许取消。
 
 function CancellationAuthorityFields({
   draft,
@@ -188,7 +236,7 @@ function CancellationAuthorityFields({
         </Button>
       </div>
       <p className="type-caption text-idpxyz-textMuted">
-        每行写一种可以取消的请求方，以及依据哪条规则；没写的请求方不能取消。至少要有一行，同一请求方只能有一行。
+        每行写一种可以取消的请求方，以及依据哪条规则；没写到的请求方不能取消。整节留空即未声明。同一请求方只能有一行。
       </p>
       {/* 正文根 authorizationRule 认领了就要有处显（票 22 判据 3；票 17 评审点名）：服务端点到正文整体而不是目录时落在这里。 */}
       <Problems lines={form.problems['authorizationRule']} />

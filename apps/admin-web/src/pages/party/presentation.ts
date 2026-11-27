@@ -72,7 +72,7 @@ export const policyKindSources: Record<CommercialPolicyKind, string> = {
   SETTLEMENT_POLICY: '结算政策的各个版本及其正文。',
   AS_OF_POLICY:
     '接受判断时点选择策略：每类接受判断按哪个时点取依据。它随接单规则包一起发布，「版本」列是所属规则包的版本。',
-  AUTHORIZATION_RULE: '授权规则的各个版本，以及每类请求方的取消授权。',
+  AUTHORIZATION_RULE: '授权规则的各个版本。可以只指名一份价格政策，给价卡做方向授权；取消目录留空即未声明。',
   CREDIT_POLICY: '信用政策的各个版本及其正文；额度按金额或按比例，二者只取其一。',
   CUSTOMER_SERVICE_RULE:
     '客户服务规则的各个版本：适用于哪个服务产品或客户合同、责任方、索赔期限与最低材料。索赔类型、材料与起算事件的解释在可见性与异常那边，这里照原词显示。',
@@ -425,7 +425,7 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
     { tenantGridFilledByChannel: true },
   ),
   'service-product-form': snapshotHint(
-    'forms 数组里一项的键：productId、version、form，外加整批的 tenantId 与 scope。' +
+    '不要带 tenantId：租户由登录身份决定。forms 数组里一项的键：productId、version、form，外加整批的 scope。' +
       'form 只能取 NETWORK_SERVICE（网络服务产品）或 LABEL_CHANNEL_SERVICE（面单渠道服务）。' +
       '所指的产品版本必须已发布且已生效：挂在未生效或已结束的版本上永远不会被选中。',
   ),

@@ -15,7 +15,37 @@ export function serviceProductsViewOf(hash: string): ServiceProductsView {
   return tab === 'publish' || tab === 'register' ? tab : 'versions';
 }
 
-/** 进出登记视图的地址：只改这一个键，路径与检索词等别的键原样；回目录时键不写，地址保持最短。 */
+/** 从目录「未登记」带进登记视图的那一版。三键齐了才算带入；缺一键就是空表，不拿半截地址拼一版。 */
+export interface ServiceProductFormTarget {
+  productId: string;
+  version: string;
+  scope: string;
+}
+
+const formTargetParams = { product: 'productId', version: 'version', scope: 'scope' } as const;
+
+export function serviceProductFormTargetOf(hash: string): ServiceProductFormTarget | null {
+  const productId = hashQueryValue(hash, 'product');
+  const version = hashQueryValue(hash, 'version');
+  const scope = hashQueryValue(hash, 'scope');
+  if (productId === '' || version === '' || scope === '') return null;
+  return { productId, version, scope };
+}
+
+/** 进出登记视图的地址：只改视图键，路径与检索词等别的键原样；回目录时键不写，地址保持最短。离开形态登记时把带入的那一版也清掉。 */
 export function serviceProductsViewHash(hash: string, view: ServiceProductsView): string {
-  return hashWithQueryValue(hash, SERVICE_PRODUCTS_VIEW_PARAM, view === 'versions' ? '' : view);
+  let next = hashWithQueryValue(hash, SERVICE_PRODUCTS_VIEW_PARAM, view === 'versions' ? '' : view);
+  if (view !== 'register') {
+    for (const key of Object.keys(formTargetParams)) next = hashWithQueryValue(next, key, '');
+  }
+  return next;
+}
+
+/** 目录里点「未登记」：登记视图加上这一版的产品、版本、适用范围。 */
+export function serviceProductFormHash(hash: string, target: ServiceProductFormTarget): string {
+  let next = serviceProductsViewHash(hash, 'register');
+  next = hashWithQueryValue(next, 'product', target.productId);
+  next = hashWithQueryValue(next, 'version', target.version);
+  next = hashWithQueryValue(next, 'scope', target.scope);
+  return next;
 }

@@ -17,6 +17,7 @@ export interface OperatorGrantRecord {
   capabilityFace: string;
   decisionKind?: string;
   workScope?: { kind: string; reference: string };
+  dataVisibility?: { kind: string; reference: string };
   effectiveStartsAt: string;
   effectiveEndsAt?: string;
   basis: string;
@@ -42,6 +43,8 @@ export interface OperatorListResponseBody {
   faces: string[];
   decisionKinds: string[];
   workScopeKinds: string[];
+  /** 数据可见范围的种类。页面据此摆选项。 */
+  visibilityKinds: string[];
   operators: OperatorRecord[];
   page: CataloguePage;
 }
@@ -75,6 +78,7 @@ export interface OperatorGrantPayload {
   capabilityFace: string;
   decisionKind?: string;
   workScope?: { kind: string; reference: string };
+  dataVisibility?: { kind: string; reference: string };
   effectiveStartsAt: string;
   effectiveEndsAt?: string;
   basis: string;

@@ -144,6 +144,19 @@ export function wallTimeOf(instant: Date, timeZone: string): string {
 }
 
 /**
+ * 文本格上给人看的墙钟。库存仍是 `datetime-local` 的 `T` 形，好让 wallTimeToRfc3339 不用改；
+ * 屏幕上把 `T` 换成空格，空态用占位符 `yyyy-mm-dd hh:mm:ss`，不借浏览器按系统区域画的月/日/年。
+ */
+export function wallTimeTextOf(stored: string): string {
+  return stored.replace('T', ' ');
+}
+
+/** 文本格交回来的墙钟：日期和时间之间的空格收回 `T`，其余原样。 */
+export function wallTimeStoredOf(typed: string): string {
+  return typed.replace(' ', 'T');
+}
+
+/**
  * `datetime-local` 收到的墙钟时刻（`YYYY-MM-DDTHH:mm[:ss]`，无时区）按给定 IANA 区换成 RFC 3339
  * UTC（到秒，`Z` 结尾）。换不出来交回 null，调用方按编码层问题报，不猜、不补默认。
  *

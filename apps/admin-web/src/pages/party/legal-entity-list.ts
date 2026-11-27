@@ -25,7 +25,7 @@ export const legalEntitySortColumns: CatalogueSortColumns = {
   'registered-at': 'registeredAt',
 };
 
-/** 默认登记时间新→旧（票 01 裁决 2：运营配置员最常看「刚登进去的那条」）。 */
+/** 默认登记时间新→旧（票 01 裁决 2：运营配置员最常看「刚登进去的那条」）。列表不再单列登记时间，这一序仍是读口缺省。 */
 export const defaultLegalEntitySort: WorkbenchSort = { key: 'registered-at', dir: -1 };
 
 /** 法人册一问的条件：检索词、状态与注册地（「全部」即那一维缺席）与表头排序；登记时间新→旧是读口的缺省序，不写进查询串。 */

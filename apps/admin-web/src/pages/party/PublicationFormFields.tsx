@@ -117,7 +117,7 @@ export function Field({
   const lines = silent ? [] : [path, ...alsoPaths].flatMap((candidate) => problems[candidate] ?? []);
   const Wrapper = as;
   return (
-    <Wrapper className="block">
+    <Wrapper className="block" data-field-path={path}>
       <span className={fieldLabel}>{label}</span>
       {children}
       <Problems lines={lines} />
@@ -249,6 +249,11 @@ export interface ReferencePickerFaceProps<Body> {
   optionsNote?: string;
   /** 当前值不在候选里时那一项的括注。 */
   unknownNote?: string;
+  /**
+   * 读面答了、候选却是空的：改成手填，不再只留一个空下拉。给「引用可以先占上、名册以后再登记」的格，
+   * 例如价格政策的定价方案。不给则维持空下拉加 emptyNote。
+   */
+  manualWhenEmpty?: boolean;
 }
 
 /**
@@ -294,9 +299,24 @@ export function ReferencePickerFor<Body>({
   manualPlaceholder = '引用串（读面不可用时手填）',
   optionsNote,
   unknownNote = '手填，不在读面上',
+  manualWhenEmpty = false,
 }: ReferencePickerFaceProps<Body> & { answer: ApiResult<Body> | null }) {
   if (answer?.kind === 'outcome') {
     const options = optionsOf(answer.body);
+    if (options.length === 0 && manualWhenEmpty) {
+      return (
+        <Field label={label} path={path} problems={problems}>
+          <Input
+            value={value}
+            disabled={locked}
+            className="font-mono type-value"
+            placeholder={manualPlaceholder}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          <span className="block type-body text-idpxyz-breadcrumb mt-1">{emptyNote}</span>
+        </Field>
+      );
+    }
     const note = options.length === 0 ? emptyNote : optionsNote;
     return (
       <Field label={label} path={path} problems={problems}>

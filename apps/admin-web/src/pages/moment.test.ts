@@ -7,6 +7,8 @@ import {
   formatInstant,
   formatRange,
   wallTimeOf,
+  wallTimeStoredOf,
+  wallTimeTextOf,
   wallTimeToRfc3339,
   zoneLabel,
 } from './moment';
@@ -72,6 +74,12 @@ test('解析不了的时刻原样交回', () => {
 
 // Covers: datetime-local 收到的墙钟时刻按指定时区换成 RFC 3339 UTC，秒可缺补零，毫秒不带；
 // 换不出来（空、格式不对）交回 null 让调用方按编码层问题报，不猜。
+test('文本格的墙钟与库存的 T 形互转', () => {
+  equal(wallTimeTextOf('2026-01-01T08:00:00'), '2026-01-01 08:00:00');
+  equal(wallTimeStoredOf('2026-01-01 08:00:00'), '2026-01-01T08:00:00');
+  equal(wallTimeToRfc3339(wallTimeStoredOf('2026-01-01 08:00:00'), 'Asia/Shanghai'), '2026-01-01T00:00:00Z');
+});
+
 test('墙钟时刻按时区换成 RFC 3339 UTC', () => {
   equal(wallTimeToRfc3339('2026-01-02T08:00', 'Asia/Shanghai'), '2026-01-02T00:00:00Z');
   equal(wallTimeToRfc3339('2026-01-02T00:00:30', 'UTC'), '2026-01-02T00:00:30Z');

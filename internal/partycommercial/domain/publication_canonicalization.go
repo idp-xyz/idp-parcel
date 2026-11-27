@@ -132,7 +132,7 @@ type PublicationContent struct {
 	// 两格文档，见 publication_canonicalization_service_product.go。
 	ServiceProduct   *ServiceProductBody
 	CustomerContract *CustomerContractBody
-	// AuthorizationRule 是授权规则册的正文（票 admin-write-faces/17）：取消授权目录，见 publication_canonicalization_authorization_rule.go。
+	// AuthorizationRule 是授权规则册的正文（票 admin-write-faces/17）：取消授权目录可缺，见 publication_canonicalization_authorization_rule.go。
 	AuthorizationRule *AuthorizationRuleBody
 	// SettlementPolicy 是结算政策册的正文（票 admin-write-faces/15）。
 	SettlementPolicy *SettlementPolicyBody
