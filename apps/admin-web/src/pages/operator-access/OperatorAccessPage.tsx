@@ -19,7 +19,6 @@ import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CursorPager, pastFirstPage } from '../shipment-request/cursor-pager';
 import { currentDisplayTimeZone, wallTimeOf, wallTimeToRfc3339 } from '../moment';
 import { useOperatorAccessGrant } from '../use-operator-grants';
-import { DetailRow } from '../party/detail-primitives';
 import { RegisterView } from '../party/RegisterView';
 import { selectClass } from '../party/PublicationFormFields';
 import { operatorNameOutcomeNote, operatorNamePayload, operatorNameProblem } from './operator-names';
@@ -34,15 +33,17 @@ import {
   type OperatorRecord,
   type OperatorWriteResponseBody,
 } from './api';
-import { GrantChecklistForm } from './grant-checklist-form';
+import { AdjustGrantsForm } from './adjust-grants-form';
+import { decisionBundles, operatorBrief } from './operator-brief';
 import {
-  effectiveGrantCount,
   faceLabel,
   grantQualifier,
   grantStandingAt,
   grantStandingLabels,
   operatorWriteOutcomeLabel,
   shortSubject,
+  dataVisibilityKindLabels,
+  decisionKindLabel,
   workScopeKindLabels,
   type GrantStanding,
 } from './presentation';
@@ -63,37 +64,24 @@ const columns: WorkbenchColumn<OperatorRecord>[] = [
   {
     key: 'name',
     header: '姓名',
-    // 不折行：右栏开着时这一列被挤窄，两个字的「没登」会折成两行。
     render: (row) =>
-      row.name ? <span className="whitespace-nowrap type-body">{row.name}</span> : <span className="whitespace-nowrap text-idpxyz-textMuted">没登</span>,
-  },
-  {
-    key: 'subject',
-    header: '主体标识',
-    render: (row) => (
-      <span className="font-mono" title={row.subject}>
-        {shortSubject(row.subject)}
-      </span>
-    ),
-  },
-  { key: 'basis', header: '登记依据', render: (row) => <span className="font-mono type-body">{row.basis}</span> },
-  {
-    key: 'grants',
-    header: '生效中的授予',
-    render: (row) => {
-      const effective = row.grants.filter((grant) => grantStandingAt(grant, new Date()) === 'effective');
-      return effective.length === 0 ? (
-        <span className="text-idpxyz-textMuted">无</span>
+      row.name ? (
+        <span className="whitespace-nowrap type-body">{row.name}</span>
       ) : (
-        <span className="type-body">{Array.from(new Set(effective.map((grant) => faceLabel(grant.capabilityFace)))).join('、')}</span>
-      );
-    },
+        <span className="whitespace-nowrap font-mono text-idpxyz-textMuted" title={row.subject}>
+          {shortSubject(row.subject)}
+        </span>
+      ),
   },
   {
-    key: 'recorded-at',
-    header: '登记时间',
-    hideWhenDetailOpen: true,
-    render: (row) => <span className="font-mono type-body">{formatInstant(row.recordedAt)}</span>,
+    key: 'duty',
+    header: '能做的事',
+    render: (row) => <span className="type-body">{operatorBrief(row, new Date()).duty}</span>,
+  },
+  {
+    key: 'visibility',
+    header: '看得见',
+    render: (row) => <span className="type-body">{operatorBrief(row, new Date()).visibility}</span>,
   },
 ];
 
@@ -196,7 +184,7 @@ function GrantForm({
   onClose,
 }: {
   operator: OperatorRecord;
-  vocabulary: Pick<OperatorListResponseBody, 'faces' | 'decisionKinds' | 'workScopeKinds'>;
+  vocabulary: Pick<OperatorListResponseBody, 'faces' | 'decisionKinds' | 'workScopeKinds' | 'visibilityKinds'>;
   onRecorded: () => void;
   onClose: () => void;
 }) {
@@ -205,6 +193,9 @@ function GrantForm({
   const [decisionKind, setDecisionKind] = useState(vocabulary.decisionKinds[0] ?? '');
   const [scopeKind, setScopeKind] = useState(vocabulary.workScopeKinds[0] ?? '');
   const [scopeReference, setScopeReference] = useState('');
+  const visibilityKinds = vocabulary.visibilityKinds ?? [];
+  const [visibilityKind, setVisibilityKind] = useState(visibilityKinds[0] ?? '');
+  const [visibilityReference, setVisibilityReference] = useState('');
   const [grantId, setGrantId] = useState('');
   const [startsAt, setStartsAt] = useState(() => wallTimeOf(new Date(), timeZone));
   const [endsAt, setEndsAt] = useState('');
@@ -219,7 +210,8 @@ function GrantForm({
     startsRfc !== null &&
     (endsAt === '' || endsRfc !== null) &&
     (face !== 'OPERATION_DECISION' || decisionKind !== '') &&
-    (face !== 'WORK_FACT_REGISTRATION' || (scopeKind !== '' && scopeReference.trim() !== ''));
+    (face !== 'WORK_FACT_REGISTRATION' || (scopeKind !== '' && scopeReference.trim() !== '')) &&
+    (face !== 'DATA_VISIBILITY' || (visibilityKind !== '' && visibilityReference.trim() !== ''));
   const submit = () => {
     if (!complete || startsRfc === null) return;
     setBusy(true);
@@ -230,6 +222,7 @@ function GrantForm({
       capabilityFace: face,
       ...(face === 'OPERATION_DECISION' ? { decisionKind } : {}),
       ...(face === 'WORK_FACT_REGISTRATION' ? { workScope: { kind: scopeKind, reference: scopeReference.trim() } } : {}),
+      ...(face === 'DATA_VISIBILITY' ? { dataVisibility: { kind: visibilityKind, reference: visibilityReference.trim() } } : {}),
       effectiveStartsAt: startsRfc,
       ...(endsRfc ? { effectiveEndsAt: endsRfc } : {}),
       basis: basis.trim(),
@@ -257,8 +250,8 @@ function GrantForm({
           <span className="text-idpxyz-textMuted">决定种类</span>
           <select className={selectClass} value={decisionKind} onChange={(event) => setDecisionKind(event.target.value)}>
             {vocabulary.decisionKinds.map((candidate) => (
-              <option key={candidate} value={candidate}>
-                {candidate}
+              <option key={candidate} value={candidate} title={candidate}>
+                {decisionKindLabel(candidate)}
               </option>
             ))}
           </select>
@@ -277,6 +270,21 @@ function GrantForm({
             </select>
           </label>
           <TextInput label="作业范围引用" value={scopeReference} onChange={setScopeReference} placeholder="网点或场外作业范围标识" />
+        </div>
+      ) : null}
+      {face === 'DATA_VISIBILITY' ? (
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1 type-body">
+            <span className="text-idpxyz-textMuted">可见范围种类</span>
+            <select className={selectClass} value={visibilityKind} onChange={(event) => setVisibilityKind(event.target.value)}>
+              {visibilityKinds.map((candidate) => (
+                <option key={candidate} value={candidate}>
+                  {dataVisibilityKindLabels[candidate] ?? candidate}
+                </option>
+              ))}
+            </select>
+          </label>
+          <TextInput label="可见范围引用" value={visibilityReference} onChange={setVisibilityReference} placeholder="标识，或 * 表示这一类全部" />
         </div>
       ) : null}
       <div className="grid grid-cols-2 gap-3">
@@ -351,9 +359,55 @@ function RevokeDialog({ grant, onClose, onRevoked }: { grant: OperatorGrantRecor
   );
 }
 
+const grantGrid = 'grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-2';
+
+function GrantLine({
+  grant,
+  now,
+  readOnly,
+  onRevoke,
+  label,
+}: {
+  grant: OperatorGrantRecord;
+  now: Date;
+  readOnly: boolean;
+  onRevoke: () => void;
+  /** 格子上的名字。缺省用能力面或决定种类的中文。 */
+  label?: string;
+}) {
+  const standing = grantStandingAt(grant, now);
+  const text = label ?? (grant.decisionKind ? decisionKindLabel(grant.decisionKind) : faceLabel(grant.capabilityFace));
+  return (
+    <li className="flex min-w-0 flex-col gap-0.5 rounded border border-idpxyz-border px-2.5 py-1.5 type-body">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="text-idpxyz-text">{text}</span>
+          <StatusPill label={grantStandingLabels[standing]} tone={standingTone[standing]} />
+        </div>
+        {!readOnly && (standing === 'effective' || standing === 'pending') ? (
+          <Button variant="ghost" size="sm" className="type-caption shrink-0 text-idpxyz-textMuted" onClick={onRevoke}>
+            撤销
+          </Button>
+        ) : null}
+      </div>
+      <TechnicalDetails
+        rows={[
+          { label: '授予标识', value: grant.grantId },
+          { label: '依据', value: grant.basis },
+          { label: '登记时间', value: grant.recordedAt },
+          ...(grant.decisionKind ? [{ label: '决定种类', value: grant.decisionKind }] : []),
+          ...(grant.workScope ? [{ label: '作业范围', value: `${grant.workScope.kind} ${grant.workScope.reference}` }] : []),
+          ...(grant.dataVisibility ? [{ label: '可见范围', value: `${grant.dataVisibility.kind} ${grant.dataVisibility.reference}` }] : []),
+          { label: '生效', value: `${formatInstant(grant.effectiveStartsAt)} → ${grant.effectiveEndsAt ? formatInstant(grant.effectiveEndsAt) : '不设终点'}` },
+          ...(grant.revocation ? [{ label: '撤销', value: `${formatInstant(grant.revocation.revokedAt)} · ${grant.revocation.basis}` }] : []),
+        ]}
+      />
+    </li>
+  );
+}
+
 /**
- * 右栏：绑定事实、授予表、「授予…」与各条「撤销…」。没有管理授予（readOnly）时只看。落册后经 onWritten 重取列表当前这一页：
- * 列表按游标翻页、不经取数层（ADR-0360），没有缓存可供写口作废，只能由页面自己重取。
+ * 右栏按三句展开：能做的事、看得见、登记事实。调整一次登多笔，撤销仍是一笔。没有管理授予时只看。
  */
 function OperatorDetailPanel({
   operator,
@@ -363,34 +417,37 @@ function OperatorDetailPanel({
   onWritten,
 }: {
   operator: OperatorRecord;
-  vocabulary: Pick<OperatorListResponseBody, 'faces' | 'decisionKinds' | 'workScopeKinds'>;
+  vocabulary: Pick<OperatorListResponseBody, 'faces' | 'decisionKinds' | 'workScopeKinds' | 'visibilityKinds'>;
   readOnly: boolean;
   onClose: () => void;
   onWritten: () => void;
 }) {
   const [granting, setGranting] = useState(false);
-  const [listing, setListing] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
   const [naming, setNaming] = useState(false);
   const [revoking, setRevoking] = useState<OperatorGrantRecord | null>(null);
   const now = new Date();
+  const brief = operatorBrief(operator, now);
+  const offered = new Set(vocabulary.decisionKinds);
+  const knownBundles = new Set(decisionBundles.flatMap((bundle) => bundle.kinds));
   return (
-    <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`操作者 ${operator.subject}`}>
+    <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`操作者 ${operator.name ?? operator.subject}`}>
       <div className="space-y-2 border-b border-idpxyz-border px-5 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="break-all font-mono type-title font-semibold text-idpxyz-textBright">{operator.subject}</h2>
+            <h2 className="type-title font-semibold text-idpxyz-textBright">{operator.name ?? shortSubject(operator.subject)}</h2>
             <p className="mt-0.5 type-body text-idpxyz-textMuted">
-              {operator.name ? `${operator.name} · ` : '操作者 · '}生效中的授予 {effectiveGrantCount(operator, now)} 条
+              {brief.duty} · {brief.visibility}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {!readOnly && !granting && !listing ? (
+            {!readOnly && !granting && !adjusting ? (
               <>
-                <Button variant="outline" size="sm" className="type-body" onClick={() => setGranting(true)}>
-                  授予…
+                <Button variant="default" size="sm" className={`${primaryActionClass} type-body`} onClick={() => setAdjusting(true)}>
+                  调整…
                 </Button>
-                <Button variant="outline" size="sm" className="type-body" onClick={() => setListing(true)}>
-                  按清单授予…
+                <Button variant="outline" size="sm" className="type-body" onClick={() => setGranting(true)}>
+                  单笔…
                 </Button>
               </>
             ) : null}
@@ -401,27 +458,11 @@ function OperatorDetailPanel({
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-3">
-        <dl>
-          <DetailRow label="姓名">
-            <span className="flex flex-wrap items-center gap-2">
-              {operator.name ? operator.name : <span className="text-idpxyz-textMuted">没登，界面上示主体标识</span>}
-              {!readOnly && !naming ? (
-                <Button variant="outline" size="sm" className="type-body" onClick={() => setNaming(true)}>
-                  {operator.name ? '改姓名…' : '登姓名…'}
-                </Button>
-              ) : null}
-            </span>
-          </DetailRow>
-          <DetailRow label="发行方" mono>
-            {operator.issuer}
-          </DetailRow>
-          <DetailRow label="登记依据" mono>
-            {operator.basis}
-          </DetailRow>
-          <DetailRow label="登记时间" mono>
-            {formatInstant(operator.recordedAt)}
-          </DetailRow>
-        </dl>
+        {!readOnly && !naming ? (
+          <Button variant="outline" size="sm" className="type-body self-start" onClick={() => setNaming(true)}>
+            {operator.name ? '改姓名…' : '登姓名…'}
+          </Button>
+        ) : null}
         {naming ? (
           <NameForm
             operator={operator}
@@ -443,57 +484,114 @@ function OperatorDetailPanel({
             onClose={() => setGranting(false)}
           />
         ) : null}
-        {listing ? (
-          <GrantChecklistForm
+        {adjusting ? (
+          <AdjustGrantsForm
             operator={operator}
             vocabulary={vocabulary}
             onWritten={onWritten}
-            onClose={() => setListing(false)}
+            onClose={() => setAdjusting(false)}
           />
         ) : null}
         <section className="flex flex-col gap-2">
-          <h3 className="type-body font-medium text-idpxyz-text">授予</h3>
-          {operator.grants.length === 0 ? (
-            <p className="type-body text-idpxyz-textMuted">还没有任何授予：这个操作者登录后什么也做不了。</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {operator.grants.map((grant) => {
-                const standing = grantStandingAt(grant, now);
-                return (
-                  <li key={grant.grantId} className="flex flex-col gap-1 rounded border border-idpxyz-border p-3 type-body">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-idpxyz-text">{faceLabel(grant.capabilityFace)}</span>
-                        {grantQualifier(grant) ? <span className="font-mono text-idpxyz-textMuted">{grantQualifier(grant)}</span> : null}
-                        <StatusPill label={grantStandingLabels[standing]} tone={standingTone[standing]} />
-                      </div>
-                      {!readOnly && (standing === 'effective' || standing === 'pending') ? (
-                        <Button variant="outline" size="sm" className="type-body" onClick={() => setRevoking(grant)}>
-                          撤销…
-                        </Button>
-                      ) : null}
-                    </div>
-                    <p className="font-mono text-idpxyz-textMuted">
-                      {formatInstant(grant.effectiveStartsAt)} → {grant.effectiveEndsAt ? formatInstant(grant.effectiveEndsAt) : '不设终点'}
-                    </p>
-                    {grant.revocation ? (
-                      <p className="font-mono text-idpxyz-textMuted">
-                        撤销于 {formatInstant(grant.revocation.revokedAt)} · 依据 {grant.revocation.basis}
-                      </p>
-                    ) : null}
-                    <TechnicalDetails
-                      rows={[
-                        { label: '授予标识', value: grant.grantId },
-                        { label: '依据', value: grant.basis },
-                        { label: '登记时间', value: grant.recordedAt },
-                      ]}
-                    />
-                  </li>
-                );
-              })}
+          <h3 className="type-body font-medium text-idpxyz-text">能做的事</h3>
+          {operator.grants.some(
+            (grant) => grant.capabilityFace !== 'OPERATION_DECISION' && grant.capabilityFace !== 'DATA_VISIBILITY' && grant.capabilityFace !== 'WORK_FACT_REGISTRATION',
+          ) ? (
+            <ul className={grantGrid}>
+              {operator.grants
+                .filter(
+                  (grant) =>
+                    grant.capabilityFace !== 'OPERATION_DECISION' &&
+                    grant.capabilityFace !== 'DATA_VISIBILITY' &&
+                    grant.capabilityFace !== 'WORK_FACT_REGISTRATION',
+                )
+                .map((grant) => (
+                  <GrantLine key={grant.grantId} grant={grant} now={now} readOnly={readOnly} onRevoke={() => setRevoking(grant)} />
+                ))}
             </ul>
+          ) : operator.grants.some((grant) => grant.decisionKind || grant.capabilityFace === 'WORK_FACT_REGISTRATION') ? null : (
+            <p className="type-body text-idpxyz-textMuted">还不能做业务。</p>
+          )}
+          {operator.grants.some((grant) => grant.capabilityFace === 'WORK_FACT_REGISTRATION') ? (
+            <div className="flex flex-col gap-2">
+              <h4 className="type-body text-idpxyz-textMuted">现场作业</h4>
+              <ul className={grantGrid}>
+                {operator.grants
+                  .filter((grant) => grant.capabilityFace === 'WORK_FACT_REGISTRATION')
+                  .map((grant) => (
+                    <GrantLine
+                      key={grant.grantId}
+                      grant={grant}
+                      now={now}
+                      readOnly={readOnly}
+                      label={grantQualifier(grant) || faceLabel(grant.capabilityFace)}
+                      onRevoke={() => setRevoking(grant)}
+                    />
+                  ))}
+              </ul>
+            </div>
+          ) : null}
+          {decisionBundles.map((bundle) => {
+            const grants = operator.grants.filter((grant) => grant.decisionKind && bundle.kinds.includes(grant.decisionKind));
+            if (grants.length === 0) return null;
+            const held = grants.filter((grant) => grantStandingAt(grant, now) === 'effective').length;
+            const total = bundle.kinds.filter((kind) => offered.has(kind)).length;
+            return (
+              <div key={bundle.id} className="flex flex-col gap-2">
+                <h4 className="type-body text-idpxyz-textMuted">
+                  {bundle.label} {held}/{total || bundle.kinds.length}
+                </h4>
+                <ul className={grantGrid}>
+                  {grants.map((grant) => (
+                    <GrantLine key={grant.grantId} grant={grant} now={now} readOnly={readOnly} onRevoke={() => setRevoking(grant)} />
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+          {operator.grants.some((grant) => grant.decisionKind && !knownBundles.has(grant.decisionKind)) ? (
+            <div className="flex flex-col gap-2">
+              <h4 className="type-body text-idpxyz-textMuted">其他</h4>
+              <ul className={grantGrid}>
+                {operator.grants
+                  .filter((grant) => grant.decisionKind && !knownBundles.has(grant.decisionKind))
+                  .map((grant) => (
+                    <GrantLine key={grant.grantId} grant={grant} now={now} readOnly={readOnly} onRevoke={() => setRevoking(grant)} />
+                  ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+        <section className="flex flex-col gap-2">
+          <h3 className="type-body font-medium text-idpxyz-text">看得见</h3>
+          {operator.grants.some((grant) => grant.capabilityFace === 'DATA_VISIBILITY') ? (
+            <ul className={grantGrid}>
+              {operator.grants
+                .filter((grant) => grant.capabilityFace === 'DATA_VISIBILITY')
+                .map((grant) => (
+                  <GrantLine
+                    key={grant.grantId}
+                    grant={grant}
+                    now={now}
+                    readOnly={readOnly}
+                    label={grantQualifier(grant) || faceLabel(grant.capabilityFace)}
+                    onRevoke={() => setRevoking(grant)}
+                  />
+                ))}
+            </ul>
+          ) : (
+            <p className="type-body text-idpxyz-textMuted">看不见业务数据。没授客户或仓，就是这一类什么都看不见。</p>
           )}
         </section>
+        <TechnicalDetails
+          title="登记事实"
+          rows={[
+            { label: '发行方', value: operator.issuer },
+            { label: '主体标识', value: operator.subject },
+            { label: '登记依据', value: operator.basis },
+            { label: '登记时间', value: operator.recordedAt },
+          ]}
+        />
       </div>
       <RevokeDialog
         grant={revoking}

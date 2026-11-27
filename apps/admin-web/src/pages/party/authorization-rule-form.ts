@@ -29,6 +29,8 @@ export interface AuthorizationRuleDraft {
   scope: string;
   effectiveStartsAt: string;
   effectiveEndsAt: string;
+  /** 壳上指名的价格政策对象标识。空即不指名。不进内容摘要。 */
+  pricePolicy: string;
   rows: CancellationRowDraft[];
 }
 
@@ -43,6 +45,7 @@ export function emptyAuthorizationRuleDraft(): AuthorizationRuleDraft {
     scope: '',
     effectiveStartsAt: '',
     effectiveEndsAt: '',
+    pricePolicy: '',
     rows: [emptyCancellationRowDraft()],
   };
 }
@@ -66,9 +69,15 @@ export function authorizationRuleDraftFromRecord(record: AuthorizationRuleRecord
   };
 }
 
+/** 行里有没有人写过字。两格都空的行不算声明，整节因此可以留空。 */
+function cancellationRowTouched(row: CancellationRowDraft): boolean {
+  return row.party.trim() !== '' || row.rule.trim() !== '';
+}
+
 /**
- * 草稿 → 载荷。可缺的壳格留空即不进载荷（Go 侧 omitempty 同义）；目录一节永远在场、行照原样——零行也送空数组，
- * 「一行都没有」由服务端答缺件，不是表单替人决定的事。时刻格是日期时间控件交出的本地墙钟，按显示时区换成 UTC
+ * 草稿 → 载荷。可缺的壳格留空即不进载荷（Go 侧 omitempty 同义）。取消目录整节没人写过就不出这一节——
+ * 那是未声明，不是送一个空数组让服务端当成缺件。只要有一行写了字，行照原样送，空格与同一请求方两行由服务端点名。
+ * 价格政策写在壳上的指名引用，不进正文。时刻格是日期时间控件交出的本地墙钟，按显示时区换成 UTC
  * （wallMomentOf）。载荷里没有身份也没有摘要。
  */
 export function payloadOf(
@@ -81,11 +90,15 @@ export function payloadOf(
     version: draft.version,
     scope: draft.scope,
     effectiveStartsAt: wallMomentOf(draft.effectiveStartsAt, timeZone),
-    authorizationRule: {
-      cancellationAuthority: draft.rows.map((row) => ({ party: row.party, rule: row.rule })),
-    },
   };
   if (draft.effectiveEndsAt.trim() !== '') payload.effectiveEndsAt = wallMomentOf(draft.effectiveEndsAt, timeZone);
+  if (draft.rows.some(cancellationRowTouched)) {
+    payload.authorizationRule = {
+      cancellationAuthority: draft.rows.map((row) => ({ party: row.party, rule: row.rule })),
+    };
+  }
+  const pricePolicy = draft.pricePolicy.trim();
+  if (pricePolicy !== '') payload.references = { PRICE_RULE: pricePolicy };
   return payload;
 }
 
@@ -115,7 +128,7 @@ const shellPaths = ['objectId', 'version', 'scope', 'effectiveStartsAt', 'effect
  * 都可能点名。
  */
 export function authorizationRuleFieldPaths(draft: AuthorizationRuleDraft): string[] {
-  const paths: string[] = [...shellPaths, 'authorizationRule', 'authorizationRule.cancellationAuthority'];
+  const paths: string[] = [...shellPaths, 'references.PRICE_RULE', 'authorizationRule', 'authorizationRule.cancellationAuthority'];
   draft.rows.forEach((_, index) => {
     const row = `authorizationRule.cancellationAuthority[${index}]`;
     paths.push(row, `${row}.party`, `${row}.rule`);
@@ -130,7 +143,7 @@ export function authorizationRuleFieldPaths(draft: AuthorizationRuleDraft): stri
  * 的 path 要同步改这里，改认领表要先在 JSX 里找到显它的地方。
  */
 export function authorizationRuleRenderedPaths(draft: AuthorizationRuleDraft): string[] {
-  const paths: string[] = [...shellPaths, 'authorizationRule', 'authorizationRule.cancellationAuthority'];
+  const paths: string[] = [...shellPaths, 'references.PRICE_RULE', 'authorizationRule', 'authorizationRule.cancellationAuthority'];
   draft.rows.forEach((_, index) => {
     const row = `authorizationRule.cancellationAuthority[${index}]`;
     paths.push(row, `${row}.party`, `${row}.rule`);

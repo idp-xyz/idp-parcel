@@ -23,14 +23,13 @@ import {
 
 function draft(over: Partial<ServiceProductDraft> = {}): ServiceProductDraft {
   return {
+    ...emptyServiceProductDraft(),
     objectId: 'SYN-PROD-CN-SG-EXPRESS',
     version: 'v2',
     scope: 'SYN-SCOPE-01',
     effectiveStartsAt: '2026-08-01T00:00',
-    effectiveEndsAt: '',
-    references: [],
-    deliveryConditions: emptyDeliveryConditionDraft(),
     ...over,
+    displayName: over.displayName ?? '',
   };
 }
 

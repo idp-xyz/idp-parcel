@@ -90,6 +90,9 @@ const (
 	// 写面与本租户操作者册的查阅读。它不守任何业务登记册——持它的人不因此能登业务数据，登记册配置写的人也不因此能给
 	// 人授权，租户才分得开「账号管理员」与「配置员」。有租户维，与预留的治理登记那一格不是一回事。
 	CapabilityOperatorAccessAdministration CapabilityFace = "OPERATOR_ACCESS_ADMINISTRATION"
+	// CapabilityDataVisibility 是数据可见范围（ADR-0385）：看得见哪些客户账户、哪些仓。它不是端点门，端点门仍是
+	// 主数据与运营查阅读；这一格只把范围放进信封。只能经 NewDataVisibilityGrant 建，必带种类与引用。没授不是全部。
+	CapabilityDataVisibility CapabilityFace = "DATA_VISIBILITY"
 )
 
 // reservedGovernanceRegistration 是治理登记那一格：ADR-0100 只预留它，授予模型按 ADR-0085
@@ -111,7 +114,7 @@ func ParseCapabilityFace(value string) (CapabilityFace, error) {
 func (face CapabilityFace) checkGrantable() error {
 	switch face {
 	case CapabilityRegistryConfigurationWrite, CapabilityMasterDataAndOperationsRead, CapabilityOperationDecision,
-		CapabilityWorkFactRegistration, CapabilityOperatorAccessAdministration:
+		CapabilityWorkFactRegistration, CapabilityOperatorAccessAdministration, CapabilityDataVisibility:
 		return nil
 	case reservedGovernanceRegistration:
 		return ErrCapabilityFaceReserved
@@ -126,7 +129,7 @@ func (face CapabilityFace) String() string { return string(face) }
 func GrantableCapabilityFaces() []CapabilityFace {
 	return []CapabilityFace{
 		CapabilityRegistryConfigurationWrite, CapabilityMasterDataAndOperationsRead, CapabilityOperationDecision,
-		CapabilityWorkFactRegistration, CapabilityOperatorAccessAdministration,
+		CapabilityWorkFactRegistration, CapabilityOperatorAccessAdministration, CapabilityDataVisibility,
 	}
 }
 
@@ -169,14 +172,15 @@ func (interval EffectiveInterval) Contains(at time.Time) bool {
 // 撤了再授是两笔授予，不是一笔的两次修改——拿（主体、能力面）当键，后一笔就得覆盖前一笔，
 // 而前一笔正是那段时间里他确实有权的证据。
 type OperatorGrant struct {
-	tenantID     string
-	grantID      string
-	subject      OperatorSubject
-	face         CapabilityFace
-	decisionKind DecisionKind
-	workScope    WorkScope
-	interval     EffectiveInterval
-	basis        string
+	tenantID       string
+	grantID        string
+	subject        OperatorSubject
+	face           CapabilityFace
+	decisionKind   DecisionKind
+	workScope      WorkScope
+	dataVisibility DataVisibility
+	interval       EffectiveInterval
+	basis          string
 }
 
 func NewOperatorGrant(
@@ -195,6 +199,9 @@ func NewOperatorGrant(
 	}
 	if face == CapabilityWorkFactRegistration {
 		return OperatorGrant{}, ErrWorkScopeRequired
+	}
+	if face == CapabilityDataVisibility {
+		return OperatorGrant{}, ErrDataVisibilityRequired
 	}
 	tenant := strings.TrimSpace(tenantID)
 	id := strings.TrimSpace(grantID)

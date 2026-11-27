@@ -41,6 +41,18 @@ const warehouseListed = `WITH latest AS (
           FROM latest
      )`
 
+// warehouseListedRestricted 在租户条件上再加仓编码集。$2 是调用方放进 Plan 参数前部的编码数组；
+// 空数组不匹配任何行，那是什么都看不见，不是全部。
+const warehouseListedRestricted = `WITH latest AS (
+        SELECT DISTINCT ON (warehouse_code) *
+          FROM warehouse_fulfillment.warehouse_revision
+         WHERE tenant_id = $1 AND warehouse_code = ANY($2)
+         ORDER BY warehouse_code, revision DESC
+     ), listed AS (
+        SELECT latest.*, latest.deactivated::text AS deactivated_word
+          FROM latest
+     )`
+
 // warehouseListBinding：q 覆盖仓编码与名称——登记表单与下游挑仓时认的就是这两格，地址正文不进检索。
 var warehouseListBinding = ports.WarehousePages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"warehouseCode": "warehouse_code"},
@@ -56,6 +68,7 @@ func (catalogue *WarehouseCatalogue) ListWarehouses(
 	tenant domain.TenantID,
 	limit int,
 	query cataloguepage.Query,
+	scope ports.WarehouseScope,
 ) (cataloguepage.Result[ports.WarehouseRow], error) {
 	const operation = "list warehouses"
 	fail := func(err error) (cataloguepage.Result[ports.WarehouseRow], error) {
@@ -68,7 +81,17 @@ func (catalogue *WarehouseCatalogue) ListWarehouses(
 	if limit < 1 {
 		return fail(fmt.Errorf("limit must be positive, got %d", limit))
 	}
-	plan, err := warehouseListBinding.Plan(query, "", []any{tenant.String()}, limit)
+	listed := warehouseListed
+	args := []any{tenant.String()}
+	if scope.Restricted {
+		listed = warehouseListedRestricted
+		codes := scope.Codes
+		if codes == nil {
+			codes = []string{}
+		}
+		args = append(args, codes)
+	}
+	plan, err := warehouseListBinding.Plan(query, "", args, limit)
 	if err != nil {
 		return fail(err)
 	}
@@ -77,11 +100,11 @@ func (catalogue *WarehouseCatalogue) ListWarehouses(
 		return fail(err)
 	}
 	var total int64
-	if err := querier.QueryRow(ctx, warehouseListed+" "+plan.CountSQL("listed"), plan.Args...).Scan(&total); err != nil {
+	if err := querier.QueryRow(ctx, listed+" "+plan.CountSQL("listed"), plan.Args...).Scan(&total); err != nil {
 		return fail(err)
 	}
 	fetched, err := collectWarehouseRows(ctx, querier,
-		warehouseListed+" "+plan.PageSQL(warehouseColumns, "listed"), plan.PageArgs, limit+1)
+		listed+" "+plan.PageSQL(warehouseColumns, "listed"), plan.PageArgs, limit+1)
 	if err != nil {
 		return fail(err)
 	}

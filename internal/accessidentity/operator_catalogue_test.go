@@ -158,7 +158,7 @@ func TestGrantableCapabilityFacesMatchTheGrantableGate(t *testing.T) {
 		}
 		listed[face] = true
 	}
-	for _, candidate := range []string{"REGISTRY_CONFIGURATION_WRITE", "MASTER_DATA_AND_OPERATIONS_READ", "OPERATION_DECISION", "WORK_FACT_REGISTRATION", "OPERATOR_ACCESS_ADMINISTRATION", reservedGovernanceRegistration, "SOMETHING_ELSE"} {
+	for _, candidate := range []string{"REGISTRY_CONFIGURATION_WRITE", "MASTER_DATA_AND_OPERATIONS_READ", "OPERATION_DECISION", "WORK_FACT_REGISTRATION", "OPERATOR_ACCESS_ADMINISTRATION", "DATA_VISIBILITY", reservedGovernanceRegistration, "SOMETHING_ELSE"} {
 		face, err := ParseCapabilityFace(candidate)
 		if (err == nil) != listed[face] {
 			t.Fatalf("%s：解析 err=%v，列表里=%v", candidate, err, listed[face])

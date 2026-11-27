@@ -58,6 +58,31 @@ test('运营决定与作业范围带上细分，不带细分的那两格被丢�
   );
 });
 
+test('数据可见范围带上引用，* 在标识里写成 ALL，裸面被丢掉', () => {
+  const plan = planGrantChecklist(
+    {
+      faces: ['DATA_VISIBILITY'],
+      decisionKinds: [],
+      workScopes: [],
+      visibilities: [
+        { kind: 'CUSTOMER_ACCOUNT', reference: '*' },
+        { kind: 'WAREHOUSE', reference: 'IDP-WH-PVG' },
+      ],
+    },
+    draft,
+    [],
+    now,
+  );
+  equal(plan.problem, null);
+  deepEqual(
+    plan.payloads.map((payload) => [payload.capabilityFace, payload.dataVisibility?.reference, payload.grantId]),
+    [
+      ['DATA_VISIBILITY', '*', 'SYN-G-CUSTOMER_ACCOUNT-ALL'],
+      ['DATA_VISIBILITY', 'IDP-WH-PVG', 'SYN-G-WAREHOUSE-IDP-WH-PVG'],
+    ],
+  );
+});
+
 test('已经生效或未到的同一格跳过，已撤销的可以再授', () => {
   const plan = planGrantChecklist(
     { faces: ['REGISTRY_CONFIGURATION_WRITE'], decisionKinds: ['WAVE_RELEASE', 'SEGMENT_CLOSURE'], workScopes: [] },

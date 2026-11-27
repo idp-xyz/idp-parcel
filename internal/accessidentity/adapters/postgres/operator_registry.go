@@ -109,16 +109,17 @@ func (registry *OperatorRegistry) RegisterGrant(
 		endsAt = &end
 	}
 	scopeKind, scopeRef := optionalWorkScope(grant)
+	visibilityKind, visibilityRef := optionalVisibility(grant)
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO access_identity.operator_grant
 			(tenant_id, grant_id, issuer, subject, capability_face,
 			 effective_starts_at, effective_ends_at, basis_ref, decision_kind,
-			 work_scope_kind, work_scope_ref)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			 work_scope_kind, work_scope_ref, visibility_kind, visibility_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 ON CONFLICT DO NOTHING`,
 		grant.TenantID(), grant.GrantID(), subject.Issuer(), subject.Subject(), grant.Face().String(),
 		startsAt, endsAt, grant.Basis(), optionalDecisionKind(grant.DecisionKind()),
-		scopeKind, scopeRef,
+		scopeKind, scopeRef, visibilityKind, visibilityRef,
 	)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", operation, err)
@@ -133,15 +134,16 @@ func (registry *OperatorRegistry) RegisterGrant(
 		storedEndsAt                                         *time.Time
 		storedKind                                           *string
 		storedScopeKind, storedScopeRef                      *string
+		storedVisibilityKind, storedVisibilityRef            *string
 	)
 	err = executor.QueryRow(ctx,
 		`SELECT issuer, subject, capability_face, effective_starts_at, effective_ends_at, basis_ref, decision_kind,
-		        work_scope_kind, work_scope_ref
+		        work_scope_kind, work_scope_ref, visibility_kind, visibility_ref
 		   FROM access_identity.operator_grant
 		  WHERE tenant_id = $1 AND grant_id = $2`,
 		grant.TenantID(), grant.GrantID(),
 	).Scan(&storedIssuer, &storedSubject, &storedFace, &storedStartsAt, &storedEndsAt, &storedBasis, &storedKind,
-		&storedScopeKind, &storedScopeRef)
+		&storedScopeKind, &storedScopeRef, &storedVisibilityKind, &storedVisibilityRef)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", fmt.Errorf("%s: 撞键后读不回既有行", operation)
 	}
@@ -154,6 +156,8 @@ func (registry *OperatorRegistry) RegisterGrant(
 		sameOptionalText(storedKind, optionalDecisionKind(grant.DecisionKind())) &&
 		sameOptionalText(storedScopeKind, scopeKind) &&
 		sameOptionalText(storedScopeRef, scopeRef) &&
+		sameOptionalText(storedVisibilityKind, visibilityKind) &&
+		sameOptionalText(storedVisibilityRef, visibilityRef) &&
 		sameInstant(storedStartsAt, startsAt) &&
 		sameOptionalInstant(storedEndsAt, endsAt) &&
 		storedBasis == grant.Basis()
@@ -238,7 +242,8 @@ func (registry *OperatorRegistry) FindOperator(
 	rows, err := querier.Query(ctx,
 		`SELECT o.tenant_id, o.basis_ref,
 		        g.grant_id, g.capability_face, g.effective_starts_at, g.effective_ends_at, g.basis_ref,
-		        g.decision_kind, g.work_scope_kind, g.work_scope_ref, r.revoked_at, r.basis_ref
+		        g.decision_kind, g.work_scope_kind, g.work_scope_ref, g.visibility_kind, g.visibility_ref,
+		        r.revoked_at, r.basis_ref
 		   FROM access_identity.operator o
 		   LEFT JOIN access_identity.operator_grant g
 		     ON g.issuer = o.issuer AND g.subject = o.subject AND g.tenant_id = o.tenant_id
@@ -260,16 +265,17 @@ func (registry *OperatorRegistry) FindOperator(
 	)
 	for rows.Next() {
 		var (
-			tenant, basis               string
-			grantID, face, grantBasis   *string
-			startsAt, endsAt, revokedAt *time.Time
-			decisionKind                *string
-			scopeKind, scopeRef         *string
-			revocationBasis             *string
+			tenant, basis                 string
+			grantID, face, grantBasis     *string
+			startsAt, endsAt, revokedAt   *time.Time
+			decisionKind                  *string
+			scopeKind, scopeRef           *string
+			visibilityKind, visibilityRef *string
+			revocationBasis               *string
 		)
 		if err := rows.Scan(&tenant, &basis,
 			&grantID, &face, &startsAt, &endsAt, &grantBasis,
-			&decisionKind, &scopeKind, &scopeRef, &revokedAt, &revocationBasis,
+			&decisionKind, &scopeKind, &scopeRef, &visibilityKind, &visibilityRef, &revokedAt, &revocationBasis,
 		); err != nil {
 			return accessidentity.OperatorStanding{}, false, fmt.Errorf("%s: %w", operation, err)
 		}
@@ -284,7 +290,7 @@ func (registry *OperatorRegistry) FindOperator(
 			continue
 		}
 		recorded, err := recordedGrantFromRow(tenant, subject,
-			*grantID, *face, decisionKind, scopeKind, scopeRef, *startsAt, endsAt, *grantBasis, revokedAt, revocationBasis)
+			*grantID, *face, decisionKind, scopeKind, scopeRef, visibilityKind, visibilityRef, *startsAt, endsAt, *grantBasis, revokedAt, revocationBasis)
 		if err != nil {
 			return accessidentity.OperatorStanding{}, false, fmt.Errorf("%s: 授予 %s：%w", operation, *grantID, err)
 		}
@@ -311,6 +317,7 @@ func recordedGrantFromRow(
 	grantID, rawFace string,
 	rawDecisionKind *string,
 	rawScopeKind, rawScopeRef *string,
+	rawVisibilityKind, rawVisibilityRef *string,
 	startsAt time.Time,
 	endsAt *time.Time,
 	basis string,
@@ -350,6 +357,15 @@ func recordedGrantFromRow(
 			return accessidentity.RecordedGrant{}, scopeErr
 		}
 		grant, err = accessidentity.NewWorkFactRegistrationGrant(tenant, grantID, subject, scope, interval, basis)
+	case accessidentity.CapabilityDataVisibility:
+		if rawVisibilityKind == nil || rawVisibilityRef == nil {
+			return accessidentity.RecordedGrant{}, accessidentity.ErrDataVisibilityRequired
+		}
+		visibility, visibilityErr := accessidentity.NewDataVisibility(accessidentity.DataVisibilityKind(*rawVisibilityKind), *rawVisibilityRef)
+		if visibilityErr != nil {
+			return accessidentity.RecordedGrant{}, visibilityErr
+		}
+		grant, err = accessidentity.NewDataVisibilityGrant(tenant, grantID, subject, visibility, interval, basis)
 	default:
 		grant, err = accessidentity.NewOperatorGrant(tenant, grantID, subject, face, interval, basis)
 	}
@@ -399,6 +415,16 @@ func optionalWorkScope(grant accessidentity.OperatorGrant) (kind, reference *str
 	}
 	scope := grant.WorkScope()
 	kindValue, referenceValue := scope.Kind().String(), scope.Reference()
+	return &kindValue, &referenceValue
+}
+
+// optionalVisibility 把「无数据可见范围」写成两个 NULL：列上的 CHECK 以 NULL 表示别的能力面。
+func optionalVisibility(grant accessidentity.OperatorGrant) (kind, reference *string) {
+	if grant.Face() != accessidentity.CapabilityDataVisibility {
+		return nil, nil
+	}
+	visibility := grant.DataVisibility()
+	kindValue, referenceValue := visibility.Kind().String(), visibility.Reference()
 	return &kindValue, &referenceValue
 }
 

@@ -97,7 +97,7 @@ func TestWarehouseRegistryKeepsEveryByteOfVerbatimCellsAndKeepsCodesApart(t *tes
 		}
 	}
 
-	page, err := catalogue.ListWarehouses(ctx, tenant, 50, firstPage(t, nil))
+	page, err := catalogue.ListWarehouses(ctx, tenant, 50, firstPage(t, nil), ports.WarehouseScope{})
 	if err != nil || page.Total != int64(len(codes)) {
 		t.Fatalf("列表 = (共 %d, %v)，want %d 个互相独立的仓", page.Total, err, len(codes))
 	}
@@ -141,7 +141,7 @@ func TestWarehouseRegistryIsTenantScoped(t *testing.T) {
 	if _, found, err := warehouses.LoadWarehouseRevision(ctx, stranger, code, 1); err != nil || found {
 		t.Fatalf("没登记过的租户点读 = (%v, %v)，want (false, nil)", found, err)
 	}
-	if page, err := catalogue.ListWarehouses(ctx, stranger, 50, firstPage(t, nil)); err != nil || len(page.Rows) != 0 || page.Total != 0 {
+	if page, err := catalogue.ListWarehouses(ctx, stranger, 50, firstPage(t, nil), ports.WarehouseScope{}); err != nil || len(page.Rows) != 0 || page.Total != 0 {
 		t.Fatalf("没登记过的租户列表 = (%d 行, 共 %d, %v)，want 空", len(page.Rows), page.Total, err)
 	}
 	if history, err := catalogue.ListWarehouseRevisions(ctx, stranger, code); err != nil || len(history) != 0 {

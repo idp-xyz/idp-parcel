@@ -317,13 +317,14 @@ type registrationResponse struct {
 }
 
 type operatorsResponse struct {
-	Outcome        string             `json:"outcome"`
-	Issuer         string             `json:"issuer"`
-	Faces          []string           `json:"faces"`
-	DecisionKinds  []string           `json:"decisionKinds"`
-	WorkScopeKinds []string           `json:"workScopeKinds"`
-	Operators      []operatorBody     `json:"operators"`
-	Page           cataloguepage.Page `json:"page"`
+	Outcome         string             `json:"outcome"`
+	Issuer          string             `json:"issuer"`
+	Faces           []string           `json:"faces"`
+	DecisionKinds   []string           `json:"decisionKinds"`
+	WorkScopeKinds  []string           `json:"workScopeKinds"`
+	VisibilityKinds []string           `json:"visibilityKinds"`
+	Operators       []operatorBody     `json:"operators"`
+	Page            cataloguepage.Page `json:"page"`
 }
 
 type operatorBody struct {
@@ -339,18 +340,24 @@ type operatorBody struct {
 // operatorGrantBody 的可选格按能力面在场：决定种类只在「运营决定」上，作业范围只在「作业事实登记」上，终点不设即缺席，
 // 没撤销即没有 revocation。缺席而不是 null，管理台按键在不在判。
 type operatorGrantBody struct {
-	GrantID           string          `json:"grantId"`
-	CapabilityFace    string          `json:"capabilityFace"`
-	DecisionKind      string          `json:"decisionKind,omitempty"`
-	WorkScope         *workScopeBody  `json:"workScope,omitempty"`
-	EffectiveStartsAt string          `json:"effectiveStartsAt"`
-	EffectiveEndsAt   string          `json:"effectiveEndsAt,omitempty"`
-	Basis             string          `json:"basis"`
-	RecordedAt        string          `json:"recordedAt"`
-	Revocation        *revocationBody `json:"revocation,omitempty"`
+	GrantID           string              `json:"grantId"`
+	CapabilityFace    string              `json:"capabilityFace"`
+	DecisionKind      string              `json:"decisionKind,omitempty"`
+	WorkScope         *workScopeBody      `json:"workScope,omitempty"`
+	DataVisibility    *dataVisibilityBody `json:"dataVisibility,omitempty"`
+	EffectiveStartsAt string              `json:"effectiveStartsAt"`
+	EffectiveEndsAt   string              `json:"effectiveEndsAt,omitempty"`
+	Basis             string              `json:"basis"`
+	RecordedAt        string              `json:"recordedAt"`
+	Revocation        *revocationBody     `json:"revocation,omitempty"`
 }
 
 type workScopeBody struct {
+	Kind      string `json:"kind"`
+	Reference string `json:"reference"`
+}
+
+type dataVisibilityBody struct {
 	Kind      string `json:"kind"`
 	Reference string `json:"reference"`
 }
@@ -362,12 +369,13 @@ type revocationBody struct {
 
 func operatorsResponseOf(issuer string, rows []accessidentity.OperatorCatalogueRow) operatorsResponse {
 	body := operatorsResponse{
-		Outcome:        outcomeOperatorsListed,
-		Issuer:         issuer,
-		Faces:          make([]string, 0),
-		DecisionKinds:  make([]string, 0),
-		WorkScopeKinds: make([]string, 0),
-		Operators:      make([]operatorBody, 0, len(rows)),
+		Outcome:         outcomeOperatorsListed,
+		Issuer:          issuer,
+		Faces:           make([]string, 0),
+		DecisionKinds:   make([]string, 0),
+		WorkScopeKinds:  make([]string, 0),
+		VisibilityKinds: make([]string, 0),
+		Operators:       make([]operatorBody, 0, len(rows)),
 	}
 	for _, face := range accessidentity.GrantableCapabilityFaces() {
 		body.Faces = append(body.Faces, face.String())
@@ -377,6 +385,9 @@ func operatorsResponseOf(issuer string, rows []accessidentity.OperatorCatalogueR
 	}
 	for _, kind := range accessidentity.WorkScopeKinds() {
 		body.WorkScopeKinds = append(body.WorkScopeKinds, kind.String())
+	}
+	for _, kind := range accessidentity.DataVisibilityKinds() {
+		body.VisibilityKinds = append(body.VisibilityKinds, kind.String())
 	}
 	for _, row := range rows {
 		body.Operators = append(body.Operators, operatorBodyOf(row))
@@ -414,6 +425,9 @@ func operatorGrantBodyOf(row accessidentity.RecordedGrantRow) operatorGrantBody 
 	}
 	if grant.Face() == accessidentity.CapabilityWorkFactRegistration {
 		body.WorkScope = &workScopeBody{Kind: grant.WorkScope().Kind().String(), Reference: grant.WorkScope().Reference()}
+	}
+	if grant.Face() == accessidentity.CapabilityDataVisibility {
+		body.DataVisibility = &dataVisibilityBody{Kind: grant.DataVisibility().Kind().String(), Reference: grant.DataVisibility().Reference()}
 	}
 	if endsAt, bounded := grant.Interval().EndsAt(); bounded {
 		body.EffectiveEndsAt = instant(endsAt)

@@ -8,6 +8,7 @@ import (
 	identity "go.idp.xyz/idp-parcel/internal/accessidentity"
 	warehousehttp "go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
 // OperatorOperationsReadAuthenticator 实现 warehousehttp.OperatorOperationsReadAuthenticator：以主数据与运营查阅读能力面铸
@@ -17,7 +18,10 @@ type OperatorOperationsReadAuthenticator struct {
 	minter Minter
 }
 
-var _ warehousehttp.OperatorOperationsReadAuthenticator = (*OperatorOperationsReadAuthenticator)(nil)
+var (
+	_ warehousehttp.OperatorOperationsReadAuthenticator = (*OperatorOperationsReadAuthenticator)(nil)
+	_ warehousehttp.WarehouseScopeReader                = (*OperatorOperationsReadAuthenticator)(nil)
+)
 
 func NewOperatorOperationsReadAuthenticator(minter Minter) (*OperatorOperationsReadAuthenticator, error) {
 	if minter == nil {
@@ -40,4 +44,25 @@ func (authenticator *OperatorOperationsReadAuthenticator) AuthenticateOperations
 		return domain.TenantID{}, fmt.Errorf("warehouse fulfillment accessidentity: tenant: %w", err)
 	}
 	return tenant, nil
+}
+
+// ReadWarehouseScope 铸查阅读信封，交回租户和仓可见范围。没授是 Restricted 且 Codes 为空，不是全部。
+func (authenticator *OperatorOperationsReadAuthenticator) ReadWarehouseScope(
+	ctx context.Context,
+	bearerToken string,
+) (domain.TenantID, ports.WarehouseScope, error) {
+	envelope, err := authenticator.minter.MintOperator(ctx, identity.NewOperatorCredential(bearerToken),
+		identity.OperatorRequest{Face: identity.CapabilityMasterDataAndOperationsRead})
+	if err != nil {
+		return domain.TenantID{}, ports.WarehouseScope{}, answer(err)
+	}
+	tenant, err := domain.NewTenantID(envelope.TenantID())
+	if err != nil {
+		return domain.TenantID{}, ports.WarehouseScope{}, fmt.Errorf("warehouse fulfillment accessidentity: tenant: %w", err)
+	}
+	all, codes := envelope.WarehouseVisibility()
+	if all {
+		return tenant, ports.WarehouseScope{}, nil
+	}
+	return tenant, ports.WarehouseScope{Restricted: true, Codes: codes}, nil
 }

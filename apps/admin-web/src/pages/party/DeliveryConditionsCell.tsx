@@ -7,9 +7,21 @@ import { RefLink } from './RefLink';
  * （与 contentRegistered 那条纪律同）。方式与规则引用是开放引用，照字面显、不译词。合同行只显自己这半（所收紧的是哪一版），
  * 不去产品行对照——这是选的不是漏的：两层一处对照归日后政策页一册的票。
  */
-export function DeliveryConditionsCell({ conditions }: { conditions?: DeliveryConditionRecord }) {
+export function DeliveryConditionsCell({
+  conditions,
+  absentNote,
+}: {
+  conditions?: DeliveryConditionRecord;
+  /** 键缺席时跟在「未声明」后面的那一句后果。不给就不写，合同层与产品层的空不是同一句话。 */
+  absentNote?: string;
+}) {
   if (!conditions) {
-    return <span className="text-idpxyz-textMuted">未声明</span>;
+    return (
+      <div>
+        <p className="text-idpxyz-textMuted">未声明</p>
+        {absentNote ? <p className="mt-0.5 type-caption text-idpxyz-textMuted">{absentNote}</p> : null}
+      </div>
+    );
   }
   return (
     <div className="type-body leading-4 space-y-0.5">

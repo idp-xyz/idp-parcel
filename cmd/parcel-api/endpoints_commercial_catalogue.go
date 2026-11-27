@@ -23,16 +23,20 @@ type commercialCatalogueWiring struct {
 	businessPartyProfiles      commercialhttp.BusinessPartyProfileHistoryReader
 	referenceEnablements       commercialhttp.ReferenceEnablementReader
 	signingEvidences           commercialhttp.SigningEvidenceReader
+	labelNames                 commercialhttp.LabelNameStore
 }
 
 func init() {
 	registerEndpoints(endpointFeature[commercialCatalogueWiring]{
 		lines: map[string]endpointLine{
-			"/commercial-service-products":    {method: http.MethodGet, face: operationsReadFace()},
-			"/commercial-policies":            {method: http.MethodGet, face: operationsReadFace(), probe: "/commercial-policies?kind=ACCEPTANCE_RULE_PACKAGE"},
-			"/commercial-customer-contracts":  {method: http.MethodGet, face: operationsReadFace()},
-			"/commercial-supplier-agreements": {method: http.MethodGet, face: operationsReadFace()},
-			"/commercial-business-parties":    {method: http.MethodGet, face: operationsReadFace()},
+			"/commercial-service-products":                           {method: http.MethodGet, face: operationsReadFace()},
+			"/commercial-scope-names":                                {method: http.MethodGet, face: operationsReadFace()},
+			"/commercial-scope-name-registrations":                   {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-service-product-display-name-registrations": {method: http.MethodPost, face: registryWriteFace()},
+			"/commercial-policies":                                   {method: http.MethodGet, face: operationsReadFace(), probe: "/commercial-policies?kind=ACCEPTANCE_RULE_PACKAGE"},
+			"/commercial-customer-contracts":                         {method: http.MethodGet, face: operationsReadFace()},
+			"/commercial-supplier-agreements":                        {method: http.MethodGet, face: operationsReadFace()},
+			"/commercial-business-parties":                           {method: http.MethodGet, face: operationsReadFace()},
 			"/commercial-business-parties/{partyId}/revisions": {
 				method: http.MethodGet, face: operationsReadFace(), probe: "/commercial-business-parties/SYN-PARTY-01/revisions",
 			},
@@ -119,12 +123,16 @@ func init() {
 				businessPartyProfiles:      businessPartyProfiles,
 				referenceEnablements:       commercialapp.NewQueryReferenceEnablementsHandler(referenceEnablements, systemClock{}),
 				signingEvidences:           commercialapp.NewQuerySigningEvidenceHandler(signingEvidenceStore),
+				labelNames:                 commercialCatalog,
 			}, nil
 		},
 		mount: func(channels endpointChannels, wiring commercialCatalogueWiring) []httpapi.BusinessEndpoint {
 			commercialCatalogueIntake := channels.commercialCatalogue()
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialCatalogueIntake, wiring.serviceProducts)},
+				{Pattern: "/commercial-scope-names", Handler: commercialhttp.NewQueryScopeNamesEndpoint(commercialCatalogueIntake, wiring.labelNames)},
+				{Pattern: "/commercial-scope-name-registrations", Handler: commercialhttp.NewRegisterScopeNameEndpoint(commercialCatalogueIntake, wiring.labelNames)},
+				{Pattern: "/commercial-service-product-display-name-registrations", Handler: commercialhttp.NewRegisterDisplayNameEndpoint(commercialCatalogueIntake, wiring.labelNames)},
 				{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialCatalogueIntake, wiring.commercialPolicies)},
 				{Pattern: "/commercial-customer-contracts", Handler: commercialhttp.NewQueryCustomerContractsEndpoint(commercialCatalogueIntake, wiring.commercialRelations)},
 				{Pattern: "/commercial-supplier-agreements", Handler: commercialhttp.NewQuerySupplierAgreementsEndpoint(commercialCatalogueIntake, wiring.commercialRelations)},

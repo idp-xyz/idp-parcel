@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
 // 本文件证仓册的读面：各仓的当前修订列表（分页、按是否停用筛、q）与一个仓的修订史。
@@ -57,7 +58,7 @@ func TestWarehouseCatalogueListsOnlyTheCurrentRevisionOfEachWarehouse(t *testing
 		if err != nil {
 			t.Fatalf("parse %q: %v", query, err)
 		}
-		page, err := catalogue.ListWarehouses(ctx, tenant, 50, firstPage(t, values))
+		page, err := catalogue.ListWarehouses(ctx, tenant, 50, firstPage(t, values), ports.WarehouseScope{})
 		if err != nil {
 			t.Fatalf("列表 %q：%v", query, err)
 		}
@@ -69,7 +70,7 @@ func TestWarehouseCatalogueListsOnlyTheCurrentRevisionOfEachWarehouse(t *testing
 		}
 	}
 
-	page, err := catalogue.ListWarehouses(ctx, tenant, 50, firstPage(t, nil))
+	page, err := catalogue.ListWarehouses(ctx, tenant, 50, firstPage(t, nil), ports.WarehouseScope{})
 	if err != nil {
 		t.Fatalf("列表：%v", err)
 	}
@@ -99,7 +100,7 @@ func TestWarehouseCataloguePagesInCodeOrderWithoutRepeatsOrGapsWhileRowsArrive(t
 		mustSave(t, transactor, warehouses, revisionFixture(t, "SYN-TENANT-01", code(serial), 1, nil))
 	}
 
-	first, err := catalogue.ListWarehouses(ctx, tenant, 2, firstPage(t, nil))
+	first, err := catalogue.ListWarehouses(ctx, tenant, 2, firstPage(t, nil), ports.WarehouseScope{})
 	if err != nil {
 		t.Fatalf("第一页：%v", err)
 	}
@@ -110,14 +111,14 @@ func TestWarehouseCataloguePagesInCodeOrderWithoutRepeatsOrGapsWhileRowsArrive(t
 	// 新登的排在已翻过的那头（00 < 01）。偏移分页会把第一页末行挤进第二页开头。
 	mustSave(t, transactor, warehouses, revisionFixture(t, "SYN-TENANT-01", code(0), 1, nil))
 
-	second, err := catalogue.ListWarehouses(ctx, tenant, 2, firstPage(t, url.Values{"after": {first.Next}}))
+	second, err := catalogue.ListWarehouses(ctx, tenant, 2, firstPage(t, url.Values{"after": {first.Next}}), ports.WarehouseScope{})
 	if err != nil {
 		t.Fatalf("第二页：%v", err)
 	}
 	if got := codesOf(second.Rows); !slices.Equal(got, []string{code(3), code(4)}) || second.Total != 6 || second.Next == "" {
 		t.Fatalf("第二页 = %v（共 %d），want %s,%s、总数跟着新登的行变成 6", got, second.Total, code(3), code(4))
 	}
-	third, err := catalogue.ListWarehouses(ctx, tenant, 2, firstPage(t, url.Values{"after": {second.Next}}))
+	third, err := catalogue.ListWarehouses(ctx, tenant, 2, firstPage(t, url.Values{"after": {second.Next}}), ports.WarehouseScope{})
 	if err != nil {
 		t.Fatalf("末页：%v", err)
 	}
@@ -133,7 +134,7 @@ func TestWarehouseCatalogueOfAnEmptyRegisterAnswersAnEmptyPage(t *testing.T) {
 	ctx := t.Context()
 	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-EMPTY")
 
-	page, err := catalogue.ListWarehouses(ctx, tenant, 50, firstPage(t, nil))
+	page, err := catalogue.ListWarehouses(ctx, tenant, 50, firstPage(t, nil), ports.WarehouseScope{})
 	if err != nil || len(page.Rows) != 0 || page.Total != 0 || page.Next != "" {
 		t.Fatalf("空册 = (%d 行、共 %d、next %q, %v)，want 空页", len(page.Rows), page.Total, page.Next, err)
 	}
@@ -142,7 +143,7 @@ func TestWarehouseCatalogueOfAnEmptyRegisterAnswersAnEmptyPage(t *testing.T) {
 		t.Fatalf("空册的修订史 = (%#v, %v)，want 空切片、无错", history, err)
 	}
 	for _, limit := range []int{0, -1} {
-		if _, err := catalogue.ListWarehouses(ctx, tenant, limit, firstPage(t, nil)); err == nil {
+		if _, err := catalogue.ListWarehouses(ctx, tenant, limit, firstPage(t, nil), ports.WarehouseScope{}); err == nil {
 			t.Errorf("页大小 %d 应被拒", limit)
 		}
 	}

@@ -8,7 +8,7 @@ import {
   type RegistrationResponseBody,
 } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
-import { currentDisplayTimeZone } from '../moment';
+import { currentDisplayTimeZone, wallTimeStoredOf, wallTimeTextOf } from '../moment';
 import {
   commercialRegistrationEndpoints,
   partyIdentityOutcomeLabels,
@@ -214,6 +214,7 @@ export function WallTimeField({
   timeZone,
   onChange,
   note,
+  plain = false,
 }: {
   label: string;
   path: string;
@@ -222,22 +223,32 @@ export function WallTimeField({
   locked: boolean;
   timeZone: string;
   onChange: (value: string) => void;
-  /** 时区那句之前再加的一句；不给就只显时区那句。 */
+  /** 时区那句之前再加的一句；不给就只显时区那句。`plain` 时这句单独留，不再跟时区那句。 */
   note?: string;
+  /**
+   * 文本格，空态是 `yyyy-mm-dd hh:mm:ss`。`datetime-local` 的空态跟浏览器区域走，英文系统画成月/日/年。
+   * 库存仍是带 T 的墙钟。
+   */
+  plain?: boolean;
 }) {
   return (
     <Field label={label} path={path} problems={problems}>
       <Input
-        type="datetime-local"
-        step={1}
-        value={value}
+        type={plain ? 'text' : 'datetime-local'}
+        step={plain ? undefined : 1}
+        placeholder={plain ? 'yyyy-mm-dd hh:mm:ss' : undefined}
+        value={plain ? wallTimeTextOf(value) : value}
         readOnly={locked}
         className="font-mono type-value"
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onChange(plain ? wallTimeStoredOf(event.target.value) : event.target.value)}
       />
-      <span className="block type-body text-idpxyz-breadcrumb mt-1">
-        {note ? `${note} ` : ''}按本地时刻（{timeZone}）填。
-      </span>
+      {plain ? (
+        note ? <span className="block type-body text-idpxyz-breadcrumb mt-1">{note}</span> : null
+      ) : (
+        <span className="block type-body text-idpxyz-breadcrumb mt-1">
+          {note ? `${note} ` : ''}按本地时刻（{timeZone}）填。
+        </span>
+      )}
     </Field>
   );
 }

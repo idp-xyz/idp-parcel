@@ -19,8 +19,12 @@ test('授予此刻的状态照区间与撤销判', () => {
   equal(grantStandingAt(grant({ effectiveEndsAt: '2026-11-04T12:00:00Z' }), now), 'expired');
   equal(grantStandingAt(grant({ revocation: { revokedAt: '2026-11-04T11:59:59Z', basis: 'R' } }), now), 'revoked');
   equal(grantStandingAt(grant({ revocation: { revokedAt: '2026-11-05T00:00:00Z', basis: 'R' } }), now), 'effective');
-  equal(grantQualifier({ decisionKind: 'LOAD_ASSIGNMENT' }), 'LOAD_ASSIGNMENT');
+  equal(grantQualifier({ decisionKind: 'LOAD_ASSIGNMENT' }), '装载分派');
+  equal(grantQualifier({ decisionKind: 'WAVE_RELEASE' }), '放进波次');
+  equal(grantQualifier({ decisionKind: 'NOT_A_DECISION' }), 'NOT_A_DECISION');
   equal(grantQualifier({ workScope: { kind: 'NODE', reference: 'SYN-NODE-01' } }), '网点 SYN-NODE-01');
+  equal(grantQualifier({ dataVisibility: { kind: 'CUSTOMER_ACCOUNT', reference: '*' } }), '客户账户 全部');
+  equal(grantQualifier({ dataVisibility: { kind: 'WAREHOUSE', reference: 'IDP-WH-PVG' } }), '仓 IDP-WH-PVG');
   equal(grantQualifier({}), '');
 });
 

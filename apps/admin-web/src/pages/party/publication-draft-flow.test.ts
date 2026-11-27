@@ -9,6 +9,7 @@ import type {
   PublicationPreviewResponseBody,
 } from './publication-draft-api';
 import {
+  approvalExhausted,
   changedDecisionOf,
   currentAnswer,
   decisionDigestOf,
@@ -275,6 +276,13 @@ test('没发布的输入才算未保存：与起头那份相同不算，走到�
   equal(publicationDraftUnsaved('空表单', '填了', 'publish'), false);
   equal(publicationDraftUnsaved('预填', '预填', 'form'), false);
   equal(publicationDraftUnsaved('预填', '预填后改了', 'form'), true);
+});
+
+test('审批职责还没登记时再点批准不会换结果', () => {
+  const waiting = withSubmission(emptyFlow(), key, drafted('DRAFT_SUBMITTED'));
+  equal(approvalExhausted(withApproval(waiting, key, drafted('NOT_CONFIGURED')), key), true);
+  equal(approvalExhausted(withApproval(waiting, key, drafted('DRAFT_APPROVED')), key), false);
+  equal(approvalExhausted(waiting, key), false);
 });
 
 test('批准与发布区：存为待批准之后才出现；批准做完发布才亮；发布后两个都做完', () => {

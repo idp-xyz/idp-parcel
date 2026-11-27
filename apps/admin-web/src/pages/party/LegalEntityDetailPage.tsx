@@ -127,6 +127,7 @@ export function legalEntityTechnicalRows(row: GroupLegalEntityRecord): { label: 
     { label: '参与方标识', value: row.partyId },
     { label: '身份修订号', value: String(row.revision) },
     { label: '登记依据', value: row.basis },
+    { label: '登记时间', value: formatInstant(row.registeredAt) },
     { label: '身份更正依据', value: row.identityCorrectionBasis ?? '' },
     { label: '停用依据', value: row.deactivationBasis ?? '' },
     { label: '租户', value: row.tenantId },

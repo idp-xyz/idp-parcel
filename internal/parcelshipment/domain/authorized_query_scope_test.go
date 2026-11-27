@@ -85,3 +85,37 @@ func TestAQueryScopeRequiresItsParts(t *testing.T) {
 		t.Fatal("重复客户账户不该静默通过——去重是授权能力的事，重复说明它交来的判断坏了")
 	}
 }
+
+func TestOperatorCustomerVisibilityKeepsAnEmptySetAsSeeingNothing(t *testing.T) {
+	reference := mustValue(t, domain.NewQueryScopeReference, "operator-operations-read")
+	tenant := mustValue(t, domain.NewTenantID, "TENANT-1")
+
+	all, err := domain.NewOperatorCustomerVisibilityScope(reference, tenant, true, []string{"CUST-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, restricted := all.RestrictedAccounts(); restricted {
+		t.Fatal("显式的全部客户不该再点名账户")
+	}
+
+	none, err := domain.NewOperatorCustomerVisibilityScope(reference, tenant, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accounts, restricted := none.RestrictedAccounts()
+	if !restricted || len(accounts) != 0 {
+		t.Fatalf("没授客户范围 = restricted %v accounts %v，want 限制且为空", restricted, accounts)
+	}
+
+	one, err := domain.NewOperatorCustomerVisibilityScope(reference, tenant, false, []string{"CUST-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	accounts, restricted = one.RestrictedAccounts()
+	if !restricted || len(accounts) != 1 || accounts[0].String() != "CUST-1" {
+		t.Fatalf("点名 = restricted %v accounts %v", restricted, accounts)
+	}
+	if _, err := domain.NewOperatorCustomerVisibilityScope(reference, tenant, false, []string{"CUST-1", "CUST-1"}); err == nil {
+		t.Fatal("重复的客户账户不该立得起来")
+	}
+}

@@ -85,8 +85,8 @@ func TestAuthorizationRulePreviewAndSubmissionShareTheDigest(t *testing.T) {
 }
 
 // Covers: ADR-0126 Decision 四「逐格问题」— 目录每一行的问题按 authorizationRule.cancellationAuthority[i].<键> 收齐再答：
-// 集合外的请求方、空规则各点名自己那一格；跨行的判（同一请求方两行、零行）不在解码层，走领域门在预览上答`未受理`
-// 带成因；授予册的键（authorizedActions）不在本册载荷里，出现即按未知键拒。
+// 集合外的请求方、空规则各点名自己那一格；同一请求方两行不在解码层，走领域门在预览上答`未受理`
+// 带成因。零行是取消目录未声明，预览通过、文档不带这一节。授予册的键（authorizedActions）不在本册载荷里，出现即按未知键拒。
 func TestAuthorizationRulePayloadProblemsAreCollectedPerRow(t *testing.T) {
 	tenant := pcNew(t, domain.NewTenantID, pcTenant)
 
@@ -122,12 +122,14 @@ func TestAuthorizationRulePayloadProblemsAreCollectedPerRow(t *testing.T) {
     ]`, `[]`, 1)
 	command, err = decodePublication(t, empty).PreviewCommand(tenant)
 	if err != nil {
-		t.Fatalf("零行不是逐格问题，该到领域门：%v", err)
+		t.Fatalf("零行是未声明，不该在解码层被拒：%v", err)
 	}
 	preview, err = application.NewPreviewCommercialPublicationHandler().Handle(context.Background(), command)
-	if err != nil || preview.Outcome() != application.CommercialPublicationPreviewNotAccepted ||
-		!errors.Is(preview.RefusalCause(), domain.ErrCancellationAuthorityNotConfigured) {
-		t.Fatalf("preview = %q, cause = %v, err = %v; want NOT_ACCEPTED / ErrCancellationAuthorityNotConfigured", preview.Outcome(), preview.RefusalCause(), err)
+	if err != nil || preview.Outcome() != application.CommercialPublicationPreviewed {
+		t.Fatalf("preview = %q, cause = %v, err = %v; want PREVIEWED", preview.Outcome(), preview.RefusalCause(), err)
+	}
+	if canonical, ok := preview.Canonical(); !ok || strings.Contains(string(canonical.Document()), "authorizationRule") {
+		t.Fatalf("empty catalogue document = %s", canonical.Document())
 	}
 
 	withGrants := strings.Replace(authorizationRulePayload, `"cancellationAuthority": [`, `"authorizedActions": ["MANUAL_REVIEW"], "cancellationAuthority": [`, 1)
@@ -144,5 +146,33 @@ func TestAuthorizationRulePayloadProblemsAreCollectedPerRow(t *testing.T) {
 	if err != nil || preview.Outcome() != application.CommercialPublicationPreviewNotAccepted ||
 		!errors.Is(preview.RefusalCause(), domain.ErrPublicationContentKindMismatch) {
 		t.Fatalf("preview = %q, cause = %v; want NOT_ACCEPTED / ErrPublicationContentKindMismatch", preview.Outcome(), preview.RefusalCause())
+	}
+}
+
+// Covers: 方向授权只在壳上指名价格政策，取消目录整节不出现；引用进壳，不进摘要。
+func TestAuthorizationRuleMayNameAPricePolicyWithoutACancellationCatalogue(t *testing.T) {
+	raw := `{
+	  "kind": "AUTHORIZATION_RULE",
+	  "objectId": "auth-price",
+	  "version": "v1",
+	  "scope": "SYN-SCOPE-01",
+	  "effectiveStartsAt": "2026-01-02T00:00:00Z",
+	  "references": { "PRICE_RULE": "IDP-PRICE-RULE-CN-SG-SELL" }
+	}`
+	tenant := pcNew(t, domain.NewTenantID, pcTenant)
+	command, err := decodePublication(t, raw).PreviewCommand(tenant)
+	if err != nil {
+		t.Fatalf("preview command: %v", err)
+	}
+	if command.Content.AuthorizationRule != nil {
+		t.Fatalf("content body = %#v; want cancellation catalogue absent", command.Content.AuthorizationRule)
+	}
+	named, ok := command.Shell.References[domain.PriceRuleObject]
+	if !ok || named.String() != "IDP-PRICE-RULE-CN-SG-SELL" {
+		t.Fatalf("price policy reference = %s, %v", named, ok)
+	}
+	preview, err := application.NewPreviewCommercialPublicationHandler().Handle(context.Background(), command)
+	if err != nil || preview.Outcome() != application.CommercialPublicationPreviewed {
+		t.Fatalf("preview = %q, cause = %v, err = %v", preview.Outcome(), preview.RefusalCause(), err)
 	}
 }

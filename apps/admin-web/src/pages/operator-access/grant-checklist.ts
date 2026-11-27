@@ -4,13 +4,14 @@ import { grantStandingAt } from './presentation';
 // 按清单授予：一次提交多笔，每一笔仍是现有的授予登记口。不造角色，也不代填标识——前缀、依据、起点由人给，
 // 每一笔的标识是前缀加上这一格的原词，提交前能逐笔看见。已经生效或未到的同一格跳过，已撤销的可以再授。
 
-/** 不带细分就不能授的两格：运营决定要种类，作业事实要范围。 */
-const qualifiedFaces = new Set(['OPERATION_DECISION', 'WORK_FACT_REGISTRATION']);
+/** 不带细分就不能授的几格：运营决定要种类，作业事实要范围，数据可见范围要种类和引用。 */
+const qualifiedFaces = new Set(['OPERATION_DECISION', 'WORK_FACT_REGISTRATION', 'DATA_VISIBILITY']);
 
 export interface GrantChecklistSelection {
   faces: readonly string[];
   decisionKinds: readonly string[];
   workScopes: readonly { kind: string; reference: string }[];
+  visibilities?: readonly { kind: string; reference: string }[];
 }
 
 export interface GrantChecklistDraft {
@@ -33,9 +34,11 @@ function lineKey(line: {
   capabilityFace: string;
   decisionKind?: string;
   workScope?: { kind: string; reference: string };
+  dataVisibility?: { kind: string; reference: string };
 }): string {
   if (line.decisionKind) return `D:${line.decisionKind}`;
   if (line.workScope) return `W:${line.workScope.kind}:${line.workScope.reference}`;
+  if (line.dataVisibility) return `V:${line.dataVisibility.kind}:${line.dataVisibility.reference}`;
   return `F:${line.capabilityFace}`;
 }
 
@@ -43,9 +46,14 @@ function suffixOf(line: {
   capabilityFace: string;
   decisionKind?: string;
   workScope?: { kind: string; reference: string };
+  dataVisibility?: { kind: string; reference: string };
 }): string {
   if (line.decisionKind) return line.decisionKind;
   if (line.workScope) return `${line.workScope.kind}-${line.workScope.reference}`;
+  if (line.dataVisibility) {
+    const reference = line.dataVisibility.reference === '*' ? 'ALL' : line.dataVisibility.reference;
+    return `${line.dataVisibility.kind}-${reference}`;
+  }
   return line.capabilityFace;
 }
 
@@ -63,7 +71,12 @@ export function planGrantChecklist(
     return { payloads: [], skipped: 0, problem: '授予标识前缀、依据和生效起点都要填。' };
   }
 
-  const lines: { capabilityFace: string; decisionKind?: string; workScope?: { kind: string; reference: string } }[] = [];
+  const lines: {
+    capabilityFace: string;
+    decisionKind?: string;
+    workScope?: { kind: string; reference: string };
+    dataVisibility?: { kind: string; reference: string };
+  }[] = [];
   for (const face of selection.faces) {
     if (face.trim() === '' || qualifiedFaces.has(face)) continue;
     lines.push({ capabilityFace: face });
@@ -79,6 +92,14 @@ export function planGrantChecklist(
       return { payloads: [], skipped: 0, problem: '作业范围的种类和引用都要填。' };
     }
     lines.push({ capabilityFace: 'WORK_FACT_REGISTRATION', workScope: { kind, reference } });
+  }
+  for (const scope of selection.visibilities ?? []) {
+    const kind = scope.kind.trim();
+    const reference = scope.reference.trim();
+    if (kind === '' || reference === '') {
+      return { payloads: [], skipped: 0, problem: '可见范围的种类和引用都要填。引用填 * 表示这一类全部。' };
+    }
+    lines.push({ capabilityFace: 'DATA_VISIBILITY', dataVisibility: { kind, reference } });
   }
   if (lines.length === 0) {
     return { payloads: [], skipped: 0, problem: '还没有勾选要授的。' };
@@ -115,6 +136,7 @@ export function planGrantChecklist(
       capabilityFace: line.capabilityFace,
       ...(line.decisionKind ? { decisionKind: line.decisionKind } : {}),
       ...(line.workScope ? { workScope: line.workScope } : {}),
+      ...(line.dataVisibility ? { dataVisibility: line.dataVisibility } : {}),
       effectiveStartsAt: starts,
       ...(draft.effectiveEndsAt ? { effectiveEndsAt: draft.effectiveEndsAt } : {}),
       basis,

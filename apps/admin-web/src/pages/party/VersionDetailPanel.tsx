@@ -12,6 +12,8 @@ export interface DetailColumn<Row> {
   id?: string;
   key?: string;
   header: ReactNode;
+  /** 只在目录表里。详情改由 detailOnly 的行来读，避免同一格在详情里出现两遍。 */
+  tableOnly?: boolean;
   render: (row: Row) => ReactNode;
 }
 
@@ -92,7 +94,7 @@ export function VersionDetailPanel<Row>({
           <TabsContent value="detail" className="mt-0">
             <dl>
               {columns
-                .filter((column) => (column.id ?? column.key) !== 'new-version' && typeof column.header === 'string')
+                .filter((column) => (column.id ?? column.key) !== 'new-version' && typeof column.header === 'string' && !column.tableOnly)
                 .map((column) => (
                   <DetailRow key={column.id ?? column.key} label={column.header as string}>
                     {column.render(row)}

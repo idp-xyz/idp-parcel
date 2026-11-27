@@ -5,8 +5,11 @@ import { partyRoleLabels } from './presentation';
 import {
   emptyPartyRelationshipDraft,
   partyRelationshipFieldPaths,
+  partyRelationshipGapSummary,
   partyRelationshipLocalProblems,
   partyRelationshipPayloadOf,
+  partyRelationshipServerProblems,
+  partyRelationshipSubmitGaps,
   partyRoleOptions,
   suggestedPartyRelationshipRevision,
   type PartyRelationshipDraft,
@@ -111,7 +114,7 @@ test('空白原样带、空串照送、角色未选照送空串', () => {
 });
 
 // Covers: 本地只报编码层——修订号、各时刻换不出来时报在各自路径上；批准那两格只在勾了已批准时才判，勾了就都要有；
-// 角色未选、双方为空、区间倒置都不是本地的话。
+// 角色未选、双方为空、区间倒置不在编码层里。必填空格由 partyRelationshipSubmitGaps 在点保存时另报。
 test('本地只报编码层问题', () => {
   deepEqual(partyRelationshipLocalProblems(draft({}), 'UTC'), {});
   deepEqual(partyRelationshipLocalProblems(draft({ revision: '2.0' }), 'UTC'), {
@@ -207,6 +210,62 @@ test('角色选项从 partyRoleLabels 派生', () => {
   );
   deepEqual(options[0], { value: 'CUSTOMER', label: '客户 · CUSTOMER' });
   deepEqual(options[options.length - 1], { value: 'AUTHORIZED_DELIVERING_PARTY', label: '授权交付方 · AUTHORIZED_DELIVERING_PARTY' });
+});
+
+const scopeDetail = 'relationships[0].scope: party commercial: blank value: commercial scope reference';
+
+// Covers: 点保存才报的必填空格——空表点出标了星号而留空的那些，填齐的草稿没有；授权交付方不把 scope 原值再报一遍。
+test('点保存才报必填空格', () => {
+  deepEqual(Object.keys(partyRelationshipSubmitGaps(emptyPartyRelationshipDraft())), [
+    'relationships[0].relationshipId',
+    'relationships[0].holder',
+    'relationships[0].counterparty',
+    'relationships[0].role',
+    'relationships[0].scope',
+    'relationships[0].basis',
+    'relationships[0].effectiveStartsAt',
+  ]);
+  equal(partyRelationshipSubmitGaps(emptyPartyRelationshipDraft())['relationships[0].scope']?.[0], '必填，不能留空');
+  deepEqual(partyRelationshipSubmitGaps(draft({})), {});
+  deepEqual(partyRelationshipSubmitGaps(draft({ scope: '   ' })), {
+    'relationships[0].scope': ['必填，不能留空'],
+  });
+  deepEqual(partyRelationshipSubmitGaps(draft({ role: 'AUTHORIZED_DELIVERING_PARTY', scope: '' })), {});
+});
+
+// Covers: 页脚按表单路径顺序点名，没有空格就没有这句话。
+test('必填空格收成页脚一句', () => {
+  equal(
+    partyRelationshipGapSummary({
+      'relationships[0].basis': ['必填，不能留空'],
+      'relationships[0].scope': ['必填，不能留空'],
+    }),
+    '还有 2 项要填：覆盖范围、来源单据',
+  );
+  equal(partyRelationshipGapSummary({}), null);
+});
+
+// Covers: 服务端点名到覆盖范围时，原话挂回这一格；格子上已经有必填句就不再挂第二遍；人填上之后空值类原话撤下；
+// 对不上路径的散文不挂到任何格子。
+test('服务端点名的原话挂回格子', () => {
+  deepEqual(partyRelationshipServerProblems(scopeDetail, draft({ scope: '' }), {}), {
+    'relationships[0].scope': ['party commercial: blank value: commercial scope reference'],
+  });
+  deepEqual(
+    partyRelationshipServerProblems(scopeDetail, draft({ scope: '' }), {
+      'relationships[0].scope': ['必填，不能留空'],
+    }),
+    {},
+  );
+  deepEqual(partyRelationshipServerProblems(scopeDetail, draft({ scope: '全部业务' }), {}), {});
+  deepEqual(partyRelationshipServerProblems('tenantId must not be carried', draft({}), {}), {});
+  deepEqual(
+    partyRelationshipServerProblems('relationships[0].effectiveStartsAt/effectiveEndsAt: 终点早于起点', draft({}), {}),
+    {
+      'relationships[0].effectiveStartsAt': ['终点早于起点'],
+      'relationships[0].effectiveEndsAt': ['终点早于起点'],
+    },
+  );
 });
 
 // Covers: 认领的路径表与 partyRelationshipDocument 的键（含嵌套的 approval 各格）一一对应。

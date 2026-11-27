@@ -4,8 +4,9 @@ import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-pri
 import { WorkbenchPageTemplate, type WorkbenchChip, type WorkbenchColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { TechnicalDetails, type TechnicalRow } from '../../components/TechnicalDetails';
-import { EnablementDialog, enablementColumns, useEnablement, useMayConfigureEnablement } from './EnablementControls';
-import { enablementScopeNote } from './enablement';
+import { EnablementDialog, EnablementStandingChips, enablementAudit, enablementColumns, useEnablement, useMayConfigureEnablement } from './EnablementControls';
+import { enablementScopeNote, filterByEnablementStanding, type EnablementStandingChoice } from './enablement';
+import { useOperatorNames } from '../operator-access/use-operator-names';
 import { useCatalogue } from './use-catalogue';
 import {
   listCountries,
@@ -114,14 +115,18 @@ const countryColumns: WorkbenchColumn<CountryRecord>[] = [
 function CountriesTab() {
   const { answer, retry, refreshing } = useCatalogue<CountryListResponseBody>(listCountries);
   const enablement = useEnablement('COUNTRY');
+  const names = useOperatorNames();
   const mayConfigure = useMayConfigureEnablement();
   const [asking, setAsking] = useState<Parameters<typeof EnablementDialog>[0]['pending']>(null);
   const [search, setSearch] = useState('');
   const [region, setRegion] = useState('ALL');
+  const [standing, setStanding] = useState<EnablementStandingChoice>('ALL');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const answered = answer?.kind === 'outcome';
+  const enablementReady = enablement.answer?.kind === 'outcome';
   const rows = answered ? answer.body.countries : [];
-  const visible = filterCountries(rows, { search, region });
+  const matched = filterCountries(rows, { search, region });
+  const visible = enablementReady ? filterByEnablementStanding(matched, standing, enablement.byCode) : matched;
 
   return (
     <>
@@ -135,8 +140,13 @@ function CountriesTab() {
         refreshing={refreshing || enablement.refreshing}
         search={{ value: search, onChange: setSearch, placeholder: '搜代码、中文名、英文名…' }}
         statusChips={answered ? filterChips(countByRegion(rows), rows.length, region, setRegion) : undefined}
+        extraFilters={
+          answered && enablementReady ? (
+            <EnablementStandingChips codes={matched.map((row) => row.code)} byCode={enablement.byCode} active={standing} onChange={setStanding} />
+          ) : undefined
+        }
         toolbarRight={answered ? countSummary(rows.length, visible.length, '个国家和地区') : undefined}
-        columns={[...countryColumns, ...enablementColumns<CountryRecord>(enablement, mayConfigure, (row) => row.nameZh, setAsking)]}
+        columns={[...countryColumns, ...enablementColumns<CountryRecord>(enablement, mayConfigure, (row) => row.nameZh, setAsking, names)]}
         rows={visible}
         rowKey={(row) => row.code}
         selectedKey={selectedKey}
@@ -145,25 +155,30 @@ function CountriesTab() {
         onClearFilters={() => {
           setSearch('');
           setRegion('ALL');
+          setStanding('ALL');
         }}
         renderDetail={(key) => {
           const row = rows.find((item) => item.code === key);
-          return row ? (
+          if (!row) return null;
+          const audit = enablementAudit(enablement.byCode.get(row.code), enablement.asOf, names);
+          return (
             <DetailPanel
               code={row.code}
               name={row.nameZh}
               facts={[
                 { label: '英文名', value: row.nameEn },
                 { label: '区域', value: regionLabel(row.region) },
+                ...audit.facts,
               ]}
               note="区域只用来分组查找，不是服务区域或覆盖范围；那些在“服务区域”里登记。"
               technical={[
                 { label: '两位代码', value: row.code },
                 { label: '区域码', value: row.region },
+                ...audit.technical,
               ]}
               onClose={() => setSelectedKey(null)}
             />
-          ) : null;
+          );
         }}
         viewState={referenceViewState(answer, rows.length, retry, info, 'GET /reference-data/countries', '国家和地区')}
       />
@@ -185,14 +200,18 @@ const currencyColumns: WorkbenchColumn<CurrencyRecord>[] = [
 function CurrenciesTab() {
   const { answer, retry, refreshing } = useCatalogue<CurrencyListResponseBody>(listCurrencies);
   const enablement = useEnablement('CURRENCY');
+  const names = useOperatorNames();
   const mayConfigure = useMayConfigureEnablement();
   const [asking, setAsking] = useState<Parameters<typeof EnablementDialog>[0]['pending']>(null);
   const [search, setSearch] = useState('');
   const [scale, setScale] = useState('ALL');
+  const [standing, setStanding] = useState<EnablementStandingChoice>('ALL');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const answered = answer?.kind === 'outcome';
+  const enablementReady = enablement.answer?.kind === 'outcome';
   const rows = answered ? answer.body.currencies : [];
-  const visible = filterCurrencies(rows, { search, scale });
+  const matched = filterCurrencies(rows, { search, scale });
+  const visible = enablementReady ? filterByEnablementStanding(matched, standing, enablement.byCode) : matched;
 
   return (
     <>
@@ -206,8 +225,13 @@ function CurrenciesTab() {
         refreshing={refreshing || enablement.refreshing}
         search={{ value: search, onChange: setSearch, placeholder: '搜代码、中文名、英文名、符号…' }}
         statusChips={answered ? filterChips(countByMinorUnitScale(rows), rows.length, scale, setScale) : undefined}
+        extraFilters={
+          answered && enablementReady ? (
+            <EnablementStandingChips codes={matched.map((row) => row.code)} byCode={enablement.byCode} active={standing} onChange={setStanding} />
+          ) : undefined
+        }
         toolbarRight={answered ? countSummary(rows.length, visible.length, '种币种') : undefined}
-        columns={[...currencyColumns, ...enablementColumns<CurrencyRecord>(enablement, mayConfigure, (row) => row.nameZh, setAsking)]}
+        columns={[...currencyColumns, ...enablementColumns<CurrencyRecord>(enablement, mayConfigure, (row) => row.nameZh, setAsking, names)]}
         rows={visible}
         rowKey={(row) => row.code}
         selectedKey={selectedKey}
@@ -216,10 +240,13 @@ function CurrenciesTab() {
         onClearFilters={() => {
           setSearch('');
           setScale('ALL');
+          setStanding('ALL');
         }}
         renderDetail={(key) => {
           const row = rows.find((item) => item.code === key);
-          return row ? (
+          if (!row) return null;
+          const audit = enablementAudit(enablement.byCode.get(row.code), enablement.asOf, names);
+          return (
             <DetailPanel
               code={row.code}
               name={row.nameZh}
@@ -227,15 +254,17 @@ function CurrenciesTab() {
                 { label: '英文名', value: row.nameEn },
                 { label: '符号', value: row.symbol },
                 { label: '小数位', value: minorUnitScaleText(row.minorUnitScale) },
+                ...audit.facts,
               ]}
               note="小数位是这个币种金额最小到哪一位：计价与结算把金额合计取整时按它定位数。目录之外的三位代码仍可使用，只是这里查不到名称。"
               technical={[
                 { label: '三位代码', value: row.code },
                 { label: '最小币单位小数位', value: String(row.minorUnitScale) },
+                ...audit.technical,
               ]}
               onClose={() => setSelectedKey(null)}
             />
-          ) : null;
+          );
         }}
         viewState={referenceViewState(answer, rows.length, retry, info, 'GET /reference-data/currencies', '币种')}
       />

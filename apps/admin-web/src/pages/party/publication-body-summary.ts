@@ -255,13 +255,16 @@ export function publicationBodySummary(payload: CommercialPublicationPayload, ti
     case 'AUTHORIZATION_RULE':
       return [
         {
+          label: '价格政策',
+          value: payload.references?.PRICE_RULE ?? '不指名',
+        },
+        {
           label: '取消授权',
-          value:
-            (payload.authorizationRule?.cancellationAuthority ?? []).length === 0
-              ? none
-              : (payload.authorizationRule?.cancellationAuthority ?? [])
-                  .map((row) => `${labelOf(cancellationPartyLabels, row.party)}：${row.rule}`)
-                  .join('；'),
+          value: payload.authorizationRule
+            ? payload.authorizationRule.cancellationAuthority
+                .map((row) => `${labelOf(cancellationPartyLabels, row.party)}：${row.rule}`)
+                .join('；')
+            : '未声明',
         },
       ];
     case 'CUSTOMER_SERVICE_RULE':

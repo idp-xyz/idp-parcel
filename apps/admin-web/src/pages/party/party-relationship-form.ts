@@ -15,8 +15,12 @@
 // 适用范围一格原样带，只有授权交付方例外：它的范围服务端只认一种拼法，手写查询串容易拼成第二种写法而被拒，所以
 // 这一角色改填客户账户与节点两格，由 authorized-delivery-scope.ts 拼；拼不出（如账户空）是编码失败，与修订号编不出
 // 同办。
+//
+// 标了必填却留空的格子不在编码层里判：表单刚打开不先标红。点保存时由 partyRelationshipSubmitGaps 按格拦下、请求不发出。
+// 服务端仍退回并点名到路径时，由 partyRelationshipServerProblems 把原话挂回那一格。
 
 import type { PartyRelationshipRecord } from './api';
+import { pointedFieldProblem } from './caller-problem-facing';
 import { authorizedDeliveringPartyRole, spellAuthorizedDeliveryScope } from './authorized-delivery-scope';
 import { wallTimeToRfc3339 } from '../moment';
 import { partyRoleLabels } from './presentation';
@@ -175,7 +179,8 @@ export function partyRelationshipPayloadOf(
  * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。修订号编不进正整数、各时刻填了却换不成 RFC 3339、
  * 授权交付方的两格拼不成那一种适用范围；批准那两格只在勾了已批准时才看——不勾时它们根本不进载荷。勾了就两格都要有：
  * 批准单据空着，服务端在接入口答形状错（400）；批准时刻缺着，用例答的是笼统的状态迁移不成立，都不点名是哪一格，
- * 所以在这里按格拦下。角色未选、双方为空、区间倒置都是服务端的话。
+ * 所以在这里按格拦下。角色未选、双方为空、覆盖范围留空这些必填空格不在这里——表单刚打开不标红，点保存才由
+ * partyRelationshipSubmitGaps 拦下。区间倒置仍是服务端的话。
  */
 export function partyRelationshipLocalProblems(
   draft: PartyRelationshipDraft,
@@ -218,4 +223,117 @@ export function suggestedPartyRelationshipRevision(
   relationshipId: string,
 ): number {
   return suggestedNextRevision(rows, relationshipId, (row) => row.relationshipId);
+}
+
+/** 点保存时才说的那一句。与发布表单把 blank value 译成的话是同一句，避免两处各写各的。 */
+export const partyRelationshipRequiredBlank = '必填，不能留空';
+
+/** 页脚点名用的格子名字。句子里「哪一方」随本单位锁在哪一侧而变，由摆表单的那一层改这两格。 */
+export const partyRelationshipGapLabels: Record<string, string> = {
+  'relationships[0].relationshipId': '关系编号',
+  'relationships[0].holder': '哪一方',
+  'relationships[0].counterparty': '对哪一方',
+  'relationships[0].role': '角色',
+  'relationships[0].scope': '覆盖范围',
+  'relationships[0].basis': '来源单据',
+  'relationships[0].effectiveStartsAt': '开始时间',
+  'relationships[0].effectiveEndsAt': '结束时间',
+  'relationships[0].approval.reference': '批准单据',
+  'relationships[0].approval.approvedAt': '批准时间',
+};
+
+/**
+ * 点保存时才露出的必填空格。表单打开时不调用，所以空表不会先红一片。授权交付方的覆盖范围另有拼法，空账户已在
+ * 编码层报，这里不把 scope 原值再报一遍。区间倒置、角色词不在封闭集里，仍留给服务端。
+ */
+export function partyRelationshipSubmitGaps(draft: PartyRelationshipDraft): Record<string, string[]> {
+  const problems: Record<string, string[]> = {};
+  const blank = (path: string, value: string) => {
+    if (value.trim() === '') problems[path] = [partyRelationshipRequiredBlank];
+  };
+  blank('relationships[0].relationshipId', draft.relationshipId);
+  blank('relationships[0].holder', draft.holder);
+  blank('relationships[0].counterparty', draft.counterparty);
+  blank('relationships[0].role', draft.role);
+  if (draft.role !== authorizedDeliveringPartyRole) blank('relationships[0].scope', draft.scope);
+  blank('relationships[0].basis', draft.basis);
+  blank('relationships[0].effectiveStartsAt', draft.effectiveStartsAt);
+  return problems;
+}
+
+// 页脚点名和焦点都按人在表单上遇到格子的顺序，不按载荷键的顺序。关系编号在表单最后一格，载荷里却排在最前。
+const partyRelationshipBlankOrder = [
+  'relationships[0].holder',
+  'relationships[0].counterparty',
+  'relationships[0].role',
+  'relationships[0].scope',
+  'relationships[0].effectiveStartsAt',
+  'relationships[0].basis',
+  'relationships[0].relationshipId',
+  'relationships[0].effectiveEndsAt',
+  'relationships[0].approval.reference',
+  'relationships[0].approval.approvedAt',
+] as const;
+
+/** 第一处还空着的格子；没有就 null。 */
+export function firstPartyRelationshipGapPath(gaps: Record<string, string[]>): string | null {
+  return partyRelationshipBlankOrder.find((path) => (gaps[path]?.length ?? 0) > 0) ?? null;
+}
+
+/** 页脚那一句。没有空格就没有这句话。 */
+export function partyRelationshipGapSummary(
+  gaps: Record<string, string[]>,
+  labelOf: (path: string) => string = (path) => partyRelationshipGapLabels[path] ?? path,
+): string | null {
+  const names = partyRelationshipBlankOrder.flatMap((path) => ((gaps[path]?.length ?? 0) > 0 ? [labelOf(path)] : []));
+  if (names.length === 0) return null;
+  return `还有 ${names.length} 项要填：${names.join('、')}`;
+}
+
+/**
+ * 服务端退回里点名到路径的那一句，挂回格子。必填空格已经在页上标着时不再挂第二遍。空值类的原话在人把格子填上之后
+ * 撤下；其余原话留到下一次保存，人改了什么服务端还没再看过。
+ */
+export function partyRelationshipServerProblems(
+  detail: string | undefined,
+  draft: PartyRelationshipDraft,
+  alreadyShown: Record<string, string[]>,
+): Record<string, string[]> {
+  if (detail === undefined || detail.trim() === '') return {};
+  const pointed = pointedFieldProblem(detail);
+  if (pointed === null) return {};
+  const problems: Record<string, string[]> = {};
+  for (const path of pointed.paths) {
+    if ((alreadyShown[path]?.length ?? 0) > 0) continue;
+    if (pointed.raw.startsWith('party commercial: blank value') && draftValue(draft, path).trim() !== '') continue;
+    problems[path] = [pointed.raw];
+  }
+  return problems;
+}
+
+function draftValue(draft: PartyRelationshipDraft, path: string): string {
+  switch (path) {
+    case 'relationships[0].relationshipId':
+      return draft.relationshipId;
+    case 'relationships[0].holder':
+      return draft.holder;
+    case 'relationships[0].counterparty':
+      return draft.counterparty;
+    case 'relationships[0].role':
+      return draft.role;
+    case 'relationships[0].scope':
+      return draft.role === authorizedDeliveringPartyRole ? draft.scopeCustomerAccount : draft.scope;
+    case 'relationships[0].basis':
+      return draft.basis;
+    case 'relationships[0].effectiveStartsAt':
+      return draft.effectiveStartsAt;
+    case 'relationships[0].effectiveEndsAt':
+      return draft.effectiveEndsAt;
+    case 'relationships[0].approval.reference':
+      return draft.approvalReference;
+    case 'relationships[0].approval.approvedAt':
+      return draft.approvedAt;
+    default:
+      return '';
+  }
 }

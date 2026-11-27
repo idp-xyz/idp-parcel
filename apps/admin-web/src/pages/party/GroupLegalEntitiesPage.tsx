@@ -69,7 +69,10 @@ import {
 import { useMayWriteRegistry } from '../use-operator-grants';
 import { CountryLabel } from '../refdata-labels';
 import { entryHint } from '../operator-grants';
-import { neighborsOf, prefetchLegalEntityReads } from './legal-entity-reads';
+import { legalEntityReadVersion, neighborsOf, prefetchLegalEntityReads } from './legal-entity-reads';
+import { useCurrentLegalEntityProfile } from './CurrentLegalEntityProfile';
+import { ProfileStatusValue } from './LegalEntityHeaderParts';
+import { profileStatusCellOf } from './legal-entity-references';
 import { useLoaded } from './PublicationFormFields';
 
 // 列表取回后预读右栏的前几行：一行三个很小的读，二十行是六十个请求，再多就只读选中行的邻行。
@@ -170,17 +173,33 @@ function IdentityLayerCell({ row, typeNameOf }: { row: GroupLegalEntityRecord; t
 //
 // 列表是函数不是常量：注册号那一列要带目录查法，目录是页面挂载后读回的；页面用 useMemo 只在查法变时重建。
 //
-// 宽屏下的列宽纪律（票 company-subject-ux/08 第 6 条）：前两列给定宽（模板只开放每列的 width，表格本身撑满列表区），
-// 多出来的宽度就落到没定宽的状态与日期列上，它们的内容靠左、紧跟前一列，不再被前两列推到右边缘。主列内容另上限 22rem：
-// 列表比各列之和还宽时浏览器会把定宽列也拉宽，名称那一格不跟着长。
+// 列宽：除最后一列外都写成很小的百分比，按内容收住。表格撑满列表区时，多出来的宽度只落在最后一列里、
+// 字仍靠左，空档在行尾。若让状态和两个日期列一起吃宽度，生效时间与登记时间会被彼此推开。
+// 主列内容另上限 22rem，长名称截断，不跟着列表变宽。
 //
-// 表头只有生效时间与登记时间可排：排序下推到读口（legal-entity-list.ts 的 legalEntitySortColumns），读口不按名称排。
+// 表头可排的只有生效时间。默认仍按登记时间新到旧（读口缺省，不写进查询串）；登记时间在详情的技术详情里，
+// 不占列表。资料状态是另一问（当前资料），列表格用与右栏同一把缓存键。
+/** 按内容定宽。表格多出来的宽度不要落在这些列上，否则后一列会被推到右边。 */
+const contentWidth = '1%';
+
+/** 列表上的资料状态。读的是当前资料，与右栏同一键，预读命中时不再现问。 */
+function ListProfileStatus({ row }: { row: GroupLegalEntityRecord }) {
+  const query = useCurrentLegalEntityProfile(row.legalEntityId, legalEntityReadVersion(row));
+  const cell = profileStatusCellOf(query.answer, row.legalEntityId);
+  const title = cell.kind === 'status' ? cell.status.description : undefined;
+  return (
+    <span className="whitespace-nowrap" title={title}>
+      <ProfileStatusValue cell={cell} />
+    </span>
+  );
+}
+
 function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<GroupLegalEntityRecord>[] {
   return [
   {
     key: 'party',
     header: '公司主体',
-    width: '22rem',
+    width: contentWidth,
     // 名称在参与方册上（法人不抄第二份）；转写不到那一格的话与判据在 presentation.ts 的 partyNameUnknownNote。
     // 主列把名称与法人标识并排成两层，方便扫描；参与方标识、修订号、登记依据仍进详情栏底部的「技术详情」。
     render: (row) => (
@@ -210,12 +229,13 @@ function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<Gr
     key: 'identity-layer',
     header: '注册地与注册号',
     minListWidth: 680,
-    width: '20rem',
+    width: contentWidth,
     render: (row) => <IdentityLayerCell row={row} typeNameOf={typeNameOf} />,
   },
   {
     key: 'status',
     header: '状态',
+    width: contentWidth,
     // 已停用行标出停用时点：停用只自其时点起不再支持新的商业决定，时点是这格状态的内容而不是装饰。
     // 三个时刻都只显到日期（spec 公司主体 UX「统一用语」）：生效 / 登记 / 停用对运营是「哪一天」，完整时刻在悬停里。
     render: (row) => (
@@ -234,6 +254,7 @@ function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<Gr
     header: '生效时间',
     sortKey: 'effective-from',
     minListWidth: 960,
+    width: contentWidth,
     // 待生效配一个琥珀色时钟而不是把时刻标琥珀色：琥珀色字落在选中行与关注行的底色上不足 4.5:1（票 group-legal-entities-uiux/08
     // 评审），图标是非文字，门槛 3:1。
     render: (row) => (
@@ -246,15 +267,9 @@ function columnsOf(typeNameOf: RegistrationNumberTypeNameOf): WorkbenchColumn<Gr
     ),
   },
   {
-    key: 'registered-at',
-    header: '登记时间',
-    sortKey: 'registered-at',
-    minListWidth: 1240,
-    render: (row) => (
-      <span className="font-mono text-idpxyz-breadcrumb">
-        <Instant value={row.registeredAt} precision="day" />
-      </span>
-    ),
+    key: 'profile-status',
+    header: '资料状态',
+    render: (row) => <ListProfileStatus row={row} />,
   },
   ];
 }

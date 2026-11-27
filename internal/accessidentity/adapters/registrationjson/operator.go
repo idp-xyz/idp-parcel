@@ -24,17 +24,24 @@ type WorkScope struct {
 	Reference string `json:"reference"`
 }
 
-// GrantItem 是登一笔授予的单项。决定种类与作业范围各只属一格，别的格带了即拒（GrantFrom）。
+// DataVisibility 是数据可见范围的形状：种类与引用。引用 * 是这一类全部。
+type DataVisibility struct {
+	Kind      string `json:"kind"`
+	Reference string `json:"reference"`
+}
+
+// GrantItem 是登一笔授予的单项。决定种类、作业范围与数据可见范围各只属一格，别的格带了即拒（GrantFrom）。
 type GrantItem struct {
-	GrantID           string     `json:"grantId"`
-	Issuer            string     `json:"issuer"`
-	Subject           string     `json:"subject"`
-	CapabilityFace    string     `json:"capabilityFace"`
-	DecisionKind      string     `json:"decisionKind,omitempty"`
-	WorkScope         *WorkScope `json:"workScope,omitempty"`
-	EffectiveStartsAt time.Time  `json:"effectiveStartsAt"`
-	EffectiveEndsAt   *time.Time `json:"effectiveEndsAt,omitempty"`
-	Basis             string     `json:"basis"`
+	GrantID           string          `json:"grantId"`
+	Issuer            string          `json:"issuer"`
+	Subject           string          `json:"subject"`
+	CapabilityFace    string          `json:"capabilityFace"`
+	DecisionKind      string          `json:"decisionKind,omitempty"`
+	WorkScope         *WorkScope      `json:"workScope,omitempty"`
+	DataVisibility    *DataVisibility `json:"dataVisibility,omitempty"`
+	EffectiveStartsAt time.Time       `json:"effectiveStartsAt"`
+	EffectiveEndsAt   *time.Time      `json:"effectiveEndsAt,omitempty"`
+	Basis             string          `json:"basis"`
 }
 
 // RevocationItem 是撤一笔授予的单项。
@@ -99,6 +106,9 @@ func GrantFrom(tenantID string, entry GrantItem) (accessidentity.OperatorGrant, 
 	if face != accessidentity.CapabilityWorkFactRegistration && entry.WorkScope != nil {
 		return accessidentity.OperatorGrant{}, fmt.Errorf("workScope 只属 WORK_FACT_REGISTRATION，%s 不带作业范围", face)
 	}
+	if face != accessidentity.CapabilityDataVisibility && entry.DataVisibility != nil {
+		return accessidentity.OperatorGrant{}, fmt.Errorf("dataVisibility 只属 DATA_VISIBILITY，%s 不带数据可见范围", face)
+	}
 	switch face {
 	case accessidentity.CapabilityOperationDecision:
 		kind, err := accessidentity.ParseDecisionKind(entry.DecisionKind)
@@ -112,8 +122,30 @@ func GrantFrom(tenantID string, entry GrantItem) (accessidentity.OperatorGrant, 
 			return accessidentity.OperatorGrant{}, err
 		}
 		return accessidentity.NewWorkFactRegistrationGrant(tenantID, entry.GrantID, subject, scope, interval, entry.Basis)
+	case accessidentity.CapabilityDataVisibility:
+		visibility, err := DataVisibilityFrom(entry.DataVisibility)
+		if err != nil {
+			return accessidentity.OperatorGrant{}, err
+		}
+		return accessidentity.NewDataVisibilityGrant(tenantID, entry.GrantID, subject, visibility, interval, entry.Basis)
 	}
 	return accessidentity.NewOperatorGrant(tenantID, entry.GrantID, subject, face, interval, entry.Basis)
+}
+
+// DataVisibilityFrom 译一份数据可见范围：缺席即拒，范围不代填。引用 * 是这一类全部。
+func DataVisibilityFrom(document *DataVisibility) (accessidentity.DataVisibility, error) {
+	if document == nil {
+		return accessidentity.DataVisibility{}, fmt.Errorf("dataVisibility 缺席：数据可见范围不代填")
+	}
+	kind, err := accessidentity.ParseDataVisibilityKind(document.Kind)
+	if err != nil {
+		return accessidentity.DataVisibility{}, fmt.Errorf("dataVisibility.kind %q：%w", document.Kind, err)
+	}
+	visibility, err := accessidentity.NewDataVisibility(kind, document.Reference)
+	if err != nil {
+		return accessidentity.DataVisibility{}, fmt.Errorf("dataVisibility.reference：%w", err)
+	}
+	return visibility, nil
 }
 
 // IntervalFrom 译授予的生效区间，各本册的授予共用：起点不代填。

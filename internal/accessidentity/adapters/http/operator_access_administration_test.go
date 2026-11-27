@@ -233,12 +233,13 @@ func TestQueryOperatorsListsTheTenantWithVocabulary(t *testing.T) {
 		t.Fatalf("自报租户 = %d %s，册读了 %d 次", refused.Code, refused.Body.String(), catalogue.listed)
 	}
 	var listed struct {
-		Outcome        string           `json:"outcome"`
-		Issuer         string           `json:"issuer"`
-		Faces          []string         `json:"faces"`
-		DecisionKinds  []string         `json:"decisionKinds"`
-		WorkScopeKinds []string         `json:"workScopeKinds"`
-		Operators      []map[string]any `json:"operators"`
+		Outcome         string           `json:"outcome"`
+		Issuer          string           `json:"issuer"`
+		Faces           []string         `json:"faces"`
+		DecisionKinds   []string         `json:"decisionKinds"`
+		WorkScopeKinds  []string         `json:"workScopeKinds"`
+		VisibilityKinds []string         `json:"visibilityKinds"`
+		Operators       []map[string]any `json:"operators"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
@@ -246,7 +247,7 @@ func TestQueryOperatorsListsTheTenantWithVocabulary(t *testing.T) {
 	if listed.Outcome != "OPERATORS_LISTED" || listed.Issuer != "https://id.syn.example/dex" {
 		t.Fatalf("body = %s", response.Body.String())
 	}
-	wantFaces := []string{"REGISTRY_CONFIGURATION_WRITE", "MASTER_DATA_AND_OPERATIONS_READ", "OPERATION_DECISION", "WORK_FACT_REGISTRATION", "OPERATOR_ACCESS_ADMINISTRATION"}
+	wantFaces := []string{"REGISTRY_CONFIGURATION_WRITE", "MASTER_DATA_AND_OPERATIONS_READ", "OPERATION_DECISION", "WORK_FACT_REGISTRATION", "OPERATOR_ACCESS_ADMINISTRATION", "DATA_VISIBILITY"}
 	if strings.Join(listed.Faces, ",") != strings.Join(wantFaces, ",") {
 		t.Fatalf("faces = %v", listed.Faces)
 	}
@@ -255,6 +256,9 @@ func TestQueryOperatorsListsTheTenantWithVocabulary(t *testing.T) {
 	}
 	if strings.Join(listed.WorkScopeKinds, ",") != "NODE,OFFSITE,WAREHOUSE" {
 		t.Fatalf("workScopeKinds = %v", listed.WorkScopeKinds)
+	}
+	if strings.Join(listed.VisibilityKinds, ",") != "CUSTOMER_ACCOUNT,WAREHOUSE" {
+		t.Fatalf("visibilityKinds = %v", listed.VisibilityKinds)
 	}
 	if len(listed.Operators) != 2 {
 		t.Fatalf("operators = %v", listed.Operators)

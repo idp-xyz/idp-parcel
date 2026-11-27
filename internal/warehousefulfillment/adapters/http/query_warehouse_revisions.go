@@ -55,6 +55,14 @@ func NewQueryWarehouseRevisionsEndpoint(intake CatalogueIntake, reader Warehouse
 			writeMalformed(response, reason)
 			return
 		}
+		if warehouseHidden(query.Warehouses, code.String()) {
+			writeJSON(response, http.StatusOK, warehouseRevisionsResponse{
+				Outcome:       outcomeWarehouseRevisionsListed,
+				WarehouseCode: code.String(),
+				Revisions:     warehouseBodiesOfRows(nil),
+			})
+			return
+		}
 
 		rows, err := reader.WarehouseRevisions(request.Context(), query.Tenant, code)
 		if err != nil {
@@ -84,4 +92,18 @@ func warehouseCodeOf(request *http.Request) (domain.WarehouseCode, string) {
 		return domain.WarehouseCode{}, blankCellReason(warehouseCodeQueryKey)
 	}
 	return code, ""
+}
+
+// warehouseHidden 答这个仓是不是在这次查阅的可见范围之外。不限制时没有之外。限制时空名单什么都在之外。
+// 看不见与查无同答，所以调用方交回空修订史，不另立一格。
+func warehouseHidden(scope ports.WarehouseScope, code string) bool {
+	if !scope.Restricted {
+		return false
+	}
+	for _, candidate := range scope.Codes {
+		if candidate == code {
+			return false
+		}
+	}
+	return true
 }

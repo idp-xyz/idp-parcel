@@ -1436,6 +1436,10 @@ type ServiceProductCatalogueRow struct {
 	Form               string
 	HasForm            bool
 	DeliveryConditions *DeliveryConditionCatalogueRow
+	// DisplayName 是这一版给人看的名称。空串即没登记：不从对象标识翻译出来。
+	DisplayName string
+	// ScopeName 是适用范围这串字在名册里的叫法。空串即这串范围还没有叫法。
+	ScopeName string
 
 	// 收尾回显，含义同 SupplierAgreementCatalogueRow 的同名四格（ADR-0233 决定五）：原区间仍在 Effective* 两格，不被覆盖。
 	SelectionEndsAt time.Time
@@ -1443,6 +1447,22 @@ type ServiceProductCatalogueRow struct {
 	RetiredAt       time.Time
 	Successor       string
 }
+
+// CommercialScopeName 是范围名册的一行。没有行就是这串范围还没有叫法。
+type CommercialScopeName struct {
+	Scope string
+	Name  string
+}
+
+// LabelSaveOutcome 是名称登记的封闭结果。换叫法不覆盖。
+type LabelSaveOutcome string
+
+const (
+	LabelSaved             LabelSaveOutcome = "SAVED"
+	LabelAlreadyRegistered LabelSaveOutcome = "ALREADY_REGISTERED"
+	LabelContentConflict   LabelSaveOutcome = "CONTENT_CONFLICT"
+	LabelNotFound          LabelSaveOutcome = "NOT_FOUND"
+)
 
 // DeliveryConditionCatalogueRow 是目录行上可缺的一节:某一版(服务产品版本的产品层,或客户
 // 合同版本的合同层)声明过的交付条件——允许的方式集合(按引用字面稳定序)、两条规则引用与

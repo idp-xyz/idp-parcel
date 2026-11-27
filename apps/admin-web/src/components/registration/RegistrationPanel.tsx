@@ -13,6 +13,7 @@ import {
 } from '../guided-form/guided-forms';
 import { OperatorRefusalNote, TechnicalDetails, httpRows } from '../states';
 import { outcomeTechnicalRows } from './answer-rows';
+import { callerProblemFacing } from '../../pages/party/caller-problem-facing';
 import { overAppliedNote, unreconciledScopesNote, type UnreconciledScope } from './over-applied-note';
 
 /**
@@ -307,6 +308,8 @@ export interface RegistrationAnswerNoteProps {
   undecidedReasonLabels?: Record<string, string>;
   declarationLandingLabels?: Record<string, string>;
   problemNote: (code: string) => string;
+  /** 登记项路径到格子名字。服务端点名到路径时，页脚用这个名字，不用 JSON 路径。 */
+  fieldLabels?: Record<string, string>;
 }
 
 /**
@@ -322,6 +325,7 @@ export function RegistrationAnswerNote({
   undecidedReasonLabels,
   declarationLandingLabels,
   problemNote,
+  fieldLabels,
 }: RegistrationAnswerNoteProps) {
   if (state.kind === 'idle' || state.kind === 'submitting') return null;
   if (state.kind === 'malformed') {
@@ -398,17 +402,23 @@ export function RegistrationAnswerNote({
     case 'loginRequired':
     case 'notGranted':
       return <OperatorRefusalNote kind={answer.kind} />;
-    case 'callerProblem':
+    case 'callerProblem': {
+      // 点名到某一格的退回用格子的名字说；对不上格子的散文（自报租户、未知键）仍原样放在原因里。
+      // 原话收进技术详情，不和「常见原因」那一串排在一起。
+      const facing = callerProblemFacing(answer.code, answer.detail, problemNote, fieldLabels);
       return (
         <div className="type-body leading-4 text-idpxyz-danger">
-          <p>调用方式问题：{problemNote(answer.code)}</p>
-          {/* 服务端随 4xx 交回的理由散文（票 admin-web-group-legal-entities/11）：原样示出、不查表、不截断——
-              「tenantId must not be carried…」那半句正是操作者要去掉的那一格。缺席不显：没给就是没给，不
-              替服务端补一句。逐字段表单与 JSON 签共用这一处呈现，两边同时得到。 */}
-          {answer.detail ? <p className="mt-1">原因：{answer.detail}</p> : null}
-          <TechnicalDetails rows={httpRows(answer.status, answer.code)} />
+          <p>{facing.lead}</p>
+          {facing.reason ? <p className="mt-1">原因：{facing.reason}</p> : null}
+          <TechnicalDetails
+            rows={[
+              ...httpRows(answer.status, answer.code),
+              ...(facing.technicalDetail === '' ? [] : [{ label: '原因', value: facing.technicalDetail }]),
+            ]}
+          />
         </div>
       );
+    }
     case 'noAnswer':
       return (
         <div className="type-body leading-4 text-idpxyz-danger">

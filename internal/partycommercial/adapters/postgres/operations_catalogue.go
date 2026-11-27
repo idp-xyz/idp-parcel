@@ -160,6 +160,8 @@ var serviceProductListed = `WITH listed AS (
                version.effective_starts_at, version.effective_ends_at, version.published_at,
                ` + catalogueClosureColumns + `,
                product.form,` + deliveryConditionColumns + `,
+               display_name.name AS display_name,
+               scope_name.name AS scope_name,
                ` + versionStatusCode + ` AS status_code
           FROM party_commercial.commercial_version AS version
           LEFT JOIN party_commercial.service_product_form AS product
@@ -167,6 +169,14 @@ var serviceProductListed = `WITH listed AS (
                 AND product.object_kind   = version.object_kind
                 AND product.object_id     = version.object_id
                 AND product.version_label = version.version_label` + deliveryConditionJoin + `
+          LEFT JOIN party_commercial.service_product_display_name AS display_name
+                 ON display_name.tenant_id     = version.tenant_id
+                AND display_name.object_kind   = version.object_kind
+                AND display_name.object_id     = version.object_id
+                AND display_name.version_label = version.version_label
+          LEFT JOIN party_commercial.commercial_scope_name AS scope_name
+                 ON scope_name.tenant_id = version.tenant_id
+                AND scope_name.scope_ref = version.scope_ref
           ` + versionClosureJoins("version") + `
          WHERE version.tenant_id   = $1
            AND version.object_kind = $2
@@ -176,7 +186,7 @@ var serviceProductListed = `WITH listed AS (
 var serviceProductRead = catalogueRead[ports.ServiceProductCatalogueRow]{
 	binding:   ports.ServiceProductPages.MustBind(versionShellColumns("form")),
 	listed:    serviceProductListed,
-	selection: versionShellSelection + `, form, ` + deliveryConditionSelection,
+	selection: versionShellSelection + `, form, ` + deliveryConditionSelection + `, display_name, scope_name`,
 	scan:      scanServiceProduct,
 	position: func(row ports.ServiceProductCatalogueRow, sortField string) cataloguepage.Position {
 		return versionShellPosition(sortField, row.ObjectID, row.VersionLabel, row.PublishedAt)
@@ -190,11 +200,14 @@ func scanServiceProduct(rows pgx.Rows) (ports.ServiceProductCatalogueRow, error)
 	var endsAt *time.Time
 	var form *string
 	var delivery deliveryConditionScan
+	var displayName *string
+	var scopeName *string
 	targets := append([]any{
 		&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
 		&row.EffectiveStartsAt, &endsAt, &row.PublishedAt}, closure.targets()...)
 	targets = append(targets, &form)
 	targets = append(targets, delivery.targets()...)
+	targets = append(targets, &displayName, &scopeName)
 	if err := rows.Scan(targets...); err != nil {
 		return row, err
 	}
@@ -213,6 +226,12 @@ func scanServiceProduct(rows pgx.Rows) (ports.ServiceProductCatalogueRow, error)
 	}
 	if row.DeliveryConditions, err = delivery.row(); err != nil {
 		return row, err
+	}
+	if displayName != nil {
+		row.DisplayName = *displayName
+	}
+	if scopeName != nil {
+		row.ScopeName = *scopeName
 	}
 	return row, nil
 }

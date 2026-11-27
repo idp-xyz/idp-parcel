@@ -13,13 +13,16 @@ import (
 
 // OperatorOperationsReadAuthenticator 认证一次主数据与运营查阅读出示，交回操作者绑定的租户。失败只交回本包的格；
 // 从共享接入身份能力译过来的那一层在 adapters/accessidentity。
+// CustomerVisibility 在同一次查阅读成立之后，答看得见哪些客户账户。all 为真是显式的全部；为假时 ids 是点名的账户，
+// 空切片是什么都看不见。缺授予不是全部（ADR-0385）。
 type OperatorOperationsReadAuthenticator interface {
 	AuthenticateOperationsRead(ctx context.Context, bearerToken string) (domain.TenantID, error)
+	CustomerVisibility(ctx context.Context, bearerToken string) (tenant domain.TenantID, all bool, ids []string, err error)
 }
 
 // OperatorOperationsReadIntake 是操作者渠道的查阅 Intake（ADR-0100 决定四）。面单交易、渠道择优、释放未受理册、
-// 取消先后冲突册的作用域只有租户一维。委托查阅及其子集视图也走这里：运营侧看见本租户的全部账户
-// （OperatorTenantScope），不把账户名单塞进客户侧的 AuthorizedQueryScope。
+// 取消先后冲突册的作用域只有租户一维。委托查阅及其子集视图也走这里：客户范围取自操作者信封上的
+// 数据可见范围（ADR-0385），不把账户名单塞进客户侧的 AuthorizedQueryScope。
 type OperatorOperationsReadIntake struct {
 	authenticator OperatorOperationsReadAuthenticator
 }
@@ -80,9 +83,9 @@ func (intake *OperatorOperationsReadIntake) IntakeCancellationOrderConflictQuery
 	return CancellationOrderConflictQuery{Tenant: tenant, Limit: operatorOperationsReadLimit}, nil
 }
 
-// operatorTenantScope 认证主数据与运营查阅读，作用域是整个租户。引用是固定的证据名，不从请求里取。
+// operatorTenantScope 认证主数据与运营查阅读，再按信封上的客户可见范围收成作用域。引用是固定的证据名，不从请求里取。
 func (intake *OperatorOperationsReadIntake) operatorTenantScope(ctx context.Context, request *http.Request) (domain.OperatorTenantScope, error) {
-	tenant, err := intake.authenticator.AuthenticateOperationsRead(ctx, httpapi.BearerToken(request))
+	tenant, all, ids, err := intake.authenticator.CustomerVisibility(ctx, httpapi.BearerToken(request))
 	if err != nil {
 		return domain.OperatorTenantScope{}, err
 	}
@@ -90,7 +93,7 @@ func (intake *OperatorOperationsReadIntake) operatorTenantScope(ctx context.Cont
 	if err != nil {
 		return domain.OperatorTenantScope{}, err
 	}
-	scope, err := domain.NewOperatorTenantScope(reference, tenant)
+	scope, err := domain.NewOperatorCustomerVisibilityScope(reference, tenant, all, ids)
 	if err != nil {
 		return domain.OperatorTenantScope{}, err
 	}

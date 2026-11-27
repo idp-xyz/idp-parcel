@@ -75,7 +75,8 @@ func (registry *OperatorRegistry) ListOperators(
 	rows, err := querier.Query(ctx,
 		`SELECT o.issuer, o.subject, o.basis_ref, o.recorded_at, o.name,
 		        g.grant_id, g.capability_face, g.effective_starts_at, g.effective_ends_at, g.basis_ref,
-		        g.decision_kind, g.work_scope_kind, g.work_scope_ref, g.recorded_at, r.revoked_at, r.basis_ref
+		        g.decision_kind, g.work_scope_kind, g.work_scope_ref, g.visibility_kind, g.visibility_ref,
+		        g.recorded_at, r.revoked_at, r.basis_ref
 		   FROM (`+pageSQL+`) AS o
 		   LEFT JOIN access_identity.operator_grant g
 		     ON g.issuer = o.issuer AND g.subject = o.subject AND g.tenant_id = o.tenant_id
@@ -117,12 +118,13 @@ func (registry *OperatorRegistry) ListOperators(
 			grantID, face, grantBasis         *string
 			startsAt, endsAt, grantRecordedAt *time.Time
 			decisionKind, scopeKind, scopeRef *string
+			visibilityKind, visibilityRef     *string
 			revokedAt                         *time.Time
 			revocationBasis                   *string
 		)
 		if err := rows.Scan(&issuer, &subjectID, &basis, &operatorRecordedAt, &name,
 			&grantID, &face, &startsAt, &endsAt, &grantBasis,
-			&decisionKind, &scopeKind, &scopeRef, &grantRecordedAt, &revokedAt, &revocationBasis,
+			&decisionKind, &scopeKind, &scopeRef, &visibilityKind, &visibilityRef, &grantRecordedAt, &revokedAt, &revocationBasis,
 		); err != nil {
 			return fail(err)
 		}
@@ -148,7 +150,7 @@ func (registry *OperatorRegistry) ListOperators(
 			continue
 		}
 		recorded, err := recordedGrantFromRow(tenant, binding.Subject(),
-			*grantID, *face, decisionKind, scopeKind, scopeRef, *startsAt, endsAt, *grantBasis, revokedAt, revocationBasis)
+			*grantID, *face, decisionKind, scopeKind, scopeRef, visibilityKind, visibilityRef, *startsAt, endsAt, *grantBasis, revokedAt, revocationBasis)
 		if err != nil {
 			return fail(fmt.Errorf("授予 %s：%w", *grantID, err))
 		}
@@ -202,18 +204,20 @@ func (registry *OperatorRegistry) FindGrant(
 		endsAt, revokedAt              *time.Time
 		decisionKind                   *string
 		scopeKind, scopeRef            *string
+		visibilityKind, visibilityRef  *string
 		revocationBasis                *string
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT g.issuer, g.subject, g.capability_face, g.effective_starts_at, g.effective_ends_at, g.basis_ref,
-		        g.decision_kind, g.work_scope_kind, g.work_scope_ref, r.revoked_at, r.basis_ref
+		        g.decision_kind, g.work_scope_kind, g.work_scope_ref, g.visibility_kind, g.visibility_ref,
+		        r.revoked_at, r.basis_ref
 		   FROM access_identity.operator_grant g
 		   LEFT JOIN access_identity.operator_grant_revocation r
 		     ON r.tenant_id = g.tenant_id AND r.grant_id = g.grant_id
 		  WHERE g.tenant_id = $1 AND g.grant_id = $2`,
 		strings.TrimSpace(tenantID), strings.TrimSpace(grantID),
 	).Scan(&issuer, &subjectID, &face, &startsAt, &endsAt, &basis,
-		&decisionKind, &scopeKind, &scopeRef, &revokedAt, &revocationBasis)
+		&decisionKind, &scopeKind, &scopeRef, &visibilityKind, &visibilityRef, &revokedAt, &revocationBasis)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return accessidentity.RecordedGrant{}, false, nil
 	}
@@ -225,7 +229,7 @@ func (registry *OperatorRegistry) FindGrant(
 		return accessidentity.RecordedGrant{}, false, fmt.Errorf("%s: %w", operation, err)
 	}
 	recorded, err := recordedGrantFromRow(strings.TrimSpace(tenantID), subject,
-		strings.TrimSpace(grantID), face, decisionKind, scopeKind, scopeRef, startsAt, endsAt, basis, revokedAt, revocationBasis)
+		strings.TrimSpace(grantID), face, decisionKind, scopeKind, scopeRef, visibilityKind, visibilityRef, startsAt, endsAt, basis, revokedAt, revocationBasis)
 	if err != nil {
 		return accessidentity.RecordedGrant{}, false, fmt.Errorf("%s: 授予 %s：%w", operation, grantID, err)
 	}

@@ -29,6 +29,10 @@ export interface ServiceProductRecord extends VersionClosureEcho {
   form?: string;
   /** 这一版声明过的产品层交付条件（0030；票 admin-write-faces/25 裁读回折进目录行）。键缺席即这一版没有交付条件——页面先看键在不在。 */
   deliveryConditions?: DeliveryConditionRecord;
+  /** 这一版给人看的名称。缺席即没登记，页面不从对象标识翻译。 */
+  displayName?: string;
+  /** 适用范围在名册里的叫法。缺席即这串范围还没有叫法。 */
+  scopeName?: string;
 }
 
 // 目录行上可缺的那一节交付条件（后端 deliveryConditionBody，键名镜像受控批文）：方式集合按登记册交回的稳定序、两条规则引用、
@@ -775,6 +779,23 @@ export function listServiceProducts(
   return exchangeMasterData<ServiceProductListResponseBody>(
     catalogueRequestPath('/commercial-service-products', conditions, after),
   );
+}
+
+export interface ScopeNameRecord {
+  scope: string;
+  name: string;
+}
+
+export function listScopeNames(): Promise<ApiResult<{ outcome: string; scopes: ScopeNameRecord[] }>> {
+  return exchangeMasterData('/commercial-scope-names');
+}
+
+export function registerScopeName(scope: string, name: string): Promise<ApiResult<{ outcome: string }>> {
+  return afterPartyWrite(postMasterData('/commercial-scope-name-registrations', { scope, name }));
+}
+
+export function registerDisplayName(objectId: string, version: string, name: string): Promise<ApiResult<{ outcome: string }>> {
+  return afterPartyWrite(postMasterData('/commercial-service-product-display-name-registrations', { objectId, version, name }));
 }
 
 /**

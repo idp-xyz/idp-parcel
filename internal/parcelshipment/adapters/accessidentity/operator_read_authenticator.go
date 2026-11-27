@@ -37,3 +37,19 @@ func (authenticator *OperatorOperationsReadAuthenticator) AuthenticateOperations
 	}
 	return tenant, nil
 }
+
+// CustomerVisibility 再铸一次查阅读信封，交回租户和客户可见范围。all 为真是显式的全部客户；
+// 为假时 ids 是点名的账户，空切片是什么都看不见。
+func (authenticator *OperatorOperationsReadAuthenticator) CustomerVisibility(ctx context.Context, bearerToken string) (domain.TenantID, bool, []string, error) {
+	envelope, err := authenticator.minter.MintOperator(ctx, identity.NewOperatorCredential(bearerToken),
+		identity.OperatorRequest{Face: identity.CapabilityMasterDataAndOperationsRead})
+	if err != nil {
+		return domain.TenantID{}, false, nil, answer(err)
+	}
+	tenant, err := domain.NewTenantID(envelope.TenantID())
+	if err != nil {
+		return domain.TenantID{}, false, nil, fmt.Errorf("parcel shipment accessidentity: tenant: %w", err)
+	}
+	all, ids := envelope.CustomerVisibility()
+	return tenant, all, ids, nil
+}
