@@ -64,7 +64,7 @@ Status: in-progress
 
 | 站 | 页面 | 卡 | 状态 |
 |---|---|---|---|
-| 1 进门 | 登录、外壳、工作台、最近打开、保存的视图、没有授予时各页怎么说 | [01](./stations/01-entry.md) | 未过：15 通过 / 5 不通过 |
+| 1 进门 | 登录、外壳、工作台、最近打开、保存的视图、没有授予时各页怎么说 | [01](./stations/01-entry.md) | 首走未过：15 通过 / 5 不通过。五处已改，2026-11-27 复验对上，整站未再走一遍 |
 | 2 账号与基础 | 操作者与授予、基础数据、单据编号；授予到位后各页空态巡一遍 | 待出 | — |
 | 3 公司主体 | 公司主体 | 待出 | — |
 | 4 往来单位 | 往来单位 | 待出 | — |
@@ -88,11 +88,11 @@ Status: in-progress
 
 | 票 | 题 | 出自 | 状态 |
 |---|---|---|---|
-| [01](./issues/01-command-palette-speaks-english.md) | 命令面板的提示是英文 | 第 1 站 1.7 | ready-for-agent |
-| [02](./issues/02-shipment-views-still-on-the-isolated-read.md) | 运单三个读口仍挂隔离读 | 第 1 站 1.13、1.19 | ready-for-human |
-| [03](./issues/03-saved-views-has-an-entry-before-the-feature.md) | 保存的视图未开放已有入口 | 第 1 站 1.16 | ready-for-human |
-| [04](./issues/04-no-grant-copy-and-the-write-form-still-opens.md) | 没有授予的说明与仍可点开的写表单 | 第 1 站 1.18 | ready-for-agent |
-| [05](./issues/05-workbench-does-not-say-what-a-new-admin-does-first.md) | 工作台不告诉新管理员先去授权 | 第 1 站 1.13 | ready-for-agent |
+| [01](./issues/01-command-palette-speaks-english.md) | 命令面板的提示是英文 | 第 1 站 1.7 | resolved |
+| [02](./issues/02-shipment-views-still-on-the-isolated-read.md) | 运单三个读口仍挂隔离读 | 第 1 站 1.13、1.19 | resolved |
+| [03](./issues/03-saved-views-has-an-entry-before-the-feature.md) | 保存的视图未开放已有入口 | 第 1 站 1.16 | resolved |
+| [04](./issues/04-no-grant-copy-and-the-write-form-still-opens.md) | 没有授予的说明与仍可点开的写表单 | 第 1 站 1.18 | resolved |
+| [05](./issues/05-workbench-does-not-say-what-a-new-admin-does-first.md) | 工作台不告诉新管理员先去授权 | 第 1 站 1.13 | resolved |
 
 ## Comments
 

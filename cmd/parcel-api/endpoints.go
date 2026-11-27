@@ -302,7 +302,7 @@ func refuseRepeatedPatterns(endpoints []httpapi.BusinessEndpoint) error {
 
 // 缺省朝拦：真渠道与隔离入参都缺席时，下面这组查阅变量全取未配置即拒。
 //
-// **读写入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：isolatedRead 只换委托查阅那一只变量，
+// **读写入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：委托查阅走 operatorRegistries 的查阅读，
 // customerSubmission（首方客户渠道）只换 `/v1/shipment-requests` 一行。运营查阅各族走 operatorRegistries 的查阅读，作业事实各口走
 // workFactReception / workFactTransport，运营决定各口走 operatorDecisions，都不经隔离开关。其余命令面挂字面量
 // `UnconfiguredIntake{}`，不经由任何变量——读那一行就能看出它们哪个开关都换不了。
@@ -311,9 +311,9 @@ func refuseRepeatedPatterns(endpoints []httpapi.BusinessEndpoint) error {
 // 未配置时这些 Intake 仍在，答的是未配置，与未接真渠道时同码。
 
 func (channels endpointChannels) shipmentViews() shipmenthttp.ShipmentRequestViewsIntake {
-	// 委托查阅及其子集视图仍走隔离读：它们的读口按可见客户账户切，操作者信封只给得出租户（票 operator-channel/53）。
-	if channels.isolatedRead != nil {
-		return channels.isolatedRead.shipmentRequestViews
+	// 委托查阅及其子集视图走操作者的主数据与运营查阅读，作用域是整个租户。
+	if channels.operatorRegistries.shipmentOperationsRead != nil {
+		return channels.operatorRegistries.shipmentOperationsRead
 	}
 	return shipmenthttp.UnconfiguredIntake{}
 }

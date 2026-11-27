@@ -75,3 +75,42 @@ func (scope AuthorizedQueryScope) CustomerAccountIDs() []CustomerAccountID {
 	copy(copied, scope.accounts)
 	return copied
 }
+
+// ShipmentReadScope 是委托查阅读口吃的可见范围。两种形状各自立得起来：
+// AuthorizedQueryScope 点名可见的客户账户；OperatorTenantScope 是持有主数据与运营查阅读的操作者，看见本租户全部账户。
+// 不把「空账户集」塞进 AuthorizedQueryScope 来表示全部——那个构造器拒绝空集，就是不让每个读口自己解释空的意思。
+type ShipmentReadScope interface {
+	TenantID() TenantID
+	// RestrictedAccounts 的 restricted 为真时，读口只看见这些账户；为假时看见本租户的全部账户。
+	RestrictedAccounts() (accounts []CustomerAccountID, restricted bool)
+}
+
+// RestrictedAccounts 把客户侧作用域报成「只看见这些账户」。
+func (scope AuthorizedQueryScope) RestrictedAccounts() ([]CustomerAccountID, bool) {
+	return scope.CustomerAccountIDs(), true
+}
+
+// OperatorTenantScope 是运营侧的委托查阅作用域：整个租户，不点名账户。
+type OperatorTenantScope struct {
+	reference QueryScopeReference
+	tenant    TenantID
+}
+
+// NewOperatorTenantScope 要引用与租户都在。引用只进证据索引，不参与过滤。
+func NewOperatorTenantScope(reference QueryScopeReference, tenant TenantID) (OperatorTenantScope, error) {
+	if !reference.valid() {
+		return OperatorTenantScope{}, fmt.Errorf("%w: scope reference is required", ErrInvalidQueryScope)
+	}
+	if !tenant.valid() {
+		return OperatorTenantScope{}, fmt.Errorf("%w: tenant is required", ErrInvalidQueryScope)
+	}
+	return OperatorTenantScope{reference: reference, tenant: tenant}, nil
+}
+
+func (scope OperatorTenantScope) Reference() QueryScopeReference { return scope.reference }
+
+func (scope OperatorTenantScope) TenantID() TenantID { return scope.tenant }
+
+func (scope OperatorTenantScope) RestrictedAccounts() ([]CustomerAccountID, bool) {
+	return nil, false
+}

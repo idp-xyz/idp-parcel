@@ -310,7 +310,7 @@ export function ReferencePickerFor<Body>({
     <Field label={label} path={path} problems={problems}>
       <Input
         value={value}
-        disabled={locked}
+        disabled={locked || answer?.kind === 'notGranted'}
         className="font-mono type-value"
         placeholder={manualPlaceholder}
         onChange={(event) => onChange(event.target.value)}
@@ -320,8 +320,10 @@ export function ReferencePickerFor<Body>({
           ? `正在读${readFace}…`
           : answer.kind === 'unconfigured'
             ? `暂时读不到${readFace}（接入渠道未配置），先手填标识；标识对不对由服务端在发布时检查。`
-            : isOperatorRefusal(answer)
-              ? `暂时读不到${readFace}（${accessRefusalTitle(answer.kind)}），先手填标识；标识对不对由服务端在发布时检查。`
+            : answer.kind === 'notGranted'
+              ? `没有查看${readFace}的权限，不能从名册里选。请管理员在「操作者与授予」里加上查阅权限。`
+              : isOperatorRefusal(answer)
+                ? `暂时读不到${readFace}（${accessRefusalTitle(answer.kind)}）。重新登录后再选。`
               : `${readFace}读不到，先手填；引用在不在册由服务端发布时判。`}
       </span>
     </Field>

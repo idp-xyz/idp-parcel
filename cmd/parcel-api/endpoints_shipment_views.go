@@ -18,9 +18,9 @@ type shipmentViewsWiring struct {
 func init() {
 	registerEndpoints(endpointFeature[shipmentViewsWiring]{
 		lines: map[string]endpointLine{
-			"/shipment-request-views":       {method: http.MethodGet, face: isolatedReadFace()},
-			"/acceptance-review-queue":      {method: http.MethodGet, face: isolatedReadFace()},
-			"/authorized-disposition-queue": {method: http.MethodGet, face: isolatedReadFace()},
+			"/shipment-request-views":       {method: http.MethodGet, face: operationsReadFace()},
+			"/acceptance-review-queue":      {method: http.MethodGet, face: operationsReadFace()},
+			"/authorized-disposition-queue": {method: http.MethodGet, face: operationsReadFace()},
 		},
 		build: func(sources endpointSources) (shipmentViewsWiring, error) {
 			requestViews, err := pspostgres.NewShipmentRequestViews(sources.db)
@@ -45,8 +45,7 @@ func init() {
 			shipmentViewsIntake := channels.shipmentViews()
 			return []httpapi.BusinessEndpoint{
 				{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmentViewsIntake, wiring.requestViews)},
-				// 复核队列查阅（票 09）：委托查阅面的子集视图，Intake 沿用同一变量——隔离读
-				// 准入（ADR-0078）启用时随委托查阅一起换值，不另立第二种准入形。
+				// 复核队列查阅（票 09）：委托查阅面的子集视图，Intake 沿用同一变量。
 				{Pattern: "/acceptance-review-queue", Handler: shipmenthttp.NewQueryAcceptanceReviewQueueEndpoint(shipmentViewsIntake, wiring.reviewQueue, wiring.reviewJudgments)},
 				// 授权处置队列查阅（票 sa-preacceptance-policy-view/04，ADR-0132 决定二）：同为委托查阅面的子集视图，
 				// Intake 沿用同一变量；单份详情复用复核队列的 `?shipmentRequestId=` 分支，这里只有列表。

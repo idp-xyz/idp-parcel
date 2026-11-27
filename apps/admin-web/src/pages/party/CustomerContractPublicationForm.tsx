@@ -547,7 +547,7 @@ function ObjectPicker({
     <>
       <Input
         value={value}
-        readOnly={locked}
+        readOnly={locked || candidates.kind === 'notGranted'}
         className="font-mono type-value"
         placeholder="对象标识"
         onChange={(event) => onChange(event.target.value)}
@@ -559,7 +559,9 @@ function ObjectPicker({
             ? `暂时读不到${registerName}（接入渠道未配置），先手填标识；标识是否在册由服务端在发布时核对。`
             : candidates.kind === 'unavailable'
               ? `暂时读不到${registerName}，先手填标识；标识是否在册由服务端在发布时核对。`
-              : `暂时读不到${registerName}（${accessRefusalTitle(candidates.kind)}），先手填标识；标识是否在册由服务端在发布时核对。`}
+              : candidates.kind === 'notGranted'
+                ? `没有查看${registerName}的权限，不能从名册里选。请管理员在「操作者与授予」里加上查阅权限。`
+                : `暂时读不到${registerName}（${accessRefusalTitle(candidates.kind)}），先手填标识；标识是否在册由服务端在发布时核对。`}
       </span>
     </>
   );

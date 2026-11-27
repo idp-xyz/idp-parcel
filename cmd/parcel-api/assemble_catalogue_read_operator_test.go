@@ -14,7 +14,7 @@ import (
 
 // swappedReadPatterns 由登记处导出：挂操作者渠道「主数据与运营查阅读」能力面、经共享渠道的查阅行（GET）——ADR-0077 那一族
 // 目录查阅（隔离读放行已撤，答复走操作者查阅读），与运营查阅面余下各族（票 operator-channel/35）：面单交易、渠道择优、节点作业、
-// 运输履约、追踪与异常、代收、结算、治理。委托查阅及其子集视图不在其中，仍挂隔离读（票 operator-channel/53）。
+// 运输履约、追踪与异常、代收、结算、治理，以及委托查阅及其子集视图。
 func swappedReadPatterns() []string {
 	return declaredPatterns(func(line endpointLine) bool {
 		return line.face.family == faceOperationsRead && line.method == http.MethodGet && !line.ownIntake

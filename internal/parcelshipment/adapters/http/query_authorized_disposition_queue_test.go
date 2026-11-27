@@ -18,13 +18,13 @@ import (
 type dispositionQueueReaderDouble struct {
 	rows    []ports.AuthorizedDispositionQueueRecord
 	listErr error
-	scope   domain.AuthorizedQueryScope
+	scope   domain.ShipmentReadScope
 	limit   int
 }
 
 func (double *dispositionQueueReaderDouble) ListAwaitingAuthorizedDisposition(
 	_ context.Context,
-	scope domain.AuthorizedQueryScope,
+	scope domain.ShipmentReadScope,
 	limit int,
 	_ cataloguepage.Query,
 ) (cataloguepage.Result[ports.AuthorizedDispositionQueueRecord], error) {

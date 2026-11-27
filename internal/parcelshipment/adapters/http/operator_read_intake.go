@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 
+	"fmt"
+
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
@@ -15,12 +17,14 @@ type OperatorOperationsReadAuthenticator interface {
 	AuthenticateOperationsRead(ctx context.Context, bearerToken string) (domain.TenantID, error)
 }
 
-// OperatorOperationsReadIntake 是操作者渠道在面单交易、渠道择优决定、释放未受理册与取消先后冲突册四口的 Intake（ADR-0100 决定四）。四口的作用域
-// 只有租户一维（ADR-0084 决定七；释放未受理册按租户切，ADR-0293 决定一；冲突册同，ADR-0295 决定一），信封给得出。委托查阅及其子集视图刻意不实现：它们的读口按可见客户账户切，操作者信封只有
-// 租户，拿一组账户去凑等于造一个作用域（票 operator-channel/53）。
+// OperatorOperationsReadIntake 是操作者渠道的查阅 Intake（ADR-0100 决定四）。面单交易、渠道择优、释放未受理册、
+// 取消先后冲突册的作用域只有租户一维。委托查阅及其子集视图也走这里：运营侧看见本租户的全部账户
+// （OperatorTenantScope），不把账户名单塞进客户侧的 AuthorizedQueryScope。
 type OperatorOperationsReadIntake struct {
 	authenticator OperatorOperationsReadAuthenticator
 }
+
+var _ ShipmentRequestViewsIntake = (*OperatorOperationsReadIntake)(nil)
 
 var (
 	_ LabelTransactionQueryIntake             = (*OperatorOperationsReadIntake)(nil)
@@ -74,6 +78,45 @@ func (intake *OperatorOperationsReadIntake) IntakeCancellationOrderConflictQuery
 		return CancellationOrderConflictQuery{}, err
 	}
 	return CancellationOrderConflictQuery{Tenant: tenant, Limit: operatorOperationsReadLimit}, nil
+}
+
+// operatorTenantScope 认证主数据与运营查阅读，作用域是整个租户。引用是固定的证据名，不从请求里取。
+func (intake *OperatorOperationsReadIntake) operatorTenantScope(ctx context.Context, request *http.Request) (domain.OperatorTenantScope, error) {
+	tenant, err := intake.authenticator.AuthenticateOperationsRead(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return domain.OperatorTenantScope{}, err
+	}
+	reference, err := domain.NewQueryScopeReference("operator-operations-read")
+	if err != nil {
+		return domain.OperatorTenantScope{}, err
+	}
+	scope, err := domain.NewOperatorTenantScope(reference, tenant)
+	if err != nil {
+		return domain.OperatorTenantScope{}, err
+	}
+	return scope, nil
+}
+
+// IntakeListQuery 不读请求体。租户只取自信封，页大小是这一渠道的产品策略。
+func (intake *OperatorOperationsReadIntake) IntakeListQuery(ctx context.Context, request *http.Request) (ShipmentRequestViewsQuery, error) {
+	scope, err := intake.operatorTenantScope(ctx, request)
+	if err != nil {
+		return ShipmentRequestViewsQuery{}, err
+	}
+	return ShipmentRequestViewsQuery{Scope: scope, Limit: operatorOperationsReadLimit}, nil
+}
+
+// IntakeDetailQuery 解析定位标识。标识只定位候选对象，权限在租户作用域上。
+func (intake *OperatorOperationsReadIntake) IntakeDetailQuery(ctx context.Context, request *http.Request) (ShipmentRequestViewQuery, error) {
+	scope, err := intake.operatorTenantScope(ctx, request)
+	if err != nil {
+		return ShipmentRequestViewQuery{}, err
+	}
+	requestID, err := domain.NewShipmentRequestID(request.URL.Query().Get("shipmentRequestId"))
+	if err != nil {
+		return ShipmentRequestViewQuery{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+	}
+	return ShipmentRequestViewQuery{Scope: scope, RequestID: requestID}, nil
 }
 
 // IntakePostIntakeDispositionRequestQuery 同上：租户只取自信封，页大小是这一渠道的产品策略（ADR-0332）。

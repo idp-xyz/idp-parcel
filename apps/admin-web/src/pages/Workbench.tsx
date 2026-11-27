@@ -5,6 +5,7 @@ import { parcelNavigationSections, pageTitleById } from '../navigation';
 import { statusToneText } from '../components/status-tone';
 import { listRecentObjects, recentObjectHash, type RecentObject } from './my-work/recent-objects';
 import { listSavedViews, savedViewHash, type SavedView } from './my-work/saved-views';
+import { useOperationsReadGrant } from './use-operator-grants';
 import { InstantCell, moduleTitleOf } from './my-work/shared';
 import { unadmittedObjectsHash } from './customs/cases-address';
 import { disputedStatementsHash } from './settlement/reconciliation-address';
@@ -246,6 +247,7 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
   // 一次读进 state：工作台每次从别页回来都重挂载，重读即最新；本页只读不写这两份存储，写方是外壳（记）与两页（清 / 删）。
   const [recent] = useState<RecentObject[]>(() => listRecentObjects(window.localStorage));
   const [views] = useState<SavedView[]>(() => listSavedViews(window.localStorage));
+  const readGrant = useOperationsReadGrant();
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -256,6 +258,20 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
             今天要处理的事都在这里，点一格进到对应的列表；下面是你最近打开过的对象和全部功能入口。
           </p>
         </header>
+
+        {readGrant.settled && !readGrant.mayRead && (
+          <p className="mb-4 rounded border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 type-body text-idpxyz-text">
+            你现在只能管理账号。要查看运单、客户和价格，先到
+            <button
+              type="button"
+              className="mx-1 text-idpxyz-accent underline"
+              onClick={() => onNavigate?.('operator-access')}
+            >
+              操作者与授予
+            </button>
+            给自己加上主数据与运营查阅。
+          </p>
+        )}
 
         <TodoGrid onNavigate={onNavigate} />
 
@@ -292,7 +308,7 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
             icon={Star}
             title={pageTitleById['saved-views']}
             total={views.length}
-            emptyNote="这台电脑上还没有保存过视图。列表页的「保存视图」还没开放，开放后存下的筛选条件会列在这里。"
+            emptyNote="这台电脑上还没有保存过视图。在列表页点「保存当前视图」，筛好的条件会列在这里。"
             onViewAll={onNavigate ? () => onNavigate('saved-views') : undefined}
           >
             {views.slice(0, MY_WORK_PREVIEW_LIMIT).map((row) => (

@@ -149,7 +149,7 @@ type reviewQueueReaderDouble struct {
 
 func (double *reviewQueueReaderDouble) ListAwaitingManualReview(
 	_ context.Context,
-	_ domain.AuthorizedQueryScope,
+	_ domain.ShipmentReadScope,
 	_ int,
 	_ cataloguepage.Query,
 ) (cataloguepage.Result[ports.AcceptanceReviewQueueRecord], error) {
@@ -161,7 +161,7 @@ func (double *reviewQueueReaderDouble) ListAwaitingManualReview(
 
 func (double *reviewQueueReaderDouble) FindVisibleByID(
 	_ context.Context,
-	_ domain.AuthorizedQueryScope,
+	_ domain.ShipmentReadScope,
 	_ domain.ShipmentRequestID,
 ) (ports.ShipmentRequestDetailRecord, bool, error) {
 	if double.findErr != nil {

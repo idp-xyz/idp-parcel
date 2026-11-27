@@ -18,6 +18,31 @@ export function decodeHashSegment(segment: string): string | null {
 /** 检索词在地址里的键名；与目录读口契约的关键词同名，读口支持之后原样下推。 */
 export const ADDRESS_KEYWORD_PARAM = 'q';
 
+/** 保存视图在地址里的键。筛选条件是其余的查询串，这一键只指名用的是哪一份。 */
+export const SAVED_VIEW_PARAM = 'view';
+
+/** 地址上除保存视图 id 以外的查询串，键按字典序。没有则空串。这一份就是列表页要存的筛选态。 */
+export function addressQueryWithoutView(hash: string): string {
+  const params = new URLSearchParams(splitHash(hash).query);
+  params.delete(SAVED_VIEW_PARAM);
+  params.sort();
+  return params.toString();
+}
+
+/**
+ * 打开一份保存视图时的地址：路径是模块页，查询串是存下的那一份，并带上视图 id。
+ * 不沿用当前路径——人可能正站在「保存的视图」页上点这一行。
+ */
+export function hashForSavedView(moduleId: string, query: string, viewId: string): string {
+  const params = new URLSearchParams(query);
+  params.delete(SAVED_VIEW_PARAM);
+  if (viewId !== '') params.set(SAVED_VIEW_PARAM, viewId);
+  params.sort();
+  const next = params.toString();
+  const path = `#/${moduleId}`;
+  return next === '' ? path : `${path}?${next}`;
+}
+
 function splitHash(hash: string): { path: string; query: string } {
   const at = hash.indexOf('?');
   return at < 0 ? { path: hash, query: '' } : { path: hash.slice(0, at), query: hash.slice(at + 1) };

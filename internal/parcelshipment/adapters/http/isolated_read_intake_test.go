@@ -29,7 +29,10 @@ func TestIsolatedOperationsReadIntakeGrantsInjectedScope(t *testing.T) {
 	if got := query.Scope.TenantID().String(); got != "SYN-TENANT-01" {
 		t.Fatalf("tenant = %q, want SYN-TENANT-01（注入值）", got)
 	}
-	accounts := query.Scope.CustomerAccountIDs()
+	accounts, restricted := query.Scope.RestrictedAccounts()
+	if !restricted {
+		t.Fatal("隔离读作用域应当点名账户")
+	}
 	if len(accounts) != 1 || accounts[0].String() != "SYN-ACCOUNT-01" {
 		t.Fatalf("accounts = %v, want 注入的 [SYN-ACCOUNT-01]", accounts)
 	}

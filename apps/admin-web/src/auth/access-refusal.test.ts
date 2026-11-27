@@ -38,7 +38,7 @@ test('标题句带状态码与码名原名；操作者两格的整句带续办',
   equal(accessRefusalHeadline('loginRequired'), '需要登录（401 OPERATOR_CREDENTIAL_REJECTED）');
   equal(accessRefusalHeadline('notGranted'), '没有授予（403 OPERATOR_NOT_GRANTED）');
   match(operatorRefusalSentence('loginRequired', '预览'), /^预览：需要登录（401 OPERATOR_CREDENTIAL_REJECTED）。.*重新登录后再试/);
-  match(operatorRefusalSentence('notGranted'), /^没有授予（403 OPERATOR_NOT_GRANTED）。.*要管授予的人去登记授予/);
+  match(operatorRefusalSentence('notGranted'), /^没有授予（403 OPERATOR_NOT_GRANTED）。.*操作者与授予/);
 });
 
 // Covers: 守卫只认两格操作者答复——未配置各页有自己那段说明，不经它。
@@ -87,6 +87,6 @@ test('各出口对三格判法相同；别的 401 / 403 照旧是调用方问题
 test('operatorRefusalMessage 不带状态码与错误码，operatorRefusalSentence 带', () => {
   match(operatorRefusalMessage('loginRequired', '预览'), /^预览：需要登录。.*重新登录/);
   equal(/401|OPERATOR_CREDENTIAL_REJECTED/.test(operatorRefusalMessage('loginRequired', '预览')), false);
-  match(operatorRefusalMessage('notGranted'), /^没有授予。.*要管授予的人去登记授予/);
+  match(operatorRefusalMessage('notGranted'), /^没有授予。.*操作者与授予/);
   match(operatorRefusalSentence('notGranted'), /403 OPERATOR_NOT_GRANTED/);
 });

@@ -25,9 +25,6 @@ import (
 // waitingOn 快照也不该上列。
 var _ ports.AcceptanceReviewQueue = (*ShipmentRequestViews)(nil)
 
-// waitingRequests 是委托队列的固定条件：作用域那一段再加等待态与`已提交`。
-const waitingRequests = visibleRequests + " AND task_waiting_on = $3 AND state = $4"
-
 // shipmentRequestQueueColumns 把两个委托队列的声明落到列上，q 落在 shipmentRequestKeyword 上。
 var shipmentRequestQueueColumns = cataloguepage.Columns{
 	Sorts:    map[string]string{"submittedAt": "submitted_at", "shipmentRequestId": "shipment_request_id"},
@@ -42,7 +39,7 @@ var acceptanceReviewQueuePages = ports.AcceptanceReviewQueuePages.MustBind(shipm
 // limit 非正是调用方编程错误，判据同 ListVisible。
 func (views *ShipmentRequestViews) ListAwaitingManualReview(
 	ctx context.Context,
-	scope domain.AuthorizedQueryScope,
+	scope domain.ShipmentReadScope,
 	limit int,
 	query cataloguepage.Query,
 ) (cataloguepage.Result[ports.AcceptanceReviewQueueRecord], error) {
@@ -52,10 +49,10 @@ func (views *ShipmentRequestViews) ListAwaitingManualReview(
 	if limit < 1 {
 		return fail(fmt.Errorf("limit must be positive, got %d", limit))
 	}
-	plan, err := acceptanceReviewQueuePages.Plan(query, waitingRequests, []any{
-		scope.TenantID().String(), visibleAccounts(scope),
-		uint8(domain.ResumeByManualReview), uint8(domain.ShipmentRequestSubmitted),
-	}, limit)
+	where, args, next := readScopeSQL(scope)
+	plan, err := acceptanceReviewQueuePages.Plan(query,
+		fmt.Sprintf("%s AND task_waiting_on = $%d AND state = $%d", where, next, next+1),
+		append(args, uint8(domain.ResumeByManualReview), uint8(domain.ShipmentRequestSubmitted)), limit)
 	if err != nil {
 		return fail(err)
 	}
