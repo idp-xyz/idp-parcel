@@ -276,16 +276,23 @@ export function WorkbenchPageTemplate<Row>({
     const list = listRef.current;
     const row = list?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(selectedKey)}"]`);
     if (!list || !row) return;
-    // 表头是粘在这个滚动区顶上的，scrollIntoView 把它当内容不算遮挡：滚回第一行时行停在表头底下，滚动条也回不到顶。
+    // 表头粘在顶上，横向滚动条占着底边。外框的底边含滚动条，用它当可视底，最后一行会停在滚动条后面。
     const header = list.querySelector('thead')?.getBoundingClientRect().height ?? 0;
     const listBox = list.getBoundingClientRect();
     const rowBox = row.getBoundingClientRect();
+    const style = getComputedStyle(list);
+    const borderTop = Number.parseFloat(style.borderTopWidth) || 0;
+    const borderBottom = Number.parseFloat(style.borderBottomWidth) || 0;
+    const layoutBar = Math.max(0, list.offsetHeight - list.clientHeight - borderTop - borderBottom);
+    // 不占高度的覆盖式滚动条量不出来：内容比可视区宽时，底边仍按一条滚动条让出。
+    const overlayBar = layoutBar < 1 && list.scrollWidth > list.clientWidth + 1 ? 16 : 0;
     list.scrollTop += scrollDeltaToReveal({
-      listTop: listBox.top,
+      listTop: listBox.top + borderTop,
       listBottom: listBox.bottom,
       rowTop: rowBox.top,
       rowBottom: rowBox.bottom,
       header,
+      bottom: borderBottom + layoutBar + overlayBar,
     });
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused !== row && focused.matches('tr[data-row-key]') && list?.contains(focused)) {

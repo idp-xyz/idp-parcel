@@ -43,4 +43,6 @@ test('scrollDeltaToReveal：顶上让出表头，看得见的行不动', () => {
   equal(scrollDeltaToReveal({ listTop: 100, listBottom: 500, rowTop: 40, rowBottom: 80, header: 36 }), 40 - (100 + 36));
   equal(scrollDeltaToReveal({ listTop: 100, listBottom: 500, rowTop: 140, rowBottom: 180, header: 36 }), 0);
   equal(scrollDeltaToReveal({ listTop: 100, listBottom: 500, rowTop: 480, rowBottom: 520, header: 36 }), 20);
+  // 底边让出横向滚动条：行的底已经进了外框，但仍压在滚动条上，要再往上让出那一截。
+  equal(scrollDeltaToReveal({ listTop: 100, listBottom: 500, rowTop: 440, rowBottom: 490, header: 36, bottom: 16 }), 6);
 });

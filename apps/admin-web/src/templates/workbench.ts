@@ -38,12 +38,10 @@ export function workbenchKeyAction(key: string, focus: WorkbenchFocus, detailOpe
 }
 
 /**
- * 方向键换行：没有选中时向下落在第一行、向上落在最后一行；到头不绕回。选中的行已被筛掉时同「没有选中」。
- * 空表答 null。
- */
-/**
- * 把一行滚进列表可视区，scrollTop 要加的量。表头粘在滚动区顶上，压住的那一截不算看得见：
- * 不算的话，滚回第一行会停在表头底下，行露不全，滚动条也回不到顶。
+ * 把一行滚进列表可视区，scrollTop 要加的量。
+ * 表头粘在滚动区顶上，横向滚动条占着底边：这两截都不算看得见。
+ * 不算顶上的，滚回第一行会停在表头底下；不算底下的，最后一行停在横向滚动条后面，滚动条也到不了头。
+ * listBottom 是滚动区外框的底。bottom 是从外框底边让出的高度（下边框加横向滚动条）。
  * 只动这一层的 scrollTop，不带动外层能滚的容器。
  */
 export function scrollDeltaToReveal(box: {
@@ -52,13 +50,19 @@ export function scrollDeltaToReveal(box: {
   rowTop: number;
   rowBottom: number;
   header: number;
+  bottom?: number;
 }): number {
   const topLimit = box.listTop + box.header;
+  const bottomLimit = box.listBottom - (box.bottom ?? 0);
   if (box.rowTop < topLimit) return box.rowTop - topLimit;
-  if (box.rowBottom > box.listBottom) return box.rowBottom - box.listBottom;
+  if (box.rowBottom > bottomLimit) return box.rowBottom - bottomLimit;
   return 0;
 }
 
+/**
+ * 方向键换行：没有选中时向下落在第一行、向上落在最后一行；到头不绕回。选中的行已被筛掉时同「没有选中」。
+ * 空表答 null。
+ */
 export function stepSelection(
   keys: readonly string[],
   current: string | null,
