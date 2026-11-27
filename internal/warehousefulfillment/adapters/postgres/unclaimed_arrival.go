@@ -528,7 +528,9 @@ func (store *UnclaimedArrivals) ListUnclaimedArrivals(
 	if !receivedTo.IsZero() {
 		toArg = receivedTo.UTC()
 	}
-	plan, err := unclaimedArrivalListBinding.Plan(query, "", []any{tenant.String(), fromArg, toArg}, limit)
+	// 分面接着同一段 WITH。到货时刻占着 $2 和 $3，少带的话后面的 ANY 会套到时刻上。
+	listedArgs := []any{tenant.String(), fromArg, toArg}
+	plan, err := unclaimedArrivalListBinding.Plan(query, "", listedArgs, limit)
 	if err != nil {
 		return fail(err)
 	}
@@ -579,7 +581,7 @@ func (store *UnclaimedArrivals) ListUnclaimedArrivals(
 	if err != nil {
 		return fail(err)
 	}
-	return withListedFacets(ctx, querier, unclaimedArrivalListBinding, unclaimedArrivalListed, query, []any{tenant.String()}, page)
+	return withListedFacets(ctx, querier, unclaimedArrivalListBinding, unclaimedArrivalListed, query, listedArgs, page)
 }
 
 type storedUnclaimedArrival struct {

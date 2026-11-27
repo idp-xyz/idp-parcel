@@ -121,7 +121,6 @@ func TestStockReadPagesMovementsOnly(t *testing.T) {
 		"游标是空的":     base + "&after=",
 		"库存格不翻页":    "/warehouse-fulfillment-stock?ownerAccount=SYN-OWNER-01&warehouseCode=SYN-WH-01&view=cells" + after,
 		"缺省看法不翻页":   "/warehouse-fulfillment-stock?ownerAccount=SYN-OWNER-01&warehouseCode=SYN-WH-01" + after,
-		"不收 q":      base + "&q=RECEIPT",
 		"不收 sort":   base + "&sort=postedAt",
 		"after 给两次": base + after + after,
 	} {
@@ -132,6 +131,10 @@ func TestStockReadPagesMovementsOnly(t *testing.T) {
 	}
 	if len(reader.queries) != 2 {
 		t.Fatalf("被拒的请求不该到编排，查询次数 = %d", len(reader.queries))
+	}
+	response, _ = stockRead(t, endpoint, base+"&q=RECEIPT")
+	if response.Code != http.StatusOK || len(reader.queries) != 3 || reader.queries[2].Keyword != "RECEIPT" {
+		t.Fatalf("带检索词 = %d %s，查询 %+v", response.Code, response.Body.String(), reader.queries)
 	}
 
 	// 不翻页的看法照旧答整份，没有 page 一格。
