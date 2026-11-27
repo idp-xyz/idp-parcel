@@ -34,6 +34,7 @@ import {
   type OperatorRecord,
   type OperatorWriteResponseBody,
 } from './api';
+import { GrantChecklistForm } from './grant-checklist-form';
 import {
   effectiveGrantCount,
   faceLabel,
@@ -368,6 +369,7 @@ function OperatorDetailPanel({
   onWritten: () => void;
 }) {
   const [granting, setGranting] = useState(false);
+  const [listing, setListing] = useState(false);
   const [naming, setNaming] = useState(false);
   const [revoking, setRevoking] = useState<OperatorGrantRecord | null>(null);
   const now = new Date();
@@ -382,10 +384,15 @@ function OperatorDetailPanel({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {!readOnly && !granting ? (
-              <Button variant="outline" size="sm" className="type-body" onClick={() => setGranting(true)}>
-                授予…
-              </Button>
+            {!readOnly && !granting && !listing ? (
+              <>
+                <Button variant="outline" size="sm" className="type-body" onClick={() => setGranting(true)}>
+                  授予…
+                </Button>
+                <Button variant="outline" size="sm" className="type-body" onClick={() => setListing(true)}>
+                  按清单授予…
+                </Button>
+              </>
             ) : null}
             <Button className="text-idpxyz-breadcrumb" variant="ghost" size="icon" onClick={onClose} aria-label="关闭详情" title="关闭（Esc）">
               <X className="h-4 w-4" aria-hidden="true" />
@@ -434,6 +441,14 @@ function OperatorDetailPanel({
               onWritten();
             }}
             onClose={() => setGranting(false)}
+          />
+        ) : null}
+        {listing ? (
+          <GrantChecklistForm
+            operator={operator}
+            vocabulary={vocabulary}
+            onWritten={onWritten}
+            onClose={() => setListing(false)}
           />
         ) : null}
         <section className="flex flex-col gap-2">
