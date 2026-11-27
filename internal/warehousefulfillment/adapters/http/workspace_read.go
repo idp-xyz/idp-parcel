@@ -673,7 +673,7 @@ func NewQueryReturnsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQu
 		if asked.Paged() || asked.Keyed() {
 			page, err := queries.ReadReturns(request.Context(), query.Tenant, asked)
 			if err != nil {
-				slog.ErrorContext(request.Context(), "returns page did not form an answer")
+				slog.ErrorContext(request.Context(), "returns page did not form an answer", "err", err)
 				writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 				return
 			}

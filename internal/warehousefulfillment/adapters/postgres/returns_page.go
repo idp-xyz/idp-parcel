@@ -262,7 +262,7 @@ func oneReturnAdvice(ctx context.Context, querier rowQuery, tenant, key string) 
 	page := ports.ReturnsPage{View: ports.ReturnsViewAdvice, PreAdvices: []ports.ReturnPreAdviceRow{}, Receipts: []ports.ReturnReceiptRow{}}
 	rows, err := querier.Query(ctx, `
 SELECT advice_id, document_number, numbering_absence, owner_account_id, warehouse_code,
-       origin, tracking_number, basis, operator_id, received_at, ''
+       origin, tracking_number, basis, operator_id, received_at, ''::text
   FROM warehouse_fulfillment.return_pre_advice
  WHERE tenant_id = $1 AND (document_number = $2 OR advice_id = $2)
  ORDER BY CASE WHEN document_number = $2 THEN 0 ELSE 1 END, advice_id
@@ -376,7 +376,7 @@ SELECT r.fact_id, r.warehouse_code, r.location_code, r.tracking_number, r.owner_
 	}
 	advices, err := querier.Query(ctx, `
 SELECT advice_id, document_number, numbering_absence, owner_account_id, warehouse_code,
-       origin, tracking_number, basis, operator_id, received_at, ''
+       origin, tracking_number, basis, operator_id, received_at, ''::text
   FROM warehouse_fulfillment.return_pre_advice
  WHERE tenant_id = $1
    AND (
@@ -439,7 +439,7 @@ func scanReceipt(rows adviceScanner) (ports.ReturnReceiptRow, error) {
 	if err := rows.Scan(
 		&row.FactID, &row.WarehouseCode, &row.LocationCode, &row.TrackingNumber, &owner, &advice, &arrival,
 		&row.GoodsCode, &row.Unit, &row.StockState, &row.Quantity, &row.Outcome, &row.OccurredAt,
-		&decID, &dest, &basis, &opID, &origin, decided,
+		&decID, &dest, &basis, &opID, &origin, &decided,
 	); err != nil {
 		return ports.ReturnReceiptRow{}, fmt.Errorf("returns page: receipt: %w", err)
 	}
