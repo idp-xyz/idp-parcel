@@ -48,8 +48,8 @@ export function WmsDocumentPage({
   onBack: () => void;
   onReload?: () => void;
   /**
-   * 详情栏换到下一张、新的还没读到：头和正文留着上一张，只是不能点，也不另写一行提示——多出来的字会把栏撑一下再收回去。
-   * 新的到了由调用方换上。关闭、整页打开、刷新不在此列，换的过程中也能用。
+   * 详情栏换到下一张、新的还没读到：头和正文留着上一张，只是不能点。加载只让右上角那个刷新标转起来，不另写一行——多出来的字会把栏撑一下再收回去。
+   * 新的到了由调用方换上。关闭、整页打开在换的过程中也能用。
    */
   busy?: boolean;
   /** 右栏：关联单据一类看不见也不缺的辅助内容，只在宽屏显示。 */
@@ -64,7 +64,7 @@ export function WmsDocumentPage({
   const ready = !loading && !error;
   if (panel) {
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-idpxyz-editor">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-idpxyz-editor" aria-busy={busy || undefined}>
         {/* 头区与下面的进度条说的是同一件事——这张单是什么、走到哪了：有进度条时两块之间不画线，线只画在进度条下面一道。 */}
         <div className={`shrink-0 px-4 ${ready && stepper ? 'pb-1 pt-3' : 'border-b border-idpxyz-border py-3'}`}>
           {/* 刷新、整页打开、关闭钉在右上角，不参与换行：栏再窄，关闭也在老地方。右边留出它们的位置。 */}
@@ -82,8 +82,8 @@ export function WmsDocumentPage({
             </div>
             <div className="absolute right-0 top-0 flex items-center">
               {onReload ? (
-                <Button type="button" variant="ghost" size="icon" disabled={loading} title="刷新" aria-label="刷新" onClick={onReload}>
-                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                <Button type="button" variant="ghost" size="icon" disabled={loading || busy} title={busy ? '正在读取' : '刷新'} aria-label={busy ? '正在读取' : '刷新'} onClick={onReload}>
+                  <RefreshCw className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`} aria-hidden="true" />
                 </Button>
               ) : null}
               <Button type="button" variant="ghost" size="icon" title="整页打开" aria-label="整页打开" onClick={panel.onOpenPage}>
