@@ -18,6 +18,7 @@ import { listOwnerPreAdvices, type PreAdviceRecord } from './api';
 import { DocumentLink } from './document-page';
 import { fitColumnWidth, nameOf, shortInstant } from './list-cells';
 import { PreAdviceDocument } from './PreAdviceDocument';
+import { preAdviceProgress } from './pre-advice-progress';
 import { useDocumentParts } from './use-document';
 import { receiveStationHash } from './station/stations';
 import { useStatusCounts } from './use-status-counts';
@@ -108,6 +109,22 @@ function PreAdviceList() {
       ),
     },
     { key: 'status', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.status} /> },
+    {
+      key: 'progress',
+      header: nowrap('已收 / 预报'),
+      right: true,
+      width: fitColumnWidth,
+      render: (row) => {
+        const progress = preAdviceProgress(row);
+        const unit = progress.byCarton ? '箱' : '';
+        const gap = progress.outstanding > 0 ? `，还差 ${progress.outstanding}${unit}` : progress.advised > 0 ? '，已收齐' : '';
+        return (
+          <span className="whitespace-nowrap tabular-nums" title={`已收 ${progress.received}${unit}，预报 ${progress.advised}${unit}${gap}`}>
+            {progress.received} / {progress.advised}
+          </span>
+        );
+      },
+    },
     { key: 'warehouse', header: '仓', width: fitColumnWidth, minListWidth: 880, render: (row) => namedWarehouse(row.warehouseCode) },
     {
       key: 'mode',
@@ -146,18 +163,34 @@ function PreAdviceList() {
       width: fitColumnWidth,
       render: (row) =>
         row.status === 'ADVISED' || row.status === 'RECEIVING' ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
-            onClick={(event) => {
-              event.stopPropagation();
-              enterStation(receiveStationHash(row.preAdviceId));
-            }}
-          >
-            {row.status === 'ADVISED' ? '去收货' : '接着收货'}
-          </Button>
+          <span className="inline-flex items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
+              onClick={(event) => {
+                event.stopPropagation();
+                enterStation(receiveStationHash(row.preAdviceId));
+              }}
+            >
+              {row.status === 'ADVISED' ? '去收货' : '接着收货'}
+            </Button>
+            {row.status === 'RECEIVING' && drawer.has('pre-advice-close') ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="whitespace-nowrap"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  drawer.open('pre-advice-close', { preAdviceId: row.preAdviceId });
+                }}
+              >
+                完结
+              </Button>
+            ) : null}
+          </span>
         ) : (
           <span className="text-idpxyz-textMuted">—</span>
         ),
