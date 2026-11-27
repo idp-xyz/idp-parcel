@@ -14,6 +14,7 @@ import { allWavesChoice, waveChoices, waveOfChoice, type PickCell, type PickQueu
 import { ScanBox } from './ScanBox';
 import { panelClass, ScanFeedback } from './ScanFeedback';
 import { StationFrame, stationActionClass, stationButtonClass, stationPrimaryClass } from './StationFrame';
+import { pendingLeave } from './station-leave';
 import { packStationHash, pickStationHash, sortStationHash } from './stations';
 import { usePickSession } from './use-pick-session';
 import { useStationSound } from './use-station-sound';
@@ -318,6 +319,7 @@ export function PickStation({ device, wave, onChangeDevice }: PickStationProps) 
         context={context}
         progress={state === null ? undefined : pickProgress(state)}
         sound={{ on: sound.on, onToggle: sound.toggle }}
+        confirmLeave={state === null ? undefined : pendingLeave(state.phase, state.phase === 'goods' ? state.counted : 0) ?? undefined}
         left={left}
         right={right}
       />

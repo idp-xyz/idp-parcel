@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
@@ -67,6 +68,26 @@ func TestWarehouseCatalogueListsOnlyTheCurrentRevisionOfEachWarehouse(t *testing
 		}
 		if page.Total != int64(len(want)) || page.Next != "" {
 			t.Fatalf("列表 %q 的总数 = %d（next %q），want %d 且与本页同一组条件", query, page.Total, page.Next, len(want))
+		}
+		// 是否停用这一维点了名分面：计数不含这一维自己的筛选，q 与别的条件仍算在内。
+		falseCount, trueCount := facetCount(t, page.Facets, "deactivated", "false"), facetCount(t, page.Facets, "deactivated", "true")
+		switch query {
+		case "", "deactivated=true", "deactivated=false", "deactivated=true&deactivated=false":
+			if falseCount != 2 || trueCount != 1 {
+				t.Fatalf("列表 %q 的停用分面 = 未停用 %d、已停用 %d，want 2 与 1（筛自己这一维不改变各格的数）", query, falseCount, trueCount)
+			}
+		case "q=wh-02":
+			if falseCount != 1 || trueCount != 0 {
+				t.Fatalf("列表 %q 的停用分面 = 未停用 %d、已停用 %d，want 1 与 0", query, falseCount, trueCount)
+			}
+		case "q=合成一号仓（二）":
+			if falseCount != 0 || trueCount != 1 {
+				t.Fatalf("列表 %q 的停用分面 = 未停用 %d、已停用 %d，want 0 与 1", query, falseCount, trueCount)
+			}
+		case "q=%25":
+			if falseCount != 0 || trueCount != 0 {
+				t.Fatalf("列表 %q 的停用分面 = 未停用 %d、已停用 %d，want 0 与 0", query, falseCount, trueCount)
+			}
 		}
 	}
 
@@ -138,6 +159,9 @@ func TestWarehouseCatalogueOfAnEmptyRegisterAnswersAnEmptyPage(t *testing.T) {
 	if err != nil || len(page.Rows) != 0 || page.Total != 0 || page.Next != "" {
 		t.Fatalf("空册 = (%d 行、共 %d、next %q, %v)，want 空页", len(page.Rows), page.Total, page.Next, err)
 	}
+	if facetCount(t, page.Facets, "deactivated", "false") != 0 || facetCount(t, page.Facets, "deactivated", "true") != 0 {
+		t.Fatalf("空册的停用分面 = %+v，want 两个词都是 0", page.Facets["deactivated"])
+	}
 	history, err := catalogue.ListWarehouseRevisions(ctx, tenant, valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"))
 	if err != nil || history == nil || len(history) != 0 {
 		t.Fatalf("空册的修订史 = (%#v, %v)，want 空切片、无错", history, err)
@@ -184,4 +208,19 @@ func TestWarehouseCatalogueHistoryIsOrderedByRevisionNumberAndShowsWhoAndWhen(t 
 			t.Fatalf("修订史第 %d 笔 = %+v，want 修订 %d、停用 %v、登记责任方 %s", index+1, row, want.revision, want.deactivated, want.registrant)
 		}
 	}
+}
+
+func facetCount(t *testing.T, facets cataloguepage.Facets, dimension, value string) int64 {
+	t.Helper()
+	counts := facets[dimension]
+	if len(counts) == 0 {
+		t.Fatalf("分面 %q 没交回", dimension)
+	}
+	for _, count := range counts {
+		if count.Value == value {
+			return count.Count
+		}
+	}
+	t.Fatalf("分面 %q 没有值 %q：%+v", dimension, value, counts)
+	return 0
 }

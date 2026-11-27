@@ -1,7 +1,7 @@
 import type { RegistrationResponseBody } from '../../components/registration';
 import { exchangeMasterData, postMasterData, postWorkFact, type ApiResult } from '../catalogue-api';
 import type { CatalogueConditions, CataloguePage } from '../catalogue-query';
-import { catalogueRequestPath } from '../catalogue-query';
+import { catalogueDefaultPageSize, cataloguePageSizes, catalogueRequestPath } from '../catalogue-query';
 import { asCatalogueRegistration, asStockImportWrite, type CatalogueRegistrationBody, type StockImportWriteBody } from './answers';
 import type { PartialShipmentAnswer, ShortPickDisposalAnswer } from './partial-shipment';
 import type { AllocationExceptionRecord, DueWaveRulesBody, WaveRuleRecord, WaveRuleRunBody } from './wave-rule';
@@ -364,6 +364,7 @@ export interface GoodsRecord {
   packagingLevels?: ReadonlyArray<{ name: string; factor: number }>;
   trackBatch: boolean;
   trackExpiry: boolean;
+  trackSerial?: boolean;
   aliases?: ReadonlyArray<{ code: string; type: string; platform?: string; validity?: { from?: string; to?: string } }>;
   composite: boolean;
   composition?: { outboundMode: string; components: ReadonlyArray<{ code: string; quantity: number }> };
@@ -421,7 +422,9 @@ export interface StockReadBody {
     inboundAt?: string;
     quantity: number;
     allocatable?: boolean;
+    zoneUsage?: string;
     frozen: number;
+    locked?: number;
     available: number;
     ageDays?: number;
     age?: string;
@@ -460,6 +463,8 @@ export interface StockReadBody {
     reason?: string;
     operator?: string;
     frozenAt?: string;
+    /** 冻结号或盘点号。 */
+    reference?: string;
   }>;
   movements?: ReadonlyArray<{
     warehouse: string;
@@ -469,8 +474,10 @@ export interface StockReadBody {
     postedAt?: string;
     lines?: ReadonlyArray<{ location?: string; goodsCode: string; unit: string; stockState: string; delta: number }>;
   }>;
-  /** 只在看流水时有：五种看法里只有流水翻页，其余答整份。 */
+  /** 只在看流水时有：流水按游标翻页。 */
   page?: CataloguePage;
+  /** 库存格、整箱、汇总、占用按页取时有。不带页码的读口不答这一格，行是整份。 */
+  book?: { page: number; pageSize: number; total: number };
 }
 
 /** 册别在条件的选择器里，请求路径按它选；选择器本身不进查询串。 */
@@ -526,17 +533,35 @@ export function listOwnerPreAdvices(
   ownerAccount: string,
   keyword: string,
   after: string | null = null,
+  pageSize?: number,
+  status?: string,
+  warehouseCode?: string,
+  expectedFrom?: string,
+  expectedUntil?: string,
 ): Promise<ApiResult<PreAdviceListBody>> {
   const params = new URLSearchParams({ ownerAccount });
   if (keyword.trim() !== '') params.set('q', keyword.trim());
+  if (status !== undefined && status.trim() !== '') params.set('status', status.trim());
+  if (warehouseCode !== undefined && warehouseCode.trim() !== '') params.set('warehouseCode', warehouseCode.trim());
+  if (expectedFrom !== undefined && expectedFrom.trim() !== '') params.set('expectedFrom', expectedFrom.trim());
+  if (expectedUntil !== undefined && expectedUntil.trim() !== '') params.set('expectedUntil', expectedUntil.trim());
   if (after !== null && after !== '') params.set('after', after);
+  if (pageSize !== undefined) params.set('pageSize', String(pageSize));
   return exchangeMasterData<PreAdviceListBody>(`/warehouse-fulfillment-inbound-pre-advices?${params.toString()}`);
 }
 
-export function listOwnerGoods(ownerAccount: string, keyword: string, after: string | null = null): Promise<ApiResult<GoodsListBody>> {
+export function listOwnerGoods(
+  ownerAccount: string,
+  keyword: string,
+  after: string | null = null,
+  pageSize?: number,
+  sort?: string,
+): Promise<ApiResult<GoodsListBody>> {
   const params = new URLSearchParams({ ownerAccount });
   if (keyword.trim() !== '') params.set('q', keyword.trim());
   if (after !== null && after !== '') params.set('after', after);
+  if (pageSize !== undefined && pageSize > 0) params.set('pageSize', String(pageSize));
+  if (sort !== undefined && sort !== '') params.set('sort', sort);
   return exchangeMasterData<GoodsListBody>(`/warehouse-fulfillment-goods?${params.toString()}`);
 }
 
@@ -545,11 +570,27 @@ export function queryOwnerStock(
   warehouseCode: string,
   view: StockViewKind,
   after: string | null = null,
+  pageSize?: number,
+  page?: number,
+  keyword?: string,
+  state?: string,
 ): Promise<ApiResult<StockReadBody>> {
   const params = new URLSearchParams({ ownerAccount, view });
   if (warehouseCode.trim() !== '') params.set('warehouseCode', warehouseCode.trim());
-  // 读口只在看流水时收 after，别的看法带了它会被拒。
-  if (view === 'movements' && after !== null && after !== '') params.set('after', after);
+  if (keyword !== undefined && keyword.trim() !== '') params.set('q', keyword.trim());
+  if (state !== undefined && state !== '') {
+    if (view === 'cells' || view === 'summary') params.set('stockState', state);
+    else if (view === 'cartons') params.set('held', state === 'HELD' ? 'true' : 'false');
+    else if (view === 'holds') params.set('holdKind', state);
+  }
+  // 流水收 after 与 pageSize。其余四种收 page 与 pageSize，带了 after 会被拒。
+  if (view === 'movements') {
+    if (after !== null && after !== '') params.set('after', after);
+    if (pageSize !== undefined) params.set('pageSize', String(pageSize));
+  } else if (pageSize !== undefined) {
+    params.set('pageSize', String(pageSize));
+    params.set('page', String(page ?? 1));
+  }
   return exchangeMasterData<StockReadBody>(`/warehouse-fulfillment-stock?${params.toString()}`);
 }
 
@@ -639,7 +680,13 @@ export interface WaveRecord {
   requests: string[];
   /** `requests` 里已经撤出的那几张：它们在这个波次里的任务作废了，请求回到了已预占。 */
   withdrawnRequests: string[];
-  tasks: WaveTaskRecord[];
+  /** 列表上各状态的条数。按号读的那一张不靠这四格，任务在 `tasks` 里。 */
+  openTasks?: number;
+  doneTasks?: number;
+  shortTasks?: number;
+  cancelledTasks?: number;
+  /** 按号读的那一张才有。列表不嵌每一条任务。 */
+  tasks?: WaveTaskRecord[];
 }
 
 export interface WaveOneBody {
@@ -745,6 +792,94 @@ export function listWaves(
 ): Promise<ApiResult<WaveListBody>> {
   return exchangeMasterData<WaveListBody>(
     catalogueRequestPath('/warehouse-fulfillment-wave-list', conditions, after),
+  );
+}
+
+interface PickTaskRow {
+  taskId: string;
+  waveId: string;
+  requestId: string;
+  ownerAccount?: string;
+  locationCode: string;
+  zoneCode?: string;
+  goodsCode: string;
+  unit: string;
+  stockState: string;
+  quantity: number;
+  status: string;
+  warehouseCode: string;
+  singleUnit?: boolean;
+  batchPick?: boolean;
+  assignee?: string;
+  zoneAssignee?: string;
+  releasedAt: string;
+}
+
+interface PickTaskListBody {
+  outcome: string;
+  tasks: PickTaskRow[];
+  page: CataloguePage;
+}
+
+/** 待执行的任务按波次收回拣货工位已经认得的形状。这一问里没有的任务（拣满、少拣、作废）不在其中。 */
+function wavesOfOpenTasks(tasks: readonly PickTaskRow[]): WaveRecord[] {
+  const waves: WaveRecord[] = [];
+  const byWave = new Map<string, WaveRecord>();
+  for (const task of tasks) {
+    let wave = byWave.get(task.waveId);
+    if (wave === undefined) {
+      wave = {
+        waveId: task.waveId,
+        warehouseCode: task.warehouseCode,
+        operator: '',
+        prefetch: false,
+        status: 'RELEASED',
+        releasedAt: task.releasedAt,
+        ...(task.singleUnit === true ? { singleUnit: true } : {}),
+        ...(task.batchPick === true ? { batchPick: true } : {}),
+        ...(task.assignee ? { assignee: task.assignee } : {}),
+        requests: [],
+        withdrawnRequests: [],
+        tasks: [],
+      };
+      byWave.set(task.waveId, wave);
+      waves.push(wave);
+    }
+    if (task.zoneCode && task.zoneAssignee && !wave.zoneAssignees?.some((entry) => entry.zoneCode === task.zoneCode)) {
+      wave.zoneAssignees = [...(wave.zoneAssignees ?? []), { zoneCode: task.zoneCode, assignee: task.zoneAssignee }];
+    }
+    const listed = wave.tasks ?? [];
+    wave.tasks = listed;
+    listed.push({
+      taskId: task.taskId,
+      requestId: task.requestId,
+      ...(task.ownerAccount ? { ownerAccount: task.ownerAccount } : {}),
+      locationCode: task.locationCode,
+      ...(task.zoneCode ? { zoneCode: task.zoneCode } : {}),
+      goodsCode: task.goodsCode,
+      unit: task.unit,
+      stockState: task.stockState,
+      quantity: task.quantity,
+      picked: 0,
+      status: task.status,
+    });
+  }
+  return waves;
+}
+
+/** 拣货工位看本仓全部波次时用的读口：只要待执行的任务，收回波次的形状给队列去排。 */
+export function listOpenPickTasks(
+  conditions: CatalogueConditions,
+  after: string | null = null,
+): Promise<ApiResult<WaveListBody>> {
+  return exchangeMasterData<PickTaskListBody>(catalogueRequestPath('/warehouse-fulfillment-pick-tasks', conditions, after)).then(
+    (answer) => {
+      if (answer.kind !== 'outcome') return answer;
+      return {
+        ...answer,
+        body: { outcome: 'WAVES_LISTED', waves: wavesOfOpenTasks(answer.body.tasks), page: answer.body.page },
+      };
+    },
   );
 }
 
@@ -971,7 +1106,7 @@ export interface PreAdviceByNumberBody {
   preAdvice?: PreAdviceRecord;
 }
 
-/** 按单据号取一张入库预报。逐字相等，只在本租户；找不到答 found 为假，不答 404。 */
+/** 作业台认单。扫到的码可以是单据号，也可以是预报标识；单据号优先。找不到答 found 为假，不答 404。货主那一问仍只认单据号。 */
 export function getPreAdviceByNumber(documentNumber: string): Promise<ApiResult<PreAdviceByNumberBody>> {
   const params = new URLSearchParams({ documentNumber });
   return exchangeMasterData<PreAdviceByNumberBody>(`/warehouse-fulfillment-inbound-pre-advice-by-number?${params.toString()}`);
@@ -1037,8 +1172,10 @@ export interface SettingsOverviewBody {
   }>;
   /** 登记过「拣货必须用周转箱」的仓各自最新的一版；没登记的仓不在里面，那是未配置。 */
   toteRequirements?: ReadonlyArray<{ warehouseCode: string; revision: number; required: boolean; operator: string; registeredAt: string }>;
-  /** 各仓登记过的成波规则各自最新的一版，停用的也在里面；没登记规则的仓不在里面。 */
+  /** 各仓登记过的成波规则各自最新的一版，停用的也在里面；没登记规则的仓不在里面。按页取时只是这一页。 */
   waveRules?: ReadonlyArray<WaveRuleRecord>;
+  /** 按页取成波规则时有。不带页码的总览不答这一格，waveRules 是整份。 */
+  waveRuleBook?: { page: number; pageSize: number; total: number };
   approvalDuty: { configured: boolean; revision?: number; distinctSubjects?: boolean; operator?: string; registeredAt?: string };
   disposalRules: ReadonlyArray<DisposalRuleRecord>;
   chargeUnits: ReadonlyArray<{ warehouseCode: string; revision: number; weightUnit: string; volumeUnit: string; registeredAt: string }>;
@@ -1064,8 +1201,17 @@ export function runDueWaveRules(warehouse?: string): Promise<ApiResult<DueWaveRu
   return postMasterData<DueWaveRulesBody>('/warehouse-fulfillment-wave-rule-due-runs', warehouse ? { warehouse } : {});
 }
 
-export function getSettingsOverview(): Promise<ApiResult<SettingsOverviewBody>> {
-  return exchangeMasterData<SettingsOverviewBody>('/warehouse-fulfillment-settings-overview');
+export function getSettingsOverview(query?: {
+  page?: number;
+  pageSize?: number;
+  warehouse?: string;
+}): Promise<ApiResult<SettingsOverviewBody>> {
+  const params = new URLSearchParams();
+  if (query?.page !== undefined) params.set('page', String(query.page));
+  if (query?.pageSize !== undefined) params.set('pageSize', String(query.pageSize));
+  if (query?.warehouse) params.set('warehouse', query.warehouse);
+  const text = params.toString();
+  return exchangeMasterData<SettingsOverviewBody>(text === '' ? '/warehouse-fulfillment-settings-overview' : `/warehouse-fulfillment-settings-overview?${text}`);
 }
 
 export interface OutboundRequestDetailBody {
@@ -1129,6 +1275,7 @@ export interface OutboundRequestDetailBody {
     cutoffState?: string;
     ownerLabel?: string;
     lines: ReadonlyArray<{ goodsCode: string; unit: string; quantity: number }>;
+    serials?: readonly string[];
   }>;
   confirmations?: ReadonlyArray<{
     factId: string;
@@ -1523,6 +1670,9 @@ export interface ReturnPreAdviceRecord {
   lines: ReadonlyArray<{ goodsCode: string; unit: string; quantity: number }>;
   /** 按页取的列表才带：待到仓、已到仓、已处置。按一张取时没有，状态由到仓记录对出来。 */
   status?: 'AWAITING_ARRIVAL' | 'ARRIVED' | 'DISPOSED';
+  /** 按页取的列表才带：入了暂存还没记去向的笔数，和转了待认领的笔数。 */
+  awaitingDisposition?: number;
+  diverted?: number;
 }
 
 export interface ReturnReceiptRecord {
@@ -1559,8 +1709,7 @@ export function getReturnsOverview(): Promise<ApiResult<ReturnsOverviewBody>> {
   return exchangeMasterData<ReturnsOverviewBody>('/warehouse-fulfillment-returns-overview');
 }
 
-export const returnsPageSizes = [20, 50, 100, 200] as const;
-export const returnsDefaultPageSize = 50;
+export { cataloguePageSizes as returnsPageSizes, catalogueDefaultPageSize as returnsDefaultPageSize };
 
 export interface ReturnsPageBody {
   outcome: string;
@@ -1643,8 +1792,27 @@ export interface AgentOverviewBody {
     dimensionUnit?: string;
     reportedAt: string;
   }>;
+  /** 按页取时有，三张表各一页。不带页码的总览不答这一格。 */
+  pages?: {
+    connectors: { page: number; pageSize: number; total: number };
+    statements: { page: number; pageSize: number; total: number };
+    results: { page: number; pageSize: number; total: number };
+  };
 }
 
-export function getAgentOverview(): Promise<ApiResult<AgentOverviewBody>> {
-  return exchangeMasterData<AgentOverviewBody>('/warehouse-fulfillment-agent-overview');
+export function getAgentOverview(query?: {
+  pageSize: number;
+  connectorsPage: number;
+  statementsPage: number;
+  resultsPage: number;
+}): Promise<ApiResult<AgentOverviewBody>> {
+  const params = new URLSearchParams();
+  if (query) {
+    params.set('pageSize', String(query.pageSize));
+    params.set('connectorsPage', String(query.connectorsPage));
+    params.set('statementsPage', String(query.statementsPage));
+    params.set('resultsPage', String(query.resultsPage));
+  }
+  const text = params.toString();
+  return exchangeMasterData<AgentOverviewBody>(text === '' ? '/warehouse-fulfillment-agent-overview' : `/warehouse-fulfillment-agent-overview?${text}`);
 }

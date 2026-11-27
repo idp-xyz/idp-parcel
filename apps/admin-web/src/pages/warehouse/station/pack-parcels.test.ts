@@ -279,3 +279,12 @@ test('打包的报文：各格首尾空白去掉再交，序号按包裹的次�
   equal(rows[0].packagingMaterial, 'BOX-S');
   equal(rows[1].quantity, '2');
 });
+
+test('跟踪序列号的号按包裹顺序分给同一种货，没号的包裹不带这一格', () => {
+  const parcels = [filled(1, 'G-A', 1), filled(2, 'G-A', 2), filled(3, 'G-B', 2)];
+  const values = packFactValues(order, parcels, { 'G-A\u0000件': ['SN-1', 'SN-2', 'SN-3'] });
+  const rows = values.parcels as Array<Record<string, unknown>>;
+  deepEqual(rows[0].serials, ['SN-1']);
+  deepEqual(rows[1].serials, ['SN-2', 'SN-3']);
+  equal('serials' in rows[2], false);
+});

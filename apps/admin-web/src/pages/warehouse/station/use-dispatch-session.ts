@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getOutboundRequestDetail, listOutboundRequests, type OutboundRequestRecord } from '../api';
+import { dispatchQueueNote, loadDispatchQueue } from './dispatch-queue';
 import { workFactSpecs, type WorkFactSpec } from '../work-fact';
 import { browserStorage } from './device-binding';
 import {
@@ -50,11 +51,27 @@ export function useDispatchSession(input: DispatchSessionInput) {
     return step;
   }, [input]);
 
+  const queueTicket = useRef(0);
+  const refreshQueue = useCallback(() => {
+    const ticket = ++queueTicket.current;
+    void loadDispatchQueue({ warehouse: input.warehouse, read: listOutboundRequests }).then((answer) => {
+      if (ticket !== queueTicket.current) return;
+      if (answer.kind !== 'queue') {
+        setQueueNote(`等交出的出库单没读成：${describeReadFailure(answer.failure)}`);
+        return;
+      }
+      setQueue(answer.queue.rows);
+      setQueueNote(dispatchQueueNote(answer.queue));
+    });
+  }, [input.warehouse]);
+
   const send = useCallback((attempt: WorkFactAttempt) => {
     void sendWorkFact(attempt).then((answer) => {
-      apply(handoffVerdict(stateRef.current, judgeWorkFactAnswer(answer)));
+      const step = apply(handoffVerdict(stateRef.current, judgeWorkFactAnswer(answer)));
+      // apply 不跑效果。记下才重读，没记下的单还在已打包里。
+      if (step.effects.some((effect) => effect.kind === 'refresh-queue')) refreshQueue();
     });
-  }, [apply]);
+  }, [apply, refreshQueue]);
 
   const run = useCallback((effects: DispatchEffect[]) => {
     for (const effect of effects) {
@@ -111,22 +128,8 @@ export function useDispatchSession(input: DispatchSessionInput) {
   }, [input.deviceId, input.requestId, input.warehouse]);
 
   useEffect(() => {
-    let cancelled = false;
-    void listOutboundRequests({ filters: { status: ['PACKED'], warehouseCode: [input.warehouse] } }).then((answer) => {
-      if (cancelled) return;
-      if (answer.kind !== 'outcome') {
-        setQueueNote(`等交出的出库单没读成：${describeReadFailure(answer)}`);
-        return;
-      }
-      const rows = answer.body.requests ?? [];
-      setQueue(rows);
-      const more = answer.body.page?.next ? '只列了第一页。' : '';
-      setQueueNote(`已打包、等交出的出库单 ${answer.body.page?.total ?? rows.length} 张。${more}`);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [input.warehouse]);
+    refreshQueue();
+  }, [refreshQueue]);
 
   return {
     state,

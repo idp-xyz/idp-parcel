@@ -13,7 +13,7 @@ import (
 
 // goodsHeaderColumns 是商品修订表被读出的列。可空数值按文本读出，再经领域的数值构造门回到规范写法，不经浮点。
 const goodsHeaderColumns = `tenant_id, owner_account_id, goods_code, revision, goods_name, base_unit,
-	track_batch, track_expiry, composite, outbound_mode,
+	track_batch, track_expiry, track_serial, composite, outbound_mode,
 	declared_name, declared_hs_code, declared_origin_country, declared_unit_price::text, declared_currency,
 	submission_path, submission_source, request_key, evidence_reference, registrant, registered_at`
 
@@ -26,6 +26,7 @@ type storedGoodsHeader struct {
 	baseUnit         string
 	trackBatch       bool
 	trackExpiry      bool
+	trackSerial      bool
 	composite        bool
 	outboundMode     *string
 	declaredName     *string
@@ -45,7 +46,7 @@ func scanStoredGoodsHeader(scanner rowScanner) (storedGoodsHeader, error) {
 	var stored storedGoodsHeader
 	err := scanner.Scan(
 		&stored.tenant, &stored.owner, &stored.code, &stored.revision, &stored.name, &stored.baseUnit,
-		&stored.trackBatch, &stored.trackExpiry, &stored.composite, &stored.outboundMode,
+		&stored.trackBatch, &stored.trackExpiry, &stored.trackSerial, &stored.composite, &stored.outboundMode,
 		&stored.declaredName, &stored.declaredHS, &stored.declaredOrigin, &stored.declaredPrice, &stored.declaredCurrency,
 		&stored.path, &stored.source, &stored.requestKey, &stored.evidence, &stored.registrant, &stored.registeredAt,
 	)
@@ -259,7 +260,7 @@ func goodsContentOfStored(ctx context.Context, querier bentopg.Querier, stored s
 	}
 	content, err := domain.NewGoodsContent(domain.GoodsContentSpec{
 		Name: name, BaseUnit: baseUnit, PackagingLevels: levels,
-		TrackBatch: stored.trackBatch, TrackExpiry: stored.trackExpiry,
+		TrackBatch: stored.trackBatch, TrackExpiry: stored.trackExpiry, TrackSerial: stored.trackSerial,
 		Aliases: aliases, Composite: stored.composite, OutboundMode: mode, Components: components,
 		Declaration: declaration, DeclaredMeasurements: measurements,
 	})
@@ -492,6 +493,7 @@ func goodsRowOf(revision domain.GoodsRevision) ports.GoodsRow {
 		BaseUnit:       content.BaseUnit().String(),
 		TrackBatch:     content.TrackBatch(),
 		TrackExpiry:    content.TrackExpiry(),
+		TrackSerial:    content.TrackSerial(),
 		Composite:      content.Composite(),
 		SubmissionPath: revision.Submission().Path().String(),
 		Registrant:     revision.Registrant().String(),

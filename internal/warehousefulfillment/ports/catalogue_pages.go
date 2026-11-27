@@ -15,7 +15,7 @@ var WarehousePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	DefaultSort: cataloguepage.Sort{Field: "warehouseCode"},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
-		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary(), Facet: true},
 	},
 })
 
@@ -29,7 +29,7 @@ var LocationTypePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	DefaultSort: cataloguepage.Sort{Field: "locationTypeCode"},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
-		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary(), Facet: true},
 	},
 })
 
@@ -43,7 +43,7 @@ var PackagingMaterialPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	DefaultSort: cataloguepage.Sort{Field: "packagingMaterialCode"},
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
-		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary(), Facet: true},
 	},
 })
 
@@ -61,7 +61,7 @@ var ZonePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
-		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary(), Facet: true},
 	},
 })
 
@@ -80,7 +80,7 @@ var LocationPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
 		{Name: "zoneCode"},
-		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary()},
+		{Name: "deactivated", Vocabulary: cataloguepage.BooleanVocabulary(), Facet: true},
 	},
 })
 
@@ -110,7 +110,7 @@ var UnclaimedArrivalPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
 		{Name: "kind", Vocabulary: []string{"INBOUND", "RETURN"}},
-		{Name: "status", Vocabulary: []string{"UNCLAIMED", "CLAIMED", "DISPOSED"}},
+		{Name: "status", Vocabulary: []string{"UNCLAIMED", "CLAIMED", "DISPOSED"}, Facet: true},
 	},
 	Selectors: []string{"receivedFrom", "receivedTo"},
 })
@@ -120,7 +120,8 @@ var UnclaimedArrivalPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 //
 // 只开入账时刻一个可排维，缺省新的在前：查阅流水是从最近的一笔往回看，旧的在前时操作者要翻到末页才看得到刚入的账。
 // 行标识是流水标识一段。货主、仓与看法是读口自己消费的键，列作选择器进游标摘要——换了货主或仓，上一份列表的游标就不成立。
-// 调用方给不了 q 与 sort：读口在解码之前就拒收这两个键。货主面不翻页，由读口自己指定旧的在前、只取第一页。
+// 运营面可以带 q，摘要里有它，换了检索词游标就不成立。sort 仍不收：读口在解码之前就拒收。货主面不翻页，也不收 q，
+// 由读口自己指定旧的在前、只取第一页。
 var StockMovementPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Name: "warehouse-fulfillment-stock-movements",
 	Sorts: []cataloguepage.SortDimension{
@@ -143,6 +144,6 @@ var StockImportPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
-		{Name: "status", Vocabulary: []string{"PENDING", "POSTED", "REJECTED"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "POSTED", "REJECTED"}, Facet: true},
 	},
 })

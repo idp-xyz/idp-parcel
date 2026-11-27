@@ -307,6 +307,7 @@ type unclaimedArrivalListResponse struct {
 	Outcome  string                 `json:"outcome"`
 	Arrivals []unclaimedArrivalBody `json:"arrivals"`
 	Page     cataloguepage.Page     `json:"page"`
+	Facets   cataloguepage.Facets   `json:"facets,omitempty"`
 }
 
 type unclaimedArrivalOneResponse struct {
@@ -567,6 +568,9 @@ func NewQueryUnclaimedArrivalsEndpoint(intake CatalogueIntake, queries Unclaimed
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListUnclaimedArrivals(request.Context(), query.Tenant, query.Limit, pageQuery, receivedFrom, receivedTo)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "unclaimed arrivals list did not form an answer")
@@ -581,6 +585,7 @@ func NewQueryUnclaimedArrivalsEndpoint(intake CatalogueIntake, queries Unclaimed
 			Outcome:  outcomeUnclaimedArrivalsListed,
 			Arrivals: arrivals,
 			Page:     page.Page(query.Limit),
+			Facets:   page.Facets,
 		})
 	})
 }

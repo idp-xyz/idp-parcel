@@ -402,21 +402,34 @@ test('队列：本仓已拣货与已复核各读一份，早受理的在前；�
   deepEqual(
     calls.map((call) => call.conditions),
     [
-      { filters: { warehouseCode: [WAREHOUSE], status: ['PICKED'] }, sort: 'receivedAt' },
-      { filters: { warehouseCode: [WAREHOUSE], status: ['CHECKED'] }, sort: 'receivedAt' },
+      { filters: { warehouseCode: [WAREHOUSE], status: ['PICKED'] }, sort: 'receivedAt', pageSize: 200 },
+      { filters: { warehouseCode: [WAREHOUSE], status: ['CHECKED'] }, sort: 'receivedAt', pageSize: 200 },
     ],
   );
   equal(waitingCounter(answer.queue), '已拣完、等复核的出库单 2 张；已复核、等打包的 1 张');
 });
 
-test('队列：比一页长时屏上的张数仍是读口答的总数，不是这一页的行数', async () => {
+test('队列：比一页长时接着翻，翻完之后列表与总数一致', async () => {
   const many = Array.from({ length: 5 }, (_, index) => outbound(`OBR-${index}`, WAREHOUSE, 'PICKED'));
   const { read } = fakeOutbound(many, { pageSize: 2 });
   const answer = await loadPackQueue({ warehouse: WAREHOUSE, read });
   ok(answer.kind === 'queue');
   if (answer.kind !== 'queue') return;
+  equal(answer.queue.checkable.rows.length, 5);
+  equal(queueCount(answer.queue.checkable), 5);
+  equal(answer.queue.checkable.truncated, undefined);
+});
+
+test('队列：翻到页数上限还有下一页，张数仍是总数，并说只列了看到的', async () => {
+  const many = Array.from({ length: 5 }, (_, index) => outbound(`OBR-${index}`, WAREHOUSE, 'PICKED'));
+  const { read } = fakeOutbound(many, { pageSize: 2 });
+  const answer = await loadPackQueue({ warehouse: WAREHOUSE, read, maxPages: 1 });
+  ok(answer.kind === 'queue');
+  if (answer.kind !== 'queue') return;
   equal(answer.queue.checkable.rows.length, 2);
   equal(queueCount(answer.queue.checkable), 5);
+  equal(answer.queue.checkable.truncated, true);
+  ok(waitingCounter(answer.queue).includes('只列了前 2 张'));
 });
 
 test('队列：读口没给总数时用读到的行数，不去猜', () => {

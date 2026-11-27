@@ -69,6 +69,6 @@ test('库存行按商品编码逐字对，不是包含匹配', () => {
 test('代录新修订基于当前修订号，名称、单位与跟踪开关从当前修订带出', () => {
   deepEqual(
     revisionPrefill({ ownerAccount: 'OWNER-1', goodsCode: 'G1', revision: 3, name: '示例', baseUnit: '件', trackBatch: true, trackExpiry: false }),
-    { ownerAccount: 'OWNER-1', goodsCode: 'G1', basisRevision: '3', name: '示例', baseUnit: '件', trackBatch: true, trackExpiry: false },
+    { ownerAccount: 'OWNER-1', goodsCode: 'G1', basisRevision: '3', name: '示例', baseUnit: '件', trackBatch: true, trackExpiry: false, trackSerial: false },
   );
 });

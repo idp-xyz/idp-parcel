@@ -94,7 +94,7 @@ func (catalogue *ZoneCatalogue) ListZones(
 	if err != nil {
 		return fail(err)
 	}
-	return page, nil
+	return withListedFacets(ctx, querier, zoneListBinding, zoneListed, query, []any{tenant.String()}, page)
 }
 
 // ListZoneRevisions 取一个库区册上的全部修订，按修订号升序。不在册与别的租户的同编码库区同形：空切片、无错。

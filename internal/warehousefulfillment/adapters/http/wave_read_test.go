@@ -29,6 +29,18 @@ func (stub *waveQueriesStub) ListWaves(_ context.Context, _ domain.TenantID, lim
 	})
 }
 
+func (stub *waveQueriesStub) ListPickTasks(_ context.Context, _ domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.PickTaskListRow], error) {
+	stub.statuses = query.Filters["status"]
+	row := ports.PickTaskListRow{
+		TaskID: "SYN-TASK-02", WaveID: "SYN-WAVE-01", RequestID: "SYN-REQ-01", LocationCode: "SYN-LOC-01",
+		GoodsCode: "SYN-GOODS-01", Unit: "件", StockState: "GOOD", Quantity: 2, Status: ports.PickTaskOpen,
+		WarehouseCode: "SYN-WH-01", ReleasedAt: time.Date(2026, 11, 20, 6, 0, 0, 0, time.UTC),
+	}
+	return cataloguepage.Finish(query, []ports.PickTaskListRow{row}, limit, 1, func(item ports.PickTaskListRow, _ string) cataloguepage.Position {
+		return cataloguepage.Position{Value: cataloguepage.FormatInstant(item.ReleasedAt), Identity: []string{item.TaskID}}
+	})
+}
+
 func (stub *waveQueriesStub) ListPickDifferences(_ context.Context, _ domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.PickDifferenceRow], error) {
 	stub.statuses = query.Filters["status"]
 	recorded := time.Date(2026, 11, 20, 7, 0, 0, 0, time.UTC)
@@ -136,6 +148,25 @@ func TestWaveListCarriesStatusAndFiltersByIt(t *testing.T) {
 	response, _ = waveRead(t, endpoint, "/warehouse-fulfillment-wave-list?status=CLOSED")
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("词表之外的状态 = %d %s", response.Code, response.Body.String())
+	}
+}
+
+// 拣货任务列表：拣货工位按仓与待执行取队列；状态是声明过的筛选维，词表之外不受理。
+func TestPickTaskListFiltersByStatus(t *testing.T) {
+	queries := &waveQueriesStub{row: pickingWave()}
+	endpoint := warehousehttp.NewQueryPickTasksEndpoint(stockReadIntakeStub{}, queries)
+	response, _ := waveRead(t, endpoint, "/warehouse-fulfillment-pick-tasks?warehouseCode=SYN-WH-01&status=OPEN")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"outcome":"PICK_TASKS_LISTED"`) ||
+		!strings.Contains(response.Body.String(), `"taskId":"SYN-TASK-02"`) {
+		t.Fatalf("拣货任务列表 = %d %s", response.Code, response.Body.String())
+	}
+	if len(queries.statuses) != 1 || queries.statuses[0] != ports.PickTaskOpen {
+		t.Fatalf("交给读面的状态筛选 = %v", queries.statuses)
+	}
+	refused := httptest.NewRecorder()
+	endpoint.ServeHTTP(refused, httptest.NewRequest(http.MethodGet, "/warehouse-fulfillment-pick-tasks?status=CLOSED", nil))
+	if refused.Code != http.StatusBadRequest {
+		t.Fatalf("词表之外的状态 = %d %s", refused.Code, refused.Body.String())
 	}
 }
 

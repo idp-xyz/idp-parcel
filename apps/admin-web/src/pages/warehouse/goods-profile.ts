@@ -90,6 +90,7 @@ export function revisionPrefill(goods: {
   baseUnit: string;
   trackBatch: boolean;
   trackExpiry: boolean;
+  trackSerial?: boolean;
 }): Record<string, unknown> {
   return {
     ownerAccount: goods.ownerAccount,
@@ -99,5 +100,6 @@ export function revisionPrefill(goods: {
     baseUnit: goods.baseUnit,
     trackBatch: goods.trackBatch,
     trackExpiry: goods.trackExpiry,
+    trackSerial: goods.trackSerial === true,
   };
 }

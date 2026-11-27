@@ -2,6 +2,7 @@ import type { WorkDeviceRecord } from '../../work-devices/api';
 import { ScanBox } from './ScanBox';
 import { ScanFeedback } from './ScanFeedback';
 import { StationFrame, stationActionClass, stationPrimaryClass } from './StationFrame';
+import { pendingLeave } from './station-leave';
 import { usePutawaySession } from './use-putaway-session';
 import { useStationSound } from './use-station-sound';
 
@@ -20,6 +21,7 @@ export function PutawayStation({ device, onChangeDevice }: { device: WorkDeviceR
       context={state.owner ? `货主 ${state.owner}` : '还没选货主'}
       progress={state.moved > 0 ? `这一趟已移 ${state.moved} 笔` : undefined}
       sound={{ on: sound.on, onToggle: sound.toggle }}
+      confirmLeave={pendingLeave(state.phase, state.phase === 'goods' || state.phase === 'target' ? (state.draft?.quantity ?? 0) : 0) ?? undefined}
       left={
         <div className="flex flex-col gap-4">
           <ScanFeedback kind={state.feedback.tone} text={`${state.feedback.headline}。${state.feedback.detail}`} />

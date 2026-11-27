@@ -67,6 +67,9 @@ func NewQueryReferenceSeriesCoverageEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		at := clock.Now().UTC()
 		page, err := reader.ListReferenceSeriesCoverage(request.Context(), query.Scope.Tenant(), at, query.Limit, pageQuery)

@@ -72,6 +72,9 @@ func NewQueryPublicationDraftsEndpoint(intake CommercialCatalogueIntake, reader 
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := reader.ListOpenDrafts(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不是「没有待批准的」：伪装成空列表会让批准者以为没有活要干。

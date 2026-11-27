@@ -73,9 +73,11 @@ test('交出一只之后留在这张单上；都交完回到等扫', () => {
   const stayed = handoffVerdict(submitting.state, { verdict: 'done', outcome: 'RECORDED', headline: '已记录' });
   equal(stayed.state.phase, 'waiting');
   equal(stayed.state.feedback.headline, '这张单的包裹都已交出');
+  equal(stayed.effects[0]?.kind, 'refresh-queue');
   const withheld = handoffVerdict(submitting.state, { verdict: 'refused', outcome: 'WITHHELD', headline: '放行条件还没满足' });
   equal(withheld.state.phase, 'handing');
   equal(withheld.state.sheet?.parcels[1].done, false);
+  equal(withheld.effects.length, 0);
 });
 
 test('出库确认的报文与旧作业台逐键相同；自提走另一个口', () => {

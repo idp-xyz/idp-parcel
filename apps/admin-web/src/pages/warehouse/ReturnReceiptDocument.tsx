@@ -1,7 +1,9 @@
 import { Button } from '@idpxyz/ui-primitives';
 import { useEffect, useRef } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
+import { enterStation } from '../../shell/enter-station';
 import { formatInstant } from '../catalogue-view';
+import { useOperatorNames } from '../operator-access/use-operator-names';
 import { hiddenDecisionHint } from '../operator-grants';
 import { receivingActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
@@ -18,10 +20,12 @@ import {
   returnReceiptStatus,
   returnReceiptTrack,
   returnReceiptWaitingSince,
+  dispositionActor,
   siblingReceipts,
 } from './return-flow';
 import { loadReturnReceipt } from './api';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
+import { putawayStationHash } from './station/stations';
 import { openDocument, useReturnToList } from './use-document';
 import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsTone } from './wms-ui';
@@ -43,6 +47,7 @@ export function ReturnReceiptDocument({
   panel?: { onClose: () => void; onChanged: () => void; revision: number };
 }) {
   const drawer = useActionDrawer(receivingActionSpecs);
+  const names = useOperatorNames();
   const back = useReturnToList(moduleId);
   const complete = factId !== '';
   const { answer, loading, reload, held, reloading } = useKeyedLoad(complete ? factId : null, loadReturnReceipt, { holdPrevious: panel !== undefined });
@@ -70,7 +75,8 @@ export function ReturnReceiptDocument({
   const status = receipt ? returnReceiptStatus(receipt) : null;
   const track = receipt ? returnReceiptTrack(receipt) : null;
   const next = status ? returnReceiptNextStep(status) : null;
-  const canDispose = receipt !== undefined && next !== null && drawer.has('return-disposition');
+  const canDispose = receipt !== undefined && next !== null && next.station === undefined && drawer.has('return-disposition');
+  const canMove = next?.station === 'putaway';
   const advices = receipt && overview ? advicesOfReceipt(receipt, overview.preAdvices ?? []) : [];
   const siblings = receipt && overview ? siblingReceipts(receipt, overview.receipts ?? []) : [];
   const disposition = receipt?.disposition;
@@ -87,7 +93,7 @@ export function ReturnReceiptDocument({
       kpis.push({
         label: '处置去向',
         value: returnDestinationLabel(disposition.destination),
-        note: `处置于 ${formatInstant(disposition.decidedAt)}`,
+        note: `处置于 ${formatInstant(disposition.decidedAt)}，货还在退货暂存`,
         tone: 'success',
       });
     }
@@ -144,6 +150,11 @@ export function ReturnReceiptDocument({
               {canDispose ? (
                 <Button type="button" className={primaryActionClass} onClick={() => drawer.open('return-disposition', { factId: receipt.factId })}>
                   处置
+                </Button>
+              ) : null}
+              {canMove ? (
+                <Button type="button" className={primaryActionClass} onClick={() => enterStation(putawayStationHash())}>
+                  移出退货暂存
                 </Button>
               ) : null}
               {diverted ? (
@@ -251,7 +262,7 @@ export function ReturnReceiptDocument({
                     items={[
                       { label: '处置去向', value: <ReceiptStatusBadge receipt={receipt} /> },
                       { label: '处置时刻', value: formatInstant(disposition.decidedAt), mono: true },
-                      { label: '处置人', value: disposition.operator || (disposition.origin === 'CUSTOMER' ? '货主自己提交' : '—'), mono: true },
+                      { label: '处置人', value: dispositionActor(disposition, names), mono: Boolean(disposition.operator) && !names.has(disposition.operator) },
                       { label: '来源', value: labelOf(disposition.origin) },
                       { label: '依据', value: disposition.basis || '—', mono: true },
                       { label: '处置决定号', value: disposition.decisionId, mono: true },

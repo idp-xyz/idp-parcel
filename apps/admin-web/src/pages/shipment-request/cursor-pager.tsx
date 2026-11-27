@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
-import { cursorPageSummary, cursorPagerControls, type ListCursorPaginationProps } from '../../templates';
+import { CursorPageSizeSelect, cursorPageSummary, cursorPagerControls, type ListCursorPaginationProps } from '../../templates';
 
 // 翻页条由页面自己摆，放进工作台的 listFooter 就只占左边列表那一栏。字句与两钮能不能按取模板导出的
 // cursorPageSummary / cursorPagerControls，与 ListPageTemplate 的翻页条同一口径。
@@ -15,6 +15,7 @@ export function CursorPager({ pagination }: { pagination: ListCursorPaginationPr
     >
       <span className="tabular-nums">{cursorPageSummary(page, size, total)}</span>
       <div className="flex items-center gap-1">
+        <CursorPageSizeSelect control={pagination.pageSize} />
         <Button variant="ghost" size="sm" disabled={!canPrevious} onClick={onPrevious}>
           <ChevronLeft className="h-3 w-3" aria-hidden="true" />
           上一页

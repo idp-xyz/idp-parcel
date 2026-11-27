@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import { useMayMakeDecision, useMayWriteRegistry } from '../use-operator-grants';
+import { claimAdvicePayload } from './advice-action';
 import {
   postWarehouseAction,
   warehouseActionOutcomeLabels,
   type WarehouseActionSpec,
 } from './actions';
+import { getPreAdviceByNumber } from './api';
 import type { GuidedFormSeed } from './guided-forms';
 import { allWarehouseGuidedForms } from './guided-schemas';
 import { GuidedActionPanel, type GuidedActionTarget } from './GuidedActionPanel';
@@ -89,6 +91,20 @@ export function useWarehouseActionTargets(specs: readonly WarehouseActionSpec[])
         submit: (snapshot: unknown) => postWarehouseAction(spec.endpoint, snapshot),
         outcomeLabels: warehouseActionOutcomeLabels,
         form: allWarehouseGuidedForms[spec.id] ?? { fields: [] },
+        prepare:
+          spec.id === 'unclaimed-claim'
+            ? async (payload) => {
+                const typed = typeof payload.preAdviceId === 'string' ? payload.preAdviceId.trim() : '';
+                if (typed === '') return { ok: true as const, payload };
+                const answer = await getPreAdviceByNumber(typed);
+                if (answer.kind !== 'outcome') return claimAdvicePayload(payload, { ok: false });
+                return claimAdvicePayload(payload, {
+                  ok: true,
+                  found: answer.body.found,
+                  preAdviceId: answer.body.preAdvice?.preAdviceId,
+                });
+              }
+            : undefined,
       }));
   }, [
     specs,

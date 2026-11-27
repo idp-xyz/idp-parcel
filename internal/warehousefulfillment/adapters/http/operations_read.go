@@ -39,6 +39,12 @@ type WaveQueries interface {
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[ports.PickDifferenceRow], error)
+	ListPickTasks(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+		query cataloguepage.Query,
+	) (cataloguepage.Result[ports.PickTaskListRow], error)
 }
 
 // ChargeOccurrenceQueries 是运营查阅仓储作业收费发生项列表的读口。
@@ -113,6 +119,9 @@ func NewQueryOutboundRequestsEndpoint(intake CatalogueIntake, queries OutboundRe
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.List(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "outbound request list did not form an answer")
@@ -158,6 +167,7 @@ func NewQueryOutboundRequestsEndpoint(intake CatalogueIntake, queries OutboundRe
 			Outcome:  "OUTBOUND_REQUESTS_LISTED",
 			Requests: items,
 			Page:     page.Page(query.Limit),
+			Facets:   page.Facets,
 		})
 	})
 }
@@ -178,6 +188,9 @@ func NewQueryWavesEndpoint(intake CatalogueIntake, queries WaveQueries) http.Han
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListWaves(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "wave list did not form an answer")
@@ -191,6 +204,81 @@ func NewQueryWavesEndpoint(intake CatalogueIntake, queries WaveQueries) http.Han
 		writeJSON(response, http.StatusOK, waveListResponse{
 			Outcome: "WAVES_LISTED",
 			Waves:   items,
+			Page:    page.Page(query.Limit),
+			Facets:  page.Facets,
+		})
+	})
+}
+
+type pickTaskListResponse struct {
+	Outcome string             `json:"outcome"`
+	Tasks   []pickTaskBody     `json:"tasks"`
+	Page    cataloguepage.Page `json:"page"`
+}
+
+type pickTaskBody struct {
+	TaskID        string `json:"taskId"`
+	WaveID        string `json:"waveId"`
+	RequestID     string `json:"requestId"`
+	OwnerAccount  string `json:"ownerAccount,omitempty"`
+	LocationCode  string `json:"locationCode"`
+	ZoneCode      string `json:"zoneCode,omitempty"`
+	GoodsCode     string `json:"goodsCode"`
+	Unit          string `json:"unit"`
+	StockState    string `json:"stockState"`
+	Quantity      int64  `json:"quantity"`
+	Status        string `json:"status"`
+	WarehouseCode string `json:"warehouseCode"`
+	SingleUnit    bool   `json:"singleUnit,omitempty"`
+	BatchPick     bool   `json:"batchPick,omitempty"`
+	Assignee      string `json:"assignee,omitempty"`
+	ZoneAssignee  string `json:"zoneAssignee,omitempty"`
+	ReleasedAt    string `json:"releasedAt"`
+}
+
+func pickTaskBodyOf(row ports.PickTaskListRow) pickTaskBody {
+	return pickTaskBody{
+		TaskID: row.TaskID, WaveID: row.WaveID, RequestID: row.RequestID, OwnerAccount: row.OwnerAccount,
+		LocationCode: row.LocationCode, ZoneCode: row.ZoneCode, GoodsCode: row.GoodsCode, Unit: row.Unit,
+		StockState: row.StockState, Quantity: row.Quantity, Status: row.Status, WarehouseCode: row.WarehouseCode,
+		SingleUnit: row.SingleUnit, BatchPick: row.BatchPick, Assignee: row.Assignee, ZoneAssignee: row.ZoneAssignee,
+		ReleasedAt: rfc3339(row.ReleasedAt),
+	}
+}
+
+// NewQueryPickTasksEndpoint 交回运营分页查阅拣货任务的入口（GET /warehouse-fulfillment-pick-tasks）。
+// 拣货工位用它按仓与待执行取队列。
+func NewQueryPickTasksEndpoint(intake CatalogueIntake, queries WaveQueries) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if refuseMethod(response, request, http.MethodGet) {
+			return
+		}
+		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
+		if err != nil {
+			writeIntakeProblem(response, err)
+			return
+		}
+		pageQuery, err := ports.PickTaskPages.DecodeRaw(request.URL.RawQuery)
+		if err != nil {
+			writePageQueryProblem(response, err)
+			return
+		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
+		page, err := queries.ListPickTasks(request.Context(), query.Tenant, query.Limit, pageQuery)
+		if err != nil {
+			slog.ErrorContext(request.Context(), "pick task list did not form an answer")
+			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+			return
+		}
+		items := make([]pickTaskBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
+			items = append(items, pickTaskBodyOf(row))
+		}
+		writeJSON(response, http.StatusOK, pickTaskListResponse{
+			Outcome: "PICK_TASKS_LISTED",
+			Tasks:   items,
 			Page:    page.Page(query.Limit),
 		})
 	})
@@ -295,6 +383,9 @@ func NewQueryPickDifferencesEndpoint(intake CatalogueIntake, queries WaveQueries
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListPickDifferences(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "pick difference list did not form an answer")
@@ -314,6 +405,7 @@ func NewQueryPickDifferencesEndpoint(intake CatalogueIntake, queries WaveQueries
 			Outcome:     "PICK_DIFFERENCES_LISTED",
 			Differences: items,
 			Page:        page.Page(query.Limit),
+			Facets:      page.Facets,
 		})
 	})
 }
@@ -322,6 +414,7 @@ type pickDifferenceListResponse struct {
 	Outcome     string               `json:"outcome"`
 	Differences []pickDifferenceBody `json:"differences"`
 	Page        cataloguepage.Page   `json:"page"`
+	Facets      cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 type pickDifferenceBody struct {
@@ -345,13 +438,16 @@ type pickDifferenceBody struct {
 }
 
 func waveRowBodyOf(row ports.WaveRow) waveRowBody {
-	tasks := make([]waveTaskBody, 0, len(row.Tasks))
-	for _, task := range row.Tasks {
-		tasks = append(tasks, waveTaskBody{
-			TaskID: task.TaskID, RequestID: task.RequestID, OwnerAccount: task.OwnerAccount, LocationCode: task.LocationCode,
-			ZoneCode: task.ZoneCode, StagingLocation: task.StagingLocation, GoodsCode: task.GoodsCode, Unit: task.Unit,
-			StockState: task.StockState, Quantity: task.Quantity, Picked: task.Picked, Status: task.Status,
-		})
+	var tasks []waveTaskBody
+	if len(row.Tasks) > 0 {
+		tasks = make([]waveTaskBody, 0, len(row.Tasks))
+		for _, task := range row.Tasks {
+			tasks = append(tasks, waveTaskBody{
+				TaskID: task.TaskID, RequestID: task.RequestID, OwnerAccount: task.OwnerAccount, LocationCode: task.LocationCode,
+				ZoneCode: task.ZoneCode, StagingLocation: task.StagingLocation, GoodsCode: task.GoodsCode, Unit: task.Unit,
+				StockState: task.StockState, Quantity: task.Quantity, Picked: task.Picked, Status: task.Status,
+			})
+		}
 	}
 	requests := row.Requests
 	if requests == nil {
@@ -368,7 +464,9 @@ func waveRowBodyOf(row ports.WaveRow) waveRowBody {
 	return waveRowBody{
 		WaveID: row.WaveID, WarehouseCode: row.WarehouseCode, Operator: row.Operator,
 		Prefetch: row.Prefetch, Status: row.Status, ReleasedAt: rfc3339(row.ReleasedAt), SingleUnit: row.SingleUnit, BatchPick: row.BatchPick, RuleCode: row.RuleCode, Assignee: row.Assignee,
-		ZoneAssignees: zones, Requests: requests, WithdrawnRequests: withdrawn, Tasks: tasks,
+		ZoneAssignees: zones, Requests: requests, WithdrawnRequests: withdrawn,
+		OpenTasks: row.OpenTasks, DoneTasks: row.DoneTasks, ShortTasks: row.ShortTasks, CancelledTasks: row.CancelledTasks,
+		Tasks: tasks,
 	}
 }
 
@@ -387,6 +485,9 @@ func NewQueryChargeOccurrencesEndpoint(intake CatalogueIntake, queries ChargeOcc
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
+		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
 		}
 		page, err := queries.ListOccurrences(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
@@ -440,6 +541,12 @@ func NewQueryWarehouseAdoptionsEndpoint(intake CatalogueIntake, queries Warehous
 			writeIntakeProblem(response, err)
 			return
 		}
+		if chosen, err := cataloguepage.ChosenPageSize(request.URL.RawQuery); err != nil {
+			writePageQueryProblem(response, err)
+			return
+		} else if chosen > 0 {
+			query.Limit = chosen
+		}
 		page, err := queries.ListAdoptions(request.Context(), query.Tenant, query.Limit, request.URL.RawQuery)
 		if err != nil {
 			var malformed *cataloguepage.MalformedQuery
@@ -483,6 +590,12 @@ func NewQueryWarehouseChargeRequestsEndpoint(intake CatalogueIntake, queries War
 			writeIntakeProblem(response, err)
 			return
 		}
+		if chosen, err := cataloguepage.ChosenPageSize(request.URL.RawQuery); err != nil {
+			writePageQueryProblem(response, err)
+			return
+		} else if chosen > 0 {
+			query.Limit = chosen
+		}
 		page, err := queries.ListRequests(request.Context(), query.Tenant, query.Limit, request.URL.RawQuery)
 		if err != nil {
 			var malformed *cataloguepage.MalformedQuery
@@ -525,6 +638,7 @@ type outboundRequestListResponse struct {
 	Outcome  string                   `json:"outcome"`
 	Requests []outboundRequestRowBody `json:"requests"`
 	Page     cataloguepage.Page       `json:"page"`
+	Facets   cataloguepage.Facets     `json:"facets,omitempty"`
 }
 
 type outboundRequestRowBody struct {
@@ -577,9 +691,10 @@ type outboundRequestLineBody struct {
 }
 
 type waveListResponse struct {
-	Outcome string             `json:"outcome"`
-	Waves   []waveRowBody      `json:"waves"`
-	Page    cataloguepage.Page `json:"page"`
+	Outcome string               `json:"outcome"`
+	Waves   []waveRowBody        `json:"waves"`
+	Page    cataloguepage.Page   `json:"page"`
+	Facets  cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 type waveResponse struct {
@@ -606,8 +721,14 @@ type waveRowBody struct {
 	ZoneAssignees []waveZoneAssigneeBody `json:"zoneAssignees,omitempty"`
 	Requests      []string               `json:"requests"`
 	// WithdrawnRequests 是 requests 里已经撤出的那几张。
-	WithdrawnRequests []string       `json:"withdrawnRequests"`
-	Tasks             []waveTaskBody `json:"tasks"`
+	WithdrawnRequests []string `json:"withdrawnRequests"`
+	// 列表给各状态的条数，不嵌每一条任务。按号读的那一张这四格是 0，任务在 tasks 里。
+	OpenTasks      int64 `json:"openTasks"`
+	DoneTasks      int64 `json:"doneTasks"`
+	ShortTasks     int64 `json:"shortTasks"`
+	CancelledTasks int64 `json:"cancelledTasks"`
+	// Tasks 只在按号读的那一张上有。
+	Tasks []waveTaskBody `json:"tasks,omitempty"`
 }
 
 type waveZoneAssigneeBody struct {

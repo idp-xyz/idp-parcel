@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@idpxyz/ui-primitives';
 import { useState } from 'react';
+import { headingOf } from './advice-action';
 import type { WarehouseActionSpec } from './actions';
 import { useWarehouseTargetMap } from './ActionPanel';
 import { GuidedFormBody, type GuidedActionTarget } from './GuidedActionPanel';
@@ -76,6 +77,7 @@ export function ActionDrawer({
 }) {
   // 与 WmsDetailModal 同因：标签保活下换页不卸载，开着的抽屉会盖到下一页。
   useCloseOnHashChange(active !== null, onClose);
+  const heading = headingOf(active?.prefill);
   return (
     <Dialog open={active !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
@@ -83,7 +85,17 @@ export function ActionDrawer({
           <>
             {/* 标题下不摆接口路径：读这张表单的是仓里的人，路径收在表单底部的技术详情里，排障时再展开。 */}
             <DialogHeader>
-              <DialogTitle>{active.target.title}</DialogTitle>
+              {heading ? (
+                <>
+                  <DialogTitle className="font-mono">{heading.title}</DialogTitle>
+                  <p className="type-body text-idpxyz-textMuted">
+                    {active.target.title}
+                    {heading.detail !== '' ? ` · ${heading.detail}` : ''}
+                  </p>
+                </>
+              ) : (
+                <DialogTitle>{active.target.title}</DialogTitle>
+              )}
             </DialogHeader>
             <DialogBody className="overflow-y-auto">
               <GuidedFormBody

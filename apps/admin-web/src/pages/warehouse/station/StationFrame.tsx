@@ -33,12 +33,28 @@ export interface StationFrameProps {
   progress?: string;
   /** 给了才摆声音开关。 */
   sound?: { on: boolean; onToggle: () => void };
+  /** 有这句话时，换工位和退出要先确认。没有就不拦。 */
+  confirmLeave?: string;
   /** 左边：下一步、扫描框、反馈、按钮；没有右边时占满。 */
   left: ReactNode;
   right?: ReactNode;
 }
 
-export function StationFrame({ title, device, onChangeDevice, context, progress, sound, left, right }: StationFrameProps) {
+function StationLeaveLink({ href, label, confirmLeave }: { href: string; label: string; confirmLeave?: string }) {
+  return (
+    <a
+      className={stationButtonClass}
+      href={href}
+      onClick={(event) => {
+        if (confirmLeave !== undefined && !window.confirm(confirmLeave)) event.preventDefault();
+      }}
+    >
+      {label}
+    </a>
+  );
+}
+
+export function StationFrame({ title, device, onChangeDevice, context, progress, sound, confirmLeave, left, right }: StationFrameProps) {
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-idpxyz-bg text-idpxyz-text">
       <header className="shrink-0 border-b border-idpxyz-border bg-idpxyz-sidebar px-3 py-2 md:px-5">
@@ -68,12 +84,8 @@ export function StationFrame({ title, device, onChangeDevice, context, progress,
                 {sound.on ? '声音：开' : '声音：关'}
               </button>
             ) : null}
-            <a className={stationButtonClass} href={stationHomeHash}>
-              换工位
-            </a>
-            <a className={stationButtonClass} href={legacyWorkstationHash}>
-              退出作业台
-            </a>
+            <StationLeaveLink href={stationHomeHash} label="换工位" confirmLeave={confirmLeave} />
+            <StationLeaveLink href={legacyWorkstationHash} label="退出作业台" confirmLeave={confirmLeave} />
           </div>
         </div>
         {context ? <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 type-body text-idpxyz-textMuted">{context}</div> : null}

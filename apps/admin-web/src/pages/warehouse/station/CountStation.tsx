@@ -2,6 +2,7 @@ import type { WorkDeviceRecord } from '../../work-devices/api';
 import { ScanBox } from './ScanBox';
 import { ScanFeedback } from './ScanFeedback';
 import { StationFrame, stationActionClass, stationPrimaryClass } from './StationFrame';
+import { pendingLeave } from './station-leave';
 import { useCountSession } from './use-count-session';
 import { useStationSound } from './use-station-sound';
 
@@ -25,6 +26,7 @@ export function CountStation({ device, countId, onChangeDevice }: { device: Work
       context={state.sheet ? state.sheet.countId : '还没选定盘点单'}
       progress={state.sheet ? `已清点 ${state.sheet.counted.length} / ${state.sheet.locations.length}` : undefined}
       sound={{ on: sound.on, onToggle: sound.toggle }}
+      confirmLeave={pendingLeave(state.phase, state.lines.reduce((sum, line) => sum + line.quantity, 0)) ?? undefined}
       left={
         <div className="flex flex-col gap-4">
           <ScanFeedback kind={state.feedback.tone} text={`${state.feedback.headline}。${state.feedback.detail}`} />

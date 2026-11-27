@@ -58,6 +58,9 @@ func NewQueryProductChannelMappingsEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListProductChannelMappings(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {

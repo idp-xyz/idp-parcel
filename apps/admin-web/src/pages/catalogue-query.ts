@@ -31,11 +31,22 @@ export interface CatalogueConditions {
   readonly filters?: Readonly<Record<string, readonly string[]>>;
   /** 检索词；去首尾空白，空即缺席。 */
   readonly q?: string;
+  /**
+   * 这一页要多少行。只在调用方选了的时候出现；操作者列表由 useCatalogueCursor 选一档（缺省 50）。
+   * 换档即换条件签名，旧游标作废、回到第一页。没写的调用方仍按渠道契约取，查询串与从前相同。
+   */
+  readonly pageSize?: number;
 }
+
+/** 操作者可选的页大小，与读口收的那几档相同。 */
+export const cataloguePageSizes = [20, 50, 100, 200] as const;
+
+export const catalogueDefaultPageSize = 50;
 
 const SORT_PARAM = 'sort';
 const KEYWORD_PARAM = 'q';
 const CURSOR_PARAM = 'after';
+const PAGE_SIZE_PARAM = 'pageSize';
 
 function conditionParams(conditions: CatalogueConditions): URLSearchParams {
   const params = new URLSearchParams();
@@ -48,6 +59,7 @@ function conditionParams(conditions: CatalogueConditions): URLSearchParams {
   }
   const keyword = conditions.q?.trim() ?? '';
   if (keyword !== '') params.append(KEYWORD_PARAM, keyword);
+  if (conditions.pageSize !== undefined) params.append(PAGE_SIZE_PARAM, String(conditions.pageSize));
   return params;
 }
 

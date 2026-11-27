@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -44,15 +45,39 @@ func TestAnEmptyQueryIsTheFirstPageInTheDefaultOrder(t *testing.T) {
 }
 
 // Covers: ADR-0144 决定四「未知参数键 → MALFORMED_REQUEST」——多给的键若被静默忽略，前端以为筛了、服务端
-// 其实没筛。页大小不开调用方参数（决定二），所以 limit / pageSize 同样是集外键；键名区分大小写。
+// 其实没筛。limit / page 仍是集外键。pageSize 另有档位，不在这里当未知键。键名区分大小写。
 func TestAKeyOutsideTheDeclaredSetIsRefused(t *testing.T) {
-	for _, key := range []string{"limit", "pageSize", "page", "Status", "kind", "foo"} {
+	for _, key := range []string{"limit", "page", "Status", "kind", "foo"} {
 		t.Run(key, func(t *testing.T) {
 			reason := refused(t, url.Values{key: {"1"}})
 			if !strings.Contains(reason, key) {
 				t.Fatalf("理由应点名 %s，得 %q", key, reason)
 			}
 		})
+	}
+}
+
+func TestPageSizeAcceptsTheOperatorSetAndRefusesAnythingElse(t *testing.T) {
+	for _, size := range []string{"20", "50", "100", "200"} {
+		query := decode(t, url.Values{"pageSize": {size}})
+		if strconv.Itoa(query.PageSize) != size {
+			t.Fatalf("pageSize=%s：得 %d", size, query.PageSize)
+		}
+	}
+	if decode(t, nil).PageSize != 0 {
+		t.Fatal("缺省不应写成某一档")
+	}
+	reason := refused(t, url.Values{"pageSize": {"15"}})
+	if !strings.Contains(reason, "pageSize") || strings.Contains(reason, "15") {
+		t.Fatalf("理由应点名参数且不回显取值，得 %q", reason)
+	}
+	absent, err := cataloguepage.ChosenPageSize("")
+	if err != nil || absent != 0 {
+		t.Fatalf("没给页大小：%d %v", absent, err)
+	}
+	chosen, err := cataloguepage.ChosenPageSize("q=a&pageSize=100")
+	if err != nil || chosen != 100 {
+		t.Fatalf("页大小：%d %v", chosen, err)
 	}
 }
 

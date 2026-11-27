@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
+import { operatorNamesOf } from '../operator-access/operator-names';
 import {
   adviceInFilter,
   adviceLineNote,
   adviceLineRows,
   adviceRegistrant,
+  dispositionActor,
   adviceRows,
   advicesOfReceipt,
   awaitsDisposition,
@@ -257,9 +259,9 @@ test('预报的下一步只有待到仓的有：去作业台收退件；到了�
   equal(returnAdviceNextStep('DISPOSED'), null);
 });
 
-test('到仓记录的下一步只有待处置的有：处置；已处置、转待认领与陌生结果没有', () => {
+test('到仓记录的下一步：待处置就地记去向；去向已记就去把货移出退货暂存；转待认领与陌生结果不在这里指', () => {
   deepEqual(returnReceiptNextStep('AWAITING_DISPOSITION'), { label: '处置' });
-  equal(returnReceiptNextStep('DISPOSED'), null);
+  deepEqual(returnReceiptNextStep('DISPOSED'), { label: '移出退货暂存', station: 'putaway' });
   equal(returnReceiptNextStep('DIVERTED'), null);
   equal(returnReceiptNextStep('OTHER'), null);
 });
@@ -413,6 +415,15 @@ test('登记人：运营代录的是运营登记人，货主自己提交的没�
   equal(adviceRegistrant({ origin: 'CUSTOMER', operator: '' }), '货主自己提交');
   equal(adviceRegistrant({ origin: 'CUSTOMER' }), '货主自己提交');
   equal(adviceRegistrant({ origin: 'OPERATOR', operator: '' }), '—');
+});
+
+test('处置人：登了姓名示姓名，没登只示 sub，货主自己提交的没有运营主体', () => {
+  const operator = 'http://127.0.0.1:5556/dex#ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA';
+  const names = operatorNamesOf([{ operator, name: '演示主管' }]);
+  equal(dispositionActor({ origin: 'OPERATOR', operator }, names), '演示主管');
+  equal(dispositionActor({ origin: 'OPERATOR', operator }), 'ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA');
+  equal(dispositionActor({ origin: 'CUSTOMER', operator: '' }), '货主自己提交');
+  equal(dispositionActor({ origin: 'OPERATOR' }), '—');
 });
 
 test('处置情况一句话：记了去向写去向，没记的写待处置，转待认领的写认领后另起一笔再处置', () => {

@@ -131,6 +131,9 @@ func serveProjectionList(
 		writePageQueryProblem(response, err)
 		return
 	}
+	if pageQuery.PageSize > 0 {
+		limit = pageQuery.PageSize
+	}
 	page, err := reader.ListCurrent(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)

@@ -115,6 +115,39 @@ func TestAWaveStatusFollowsItsPickTasks(t *testing.T) {
 		}
 		return ids
 	}
+	openTasks := func(raw string) int {
+		t.Helper()
+		query, err := ports.PickTaskPages.DecodeRaw(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		page, err := store.ListPickTasks(t.Context(), tenant, 20, query)
+		if err != nil {
+			t.Fatalf("拣货任务 %s：%v", raw, err)
+		}
+		if int(page.Total) != len(page.Rows) {
+			t.Fatalf("拣货任务 %s 的总数 %d 与本页 %d 不是同一组", raw, page.Total, len(page.Rows))
+		}
+		return len(page.Rows)
+	}
+	listedWave := func(id string) ports.WaveRow {
+		t.Helper()
+		query, err := ports.WavePages.DecodeRaw("")
+		if err != nil {
+			t.Fatal(err)
+		}
+		page, err := store.ListWaves(t.Context(), tenant, 20, query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range page.Rows {
+			if row.WaveID == id {
+				return row
+			}
+		}
+		t.Fatalf("列表里没有 %s", id)
+		return ports.WaveRow{}
+	}
 
 	pair := []domain.OutboundRequestID{reserve("REQ-STATUS-A"), reserve("REQ-STATUS-B")}
 	var released application.WaveResult
@@ -132,11 +165,21 @@ func TestAWaveStatusFollowsItsPickTasks(t *testing.T) {
 	if got := statusOf("WAVE-STATUS"); got != ports.WaveReleased {
 		t.Fatalf("刚放出 = %s", got)
 	}
+	if openTasks("warehouseCode=SYN-WH-01&status=OPEN") != 2 || openTasks("warehouseCode=SYN-WH-01&status=DONE") != 0 {
+		t.Fatal("刚放出应有两条待执行、没有拣满")
+	}
+	if row := listedWave("WAVE-STATUS"); len(row.Tasks) != 0 || row.OpenTasks != 2 || row.DoneTasks != 0 {
+		t.Fatalf("列表应只带条数、不嵌任务：任务 %d 条，待执行 %d，拣满 %d", len(row.Tasks), row.OpenTasks, row.DoneTasks)
+	}
 	if world.pick(t, handler, released.Tasks()[0].ID, 10).Outcome() != application.WavePicked {
 		t.Fatal("第一条没有拣成")
 	}
 	if got := statusOf("WAVE-STATUS"); got != ports.WavePicking {
 		t.Fatalf("拣了一条 = %s", got)
+	}
+	if openTasks("warehouseCode=SYN-WH-01&status=OPEN") != 1 || openTasks("warehouseCode=SYN-WH-01&status=DONE") != 1 ||
+		openTasks("waveId=WAVE-STATUS&status=OPEN") != 1 || openTasks("warehouseCode=SYN-WH-02&status=OPEN") != 0 {
+		t.Fatal("拣了一条之后应剩一条待执行、一条拣满，别的仓没有")
 	}
 	if ids := listed("status=" + ports.WavePicking); len(ids) != 1 || ids[0] != "WAVE-STATUS" {
 		t.Fatalf("按拣货中筛 = %v", ids)
@@ -291,7 +334,7 @@ func TestAPrefetchedWaveSubmitsOneEstimatedCommission(t *testing.T) {
 		t.Fatal(err)
 	}
 	listedWaves, err := wavesStore.ListWaves(t.Context(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), 20, waveQuery)
-	if err != nil || len(listedWaves.Rows) != 1 || listedWaves.Rows[0].WaveID != "WAVE-PRE" || len(listedWaves.Rows[0].Requests) != 1 || len(listedWaves.Rows[0].Tasks) != 1 {
+	if err != nil || len(listedWaves.Rows) != 1 || listedWaves.Rows[0].WaveID != "WAVE-PRE" || len(listedWaves.Rows[0].Requests) != 1 || listedWaves.Rows[0].OpenTasks != 1 || len(listedWaves.Rows[0].Tasks) != 0 {
 		t.Fatalf("波次列表 %+v err %v", listedWaves.Rows, err)
 	}
 }
@@ -542,6 +585,71 @@ func TestACheckedPickCanBePackedAndAMismatchCannot(t *testing.T) {
 	packed := world.packOutbound(t, handler, request.ID(), "SYN-FACT-PACK", 6, 4)
 	if packed.Outcome() != application.WavePacked || parcelCount(t, world) != 2 || requestStatus(t, world, request.ID()) != "PACKED" {
 		t.Fatalf("打包 %s 包裹 %d 状态 %s", packed.Outcome(), parcelCount(t, world), requestStatus(t, world, request.ID()))
+	}
+}
+
+func TestTrackedGoodsKeepTheSerialsOnThePackedParcels(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedStorageStock(t, 2)
+	world.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-OUT", 1, func(spec *domain.ZoneContentSpec) {
+		spec.Usage = domain.ZoneUsageOutboundStaging
+	}))
+	world.saveLocation(t, locationFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-LOC-OUT", 1, func(spec *domain.LocationContentSpec) {
+		spec.ZoneCode = valueOf(t, domain.NewZoneCode, "SYN-ZONE-OUT")
+	}))
+	accepted := world.acceptOutbound(t, world.outbound(t), outboundCommand(t, "REQ-SERIAL", 2))
+	request, _ := accepted.Request()
+	handler := world.waves(t)
+	if world.adoptStrategy(t, handler).Outcome() != application.WaveStrategyRegistered {
+		t.Fatal("策略没有采用")
+	}
+	released := world.releaseWave(t, handler, "WAVE-SERIAL", request.ID())
+	if world.pick(t, handler, released.Tasks()[0].ID, 2).Outcome() != application.WavePicked {
+		t.Fatal("没有拣完")
+	}
+	if world.checkOutbound(t, handler, request.ID(), "SYN-FACT-SERIAL-CHECK", 2).Outcome() != application.WaveChecked {
+		t.Fatal("没有复核完")
+	}
+	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
+	pack := func(fact string, serials []string) application.WaveResult {
+		t.Helper()
+		parcel := parcelOf(t, 1, 2)
+		parcel.Serials = serials
+		var result application.WaveResult
+		err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+			var packErr error
+			result, packErr = handler.Pack(ctx, application.PackCommand{
+				Tenant: tenant, FactID: valueOf(t, domain.NewPickFactID, fact), Request: request.ID(),
+				Parcels: []application.PackParcelCommand{parcel},
+			})
+			return packErr
+		})
+		if err != nil {
+			t.Fatalf("打包：%v", err)
+		}
+		return result
+	}
+	if pack("SYN-FACT-SERIAL-OFF", []string{"SN-1", "SN-2"}).Outcome() != application.WaveContentInvalid || parcelCount(t, world) != 0 {
+		t.Fatal("没开跟踪序列号却收下了号")
+	}
+	tag, err := world.pool.Exec(t.Context(),
+		`UPDATE warehouse_fulfillment.goods_revision SET track_serial = true
+		  WHERE tenant_id = 'SYN-TENANT-01' AND goods_code = 'SYN-GOODS-01'`)
+	if err != nil || tag.RowsAffected() == 0 {
+		t.Fatalf("打开跟踪序列号：%v 行 %d", err, tag.RowsAffected())
+	}
+	if pack("SYN-FACT-SERIAL-SHORT", []string{"SN-1"}).Outcome() != application.WaveContentInvalid || parcelCount(t, world) != 0 {
+		t.Fatal("号数对不上却记下了")
+	}
+	if pack("SYN-FACT-SERIAL", []string{"SN-1", "SN-2"}).Outcome() != application.WavePacked {
+		t.Fatal("号齐了却没有记下")
+	}
+	stored, err := wavesOf(t, world).ParcelsOf(t.Context(), tenant, request.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 1 || len(stored[0].Serials) != 2 || stored[0].Serials[0] != "SN-1" || stored[0].Serials[1] != "SN-2" {
+		t.Fatalf("读回的号 %+v", stored)
 	}
 }
 
@@ -1609,6 +1717,18 @@ func TestAPickupHandoverStaysUnconfiguredUntilACredentialIsRegistered(t *testing
 	online := world.confirmOutbound(t, handler, request, "SYN-FACT-PICKUP", application.ConfirmKindPickup, false)
 	if online.Outcome() != application.WaveNotConfigured || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 4 {
 		t.Fatalf("自提 %s 待出库 %d", online.Outcome(), world.stockUnitAt(t, "SYN-LOC-OUT", "件"))
+	}
+}
+
+func TestAPickupHandoverConfirmsWhenTheCredentialIsWrittenOnIt(t *testing.T) {
+	world, handler, request := packedOutbound(t, "REQ-CONFIRM-PICKUP-OK", domain.DispatchPickup, "", 4)
+	command := confirmCommand(t, request, "SYN-FACT-PICKUP-OK", application.ConfirmKindPickup, false)
+	command.ValidFrom = time.Time{}
+	command.ValidUntil = time.Time{}
+	command.PickupParty = "演示提货人"
+	command.PickupCredential = "SYN-PICKUP-1"
+	if world.confirmCommand(t, handler, command).Outcome() != application.WaveConfirmed || world.stockUnitAt(t, "SYN-LOC-OUT", "件") != 0 || requestStatus(t, world, request) != "SHIPPED" {
+		t.Fatal("写了自提凭证、没带放行区间，应当确认出库")
 	}
 }
 

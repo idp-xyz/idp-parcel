@@ -336,12 +336,12 @@ func insertGoodsRevision(ctx context.Context, executor bentopg.Executor, revisio
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO warehouse_fulfillment.goods_revision (
 		    tenant_id, owner_account_id, goods_code, revision, goods_name, base_unit,
-		    track_batch, track_expiry, composite, outbound_mode,
+		    track_batch, track_expiry, track_serial, composite, outbound_mode,
 		    declared_name, declared_hs_code, declared_origin_country, declared_unit_price, declared_currency,
 		    submission_path, submission_source, request_key, evidence_reference, registrant, registered_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::numeric,$15,$16,$17,$18,$19,$20,$21)`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::numeric,$16,$17,$18,$19,$20,$21,$22)`,
 		revision.Tenant().String(), revision.Owner().String(), revision.Code().String(), revision.Revision(),
-		content.Name().String(), content.BaseUnit().String(), content.TrackBatch(), content.TrackExpiry(), content.Composite(), outbound,
+		content.Name().String(), content.BaseUnit().String(), content.TrackBatch(), content.TrackExpiry(), content.TrackSerial(), content.Composite(), outbound,
 		declaredName, declaredHS, declaredOrigin, declaredPrice, declaredCurrency,
 		submission.Path().String(), source, submission.Key().String(), evidence, revision.Registrant().String(), revision.RegisteredAt(),
 	); err != nil {

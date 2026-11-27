@@ -424,6 +424,7 @@ type GoodsContentSpec struct {
 	PackagingLevels      []PackagingLevel
 	TrackBatch           bool
 	TrackExpiry          bool
+	TrackSerial          bool
 	Aliases              []GoodsAlias
 	Composite            bool
 	OutboundMode         GoodsOutboundMode
@@ -443,6 +444,7 @@ type GoodsContent struct {
 	levels       []PackagingLevel
 	trackBatch   bool
 	trackExpiry  bool
+	trackSerial  bool
 	aliases      []GoodsAlias
 	composite    bool
 	outboundMode GoodsOutboundMode
@@ -460,6 +462,7 @@ func NewGoodsContent(spec GoodsContentSpec) (GoodsContent, error) {
 		levels:       slices.Clone(spec.PackagingLevels),
 		trackBatch:   spec.TrackBatch,
 		trackExpiry:  spec.TrackExpiry,
+		trackSerial:  spec.TrackSerial,
 		aliases:      slices.Clone(spec.Aliases),
 		composite:    spec.Composite,
 		outboundMode: spec.OutboundMode,
@@ -530,6 +533,10 @@ func (content GoodsContent) TrackExpiry() bool {
 	return content.trackExpiry
 }
 
+func (content GoodsContent) TrackSerial() bool {
+	return content.trackSerial
+}
+
 func (content GoodsContent) Aliases() []GoodsAlias {
 	return slices.Clone(content.aliases)
 }
@@ -564,6 +571,7 @@ func (content GoodsContent) SameAs(other GoodsContent) bool {
 		content.baseUnit == other.baseUnit &&
 		content.trackBatch == other.trackBatch &&
 		content.trackExpiry == other.trackExpiry &&
+		content.trackSerial == other.trackSerial &&
 		content.composite == other.composite &&
 		content.outboundMode == other.outboundMode &&
 		content.declaration == other.declaration &&

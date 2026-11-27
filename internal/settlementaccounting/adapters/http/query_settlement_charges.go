@@ -138,6 +138,9 @@ func serveCustomerCharges(
 		writePageQueryProblem(response, err)
 		return
 	}
+	if pageQuery.PageSize > 0 {
+		limit = pageQuery.PageSize
+	}
 	page, err := reader.ListCustomerCharges(request.Context(), tenant, limit, pageQuery)
 	if err != nil {
 		// 读不回是答案未形成，不是「空册」——伪装成后者会让一次该重试的故障变成终局。
@@ -236,6 +239,9 @@ func serveSupplierExpectedCosts(
 	if err != nil {
 		writePageQueryProblem(response, err)
 		return
+	}
+	if pageQuery.PageSize > 0 {
+		limit = pageQuery.PageSize
 	}
 	page, err := reader.ListSupplierExpectedCosts(request.Context(), tenant, limit, pageQuery)
 	if err != nil {

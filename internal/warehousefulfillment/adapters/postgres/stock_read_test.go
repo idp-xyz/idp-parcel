@@ -37,6 +37,17 @@ func TestStockReadAnswersTheLedgerWithoutMovingIt(t *testing.T) {
 	}
 	reader := world.stockReader(t)
 	cells := world.readStock(t, reader, application.StockViewCells, false)
+	if cells.Book != nil {
+		t.Fatal("不带页码应答整份")
+	}
+	first := world.readStockBook(t, reader, application.StockViewCells, 1, 1)
+	if first.Book == nil || first.Book.Total != len(cells.Cells) || len(first.Cells) != 1 {
+		t.Fatalf("库存格第一页 %+v 共 %d", first.Book, len(first.Cells))
+	}
+	past := world.readStockBook(t, reader, application.StockViewCells, first.Book.Total+1, 1)
+	if past.Book == nil || past.Book.Total != len(cells.Cells) || len(past.Cells) != 0 {
+		t.Fatalf("库存格越过末页 %+v 行 %d", past.Book, len(past.Cells))
+	}
 	store := cellNamed(t, cells.Cells, "SYN-LOC-STORE")
 	if store.Quantity != 10 || store.Frozen != 4 || store.Available != 6 || !store.Allocatable || store.Location == "" || !store.AgeConfigured || store.AgeDays != 0 {
 		t.Fatalf("存储格 %+v", store)
@@ -90,6 +101,16 @@ func (world receiptWorld) stockReader(t *testing.T) *application.QueryStockHandl
 	return application.NewQueryStockHandler(reads, world.warehouses, world.warehouses, world.locations, world.zones, nil, nil)
 }
 
+func (world receiptWorld) readStockBook(t *testing.T, reader *application.QueryStockHandler, view application.StockView, page, size int) application.StockSnapshot {
+	t.Helper()
+	query := application.StockQuery{
+		Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Owner: valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"),
+		Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), View: view, Now: world.clock.Now(),
+		Number: page, Limit: size,
+	}
+	return world.queryStock(t, reader, query)
+}
+
 func (world receiptWorld) readStock(t *testing.T, reader *application.QueryStockHandler, view application.StockView, customer bool) application.StockSnapshot {
 	t.Helper()
 	return world.readStockOwner(t, reader, "SYN-OWNER-01", view, customer)
@@ -130,11 +151,14 @@ func (world receiptWorld) queryStock(t *testing.T, reader *application.QueryStoc
 }
 
 // movementPage 照读口的做法解出流水的翻页：货主、仓与看法进游标摘要，after 为空即第一页。
-func movementPage(t *testing.T, owner, after string) cataloguepage.Query {
+func movementPage(t *testing.T, owner, after string, keyword ...string) cataloguepage.Query {
 	t.Helper()
 	values := url.Values{"ownerAccount": {owner}, "warehouseCode": {"SYN-WH-01"}, "view": {"movements"}}
 	if after != "" {
 		values.Set("after", after)
+	}
+	if len(keyword) > 0 && keyword[0] != "" {
+		values.Set("q", keyword[0])
 	}
 	page, err := ports.StockMovementPages.Decode(values)
 	if err != nil {
@@ -232,6 +256,104 @@ func TestStockMovementsTurnPagesNewestFirst(t *testing.T) {
 	if len(none.Movements) != 0 || none.MovementPage == nil || none.MovementPage.Next != nil || *none.MovementPage.Total != 0 {
 		t.Fatalf("别的货主 %+v page %+v", none.Movements, none.MovementPage)
 	}
+}
+
+// 检索先收窄再切页：名称、条码、库位与箱号各认各的，对不上的不进这一页，book 的总数是收窄之后的。
+func TestStockReadNarrowsByGoodsWord(t *testing.T) {
+	world := newReceiptWorld(t)
+	world.seedReceiving(t)
+	world.saveGoodsRevision(t, goodsRevisionFixture(t, "SYN-OWNER-01", "SYN-GOODS-02", 1, "REQ-GOODS-WORD", func(spec *domain.GoodsContentSpec) {
+		spec.Name = valueOf(t, domain.NewGoodsName, "另一件货")
+		spec.Aliases = []domain.GoodsAlias{domain.NewGoodsAlias(
+			valueOf(t, domain.NewGoodsAliasCode, "SYN-BAR-02"), domain.GoodsAliasBarcode, domain.PlatformName{}, domain.AliasValidity{},
+		)}
+	}))
+	first := world.adviseGoods(t, "REQ-WORD-1", "SYN-GOODS-01", "件", 2)
+	if world.confirm(t, receiptCommand(t, "SYN-FACT-WORD-1", first.ID().String(), mustReceiptLine(t, receiptLineSpec{
+		observed: "SYN-GOODS-01", quantity: 2,
+	}))).Outcome() != application.ConfirmReceiptConfirmed {
+		t.Fatal("第一件没有入账")
+	}
+	second := world.adviseGoods(t, "REQ-WORD-2", "SYN-GOODS-02", "件", 5)
+	if world.confirm(t, receiptCommand(t, "SYN-FACT-WORD-2", second.ID().String(), mustReceiptLine(t, receiptLineSpec{
+		observed: "SYN-GOODS-02", quantity: 5,
+	}))).Outcome() != application.ConfirmReceiptConfirmed {
+		t.Fatal("另一件没有入账")
+	}
+	cartonAdvice := world.adviseCartons(t, "REQ-WORD-CTN", "SYN-CARTON-WORD")
+	if world.confirm(t, cartonReceiptCommand(t, "SYN-FACT-WORD-CTN", cartonAdvice.ID().String(), mustCartonLine(t, "SYN-CARTON-WORD", "", false))).Outcome() != application.ConfirmReceiptConfirmed {
+		t.Fatal("整箱没有入账")
+	}
+	reads, err := postgres.NewStockReads(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := application.NewQueryStockHandler(reads, world.warehouses, world.warehouses, world.locations, world.zones, nil, world.goods)
+	read := func(view application.StockView, keyword string) application.StockSnapshot {
+		t.Helper()
+		query := application.StockQuery{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Owner: valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"),
+			Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), View: view, Keyword: keyword, Now: world.clock.Now(),
+		}
+		if view == application.StockViewMovements {
+			query.Page, query.Limit = movementPage(t, "SYN-OWNER-01", "", keyword), 50
+		}
+		return world.queryStock(t, reader, query)
+	}
+
+	byName := read(application.StockViewCells, "另一件")
+	if len(byName.Cells) != 1 || byName.Cells[0].Goods != "SYN-GOODS-02" || byName.Cells[0].Quantity != 5 {
+		t.Fatalf("按名称 %+v", byName.Cells)
+	}
+	byBarcode := read(application.StockViewCells, "syn-bar-01")
+	if len(byBarcode.Cells) != 1 || byBarcode.Cells[0].Goods != "SYN-GOODS-01" {
+		t.Fatalf("按条码 %+v", byBarcode.Cells)
+	}
+	byLocation := read(application.StockViewCells, "syn-loc-rcv")
+	if len(byLocation.Cells) != 2 {
+		t.Fatalf("按库位 %+v", byLocation.Cells)
+	}
+	none := world.queryStock(t, reader, application.StockQuery{
+		Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), Owner: valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-01"),
+		Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), View: application.StockViewCells, Keyword: "没有这种",
+		Now: world.clock.Now(), Number: 1, Limit: 20,
+	})
+	if len(none.Cells) != 0 || none.Book == nil || none.Book.Total != 0 {
+		t.Fatalf("对不上 %+v book %+v", none.Cells, none.Book)
+	}
+	summary := read(application.StockViewSummary, "另一件")
+	if len(summary.Summary) != 1 || summary.Summary[0].Goods != "SYN-GOODS-02" || summary.Summary[0].OnHand != 5 {
+		t.Fatalf("汇总 %+v", summary.Summary)
+	}
+	cartons := read(application.StockViewCartons, "SYN-CARTON-WORD")
+	if len(cartons.Cartons) != 1 || cartons.Cartons[0].Carton != "SYN-CARTON-WORD" {
+		t.Fatalf("按箱号 %+v", cartons.Cartons)
+	}
+	byContents := read(application.StockViewCartons, "合成商品")
+	if len(byContents.Cartons) != 1 || byContents.Cartons[0].Carton != "SYN-CARTON-WORD" {
+		t.Fatalf("按箱内商品 %+v", byContents.Cartons)
+	}
+	otherCarton := read(application.StockViewCartons, "另一件")
+	if len(otherCarton.Cartons) != 0 {
+		t.Fatalf("箱里没有这一件 %+v", otherCarton.Cartons)
+	}
+	moves := read(application.StockViewMovements, "另一件货")
+	if moves.MovementPage == nil || moves.MovementPage.Total == nil || *moves.MovementPage.Total != 1 || len(moves.Movements) != 1 || !movementLineGoods(moves.Movements[0], "SYN-GOODS-02") {
+		t.Fatalf("流水 %+v page %+v", moves.Movements, moves.MovementPage)
+	}
+	plain := read(application.StockViewMovements, "")
+	if plain.MovementPage == nil || plain.MovementPage.Total == nil || *plain.MovementPage.Total < 2 {
+		t.Fatalf("不检索 %+v", plain.MovementPage)
+	}
+}
+
+func movementLineGoods(movement application.StockMovementView, goods string) bool {
+	for _, line := range movement.Lines {
+		if line.Goods == goods {
+			return true
+		}
+	}
+	return false
 }
 
 func cellNamed(t *testing.T, cells []application.StockCellView, location string) application.StockCellView {

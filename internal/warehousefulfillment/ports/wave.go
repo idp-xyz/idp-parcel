@@ -228,6 +228,7 @@ type PackParcel struct {
 	Goods             domain.GoodsCode
 	Unit              domain.GoodsUnitName
 	Quantity          int64
+	Serials           []string
 	ShipmentRequestID string
 	DeclaredParcelID  string
 	CommissionState   string

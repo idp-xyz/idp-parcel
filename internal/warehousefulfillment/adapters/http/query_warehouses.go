@@ -29,9 +29,10 @@ var _ WarehouseCatalogueReader = (*application.QueryWarehousesHandler)(nil)
 const outcomeWarehousesListed = "WAREHOUSES_LISTED"
 
 type warehouseListResponse struct {
-	Outcome    string             `json:"outcome"`
-	Warehouses []warehouseBody    `json:"warehouses"`
-	Page       cataloguepage.Page `json:"page"`
+	Outcome    string               `json:"outcome"`
+	Warehouses []warehouseBody      `json:"warehouses"`
+	Page       cataloguepage.Page   `json:"page"`
+	Facets     cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 // NewQueryWarehousesEndpoint 交回各仓当前修订的查阅入口（GET /warehouse-fulfillment-warehouses）。查询参数按
@@ -54,6 +55,9 @@ func NewQueryWarehousesEndpoint(intake CatalogueIntake, reader WarehouseCatalogu
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListWarehouses(request.Context(), query.Tenant, query.Limit, pageQuery, query.Warehouses)
 		if err != nil {
@@ -65,6 +69,7 @@ func NewQueryWarehousesEndpoint(intake CatalogueIntake, reader WarehouseCatalogu
 			Outcome:    outcomeWarehousesListed,
 			Warehouses: warehouseBodiesOfRows(page.Rows),
 			Page:       page.Page(query.Limit),
+			Facets:     page.Facets,
 		})
 	})
 }
@@ -101,7 +106,11 @@ func NewListCustomerWarehousesEndpoint(intake CustomerInboundPreAdvicePorts, rea
 			writeCustomerQueryProblem(response, request, err)
 			return
 		}
-		page, err := reader.ListWarehouses(request.Context(), identity.Tenant, operatorCatalogueReadLimit, pageQuery, ports.WarehouseScope{})
+		limit := operatorCatalogueReadLimit
+		if pageQuery.PageSize > 0 {
+			limit = pageQuery.PageSize
+		}
+		page, err := reader.ListWarehouses(request.Context(), identity.Tenant, limit, pageQuery, ports.WarehouseScope{})
 		if err != nil {
 			slog.ErrorContext(request.Context(), "customer warehouse list did not form an answer")
 			writeCustomerProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed, "")
@@ -110,7 +119,7 @@ func NewListCustomerWarehousesEndpoint(intake CustomerInboundPreAdvicePorts, rea
 		writeJSON(response, http.StatusOK, customerWarehouseListResponse{
 			Outcome:    outcomeWarehousesListed,
 			Warehouses: customerWarehouseBodiesOfRows(page.Rows),
-			Page:       page.Page(operatorCatalogueReadLimit),
+			Page:       page.Page(limit),
 		})
 	})
 }

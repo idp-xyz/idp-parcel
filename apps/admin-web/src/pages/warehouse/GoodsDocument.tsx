@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { formatInstant } from '../catalogue-view';
@@ -8,7 +8,7 @@ import { getGoodsCurrent, queryOwnerStock, type GoodsRecord, type StockReadBody 
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { goodsMeasurementRows, goodsStockRows, revisionPrefill } from './goods-profile';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsSubTable, type WmsSubColumn } from './wms-ui';
 
 const moduleId = 'warehouse-goods';
@@ -54,19 +54,46 @@ const validityWord = (validity: { from?: string; to?: string } | undefined): str
 /**
  * 商品档案页：这位货主这个商品当前修订的全部资料，加上它此刻在各仓的库存。商品没有生命周期，只有修订号一路往上加，
  * 所以头区用修订徽章，不画进度条；改资料是代录一个新修订。
+ *
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一个商品留着上一份，新的读到再换。列表重取会让 `revision` 变，档案跟着重读。
  */
-export function GoodsDocument({ ownerAccount, goodsCode }: { ownerAccount: string; goodsCode: string }) {
+export function GoodsDocument({
+  ownerAccount,
+  goodsCode,
+  panel,
+}: {
+  ownerAccount: string;
+  goodsCode: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(receivingActionSpecs);
   const back = useReturnToList(moduleId);
   const complete = ownerAccount !== '' && goodsCode !== '';
-  const goodsLoad = useKeyedLoad(complete ? `${ownerAccount}\n${goodsCode}` : null, loadGoods);
-  const stockLoad = useKeyedLoad(complete ? ownerAccount : null, loadOwnerStock);
+  const goodsKey = complete ? `${ownerAccount}\n${goodsCode}` : null;
+  const goodsLoad = useKeyedLoad(goodsKey, loadGoods, { holdPrevious: panel !== undefined });
+  const stockLoad = useKeyedLoad(complete ? ownerAccount : null, loadOwnerStock, { holdPrevious: panel !== undefined });
+  const reloadGoods = goodsLoad.reload;
+  const reloadStock = stockLoad.reload;
   const reload = () => {
-    goodsLoad.reload();
-    stockLoad.reload();
+    reloadGoods();
+    reloadStock();
   };
+  const shownKey = useRef(goodsKey);
+  useEffect(() => {
+    if (shownKey.current === goodsKey) return;
+    shownKey.current = goodsKey;
+    drawer.close();
+  }, [goodsKey, drawer]);
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reloadGoods();
+    reloadStock();
+  }, [revision, reloadGoods, reloadStock]);
 
-  const { answer, loading } = goodsLoad;
+  const { answer, loading, held, reloading } = goodsLoad;
   const goods: GoodsRecord | undefined = answer?.kind === 'outcome' ? answer.body.goods : undefined;
   const failure =
     (complete ? null : '地址里缺货主或商品编码：商品的地址是「货主 / 商品编码」两段。') ??
@@ -74,7 +101,7 @@ export function GoodsDocument({ ownerAccount, goodsCode }: { ownerAccount: strin
     (answer?.kind === 'outcome' && !goods ? `货主 ${ownerAccount} 名下没有 ${goodsCode} 这个商品。` : null);
 
   const stockFailure = readFailureMessage(stockLoad.answer);
-  const stockRows = goodsStockRows(stockLoad.answer?.kind === 'outcome' ? stockLoad.answer.body.summary : undefined, goodsCode);
+  const stockRows = goodsStockRows(stockLoad.answer?.kind === 'outcome' ? stockLoad.answer.body.summary : undefined, goods?.goodsCode ?? goodsCode);
   const stockColumns: WmsSubColumn<StockSummaryRow>[] = [
     { id: 'warehouse', header: '仓', mono: true, render: (row) => row.warehouse },
     { id: 'unit', header: '单位', render: (row) => row.unit },
@@ -117,10 +144,13 @@ export function GoodsDocument({ ownerAccount, goodsCode }: { ownerAccount: strin
             : undefined
         }
         badge={goods ? <WmsBadge label={`修订 r${goods.revision}`} tone="info" /> : undefined}
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [ownerAccount, goods?.goodsCode ?? goodsCode]) } : undefined}
         actions={
           goods && drawer.has('goods-on-behalf') ? (
             <Button type="button" className={primaryActionClass} onClick={() => drawer.open('goods-on-behalf', revisionPrefill(goods))}>
@@ -149,6 +179,7 @@ export function GoodsDocument({ ownerAccount, goodsCode }: { ownerAccount: strin
                 { label: '基本单位', value: goods.baseUnit },
                 { label: '批次', value: goods.trackBatch ? '记批' : '不记批' },
                 { label: '效期', value: goods.trackExpiry ? '记效期' : '不记效期' },
+                { label: '序列号', value: goods.trackSerial ? '出库要记' : '不记' },
                 { label: '组合', value: goods.composite ? '是' : '否' },
                 { label: '登记', value: `${goods.registrant} · ${formatInstant(goods.registeredAt)}` },
               ]}
@@ -245,7 +276,7 @@ export function GoodsDocument({ ownerAccount, goodsCode }: { ownerAccount: strin
           </>
         ) : null}
       </WmsDocumentPage>
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={panel ? panel.onChanged : reload} />
     </>
   );
 }

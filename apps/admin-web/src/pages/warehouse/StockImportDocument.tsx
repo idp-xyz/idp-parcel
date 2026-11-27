@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { formatInstant } from '../catalogue-view';
@@ -9,7 +10,7 @@ import { stockImportStatusLabel } from './rows';
 import { useStockImportTargets } from './stock-import-actions';
 import { stockImportTotals, stockImportTrack } from './stock-import-flow';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsSubColumn } from './wms-ui';
 
 const moduleId = 'stock-imports';
@@ -17,11 +18,33 @@ const moduleId = 'stock-imports';
 /**
  * 建账导入页：期初库存按哪些行入账。提交只是登记，不改库存账；批准才入账，驳回就此结束。
  * 批准与驳回在头区做——批准的人在这里核完每一行再下手。
+ *
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一行留着上一张，新的读到再换。栏里做完一个动作告诉列表重取，
+ * 列表重取会让 `revision` 变，这张单跟着重读。
  */
-export function StockImportDocument({ importId }: { importId: string }) {
+export function StockImportDocument({
+  importId,
+  panel,
+}: {
+  importId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useDrawerOver(useStockImportTargets());
   const back = useReturnToList(moduleId);
-  const { answer, loading, reload } = useKeyedLoad(importId, getStockImportDetail);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(importId, getStockImportDetail, { holdPrevious: panel !== undefined });
+  const shownId = useRef(importId);
+  useEffect(() => {
+    if (shownId.current === importId) return;
+    shownId.current = importId;
+    drawer.close();
+  }, [importId, drawer]);
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
   const record = answer?.kind === 'outcome' ? answer.body.stockImport : undefined;
   const failure =
     readFailureMessage(answer) ?? (answer?.kind === 'outcome' && !record ? `没有 ${importId} 这张建账导入。它可能属于别的公司，或导入号有误。` : null);
@@ -73,10 +96,13 @@ export function StockImportDocument({ importId }: { importId: string }) {
         title={record?.importId ?? importId}
         subtitle={record ? [`货主 ${record.ownerAccount}`, `仓 ${record.warehouseCode}`, `提交于 ${formatInstant(record.submittedAt)}`].join(' · ') : undefined}
         badge={record ? <WmsBadge code={record.status} label={stockImportStatusLabel(record.status)} /> : undefined}
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [record?.importId ?? importId]) } : undefined}
         stepper={
           track ? (
             <WmsStepper
@@ -185,7 +211,7 @@ export function StockImportDocument({ importId }: { importId: string }) {
           </>
         ) : null}
       </WmsDocumentPage>
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={panel ? panel.onChanged : reload} />
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import { activeWaveStatuses, settledWaveStatuses, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
+import { activeWaveStatuses, listedWaveProgress, settledWaveStatuses, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
 
 test('状态的词：四种各有中文，陌生的词原样示出', () => {
   deepEqual(
@@ -59,4 +59,13 @@ test('拣货进度：作废与迟到的任务不算进度，单独数', () => {
 test('拣货进度：没有任务可算时是 0，不除以零', () => {
   deepEqual(waveProgress(tasks('CANCELLED')), { tasks: 0, open: 0, done: 0, short: 0, cancelled: 1, percent: 0 });
   deepEqual(waveProgress([]), { tasks: 0, open: 0, done: 0, short: 0, cancelled: 0, percent: 0 });
+  deepEqual(listedWaveProgress({ openTasks: 1, doneTasks: 1, shortTasks: 1, cancelledTasks: 2 }), {
+    tasks: 3,
+    open: 1,
+    done: 1,
+    short: 1,
+    cancelled: 2,
+    percent: 66,
+  });
+  deepEqual(listedWaveProgress({ tasks: [{ status: 'DONE' }, { status: 'OPEN' }], openTasks: 0 }), waveProgress([{ status: 'DONE' }, { status: 'OPEN' }]));
 });

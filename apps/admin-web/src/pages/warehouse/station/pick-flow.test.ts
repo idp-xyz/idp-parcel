@@ -1099,9 +1099,9 @@ test('不收码时扫描框里的字说明为什么', () => {
 
 test('队列读全了没有要说的；只看了前几页就如实说看了多少', () => {
   deepEqual(queueNotes({ wavesRead: 3, truncated: false, waveMissing: false }, null), []);
-  const notes = queueNotes({ wavesRead: 1000, truncated: true, waveMissing: false }, null);
+  const notes = queueNotes({ wavesRead: 1000, tasksRead: 1000, truncated: true, waveMissing: false }, null);
   equal(notes.length, 1);
-  ok(notes[0].includes('只看了最近放出的 1000 个还没拣完的波次'));
+  ok(notes[0].includes('只看了 1000 条还没拣的任务'));
 });
 
 test('指名的波次没找到：说没找到', () => {

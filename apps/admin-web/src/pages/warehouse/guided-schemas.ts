@@ -25,10 +25,9 @@ const warehouseKindOptions: readonly GuidedSelectOption[] = [
 ];
 
 const arrivalModeOptions: readonly GuidedSelectOption[] = [
-  { value: 'PARCEL', label: '包裹（PARCEL）' },
-  { value: 'CARTON', label: '整箱（CARTON）' },
+  { value: 'FULL_CONTAINER', label: '整柜（FULL_CONTAINER）' },
   { value: 'PALLET', label: '托盘（PALLET）' },
-  { value: 'LOOSE', label: '散货（LOOSE）' },
+  { value: 'LOOSE_CARTON', label: '散箱（LOOSE_CARTON）' },
 ];
 
 const inboundModeOptions: readonly GuidedSelectOption[] = [
@@ -237,7 +236,7 @@ export const receivingGuidedForms: Record<string, GuidedFormDefinition> = {
   },
   'pre-advice-notice': {
     fields: [
-      { path: 'preAdviceId', label: '入库预报号', kind: 'text', required: true, placeholder: 'SYN-IPA-01' },
+      { path: 'preAdviceId', label: '预报标识', kind: 'text', required: true, carried: true },
       { path: 'decisionId', label: '决定标识', kind: 'text', required: true, placeholder: 'DEC-NOTICE-01' },
       { path: 'evidenceReference', label: '依据引用', kind: 'text', required: true, placeholder: 'EVID-01' },
       { path: 'expectedAt', label: '新预计到达时刻', kind: 'datetime', required: true },
@@ -247,13 +246,13 @@ export const receivingGuidedForms: Record<string, GuidedFormDefinition> = {
   },
   'pre-advice-withdrawal': {
     fields: [
-      { path: 'preAdviceId', label: '入库预报号', kind: 'text', required: true, placeholder: 'SYN-IPA-01' },
+      { path: 'preAdviceId', label: '预报标识', kind: 'text', required: true, carried: true },
       { path: 'evidenceReference', label: '依据引用', kind: 'text', required: true, placeholder: 'EVID-01' },
     ],
   },
   'pre-advice-close': {
     fields: [
-      { path: 'preAdviceId', label: '入库预报号', kind: 'text', required: true, placeholder: 'SYN-IPA-01' },
+      { path: 'preAdviceId', label: '预报标识', kind: 'text', required: true, carried: true },
       { path: 'note', label: '完结说明', kind: 'text', placeholder: '可选' },
     ],
   },
@@ -270,7 +269,7 @@ export const receivingGuidedForms: Record<string, GuidedFormDefinition> = {
       { path: 'decisionId', label: '决定标识', kind: 'text', required: true, placeholder: 'DEC-CLAIM-01' },
       { path: 'arrivalId', label: '待认领到货号', kind: 'text', required: true, placeholder: 'SYN-UCA-01' },
       { path: 'ownerAccount', label: '认领货主', kind: 'text', required: true, placeholder: 'SYN-OWNER-01' },
-      { path: 'preAdviceId', label: '对应入库预报号', kind: 'text', placeholder: '入库到货必填，退件留空' },
+      { path: 'preAdviceId', label: '入库单号', kind: 'text', placeholder: '扫或填单据号，退件留空', hint: '填单据号即可，提交时换成预报标识；手里是预报标识也收' },
     ],
   },
   'unclaimed-revoke': {
@@ -301,11 +300,12 @@ export const receivingGuidedForms: Record<string, GuidedFormDefinition> = {
       { path: 'decisionId', label: '决定标识', kind: 'text', required: true, placeholder: 'DEC-GOODS-01' },
       { path: 'evidenceReference', label: '依据引用', kind: 'text', required: true, placeholder: 'EVID-01' },
       { path: 'goodsCode', label: '商品编码', kind: 'text', required: true, placeholder: 'SYN-GOODS-01' },
-      { path: 'basisRevision', label: '基于的修订号', kind: 'integer', required: true, allowZero: true, placeholder: '0', hint: '首版填 0，改资料填当前修订号' },
+      { path: 'basisRevision', label: '基于的修订号', kind: 'integer', allowZero: true, omitWhenZero: true, placeholder: '留空', hint: '首版留空。改资料填当前修订号；填 0 会当成给了基准 0' },
       { path: 'name', label: '商品名称', kind: 'text', required: true, placeholder: '示例商品' },
       { path: 'baseUnit', label: '基本单位', kind: 'text', required: true, placeholder: '件' },
       { path: 'trackBatch', label: '跟踪批号', kind: 'boolean' },
       { path: 'trackExpiry', label: '跟踪效期', kind: 'boolean' },
+      { path: 'trackSerial', label: '跟踪序列号', kind: 'boolean' },
       {
         path: 'packagingLevels',
         label: '包装层级（可选）',

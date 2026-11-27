@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { formatInstant } from '../catalogue-view';
@@ -11,7 +12,7 @@ import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { internalJobKind, processingModule } from './processing-address';
 import { discrepancyEffect, discrepancyStatusLabel, discrepancyTrack, originLineIndex } from './stock-approval-flow';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsSubColumn } from './wms-ui';
 
 const moduleId = countsAdjustmentsModule;
@@ -21,12 +22,29 @@ const mutedText = 'type-caption text-idpxyz-textMuted';
  * 作业差异页：库内作业（上架、移库、形态与状态转换、短少上报）里没能入账的那一部分，等人批准补账或驳回。
  * 差异本身不带作业种类，所以页面按作业事实号再读一次那次作业，读不到不拦正文，只少了种类与作业各行。
  * 作业事实号链到它自己的库内作业页，那里写这次作业账上入了多少。批准与驳回在头区做。
+ *
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一行留着上一张，新的读到再换。栏里做完一个动作告诉列表重取，
+ * 列表重取会让 `revision` 变，这张单跟着重读。
  */
-export function JobDiscrepancyDocument({ discrepancyId }: { discrepancyId: string }) {
+export function JobDiscrepancyDocument({
+  discrepancyId,
+  panel,
+}: {
+  discrepancyId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(internalOpsActionSpecs);
   const back = useReturnToList(moduleId);
   const complete = discrepancyId !== '';
-  const { answer, loading, reload } = useKeyedLoad(complete ? discrepancyId : null, findJobDiscrepancy);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(complete ? discrepancyId : null, findJobDiscrepancy, {
+    holdPrevious: panel !== undefined,
+  });
+  const shownId = useRef(discrepancyId);
+  useEffect(() => {
+    if (shownId.current === discrepancyId) return;
+    shownId.current = discrepancyId;
+    drawer.close();
+  }, [discrepancyId, drawer]);
   const found = answer?.kind === 'outcome' ? answer.body : undefined;
   const record = found?.record;
   const failure =
@@ -41,10 +59,20 @@ export function JobDiscrepancyDocument({ discrepancyId }: { discrepancyId: strin
   const jobLoad = useKeyedLoad(record?.factId ?? null, getInternalJob);
   const job = jobLoad.answer?.kind === 'outcome' ? jobLoad.answer.body.job : undefined;
   const jobFailure = readFailureMessage(jobLoad.answer);
+  const reloadJob = jobLoad.reload;
   const reloadAll = () => {
     reload();
-    jobLoad.reload();
+    reloadJob();
   };
+  // 列表重取之后差异和它来自的那次作业都要重读：批准入账会改作业各行的已入账。
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+    reloadJob();
+  }, [revision, reload, reloadJob]);
 
   const track = record ? discrepancyTrack(record.status) : null;
   const pending = record?.status === 'PENDING';
@@ -111,10 +139,17 @@ export function JobDiscrepancyDocument({ discrepancyId }: { discrepancyId: strin
             : undefined
         }
         badge={record ? <WmsBadge code={record.status} label={discrepancyStatusLabel(record.status)} /> : undefined}
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reloadAll}
+        panel={
+          panel
+            ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [discrepancyKind, record?.discrepancyId ?? discrepancyId]) }
+            : undefined
+        }
         stepper={
           track ? (
             <WmsStepper
@@ -238,7 +273,7 @@ export function JobDiscrepancyDocument({ discrepancyId }: { discrepancyId: strin
           </>
         ) : null}
       </WmsDocumentPage>
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reloadAll} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={panel ? panel.onChanged : reloadAll} />
     </>
   );
 }

@@ -60,7 +60,7 @@ export function WaveDocument({
   const progress = waveProgress(tasks);
   const track = wave ? waveTrack(wave.status) : undefined;
   const withdrawn = new Set(wave?.withdrawnRequests ?? []);
-  const withdrawable = wave ? withdrawableRequests(wave) : [];
+  const withdrawable = wave ? withdrawableRequests({ ...wave, tasks: wave.tasks ?? [] }) : [];
   const canWithdraw = drawer.has('wave-withdraw');
   const withdraw = (requests: readonly string[]) => drawer.open('wave-withdraw', { waveId, requests: requests.join(', ') });
   // 余下的格按库位排：拣货的人顺着库位走，不照任务生成的先后。
@@ -254,7 +254,7 @@ export function WaveDocument({
           waveId={waveId}
           warehouse={wave.warehouseCode}
           assignee={wave.assignee}
-          zones={waveZones(wave.tasks)}
+          zones={waveZones(wave.tasks ?? [])}
           zoneAssignees={wave.zoneAssignees}
           names={names}
         />

@@ -1,15 +1,12 @@
-// 拣货工位的待拣队列：从波次读口读出本仓还没拣的拣货任务，排成作业的次序（纯 TypeScript，node:test 直接测）。
+// 拣货工位的待拣队列：把还没拣的拣货任务排成作业的次序（纯 TypeScript，node:test 直接测）。
 //
-// 一个波次带着它的全部任务。看本仓全部波次时按状态只问还有任务等着拣的那两种（已放出、拣货中），拣完与取消的波次不再翻；
-// 任务这一层读口不筛，待执行的在前端挑。还没拣完的波次理应不多，仍设页数上限（读口缺省序是放出时刻倒序，从新到旧翻），
-// 翻不完时在结果里如实带出「只看了多少」，由界面照实说，不假装看全了。
-//
-// 指名了波次（地址里的 `?wave=`）时按波次号读那一张，不走列表。
+// 看本仓全部波次时向拣货任务读口要待执行的（按仓与任务状态筛，缺省按放出时刻从新到旧），不再把波次整页取来自己挑。
+// 一次最多翻几页，翻不完就在结果里如实带出看了多少条，由界面照实说，不假装看全了。
+// 指名了波次（地址里的 `?wave=`）时按波次号读那一张，待执行的格在这一张里挑。
 
 import type { ApiResult } from '../../catalogue-api';
 import type { CatalogueConditions } from '../../catalogue-query';
 import type { WaveListBody, WaveOneBody, WaveRecord } from '../api';
-import { activeWaveStatuses } from '../wave-flow';
 
 /** 合成一格拿的几条任务里的一条，和它自己要拣几件。 */
 export interface PickMember {
@@ -67,7 +64,7 @@ export function allotMembers(cell: PickCell, quantity: number): { cell: PickCell
   });
 }
 
-/** 一次最多翻几页（每页读口最多 200 个波次）。 */
+/** 一次最多翻几页（每页 200 条待执行的任务）。 */
 export const MAX_WAVE_PAGES = 5;
 
 // 库位码里的数字按数值比：A-1-2 排在 A-1-10 前面，拣货的人顺着库位走。比不出先后的再按任务号定，次序才稳定。
@@ -123,7 +120,7 @@ export function cellsOfWaves(waves: readonly WaveRecord[], scope: PickScope): Pi
   for (const wave of waves) {
     if (wave.warehouseCode !== scope.warehouse) continue;
     if (scope.wave !== null && wave.waveId !== scope.wave) continue;
-    for (const task of wave.tasks) {
+    for (const task of wave.tasks ?? []) {
       if (task.status !== 'OPEN') continue;
       if (assignedElsewhere(wave, task, scope)) continue;
       if (!Number.isInteger(task.quantity) || task.quantity < 1) continue;
@@ -197,6 +194,8 @@ export interface PickQueue {
   cells: PickCell[];
   /** 这一趟读到了几个波次。 */
   wavesRead: number;
+  /** 这一趟读到了几条任务。看本仓全部波次时，翻不完说的是这个数。 */
+  tasksRead: number;
   pagesRead: number;
   /** 翻到页数上限，读口还有下一页：更早放出、还没拣完的波次没有看，里面没拣的格这里看不到。 */
   truncated: boolean;
@@ -225,16 +224,17 @@ function queueOf(waves: readonly WaveRecord[], scope: PickScope, read: Pick<Pick
   return {
     cells: cellsOfWaves(waves, scope),
     wavesRead: waves.length,
+    tasksRead: waves.reduce((sum, candidate) => sum + (candidate.tasks?.length ?? 0), 0),
     ...read,
     waveMissing: scope.wave !== null && scoped.length === 0,
     waves: scoped
       .map((candidate) => ({
         waveId: candidate.waveId,
-        open: candidate.tasks.filter((task) => task.status === 'OPEN').length,
+        open: (candidate.tasks ?? []).filter((task) => task.status === 'OPEN').length,
         ...(candidate.assignee ? { assignee: candidate.assignee } : {}),
       }))
       .filter((entry) => entry.open > 0),
-    assignedElsewhere: scoped.filter((candidate) => candidate.tasks.some((task) => task.status === 'OPEN' && assignedElsewhere(candidate, task, scope))).length,
+    assignedElsewhere: scoped.filter((candidate) => (candidate.tasks ?? []).some((task) => task.status === 'OPEN' && assignedElsewhere(candidate, task, scope))).length,
   };
 }
 
@@ -248,7 +248,7 @@ export async function loadPickQueue(input: PickQueueInput): Promise<PickQueueAns
   }
 
   const maxPages = input.maxPages ?? MAX_WAVE_PAGES;
-  const conditions: CatalogueConditions = { filters: { warehouseCode: [warehouse], status: [...activeWaveStatuses] } };
+  const conditions: CatalogueConditions = { filters: { warehouseCode: [warehouse], status: ['OPEN'] }, pageSize: 200 };
   const waves: WaveRecord[] = [];
   let after: string | null = null;
   let pagesRead = 0;

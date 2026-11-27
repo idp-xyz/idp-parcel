@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { formatInstant } from '../catalogue-view';
@@ -21,9 +22,9 @@ import {
   relabelPlan,
   type MaterialRow,
 } from './instruction-flow';
-import { processingModule } from './processing-address';
+import { instructionKind, processingModule } from './processing-address';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsSubColumn, type WmsTone } from './wms-ui';
 
@@ -34,12 +35,36 @@ const mutedText = 'type-caption text-idpxyz-textMuted';
  * 指令页：一份加工、拆解或换标指令要做什么、现场做了没有。三种指令共用一份指令册与一个读口，这一页按种类显示不同的内容：
  * 加工与拆解给出用料与产出，换标给出原别名与新别名。执行本身在作业台做，页面只指路——头区的主动作是去作业台，
  * 还没执行的可以作废；已执行的不能作废。
+ *
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一行留着上一张，新的读到再换。栏里做完一个动作告诉列表重取，
+ * 列表重取会让 `revision` 变，这张单跟着重读。
  */
-export function InstructionDocument({ instructionId }: { instructionId: string }) {
+export function InstructionDocument({
+  instructionId,
+  panel,
+}: {
+  instructionId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(internalOpsActionSpecs);
   const back = useReturnToList(moduleId);
   const complete = instructionId !== '';
-  const { answer, loading, reload } = useKeyedLoad(complete ? instructionId : null, findInstruction);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(complete ? instructionId : null, findInstruction, {
+    holdPrevious: panel !== undefined,
+  });
+  const shownId = useRef(instructionId);
+  useEffect(() => {
+    if (shownId.current === instructionId) return;
+    shownId.current = instructionId;
+    drawer.close();
+  }, [instructionId, drawer]);
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
   const found = answer?.kind === 'outcome' ? answer.body : undefined;
   const record = found?.record;
   const failure =
@@ -108,10 +133,17 @@ export function InstructionDocument({ instructionId }: { instructionId: string }
             : undefined
         }
         badge={record ? <WmsBadge code={record.status} label={instructionStatusLabel(record.status)} /> : undefined}
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={
+          panel
+            ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [instructionKind, record?.instructionId ?? instructionId]) }
+            : undefined
+        }
         stepper={
           track ? (
             <WmsStepper
@@ -235,7 +267,7 @@ export function InstructionDocument({ instructionId }: { instructionId: string }
           </>
         ) : null}
       </WmsDocumentPage>
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={panel ? panel.onChanged : reload} />
     </>
   );
 }

@@ -12,6 +12,7 @@
 // 预报自己没有状态字段，读口也不答：到仓与处置都记在到仓记录上，所以预报的状态是拿到仓记录对出来的。读口答不出的环节不编——
 // 预报之后只有「到仓」与「处置」两件事看得出来；认不出的退件转成待认领到货，它之后怎么了要去待认领页看，这里不替它说。
 
+import { operatorLabel, type OperatorNames, noOperatorNames } from '../operator-access/operator-names';
 import type { DocumentTrack, TrackStep } from './document-track';
 
 export interface ReturnAdviceFacts {
@@ -209,12 +210,19 @@ export function returnAdviceTrack(receipts: ReadonlyArray<Pick<ReturnReceiptFact
   const status = returnAdviceStatus(receipts);
   if (status === 'AWAITING_ARRIVAL') return { steps: returnAdviceSteps, currentId: 'ADVISED', currentLabel: '已预报，待到仓' };
   if (status === 'DISPOSED') return { steps: returnAdviceSteps, currentId: 'DISPOSED' };
-  const { awaiting, diverted } = receiptTally(receipts);
+  const note = returnAdviceArrivalNote(receiptTally(receipts));
   return {
     steps: returnAdviceSteps,
     currentId: 'ARRIVED',
-    currentLabel: awaiting > 0 ? `已到仓，${awaiting} 笔待处置` : diverted > 0 ? '已到仓，转了待认领' : undefined,
+    currentLabel: note ? `已到仓，${note}` : undefined,
   };
+}
+
+/** 已到仓这一词盖住的那一句：还有几笔没记去向，或者货转去了待认领、库存里没有。待处置优先。 */
+export function returnAdviceArrivalNote(tally: Pick<ReceiptTally, 'awaiting' | 'diverted'>): string | null {
+  if (tally.awaiting > 0) return `${tally.awaiting} 笔待处置`;
+  if (tally.diverted > 0) return '转了待认领';
+  return null;
 }
 
 export const returnReceiptSteps: readonly TrackStep[] = [
@@ -256,11 +264,23 @@ export function returnAdviceNextStep(status: ReturnAdviceStatus): ReturnAdviceNe
 
 export interface ReturnReceiptNextStep {
   label: string;
+  /** 去向已记之后去上架与移库。处置当时不改库存，货还在退货暂存。 */
+  station?: 'putaway';
 }
 
-/** 只有入了暂存、还没记去向的有下一步：处置。转待认领的下一步在待认领页，读口没答它此刻在哪一步，这里不指。 */
+/**
+ * 入了暂存、还没记去向：就地处置。去向已记：去上架与移库把货移出退货暂存。
+ * 转待认领的下一步在待认领页，读口没答它此刻在哪一步，这里不指。
+ */
 export function returnReceiptNextStep(status: ReturnReceiptStatus): ReturnReceiptNextStep | null {
-  return status === 'AWAITING_DISPOSITION' ? { label: '处置' } : null;
+  switch (status) {
+    case 'AWAITING_DISPOSITION':
+      return { label: '处置' };
+    case 'DISPOSED':
+      return { label: '移出退货暂存', station: 'putaway' };
+    default:
+      return null;
+  }
 }
 
 /** 待到仓的预报在等货，从受理算起；别的状态不在等谁，答 undefined。 */
@@ -423,6 +443,15 @@ export function numberingAbsenceNote(absence: string | undefined): string {
 export function adviceRegistrant(advice: { origin: string; operator?: string }): string {
   if (advice.operator) return advice.operator;
   return advice.origin === 'CUSTOMER' ? '货主自己提交' : '—';
+}
+
+/** 处置人：登了姓名示姓名，没登只示 sub。库里仍是发行方加 sub，这里不改那一格。 */
+export function dispositionActor(
+  disposition: { origin: string; operator?: string },
+  names: OperatorNames = noOperatorNames,
+): string {
+  if (!disposition.operator) return disposition.origin === 'CUSTOMER' ? '货主自己提交' : '—';
+  return operatorLabel(disposition.operator, names) ?? '—';
 }
 
 /** 这笔到仓记录的处置情况，一句话：去向、待处置，或转待认领后另起一笔入库再处置。 */

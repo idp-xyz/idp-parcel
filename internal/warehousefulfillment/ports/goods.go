@@ -188,6 +188,7 @@ type GoodsRow struct {
 	PackagingLevels       []GoodsLevelRow
 	TrackBatch            bool
 	TrackExpiry           bool
+	TrackSerial           bool
 	Aliases               []GoodsAliasRow
 	Composite             bool
 	OutboundMode          string

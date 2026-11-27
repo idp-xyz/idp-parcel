@@ -31,6 +31,7 @@ type packagingMaterialListResponse struct {
 	Outcome            string                  `json:"outcome"`
 	PackagingMaterials []packagingMaterialBody `json:"packagingMaterials"`
 	Page               cataloguepage.Page      `json:"page"`
+	Facets             cataloguepage.Facets    `json:"facets,omitempty"`
 }
 
 // NewQueryPackagingMaterialsEndpoint 交回各包材当前修订的查阅入口（GET /warehouse-fulfillment-packaging-materials），规矩同各仓当前修订的列表口：
@@ -52,6 +53,9 @@ func NewQueryPackagingMaterialsEndpoint(intake CatalogueIntake, reader Packaging
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListPackagingMaterials(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
@@ -63,6 +67,7 @@ func NewQueryPackagingMaterialsEndpoint(intake CatalogueIntake, reader Packaging
 			Outcome:            outcomePackagingMaterialsListed,
 			PackagingMaterials: packagingMaterialBodiesOfRows(page.Rows),
 			Page:               page.Page(query.Limit),
+			Facets:             page.Facets,
 		})
 	})
 }

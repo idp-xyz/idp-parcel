@@ -129,6 +129,9 @@ func NewQueryTotesEndpoint(intake CatalogueIntake, queries ToteQueries) http.Han
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListTotes(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "tote list did not form an answer")
@@ -147,14 +150,16 @@ func NewQueryTotesEndpoint(intake CatalogueIntake, queries ToteQueries) http.Han
 			Outcome: "TOTES_LISTED",
 			Totes:   items,
 			Page:    page.Page(query.Limit),
+			Facets:  page.Facets,
 		})
 	})
 }
 
 type toteListResponse struct {
-	Outcome string             `json:"outcome"`
-	Totes   []toteBody         `json:"totes"`
-	Page    cataloguepage.Page `json:"page"`
+	Outcome string               `json:"outcome"`
+	Totes   []toteBody           `json:"totes"`
+	Page    cataloguepage.Page   `json:"page"`
+	Facets  cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 type toteBody struct {

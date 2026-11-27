@@ -188,7 +188,7 @@ test('读队列：按本仓、只问还没拣完的两种状态，从第一页�
     { waveId: 'W-2', open: 1 },
   ]);
   deepEqual(source.seen.map((call) => call.after), [null, '1']);
-  deepEqual(source.seen[0].conditions, { filters: { warehouseCode: ['SYN-WH-01'], status: ['RELEASED', 'PICKING'] } });
+  deepEqual(source.seen[0].conditions, { filters: { warehouseCode: ['SYN-WH-01'], status: ['OPEN'] }, pageSize: 200 });
 });
 
 test('读队列：翻到页数上限还有下一页，就说只看了这些，不假装看全了', async () => {

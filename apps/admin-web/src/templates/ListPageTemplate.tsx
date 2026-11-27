@@ -80,8 +80,9 @@ export interface ListPaginationProps {
 }
 
 /**
- * 游标形（ADR-0144 决定八）：服务端只给向后的游标，没有跳页、没有每页条数——页大小归渠道契约，操作者找行靠筛选与检索。
- * 走过的游标由调用方持有（cursor-pagination.ts 的 CursorTrail），模板只摆翻页条；各格照答复的 `page` 填。
+ * 游标形（ADR-0144 决定八）：服务端只给向后的游标，没有跳页。页大小由操作者在固定几档里选；
+ * 没给 `pageSize` 的调用方仍用渠道契约。走过的游标由调用方持有（cursor-pagination.ts 的 CursorTrail），
+ * 模板只摆翻页条；各格照答复的 `page` 填。
  */
 export interface ListCursorPaginationProps {
   mode: 'cursor';
@@ -96,6 +97,30 @@ export interface ListCursorPaginationProps {
   onPrevious: () => void;
   /** 收到的就是本页答复的 next，调用方压进自己的轨迹（nextCursorPage）。 */
   onNext: (next: string) => void;
+  /** 给了就能改每页多少条。不给时翻页条与原来逐字节相同。 */
+  pageSize?: { value: number; options: readonly number[]; onChange: (next: number) => void };
+}
+
+/** 游标翻页条上的「每页」选择。没给控制时什么都不渲染。 */
+export function CursorPageSizeSelect({ control }: { control: ListCursorPaginationProps['pageSize'] }) {
+  if (!control) return null;
+  return (
+    <label className="inline-flex items-center gap-1.5">
+      <span className="whitespace-nowrap">每页</span>
+      <select
+        className="h-7 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body text-idpxyz-text focus:border-idpxyz-accent focus:outline-none"
+        aria-label="每页条数"
+        value={String(control.value)}
+        onChange={(event) => control.onChange(Number(event.target.value))}
+      >
+        {control.options.map((size) => (
+          <option key={size} value={size}>
+            {size}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 export interface ListSortOption {
@@ -251,6 +276,38 @@ function DisabledSlot({ label, reason }: { label: string; reason: string }) {
   );
 }
 
+// 页码形、并且调用方给了页大小档位：与游标条同一句中文，不走 vendor Pagination 的英文文案。
+function NumberedPageBar({ pagination }: { pagination: ListPaginationProps }) {
+  const pages = pagination.pageSize > 0 ? Math.max(1, Math.ceil(pagination.total / pagination.pageSize)) : 1;
+  return (
+    <nav aria-label="翻页" className="flex items-center justify-between gap-4 type-caption text-idpxyz-textMuted">
+      <span className="tabular-nums">{`第 ${pagination.page} / ${pages} 页 · 共 ${pagination.total} 条`}</span>
+      <div className="flex items-center gap-1">
+        <CursorPageSizeSelect
+          control={
+            pagination.onPageSizeChange && pagination.pageSizeOptions
+              ? { value: pagination.pageSize, options: pagination.pageSizeOptions, onChange: pagination.onPageSizeChange }
+              : undefined
+          }
+        />
+        <Button variant="ghost" size="sm" disabled={pagination.page <= 1} onClick={() => pagination.onPageChange(pagination.page - 1)}>
+          <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+          上一页
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={pagination.page >= pages}
+          onClick={() => pagination.onPageChange(pagination.page + 1)}
+        >
+          下一页
+          <ChevronRight className="h-3 w-3" aria-hidden="true" />
+        </Button>
+      </div>
+    </nav>
+  );
+}
+
 // 游标形的翻页条。不用 vendor Pagination：它由 total 推能不能翻下一页，答不了「next 为 null 即末页」与「total 为 null 不显总数」，
 // 文案也是英文。上一页 / 下一页用 disabled 而不是 DisabledSlot 那种 aria-disabled + 说明：到头了不是「功能没接」，没什么要解释的。
 function CursorPaginationBar({ pagination }: { pagination: ListCursorPaginationProps }) {
@@ -264,6 +321,7 @@ function CursorPaginationBar({ pagination }: { pagination: ListCursorPaginationP
     >
       <span className="tabular-nums">{cursorPageSummary(page, size, total)}</span>
       <div className="flex items-center gap-1">
+        <CursorPageSizeSelect control={pagination.pageSize} />
         <Button variant="ghost" size="sm" disabled={!canPrevious} onClick={onPrevious}>
           <ChevronLeft className="h-3 w-3" aria-hidden="true" />
           上一页
@@ -685,6 +743,8 @@ export function ListPageTemplate<Row>({
             <div className="border-t border-idpxyz-border px-4 py-1.5 shrink-0">
               {pagination.mode === 'cursor' ? (
                 <CursorPaginationBar pagination={pagination} />
+              ) : pagination.pageSizeOptions ? (
+                <NumberedPageBar pagination={pagination} />
               ) : (
                 <Pagination
                   variant="table"

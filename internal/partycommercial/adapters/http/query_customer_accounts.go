@@ -67,6 +67,9 @@ func NewQueryCustomerAccountsEndpoint(
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListCustomerAccounts(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {

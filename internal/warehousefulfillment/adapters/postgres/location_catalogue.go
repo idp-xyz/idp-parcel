@@ -99,7 +99,7 @@ func (catalogue *LocationCatalogue) ListLocations(
 	if err != nil {
 		return fail(err)
 	}
-	return page, nil
+	return withListedFacets(ctx, querier, locationListBinding, locationListed, query, []any{tenant.String()}, page)
 }
 
 // ListLocationRevisions 取一个库位册上的全部修订，按修订号升序。不在册与别的租户的同编码库位同形：空切片、无错。

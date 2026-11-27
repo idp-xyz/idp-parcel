@@ -52,6 +52,9 @@ func (bridge warehouseAdoptionBridge) ListAdoptions(
 	if err != nil {
 		return cataloguepage.Result[warehousehttp.WarehouseAdoptionReadRow]{}, err
 	}
+	if pageQuery.PageSize > 0 {
+		limit = pageQuery.PageSize
+	}
 	settlementTenant, err := settlementdomain.NewTenantID(tenant.String())
 	if err != nil {
 		return cataloguepage.Result[warehousehttp.WarehouseAdoptionReadRow]{}, err
@@ -90,6 +93,9 @@ func (bridge warehouseAdoptionBridge) ListRequests(
 	pageQuery, err := saports.WarehouseChargeRequestPages.DecodeRaw(rawQuery)
 	if err != nil {
 		return cataloguepage.Result[warehousehttp.WarehouseChargeRequestReadRow]{}, err
+	}
+	if pageQuery.PageSize > 0 {
+		limit = pageQuery.PageSize
 	}
 	settlementTenant, err := settlementdomain.NewTenantID(tenant.String())
 	if err != nil {

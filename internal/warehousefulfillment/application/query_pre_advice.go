@@ -121,6 +121,26 @@ func (handler *QueryPreAdviceHandler) PreAdviceByDocumentNumber(
 	return reading, true, nil
 }
 
+// PreAdviceByCode 给作业台认单：单据号优先，对不上再按预报标识。找不到时第二个返回值为假。
+func (handler *QueryPreAdviceHandler) PreAdviceByCode(
+	ctx context.Context,
+	tenant domain.TenantID,
+	code string,
+) (PreAdviceReading, bool, error) {
+	advice, found, err := handler.preAdvices.PreAdviceByCode(ctx, tenant, code)
+	if err != nil {
+		return PreAdviceReading{}, false, fmt.Errorf("find inbound pre-advice by scan code: %w", err)
+	}
+	if !found {
+		return PreAdviceReading{}, false, nil
+	}
+	reading, err := handler.one(ctx, tenant, advice)
+	if err != nil {
+		return PreAdviceReading{}, false, fmt.Errorf("find inbound pre-advice by scan code: %w", err)
+	}
+	return reading, true, nil
+}
+
 func (handler *QueryPreAdviceHandler) one(ctx context.Context, tenant domain.TenantID, advice domain.PreAdvice) (PreAdviceReading, error) {
 	rows, err := handler.decorate(ctx, tenant, []domain.PreAdvice{advice})
 	if err != nil {

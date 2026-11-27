@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Columns 把一册声明的各维落到读面的列上（ADR-0144 决定七「各册只声明自己的排序维、筛选维、q 覆盖的列」）。列名由
@@ -27,6 +28,9 @@ type Columns struct {
 	// Keyword 是 q 覆盖的文本列，至少一列：q 是保留键、Decode 总会收下，没落列的话检索词就被静默忽略了——
 	// 正是决定四拒收未知键要防的那种「屏上的条件与答出的列表对不上」。
 	Keyword []string
+	// Comparisons 把筛选维从等值改成与一个时刻比较。键是维名，值只收 ">=" 或 "<="。
+	// 这一维一次只给一个 RFC 3339 时刻；缺席即这一端不收窄。值进游标摘要，换了区间旧游标作废。
+	Comparisons map[string]string
 }
 
 // Binding 是校验过的一册「声明 + 落列」，由 Catalogue.Bind 构造。
@@ -89,6 +93,22 @@ func (catalogue *Catalogue) Bind(columns Columns) (*Binding, error) {
 	for _, name := range catalogue.facets {
 		if columns.Codes[name] != nil {
 			return fail("给分面的筛选维 %s 不能带代码换算", name)
+		}
+	}
+	for name, operator := range columns.Comparisons {
+		if _, declared := catalogue.filters[name]; !declared {
+			return fail("比较的筛选维 %s 不在声明里", name)
+		}
+		if operator != ">=" && operator != "<=" {
+			return fail("筛选维 %s 的比较只收 >= 或 <=", name)
+		}
+		if columns.Codes[name] != nil {
+			return fail("比较的筛选维 %s 不能带代码换算", name)
+		}
+		for _, multi := range columns.MultiValued {
+			if multi == name {
+				return fail("比较的筛选维 %s 不能是多值", name)
+			}
 		}
 	}
 	if len(columns.Keyword) == 0 {
@@ -228,6 +248,17 @@ func (binding *Binding) conditions(query Query, base string, args []any, except 
 			conditions = append(conditions, fmt.Sprintf("%s && %s", column, placeholder(append([]string(nil), values...))))
 			continue
 		}
+		if operator, compared := binding.columns.Comparisons[dimension]; compared {
+			if len(values) != 1 {
+				return "", nil, malformed("筛选维 %s 只收一个时刻", dimension)
+			}
+			instant, err := time.Parse(time.RFC3339Nano, values[0])
+			if err != nil {
+				return "", nil, malformed("筛选维 %s 要写成 RFC 3339 时刻", dimension)
+			}
+			conditions = append(conditions, fmt.Sprintf("%s %s %s", column, operator, placeholder(instant.UTC())))
+			continue
+		}
 		code := binding.columns.Codes[dimension]
 		if code == nil {
 			conditions = append(conditions, fmt.Sprintf("%s = ANY(%s)", column, placeholder(append([]string(nil), values...))))
@@ -353,11 +384,12 @@ func sortedKeys[Value any](entries map[string]Value) []string {
 
 func copyColumns(columns Columns) Columns {
 	copied := Columns{
-		Sorts:    make(map[string]string, len(columns.Sorts)),
-		Identity: append([]string(nil), columns.Identity...),
-		Filters:  make(map[string]string, len(columns.Filters)),
-		Codes:    make(map[string]func(string) (int64, error), len(columns.Codes)),
-		Keyword:  append([]string(nil), columns.Keyword...),
+		Sorts:       make(map[string]string, len(columns.Sorts)),
+		Identity:    append([]string(nil), columns.Identity...),
+		Filters:     make(map[string]string, len(columns.Filters)),
+		Codes:       make(map[string]func(string) (int64, error), len(columns.Codes)),
+		Keyword:     append([]string(nil), columns.Keyword...),
+		Comparisons: make(map[string]string, len(columns.Comparisons)),
 	}
 	copied.MultiValued = append([]string(nil), columns.MultiValued...)
 	for key, value := range columns.Sorts {
@@ -368,6 +400,9 @@ func copyColumns(columns Columns) Columns {
 	}
 	for key, value := range columns.Codes {
 		copied.Codes[key] = value
+	}
+	for key, value := range columns.Comparisons {
+		copied.Comparisons[key] = value
 	}
 	return copied
 }

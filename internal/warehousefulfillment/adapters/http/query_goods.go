@@ -122,6 +122,9 @@ func NewQueryGoodsEndpoint(intake CatalogueIntake, reader GoodsCatalogueReader) 
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := reader.ListGoods(request.Context(), query.Tenant, owner, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "goods list did not form an answer", "ownerAccount", owner.String())

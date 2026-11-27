@@ -83,6 +83,9 @@ func NewQueryBusinessPartiesEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListBusinessParties(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
@@ -223,6 +226,9 @@ func NewQueryGroupLegalEntitiesEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListGroupLegalEntities(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
@@ -267,6 +273,9 @@ func NewQueryPartyRelationshipsEndpoint(
 		if err != nil {
 			writePageQueryProblem(response, err)
 			return
+		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
 		}
 
 		page, err := reader.ListPartyRelationships(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)

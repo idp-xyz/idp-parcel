@@ -1,42 +1,59 @@
-import { useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
-import type { InspectorAction, InspectorContent, InspectorField } from '../../templates/inspector';
+import { WorkbenchPageTemplate, toggleWorkbenchSort, type WorkbenchColumn, type WorkbenchSort } from '../../templates';
+import type { TemplateViewState } from '../../templates/state-slot';
+import { useTabViewState } from '../../templates/workspace-view-state';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import type { CatalogueConditions } from '../catalogue-query';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { heldCataloguePage } from '../party/held-catalogue-page';
+import { CursorPagerBar, pastFirstPage } from '../shipment-request/cursor-pager';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { internalOpsActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer, type ActionDrawerControl } from './ActionDrawer';
 import { listFreezes, type StockFreezeRecord } from './api';
+import { ClearFilters, OwnerWarehouseFilters } from './counts-list-chrome';
 import { DocumentLink } from './document-page';
 import { freezeIsCarton, freezeNextStep, freezeQuantityLabel, freezeWaitingSince } from './freeze-flow';
+import { FreezeDocument } from './FreezeDocument';
+import { fitColumnWidth, nameOf, shortInstant } from './list-cells';
 import { freezeKind, processingModule as moduleId } from './processing-address';
-import { openDocument } from './use-document';
 import type { QueueFilters } from './use-queue-filters';
 import { useStatusCounts } from './use-status-counts';
 import { elapsedLabel } from './waiting';
-import { labelOf, WmsBadge, WmsFilterSelect, WmsStatusTabs } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
 const info = moduleInfoById[moduleId];
-const mono = 'whitespace-nowrap font-mono type-body leading-4';
+const frozenKey = 'frozenAt';
+const frozen = 'FROZEN';
+const allQueues = 'ALL';
+const noRows: StockFreezeRecord[] = [];
 
-// 签的先后照一份冻结往下走的先后：冻结中是等人解冻的一队，数。已解冻只增不减，数出来的不是待办，不数；
-// 「全部」放最后，页面打开就落在冻结中上。
-const queueStatuses = ['FROZEN'] as const;
+const queueStatuses = [frozen] as const;
 const settledStatuses = ['UNFROZEN'] as const;
-// 冻的对象是读口声明的 target 筛选维，词表就这两个：按商品格冻，或按整箱冻。
+const knownStatuses = [allQueues, ...queueStatuses, ...settledStatuses];
 const targetWords = ['GOODS', 'CARTON'] as const;
 
-const newestFirst = '-frozenAt';
-const oldestFirst = 'frozenAt';
+const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{content}</span>;
 
-/** 冻结：冻结中的商品格或整箱不能被出库分配。点冻结号打开冻结单。 */
+/** 读口按冻结时刻排。冻结中先冻上的在上面；看全部或已解冻的，最新冻结的在上面。人点过表头就照他的。 */
+function frozenSort(stored: string | null, inQueue: boolean): WorkbenchSort {
+  if (stored === frozenKey) return { key: frozenKey, dir: 1 };
+  if (stored === `-${frozenKey}`) return { key: frozenKey, dir: -1 };
+  return { key: frozenKey, dir: inQueue ? 1 : -1 };
+}
+
+/**
+ * 冻结与解冻。打开落在冻结中。冻结中的数量在标题行上。
+ * 点一行在右边开这张冻结单，冻结号仍进整页。行上冻结中的只留解冻。
+ */
 export function FreezeList({ filters }: { filters: QueueFilters }) {
   const drawer = useActionDrawer(internalOpsActionSpecs);
+  const [openKey, setOpenKey] = useTabViewState<string | null>(`${moduleId}.freeze.open`, null);
   const [refreshes, setRefreshes] = useState(0);
+  const status = (knownStatuses as readonly string[]).includes(filters.status) ? filters.status : frozen;
   const settled = useSettledKeyword(filters.keyword);
   const baseFilters: Record<string, string[]> = {};
   if (filters.owner) baseFilters.ownerAccount = [filters.owner];
@@ -44,181 +61,205 @@ export function FreezeList({ filters }: { filters: QueueFilters }) {
   // 筛选态里的「种类」在这一页就是冻结的对象，读口的筛选维叫 target。
   if (filters.kind) baseFilters.target = [filters.kind];
   const base: CatalogueConditions = { q: settled, filters: baseFilters };
-  // 选了冻结中这一队，按冻结先后排，冻得最久的在最上面；看全部或已解冻的，最新的在上面。人改过排序就照他的。
-  const inQueue = (queueStatuses as readonly string[]).includes(filters.status);
-  const effectiveSort = filters.sort ?? (inQueue ? oldestFirst : newestFirst);
+  const sort = frozenSort(filters.sort, status === frozen);
   const conditions: CatalogueConditions = {
     ...base,
-    sort: effectiveSort,
-    filters: filters.status === 'ALL' ? baseFilters : { ...baseFilters, status: [filters.status] },
+    sort: sort.dir === 1 ? frozenKey : `-${frozenKey}`,
+    filters: status === allQueues ? baseFilters : { ...baseFilters, status: [status] },
   };
-  const { answer, pagination, retry } = useCatalogueCursor(conditions, listFreezes);
-  const rows = answer?.kind === 'outcome' ? answer.body.freezes : [];
+  const { answer, previous, pagination, retry } = useCatalogueCursor(conditions, listFreezes);
+  const held = heldCataloguePage(answer, previous, (body) => body.freezes.length > 0);
+  const rows = answer?.kind === 'outcome' ? answer.body.freezes : (held?.body.freezes ?? noRows);
   const counts = useStatusCounts(listFreezes, base, 'status', queueStatuses, refreshes);
   const refresh = () => {
     retry();
     setRefreshes((count) => count + 1);
   };
+  const ownerNames = useMemo(
+    () => new Map(drawer.lookups.owners.map((account) => [account.accountId, account.customerPartyName ?? ''])),
+    [drawer.lookups.owners],
+  );
+  const warehouseNames = useMemo(
+    () => new Map(drawer.lookups.warehouses.map((warehouse) => [warehouse.warehouseCode, warehouse.name ?? ''])),
+    [drawer.lookups.warehouses],
+  );
+  const named = (names: ReadonlyMap<string, string>, code: string) => {
+    const name = nameOf(names, code);
+    return name ? <WmsTwoLine primary={name} secondary={code} code title={`${name} · ${code}`} /> : <span className="whitespace-nowrap font-mono">{code}</span>;
+  };
   const now = new Date();
 
-  const columns: ListColumn<StockFreezeRecord>[] = [
+  const columns: WorkbenchColumn<StockFreezeRecord>[] = [
     {
-      id: 'id',
+      key: 'id',
       header: '冻结号',
-      className: 'whitespace-nowrap',
+      width: fitColumnWidth,
       render: (row) => <DocumentLink moduleId={moduleId} parts={[freezeKind, row.freezeId]} />,
     },
-    { id: 'status', header: '状态', render: (row) => <WmsBadge code={row.status} /> },
-    { id: 'owner', header: '货主', className: mono, render: (row) => row.ownerAccount },
-    { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
+    { key: 'status', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.status} /> },
+    { key: 'owner', header: '货主', width: fitColumnWidth, minListWidth: 900, render: (row) => named(ownerNames, row.ownerAccount) },
+    { key: 'warehouse', header: '仓', width: fitColumnWidth, minListWidth: 1080, render: (row) => named(warehouseNames, row.warehouseCode) },
     {
-      id: 'subject',
+      key: 'subject',
       header: '冻的是什么',
-      className: mono,
-      // 按商品格冻的写库位与商品，按整箱冻的写箱号：库存页没有按库位或商品的地址，这里只写、不做链接。
-      render: (row) => (freezeIsCarton(row) ? `整箱 ${row.cartonNumber || '—'}` : `${row.locationCode || '—'} · ${row.goodsCode || '—'}`),
+      render: (row) =>
+        freezeIsCarton(row) ? (
+          <WmsTwoLine fill primary="整箱" secondary={row.cartonNumber || '—'} code title={row.cartonNumber || ''} />
+        ) : (
+          <WmsTwoLine
+            fill
+            primary={<span className="font-mono">{row.locationCode || '—'}</span>}
+            secondary={row.goodsCode || '—'}
+            code
+            title={`${row.locationCode || ''}\n${row.goodsCode || ''}`}
+          />
+        ),
     },
-    { id: 'qty', header: '数量', align: 'right', className: mono, render: (row) => freezeQuantityLabel(row) },
-    { id: 'reason', header: '原因', className: 'max-w-[18rem] truncate', render: (row) => row.reason },
-    { id: 'waiting', header: '已冻', align: 'right', className: 'whitespace-nowrap', render: (row) => (row.status === 'FROZEN' ? elapsedLabel(freezeWaitingSince(row), now) || '—' : '—') },
-    { id: 'next', header: '下一步', className: 'whitespace-nowrap', render: (row) => <NextStepCell row={row} drawer={drawer} /> },
+    {
+      key: 'qty',
+      header: nowrap('数量'),
+      right: true,
+      width: fitColumnWidth,
+      render: (row) => <span className="whitespace-nowrap tabular-nums">{freezeQuantityLabel(row)}</span>,
+    },
+    {
+      key: 'reason',
+      header: '原因',
+      minListWidth: 1240,
+      render: (row) => (row.reason ? <WmsTwoLine fill primary={row.reason} title={row.reason} /> : <span className="text-idpxyz-textMuted">没写原因</span>),
+    },
+    {
+      key: 'waiting',
+      header: nowrap('已冻'),
+      right: true,
+      width: fitColumnWidth,
+      render: (row) => <span className="whitespace-nowrap tabular-nums">{elapsedLabel(freezeWaitingSince(row), now) || '—'}</span>,
+    },
+    {
+      key: 'frozen',
+      header: nowrap('冻结'),
+      right: true,
+      width: fitColumnWidth,
+      sortKey: frozenKey,
+      render: (row) => (
+        <span className="whitespace-nowrap tabular-nums" title={formatInstant(row.frozenAt)}>
+          {shortInstant(row.frozenAt, now) || '—'}
+        </span>
+      ),
+    },
+    { key: 'next', header: nowrap('下一步'), width: fitColumnWidth, render: (row) => <FreezeStep row={row} drawer={drawer} /> },
   ];
 
-  const inspectorOf = (row: StockFreezeRecord): InspectorContent => {
-    const carton = freezeIsCarton(row);
-    const actions: InspectorAction[] = [{ label: '打开冻结单', onRun: () => openDocument(moduleId, [freezeKind, row.freezeId]) }];
-    if (freezeNextStep(row.status) !== null && drawer.has('stock-unfreeze')) {
-      actions.push({ label: '解冻', onRun: () => drawer.open('stock-unfreeze', { freezeId: row.freezeId }) });
-    }
-    const audit: InspectorField[] = [{ label: '冻结', value: `${row.operator} · ${formatInstant(row.frozenAt)}`, mono: true }];
-    if (row.status === 'UNFROZEN') {
-      audit.push({
-        label: '解冻',
-        value: `${row.unfreezeOperator || '—'}${row.unfrozenAt ? ` · ${formatInstant(row.unfrozenAt)}` : ''}${row.unfreezeNote ? ` · ${row.unfreezeNote}` : ''}`,
-        mono: true,
-      });
-    }
-    return {
-      title: row.freezeId,
-      subtitle: row.reason,
-      sections: [
-        {
-          kind: 'summary',
-          fields: [
-            { label: '货主 / 仓', value: `${row.ownerAccount} · ${row.warehouseCode}`, mono: true },
-            { label: '对象', value: labelOf(row.target) },
-            ...(carton
-              ? [{ label: '箱号', value: row.cartonNumber || '—', mono: true }]
-              : [
-                  { label: '库位', value: row.locationCode || '—', mono: true },
-                  { label: '商品', value: row.goodsCode || '—', mono: true },
-                ]),
-            { label: '数量', value: freezeQuantityLabel(row), mono: true },
-          ],
-        },
-        { kind: 'status', items: [{ label: '状态', word: labelOf(row.status) }] },
-        { kind: 'actions', actions },
-        { kind: 'audit', fields: audit },
-      ],
-    };
+  const chooseStatus = (next: string) => filters.setStatus((knownStatuses as readonly string[]).includes(next) ? next : frozen);
+  const queueStats: WmsQueueStat[] = queueStatuses.map((code) => ({
+    id: code,
+    label: labelOf(code),
+    count: counts[code] ?? null,
+    active: status === code,
+    attention: true,
+    onClick: () => chooseStatus(status === code ? allQueues : code),
+  }));
+  const narrowed =
+    settled.trim() !== '' ||
+    filters.owner !== '' ||
+    filters.warehouse !== '' ||
+    filters.kind !== '' ||
+    (status !== frozen && status !== allQueues) ||
+    pastFirstPage(pagination);
+  const clearFilters = () => {
+    filters.setKeyword('');
+    filters.setOwner('');
+    filters.setWarehouse('');
+    filters.setKind('');
+    filters.setStatus(frozen);
+    filters.setSort(null);
   };
+  const viewState: TemplateViewState = held
+    ? { kind: 'ready' }
+    : catalogueViewState(answer, rows.length, refresh, {
+        module: info,
+        endpoint: 'GET /warehouse-fulfillment-freezes',
+        emptyTitle: status === frozen ? '当前没有冻结中的库存' : '还没有冻结记录',
+        emptyDescription: '可在此冻结，或在实时库存对单个格子点冻结。',
+        narrowed,
+      });
+  const shownPagination = pagination ?? held?.pagination;
+  const canFreeze = drawer.has('stock-freeze');
+  const canRestore = drawer.has('condition-restore');
 
   return (
     <>
-      <ListPageTemplate<StockFreezeRecord>
-        moduleId={moduleId}
+      <WorkbenchPageTemplate<StockFreezeRecord>
         title="冻结与解冻"
-        description="冻结中的商品格或整箱不能被出库分配。点状态看那一队，数量是当前筛选下还有几份，冻得最久的排在前面。点冻结号打开冻结单，冻结中的可以整份解冻。"
-        headerActions={
-          <div className="flex flex-wrap gap-2">
-            {drawer.has('condition-restore') ? (
-              <Button type="button" variant="outline" onClick={() => drawer.open('condition-restore')}>
-                次品转良品
-              </Button>
-            ) : null}
-            {drawer.has('stock-freeze') ? (
-              <Button type="button" className={primaryActionClass} onClick={() => drawer.open('stock-freeze')}>
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                冻结库存
-              </Button>
-            ) : null}
-          </div>
+        viewStateKey={`${moduleId}.freeze`}
+        subtitle="点一行在右边看这张冻结单。冻着的不能被出库分配"
+        titleAside={<WmsQueueStats items={queueStats} />}
+        onRefresh={refresh}
+        refreshing={answer === null}
+        primaryAction={
+          canFreeze || canRestore ? (
+            <>
+              {canRestore ? (
+                <Button type="button" variant="outline" onClick={() => drawer.open('condition-restore')}>
+                  次品转良品
+                </Button>
+              ) : null}
+              {canFreeze ? (
+                <Button type="button" className={primaryActionClass} onClick={() => drawer.open('stock-freeze')}>
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  冻结库存
+                </Button>
+              ) : null}
+            </>
+          ) : undefined
         }
         search={{ value: filters.keyword, onChange: filters.setKeyword, placeholder: '搜冻结号、货主、仓、库位、商品、箱号或原因' }}
-        sort={{
-          value: effectiveSort,
-          onChange: filters.setSort,
-          options: [
-            { value: newestFirst, label: '最新冻结的在前' },
-            { value: oldestFirst, label: '冻得最久的在前' },
-          ],
-        }}
-        filters={
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <WmsStatusTabs
-              value={filters.status}
-              onChange={filters.setStatus}
-              tabs={[
-                ...queueStatuses.map((code) => ({ value: code, label: labelOf(code), count: counts[code] })),
-                ...settledStatuses.map((code) => ({ value: code, label: labelOf(code) })),
-                { value: 'ALL', label: '全部' },
-              ]}
-            />
+        extraFilters={
+          <>
             <WmsFilterSelect
-              label="货主"
-              value={filters.owner}
-              onChange={filters.setOwner}
-              options={drawer.lookups.owners.map((account) => ({
-                value: account.accountId,
-                label: account.customerPartyName ? `${account.accountId} · ${account.customerPartyName}` : account.accountId,
-              }))}
+              label="状态"
+              value={status === allQueues ? '' : status}
+              onChange={(next) => chooseStatus(next === '' ? allQueues : next)}
+              options={[...queueStatuses, ...settledStatuses].map((code) => ({ value: code, label: labelOf(code) }))}
             />
-            <WmsFilterSelect
-              label="仓库"
-              value={filters.warehouse}
-              onChange={filters.setWarehouse}
-              options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: `${w.warehouseCode} · ${w.name}` }))}
-            />
+            <OwnerWarehouseFilters drawer={drawer} owner={filters.owner} warehouse={filters.warehouse} onOwner={filters.setOwner} onWarehouse={filters.setWarehouse} />
             <WmsFilterSelect label="对象" value={filters.kind} onChange={filters.setKind} options={targetWords.map((word) => ({ value: word, label: labelOf(word) }))} />
-          </div>
+            {narrowed ? <ClearFilters onClear={clearFilters} /> : null}
+          </>
         }
         columns={columns}
         rows={rows}
         rowKey={(row) => row.freezeId}
-        inspector={inspectorOf}
-        onRowOpen={(row) => openDocument(moduleId, [freezeKind, row.freezeId])}
-        pagination={pagination}
-        emptyRowsNote="当前条件下没有冻结记录"
-        viewState={catalogueViewState(answer, rows.length, refresh, {
-          module: info,
-          endpoint: 'GET /warehouse-fulfillment-freezes',
-          emptyTitle: filters.status === 'FROZEN' ? '当前没有冻结中的库存' : '还没有冻结记录',
-          emptyDescription: '可在此冻结，或在实时库存对单个格子点冻结。',
-          narrowed:
-            settled.trim() !== '' ||
-            filters.owner !== '' ||
-            filters.warehouse !== '' ||
-            filters.kind !== '' ||
-            (filters.status !== 'FROZEN' && filters.status !== 'ALL'),
-        })}
+        selectedKey={openKey}
+        onSelect={setOpenKey}
+        rowAlign="baseline"
+        sort={sort}
+        onSort={(key) => {
+          const next = toggleWorkbenchSort(sort, key);
+          filters.setSort(next.dir === 1 ? frozenKey : `-${frozenKey}`);
+        }}
+        noMatchText="当前筛选下没有冻结记录"
+        onClearFilters={clearFilters}
+        renderDetail={(key) => <FreezeDocument freezeId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }} />}
+        viewState={viewState}
+        listFooter={shownPagination && viewState.kind === 'ready' ? <CursorPagerBar pagination={shownPagination} /> : undefined}
       />
       <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
     </>
   );
 }
 
-/** 每行最右的那一格：冻结中的一步是解冻。能就地做的是按钮，没有授予的只说在等什么，已解冻的没有下一步。 */
-function NextStepCell({ row, drawer }: { row: StockFreezeRecord; drawer: ActionDrawerControl }) {
+function FreezeStep({ row, drawer }: { row: StockFreezeRecord; drawer: ActionDrawerControl }) {
   const next = freezeNextStep(row.status);
   if (next === null) return <span className="text-idpxyz-textMuted">—</span>;
-  if (!drawer.has('stock-unfreeze')) return <span className="text-idpxyz-textMuted">等解冻</span>;
+  if (!drawer.has('stock-unfreeze')) return <span className="whitespace-nowrap text-idpxyz-textMuted">等解冻</span>;
   return (
     <Button
       type="button"
       size="sm"
       variant="outline"
+      className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
       onClick={(event) => {
-        // 行上的单击是预览：这一下只开表单，不顺带把行选进右栏。
         event.stopPropagation();
         drawer.open('stock-unfreeze', { freezeId: row.freezeId });
       }}

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
 import { formatInstant } from '../catalogue-view';
@@ -8,9 +9,9 @@ import { findFreeze } from './api';
 import { lotLabel } from './count-flow';
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
 import { freezeIsCarton, freezeNextStep, freezeQuantityLabel, freezeTrack } from './freeze-flow';
-import { processingModule } from './processing-address';
+import { freezeKind, processingModule } from './processing-address';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper } from './wms-ui';
 
@@ -19,12 +20,34 @@ const moduleId = processingModule;
 /**
  * 冻结单页：冻的是什么（哪个库位上的哪一格货，或哪一整箱）、冻了多少、为什么冻、谁冻的、解冻了没有。冻着的数量不能被出库分配，
  * 库内作业也取不走它；解冻是整份解冻，在头区做。库存页没有按库位或商品的地址，所以库位与箱号只写、不做链接。
+ *
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一行留着上一张，新的读到再换。栏里做完一个动作告诉列表重取，
+ * 列表重取会让 `revision` 变，这张单跟着重读。
  */
-export function FreezeDocument({ freezeId }: { freezeId: string }) {
+export function FreezeDocument({
+  freezeId,
+  panel,
+}: {
+  freezeId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(internalOpsActionSpecs);
   const back = useReturnToList(moduleId);
   const complete = freezeId !== '';
-  const { answer, loading, reload } = useKeyedLoad(complete ? freezeId : null, findFreeze);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(complete ? freezeId : null, findFreeze, { holdPrevious: panel !== undefined });
+  const shownId = useRef(freezeId);
+  useEffect(() => {
+    if (shownId.current === freezeId) return;
+    shownId.current = freezeId;
+    drawer.close();
+  }, [freezeId, drawer]);
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
   const found = answer?.kind === 'outcome' ? answer.body : undefined;
   const record = found?.record;
   const failure =
@@ -57,10 +80,13 @@ export function FreezeDocument({ freezeId }: { freezeId: string }) {
         title={record?.freezeId ?? freezeId}
         subtitle={record ? [`货主 ${record.ownerAccount}`, `仓 ${record.warehouseCode}`, `冻结于 ${formatInstant(record.frozenAt)}`].join(' · ') : undefined}
         badge={record ? <WmsBadge code={record.status} /> : undefined}
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [freezeKind, record?.freezeId ?? freezeId]) } : undefined}
         stepper={
           track ? (
             <WmsStepper
@@ -154,7 +180,7 @@ export function FreezeDocument({ freezeId }: { freezeId: string }) {
           </>
         ) : null}
       </WmsDocumentPage>
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={panel ? panel.onChanged : reload} />
     </>
   );
 }

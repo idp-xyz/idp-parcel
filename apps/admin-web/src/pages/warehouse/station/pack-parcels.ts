@@ -178,7 +178,11 @@ export type PackJudgement =
     };
 
 /** 能不能提交：至少一个包裹，每个都填好，每种货装进包裹的件数都等于已拣的件数。 */
-export function judgePack(order: PackOrder, parcels: readonly ParcelDraft[]): PackJudgement {
+export function judgePack(
+  order: PackOrder,
+  parcels: readonly ParcelDraft[],
+  serials: Readonly<Record<string, readonly string[]>> = {},
+): PackJudgement {
   if (parcels.length === 0) return { ok: false, reason: '还没有包裹：点「再加一个包裹」。' };
   for (const [index, parcel] of parcels.entries()) {
     const problem = judgeParcel(order, parcel, index + 1);
@@ -192,6 +196,11 @@ export function judgePack(order: PackOrder, parcels: readonly ParcelDraft[]): Pa
       return { ok: false, reason: `${line.goodsCode} 装进包裹的比拣出来的多 ${line.assigned - line.expected} 件：把某个包裹的件数改小。` };
     }
   }
+  for (const goods of order.goods) {
+    if (goods.trackSerial !== true) continue;
+    const have = serials[goodsKey(goods)]?.length ?? 0;
+    if (have !== goods.quantity) return { ok: false, reason: `${goods.goodsCode} 还要扫序列号。` };
+  }
   return { ok: true };
 }
 
@@ -199,22 +208,34 @@ export function judgePack(order: PackOrder, parcels: readonly ParcelDraft[]): Pa
  * 打包要填的格：出库请求号与每个包裹一项（序号按次序从 1 数起）。数量按文本交，由旧作业台那条定义里的整数格去校验与转成数，
  * 事实号与仓由 work-fact-submit 按定义补，所以装出来的报文与旧作业台表单逐键相同（pack-parcels.test.ts 把两边钉在一起）。
  */
-export function packFactValues(order: PackOrder, parcels: readonly ParcelDraft[]): GuidedFormValues {
+export function packFactValues(
+  order: PackOrder,
+  parcels: readonly ParcelDraft[],
+  serials: Readonly<Record<string, readonly string[]>> = {},
+): GuidedFormValues {
+  const left = new Map(Object.entries(serials).map(([key, list]) => [key, [...list]]));
   return {
     requestId: order.requestId,
-    parcels: parcels.map((parcel, index) => ({
-      sequence: String(index + 1),
-      packagingMaterial: parcel.packaging.trim(),
-      weight: parcel.weight.trim(),
-      weightUnit: parcel.weightUnit.trim(),
-      length: parcel.length.trim(),
-      width: parcel.width.trim(),
-      height: parcel.height.trim(),
-      dimensionUnit: parcel.dimensionUnit.trim(),
-      goodsCode: parcel.goodsCode,
-      unit: parcel.unit,
-      quantity: parcel.quantity.trim(),
-    })),
+    parcels: parcels.map((parcel, index) => {
+      const key = goodsKey(parcel);
+      const count = Number(parcel.quantity.trim());
+      const taken = (left.get(key) ?? []).slice(0, count);
+      left.set(key, (left.get(key) ?? []).slice(count));
+      return {
+        sequence: String(index + 1),
+        packagingMaterial: parcel.packaging.trim(),
+        weight: parcel.weight.trim(),
+        weightUnit: parcel.weightUnit.trim(),
+        length: parcel.length.trim(),
+        width: parcel.width.trim(),
+        height: parcel.height.trim(),
+        dimensionUnit: parcel.dimensionUnit.trim(),
+        goodsCode: parcel.goodsCode,
+        unit: parcel.unit,
+        quantity: parcel.quantity.trim(),
+        ...(taken.length > 0 ? { serials: taken } : {}),
+      };
+    }),
   };
 }
 

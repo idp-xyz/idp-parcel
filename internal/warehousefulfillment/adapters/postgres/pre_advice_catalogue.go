@@ -27,15 +27,26 @@ func NewPreAdviceCatalogue(db *bentopg.DB) (*PreAdviceCatalogue, error) {
 var _ ports.PreAdviceRead = (*PreAdviceCatalogue)(nil)
 
 const preAdviceListed = `WITH listed AS (
-        SELECT pre_advice_id, warehouse_code
-          FROM warehouse_fulfillment.inbound_pre_advice
-         WHERE tenant_id = $1 AND owner_account_id = $2
+        SELECT advice.pre_advice_id, advice.warehouse_code, advice.status, notice.expected_at
+          FROM warehouse_fulfillment.inbound_pre_advice AS advice
+          JOIN warehouse_fulfillment.inbound_pre_advice_notice AS notice
+            ON notice.tenant_id = advice.tenant_id
+           AND notice.pre_advice_id = advice.pre_advice_id
+           AND notice.version = (
+                SELECT MAX(later.version)
+                  FROM warehouse_fulfillment.inbound_pre_advice_notice AS later
+                 WHERE later.tenant_id = advice.tenant_id
+                   AND later.pre_advice_id = advice.pre_advice_id
+           )
+         WHERE advice.tenant_id = $1 AND advice.owner_account_id = $2
      )`
 
 var preAdviceListBinding = ports.PreAdvicePages.MustBind(cataloguepage.Columns{
-	Sorts:    map[string]string{"preAdviceId": "pre_advice_id"},
-	Identity: []string{"pre_advice_id"},
-	Keyword:  []string{"pre_advice_id", "warehouse_code"},
+	Sorts:       map[string]string{"preAdviceId": "pre_advice_id"},
+	Identity:    []string{"pre_advice_id"},
+	Keyword:     []string{"pre_advice_id", "warehouse_code"},
+	Filters:     map[string]string{"status": "status", "warehouseCode": "warehouse_code", "expectedFrom": "expected_at", "expectedUntil": "expected_at"},
+	Comparisons: map[string]string{"expectedFrom": ">=", "expectedUntil": "<="},
 })
 
 func (catalogue *PreAdviceCatalogue) ListPreAdvices(
@@ -92,7 +103,7 @@ func (catalogue *PreAdviceCatalogue) ListPreAdvices(
 	if err != nil {
 		return fail(err)
 	}
-	return page, nil
+	return withListedFacets(ctx, querier, preAdviceListBinding, preAdviceListed, query, []any{tenant.String(), owner.String()}, page)
 }
 
 func (catalogue *PreAdviceCatalogue) PreAdviceForOwner(
@@ -133,6 +144,34 @@ func (catalogue *PreAdviceCatalogue) PreAdviceByDocumentNumber(
 	}
 	advice, found, err := loadPreAdviceWhere(ctx, querier,
 		`tenant_id = $1 AND document_number = $2`, tenant.String(), number.String())
+	if err != nil {
+		return domain.PreAdvice{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	return advice, found, nil
+}
+
+// PreAdviceByCode 先按单据号，对不上再按预报标识。两种都命中不同的行时留单据号那一张。
+func (catalogue *PreAdviceCatalogue) PreAdviceByCode(
+	ctx context.Context,
+	tenant domain.TenantID,
+	code string,
+) (domain.PreAdvice, bool, error) {
+	const operation = "load inbound pre-advice by scan code"
+	if tenant.String() == "" || code == "" {
+		return domain.PreAdvice{}, false, fmt.Errorf("%s: tenant and code are required", operation)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.PreAdvice{}, false, fmt.Errorf("%s: %w", operation, err)
+	}
+	advice, found, err := loadPreAdviceWhere(ctx, querier,
+		`tenant_id = $1 AND pre_advice_id = (
+		    SELECT pre_advice_id
+		      FROM warehouse_fulfillment.inbound_pre_advice
+		     WHERE tenant_id = $1 AND (document_number = $2 OR pre_advice_id = $2)
+		     ORDER BY CASE WHEN document_number = $2 THEN 0 ELSE 1 END, pre_advice_id
+		     LIMIT 1
+		 )`, tenant.String(), code)
 	if err != nil {
 		return domain.PreAdvice{}, false, fmt.Errorf("%s: %w", operation, err)
 	}

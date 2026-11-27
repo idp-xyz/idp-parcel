@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Plus } from 'lucide-react';
-import { Button } from '@idpxyz/ui-primitives';
+import { Button, DateTimePicker } from '@idpxyz/ui-primitives';
 import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
 import type { TemplateViewState } from '../../templates/state-slot';
 import { useTabViewState } from '../../templates/workspace-view-state';
@@ -18,10 +18,13 @@ import { listOwnerPreAdvices, type PreAdviceRecord } from './api';
 import { DocumentLink } from './document-page';
 import { fitColumnWidth, nameOf, shortInstant } from './list-cells';
 import { PreAdviceDocument } from './PreAdviceDocument';
+import { adviceActionPrefill } from './advice-action';
+import { preAdviceProgress } from './pre-advice-progress';
 import { useDocumentParts } from './use-document';
 import { receiveStationHash } from './station/stations';
+import { useStatusCounts } from './use-status-counts';
 import { elapsedLabel } from './waiting';
-import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsProgress, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
 const moduleId = 'warehouse-pre-advices';
 const info = moduleInfoById[moduleId];
@@ -42,7 +45,10 @@ function loadPreAdvices(conditions: CatalogueConditions, after: string | null) {
       body: { outcome: 'PRE_ADVICES_LISTED', ownerAccount: '', preAdvices: [], page: { size: 0, next: null, total: null } },
     });
   }
-  return listOwnerPreAdvices(owner, conditions.q ?? '', after);
+  const status = conditions.filters?.status?.[0] ?? '';
+  const expectedFrom = conditions.filters?.expectedFrom?.[0] ?? '';
+  const expectedUntil = conditions.filters?.expectedUntil?.[0] ?? '';
+  return listOwnerPreAdvices(owner, conditions.q ?? '', after, conditions.pageSize, status, '', expectedFrom, expectedUntil);
 }
 
 /** 还没开始收、预计到达已经过去的预报算迟到；收货中的已经到了。 */
@@ -60,18 +66,25 @@ function PreAdviceList() {
   const [picked, setPicked] = useTabViewState('warehouse-pre-advices.owner', '');
   const [keyword, setKeyword] = useTabViewState('warehouse-pre-advices.keyword', '');
   const [status, setStatus] = useTabViewState('warehouse-pre-advices.status', allQueues);
+  const [expectedFrom, setExpectedFrom] = useTabViewState('warehouse-pre-advices.expectedFrom', '');
+  const [expectedUntil, setExpectedUntil] = useTabViewState('warehouse-pre-advices.expectedUntil', '');
   const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-pre-advices.open', null);
   const [refreshes, setRefreshes] = useState(0);
   const settled = useSettledKeyword(keyword);
   // 预报按货主归属，读口必须带货主：人没挑过、或挑的已经不在名册里，就取名册里的第一家。
   const owner = owners.some((account) => account.accountId === picked) ? picked : (owners[0]?.accountId ?? '');
-  const { answer, previous, pagination, retry } = useCatalogueCursor({ selectors: { ownerAccount: owner }, q: settled }, loadPreAdvices);
-  const held = heldCataloguePage(answer, previous, (body) => body.preAdvices.length > 0);
-  const loaded = answer?.kind === 'outcome' ? answer.body.preAdvices : (held?.body.preAdvices ?? []);
-  // 读口不按状态筛，状态是在答回来的这一页里筛的。整份只有一页、并且这一问真是某个货主的，标题上才写数。
-  const wholeList = owner !== '' && answer?.kind === 'outcome' && answer.body.page.next === null && (pagination?.page ?? 1) === 1;
   const queue = statuses.includes(status as (typeof statuses)[number]) ? status : allQueues;
-  const rows = queue === allQueues ? loaded : loaded.filter((row) => row.status === queue);
+  const arrivalWindow: Record<string, readonly string[]> = {};
+  if (expectedFrom !== '') arrivalWindow.expectedFrom = [expectedFrom];
+  if (expectedUntil !== '') arrivalWindow.expectedUntil = [expectedUntil];
+  const base: CatalogueConditions = { selectors: { ownerAccount: owner }, q: settled, filters: arrivalWindow };
+  const conditions: CatalogueConditions =
+    queue === allQueues ? base : { ...base, filters: { ...arrivalWindow, status: [queue] } };
+  const { answer, previous, pagination, retry } = useCatalogueCursor(conditions, loadPreAdvices);
+  const held = heldCataloguePage(answer, previous, (body) => body.preAdvices.length > 0);
+  const rows = answer?.kind === 'outcome' ? answer.body.preAdvices : (held?.body.preAdvices ?? []);
+  // 标题上的数量是这一货主在当前检索下的整份，不是这一页剩下的几张。读口不答分面，每个状态问一次总数。
+  const counts = useStatusCounts(loadPreAdvices, base, 'status', workingStatuses, refreshes);
   const now = new Date();
   const warehouseNames = useMemo(
     () => new Map(drawer.lookups.warehouses.map((warehouse) => [warehouse.warehouseCode, warehouse.name ?? ''])),
@@ -105,6 +118,21 @@ function PreAdviceList() {
       ),
     },
     { key: 'status', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.status} /> },
+    {
+      key: 'progress',
+      header: nowrap('已收 / 预报'),
+      width: fitColumnWidth,
+      render: (row) => {
+        const progress = preAdviceProgress(row);
+        const unit = progress.byCarton ? '箱' : '';
+        const gap = progress.outstanding > 0 ? `，还差 ${progress.outstanding}${unit}` : progress.advised > 0 ? '，已收齐' : '';
+        return (
+          <span title={`已收 ${progress.received}${unit}，预报 ${progress.advised}${unit}${gap}`}>
+            <WmsProgress done={progress.received} total={progress.advised} />
+          </span>
+        );
+      },
+    },
     { key: 'warehouse', header: '仓', width: fitColumnWidth, minListWidth: 880, render: (row) => namedWarehouse(row.warehouseCode) },
     {
       key: 'mode',
@@ -143,18 +171,34 @@ function PreAdviceList() {
       width: fitColumnWidth,
       render: (row) =>
         row.status === 'ADVISED' || row.status === 'RECEIVING' ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
-            onClick={(event) => {
-              event.stopPropagation();
-              enterStation(receiveStationHash(row.preAdviceId));
-            }}
-          >
-            {row.status === 'ADVISED' ? '去收货' : '接着收货'}
-          </Button>
+          <span className="inline-flex items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
+              onClick={(event) => {
+                event.stopPropagation();
+                enterStation(receiveStationHash(row.preAdviceId));
+              }}
+            >
+              {row.status === 'ADVISED' ? '去收货' : '接着收货'}
+            </Button>
+            {row.status === 'RECEIVING' && drawer.has('pre-advice-close') ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="whitespace-nowrap"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  drawer.open('pre-advice-close', adviceActionPrefill(row, true));
+                }}
+              >
+                完结
+              </Button>
+            ) : null}
+          </span>
         ) : (
           <span className="text-idpxyz-textMuted">—</span>
         ),
@@ -165,15 +209,17 @@ function PreAdviceList() {
   const queueStats: WmsQueueStat[] = workingStatuses.map((code) => ({
     id: code,
     label: labelOf(code),
-    count: wholeList ? loaded.filter((row) => row.status === code).length : null,
+    count: owner === '' ? null : (counts[code] ?? null),
     active: queue === code,
-    attention: code === 'ADVISED' && wholeList && loaded.some((row) => lateOf(row, now) !== ''),
+    attention: code === 'ADVISED' && rows.some((row) => lateOf(row, now) !== ''),
     onClick: () => chooseQueue(queue === code ? allQueues : code),
   }));
-  const narrowed = settled.trim() !== '' || queue !== allQueues;
+  const narrowed = settled.trim() !== '' || queue !== allQueues || expectedFrom !== '' || expectedUntil !== '';
   const clearFilters = () => {
     setKeyword('');
     setStatus(allQueues);
+    setExpectedFrom('');
+    setExpectedUntil('');
   };
   const viewState: TemplateViewState =
     owner === ''
@@ -186,7 +232,7 @@ function PreAdviceList() {
         : { kind: 'loading', shape: 'table' }
       : held
         ? { kind: 'ready' }
-        : catalogueViewState(answer, loaded.length, refresh, {
+        : catalogueViewState(answer, rows.length, refresh, {
             module: info,
             endpoint: 'GET /warehouse-fulfillment-inbound-pre-advices',
             emptyTitle: '这位货主还没有入库预报',
@@ -194,12 +240,7 @@ function PreAdviceList() {
             narrowed: narrowed || pastFirstPage(pagination),
           });
   const shownPagination = pagination ?? held?.pagination;
-  const noMatchText =
-    queue !== allQueues
-      ? wholeList
-        ? '这位货主名下没有这个状态的入库预报'
-        : '这一页里没有这个状态的入库预报。读口不按状态筛，换一页再看。'
-      : '当前检索下没有入库预报';
+  const noMatchText = queue !== allQueues ? '这位货主名下没有这个状态的入库预报' : '当前检索下没有入库预报';
 
   return (
     <>
@@ -242,6 +283,25 @@ function PreAdviceList() {
                 ))}
               </select>
             </label>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="whitespace-nowrap type-body text-idpxyz-textMuted">预计到达</span>
+              <DateTimePicker
+                size="sm"
+                className="w-auto min-w-[11rem]"
+                placeholder="起点"
+                messages={{ placeholder: '起点', timeLabel: '时刻' }}
+                value={expectedFrom === '' ? undefined : new Date(expectedFrom)}
+                onChange={(date) => setExpectedFrom(date ? date.toISOString() : '')}
+              />
+              <DateTimePicker
+                size="sm"
+                className="w-auto min-w-[11rem]"
+                placeholder="终点"
+                messages={{ placeholder: '终点', timeLabel: '时刻' }}
+                value={expectedUntil === '' ? undefined : new Date(expectedUntil)}
+                onChange={(date) => setExpectedUntil(date ? date.toISOString() : '')}
+              />
+            </span>
             {narrowed ? (
               <button
                 type="button"

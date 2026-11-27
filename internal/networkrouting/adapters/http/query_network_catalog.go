@@ -147,6 +147,9 @@ func NewQueryNetworkCatalogEndpoint(
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		ctx := request.Context()
 		tenant := query.Scope.Tenant()
 		limit := query.Limit

@@ -157,6 +157,9 @@ func NewQueryStockImportsEndpoint(intake CatalogueIntake, queries StockImportQue
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.List(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "stock import list did not form an answer")
@@ -171,6 +174,7 @@ func NewQueryStockImportsEndpoint(intake CatalogueIntake, queries StockImportQue
 			Outcome: "LISTED",
 			Imports: imports,
 			Page:    page.Page(query.Limit),
+			Facets:  page.Facets,
 		})
 	})
 }
@@ -223,9 +227,10 @@ type stockImportIssue struct {
 }
 
 type stockImportListResponse struct {
-	Outcome string             `json:"outcome"`
-	Imports []stockImportBody  `json:"imports"`
-	Page    cataloguepage.Page `json:"page"`
+	Outcome string               `json:"outcome"`
+	Imports []stockImportBody    `json:"imports"`
+	Page    cataloguepage.Page   `json:"page"`
+	Facets  cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 type stockImportBody struct {

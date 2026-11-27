@@ -137,6 +137,10 @@ func (catalogue *Catalogue) digest(query Query, selectors map[string][]string) s
 	field(query.Sort.String())
 	group(query.Filters)
 	field(query.Keyword)
+	// 没选页大小时不写这一格，摘要与加上这一参数之前的游标相同。
+	if query.PageSize > 0 {
+		field(strconv.Itoa(query.PageSize))
+	}
 	return base64.RawURLEncoding.EncodeToString(hash.Sum(nil)[:16])
 }
 

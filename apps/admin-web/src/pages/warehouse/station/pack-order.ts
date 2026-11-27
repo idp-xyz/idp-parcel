@@ -36,6 +36,8 @@ export interface PackGoods {
   unit: string;
   /** 已拣的件数合计：复核点的、打包装的都以它为准。 */
   quantity: number;
+  /** 当前修订写了跟踪序列号。没读到之前是 false，打包口仍会按修订再判。 */
+  trackSerial?: boolean;
 }
 
 /** 在工位上做的这一张单。 */
@@ -269,7 +271,12 @@ export interface QueueList {
   rows: readonly OutboundRequestRecord[];
   /** 读口答的总数；它不给时是 null，不去猜。 */
   total: number | null;
+  /** 翻到页数上限还有下一页：列表不是全部，张数仍用总数。 */
+  truncated?: boolean;
 }
+
+/** 一份队列最多翻几页。 */
+export const MAX_PACK_PAGES = 5;
 
 export interface PackQueue {
   checkable: QueueList;
@@ -285,16 +292,38 @@ function listOf(body: OutboundRequestListBody): QueueList {
   return { rows: Array.isArray(body.requests) ? body.requests : [], total: typeof total === 'number' ? total : null };
 }
 
+async function readStatus(read: OrderReader, warehouse: string, status: string, maxPages: number): Promise<PackQueueAnswer | QueueList> {
+  const rows: OutboundRequestRecord[] = [];
+  let after: string | null = null;
+  let pages = 0;
+  let total: number | null = null;
+  let next: string | null = null;
+  do {
+    const answer = await read({ filters: { warehouseCode: [warehouse], status: [status] }, sort: 'receivedAt', pageSize: 200 }, after);
+    if (answer.kind !== 'outcome') return { kind: 'failed', failure: answer };
+    const page = listOf(answer.body);
+    rows.push(...page.rows);
+    total = page.total;
+    next = answer.body.page?.next ?? null;
+    after = next;
+    pages += 1;
+  } while (next !== null && pages < maxPages);
+  return { rows, total, ...(next !== null ? { truncated: true } : {}) };
+}
+
 /**
- * 读两份队列：本仓已拣货的、已复核的，各取第一页，早受理的在前。读口声明的筛选维是 warehouseCode 与 status，排序维是 receivedAt。
- * 总数取读口答的 page.total，所以队列比一页长时屏上的张数仍是真的。
+ * 读两份队列：本仓已拣货的、已复核的，早受理的在前，按读口往下翻。
+ * 总数取读口答的 page.total。翻到页数上限还有下一页时，列表只含看到的，屏上另说只列了前多少张。
  */
-export async function loadPackQueue(input: { warehouse: string; read: OrderReader }): Promise<PackQueueAnswer> {
-  const ask = (status: string) => input.read({ filters: { warehouseCode: [input.warehouse], status: [status] }, sort: 'receivedAt' }, null);
-  const [checkable, packable] = await Promise.all([ask(checkableStatus), ask(packableStatus)]);
-  if (checkable.kind !== 'outcome') return { kind: 'failed', failure: checkable };
-  if (packable.kind !== 'outcome') return { kind: 'failed', failure: packable };
-  return { kind: 'queue', queue: { checkable: listOf(checkable.body), packable: listOf(packable.body) } };
+export async function loadPackQueue(input: { warehouse: string; read: OrderReader; maxPages?: number }): Promise<PackQueueAnswer> {
+  const maxPages = input.maxPages ?? MAX_PACK_PAGES;
+  const [checkable, packable] = await Promise.all([
+    readStatus(input.read, input.warehouse, checkableStatus, maxPages),
+    readStatus(input.read, input.warehouse, packableStatus, maxPages),
+  ]);
+  if ('kind' in checkable) return checkable;
+  if ('kind' in packable) return packable;
+  return { kind: 'queue', queue: { checkable, packable } };
 }
 
 /** 屏上说有几张：读口给了总数就用总数，没给用读到的行数；只读到一页而还有更多时，行数不冒充总数。 */
@@ -305,5 +334,6 @@ export function queueCount(list: QueueList): number {
 /** 等扫出库单号时那一行小字：「已拣完、等复核的出库单 4 张，已复核、等打包的 2 张」。 */
 export function waitingCounter(queue: PackQueue | null): string {
   if (queue === null) return '正在读本仓等复核与等打包的出库单…';
-  return `已拣完、等复核的出库单 ${queueCount(queue.checkable)} 张；已复核、等打包的 ${queueCount(queue.packable)} 张`;
+  const cut = (list: QueueList) => (list.truncated ? `，列表只列了前 ${list.rows.length} 张` : '');
+  return `已拣完、等复核的出库单 ${queueCount(queue.checkable)} 张${cut(queue.checkable)}；已复核、等打包的 ${queueCount(queue.packable)} 张${cut(queue.packable)}`;
 }

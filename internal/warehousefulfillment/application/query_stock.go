@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
@@ -26,19 +27,22 @@ const StockAgeNotConfigured = "NOT_CONFIGURED"
 
 // StockCellView 是一格的读数。货主面的库位是空的。
 type StockCellView struct {
-	Warehouse     string
-	Location      string
-	Goods         string
-	Unit          string
-	State         string
-	Alias         string
-	Batch         string
-	Expiry        string
-	InboundBatch  string
-	InboundAt     time.Time
-	Quantity      int64
-	Allocatable   bool
+	Warehouse    string
+	Location     string
+	Goods        string
+	Unit         string
+	State        string
+	Alias        string
+	Batch        string
+	Expiry       string
+	InboundBatch string
+	InboundAt    time.Time
+	Quantity     int64
+	Allocatable  bool
+	// ZoneUsage 是这一格所在库区的用途。货主面不带。可发是 0 时用它说明为什么不分配。
+	ZoneUsage     string
 	Frozen        int64
+	Locked        int64
 	Available     int64
 	AgeDays       int
 	AgeConfigured bool
@@ -83,6 +87,8 @@ type StockHoldView struct {
 	Reason    string
 	Operator  string
 	FrozenAt  time.Time
+	// Reference 是冻结号或盘点号。货主面不带。
+	Reference string
 }
 
 // StockMovementView 是一笔流水。货主面的行不带库位，也不带回来源引用。
@@ -111,21 +117,32 @@ type StockSnapshot struct {
 	Summary   []StockSummaryView
 	Holds     []StockHoldView
 	Movements []StockMovementView
-	// MovementPage 只在看流水时有：流水是翻页答的，其余几种看法答整份、没有这一格。
+	// MovementPage 只在看流水时有：流水按游标翻页。
 	MovementPage *cataloguepage.Page
+	// Book 只在库存格、整箱、汇总、占用按页取时有。页码从 1 起。
+	Book *ports.Book
 }
 
 // StockQuery 是一次查阅。仓可以不点名，点了就只看那一个仓。
+// Keyword 是运营面的检索词，空串即不收窄。先按它收窄再切页：库存格、整箱、汇总、占用认商品编码、商品名称、
+// 条码与平台商品码、贴标别名、库位与箱号；流水的收窄在读面，游标摘要里带着同一个词。
 type StockQuery struct {
 	Tenant    domain.TenantID
 	Owner     domain.OwnerAccountID
 	Warehouse domain.WarehouseCode
 	View      StockView
 	Customer  bool
-	Now       time.Time
-	// Page 与 Limit 只有看流水时用：Page 由 ports.StockMovementPages 解出，Limit 是页大小。
-	Page  cataloguepage.Query
-	Limit int
+	Keyword   string
+	// State 收窄库存格与汇总的库存状态。Held 收窄整箱（true 已冻结，false 可用）。Hold 收窄占用。
+	// 空串即这一维不收窄。先收窄再切页。
+	State string
+	Held  string
+	Hold  string
+	Now   time.Time
+	// Page 与 Limit 在看流水时是游标与页大小。Number 大于 0 时，Limit 是库存格、整箱、汇总、占用的页大小，Number 是页码。
+	Page   cataloguepage.Query
+	Limit  int
+	Number int
 }
 
 // QueryStockHandler 如实答读那一刻的账。一个仓都没登记时答空。
@@ -191,11 +208,15 @@ func (handler *QueryStockHandler) Query(ctx context.Context, query StockQuery) (
 
 // emptyStock 是没有账可答时的空答复。看流水时仍带 page 一格：一行也没有也是一页，调用方不必区分「没有流水」与「这一口不翻页」。
 func emptyStock(query StockQuery) StockSnapshot {
-	if query.View != StockViewMovements {
-		return StockSnapshot{}
+	if query.View == StockViewMovements {
+		page := cataloguepage.NewPage(query.Limit, "", 0)
+		return StockSnapshot{MovementPage: &page}
 	}
-	page := cataloguepage.NewPage(query.Limit, "", 0)
-	return StockSnapshot{MovementPage: &page}
+	if query.Number > 0 {
+		book := ports.Book{Page: query.Number, PageSize: query.Limit}
+		return StockSnapshot{Book: &book}
+	}
+	return StockSnapshot{}
 }
 
 func (handler *QueryStockHandler) cells(ctx context.Context, query StockQuery) (StockSnapshot, error) {
@@ -207,31 +228,29 @@ func (handler *QueryStockHandler) cells(ctx context.Context, query StockQuery) (
 	if err != nil {
 		return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
 	}
-	cells := make([]StockCellView, 0, len(rows))
-	for _, row := range rows {
-		allocatable, err := handler.allocatable(ctx, query.Tenant, row.Warehouse, row.Location, row.State)
+	locks, err := handler.reads.ListActiveLocks(ctx, query.Tenant, query.Owner, query.Warehouse)
+	if err != nil {
+		return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
+	}
+	rows, err = handler.narrowCells(ctx, query, rows)
+	if err != nil {
+		return StockSnapshot{}, err
+	}
+	if query.State != "" {
+		rows = cellsInState(rows, query.State)
+	}
+	// 汇总要先看完整的账。库存格按页取时，只给这一页逐格问可分配与库龄。收窄在切页之前，book 的总数才是收窄之后的。
+	if query.View == StockViewCells && query.Number > 0 {
+		window, book := ports.CutBook(rows, query.Number, query.Limit)
+		cells, err := handler.cellViews(ctx, query, window, freezes, locks)
 		if err != nil {
-			return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
+			return StockSnapshot{}, err
 		}
-		frozen := frozenOnCell(freezes, row)
-		available := int64(0)
-		if allocatable {
-			available = row.Quantity - frozen
-		}
-		ageDays, configured, err := handler.age(ctx, query.Tenant, row.Warehouse, row.InboundAt, query.Now)
-		if err != nil {
-			return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
-		}
-		cell := StockCellView{
-			Warehouse: row.Warehouse, Goods: row.Goods, Unit: row.Unit, State: row.State,
-			Alias: textOf(row.Alias), Batch: textOf(row.BatchNumber), Expiry: textOf(row.Expiry),
-			InboundBatch: row.InboundBatch, InboundAt: row.InboundAt, Quantity: row.Quantity,
-			Allocatable: allocatable, Frozen: frozen, Available: available, AgeDays: ageDays, AgeConfigured: configured,
-		}
-		if !query.Customer {
-			cell.Location = row.Location
-		}
-		cells = append(cells, cell)
+		return StockSnapshot{Cells: cells, Book: &book}, nil
+	}
+	cells, err := handler.cellViews(ctx, query, rows, freezes, locks)
+	if err != nil {
+		return StockSnapshot{}, err
 	}
 	if query.View == StockViewCells {
 		return StockSnapshot{Cells: cells}, nil
@@ -240,7 +259,46 @@ func (handler *QueryStockHandler) cells(ctx context.Context, query StockQuery) (
 	if err := handler.applyReservations(ctx, query, summary); err != nil {
 		return StockSnapshot{}, err
 	}
+	if query.Number > 0 {
+		window, book := ports.CutBook(summary, query.Number, query.Limit)
+		return StockSnapshot{Summary: window, Book: &book}, nil
+	}
 	return StockSnapshot{Summary: summary}, nil
+}
+
+func (handler *QueryStockHandler) cellViews(ctx context.Context, query StockQuery, rows []ports.StockCellBalance, freezes []ports.StockFreezeRow, locks []ports.StockLockRow) ([]StockCellView, error) {
+	cells := make([]StockCellView, 0, len(rows))
+	for _, row := range rows {
+		allocatable, usage, err := handler.allocatable(ctx, query.Tenant, row.Warehouse, row.Location, row.State)
+		if err != nil {
+			return nil, fmt.Errorf("query stock: %w", err)
+		}
+		frozen := frozenOnCell(freezes, row)
+		locked := lockedOnCell(locks, row)
+		available := int64(0)
+		if allocatable {
+			available = row.Quantity - frozen - locked
+			if available < 0 {
+				available = 0
+			}
+		}
+		ageDays, configured, err := handler.age(ctx, query.Tenant, row.Warehouse, row.InboundAt, query.Now)
+		if err != nil {
+			return nil, fmt.Errorf("query stock: %w", err)
+		}
+		cell := StockCellView{
+			Warehouse: row.Warehouse, Goods: row.Goods, Unit: row.Unit, State: row.State,
+			Alias: textOf(row.Alias), Batch: textOf(row.BatchNumber), Expiry: textOf(row.Expiry),
+			InboundBatch: row.InboundBatch, InboundAt: row.InboundAt, Quantity: row.Quantity,
+			Allocatable: allocatable, Frozen: frozen, Locked: locked, Available: available, AgeDays: ageDays, AgeConfigured: configured,
+		}
+		if !query.Customer {
+			cell.Location = row.Location
+			cell.ZoneUsage = usage
+		}
+		cells = append(cells, cell)
+	}
+	return cells, nil
 }
 
 func (handler *QueryStockHandler) cartons(ctx context.Context, query StockQuery) (StockSnapshot, error) {
@@ -251,6 +309,19 @@ func (handler *QueryStockHandler) cartons(ctx context.Context, query StockQuery)
 	freezes, err := handler.reads.ListActiveFreezes(ctx, query.Tenant, query.Owner, query.Warehouse)
 	if err != nil {
 		return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
+	}
+	rows, err = handler.narrowCartons(ctx, query, rows)
+	if err != nil {
+		return StockSnapshot{}, err
+	}
+	if query.Held != "" {
+		rows = cartonsHeld(rows, freezes, query.Held == "true")
+	}
+	var book *ports.Book
+	if query.Number > 0 {
+		window, cut := ports.CutBook(rows, query.Number, query.Limit)
+		rows = window
+		book = &cut
 	}
 	cartons := make([]StockCartonView, 0, len(rows))
 	for _, row := range rows {
@@ -279,7 +350,7 @@ func (handler *QueryStockHandler) cartons(ctx context.Context, query StockQuery)
 		}
 		cartons = append(cartons, view)
 	}
-	return StockSnapshot{Cartons: cartons}, nil
+	return StockSnapshot{Cartons: cartons, Book: book}, nil
 }
 
 func (handler *QueryStockHandler) holds(ctx context.Context, query StockQuery) (StockSnapshot, error) {
@@ -306,6 +377,22 @@ func (handler *QueryStockHandler) holds(ctx context.Context, query StockQuery) (
 			hold.Reason = freeze.Reason
 			hold.Operator = freeze.Operator
 			hold.FrozenAt = freeze.FrozenAt
+			hold.Reference = freeze.ID
+		}
+		holds = append(holds, hold)
+	}
+	locks, err := handler.reads.ListActiveLocks(ctx, query.Tenant, query.Owner, query.Warehouse)
+	if err != nil {
+		return StockSnapshot{}, fmt.Errorf("query stock: %w", err)
+	}
+	for _, lock := range locks {
+		hold := StockHoldView{
+			Kind: "LOCKED", Warehouse: lock.Warehouse, Goods: lock.Goods, Unit: lock.Unit, State: lock.State,
+			Quantity: lock.Quantity,
+		}
+		if !query.Customer {
+			hold.Location = lock.Location
+			hold.Reference = lock.CountID
 		}
 		holds = append(holds, hold)
 	}
@@ -314,6 +401,17 @@ func (handler *QueryStockHandler) holds(ctx context.Context, query StockQuery) (
 		return StockSnapshot{}, err
 	}
 	holds = append(holds, reserved...)
+	holds, err = handler.narrowHolds(ctx, query, holds)
+	if err != nil {
+		return StockSnapshot{}, err
+	}
+	if query.Hold != "" {
+		holds = holdsOfKind(holds, query.Hold)
+	}
+	if query.Number > 0 {
+		window, book := ports.CutBook(holds, query.Number, query.Limit)
+		return StockSnapshot{Holds: window, Book: &book}, nil
+	}
 	return StockSnapshot{Holds: holds}, nil
 }
 
@@ -342,28 +440,29 @@ func (handler *QueryStockHandler) movements(ctx context.Context, query StockQuer
 	return StockSnapshot{Movements: movements, MovementPage: &page}, nil
 }
 
-func (handler *QueryStockHandler) allocatable(ctx context.Context, tenant domain.TenantID, warehouse, location, state string) (bool, error) {
+func (handler *QueryStockHandler) allocatable(ctx context.Context, tenant domain.TenantID, warehouse, location, state string) (bool, string, error) {
 	warehouseCode, err := domain.NewWarehouseCode(warehouse)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	locationCode, err := domain.NewLocationCode(location)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	stockState, err := domain.NewStockState(state)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	revision, found, err := handler.locations.LoadLatestLocation(ctx, tenant, warehouseCode, locationCode)
 	if err != nil || !found {
-		return false, err
+		return false, "", err
 	}
 	zone, found, err := handler.zones.LoadLatestZone(ctx, tenant, warehouseCode, revision.Content().ZoneCode())
 	if err != nil || !found {
-		return false, err
+		return false, "", err
 	}
-	return domain.AllocatableGoods(stockState, zone.Content().Usage()), nil
+	usage := zone.Content().Usage()
+	return domain.AllocatableGoods(stockState, usage), usage.String(), nil
 }
 
 func (handler *QueryStockHandler) age(ctx context.Context, tenant domain.TenantID, warehouse string, inbound, now time.Time) (int, bool, error) {
@@ -504,6 +603,7 @@ func summarize(cells []StockCellView, freezes []ports.StockFreezeRow) []StockSum
 		if cell.Allocatable {
 			summary.Allocatable += cell.Quantity
 			summary.Frozen += cell.Frozen
+			summary.Locked += cell.Locked
 		}
 	}
 	_ = freezes
@@ -514,6 +614,59 @@ func summarize(cells []StockCellView, freezes []ports.StockFreezeRow) []StockSum
 		views = append(views, *summary)
 	}
 	return views
+}
+
+func cellsInState(rows []ports.StockCellBalance, state string) []ports.StockCellBalance {
+	kept := make([]ports.StockCellBalance, 0, len(rows))
+	for _, row := range rows {
+		if row.State == state {
+			kept = append(kept, row)
+		}
+	}
+	return kept
+}
+
+func cartonsHeld(rows []ports.StockCartonBalance, freezes []ports.StockFreezeRow, held bool) []ports.StockCartonBalance {
+	kept := make([]ports.StockCartonBalance, 0, len(rows))
+	for _, row := range rows {
+		if cartonHeld(freezes, row) == held {
+			kept = append(kept, row)
+		}
+	}
+	return kept
+}
+
+func holdsOfKind(holds []StockHoldView, kind string) []StockHoldView {
+	kept := make([]StockHoldView, 0, len(holds))
+	for _, hold := range holds {
+		carton := hold.Kind == "FREEZE" && hold.Carton != ""
+		switch kind {
+		case "CARTON":
+			if carton {
+				kept = append(kept, hold)
+			}
+		case "FREEZE":
+			if hold.Kind == "FREEZE" && !carton {
+				kept = append(kept, hold)
+			}
+		default:
+			if hold.Kind == kind {
+				kept = append(kept, hold)
+			}
+		}
+	}
+	return kept
+}
+
+func lockedOnCell(locks []ports.StockLockRow, row ports.StockCellBalance) int64 {
+	alias := textOf(row.Alias)
+	var total int64
+	for _, lock := range locks {
+		if lock.Warehouse == row.Warehouse && lock.Location == row.Location && lock.Goods == row.Goods && lock.Unit == row.Unit && lock.State == row.State && lock.InboundBatch == row.InboundBatch && lock.Alias == alias {
+			total += lock.Quantity
+		}
+	}
+	return total
 }
 
 func frozenOnCell(freezes []ports.StockFreezeRow, row ports.StockCellBalance) int64 {
@@ -540,4 +693,149 @@ func textOf(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+// stockWords 是一次检索。needle 已去掉首尾空白并转成小写；names 的键是商品编码，值是当前修订的名称与各识别码，同样小写。
+// 登记册没接上时 names 是空的：编码、库位、箱号与贴标别名仍认，名称和条码对不上。
+type stockWords struct {
+	needle string
+	names  map[string]string
+}
+
+func (handler *QueryStockHandler) narrowCells(ctx context.Context, query StockQuery, rows []ports.StockCellBalance) ([]ports.StockCellBalance, error) {
+	words, err := handler.stockWords(ctx, query, cellGoods(rows))
+	if err != nil || words.needle == "" {
+		return rows, err
+	}
+	kept := make([]ports.StockCellBalance, 0, len(rows))
+	for _, row := range rows {
+		if words.matches(row.Goods, row.Warehouse, row.Location, textOf(row.Alias)) {
+			kept = append(kept, row)
+		}
+	}
+	return kept, nil
+}
+
+func (handler *QueryStockHandler) narrowCartons(ctx context.Context, query StockQuery, rows []ports.StockCartonBalance) ([]ports.StockCartonBalance, error) {
+	if strings.TrimSpace(query.Keyword) == "" {
+		return rows, nil
+	}
+	bills := make([][]domain.CartonContentLine, len(rows))
+	codes := make([]string, 0)
+	for index, row := range rows {
+		warehouse, err := domain.NewWarehouseCode(row.Warehouse)
+		if err != nil {
+			return nil, fmt.Errorf("query stock: %w", err)
+		}
+		carton, err := domain.NewCartonNumber(row.Carton)
+		if err != nil {
+			return nil, fmt.Errorf("query stock: %w", err)
+		}
+		bill, err := handler.reads.CartonBill(ctx, query.Tenant, query.Owner, warehouse, carton)
+		if err != nil {
+			return nil, fmt.Errorf("query stock: %w", err)
+		}
+		bills[index] = bill
+		for _, line := range bill {
+			codes = append(codes, line.Goods().String())
+		}
+	}
+	words, err := handler.stockWords(ctx, query, codes)
+	if err != nil {
+		return nil, err
+	}
+	kept := make([]ports.StockCartonBalance, 0, len(rows))
+	for index, row := range rows {
+		if words.matches("", row.Warehouse, row.Location, row.Carton) {
+			kept = append(kept, row)
+			continue
+		}
+		for _, line := range bills[index] {
+			if words.matches(line.Goods().String()) {
+				kept = append(kept, row)
+				break
+			}
+		}
+	}
+	return kept, nil
+}
+
+func (handler *QueryStockHandler) narrowHolds(ctx context.Context, query StockQuery, holds []StockHoldView) ([]StockHoldView, error) {
+	codes := make([]string, 0, len(holds))
+	for _, hold := range holds {
+		if hold.Goods != "" {
+			codes = append(codes, hold.Goods)
+		}
+	}
+	words, err := handler.stockWords(ctx, query, codes)
+	if err != nil || words.needle == "" {
+		return holds, err
+	}
+	kept := make([]StockHoldView, 0, len(holds))
+	for _, hold := range holds {
+		if words.matches(hold.Goods, hold.Warehouse, hold.Location, hold.Carton) {
+			kept = append(kept, hold)
+		}
+	}
+	return kept, nil
+}
+
+func (handler *QueryStockHandler) stockWords(ctx context.Context, query StockQuery, codes []string) (stockWords, error) {
+	needle := strings.ToLower(strings.TrimSpace(query.Keyword))
+	words := stockWords{needle: needle, names: map[string]string{}}
+	if needle == "" || handler.goods == nil {
+		return words, nil
+	}
+	seen := map[string]bool{}
+	for _, code := range codes {
+		if code == "" || seen[code] {
+			continue
+		}
+		seen[code] = true
+		goods, err := domain.NewGoodsCode(code)
+		if err != nil {
+			continue
+		}
+		revision, found, err := handler.goods.LoadLatestGoods(ctx, query.Tenant, query.Owner, goods)
+		if err != nil {
+			return stockWords{}, fmt.Errorf("query stock: %w", err)
+		}
+		if !found {
+			continue
+		}
+		var text strings.Builder
+		text.WriteString(strings.ToLower(revision.Content().Name().String()))
+		for _, alias := range revision.Content().Aliases() {
+			text.WriteByte(' ')
+			text.WriteString(strings.ToLower(alias.Code().String()))
+		}
+		words.names[code] = text.String()
+	}
+	return words, nil
+}
+
+func cellGoods(rows []ports.StockCellBalance) []string {
+	codes := make([]string, 0, len(rows))
+	for _, row := range rows {
+		codes = append(codes, row.Goods)
+	}
+	return codes
+}
+
+func (words stockWords) matches(goods string, fields ...string) bool {
+	if words.needle == "" {
+		return true
+	}
+	if goods != "" && strings.Contains(strings.ToLower(goods), words.needle) {
+		return true
+	}
+	if name := words.names[goods]; name != "" && strings.Contains(name, words.needle) {
+		return true
+	}
+	for _, field := range fields {
+		if field != "" && strings.Contains(strings.ToLower(field), words.needle) {
+			return true
+		}
+	}
+	return false
 }

@@ -136,6 +136,9 @@ func serveList(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 	}
 
 	var records []ports.ShipmentRequestSummaryRecord

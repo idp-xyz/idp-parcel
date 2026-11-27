@@ -93,7 +93,7 @@ func (catalogue *PackagingMaterialCatalogue) ListPackagingMaterials(
 	if err != nil {
 		return fail(err)
 	}
-	return page, nil
+	return withListedFacets(ctx, querier, packagingMaterialListBinding, packagingMaterialListed, query, []any{tenant.String()}, page)
 }
 
 // ListPackagingMaterialRevisions 取一个包材册上的全部修订，按修订号升序。不在册与别的租户的同编码包材同形：空切片、无错。

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -105,7 +106,7 @@ func (store *StockReads) ListActiveFreezes(ctx context.Context, tenant domain.Te
 		return nil, fmt.Errorf("list freezes: %w", err)
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT warehouse_code, target, location_code, goods_code, unit_name, stock_state, carton_number,
+		`SELECT freeze_id, warehouse_code, target, location_code, goods_code, unit_name, stock_state, carton_number,
 		        inbound_batch_id, quantity, reason, operator_id, frozen_at
 		   FROM warehouse_fulfillment.stock_freeze
 		  WHERE tenant_id = $1 AND owner_account_id = $2 AND status = 'FROZEN'
@@ -121,7 +122,7 @@ func (store *StockReads) ListActiveFreezes(ctx context.Context, tenant domain.Te
 		var row ports.StockFreezeRow
 		var location, goods, unit, state, carton, batch *string
 		if err := rows.Scan(
-			&row.Warehouse, &row.Target, &location, &goods, &unit, &state, &carton, &batch,
+			&row.ID, &row.Warehouse, &row.Target, &location, &goods, &unit, &state, &carton, &batch,
 			&row.Quantity, &row.Reason, &row.Operator, &row.FrozenAt,
 		); err != nil {
 			return nil, fmt.Errorf("list freezes: %w", err)
@@ -140,21 +141,110 @@ func (store *StockReads) ListActiveFreezes(ctx context.Context, tenant domain.Te
 	return listed, nil
 }
 
-// q 那一格是共用件要求的落列：它不接受一册没有检索列。库存读口不收 q（见 ports.StockMovementPages），这一列用不到。
+func (store *StockReads) ListActiveLocks(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) ([]ports.StockLockRow, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list locks: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT count.count_id, lock.warehouse_code, lock.location_code, lock.goods_code, lock.unit_name, lock.stock_state,
+		        lock.label_alias, lock.inbound_batch_id, lock.quantity
+		   FROM warehouse_fulfillment.stock_count_lock lock
+		   JOIN warehouse_fulfillment.stock_count count
+		     ON count.tenant_id = lock.tenant_id AND count.count_id = lock.count_id
+		  WHERE lock.tenant_id = $1 AND lock.owner_account_id = $2 AND count.status = 'COUNTING'
+		    AND ($3 = '' OR lock.warehouse_code = $3)
+		  ORDER BY count.count_id, lock.lock_index`,
+		tenant.String(), owner.String(), warehouse.String())
+	if err != nil {
+		return nil, fmt.Errorf("list locks: %w", err)
+	}
+	defer rows.Close()
+	var listed []ports.StockLockRow
+	for rows.Next() {
+		var row ports.StockLockRow
+		var alias *string
+		if err := rows.Scan(
+			&row.CountID, &row.Warehouse, &row.Location, &row.Goods, &row.Unit, &row.State, &alias, &row.InboundBatch, &row.Quantity,
+		); err != nil {
+			return nil, fmt.Errorf("list locks: %w", err)
+		}
+		row.Alias = valueOrEmpty(alias)
+		listed = append(listed, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list locks: %w", err)
+	}
+	return listed, nil
+}
+
+// q 那一格是共用件要求的落列：它不接受一册没有检索列。流水的检索不在头表上，商品、库位与贴标别名在行上，
+// 名称与条码在商品当前修订上。Plan 之前把 Keyword 清掉，免得共用件只按 reason 收窄；真正的收窄是 stockMovementKeywordSQL。
+// 游标摘要在解码时已经带上 q，这里清掉的是交给 SQL 的那一份。
 var stockMovementListBinding = ports.StockMovementPages.MustBind(cataloguepage.Columns{
 	Sorts:    map[string]string{"postedAt": "posted_at"},
 	Identity: []string{"movement_id"},
 	Keyword:  []string{"reason"},
 })
 
+// stockLikeLiteral 让检索词在 ILIKE 里只做字面包含。% 与 _ 是通配符，反斜杠是 LIKE 的缺省转义符。
+var stockLikeLiteral = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// stockMovementKeywordSQL 用 $4 收检索词的包含式样。认仓编码、行上的商品编码、库位、贴标别名，以及该商品当前修订的名称与识别码。
+const stockMovementKeywordSQL = `warehouse_code ILIKE $4 ESCAPE '\'
+    OR EXISTS (
+        SELECT 1
+          FROM warehouse_fulfillment.stock_movement_line line
+         WHERE line.tenant_id = stock_movement.tenant_id
+           AND line.movement_id = stock_movement.movement_id
+           AND (
+                line.goods_code ILIKE $4 ESCAPE '\'
+             OR line.location_code ILIKE $4 ESCAPE '\'
+             OR COALESCE(line.label_alias, '') ILIKE $4 ESCAPE '\'
+             OR EXISTS (
+                SELECT 1
+                  FROM warehouse_fulfillment.goods_revision revision
+                 WHERE revision.tenant_id = line.tenant_id
+                   AND revision.owner_account_id = line.owner_account_id
+                   AND revision.goods_code = line.goods_code
+                   AND revision.revision = (
+                        SELECT MAX(latest.revision)
+                          FROM warehouse_fulfillment.goods_revision latest
+                         WHERE latest.tenant_id = revision.tenant_id
+                           AND latest.owner_account_id = revision.owner_account_id
+                           AND latest.goods_code = revision.goods_code
+                   )
+                   AND (
+                        revision.goods_name ILIKE $4 ESCAPE '\'
+                     OR EXISTS (
+                        SELECT 1
+                          FROM warehouse_fulfillment.goods_alias alias
+                         WHERE alias.tenant_id = revision.tenant_id
+                           AND alias.owner_account_id = revision.owner_account_id
+                           AND alias.goods_code = revision.goods_code
+                           AND alias.revision = revision.revision
+                           AND alias.alias_code ILIKE $4 ESCAPE '\'
+                     )
+                   )
+             )
+           )
+    )`
+
 func (store *StockReads) ListMovements(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.StockMovementRow], error) {
 	fail := func(err error) (cataloguepage.Result[ports.StockMovementRow], error) {
 		return cataloguepage.Result[ports.StockMovementRow]{}, fmt.Errorf("list movements: %w", err)
 	}
 	const source = "warehouse_fulfillment.stock_movement"
-	plan, err := stockMovementListBinding.Plan(query,
-		"tenant_id = $1 AND owner_account_id = $2 AND ($3 = '' OR warehouse_code = $3)",
-		[]any{tenant.String(), owner.String(), warehouse.String()}, limit)
+	keyword := query.Keyword
+	planned := query
+	planned.Keyword = ""
+	where := "tenant_id = $1 AND owner_account_id = $2 AND ($3 = '' OR warehouse_code = $3)"
+	args := []any{tenant.String(), owner.String(), warehouse.String()}
+	if keyword != "" {
+		where += " AND (" + stockMovementKeywordSQL + ")"
+		args = append(args, "%"+stockLikeLiteral.Replace(keyword)+"%")
+	}
+	plan, err := stockMovementListBinding.Plan(planned, where, args, limit)
 	if err != nil {
 		return fail(err)
 	}

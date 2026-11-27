@@ -81,7 +81,7 @@ var TotePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Identity:    []cataloguepage.ValueKind{cataloguepage.Text, cataloguepage.Text},
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
-		{Name: "state", Vocabulary: []string{ToteFree, ToteInUse, ToteRetired}},
+		{Name: "state", Vocabulary: []string{ToteFree, ToteInUse, ToteRetired}, Facet: true},
 	},
 })
 

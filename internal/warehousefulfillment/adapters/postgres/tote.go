@@ -188,9 +188,13 @@ func (store *Waves) ListTotes(
 	if err := rows.Err(); err != nil {
 		return fail(err)
 	}
-	return cataloguepage.Finish(query, items, limit, total, func(item ports.ToteRow, _ string) cataloguepage.Position {
+	page, err := cataloguepage.Finish(query, items, limit, total, func(item ports.ToteRow, _ string) cataloguepage.Position {
 		return cataloguepage.Position{Value: item.ToteCode, Identity: []string{item.WarehouseCode, item.ToteCode}}
 	})
+	if err != nil {
+		return fail(err)
+	}
+	return withListedFacets(ctx, querier, toteListBinding, toteListed, query, []any{tenant.String()}, page)
 }
 
 // BindTote 先锁住箱那一行再看它绑着谁：两个人同时把同一个空箱绑给两张请求时排在这一行上，后到的看得到先到的绑定。

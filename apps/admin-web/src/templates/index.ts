@@ -2,6 +2,7 @@
 // 显式按路径引用，出现在这里会让生产页面一行 import 就把假数据带进去。
 
 export {
+  CursorPageSizeSelect,
   ListPageTemplate,
   type ListPageTemplateProps,
   type ListColumn,

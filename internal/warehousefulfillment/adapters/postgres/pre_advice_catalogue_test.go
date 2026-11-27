@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"net/url"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/adapters/postgres"
@@ -38,6 +39,73 @@ func TestPreAdviceCatalogueListsOneOwnerAndFindsByDocumentNumber(t *testing.T) {
 	if len(page.Rows[0].Notices()) != 1 || page.Rows[0].CurrentNotice().Version() != 1 {
 		t.Fatalf("告知版本 = %d", len(page.Rows[0].Notices()))
 	}
+	advised, err := ports.PreAdvicePages.Decode(url.Values{"status": {"ADVISED"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	narrowed, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, advised)
+	if err != nil || narrowed.Total != 1 || len(narrowed.Rows) != 1 || narrowed.Rows[0].Status() != domain.PreAdviceAdvised {
+		t.Fatalf("已预报 total=%d rows=%d err=%v", narrowed.Total, len(narrowed.Rows), err)
+	}
+	closed, err := ports.PreAdvicePages.Decode(url.Values{"status": {"CLOSED"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	here, err := ports.PreAdvicePages.Decode(url.Values{"warehouseCode": {"SYN-WH-01"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inWarehouse, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, here)
+	if err != nil || inWarehouse.Total != 1 || len(inWarehouse.Rows) != 1 {
+		t.Fatalf("这个仓 total=%d rows=%d err=%v", inWarehouse.Total, len(inWarehouse.Rows), err)
+	}
+	elsewhere, err := ports.PreAdvicePages.Decode(url.Values{"warehouseCode": {"SYN-WH-OTHER"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherWarehouse, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, elsewhere)
+	if err != nil || otherWarehouse.Total != 0 || len(otherWarehouse.Rows) != 0 {
+		t.Fatalf("别的仓 total=%d err=%v", otherWarehouse.Total, err)
+	}
+	inside, err := ports.PreAdvicePages.Decode(url.Values{
+		"expectedFrom":  {"2026-11-20T17:00:00Z"},
+		"expectedUntil": {"2026-11-20T19:00:00Z"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inWindow, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, inside)
+	if err != nil || inWindow.Total != 1 || len(inWindow.Rows) != 1 {
+		t.Fatalf("区间内 total=%d err=%v", inWindow.Total, err)
+	}
+	touching, err := ports.PreAdvicePages.Decode(url.Values{"expectedUntil": {"2026-11-20T18:00:00Z"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	onTheInstant, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, touching)
+	if err != nil || onTheInstant.Total != 1 {
+		t.Fatalf("终点等于预计到达 total=%d err=%v", onTheInstant.Total, err)
+	}
+	early, err := ports.PreAdvicePages.Decode(url.Values{"expectedUntil": {"2026-11-20T17:59:59Z"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, early)
+	if err != nil || before.Total != 0 {
+		t.Fatalf("终点早于预计到达 total=%d err=%v", before.Total, err)
+	}
+	after, err := ports.PreAdvicePages.Decode(url.Values{"expectedFrom": {"2026-11-21T00:00:00Z"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	later, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, after)
+	if err != nil || later.Total != 0 {
+		t.Fatalf("区间外 total=%d err=%v", later.Total, err)
+	}
+	none, err := catalogue.ListPreAdvices(t.Context(), tenant, owner, 20, closed)
+	if err != nil || none.Total != 0 || len(none.Rows) != 0 {
+		t.Fatalf("已完结 total=%d err=%v", none.Total, err)
+	}
 	other, err := catalogue.ListPreAdvices(t.Context(), tenant, valueOf(t, domain.NewOwnerAccountID, "SYN-OWNER-02"), 20, query)
 	if err != nil || other.Total != 0 || len(other.Rows) != 0 {
 		t.Fatalf("别的货主 total=%d err=%v", other.Total, err)
@@ -45,6 +113,15 @@ func TestPreAdviceCatalogueListsOneOwnerAndFindsByDocumentNumber(t *testing.T) {
 	found, ok, err := catalogue.PreAdviceByDocumentNumber(t.Context(), tenant, number)
 	if err != nil || !ok || found.ID() != advice.ID() {
 		t.Fatalf("按号找到 %v %v %v", ok, found.ID(), err)
+	}
+	byCode, ok, err := catalogue.PreAdviceByCode(t.Context(), tenant, advice.ID().String())
+	gotNumber, assigned := byCode.DocumentNumber()
+	if err != nil || !ok || byCode.ID() != advice.ID() || !assigned || gotNumber.String() != number.String() {
+		t.Fatalf("按预报标识找到 %v %v %v", ok, byCode.ID(), err)
+	}
+	_, ok, err = catalogue.PreAdviceByCode(t.Context(), tenant, "IPA-NOT-THERE")
+	if err != nil || ok {
+		t.Fatalf("不存在的预报标识 ok=%v err=%v", ok, err)
 	}
 	_, ok, err = catalogue.PreAdviceByDocumentNumber(t.Context(), tenant, valueOf(t, domain.NewDocumentNumber, "IB-NOT-A-NUMBER"))
 	if err != nil || ok {

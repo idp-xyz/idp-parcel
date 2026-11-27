@@ -65,6 +65,9 @@ func NewQueryPriceCardDraftsEndpoint(intake PriceCardDraftQueryIntake, reader Pr
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := reader.ListPriceCardDrafts(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			// 读不回（含重建门拒了一行）是答案未形成，不是空册。

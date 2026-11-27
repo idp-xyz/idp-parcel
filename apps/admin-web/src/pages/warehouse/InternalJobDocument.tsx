@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { formatInstant } from '../catalogue-view';
 import { getInternalJob, type InternalJobLineRecord } from './api';
 import { countsAdjustmentsModule, discrepancyKind } from './counts-adjustments-address';
@@ -13,9 +14,9 @@ import {
   plannedLabel,
   shortageKind,
 } from './internal-job-flow';
-import { processingModule } from './processing-address';
+import { internalJobKind, processingModule } from './processing-address';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsSubTable, type WmsSubColumn, type WmsTone } from './wms-ui';
 
 const moduleId = processingModule;
@@ -33,11 +34,26 @@ const kindNotes: Readonly<Record<string, string>> = {
  * 库内作业页：作业台提交的一笔上架、移库、形态或状态转换，或一次短少上报。它是已经发生的事实，没有生命周期，所以不画进度条，
  * 状态位是作业种类。正文的重点是「账上入了多少」：每一行计划多少、实际入账多少、没入的是账上不足还是被占用挡住。
  * 没入账的部分形成作业差异，在右栏链过去；那里批准补账，补进去的数不回改这里。
+ *
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一行留着上一张，新的读到再换。列表重取会让 `revision` 变，这笔作业跟着重读。
  */
-export function InternalJobDocument({ factId }: { factId: string }) {
+export function InternalJobDocument({
+  factId,
+  panel,
+}: {
+  factId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const back = useReturnToList(moduleId);
   const complete = factId !== '';
-  const { answer, loading, reload } = useKeyedLoad(complete ? factId : null, getInternalJob);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(complete ? factId : null, getInternalJob, { holdPrevious: panel !== undefined });
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
   const body = answer?.kind === 'outcome' ? answer.body : undefined;
   const job = body?.job;
   const failure =
@@ -137,10 +153,13 @@ export function InternalJobDocument({ factId }: { factId: string }) {
           </>
         ) : undefined
       }
-      loading={loading}
+      loading={held ? false : loading}
+      reloading={reloading}
+      busy={held}
       error={failure}
       onBack={back}
       onReload={reload}
+      panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [internalJobKind, job?.factId ?? factId]) } : undefined}
       aside={
         job && summary ? (
           <>

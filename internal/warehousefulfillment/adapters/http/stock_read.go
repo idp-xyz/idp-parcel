@@ -5,10 +5,14 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	"go.idp.xyz/idp-parcel/internal/platform/storable"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
@@ -71,7 +75,7 @@ func NewQueryCustomerStockEndpoint(intake CustomerInboundPreAdvicePorts, reader 
 }
 
 func operatorStockQuery(request *http.Request, tenant domain.TenantID, limit int) (application.StockQuery, string) {
-	values, reason := stockQueryValues(request, "ownerAccount", "warehouseCode", "view", stockAfterQueryKey)
+	values, reason := stockQueryValues(request, "ownerAccount", "warehouseCode", "view", "q", "stockState", "held", "holdKind", stockAfterQueryKey, stockPageSizeQueryKey, stockPageQueryKey)
 	if reason != "" {
 		return application.StockQuery{}, reason
 	}
@@ -87,8 +91,71 @@ func operatorStockQuery(request *http.Request, tenant domain.TenantID, limit int
 	if reason != "" {
 		return application.StockQuery{}, reason
 	}
-	query := application.StockQuery{Tenant: tenant, Owner: owner, Warehouse: warehouse, View: view, Now: time.Now()}
+	keyword, reason := stockKeyword(values["q"])
+	if reason != "" {
+		return application.StockQuery{}, reason
+	}
+	state, reason := stockStateFilter(values["stockState"])
+	if reason != "" {
+		return application.StockQuery{}, reason
+	}
+	held, reason := heldFilter(values["held"])
+	if reason != "" {
+		return application.StockQuery{}, reason
+	}
+	hold, reason := holdKindFilter(values["holdKind"])
+	if reason != "" {
+		return application.StockQuery{}, reason
+	}
+	query := application.StockQuery{
+		Tenant: tenant, Owner: owner, Warehouse: warehouse, View: view, Keyword: keyword,
+		State: state, Held: held, Hold: hold, Now: time.Now(),
+	}
 	return stockPaging(query, values, limit)
+}
+
+// stockKeyword 按目录册检索词的同一条规矩收 q：去掉首尾空白，空串即不检索。货主面不走这里。
+func stockKeyword(raw string) (string, string) {
+	keyword := strings.TrimSpace(raw)
+	if keyword == "" {
+		return "", ""
+	}
+	if !storable.Text(keyword) {
+		return "", "q contains a character that cannot be stored"
+	}
+	if utf8.RuneCountInString(keyword) > cataloguepage.MaxKeywordRunes {
+		return "", "q must be at most 100 characters"
+	}
+	return keyword, ""
+}
+
+func stockStateFilter(raw string) (string, string) {
+	if strings.TrimSpace(raw) == "" {
+		return "", ""
+	}
+	state, err := domain.NewStockState(raw)
+	if err != nil {
+		return "", "stockState is not a stock state"
+	}
+	return state.String(), ""
+}
+
+func heldFilter(raw string) (string, string) {
+	switch raw {
+	case "", "true", "false":
+		return raw, ""
+	default:
+		return "", "held must be true or false"
+	}
+}
+
+func holdKindFilter(raw string) (string, string) {
+	switch raw {
+	case "", "FREEZE", "CARTON", "RESERVATION", "LOCKED":
+		return raw, ""
+	default:
+		return "", "holdKind is not a hold"
+	}
 }
 
 func customerStockQuery(request *http.Request, tenant domain.TenantID, owner domain.OwnerAccountID) (application.StockQuery, string) {
@@ -116,29 +183,91 @@ func customerStockQuery(request *http.Request, tenant domain.TenantID, owner dom
 }
 
 const stockAfterQueryKey = "after"
+const stockPageSizeQueryKey = "pageSize"
+const stockPageQueryKey = "page"
 
-// stockPaging 给运营面流水那一种看法解出翻页。其余看法答整份、不翻页，带了 after 即拒：收下不用，调用方会以为自己翻到了下一页。
+// stockPaging 给运营面解出翻页。流水用游标：pageSize 只收与目录册相同的几档，没给仍用渠道契约，page 不收。
+// 库存格、整箱、汇总、占用用页码：带了 page 或 pageSize 才按页交回，都不带则答整份。带了 after 即拒。
 func stockPaging(query application.StockQuery, values map[string]string, limit int) (application.StockQuery, string) {
 	after, carried := values[stockAfterQueryKey]
-	if query.View != application.StockViewMovements {
-		if carried {
-			return application.StockQuery{}, "after is only taken by the movements view"
+	if query.View == application.StockViewMovements {
+		if _, paged := values[stockPageQueryKey]; paged {
+			return application.StockQuery{}, "page is only taken by the balance views"
 		}
-		return query, ""
+		conditions := stockMovementConditions(query)
+		if carried {
+			conditions.Set(stockAfterQueryKey, after)
+		}
+		if pageSize, sized := values[stockPageSizeQueryKey]; sized {
+			conditions.Set(stockPageSizeQueryKey, pageSize)
+		}
+		paged, reason := stockMovementPage(query, conditions, limit)
+		if reason != "" {
+			return paged, reason
+		}
+		if paged.Page.PageSize > 0 {
+			paged.Limit = paged.Page.PageSize
+		}
+		return paged, ""
 	}
-	conditions := stockMovementConditions(query)
 	if carried {
-		conditions.Set(stockAfterQueryKey, after)
+		return application.StockQuery{}, "after is only taken by the movements view"
 	}
-	return stockMovementPage(query, conditions, limit)
+	page, size, reason, on := stockBook(values)
+	if reason != "" {
+		return application.StockQuery{}, reason
+	}
+	if on {
+		query.Number = page
+		query.Limit = size
+	}
+	return query, ""
 }
 
-// stockMovementConditions 按已经判过的货主、仓与看法重写一份交给共用件的条件，不拿原始查询串去解：仓没给与给了空串
-// 要是同一份列表，调用方带来的 q 与 sort 读口不收，也不该有路进到解码里。
+// stockBook 解库存格、整箱、汇总、占用的页码。两个键都没给就是不按页。理由不回显取值。
+func stockBook(values map[string]string) (page int, size int, reason string, on bool) {
+	_, hasPage := values[stockPageQueryKey]
+	_, hasSize := values[stockPageSizeQueryKey]
+	if !hasPage && !hasSize {
+		return 0, 0, "", false
+	}
+	size = cataloguepage.DefaultPageSize
+	if hasSize {
+		parsed, err := strconv.Atoi(values[stockPageSizeQueryKey])
+		if err != nil || !stockPageSizeAllowed(parsed) {
+			return 0, 0, "pageSize must be 20, 50, 100 or 200", true
+		}
+		size = parsed
+	}
+	page = 1
+	if hasPage {
+		parsed, err := strconv.Atoi(values[stockPageQueryKey])
+		if err != nil || parsed < 1 || parsed > 1_000_000 {
+			return 0, 0, "page must be an integer from 1", true
+		}
+		page = parsed
+	}
+	return page, size, "", true
+}
+
+func stockPageSizeAllowed(size int) bool {
+	for _, allowed := range cataloguepage.PageSizes {
+		if size == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// stockMovementConditions 按已经判过的货主、仓、看法与检索词重写一份交给共用件的条件，不拿原始查询串去解：
+// 仓没给与给了空串要是同一份列表。sort 不在这里，解码之前就被拒了。q 空着就不写，免得一份没检索的游标对不上。
 func stockMovementConditions(query application.StockQuery) url.Values {
 	conditions := url.Values{"ownerAccount": {query.Owner.String()}, "view": {string(query.View)}}
 	if warehouse := query.Warehouse.String(); warehouse != "" {
 		conditions.Set("warehouseCode", warehouse)
+	}
+	if query.Keyword != "" {
+		conditions.Set("q", query.Keyword)
 	}
 	return conditions
 }
@@ -208,7 +337,8 @@ func stockSnapshotBody(snapshot application.StockSnapshot) stockReadBody {
 		item := stockCellBody{
 			Warehouse: cell.Warehouse, Location: cell.Location, Goods: cell.Goods, Unit: cell.Unit, State: cell.State,
 			Alias: cell.Alias, Batch: cell.Batch, Expiry: cell.Expiry, InboundBatch: cell.InboundBatch,
-			InboundAt: cell.InboundAt, Quantity: cell.Quantity, Allocatable: cell.Allocatable, Frozen: cell.Frozen, Available: cell.Available,
+			InboundAt: cell.InboundAt, Quantity: cell.Quantity, Allocatable: cell.Allocatable, ZoneUsage: cell.ZoneUsage,
+			Frozen: cell.Frozen, Locked: cell.Locked, Available: cell.Available,
 		}
 		if cell.AgeConfigured {
 			days := cell.AgeDays
@@ -242,7 +372,7 @@ func stockSnapshotBody(snapshot application.StockSnapshot) stockReadBody {
 		body.Holds = append(body.Holds, stockHoldBody{
 			Kind: hold.Kind, Warehouse: hold.Warehouse, Goods: hold.Goods, Unit: hold.Unit, State: hold.State,
 			Location: hold.Location, Carton: hold.Carton, Quantity: hold.Quantity, Reason: hold.Reason,
-			Operator: hold.Operator, FrozenAt: hold.FrozenAt,
+			Operator: hold.Operator, FrozenAt: hold.FrozenAt, Reference: hold.Reference,
 		})
 	}
 	for _, movement := range snapshot.Movements {
@@ -253,6 +383,9 @@ func stockSnapshotBody(snapshot application.StockSnapshot) stockReadBody {
 		body.Movements = append(body.Movements, item)
 	}
 	body.Page = snapshot.MovementPage
+	if snapshot.Book != nil {
+		body.Book = &stockBookBody{Page: snapshot.Book.Page, PageSize: snapshot.Book.PageSize, Total: snapshot.Book.Total}
+	}
 	return body
 }
 
@@ -263,8 +396,16 @@ type stockReadBody struct {
 	Summary   []stockSummaryBody  `json:"summary,omitempty"`
 	Holds     []stockHoldBody     `json:"holds,omitempty"`
 	Movements []stockMovementBody `json:"movements,omitempty"`
-	// Page 只在看流水时有：只有那一种看法翻页。
+	// Page 只在看流水时有：流水按游标翻页。
 	Page *cataloguepage.Page `json:"page,omitempty"`
+	// Book 只在库存格、整箱、汇总、占用按页取时有。
+	Book *stockBookBody `json:"book,omitempty"`
+}
+
+type stockBookBody struct {
+	Page     int `json:"page"`
+	PageSize int `json:"pageSize"`
+	Total    int `json:"total"`
 }
 
 type stockCellBody struct {
@@ -280,7 +421,9 @@ type stockCellBody struct {
 	InboundAt    time.Time `json:"inboundAt"`
 	Quantity     int64     `json:"quantity"`
 	Allocatable  bool      `json:"allocatable"`
+	ZoneUsage    string    `json:"zoneUsage,omitempty"`
 	Frozen       int64     `json:"frozen"`
+	Locked       int64     `json:"locked,omitempty"`
 	Available    int64     `json:"available"`
 	AgeDays      *int      `json:"ageDays,omitempty"`
 	Age          string    `json:"age,omitempty"`
@@ -327,6 +470,7 @@ type stockHoldBody struct {
 	Reason    string    `json:"reason,omitempty"`
 	Operator  string    `json:"operator,omitempty"`
 	FrozenAt  time.Time `json:"frozenAt,omitempty"`
+	Reference string    `json:"reference,omitempty"`
 }
 
 type stockMovementBody struct {

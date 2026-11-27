@@ -30,4 +30,6 @@ type PreAdviceRead interface {
 		tenant domain.TenantID,
 		number domain.DocumentNumber,
 	) (domain.PreAdvice, bool, error)
+	// PreAdviceByCode 给作业台认单：单据号优先，对不上再按预报标识。都是本租户逐字相等。
+	PreAdviceByCode(ctx context.Context, tenant domain.TenantID, code string) (domain.PreAdvice, bool, error)
 }

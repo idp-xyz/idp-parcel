@@ -137,6 +137,9 @@ func serveTiedChannelSelectionDecisions(
 		writePageQueryProblem(response, err)
 		return
 	}
+	if pageQuery.PageSize > 0 {
+		query.Limit = pageQuery.PageSize
+	}
 
 	page, err := reader.ListTiedChannelSelectionDecisions(request.Context(), query.Tenant, filter, query.Limit, pageQuery)
 	if err != nil {

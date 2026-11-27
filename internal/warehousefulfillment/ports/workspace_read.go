@@ -201,6 +201,7 @@ type OutboundParcelDetail struct {
 	CutoffState       string
 	OwnerLabel        string
 	Lines             []OutboundParcelLineDetail
+	Serials           []string
 }
 
 type OutboundConfirmationDetail struct {
@@ -243,7 +244,7 @@ var StockFreezePages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
 		{Name: "target", Vocabulary: []string{"GOODS", "CARTON"}},
-		{Name: "status", Vocabulary: []string{"FROZEN", "UNFROZEN"}},
+		{Name: "status", Vocabulary: []string{"FROZEN", "UNFROZEN"}, Facet: true},
 	},
 })
 
@@ -284,7 +285,7 @@ var StockCountPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "warehouseCode"},
 		{Name: "ownerAccount"},
-		{Name: "status", Vocabulary: []string{"PENDING", "COUNTING", "COUNTED", "VOID"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "COUNTING", "COUNTED", "VOID"}, Facet: true},
 	},
 })
 
@@ -375,7 +376,7 @@ var StockAdjustmentPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
-		{Name: "status", Vocabulary: []string{"PENDING", "POSTED", "REJECTED"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "POSTED", "REJECTED"}, Facet: true},
 	},
 })
 
@@ -422,7 +423,7 @@ var JobDiscrepancyPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 	Filters: []cataloguepage.FilterDimension{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
-		{Name: "status", Vocabulary: []string{"PENDING", "APPROVED", "REJECTED"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "APPROVED", "REJECTED"}, Facet: true},
 	},
 })
 
@@ -469,7 +470,7 @@ var InstructionPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		{Name: "ownerAccount"},
 		{Name: "warehouseCode"},
 		{Name: "kind", Vocabulary: []string{"PROCESS", "DISASSEMBLE", "RELABEL"}},
-		{Name: "status", Vocabulary: []string{"PENDING", "DONE", "VOID"}},
+		{Name: "status", Vocabulary: []string{"PENDING", "DONE", "VOID"}, Facet: true},
 	},
 })
 
@@ -540,6 +541,9 @@ type ReturnPreAdviceRow struct {
 	Lines            []ReturnPreAdviceLineRow
 	// Status 只在按页取的预报列表上有值：待到仓、已到仓、已处置。整份总览不填。
 	Status string
+	// AwaitingDisposition 是入了暂存、还没记去向的笔数。Diverted 是转了待认领的笔数。只在按页取的列表上有值。
+	AwaitingDisposition int
+	Diverted            int
 }
 
 type ReturnDispositionRow struct {

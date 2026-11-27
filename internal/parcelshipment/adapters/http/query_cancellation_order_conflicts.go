@@ -73,6 +73,9 @@ func NewQueryCancellationOrderConflictsEndpoint(
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		listed, err := reader.ListUnresolvedCancellationOrderConflicts(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不伪装成空册：把一次该重试的故障读成「没有未解开的冲突」，卡住的包裹就更没人看见了。

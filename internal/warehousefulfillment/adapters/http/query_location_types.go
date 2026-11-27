@@ -28,9 +28,10 @@ var _ LocationTypeCatalogueReader = (*application.QueryLocationTypesHandler)(nil
 const outcomeLocationTypesListed = "LOCATION_TYPES_LISTED"
 
 type locationTypeListResponse struct {
-	Outcome       string             `json:"outcome"`
-	LocationTypes []locationTypeBody `json:"locationTypes"`
-	Page          cataloguepage.Page `json:"page"`
+	Outcome       string               `json:"outcome"`
+	LocationTypes []locationTypeBody   `json:"locationTypes"`
+	Page          cataloguepage.Page   `json:"page"`
+	Facets        cataloguepage.Facets `json:"facets,omitempty"`
 }
 
 // NewQueryLocationTypesEndpoint 交回各库位类型当前修订的查阅入口（GET /warehouse-fulfillment-location-types），规矩同各仓当前修订的列表口：
@@ -52,6 +53,9 @@ func NewQueryLocationTypesEndpoint(intake CatalogueIntake, reader LocationTypeCa
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 
 		page, err := reader.ListLocationTypes(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
@@ -63,6 +67,7 @@ func NewQueryLocationTypesEndpoint(intake CatalogueIntake, reader LocationTypeCa
 			Outcome:       outcomeLocationTypesListed,
 			LocationTypes: locationTypeBodiesOfRows(page.Rows),
 			Page:          page.Page(query.Limit),
+			Facets:        page.Facets,
 		})
 	})
 }

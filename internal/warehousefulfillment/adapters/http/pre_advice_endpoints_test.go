@@ -190,6 +190,7 @@ func TestTheUnconfiguredIntakeAnswersPreAdviceLinesWithoutReadingAnything(t *tes
 
 type scriptedPreAdviceQueries struct {
 	list          []application.PreAdviceReading
+	last          cataloguepage.Query
 	one           application.PreAdviceReading
 	oneFound      bool
 	byNumber      application.PreAdviceReading
@@ -211,9 +212,10 @@ func readingOf(advice domain.PreAdvice) application.PreAdviceReading {
 }
 
 func (queries *scriptedPreAdviceQueries) ListPreAdvices(
-	context.Context, domain.TenantID, domain.OwnerAccountID, int, cataloguepage.Query,
+	_ context.Context, _ domain.TenantID, _ domain.OwnerAccountID, _ int, query cataloguepage.Query,
 ) (cataloguepage.Result[application.PreAdviceReading], error) {
 	queries.calls++
+	queries.last = query
 	return cataloguepage.Result[application.PreAdviceReading]{Rows: queries.list, Total: int64(len(queries.list))}, nil
 }
 
@@ -222,6 +224,13 @@ func (queries *scriptedPreAdviceQueries) PreAdviceForOwner(
 ) (application.PreAdviceReading, bool, error) {
 	queries.calls++
 	return queries.one, queries.oneFound, nil
+}
+
+func (queries *scriptedPreAdviceQueries) PreAdviceByCode(
+	context.Context, domain.TenantID, string,
+) (application.PreAdviceReading, bool, error) {
+	queries.calls++
+	return queries.byNumber, queries.byNumberFound, nil
 }
 
 func (queries *scriptedPreAdviceQueries) PreAdviceByDocumentNumber(
@@ -324,6 +333,40 @@ func TestPreAdviceReadsOmitAnEmptyNumberAndKeepNoticeHistoryOnTheSingleRead(t *t
 	assertProblem(t, "unknown query key", bad, http.StatusBadRequest, "MALFORMED_REQUEST")
 	if queries.calls != 0 {
 		t.Fatal("坏查询不该问读口")
+	}
+
+	narrowed := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&status=ADVISED")
+	if narrowed.Code != http.StatusOK {
+		t.Fatalf("按状态 %d %s", narrowed.Code, narrowed.Body.String())
+	}
+	if got := queries.last.Filters["status"]; len(got) != 1 || got[0] != "ADVISED" {
+		t.Fatalf("状态没交给读口：%v", queries.last.Filters)
+	}
+	byWarehouse := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&warehouseCode=SYN-WH-01")
+	if byWarehouse.Code != http.StatusOK {
+		t.Fatalf("按仓 %d %s", byWarehouse.Code, byWarehouse.Body.String())
+	}
+	if got := queries.last.Filters["warehouseCode"]; len(got) != 1 || got[0] != "SYN-WH-01" {
+		t.Fatalf("仓没交给读口：%v", queries.last.Filters)
+	}
+	windowed := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&expectedFrom=2026-11-20T00:00:00Z")
+	if windowed.Code != http.StatusOK {
+		t.Fatalf("按预计到达 %d %s", windowed.Code, windowed.Body.String())
+	}
+	if got := queries.last.Filters["expectedFrom"]; len(got) != 1 || got[0] != "2026-11-20T00:00:00Z" {
+		t.Fatalf("预计到达没交给读口：%v", queries.last.Filters)
+	}
+	queries.calls = 0
+	badWindow := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&expectedUntil=tomorrow")
+	assertProblem(t, "bad arrival window", badWindow, http.StatusBadRequest, "MALFORMED_REQUEST")
+	if queries.calls != 0 {
+		t.Fatal("写坏的时刻不该问读口")
+	}
+	queries.calls = 0
+	unknown := get(list, "/warehouse-fulfillment-inbound-pre-advices?ownerAccount=SYN-OWNER-01&status=NOPE")
+	assertProblem(t, "unknown status", unknown, http.StatusBadRequest, "MALFORMED_REQUEST")
+	if queries.calls != 0 {
+		t.Fatal("词表外的状态不该问读口")
 	}
 }
 

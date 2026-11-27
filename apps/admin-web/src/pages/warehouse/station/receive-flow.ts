@@ -95,13 +95,20 @@ const waitingFeedback = (detail = '等你扫码。'): ReceiveFeedback => ({
   detail,
 });
 
-export function startReceive(location: string | null, adviceId: string | null): ReceiveStep {
+const receivableStates = ['GOOD', 'PENDING_INSPECTION', 'DEFECTIVE'] as const;
+
+/** 这一仓上次选过的库存状态。不在这三种里、或还没选过，就是没选。 */
+export function rememberedStockState(value: string | null): string | null {
+  return value !== null && (receivableStates as readonly string[]).includes(value) ? value : null;
+}
+
+export function startReceive(location: string | null, adviceId: string | null, stockState: string | null = null): ReceiveStep {
   const base: ReceiveState = {
     phase: adviceId ? 'finding' : 'waiting',
     advice: null,
     fit: null,
     location,
-    stockState: null,
+    stockState: rememberedStockState(stockState),
     goods: [],
     cartons: [],
     damageNext: false,
@@ -281,7 +288,7 @@ export function locationVerdict(state: ReceiveState, code: string, verdict: Stag
 
 export function chooseStockState(state: ReceiveState, stockState: string): ReceiveStep {
   if (state.phase !== 'state' && state.phase !== 'goods') return hold(state);
-  if (!['GOOD', 'PENDING_INSPECTION', 'DEFECTIVE'].includes(stockState)) return hold(state);
+  if (rememberedStockState(stockState) === null) return hold(state);
   return hold({
     ...state,
     phase: 'goods',

@@ -188,6 +188,9 @@ func NewQueryInternalJobsEndpoint(intake CatalogueIntake, queries InternalJobQue
 			writePageQueryProblem(response, err)
 			return
 		}
+		if pageQuery.PageSize > 0 {
+			query.Limit = pageQuery.PageSize
+		}
 		page, err := queries.ListInternalJobs(request.Context(), query.Tenant, query.Limit, pageQuery)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "internal jobs list did not form an answer")

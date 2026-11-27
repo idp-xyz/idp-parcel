@@ -5,7 +5,37 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
+
+func TestStockWordMatchesTheGoodsNotTheRestOfTheBook(t *testing.T) {
+	named := stockWords{needle: "耳机", names: map[string]string{"SYN-GOODS-01": "蓝牙耳机 syn-bar-01"}}
+	if !named.matches("SYN-GOODS-01", "SYN-LOC-A") {
+		t.Fatal("名称与条码该认到这一件")
+	}
+	if named.matches("SYN-GOODS-02", "SYN-LOC-A") {
+		t.Fatal("别的商品不该因为库位相同就被认到")
+	}
+	if !(stockWords{needle: "loc-b"}).matches("SYN-GOODS-02", "SYN-LOC-B") {
+		t.Fatal("库位不区分大小写")
+	}
+	if !(stockWords{}).matches("SYN-GOODS-02", "SYN-LOC-A") {
+		t.Fatal("没给检索词时整份都在")
+	}
+}
+
+func TestLockedQuantityStaysOnTheSameCell(t *testing.T) {
+	alias := "SYN-ALIAS"
+	row := ports.StockCellBalance{Warehouse: "SYN-WH-01", Location: "SYN-LOC-01", Goods: "SYN-GOODS-01", Unit: "件", State: "GOOD", InboundBatch: "IBT-1", Alias: &alias}
+	locks := []ports.StockLockRow{{
+		Warehouse: "SYN-WH-01", Location: "SYN-LOC-01", Goods: "SYN-GOODS-01", Unit: "件", State: "GOOD", InboundBatch: "IBT-1", Alias: alias, Quantity: 3,
+	}, {
+		Warehouse: "SYN-WH-01", Location: "SYN-LOC-02", Goods: "SYN-GOODS-01", Unit: "件", State: "GOOD", InboundBatch: "IBT-1", Alias: alias, Quantity: 9,
+	}}
+	if got := lockedOnCell(locks, row); got != 3 {
+		t.Fatalf("锁着 %d", got)
+	}
+}
 
 func TestStockAgeUsesTheWarehouseTimeZone(t *testing.T) {
 	inbound := time.Date(2026, 11, 19, 18, 0, 0, 0, time.UTC)

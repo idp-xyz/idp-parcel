@@ -682,6 +682,7 @@ type PackParcelCommand struct {
 	Goods      domain.GoodsCode
 	Unit       domain.GoodsUnitName
 	Quantity   int64
+	Serials    []string
 }
 
 // PackCommand 写下装箱记录。委托还不在这一段提交。
@@ -794,14 +795,14 @@ func (handler *WaveHandler) Pack(ctx context.Context, command PackCommand) (Wave
 	if !parcelsConserve(command.Parcels, pickedQuantity(tasks)) {
 		return WaveResult{outcome: WaveContentInvalid}, nil
 	}
-	stored := make([]ports.PackParcel, 0, len(command.Parcels))
-	for _, parcel := range command.Parcels {
-		stored = append(stored, ports.PackParcel{
-			Sequence: parcel.Sequence, Packaging: parcel.Packaging, Weight: parcel.Weight, WeightUnit: parcel.WeightUnit,
-			Length: parcel.Length, Width: parcel.Width, Height: parcel.Height, Dimension: parcel.Dimension,
-			Goods: parcel.Goods, Unit: parcel.Unit, Quantity: parcel.Quantity,
-		})
+	serials, ok, err := handler.packSerials(ctx, command.Tenant, request.Owner(), command.Parcels)
+	if err != nil {
+		return WaveResult{}, fmt.Errorf("pack outbound: %w", err)
 	}
+	if !ok {
+		return WaveResult{outcome: WaveContentInvalid}, nil
+	}
+	stored := storedParcels(command.Parcels, serials)
 	if err := handler.waves.SavePack(ctx, command.Tenant, command.FactID, command.Request, stored, handler.clock.Now()); err != nil {
 		return WaveResult{}, fmt.Errorf("pack outbound: %w", err)
 	}
