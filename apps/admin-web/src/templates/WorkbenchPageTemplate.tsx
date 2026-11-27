@@ -7,7 +7,7 @@ import { clearSelection, selectedOnPage, toggleAllOnPage, toggleSelected } from 
 import { skeletonOf } from './loading-shape';
 import { PageSelectAllCheckbox, checkboxClass, stopRowEvent } from './selection-checkbox';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from './state-slot';
-import { stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
+import { scrollDeltaToReveal, stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
 import { useTabViewRef } from './workspace-view-state';
 
 /** 命令头里的一格指标。可点即筛选，active 表示它正是当前筛选。custom 替换数值位（如进度条）。 */
@@ -275,8 +275,18 @@ export function WorkbenchPageTemplate<Row>({
     if (selectedKey === null) return;
     const list = listRef.current;
     const row = list?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(selectedKey)}"]`);
-    if (!row) return;
-    row.scrollIntoView({ block: 'nearest' });
+    if (!list || !row) return;
+    // 表头是粘在这个滚动区顶上的，scrollIntoView 把它当内容不算遮挡：滚回第一行时行停在表头底下，滚动条也回不到顶。
+    const header = list.querySelector('thead')?.getBoundingClientRect().height ?? 0;
+    const listBox = list.getBoundingClientRect();
+    const rowBox = row.getBoundingClientRect();
+    list.scrollTop += scrollDeltaToReveal({
+      listTop: listBox.top,
+      listBottom: listBox.bottom,
+      rowTop: rowBox.top,
+      rowBottom: rowBox.bottom,
+      header,
+    });
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused !== row && focused.matches('tr[data-row-key]') && list?.contains(focused)) {
       row.focus({ preventScroll: true });

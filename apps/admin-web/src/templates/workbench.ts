@@ -41,6 +41,24 @@ export function workbenchKeyAction(key: string, focus: WorkbenchFocus, detailOpe
  * 方向键换行：没有选中时向下落在第一行、向上落在最后一行；到头不绕回。选中的行已被筛掉时同「没有选中」。
  * 空表答 null。
  */
+/**
+ * 把一行滚进列表可视区，scrollTop 要加的量。表头粘在滚动区顶上，压住的那一截不算看得见：
+ * 不算的话，滚回第一行会停在表头底下，行露不全，滚动条也回不到顶。
+ * 只动这一层的 scrollTop，不带动外层能滚的容器。
+ */
+export function scrollDeltaToReveal(box: {
+  listTop: number;
+  listBottom: number;
+  rowTop: number;
+  rowBottom: number;
+  header: number;
+}): number {
+  const topLimit = box.listTop + box.header;
+  if (box.rowTop < topLimit) return box.rowTop - topLimit;
+  if (box.rowBottom > box.listBottom) return box.rowBottom - box.listBottom;
+  return 0;
+}
+
 export function stepSelection(
   keys: readonly string[],
   current: string | null,
