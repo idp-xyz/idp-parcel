@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { WorkbenchPageTemplate, toggleWorkbenchSort, type WorkbenchColumn, type WorkbenchSort } from '../../templates';
@@ -26,10 +26,11 @@ import {
   type ReturnAdviceStatus,
 } from './return-flow';
 import { ReturnAdviceDocument } from './ReturnAdviceDocument';
+import { stockPageClamp, stockPageCount, stockPageSlice, stockPageSummary } from './stock-page';
 import type { QueueFilters } from './use-queue-filters';
 import type { ReturnsOverviewState, ReturnsPanel } from './use-returns-overview';
 import { elapsedLabel } from './waiting';
-import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsPagerBar, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
 const info = moduleInfoById[moduleId];
 const receivedKey = 'receivedAt';
@@ -45,7 +46,7 @@ const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{cont
 
 /**
  * 退货预报：货主或运营事先登记的退回明细。点一行在右边看这张预报，预报号仍进整页。概览读口不分页、不接筛选维，
- * 状态、数量、货主与仓的筛选都在已取回的整份概览上做，所以没有翻页条。
+ * 状态、数量、货主与仓的筛选都在已取回的整份概览上做；翻页是在这份上切的，行数多少都留着翻页条。
  */
 export function ReturnAdviceList({ overview, filters }: { overview: ReturnsOverviewState; filters: QueueFilters }) {
   const drawer = useActionDrawer(receivingActionSpecs);
@@ -63,6 +64,12 @@ export function ReturnAdviceList({ overview, filters }: { overview: ReturnsOverv
   const defaultOrder = filters.status === 'AWAITING_ARRIVAL' ? 'oldest' : 'newest';
   const order = isReturnOrder(filters.sort) ? filters.sort : defaultOrder;
   const rows = sortAdviceRows(shown, order);
+  // 一页多长与实时库存里整份答回的那几种看法相同。筛选或排序一换就回到第一页。
+  const sliceKey = `${filters.keyword}\n${filters.status}\n${filters.owner}\n${filters.warehouse}\n${filters.sort ?? ''}`;
+  const [paging, setPaging] = useState({ key: sliceKey, page: 1 });
+  if (paging.key !== sliceKey) setPaging({ key: sliceKey, page: 1 });
+  const page = stockPageClamp(paging.key === sliceKey ? paging.page : 1, rows.length);
+  const pageRows = stockPageSlice(rows, page);
   const sort: WorkbenchSort = { key: receivedKey, dir: order === 'oldest' ? 1 : -1 };
   const now = new Date();
   const ownerNames = useMemo(
@@ -204,7 +211,7 @@ export function ReturnAdviceList({ overview, filters }: { overview: ReturnsOverv
           </>
         }
         columns={columns}
-        rows={rows}
+        rows={pageRows}
         rowKey={(row) => row.advice.adviceId}
         selectedKey={openKey}
         onSelect={setOpenKey}
@@ -221,6 +228,17 @@ export function ReturnAdviceList({ overview, filters }: { overview: ReturnsOverv
           return <ReturnAdviceDocument adviceKey={row ? returnAdviceNumber(row.advice) : key} panel={panel} />;
         }}
         viewState={viewState}
+        listFooter={
+          viewState.kind === 'ready' ? (
+            <WmsPagerBar
+              summary={stockPageSummary(page, rows.length)}
+              canPrevious={page > 1}
+              canNext={page < stockPageCount(rows.length)}
+              onPrevious={() => setPaging({ key: sliceKey, page: page - 1 })}
+              onNext={() => setPaging({ key: sliceKey, page: page + 1 })}
+            />
+          ) : undefined
+        }
       />
       <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
     </>

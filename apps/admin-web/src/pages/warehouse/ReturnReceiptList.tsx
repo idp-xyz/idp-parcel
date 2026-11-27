@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { TabletSmartphone } from 'lucide-react';
 import { Button } from '@idpxyz/ui-primitives';
 import { WorkbenchPageTemplate, toggleWorkbenchSort, type WorkbenchColumn, type WorkbenchSort } from '../../templates';
@@ -25,10 +25,11 @@ import {
   type ReturnReceiptStatus,
 } from './return-flow';
 import { ReturnReceiptDocument } from './ReturnReceiptDocument';
+import { stockPageClamp, stockPageCount, stockPageSlice, stockPageSummary } from './stock-page';
 import type { QueueFilters } from './use-queue-filters';
 import type { ReturnsOverviewState, ReturnsPanel } from './use-returns-overview';
 import { elapsedLabel } from './waiting';
-import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsPagerBar, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
 const info = moduleInfoById[moduleId];
 const occurredKey = 'occurredAt';
@@ -42,7 +43,7 @@ const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{cont
 
 /**
  * 退件到仓与回库处置：退件扫进暂存位后出现在这里。点一行在右边看这笔到仓，作业事实号仍进整页。概览读口不分页、不接筛选维，
- * 状态、数量、货主与仓的筛选都在已取回的整份概览上做，所以没有翻页条。
+ * 状态、数量、货主与仓的筛选都在已取回的整份概览上做；翻页是在这份上切的，行数多少都留着翻页条。
  */
 export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOverviewState; filters: QueueFilters }) {
   const drawer = useActionDrawer(receivingActionSpecs);
@@ -60,6 +61,12 @@ export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOver
   const defaultOrder = filters.status === homeQueue ? 'oldest' : 'newest';
   const order = isReturnOrder(filters.sort) ? filters.sort : defaultOrder;
   const rows = sortReceipts(shown, order);
+  // 一页多长与实时库存里整份答回的那几种看法相同。筛选或排序一换就回到第一页。
+  const sliceKey = `${filters.keyword}\n${filters.status}\n${filters.owner}\n${filters.warehouse}\n${filters.sort ?? ''}`;
+  const [paging, setPaging] = useState({ key: sliceKey, page: 1 });
+  if (paging.key !== sliceKey) setPaging({ key: sliceKey, page: 1 });
+  const page = stockPageClamp(paging.key === sliceKey ? paging.page : 1, rows.length);
+  const pageRows = stockPageSlice(rows, page);
   const sort: WorkbenchSort = { key: occurredKey, dir: order === 'oldest' ? 1 : -1 };
   const now = new Date();
   const ownerNames = useMemo(
@@ -210,7 +217,7 @@ export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOver
           </>
         }
         columns={columns}
-        rows={rows}
+        rows={pageRows}
         rowKey={(row) => row.factId}
         selectedKey={openKey}
         onSelect={setOpenKey}
@@ -224,6 +231,17 @@ export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOver
         onClearFilters={clearFilters}
         renderDetail={(key) => <ReturnReceiptDocument factId={key} panel={panel} />}
         viewState={viewState}
+        listFooter={
+          viewState.kind === 'ready' ? (
+            <WmsPagerBar
+              summary={stockPageSummary(page, rows.length)}
+              canPrevious={page > 1}
+              canNext={page < stockPageCount(rows.length)}
+              onPrevious={() => setPaging({ key: sliceKey, page: page - 1 })}
+              onNext={() => setPaging({ key: sliceKey, page: page + 1 })}
+            />
+          ) : undefined
+        }
       />
       <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
     </>
