@@ -384,10 +384,11 @@ export function WorkbenchPageTemplate<Row>({
               </th>
             )}
             {visibleColumns.map((column, index) => (
+              // 表头不折行。列宽按内容收时，格里只有一个字，表头会竖着排成一字一行。
               <th
                 key={column.key}
                 scope="col"
-                className={`px-3 py-2 font-medium ${index === 0 && !selection ? 'pl-6' : ''} ${column.right ? 'text-right' : ''} ${
+                className={`whitespace-nowrap px-3 py-2 font-medium ${index === 0 && !selection ? 'pl-6' : ''} ${column.right ? 'text-right' : ''} ${
                   index === visibleColumns.length - 1 ? 'pr-6' : ''
                 }`}
                 style={column.width ? { width: column.width } : undefined}

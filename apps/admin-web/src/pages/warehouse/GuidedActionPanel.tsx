@@ -24,6 +24,12 @@ import { resolveLookupOptions, type WarehouseLookups } from './use-catalogues';
 
 export interface GuidedActionTarget extends RegistrationTarget {
   form: GuidedFormDefinition;
+  /**
+   * 引导表单提交前改报文。JSON 原文不经过这里：那一格由人自己写标识。
+   */
+  prepare?: (
+    payload: Record<string, unknown>,
+  ) => Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; message: string }>;
 }
 
 export interface GuidedActionPanelProps {
@@ -346,12 +352,23 @@ export function GuidedFormBody({
       const built = buildGuidedPayload(target.form, values);
       if (!built.ok) {
         setErrors(built.errors);
-        setFormError(built.formError ?? '请先补全标红的必填或格式有误的字段。');
+        const carried = target.form.fields.find((field) => field.carried && built.errors[field.path]);
+        setFormError(carried ? (built.errors[carried.path] ?? '请先补全标红的必填或格式有误的字段。') : (built.formError ?? '请先补全标红的必填或格式有误的字段。'));
         return;
       }
       setErrors({});
       setFormError(null);
       payload = built.payload;
+      if (target.prepare) {
+        setState({ kind: 'submitting' });
+        const prepared = await target.prepare(built.payload);
+        if (!prepared.ok) {
+          setFormError(prepared.message);
+          setState({ kind: 'idle' });
+          return;
+        }
+        payload = prepared.payload;
+      }
     }
     setState({ kind: 'submitting' });
     const answer = await target.submit(payload);
@@ -384,7 +401,7 @@ export function GuidedFormBody({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {target.form.fields.map((field) =>
-            field.kind === 'rows' ? (
+            field.carried ? null : field.kind === 'rows' ? (
               <RowsFieldControl
                 key={field.path}
                 field={field}

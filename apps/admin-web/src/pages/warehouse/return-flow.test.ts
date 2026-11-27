@@ -257,9 +257,9 @@ test('预报的下一步只有待到仓的有：去作业台收退件；到了�
   equal(returnAdviceNextStep('DISPOSED'), null);
 });
 
-test('到仓记录的下一步只有待处置的有：处置；已处置、转待认领与陌生结果没有', () => {
+test('到仓记录的下一步：待处置就地记去向；去向已记就去把货移出退货暂存；转待认领与陌生结果不在这里指', () => {
   deepEqual(returnReceiptNextStep('AWAITING_DISPOSITION'), { label: '处置' });
-  equal(returnReceiptNextStep('DISPOSED'), null);
+  deepEqual(returnReceiptNextStep('DISPOSED'), { label: '移出退货暂存', station: 'putaway' });
   equal(returnReceiptNextStep('DIVERTED'), null);
   equal(returnReceiptNextStep('OTHER'), null);
 });

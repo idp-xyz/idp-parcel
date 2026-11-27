@@ -758,6 +758,8 @@ func writeReturnsPage(response http.ResponseWriter, page ports.ReturnsPage) {
 		item := adviceJSON(advice)
 		if advice.Status != "" {
 			item["status"] = advice.Status
+			item["awaitingDisposition"] = advice.AwaitingDisposition
+			item["diverted"] = advice.Diverted
 		}
 		advices = append(advices, item)
 	}

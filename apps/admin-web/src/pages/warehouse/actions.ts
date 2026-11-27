@@ -171,9 +171,7 @@ export const receivingActionSpecs: readonly WarehouseActionSpec[] = [
     title: '代录更新入库预报告知',
     endpoint: '/warehouse-fulfillment-inbound-pre-advice-notice-on-behalf',
     grant: 'INBOUND_PRE_ADVICE_RECORD_ON_BEHALF',
-    snapshotHint:
-      '填 preAdviceId、decisionId、evidenceReference、expectedAt（RFC 3339），可选 arrivalClue、ownerReference。货主取自预报，报文里不要带 ownerAccount。' +
-      noActorNote,
+    snapshotHint: '改这张预报的预计到达。到货线索和货主参考号留空就是清空。',
   },
   {
     id: 'pre-advice-withdrawal',
@@ -181,9 +179,7 @@ export const receivingActionSpecs: readonly WarehouseActionSpec[] = [
     title: '代录撤回入库预报',
     endpoint: '/warehouse-fulfillment-inbound-pre-advice-withdrawal-on-behalf',
     grant: 'INBOUND_PRE_ADVICE_RECORD_ON_BEHALF',
-    snapshotHint:
-      '填 preAdviceId 与 evidenceReference。不要带 ownerAccount 或 decisionId；收货中与已完结的预报不能撤回。' +
-      noActorNote,
+    snapshotHint: '撤回这张还没开始收的预报，写明依据。',
   },
   {
     id: 'pre-advice-close',
@@ -191,7 +187,7 @@ export const receivingActionSpecs: readonly WarehouseActionSpec[] = [
     title: '完结入库预报并计算少收',
     endpoint: '/warehouse-fulfillment-inbound-pre-advice-closures',
     grant: 'INBOUND_PRE_ADVICE_CLOSE',
-    snapshotHint: '填 preAdviceId，可选 note。不要带 ownerAccount 或 decisionId；只完结收货中的预报。' + noActorNote,
+    snapshotHint: '完结这张收货中的预报，还没收到的按少收记下。说明可以不填。',
   },
   {
     id: 'discrepancy-conclusion',
@@ -207,7 +203,7 @@ export const receivingActionSpecs: readonly WarehouseActionSpec[] = [
     title: '认领待认领到货',
     endpoint: '/warehouse-fulfillment-unclaimed-arrival-claims',
     grant: 'UNCLAIMED_ARRIVAL_CLAIM',
-    snapshotHint: '填 decisionId、arrivalId、ownerAccount；入库到货需带 preAdviceId，退件只带货主。' + noActorNote,
+    snapshotHint: '入库到货填单据号，页面换成预报标识再送出；手里已经是预报标识也可以。退件留空。',
   },
   {
     id: 'unclaimed-revoke',

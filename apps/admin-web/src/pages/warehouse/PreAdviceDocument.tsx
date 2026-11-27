@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
 import { formatInstant } from '../catalogue-view';
+import { adviceActionPrefill } from './advice-action';
 import { receivingActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
 import { getPreAdviceDetail, type PreAdviceRecord } from './api';
@@ -116,17 +117,17 @@ export function PreAdviceDocument({
           record ? (
             <>
               {open && drawer.has('pre-advice-notice') ? (
-                <Button type="button" variant="outline" onClick={() => drawer.open('pre-advice-notice', { preAdviceId: record.preAdviceId })}>
+                <Button type="button" variant="outline" onClick={() => drawer.open('pre-advice-notice', adviceActionPrefill(record, false))}>
                   更新告知
                 </Button>
               ) : null}
               {record.status === 'ADVISED' && drawer.has('pre-advice-withdrawal') ? (
-                <Button type="button" variant="outline" onClick={() => drawer.open('pre-advice-withdrawal', { preAdviceId: record.preAdviceId })}>
+                <Button type="button" variant="outline" onClick={() => drawer.open('pre-advice-withdrawal', adviceActionPrefill(record, false))}>
                   撤回
                 </Button>
               ) : null}
               {record.status === 'RECEIVING' && drawer.has('pre-advice-close') ? (
-                <Button type="button" variant="outline" onClick={() => drawer.open('pre-advice-close', { preAdviceId: record.preAdviceId })}>
+                <Button type="button" variant="outline" onClick={() => drawer.open('pre-advice-close', adviceActionPrefill(record, true))}>
                   完结
                 </Button>
               ) : null}

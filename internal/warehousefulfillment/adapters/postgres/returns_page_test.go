@@ -50,6 +50,9 @@ func TestReturnListsPageAndFilterByTracking(t *testing.T) {
 	if err != nil || found.Total != 1 || len(found.PreAdvices) != 1 || found.PreAdvices[0].TrackingNumber != "TRK-A" || found.PreAdvices[0].Status != "ARRIVED" {
 		t.Fatalf("按单号 total=%d status=%s %v", found.Total, found.PreAdvices[0].Status, err)
 	}
+	if found.PreAdvices[0].AwaitingDisposition != 1 || found.PreAdvices[0].Diverted != 0 {
+		t.Fatalf("到仓还没记去向 awaiting=%d diverted=%d", found.PreAdvices[0].AwaitingDisposition, found.PreAdvices[0].Diverted)
+	}
 	one, err := reads.ReadReturns(t.Context(), tenant, ports.ReturnsQuery{
 		View: ports.ReturnsViewAdvice, Key: found.PreAdvices[0].DocumentNumber,
 	})

@@ -98,7 +98,7 @@ export function unclaimedTrack(arrival: Pick<ArrivalFacts, 'status' | 'postingRe
 
 /**
  * 认领表单从这件到货带出的格：到货号，以及现场登记时留的货主线索与预报线索。线索不是认定，带出来只是省得再敲，
- * 认领人可以改。
+ * 认领人可以改。预报线索填进入库单号那一格：是单据号就在提交前换成预报标识，是预报标识就照原样送出。
  */
 export function claimPrefill(arrival: { arrivalId: string; ownerClue?: string; preAdviceClue?: string }): Record<string, string> {
   return { arrivalId: arrival.arrivalId, ownerAccount: arrival.ownerClue ?? '', preAdviceId: arrival.preAdviceClue ?? '' };

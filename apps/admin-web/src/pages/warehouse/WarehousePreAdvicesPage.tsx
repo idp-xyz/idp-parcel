@@ -18,12 +18,13 @@ import { listOwnerPreAdvices, type PreAdviceRecord } from './api';
 import { DocumentLink } from './document-page';
 import { fitColumnWidth, nameOf, shortInstant } from './list-cells';
 import { PreAdviceDocument } from './PreAdviceDocument';
+import { adviceActionPrefill } from './advice-action';
 import { preAdviceProgress } from './pre-advice-progress';
 import { useDocumentParts } from './use-document';
 import { receiveStationHash } from './station/stations';
 import { useStatusCounts } from './use-status-counts';
 import { elapsedLabel } from './waiting';
-import { labelOf, WmsBadge, WmsFilterSelect, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsProgress, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
 const moduleId = 'warehouse-pre-advices';
 const info = moduleInfoById[moduleId];
@@ -120,15 +121,14 @@ function PreAdviceList() {
     {
       key: 'progress',
       header: nowrap('已收 / 预报'),
-      right: true,
       width: fitColumnWidth,
       render: (row) => {
         const progress = preAdviceProgress(row);
         const unit = progress.byCarton ? '箱' : '';
         const gap = progress.outstanding > 0 ? `，还差 ${progress.outstanding}${unit}` : progress.advised > 0 ? '，已收齐' : '';
         return (
-          <span className="whitespace-nowrap tabular-nums" title={`已收 ${progress.received}${unit}，预报 ${progress.advised}${unit}${gap}`}>
-            {progress.received} / {progress.advised}
+          <span title={`已收 ${progress.received}${unit}，预报 ${progress.advised}${unit}${gap}`}>
+            <WmsProgress done={progress.received} total={progress.advised} />
           </span>
         );
       },
@@ -192,7 +192,7 @@ function PreAdviceList() {
                 className="whitespace-nowrap"
                 onClick={(event) => {
                   event.stopPropagation();
-                  drawer.open('pre-advice-close', { preAdviceId: row.preAdviceId });
+                  drawer.open('pre-advice-close', adviceActionPrefill(row, true));
                 }}
               >
                 完结

@@ -13,7 +13,7 @@ import { returnsDefaultPageSize, returnsPageSizes, type ReturnPreAdviceRecord } 
 import { DocumentLink } from './document-page';
 import { fitColumnWidth, nameOf, shortInstant } from './list-cells';
 import { returnAdviceKind, returnsModule as moduleId } from './return-address';
-import { isReturnOrder, returnAdviceNextStep, returnAdviceNumber, returnAdviceWaitingSince, type ReturnAdviceStatus } from './return-flow';
+import { isReturnOrder, returnAdviceArrivalNote, returnAdviceNextStep, returnAdviceNumber, returnAdviceWaitingSince, type ReturnAdviceStatus } from './return-flow';
 import { ReturnAdviceDocument } from './ReturnAdviceDocument';
 import type { QueueFilters } from './use-queue-filters';
 import { useReturnsPage } from './use-returns-overview';
@@ -94,7 +94,16 @@ export function ReturnAdviceList({ filters }: { filters: QueueFilters }) {
         />
       ),
     },
-    { key: 'status', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.status} /> },
+    {
+      key: 'status',
+      header: '状态',
+      width: fitColumnWidth,
+      render: (row) => {
+        const note = returnAdviceArrivalNote({ awaiting: row.advice.awaitingDisposition ?? 0, diverted: row.advice.diverted ?? 0 });
+        const badge = <WmsBadge code={row.status} />;
+        return row.status === 'ARRIVED' && note ? <WmsTwoLine primary={badge} secondary={note} /> : badge;
+      },
+    },
     { key: 'owner', header: '货主', width: fitColumnWidth, minListWidth: 900, render: (row) => named(ownerNames, row.advice.ownerAccount) },
     { key: 'warehouse', header: '仓', width: fitColumnWidth, minListWidth: 1060, render: (row) => named(warehouseNames, row.advice.warehouseCode) },
     {

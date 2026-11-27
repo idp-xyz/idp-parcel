@@ -14,7 +14,9 @@ import { DocumentLink } from './document-page';
 import { fitColumnWidth, nameOf } from './list-cells';
 import { returnReceiptKind, returnsModule as moduleId } from './return-address';
 import { ReceiptStatusBadge } from './return-badges';
+import { enterStation } from '../../shell/enter-station';
 import { isReturnOrder, returnReceiptNextStep, returnReceiptStatus, returnReceiptWaitingSince, type ReturnReceiptStatus } from './return-flow';
+import { putawayStationHash } from './station/stations';
 import { ReturnReceiptDocument } from './ReturnReceiptDocument';
 import type { QueueFilters } from './use-queue-filters';
 import { useReturnsPage } from './use-returns-overview';
@@ -264,6 +266,22 @@ export function ReturnReceiptList({ filters }: { filters: QueueFilters }) {
 function NextStepCell({ row, drawer }: { row: ReturnReceiptRecord; drawer: ActionDrawerControl }) {
   const next = returnReceiptNextStep(returnReceiptStatus(row));
   if (next === null) return <span className="text-idpxyz-textMuted">—</span>;
+  if (next.station === 'putaway') {
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
+        onClick={(event) => {
+          event.stopPropagation();
+          enterStation(putawayStationHash());
+        }}
+      >
+        {next.label}
+      </Button>
+    );
+  }
   if (!drawer.has('return-disposition')) return <span className="text-idpxyz-textMuted">等处置</span>;
   return (
     <Button

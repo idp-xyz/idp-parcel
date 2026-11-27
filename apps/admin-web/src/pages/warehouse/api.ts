@@ -1576,6 +1576,9 @@ export interface ReturnPreAdviceRecord {
   lines: ReadonlyArray<{ goodsCode: string; unit: string; quantity: number }>;
   /** 按页取的列表才带：待到仓、已到仓、已处置。按一张取时没有，状态由到仓记录对出来。 */
   status?: 'AWAITING_ARRIVAL' | 'ARRIVED' | 'DISPOSED';
+  /** 按页取的列表才带：入了暂存还没记去向的笔数，和转了待认领的笔数。 */
+  awaitingDisposition?: number;
+  diverted?: number;
 }
 
 export interface ReturnReceiptRecord {

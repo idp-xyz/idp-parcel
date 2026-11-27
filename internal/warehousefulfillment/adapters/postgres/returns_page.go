@@ -52,7 +52,10 @@ advice_status AS (
                 AND count(fact_id) FILTER (WHERE outcome = 'COUNTED' AND decision_id IS NULL) = 0
                THEN 'DISPOSED'
                ELSE 'ARRIVED'
-           END AS status
+           END AS status,
+           -- 已到仓这一个词盖住两种事：入了暂存还没记去向，和转了待认领。列表要分开说。
+           count(fact_id) FILTER (WHERE outcome = 'COUNTED' AND decision_id IS NULL) AS awaiting,
+           count(fact_id) FILTER (WHERE outcome = 'UNCLAIMED') AS diverted
       FROM matched
      GROUP BY advice_id
 )`
@@ -116,7 +119,7 @@ func listReturnAdvices(ctx context.Context, querier rowQuery, tenant string, que
 	page := ports.ReturnsPage{View: query.View, Page: query.Page, PageSize: query.PageSize, Total: total, Counts: counts, PreAdvices: []ports.ReturnPreAdviceRow{}, Receipts: []ports.ReturnReceiptRow{}}
 	rows, err := querier.Query(ctx, adviceStatusSQL+`
 SELECT a.advice_id, a.document_number, a.numbering_absence, a.owner_account_id, a.warehouse_code,
-       a.origin, a.tracking_number, a.basis, a.operator_id, a.received_at, s.status
+       a.origin, a.tracking_number, a.basis, a.operator_id, a.received_at, s.status, s.awaiting, s.diverted
   FROM warehouse_fulfillment.return_pre_advice a
   JOIN advice_status s ON s.advice_id = a.advice_id
  WHERE a.tenant_id = $1
@@ -262,7 +265,7 @@ func oneReturnAdvice(ctx context.Context, querier rowQuery, tenant, key string) 
 	page := ports.ReturnsPage{View: ports.ReturnsViewAdvice, PreAdvices: []ports.ReturnPreAdviceRow{}, Receipts: []ports.ReturnReceiptRow{}}
 	rows, err := querier.Query(ctx, `
 SELECT advice_id, document_number, numbering_absence, owner_account_id, warehouse_code,
-       origin, tracking_number, basis, operator_id, received_at, ''::text
+       origin, tracking_number, basis, operator_id, received_at, ''::text, 0, 0
   FROM warehouse_fulfillment.return_pre_advice
  WHERE tenant_id = $1 AND (document_number = $2 OR advice_id = $2)
  ORDER BY CASE WHEN document_number = $2 THEN 0 ELSE 1 END, advice_id
@@ -376,7 +379,7 @@ SELECT r.fact_id, r.warehouse_code, r.location_code, r.tracking_number, r.owner_
 	}
 	advices, err := querier.Query(ctx, `
 SELECT advice_id, document_number, numbering_absence, owner_account_id, warehouse_code,
-       origin, tracking_number, basis, operator_id, received_at, ''::text
+       origin, tracking_number, basis, operator_id, received_at, ''::text, 0, 0
   FROM warehouse_fulfillment.return_pre_advice
  WHERE tenant_id = $1
    AND (
@@ -419,7 +422,7 @@ func scanAdvice(rows adviceScanner) (ports.ReturnPreAdviceRow, error) {
 		row                   ports.ReturnPreAdviceRow
 		num, abs, basis, opID *string
 	)
-	if err := rows.Scan(&row.AdviceID, &num, &abs, &row.OwnerAccount, &row.WarehouseCode, &row.Origin, &row.TrackingNumber, &basis, &opID, &row.ReceivedAt, &row.Status); err != nil {
+	if err := rows.Scan(&row.AdviceID, &num, &abs, &row.OwnerAccount, &row.WarehouseCode, &row.Origin, &row.TrackingNumber, &basis, &opID, &row.ReceivedAt, &row.Status, &row.AwaitingDisposition, &row.Diverted); err != nil {
 		return ports.ReturnPreAdviceRow{}, fmt.Errorf("returns page: advice: %w", err)
 	}
 	row.DocumentNumber = valueOrEmpty(num)

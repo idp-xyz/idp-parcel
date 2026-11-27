@@ -271,3 +271,16 @@ test('部分发货规则：出库单上可不选，缺货处置两件至少选�
   equal(buildGuidedPayload(consent, { requestId: 'OBR-01', partialShipment: 'SPLIT_SHIP', basis: '' }).ok, false);
   equal(outboundWaveActionSpecs.find((spec) => spec.id === 'partial-shipment-consent')?.endpoint, '/warehouse-fulfillment-outbound-partial-shipment-consents');
 });
+
+test('完结预报的报文带预报标识，单据号抬头不进报文', () => {
+  const form = allWarehouseGuidedForms['pre-advice-close'];
+  ok(form?.fields.some((field) => field.path === 'preAdviceId' && field.carried === true));
+  const built = buildGuidedPayload(form!, {
+    preAdviceId: 'IPA-1',
+    note: '',
+    heading: { title: 'IB-20261127-00002', detail: '收货中' },
+  });
+  equal(built.ok, true);
+  if (built.ok) deepEqual(built.payload, { preAdviceId: 'IPA-1' });
+  equal(buildGuidedPayload(form!, { preAdviceId: '', note: '少了一件' }).ok, false);
+});

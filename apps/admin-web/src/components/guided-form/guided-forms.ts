@@ -59,6 +59,11 @@ export interface GuidedFieldSpec {
   omitWhenZero?: boolean;
   /** kind 为 rows 且允许空数组（如空库位清点 lines: []）时，无行仍输出 [] 而不是省略该键。 */
   emitEmptyArray?: boolean;
+  /**
+   * 已经点中的单据带进来的标识。写入报文，引导表单不画输入框：人核对的是单据号，标识留在 JSON 原文里。
+   * 没带上时仍按必填拦住，不另造一个号。
+   */
+  carried?: boolean;
 }
 
 export type GuidedFormValues = Record<string, unknown>;

@@ -541,6 +541,9 @@ type ReturnPreAdviceRow struct {
 	Lines            []ReturnPreAdviceLineRow
 	// Status 只在按页取的预报列表上有值：待到仓、已到仓、已处置。整份总览不填。
 	Status string
+	// AwaitingDisposition 是入了暂存、还没记去向的笔数。Diverted 是转了待认领的笔数。只在按页取的列表上有值。
+	AwaitingDisposition int
+	Diverted            int
 }
 
 type ReturnDispositionRow struct {

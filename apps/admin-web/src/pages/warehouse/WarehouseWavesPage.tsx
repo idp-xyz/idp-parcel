@@ -163,11 +163,11 @@ function WaveList() {
     },
     {
       key: 'prefetch',
-      header: '预取面单',
+      header: nowrap('预取面单'),
       width: fitColumnWidth,
       minListWidth: 1360,
       hideWhenDetailOpen: true,
-      render: (row) => (row.prefetch ? '是' : '否'),
+      render: (row) => nowrap(row.prefetch ? '是' : '否'),
     },
     {
       key: 'operator',
