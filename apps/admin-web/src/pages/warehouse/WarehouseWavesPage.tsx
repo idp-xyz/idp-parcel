@@ -283,7 +283,7 @@ function WaveList() {
         onSort={(key) => setChosenSort(toggleWorkbenchSort(sort, key))}
         noMatchText="当前筛选下没有波次"
         onClearFilters={clearFilters}
-        renderDetail={(key) => <WaveDocument key={key} waveId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }} />}
+        renderDetail={(key) => <WaveDocument waveId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }} />}
         viewState={viewState}
         listFooter={shownPagination && viewState.kind === 'ready' ? <CursorPagerBar pagination={shownPagination} /> : undefined}
       />

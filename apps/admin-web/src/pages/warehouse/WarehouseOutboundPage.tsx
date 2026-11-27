@@ -412,8 +412,8 @@ function OutboundList() {
         noMatchText="当前筛选下没有出库单"
         onClearFilters={clearFilters}
         renderDetail={(key) => (
-          // 换一行就是换一张单：按键重挂，上一张单读到一半的答复与没关的表单不带过来。
-          <OutboundDocument key={key} requestId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }} />
+          // 不按行重挂：重挂会把整栏卸掉再从加载骨架画起。换行留着上一张，新的读到再换，见 useKeyedLoad 的 holdPrevious。
+          <OutboundDocument requestId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }} />
         )}
         viewState={viewState}
         listFooter={shownPagination && viewState.kind === 'ready' ? <CursorPagerBar pagination={shownPagination} /> : undefined}
