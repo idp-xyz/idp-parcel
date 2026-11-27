@@ -26,6 +26,11 @@ func TestOperatorStockQueryTakesAGoodsWord(t *testing.T) {
 	if reason != "" || listed.Keyword != "SYN-GOODS-01" || listed.Page.Keyword != "SYN-GOODS-01" {
 		t.Fatalf("流水 %s %q %q", reason, listed.Keyword, listed.Page.Keyword)
 	}
+	narrowed := stockQueryRequest(t, url.Values{"ownerAccount": {"SYN-OWNER-01"}, "view": {"cells"}, "stockState": {"GOOD"}, "page": {"1"}, "pageSize": {"50"}})
+	stateQuery, reason := operatorStockQuery(narrowed, tenant, 200)
+	if reason != "" || stateQuery.State != "GOOD" {
+		t.Fatalf("状态 %s %q", reason, stateQuery.State)
+	}
 	blank := stockQueryRequest(t, url.Values{"ownerAccount": {"SYN-OWNER-01"}, "view": {"cells"}, "q": {"  "}})
 	quiet, reason := operatorStockQuery(blank, tenant, 200)
 	if reason != "" || quiet.Keyword != "" {

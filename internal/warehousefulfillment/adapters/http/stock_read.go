@@ -75,7 +75,7 @@ func NewQueryCustomerStockEndpoint(intake CustomerInboundPreAdvicePorts, reader 
 }
 
 func operatorStockQuery(request *http.Request, tenant domain.TenantID, limit int) (application.StockQuery, string) {
-	values, reason := stockQueryValues(request, "ownerAccount", "warehouseCode", "view", "q", stockAfterQueryKey, stockPageSizeQueryKey, stockPageQueryKey)
+	values, reason := stockQueryValues(request, "ownerAccount", "warehouseCode", "view", "q", "stockState", "held", "holdKind", stockAfterQueryKey, stockPageSizeQueryKey, stockPageQueryKey)
 	if reason != "" {
 		return application.StockQuery{}, reason
 	}
@@ -95,7 +95,22 @@ func operatorStockQuery(request *http.Request, tenant domain.TenantID, limit int
 	if reason != "" {
 		return application.StockQuery{}, reason
 	}
-	query := application.StockQuery{Tenant: tenant, Owner: owner, Warehouse: warehouse, View: view, Keyword: keyword, Now: time.Now()}
+	state, reason := stockStateFilter(values["stockState"])
+	if reason != "" {
+		return application.StockQuery{}, reason
+	}
+	held, reason := heldFilter(values["held"])
+	if reason != "" {
+		return application.StockQuery{}, reason
+	}
+	hold, reason := holdKindFilter(values["holdKind"])
+	if reason != "" {
+		return application.StockQuery{}, reason
+	}
+	query := application.StockQuery{
+		Tenant: tenant, Owner: owner, Warehouse: warehouse, View: view, Keyword: keyword,
+		State: state, Held: held, Hold: hold, Now: time.Now(),
+	}
 	return stockPaging(query, values, limit)
 }
 
@@ -112,6 +127,35 @@ func stockKeyword(raw string) (string, string) {
 		return "", "q must be at most 100 characters"
 	}
 	return keyword, ""
+}
+
+func stockStateFilter(raw string) (string, string) {
+	if strings.TrimSpace(raw) == "" {
+		return "", ""
+	}
+	state, err := domain.NewStockState(raw)
+	if err != nil {
+		return "", "stockState is not a stock state"
+	}
+	return state.String(), ""
+}
+
+func heldFilter(raw string) (string, string) {
+	switch raw {
+	case "", "true", "false":
+		return raw, ""
+	default:
+		return "", "held must be true or false"
+	}
+}
+
+func holdKindFilter(raw string) (string, string) {
+	switch raw {
+	case "", "FREEZE", "CARTON", "RESERVATION", "LOCKED":
+		return raw, ""
+	default:
+		return "", "holdKind is not a hold"
+	}
 }
 
 func customerStockQuery(request *http.Request, tenant domain.TenantID, owner domain.OwnerAccountID) (application.StockQuery, string) {
@@ -293,7 +337,8 @@ func stockSnapshotBody(snapshot application.StockSnapshot) stockReadBody {
 		item := stockCellBody{
 			Warehouse: cell.Warehouse, Location: cell.Location, Goods: cell.Goods, Unit: cell.Unit, State: cell.State,
 			Alias: cell.Alias, Batch: cell.Batch, Expiry: cell.Expiry, InboundBatch: cell.InboundBatch,
-			InboundAt: cell.InboundAt, Quantity: cell.Quantity, Allocatable: cell.Allocatable, Frozen: cell.Frozen, Available: cell.Available,
+			InboundAt: cell.InboundAt, Quantity: cell.Quantity, Allocatable: cell.Allocatable, ZoneUsage: cell.ZoneUsage,
+			Frozen: cell.Frozen, Locked: cell.Locked, Available: cell.Available,
 		}
 		if cell.AgeConfigured {
 			days := cell.AgeDays
@@ -327,7 +372,7 @@ func stockSnapshotBody(snapshot application.StockSnapshot) stockReadBody {
 		body.Holds = append(body.Holds, stockHoldBody{
 			Kind: hold.Kind, Warehouse: hold.Warehouse, Goods: hold.Goods, Unit: hold.Unit, State: hold.State,
 			Location: hold.Location, Carton: hold.Carton, Quantity: hold.Quantity, Reason: hold.Reason,
-			Operator: hold.Operator, FrozenAt: hold.FrozenAt,
+			Operator: hold.Operator, FrozenAt: hold.FrozenAt, Reference: hold.Reference,
 		})
 	}
 	for _, movement := range snapshot.Movements {
@@ -376,7 +421,9 @@ type stockCellBody struct {
 	InboundAt    time.Time `json:"inboundAt"`
 	Quantity     int64     `json:"quantity"`
 	Allocatable  bool      `json:"allocatable"`
+	ZoneUsage    string    `json:"zoneUsage,omitempty"`
 	Frozen       int64     `json:"frozen"`
+	Locked       int64     `json:"locked,omitempty"`
 	Available    int64     `json:"available"`
 	AgeDays      *int      `json:"ageDays,omitempty"`
 	Age          string    `json:"age,omitempty"`
@@ -423,6 +470,7 @@ type stockHoldBody struct {
 	Reason    string    `json:"reason,omitempty"`
 	Operator  string    `json:"operator,omitempty"`
 	FrozenAt  time.Time `json:"frozenAt,omitempty"`
+	Reference string    `json:"reference,omitempty"`
 }
 
 type stockMovementBody struct {

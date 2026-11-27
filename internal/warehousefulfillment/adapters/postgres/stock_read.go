@@ -106,7 +106,7 @@ func (store *StockReads) ListActiveFreezes(ctx context.Context, tenant domain.Te
 		return nil, fmt.Errorf("list freezes: %w", err)
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT warehouse_code, target, location_code, goods_code, unit_name, stock_state, carton_number,
+		`SELECT freeze_id, warehouse_code, target, location_code, goods_code, unit_name, stock_state, carton_number,
 		        inbound_batch_id, quantity, reason, operator_id, frozen_at
 		   FROM warehouse_fulfillment.stock_freeze
 		  WHERE tenant_id = $1 AND owner_account_id = $2 AND status = 'FROZEN'
@@ -122,7 +122,7 @@ func (store *StockReads) ListActiveFreezes(ctx context.Context, tenant domain.Te
 		var row ports.StockFreezeRow
 		var location, goods, unit, state, carton, batch *string
 		if err := rows.Scan(
-			&row.Warehouse, &row.Target, &location, &goods, &unit, &state, &carton, &batch,
+			&row.ID, &row.Warehouse, &row.Target, &location, &goods, &unit, &state, &carton, &batch,
 			&row.Quantity, &row.Reason, &row.Operator, &row.FrozenAt,
 		); err != nil {
 			return nil, fmt.Errorf("list freezes: %w", err)
@@ -137,6 +137,43 @@ func (store *StockReads) ListActiveFreezes(ctx context.Context, tenant domain.Te
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list freezes: %w", err)
+	}
+	return listed, nil
+}
+
+func (store *StockReads) ListActiveLocks(ctx context.Context, tenant domain.TenantID, owner domain.OwnerAccountID, warehouse domain.WarehouseCode) ([]ports.StockLockRow, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list locks: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT count.count_id, lock.warehouse_code, lock.location_code, lock.goods_code, lock.unit_name, lock.stock_state,
+		        lock.label_alias, lock.inbound_batch_id, lock.quantity
+		   FROM warehouse_fulfillment.stock_count_lock lock
+		   JOIN warehouse_fulfillment.stock_count count
+		     ON count.tenant_id = lock.tenant_id AND count.count_id = lock.count_id
+		  WHERE lock.tenant_id = $1 AND lock.owner_account_id = $2 AND count.status = 'COUNTING'
+		    AND ($3 = '' OR lock.warehouse_code = $3)
+		  ORDER BY count.count_id, lock.lock_index`,
+		tenant.String(), owner.String(), warehouse.String())
+	if err != nil {
+		return nil, fmt.Errorf("list locks: %w", err)
+	}
+	defer rows.Close()
+	var listed []ports.StockLockRow
+	for rows.Next() {
+		var row ports.StockLockRow
+		var alias *string
+		if err := rows.Scan(
+			&row.CountID, &row.Warehouse, &row.Location, &row.Goods, &row.Unit, &row.State, &alias, &row.InboundBatch, &row.Quantity,
+		); err != nil {
+			return nil, fmt.Errorf("list locks: %w", err)
+		}
+		row.Alias = valueOrEmpty(alias)
+		listed = append(listed, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list locks: %w", err)
 	}
 	return listed, nil
 }

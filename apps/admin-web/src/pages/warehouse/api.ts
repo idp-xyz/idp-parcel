@@ -421,7 +421,9 @@ export interface StockReadBody {
     inboundAt?: string;
     quantity: number;
     allocatable?: boolean;
+    zoneUsage?: string;
     frozen: number;
+    locked?: number;
     available: number;
     ageDays?: number;
     age?: string;
@@ -460,6 +462,8 @@ export interface StockReadBody {
     reason?: string;
     operator?: string;
     frozenAt?: string;
+    /** 冻结号或盘点号。 */
+    reference?: string;
   }>;
   movements?: ReadonlyArray<{
     warehouse: string;
@@ -560,10 +564,16 @@ export function queryOwnerStock(
   pageSize?: number,
   page?: number,
   keyword?: string,
+  state?: string,
 ): Promise<ApiResult<StockReadBody>> {
   const params = new URLSearchParams({ ownerAccount, view });
   if (warehouseCode.trim() !== '') params.set('warehouseCode', warehouseCode.trim());
   if (keyword !== undefined && keyword.trim() !== '') params.set('q', keyword.trim());
+  if (state !== undefined && state !== '') {
+    if (view === 'cells' || view === 'summary') params.set('stockState', state);
+    else if (view === 'cartons') params.set('held', state === 'HELD' ? 'true' : 'false');
+    else if (view === 'holds') params.set('holdKind', state);
+  }
   // 流水收 after 与 pageSize。其余四种收 page 与 pageSize，带了 after 会被拒。
   if (view === 'movements') {
     if (after !== null && after !== '') params.set('after', after);

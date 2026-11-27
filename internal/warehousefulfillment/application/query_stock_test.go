@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/warehousefulfillment/ports"
 )
 
 func TestStockWordMatchesTheGoodsNotTheRestOfTheBook(t *testing.T) {
@@ -20,6 +21,19 @@ func TestStockWordMatchesTheGoodsNotTheRestOfTheBook(t *testing.T) {
 	}
 	if !(stockWords{}).matches("SYN-GOODS-02", "SYN-LOC-A") {
 		t.Fatal("没给检索词时整份都在")
+	}
+}
+
+func TestLockedQuantityStaysOnTheSameCell(t *testing.T) {
+	alias := "SYN-ALIAS"
+	row := ports.StockCellBalance{Warehouse: "SYN-WH-01", Location: "SYN-LOC-01", Goods: "SYN-GOODS-01", Unit: "件", State: "GOOD", InboundBatch: "IBT-1", Alias: &alias}
+	locks := []ports.StockLockRow{{
+		Warehouse: "SYN-WH-01", Location: "SYN-LOC-01", Goods: "SYN-GOODS-01", Unit: "件", State: "GOOD", InboundBatch: "IBT-1", Alias: alias, Quantity: 3,
+	}, {
+		Warehouse: "SYN-WH-01", Location: "SYN-LOC-02", Goods: "SYN-GOODS-01", Unit: "件", State: "GOOD", InboundBatch: "IBT-1", Alias: alias, Quantity: 9,
+	}}
+	if got := lockedOnCell(locks, row); got != 3 {
+		t.Fatalf("锁着 %d", got)
 	}
 }
 

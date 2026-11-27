@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
-import { X } from 'lucide-react';
 import { Button, Tabs, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
 import { WorkbenchPageTemplate, type WorkbenchColumn } from '../../templates';
 import type { TemplateViewState } from '../../templates/state-slot';
@@ -26,7 +25,9 @@ import { useWarehouseTargetMap } from './ActionPanel';
 import type { GuidedFormValues } from './guided-forms';
 import { fitColumnWidth, nameOf, shortInstant } from './list-cells';
 import { useWarehouseLookups, type WarehouseLookups } from './use-catalogues';
-import { labelOf, WmsBadge, WmsFilterSelect, WmsPagerBar, WmsTwoLine } from './wms-ui';
+import { zoneUsageLabel } from './rows';
+import { LedgerFigures, StockDetail, StockNote } from './stock-detail';
+import { labelOf, WmsBadge, WmsFilterSelect, WmsInfoGrid, WmsPagerBar, WmsSubTable, WmsTwoLine } from './wms-ui';
 
 const info = moduleInfoById['warehouse-stock'];
 
@@ -111,18 +112,10 @@ function stateOptions(view: StockViewKind): { value: string; label: string }[] {
       { value: 'FREEZE', label: '手动冻结' },
       { value: 'CARTON', label: '整箱冻结' },
       { value: 'RESERVATION', label: '出库预占' },
+      { value: 'LOCKED', label: '作业锁' },
     ];
   }
   return [];
-}
-
-function keepStockRow(view: StockViewKind, row: Cell | Carton | Summary | Hold | Movement, state: string): boolean {
-  if (view === 'cells' || view === 'summary') return 'stockState' in row && row.stockState === state;
-  if (view === 'cartons') return 'held' in row && (state === 'HELD' ? row.held : !row.held);
-  if (!('kind' in row)) return false;
-  if (state === 'CARTON') return row.kind === 'FREEZE' && Boolean(row.cartonNumber);
-  if (state === 'FREEZE') return row.kind === 'FREEZE' && !row.cartonNumber;
-  return row.kind === state;
 }
 
 function listedOf(view: StockViewKind, body: StockReadBody | null): ReadonlyArray<Cell | Carton | Summary | Hold | Movement> {
@@ -134,14 +127,44 @@ function listedOf(view: StockViewKind, body: StockReadBody | null): ReadonlyArra
   return body.movements ?? [];
 }
 
-/** 可发是 0、库里却有货时，右栏用一句话说明卡在哪。allocatable 在库存格上是能不能分配，在汇总上是可分配的数量。 */
-function shipBlock(row: Cell): string | null {
+/**
+ * 可发是 0、库里却有货时，右栏点明卡在哪。
+ * 能拿去分配的只有两种：存储区或拣货区里的良品，次品区里的次品。
+ * 收货暂存、退货暂存、出库暂存一律不分配。冻着的从可发里扣掉。
+ */
+function shipBlock(row: Cell, usage: string): string | null {
   if (row.available > 0 || row.quantity <= 0) return null;
-  if (row.frozen > 0) return '有货冻着，发不出。';
-  if (row.allocatable === false) return '这个库位的货不参与分配，发不出。';
-  if (row.stockState === 'PENDING_INSPECTION') return '还在待检，发不出。';
-  if (row.stockState === 'DEFECTIVE') return '是次品。';
+  if (row.allocatable === false) return unallocatableReason(row.zoneUsage || usage, row.stockState);
+  if (row.frozen > 0) return '剩下的都冻着。冻着的数量不拿去分配，所以可发是 0。';
+  if ((row.locked ?? 0) > 0) return '这一格正在盘点。锁着的数量不拿去分配，所以可发是 0。';
   return null;
+}
+
+function unallocatableReason(usage: string, state: string): string {
+  switch (usage) {
+    case 'OUTBOUND_STAGING':
+      return '这是出库暂存。货已经拣出来，等着发出，不再拿去分配新的出库单。';
+    case 'RECEIVING_STAGING':
+      return '这是收货暂存。货还停在收货，没上到存储或拣货，不拿去分配。';
+    case 'RETURN_STAGING':
+      return '这是退货暂存。货还没处置回存储或拣货，不拿去分配。';
+    case 'STORAGE':
+    case 'PICKING':
+      return `${zoneUsageLabel(usage)}区只把良品拿去分配。这一格是${labelOf(state)}。`;
+    case 'DEFECTIVE':
+      return '次品区只把次品拿去分配。这一格不是次品。';
+    default:
+      return '可发只从存储区、拣货区的良品，和次品区的次品里扣。收货暂存、退货暂存、出库暂存里的货不拿去分配。';
+  }
+}
+
+function zoneOf(frame: Frame, warehouse: string, location?: string): { name: string; usage: string } | null {
+  if (!location) return null;
+  const place = frame.lookups.locations.find((item) => item.warehouseCode === warehouse && item.locationCode === location);
+  if (!place) return null;
+  const zone = frame.lookups.zones.find((item) => item.warehouseCode === warehouse && item.zoneCode === place.zoneCode);
+  if (!zone) return null;
+  return { name: zone.name, usage: zone.usage };
 }
 
 function summaryBlock(row: Summary): string | null {
@@ -206,8 +229,6 @@ export function WarehouseStockPage() {
   const state = stateByView[view] ?? '';
   const setState = (value: string) => setStateByView((current) => ({ ...current, [view]: value }));
   const options = stateOptions(view);
-  // 流水没有库存状态。选了状态就不再向读口要页码：读口不收状态，不带页码时答整份，页在这里切。
-  const filtering = state !== '' && view !== 'movements';
 
   // 货主只从名册里选。名册还没人选、或标签里留着一个名册上没有的编码时，用第一位。
   useEffect(() => {
@@ -225,8 +246,8 @@ export function WarehouseStockPage() {
   const after = view === 'movements' ? currentCursorAfter(cursor) : null;
   const sheetPage = paging.conditions === conditions ? paging.page : 1;
   const scope = `${owner.trim()}|${warehouse}|${view}|${settled.trim()}|${state}`;
-  const serverSize = view === 'movements' ? movementSize : filtering ? undefined : sheetSize;
-  const serverPage = view === 'movements' || filtering ? undefined : sheetPage;
+  const serverSize = view === 'movements' ? movementSize : sheetSize;
+  const serverPage = view === 'movements' ? undefined : sheetPage;
 
   useEffect(() => {
     const trimmed = owner.trim();
@@ -235,10 +256,19 @@ export function WarehouseStockPage() {
       return;
     }
     let cancelled = false;
-    void listOwnerGoods(trimmed, '', null, 200).then((res) => {
-      if (cancelled || res.kind !== 'outcome') return;
-      setGoodsNames(new Map(res.body.goods.map((item) => [item.goodsCode, item.name])));
-    });
+    void (async () => {
+      const names = new Map<string, string>();
+      let after: string | null = null;
+      // 名册按页交。停在第一页时，后面的商品在库存上只剩编码。
+      for (let page = 0; page < 50; page += 1) {
+        const res = await listOwnerGoods(trimmed, '', after, 200);
+        if (cancelled || res.kind !== 'outcome') return;
+        for (const item of res.body.goods) names.set(item.goodsCode, item.name);
+        if (!res.body.page.next) break;
+        after = res.body.page.next;
+      }
+      if (!cancelled) setGoodsNames(names);
+    })();
     return () => {
       cancelled = true;
     };
@@ -249,7 +279,7 @@ export function WarehouseStockPage() {
     if (!trimmed) return;
     let cancelled = false;
     setLoading(true);
-    void queryOwnerStock(trimmed, warehouse, view, after, serverSize, serverPage, settled).then((res) => {
+    void queryOwnerStock(trimmed, warehouse, view, after, serverSize, serverPage, settled, state).then((res) => {
       if (!cancelled) {
         setSlot({ scope, answer: res });
         setLoading(false);
@@ -266,8 +296,7 @@ export function WarehouseStockPage() {
   const movementPageNumber = cursorPageNumber(cursor);
   const book = body?.book ?? null;
   const listed = listedOf(view, body);
-  const filtered = filtering ? listed.filter((row) => keepStockRow(view, row, state)) : listed;
-  const shown = filtering ? filtered.slice((sheetPage - 1) * sheetSize, sheetPage * sheetSize) : filtered;
+  const shown = listed;
   const pager =
     view === 'movements'
       ? {
@@ -279,9 +308,9 @@ export function WarehouseStockPage() {
           pageSize: { value: movementSize, options: cataloguePageSizes, onChange: setMovementSize },
         }
       : {
-          summary: cursorPageSummary(filtering ? sheetPage : (book?.page ?? sheetPage), filtering ? sheetSize : (book?.pageSize ?? sheetSize), filtering ? filtered.length : (book?.total ?? null)),
+          summary: cursorPageSummary(book?.page ?? sheetPage, book?.pageSize ?? sheetSize, book?.total ?? null),
           canPrevious: !loading && sheetPage > 1,
-          canNext: !loading && (filtering ? sheetPage * sheetSize < filtered.length : book !== null && sheetPage * (book.pageSize || sheetSize) < book.total),
+          canNext: !loading && book !== null && sheetPage * (book.pageSize || sheetSize) < book.total,
           onPrevious: () => setPaging({ conditions, page: sheetPage - 1 }),
           onNext: () => setPaging({ conditions, page: sheetPage + 1 }),
           pageSize: { value: sheetSize, options: cataloguePageSizes, onChange: setSheetSize },
@@ -307,7 +336,7 @@ export function WarehouseStockPage() {
   };
 
   const narrowed = warehouse !== '' || settled.trim() !== '' || state !== '' || (view === 'movements' ? movementPageNumber > 1 : sheetPage > 1);
-  const rowCount = filtering ? filtered.length : view === 'movements' ? (body?.movements?.length ?? 0) : listed.length;
+  const rowCount = view === 'movements' ? (body?.movements?.length ?? 0) : listed.length;
   const emptyTitle =
     view === 'cells'
       ? '当前没有商品库存格'
@@ -503,29 +532,15 @@ function stepButton(label: string, onClick: () => void) {
   );
 }
 
-function SideDetail({ kind, code, badge, subtitle, children, onClose }: { kind: string; code: string; badge?: ReactNode; subtitle?: string; children: ReactNode; onClose: () => void }) {
-  return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-idpxyz-editor">
-      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-idpxyz-border px-4 py-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="type-section font-semibold text-idpxyz-textBright">{kind}</span>
-            <span className="font-mono">{code}</span>
-            {badge}
-          </div>
-          {subtitle ? <p className="mt-1 type-caption text-idpxyz-textMuted">{subtitle}</p> : null}
-        </div>
-        <Button type="button" variant="ghost" size="icon" title="关闭详情" aria-label="关闭详情" onClick={onClose}>
-          <X className="h-4 w-4" aria-hidden="true" />
-        </Button>
-      </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4 type-body">{children}</div>
-    </div>
-  );
+function placeText(names: ReadonlyMap<string, string>, warehouse: string, location?: string) {
+  const name = nameOf(names, warehouse);
+  const warehouseText = name ? `${name} · ${warehouse}` : warehouse;
+  return location ? `${warehouseText} · ${location}` : warehouseText;
 }
 
 function CellSheet({ frame, cells }: { frame: Frame; cells: readonly Cell[] }) {
   const owner = frame.owner.trim();
+  const now = new Date();
   const columns: WorkbenchColumn<Cell & { key: string }>[] = [
     {
       key: 'place',
@@ -544,10 +559,34 @@ function CellSheet({ frame, cells }: { frame: Frame; cells: readonly Cell[] }) {
       render: (row) => goodsLine(frame.goodsNames, row.goodsCode, row.labelAlias),
     },
     { key: 'state', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.stockState} /> },
+    {
+      // 批号在上、效期在下，列名就叫批次/效期。没记的写成淡色横线。入库批次是标识，留在右栏。
+      key: 'lot',
+      header: nowrap('批次/效期'),
+      width: fitColumnWidth,
+      render: (row) => (
+        <WmsTwoLine
+          primary={<span className={row.batchNumber ? 'font-mono' : 'text-idpxyz-textMuted'}>{row.batchNumber || '—'}</span>}
+          secondary={<span className={row.expiryDate ? '' : 'text-idpxyz-textMuted'}>{row.expiryDate || '—'}</span>}
+          title={row.batchNumber || row.expiryDate ? `${row.batchNumber || '没记批号'} · ${row.expiryDate || '没记效期'}` : '没记批号和效期'}
+        />
+      ),
+    },
     { key: 'qty', header: nowrap('在库'), right: true, width: fitColumnWidth, render: (row) => quantityWithUnit(row.quantity, 'onHand', row.unit) },
     { key: 'frozen', header: nowrap('冻着'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.frozen} kind="frozen" /> },
     { key: 'available', header: nowrap('可发'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.available} kind="free" onHand={row.quantity} /> },
-    { key: 'age', header: nowrap('库龄'), right: true, width: fitColumnWidth, minListWidth: 1120, render: (row) => nowrap(ageText(row.ageDays, row.age)) },
+    { key: 'age', header: nowrap('库龄'), right: true, width: fitColumnWidth, render: (row) => nowrap(ageText(row.ageDays, row.age)) },
+    {
+      key: 'inbound',
+      header: nowrap('入库'),
+      right: true,
+      width: fitColumnWidth,
+      render: (row) => (
+        <span className="whitespace-nowrap tabular-nums" title={row.inboundAt ? formatInstant(row.inboundAt) : undefined}>
+          {shortInstant(row.inboundAt, now) || '—'}
+        </span>
+      ),
+    },
     {
       key: 'next',
       header: nowrap('下一步'),
@@ -569,26 +608,52 @@ function CellSheet({ frame, cells }: { frame: Frame; cells: readonly Cell[] }) {
       renderDetail={(key) => {
         const row = rows.find((item) => item.key === key);
         if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这一格。</p>;
+        const zone = zoneOf(frame, row.warehouse, row.location);
+        const usage = row.zoneUsage || zone?.usage || '';
+        const note = shipBlock(row, usage);
+        const zoneText = zone?.name ? `${zone.name} · ${zoneUsageLabel(usage)}` : usage ? zoneUsageLabel(usage) : '';
         return (
-          <SideDetail kind="库存格" code={row.goodsCode} badge={<WmsBadge code={row.stockState} />} subtitle={row.location ?? '代理仓，无库位'} onClose={() => frame.setOpenKey(null)}>
-            <p>{named(frame.warehouseNames, row.warehouse)}</p>
-            <p>
-              在库 <Qty value={row.quantity} kind="onHand" /> · 冻着 <Qty value={row.frozen} kind="frozen" /> · 可发{' '}
-              <Qty value={row.available} kind="free" onHand={row.quantity} /> {row.unit}
-            </p>
-            {shipBlock(row) ? <p>{shipBlock(row)}</p> : null}
-            <p className="font-mono">入库批次 {row.inboundBatchId}</p>
-            <p className="font-mono">批号 {row.batchNumber || '—'} · 效期 {row.expiryDate || '—'}</p>
-            {row.labelAlias ? <p className="font-mono">贴标 {row.labelAlias}</p> : null}
-            <p>库龄 {ageText(row.ageDays, row.age)}</p>
-            <div className="flex flex-wrap gap-2">
-              {frame.can('stock-freeze') && row.location ? stepButton('冻结', () => frame.openAction('stock-freeze', freezeCell(owner, row))) : null}
-              {frame.can('condition-restore') && row.stockState === 'DEFECTIVE' && row.location
-                ? stepButton('次转良', () => frame.openAction('condition-restore', restoreCell(owner, row)))
-                : null}
-              {frame.can('adjustment-submit') && row.location ? stepButton('调账', () => frame.openAction('adjustment-submit', adjustCell(owner, row))) : null}
-            </div>
-          </SideDetail>
+          <StockDetail
+            kind="库存格"
+            code={row.goodsCode}
+            codeTitle="商品编码"
+            badge={<WmsBadge code={row.stockState} />}
+            subtitle={[frame.goodsNames.get(row.goodsCode), placeText(frame.warehouseNames, row.warehouse, row.location), row.unit].filter((part) => part !== undefined && part !== '').join(' · ')}
+            actions={
+              row.location ? (
+                <>
+                  {frame.can('stock-freeze') ? stepButton('冻结', () => frame.openAction('stock-freeze', freezeCell(owner, row))) : null}
+                  {frame.can('condition-restore') && row.stockState === 'DEFECTIVE'
+                    ? stepButton('次转良', () => frame.openAction('condition-restore', restoreCell(owner, row)))
+                    : null}
+                  {frame.can('adjustment-submit') ? stepButton('调账', () => frame.openAction('adjustment-submit', adjustCell(owner, row))) : null}
+                </>
+              ) : undefined
+            }
+            onClose={() => frame.setOpenKey(null)}
+          >
+            <LedgerFigures
+              items={[
+                { label: `在库 · ${row.unit}`, value: <Qty value={row.quantity} kind="onHand" /> },
+                { label: '冻着', value: <Qty value={row.frozen} kind="frozen" /> },
+                { label: '锁着', value: <Qty value={row.locked ?? 0} kind="locked" /> },
+                { label: '可发', value: <Qty value={row.available} kind="free" onHand={row.quantity} /> },
+              ]}
+            />
+            {note ? <StockNote>{note}</StockNote> : null}
+            <WmsInfoGrid
+              items={[
+                { label: '库位', value: row.location ?? '代理仓，无库位', mono: Boolean(row.location) },
+                { label: '库区', value: zoneText },
+                { label: '贴标', value: row.labelAlias ?? '' },
+                { label: '批号', value: row.batchNumber ?? '' },
+                { label: '效期', value: row.expiryDate ?? '' },
+                { label: '库龄', value: ageText(row.ageDays, row.age) },
+                { label: '入库', value: row.inboundAt ? formatInstant(row.inboundAt) : '' },
+                { label: '入库批次', value: row.inboundBatchId, mono: true },
+              ]}
+            />
+          </StockDetail>
         );
       }}
     />
@@ -641,6 +706,7 @@ function adjustCell(owner: string, cell: Cell): GuidedFormValues {
 
 function CartonSheet({ frame, cartons }: { frame: Frame; cartons: readonly Carton[] }) {
   const owner = frame.owner.trim();
+  const now = new Date();
   const columns: WorkbenchColumn<Carton>[] = [
     { key: 'carton', header: '箱号', width: fitColumnWidth, render: (row) => <span className="whitespace-nowrap font-mono">{row.cartonNumber}</span> },
     {
@@ -666,6 +732,17 @@ function CartonSheet({ frame, cartons }: { frame: Frame; cartons: readonly Carto
     { key: 'held', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge label={row.held ? '已冻结' : '可用'} tone={row.held ? 'warning' : 'success'} /> },
     { key: 'age', header: nowrap('库龄'), right: true, width: fitColumnWidth, render: (row) => nowrap(ageText(row.ageDays, row.age)) },
     {
+      key: 'inbound',
+      header: nowrap('入库'),
+      right: true,
+      width: fitColumnWidth,
+      render: (row) => (
+        <span className="whitespace-nowrap tabular-nums" title={formatInstant(row.inboundAt)}>
+          {shortInstant(row.inboundAt, now) || '—'}
+        </span>
+      ),
+    },
+    {
       key: 'next',
       header: nowrap('下一步'),
       width: fitColumnWidth,
@@ -685,16 +762,40 @@ function CartonSheet({ frame, cartons }: { frame: Frame; cartons: readonly Carto
       renderDetail={(key) => {
         const row = cartons.find((item) => `${item.warehouse}/${item.cartonNumber}` === key);
         if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这只箱。</p>;
-        const bill = row.bill && row.bill.length > 0 ? row.bill.map((line) => `${line.goodsCode}×${line.quantity}`).join('，') : '未报清单';
+        const bill = row.bill ?? [];
         return (
-          <SideDetail kind="整箱" code={row.cartonNumber} badge={<WmsBadge label={row.held ? '已冻结' : '可用'} tone={row.held ? 'warning' : 'success'} />} subtitle={row.location ?? '—'} onClose={() => frame.setOpenKey(null)}>
-            <p>{named(frame.warehouseNames, row.warehouse)}</p>
-            <p>{bill}</p>
-            <p className="font-mono type-caption text-idpxyz-textMuted">入库 {formatInstant(row.inboundAt)} · 库龄 {ageText(row.ageDays, row.age)}</p>
-            {frame.can('stock-freeze') && !row.held
-              ? stepButton('冻结整箱', () => frame.openAction('stock-freeze', { warehouse: row.warehouse, ownerAccount: owner, cartonNumber: row.cartonNumber }))
-              : null}
-          </SideDetail>
+          <StockDetail
+            kind="整箱"
+            code={row.cartonNumber}
+            codeTitle="箱号"
+            badge={<WmsBadge label={row.held ? '已冻结' : '可用'} tone={row.held ? 'warning' : 'success'} />}
+            subtitle={placeText(frame.warehouseNames, row.warehouse, row.location)}
+            actions={
+              frame.can('stock-freeze') && !row.held
+                ? stepButton('冻结整箱', () => frame.openAction('stock-freeze', { warehouse: row.warehouse, ownerAccount: owner, cartonNumber: row.cartonNumber }))
+                : undefined
+            }
+            onClose={() => frame.setOpenKey(null)}
+          >
+            <WmsSubTable
+              title="箱内清单"
+              count={bill.length}
+              columns={[
+                { id: 'goods', header: '商品', render: (line) => goodsLine(frame.goodsNames, line.goodsCode) },
+                { id: 'qty', header: '数量', align: 'right', mono: true, render: (line) => String(line.quantity) },
+              ]}
+              rows={bill}
+              rowKey={(line) => line.goodsCode}
+              emptyText="未报清单"
+            />
+            <WmsInfoGrid
+              items={[
+                { label: '库位', value: row.location ?? '—', mono: Boolean(row.location) },
+                { label: '入库', value: formatInstant(row.inboundAt) },
+                { label: '库龄', value: ageText(row.ageDays, row.age) },
+              ]}
+            />
+          </StockDetail>
         );
       }}
     />
@@ -707,10 +808,10 @@ function SummarySheet({ frame, summary }: { frame: Frame; summary: readonly Summ
     { key: 'warehouse', header: '仓', width: fitColumnWidth, render: (row) => named(frame.warehouseNames, row.warehouse) },
     { key: 'state', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.stockState} /> },
     { key: 'onHand', header: nowrap('在库'), right: true, width: fitColumnWidth, render: (row) => quantityWithUnit(row.onHand, 'onHand', row.unit) },
-    { key: 'allocatable', header: nowrap('可分配'), right: true, width: fitColumnWidth, minListWidth: 1100, render: (row) => <Qty value={row.allocatable} kind="allocatable" /> },
+    { key: 'allocatable', header: nowrap('可分配'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.allocatable} kind="allocatable" /> },
     { key: 'frozen', header: nowrap('冻着'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.frozen} kind="frozen" /> },
     { key: 'reserved', header: nowrap('已预占'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.reserved} kind="reserved" /> },
-    { key: 'locked', header: nowrap('锁着'), right: true, width: fitColumnWidth, minListWidth: 1240, render: (row) => <Qty value={row.locked} kind="locked" /> },
+    { key: 'locked', header: nowrap('锁着'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.locked} kind="locked" /> },
     { key: 'available', header: nowrap('可发'), right: true, width: fitColumnWidth, render: (row) => <Qty value={row.available} kind="free" onHand={row.onHand} /> },
   ];
   const rows = summary.map((row, index) => ({ ...row, key: `${row.warehouse}/${row.goodsCode}/${row.unit}/${row.stockState}/${index}` }));
@@ -724,18 +825,28 @@ function SummarySheet({ frame, summary }: { frame: Frame; summary: readonly Summ
       renderDetail={(key) => {
         const row = rows.find((item) => item.key === key);
         if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这一行。</p>;
+        const note = summaryBlock(row);
         return (
-          <SideDetail kind="库存汇总" code={row.goodsCode} badge={<WmsBadge code={row.stockState} />} subtitle={row.unit} onClose={() => frame.setOpenKey(null)}>
-            <p>{named(frame.warehouseNames, row.warehouse)}</p>
-            <p>
-              在库 <Qty value={row.onHand} kind="onHand" /> · 可分配 <Qty value={row.allocatable} kind="allocatable" /> · 冻着 <Qty value={row.frozen} kind="frozen" />
-            </p>
-            <p>
-              已预占 <Qty value={row.reserved} kind="reserved" /> · 锁着 <Qty value={row.locked} kind="locked" /> · 可发{' '}
-              <Qty value={row.available} kind="free" onHand={row.onHand} />
-            </p>
-            {summaryBlock(row) ? <p>{summaryBlock(row)}</p> : null}
-          </SideDetail>
+          <StockDetail
+            kind="库存汇总"
+            code={row.goodsCode}
+            codeTitle="商品编码"
+            badge={<WmsBadge code={row.stockState} />}
+            subtitle={[frame.goodsNames.get(row.goodsCode), placeText(frame.warehouseNames, row.warehouse), row.unit].filter((part) => part !== undefined && part !== '').join(' · ')}
+            onClose={() => frame.setOpenKey(null)}
+          >
+            <LedgerFigures
+              items={[
+                { label: `在库 · ${row.unit}`, value: <Qty value={row.onHand} kind="onHand" /> },
+                { label: '可分配', value: <Qty value={row.allocatable} kind="allocatable" /> },
+                { label: '冻着', value: <Qty value={row.frozen} kind="frozen" /> },
+                { label: '已预占', value: <Qty value={row.reserved} kind="reserved" /> },
+                { label: '锁着', value: <Qty value={row.locked} kind="locked" /> },
+                { label: '可发', value: <Qty value={row.available} kind="free" onHand={row.onHand} /> },
+              ]}
+            />
+            {note ? <StockNote>{note}</StockNote> : null}
+          </StockDetail>
         );
       }}
     />
@@ -780,7 +891,6 @@ function HoldSheet({ frame, holds }: { frame: Frame; holds: readonly Hold[] }) {
     {
       key: 'reason',
       header: '原因',
-      minListWidth: 1000,
       render: (row) => <WmsTwoLine fill primary={row.reason || '—'} secondary={row.operator} title={row.reason ?? ''} />,
     },
   ];
@@ -795,50 +905,125 @@ function HoldSheet({ frame, holds }: { frame: Frame; holds: readonly Hold[] }) {
       renderDetail={(key) => {
         const row = rows.find((item) => item.key === key);
         if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这一条。</p>;
+        const holdName = row.kind === 'FREEZE' && row.cartonNumber ? '整箱冻结' : (holdKindLabels[row.kind] ?? row.kind);
         return (
-          <SideDetail kind={row.kind === 'FREEZE' && row.cartonNumber ? '整箱冻结' : (holdKindLabels[row.kind] ?? row.kind)} code={row.cartonNumber ?? row.goodsCode ?? '—'} subtitle={row.location ?? '—'} onClose={() => frame.setOpenKey(null)}>
-            <p>{named(frame.warehouseNames, row.warehouse)}</p>
-            <p>
-              数量 <Qty value={row.quantity} kind={row.kind === 'RESERVATION' ? 'reserved' : 'frozen'} /> {row.unit ?? ''}
-            </p>
-            <p>原因 {row.reason || '—'}</p>
-            <p className="font-mono type-caption text-idpxyz-textMuted">操作者 {row.operator || '—'}{row.frozenAt ? ` · ${formatInstant(row.frozenAt)}` : ''}</p>
-          </SideDetail>
+          <StockDetail
+            kind={holdName}
+            code={row.cartonNumber ?? row.goodsCode}
+            codeTitle={row.cartonNumber ? '箱号' : '商品编码'}
+            subtitle={[row.goodsCode ? frame.goodsNames.get(row.goodsCode) : undefined, placeText(frame.warehouseNames, row.warehouse, row.location)].filter((part) => part !== undefined && part !== '').join(' · ')}
+            actions={
+              row.kind === 'FREEZE' && row.reference && frame.can('stock-unfreeze')
+                ? stepButton('解冻', () => frame.openAction('stock-unfreeze', { freezeId: row.reference }))
+                : undefined
+            }
+            onClose={() => frame.setOpenKey(null)}
+          >
+            <LedgerFigures
+              items={[{ label: row.unit ? `数量 · ${row.unit}` : '数量', value: <Qty value={row.quantity} kind={row.kind === 'RESERVATION' ? 'reserved' : 'frozen'} /> }]}
+            />
+            <WmsInfoGrid
+              items={[
+                { label: '库位', value: row.location ?? '', mono: Boolean(row.location) },
+                { label: '库存状态', value: row.stockState ? <WmsBadge code={row.stockState} /> : '' },
+                { label: '原因', value: row.reason ?? '' },
+                { label: '操作者', value: row.operator ?? '' },
+                { label: '冻结于', value: row.frozenAt ? formatInstant(row.frozenAt) : '' },
+                { label: row.kind === 'LOCKED' ? '盘点号' : '冻结号', value: row.reference ?? '' },
+              ]}
+            />
+          </StockDetail>
         );
       }}
     />
   );
 }
 
+const movementReasonLabels: Record<string, string> = {
+  RECEIPT: '收货入库',
+  RETURN_RECEIPT: '退货入库',
+  TAKE_ON_IMPORT: '建账导入',
+  INTERNAL_MOVE: '上架 / 移库',
+  UNIT_CONVERSION: '包装换算',
+  STATE_CHANGE: '状态转换',
+  RELABEL: '换标',
+  PROCESSING: '加工',
+  DISASSEMBLY: '拆解',
+  UNBOXING: '开箱',
+  OUTBOUND_CONFIRMATION: '出库确认',
+  COUNT_GAIN: '盘盈',
+  COUNT_LOSS: '盘亏',
+  ADJUSTMENT_INCREASE: '调增',
+  ADJUSTMENT_DECREASE: '调减',
+  DESTRUCTION: '销毁',
+};
+
+function movementReason(code: string): string {
+  return movementReasonLabels[code] ?? labelOf(code);
+}
+
+type MovementLine = NonNullable<Movement['lines']>[number];
+
+/** 列表按整笔读。移库是一出一入相抵，只摆第一行的减少会把移库看成少了货。 */
+function goodsCalled(code: string, names: ReadonlyMap<string, string>): string {
+  return names.get(code) ?? code;
+}
+
+function movementReading(lines: readonly MovementLine[], names: ReadonlyMap<string, string>): { name: string; what: string } {
+  if (lines.length === 0) return { name: '—', what: '没有行' };
+  const codes = [...new Set(lines.map((line) => line.goodsCode))];
+  if (codes.length > 1) {
+    const outs = [...new Set(lines.filter((line) => line.delta < 0).map((line) => line.goodsCode))];
+    const ins = [...new Set(lines.filter((line) => line.delta > 0).map((line) => line.goodsCode))];
+    if (outs.length > 0 && ins.length > 0) {
+      return { name: outs.map((code) => goodsCalled(code, names)).join('、'), what: `产出 ${ins.map((code) => goodsCalled(code, names)).join('、')}` };
+    }
+  }
+  return readOneGoods(lines.filter((line) => line.goodsCode === codes[0]), names);
+}
+
+function readOneGoods(lines: readonly MovementLine[], names: ReadonlyMap<string, string>): { name: string; what: string } {
+  const name = goodsCalled(lines[0].goodsCode, names);
+  const unit = lines[0].unit;
+  const outs = lines.filter((line) => line.delta < 0);
+  const ins = lines.filter((line) => line.delta > 0);
+  const place = (line: MovementLine) => line.location ?? '仓';
+  if (outs.length === 1 && ins.length === 1 && place(outs[0]) === place(ins[0])) {
+    if (outs[0].unit !== ins[0].unit) {
+      return { name, what: `在 ${place(outs[0])} 从 ${Math.abs(outs[0].delta)} ${outs[0].unit} 换成 ${ins[0].delta} ${ins[0].unit}` };
+    }
+    if (outs[0].stockState !== ins[0].stockState && outs[0].delta + ins[0].delta === 0) {
+      return { name, what: `在 ${place(outs[0])} 从 ${labelOf(outs[0].stockState)} 转成 ${labelOf(ins[0].stockState)} · ${Math.abs(ins[0].delta)} ${unit}` };
+    }
+  }
+  if (outs.length === 1 && ins.length === 1 && outs[0].delta + ins[0].delta === 0) {
+    return { name, what: `从 ${place(outs[0])} 到 ${place(ins[0])} · ${Math.abs(ins[0].delta)} ${unit}` };
+  }
+  if (outs.length === 0 && ins.length > 0) {
+    const total = ins.reduce((sum, line) => sum + line.delta, 0);
+    return { name, what: `入 ${ins.map(place).join('、')} · +${total} ${unit}` };
+  }
+  if (ins.length === 0 && outs.length > 0) {
+    const total = outs.reduce((sum, line) => sum + line.delta, 0);
+    return { name, what: `出 ${outs.map(place).join('、')} · ${total} ${unit}` };
+  }
+  return { name, what: `${lines.length} 行有增有减` };
+}
+
 function MovementSheet({ frame, movements }: { frame: Frame; movements: readonly Movement[] }) {
   const now = new Date();
   const columns: WorkbenchColumn<Movement & { key: string }>[] = [
     { key: 'warehouse', header: '仓', width: fitColumnWidth, render: (row) => named(frame.warehouseNames, row.warehouse) },
-    { key: 'reason', header: '原因', width: fitColumnWidth, render: (row) => <WmsTwoLine primary={labelOf(row.reason)} title={row.reason} /> },
+    { key: 'reason', header: '原因', width: fitColumnWidth, render: (row) => <WmsTwoLine primary={movementReason(row.reason)} title={row.reason} /> },
     {
       key: 'lines',
       header: '变动',
       render: (row) => {
-        const lines = row.lines ?? [];
-        const first = lines[0];
-        if (!first) return <span className="text-idpxyz-textMuted">—</span>;
-        const name = frame.goodsNames.get(first.goodsCode);
-        return (
-          <WmsTwoLine
-            fill
-            primary={
-              <span className="inline-flex items-baseline gap-2">
-                <span>{name ?? first.goodsCode}</span>
-                <Qty value={first.delta} kind="delta" />
-              </span>
-            }
-            secondary={lines.length > 1 ? `另 ${lines.length - 1} 行` : `${first.location ?? '仓'} · ${labelOf(first.stockState)}`}
-            title={first.goodsCode}
-          />
-        );
+        const reading = movementReading(row.lines ?? [], frame.goodsNames);
+        return <WmsTwoLine fill primary={reading.name} secondary={reading.what} title={reading.what} />;
       },
     },
-    { key: 'source', header: '来源', width: fitColumnWidth, minListWidth: 980, render: (row) => <span className="whitespace-nowrap font-mono">{row.source ?? '—'}</span> },
+    { key: 'source', header: '来源', width: fitColumnWidth, render: (row) => <span className="whitespace-nowrap font-mono">{row.source ?? '—'}</span> },
     {
       key: 'at',
       header: nowrap('发生'),
@@ -862,19 +1047,41 @@ function MovementSheet({ frame, movements }: { frame: Frame; movements: readonly
       renderDetail={(key) => {
         const row = rows.find((item) => item.key === key);
         if (!row) return <p className="p-4 type-body text-idpxyz-textMuted">这一页没有这一笔。</p>;
+        const lines = row.lines ?? [];
         return (
-          <SideDetail kind="库存流水" code={labelOf(row.reason)} subtitle={row.source ?? '—'} onClose={() => frame.setOpenKey(null)}>
-            <p>{named(frame.warehouseNames, row.warehouse)}</p>
-            <p className="font-mono type-caption text-idpxyz-textMuted">发生 {formatInstant(row.occurredAt)}{row.postedAt ? ` · 入账 ${formatInstant(row.postedAt)}` : ''}</p>
-            <ul className="space-y-1 font-mono type-caption">
-              {(row.lines ?? []).map((line, index) => (
-                <li key={index}>
-                  {`${line.location ?? '仓'} · ${line.goodsCode} ${line.unit} ${labelOf(line.stockState)} `}
-                  <Qty value={line.delta} kind="delta" />
-                </li>
-              ))}
-            </ul>
-          </SideDetail>
+          <StockDetail
+            kind="库存流水"
+            code={row.source}
+            codeTitle="来源"
+            badge={<WmsBadge label={movementReason(row.reason)} tone="info" />}
+            subtitle={[placeText(frame.warehouseNames, row.warehouse), `发生 ${formatInstant(row.occurredAt)}`, row.postedAt ? `入账 ${formatInstant(row.postedAt)}` : ''].filter((part) => part !== '').join(' · ')}
+            onClose={() => frame.setOpenKey(null)}
+          >
+            <p className="type-body text-idpxyz-text">{movementReading(lines, frame.goodsNames).what}</p>
+            <WmsSubTable
+              title="账上的行"
+              count={lines.length}
+              columns={[
+                { id: 'place', header: '库位', mono: true, render: (line) => line.location ?? '—' },
+                { id: 'goods', header: '商品', render: (line) => goodsLine(frame.goodsNames, line.goodsCode) },
+                { id: 'unit', header: '单位', render: (line) => line.unit },
+                { id: 'state', header: '状态', render: (line) => <WmsBadge code={line.stockState} /> },
+                { id: 'delta', header: '增减', align: 'right', render: (line) => <Qty value={line.delta} kind="delta" /> },
+                {
+                  id: 'at',
+                  header: '变动时间',
+                  render: () => (
+                    <span className="whitespace-nowrap tabular-nums" title={row.postedAt ? `入账 ${formatInstant(row.postedAt)}` : undefined}>
+                      {formatInstant(row.occurredAt)}
+                    </span>
+                  ),
+                },
+              ]}
+              rows={lines}
+              rowKey={(line, index) => `${line.location ?? ''}/${line.goodsCode}/${index}`}
+              emptyText="这一笔没有行"
+            />
+          </StockDetail>
         );
       }}
     />
