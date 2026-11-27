@@ -102,16 +102,16 @@ export function WmsDocumentPage({
         {/* 头区与下面的进度条说的是同一件事——这张单是什么、走到哪了：有进度条时两块之间不画线，线只画在进度条下面一道。 */}
         <div className={`shrink-0 px-4 ${ready && stepper ? 'pb-1 pt-3' : 'border-b border-idpxyz-border py-3'}`}>
           {/* 刷新、整页打开、关闭钉在右上角，不跟动作钮一起换行：栏再窄，关闭也在老地方。
-              动作钮靠到它们左边，不贴在单号后面空出一大截。小字在下一行，用满整行。 */}
+              动作钮放得下就排在它们左边；排不下换行后仍靠右，不回到单号底下。小字在下一行，用满整行。 */}
           <div>
             <div className="flex items-start gap-2">
-              <div className={`flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-2 ${busy ? 'pointer-events-none' : ''}`}>
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div className={`flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-2 gap-y-2 ${busy ? 'pointer-events-none' : ''}`}>
+                <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
                   <span className="type-section font-semibold text-idpxyz-textBright">{kind}</span>
                   {title ? <CodeRef value={title} title={`${kind}号`} /> : null}
                   {ready ? badge : null}
                 </div>
-                {ready && actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div> : null}
+                {ready && actions ? <div className="flex max-w-full flex-wrap items-center justify-end gap-2">{actions}</div> : null}
               </div>
               <div className="flex shrink-0 items-center">
               {onReload ? (
