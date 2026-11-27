@@ -7,7 +7,7 @@ import { allWarehouseGuidedForms } from '../guided-schemas';
 import { operatorLabel, operatorNamesOf } from '../../operator-access/operator-names';
 import { waveClaimNote } from './pick-claim';
 import { pickOutcomeLabels, queueNotes, taskGoneAfter } from './pick-flow';
-import { cellsOfWaves, loadPickQueue } from './pick-queue';
+import { cellsOfWaves, loadPickQueue, taskAssignee } from './pick-queue';
 
 const ME = 'https://issuer.example.invalid#picker-me';
 const OTHER = 'https://issuer.example.invalid#picker-other';
@@ -47,6 +47,31 @@ test('看全部波次时不摆派给别人的波次', () => {
   deepEqual(cellsOfWaves(waves, { warehouse: 'WH-1', wave: 'W-OTHER', me: ME }).map((cell) => cell.taskId), ['T-2']);
   equal(cellsOfWaves(waves, { warehouse: 'WH-1', wave: null, me: null }).length, 3);
   equal(cellsOfWaves(waves, { warehouse: 'WH-1', wave: null }).length, 3);
+});
+
+// Covers: 按库区派：单独派了人的库区认那个人，没单独派的库区照整个波次的指派走。看全部波次时，别人的库区的格不摆，
+// 自己的库区的格照摆——哪怕整个波次派给了别人；这样的波次算进「有格派给了别人」。
+test('按库区派：别人的库区的格不摆，自己的库区照摆', async () => {
+  const inZone = (taskId: string, locationCode: string, zoneCode: string): WaveTaskRecord => ({ ...task(taskId, locationCode), zoneCode });
+  const zoned: WaveRecord = {
+    ...wave('W-ZONED', OTHER, [inZone('T-A', 'L-A', 'ZONE-A'), inZone('T-B', 'L-B', 'ZONE-B'), task('T-C', 'L-C')]),
+    zoneAssignees: [{ zoneCode: 'ZONE-A', assignee: ME }],
+  };
+  equal(taskAssignee(zoned, { zoneCode: 'ZONE-A' }), ME);
+  equal(taskAssignee(zoned, { zoneCode: 'ZONE-B' }), OTHER);
+  equal(taskAssignee(zoned, {}), OTHER);
+  equal(taskAssignee({ zoneAssignees: [] }, { zoneCode: 'ZONE-A' }), undefined);
+  deepEqual(cellsOfWaves([zoned], { warehouse: 'WH-1', wave: null, me: ME }).map((cell) => cell.taskId), ['T-A']);
+  deepEqual(cellsOfWaves([zoned], { warehouse: 'WH-1', wave: null, me: OTHER }).map((cell) => cell.taskId), ['T-B', 'T-C']);
+  equal(cellsOfWaves([zoned], { warehouse: 'WH-1', wave: 'W-ZONED', me: ME }).length, 3);
+  const answer = await loadPickQueue({
+    warehouse: 'WH-1',
+    wave: null,
+    me: ME,
+    list: async () => ({ kind: 'outcome', status: 200, body: { outcome: 'WAVES_LISTED', waves: [zoned], page: { next: null } as never } }),
+    one: async () => ({ kind: 'outcome', status: 200, body: { outcome: 'WAVE_NOT_FOUND' } }),
+  });
+  ok(answer.kind === 'queue' && answer.queue.assignedElsewhere === 1 && answer.queue.cells.length === 1);
 });
 
 // Covers: 队列如实带出有几个波次因为派给了别人没摆，屏上说清并指路；拣完了的、没派的不算；波次下拉带着各自派给了谁。

@@ -966,6 +966,23 @@ func (store *Waves) SaveSourceData(ctx context.Context, tenant domain.TenantID, 
 	return nil
 }
 
+func (store *Waves) HasAwaitingSourceData(ctx context.Context, tenant domain.TenantID, source, key, except string) (bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, err
+	}
+	var held bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (
+		    SELECT 1 FROM warehouse_fulfillment.source_data_posting
+		     WHERE tenant_id = $1 AND source = $2 AND source_request_key = $3
+		       AND adoption = 'AWAITING_REVIEW' AND version_id <> $4)`,
+		tenant.String(), source, key, except).Scan(&held); err != nil {
+		return false, fmt.Errorf("awaiting source data: %w", err)
+	}
+	return held, nil
+}
+
 func (store *Waves) LoadCancellation(ctx context.Context, tenant domain.TenantID, requestKey, parcelID string) (bool, bool, error) {
 	querier, err := store.db.ReadExecutor(ctx)
 	if err != nil {
@@ -1050,15 +1067,25 @@ func (store *Waves) LoadPack(ctx context.Context, tenant domain.TenantID, fact d
 // 再扣别的行：一张请求有几种货时，拣哪种扣哪种，行上剩的才是那种货还没拣到的数量——少拣之后回到已预占再放，
 // 分配照行上的数量来，扣错了行就会给拣齐的那种货再分一遍，缺的那种反而不分。别的行只在对得上的行不够扣时才动，
 // 合计仍等于还没拣到的数量。
+//
+// 同一种货的几行里，先扣批号、效期与拣走的这一批对得上的行（行上没点批号、效期的算对得上），其中点明了这个批号的在前：
+// 一张请求的两行点了同一种货的两个批号时，拣哪一批扣哪一行。扣错了行，拆出缺货部分时写出来的就是拣到的那一批的批号，
+// 真正缺的那一批反而不在拆出的请求上。拣走的是哪一批取自任务的入库批次。
 func reduceReservation(ctx context.Context, executor bentopg.Executor, tenant domain.TenantID, task ports.PickTask, picked int64) error {
 	request := task.Request
 	rows, err := executor.Query(ctx,
-		`SELECT line_index, quantity
-		   FROM warehouse_fulfillment.outbound_reservation
-		  WHERE tenant_id = $1 AND request_id = $2
-		  ORDER BY (goods_code = $3 AND stock_state = $4 AND label_alias IS NOT DISTINCT FROM $5) DESC, line_index`,
+		`SELECT reserved.line_index, reserved.quantity
+		   FROM warehouse_fulfillment.outbound_reservation reserved
+		   LEFT JOIN warehouse_fulfillment.inbound_batch taken
+		     ON taken.tenant_id = reserved.tenant_id AND taken.inbound_batch_id = $6
+		  WHERE reserved.tenant_id = $1 AND reserved.request_id = $2
+		  ORDER BY (reserved.goods_code = $3 AND reserved.stock_state = $4 AND reserved.label_alias IS NOT DISTINCT FROM $5) DESC,
+		           coalesce((reserved.batch_number IS NULL OR reserved.batch_number = taken.batch_number)
+		                AND (reserved.expiry_date IS NULL OR reserved.expiry_date = taken.expiry_date), false) DESC,
+		           coalesce(reserved.batch_number = taken.batch_number, false) DESC,
+		           reserved.line_index`,
 		tenant.String(), request.String(), task.Goods.String(), task.State.String(),
-		optionalText(task.Alias.String(), task.Alias.String() != ""))
+		optionalText(task.Alias.String(), task.Alias.String() != ""), task.Inbound.String())
 	if err != nil {
 		return fmt.Errorf("save pick: %w", err)
 	}
@@ -1568,10 +1595,11 @@ func (store *Waves) SavePrefetch(ctx context.Context, tenant domain.TenantID, re
 		        prefetch_length = NULLIF($7, ''),
 		        prefetch_width = NULLIF($8, ''),
 		        prefetch_height = NULLIF($9, ''),
-		        prefetch_dimension_unit = NULLIF($10, '')
+		        prefetch_dimension_unit = NULLIF($10, ''),
+		        prefetch_quantity = NULLIF($11::bigint, 0)
 		  WHERE tenant_id = $1 AND request_id = $2 AND prefetch_shipment_id IS NULL`,
 		tenant.String(), request.String(), record.ShipmentID, record.DeclaredParcelID,
-		record.Weight, record.WeightUnit, record.Length, record.Width, record.Height, record.Dimension)
+		record.Weight, record.WeightUnit, record.Length, record.Width, record.Height, record.Dimension, record.Quantity)
 	if err != nil {
 		return fmt.Errorf("save prefetch: %w", err)
 	}
@@ -1587,12 +1615,14 @@ func (store *Waves) LoadPrefetch(ctx context.Context, tenant domain.TenantID, re
 		return ports.PrefetchRecord{}, false, err
 	}
 	var shipment, declared, weight, weightUnit, length, width, height, dimension *string
+	var quantity *int64
 	err = querier.QueryRow(ctx,
 		`SELECT prefetch_shipment_id, prefetch_declared_parcel_id,
-		        prefetch_weight, prefetch_weight_unit, prefetch_length, prefetch_width, prefetch_height, prefetch_dimension_unit
+		        prefetch_weight, prefetch_weight_unit, prefetch_length, prefetch_width, prefetch_height, prefetch_dimension_unit,
+		        prefetch_quantity
 		   FROM warehouse_fulfillment.outbound_request
 		  WHERE tenant_id = $1 AND request_id = $2`,
-		tenant.String(), request.String()).Scan(&shipment, &declared, &weight, &weightUnit, &length, &width, &height, &dimension)
+		tenant.String(), request.String()).Scan(&shipment, &declared, &weight, &weightUnit, &length, &width, &height, &dimension, &quantity)
 	if errors.Is(err, pgx.ErrNoRows) || shipment == nil || *shipment == "" {
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return ports.PrefetchRecord{}, false, fmt.Errorf("load prefetch: %w", err)
@@ -1608,7 +1638,7 @@ func (store *Waves) LoadPrefetch(ctx context.Context, tenant domain.TenantID, re
 		}
 		return *ptr
 	}
-	return ports.PrefetchRecord{
+	record := ports.PrefetchRecord{
 		ShipmentID:       *shipment,
 		DeclaredParcelID: stringOf(declared),
 		Weight:           stringOf(weight),
@@ -1617,7 +1647,11 @@ func (store *Waves) LoadPrefetch(ctx context.Context, tenant domain.TenantID, re
 		Width:            stringOf(width),
 		Height:           stringOf(height),
 		Dimension:        stringOf(dimension),
-	}, true, nil
+	}
+	if quantity != nil {
+		record.Quantity = *quantity
+	}
+	return record, true, nil
 }
 
 func (store *Waves) SetRequestStatus(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, status domain.OutboundStatus) error {

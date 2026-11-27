@@ -14,6 +14,7 @@ import {
   editParcel,
   goodsIdentified,
   leaveOrder,
+  rematchAfterRefusal,
   openOrder,
   orderFound,
   orderOpened,
@@ -145,6 +146,8 @@ export function usePackSession({ deviceId, warehouse, request, cue }: PackSessio
   }
   // 按货配出来的那张单与扫的那个码：单读开之后把这一件算进复核的数里，人不必再扫一次
   const matchedRef = useRef<{ requestId: string; code: string } | null>(null);
+  // 同一份，但单读开之后还留着：这张单复核时被别的工位抢了先，要用这个码另配一张。下一次找单时换掉
+  const byGoodsRef = useRef<{ requestId: string; code: string } | null>(null);
   const packagingRef = useRef<PackagingFinder | null>(null);
   if (packagingRef.current === null) packagingRef.current = livePackagingFinder();
 
@@ -153,6 +156,9 @@ export function usePackSession({ deviceId, warehouse, request, cue }: PackSessio
   const finish = useCallback((answered: WorkFactVerdict) => {
     setVerdict(answered);
     applyRef.current(applyVerdict(stateRef.current, answered));
+    // 按货配的单被别的工位先复核了：用同一个码另配一张，人不必再扫
+    const again = rematchAfterRefusal(stateRef.current, answered, byGoodsRef.current);
+    if (again !== null) applyRef.current(again);
   }, []);
 
   const send = useCallback(
@@ -183,6 +189,7 @@ export function usePackSession({ deviceId, warehouse, request, cue }: PackSessio
         case 'find-order':
           void finderRef.current?.find(warehouse, effect.code).then((lookup) => {
             matchedRef.current = lookup.kind === 'found' && lookup.byGoods ? { requestId: lookup.row.requestId, code: effect.code } : null;
+            byGoodsRef.current = matchedRef.current;
             applyRef.current(orderFound(stateRef.current, effect.code, lookup));
           });
           return;

@@ -298,7 +298,7 @@ func TestAPrefetchedWaveSubmitsOneEstimatedCommission(t *testing.T) {
 
 func TestAPrefetchedPackRevisesOnlyWhenMeasuredWeightDiffers(t *testing.T) {
 	measured := newMeasurementWorld(t)
-	measured.seedStorageStock(t, 30)
+	measured.seedStorageStock(t, 50)
 	measured.saveZone(t, zoneFixture(t, "SYN-TENANT-01", "SYN-WH-01", "SYN-ZONE-OUT", 1, func(spec *domain.ZoneContentSpec) {
 		spec.Usage = domain.ZoneUsageOutboundStaging
 	}))
@@ -337,8 +337,22 @@ func TestAPrefetchedPackRevisesOnlyWhenMeasuredWeightDiffers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runPack := func(key, waveID, weight string, amender ports.MeasurementAmender) (domain.OutboundRequestID, string) {
+	// split 给了就把这 10 件打成两个包裹（6 件与 4 件），并接上货物明细修订口：预取的那份委托按 10 件申报，
+	// 包裹序号 1 里实际只有 6 件。
+	runPack := func(key, waveID, weight string, amender ports.MeasurementAmender, split ...ports.GoodsAmender) (domain.OutboundRequestID, string) {
 		t.Helper()
+		goods, unit := valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), valueOf(t, domain.NewGoodsUnitName, "件")
+		parcels := []application.PackParcelCommand{{
+			Sequence: 1, Packaging: "SYN-BOX-PRE", Weight: weight, WeightUnit: "KG",
+			Length: "30", Width: "20", Height: "15.5", Dimension: "CM", Goods: goods, Unit: unit, Quantity: 10,
+		}}
+		if len(split) > 0 {
+			parcels[0].Quantity = 6
+			parcels = append(parcels, application.PackParcelCommand{
+				Sequence: 2, Packaging: "SYN-BOX-PRE", Weight: "4.250", WeightUnit: "KG",
+				Length: "30", Width: "20", Height: "15.5", Dimension: "CM", Goods: goods, Unit: unit, Quantity: 4,
+			})
+		}
 		accepted := measured.acceptOutbound(t, measured.outbound(t), outboundCommand(t, key, 10))
 		req, ok := accepted.Request()
 		if !ok {
@@ -372,11 +386,7 @@ func TestAPrefetchedPackRevisesOnlyWhenMeasuredWeightDiffers(t *testing.T) {
 			}
 			packRes, runErr := handler.Pack(ctx, application.PackCommand{
 				Tenant: tenant, FactID: valueOf(t, domain.NewPickFactID, "PACK-"+waveID), Request: req.ID(),
-				Parcels: []application.PackParcelCommand{{
-					Sequence: 1, Packaging: "SYN-BOX-PRE", Weight: weight, WeightUnit: "KG",
-					Length: "30", Width: "20", Height: "15.5", Dimension: "CM",
-					Goods: valueOf(t, domain.NewGoodsCode, "SYN-GOODS-01"), Unit: valueOf(t, domain.NewGoodsUnitName, "件"), Quantity: 10,
-				}},
+				Parcels: parcels,
 			})
 			if runErr != nil {
 				return runErr
@@ -385,6 +395,9 @@ func TestAPrefetchedPackRevisesOnlyWhenMeasuredWeightDiffers(t *testing.T) {
 				return fmt.Errorf("pack %s", packRes.Outcome())
 			}
 			submitter := application.NewCommissionHandler(outStore, wavesStore, commissioner, warehouses).WithMeasurementAmender(amender)
+			if len(split) > 0 {
+				submitter = submitter.WithGoodsAmender(split[0])
+			}
 			subRes, runErr := submitter.Submit(ctx, tenant, req.ID())
 			if runErr != nil {
 				return runErr
@@ -435,6 +448,38 @@ func TestAPrefetchedPackRevisesOnlyWhenMeasuredWeightDiffers(t *testing.T) {
 	).Scan(&missing); err != nil || !strings.Contains(missing, "CORRECTION_ADOPTED") {
 		t.Fatalf("缺口应含 CORRECTION_ADOPTED got=%q err=%v", missing, err)
 	}
+
+	// 预取的那份委托按 10 件申报，打成两个包裹之后包裹序号 1 里只有 6 件：提货物明细修订，交的是实际装的 6 件；
+	// 这一个包裹的称重也与估算不同，测量修订照交。两样都已采用才记 ADOPTED；第二个包裹另交一份委托。
+	before := commissioner.called
+	goodsAdopted := &scriptedGoodsAmender{outcome: ports.MeasurementAdoptedWord}
+	bothMeasure := &scriptedMeasurementAmender{outcome: ports.MeasurementAdoptedWord}
+	_, bothState := runPack("REQ-PRE-SPLIT-OK", "WAVE-PRE-SPLIT-OK", "6.250", bothMeasure, goodsAdopted)
+	if goodsAdopted.called != 1 || goodsAdopted.last.Quantity != 6 || goodsAdopted.last.Goods != "SYN-GOODS-01" || goodsAdopted.last.DeclaredParcelID == "" ||
+		bothMeasure.called != 1 || bothState != "ADOPTED" || commissioner.called != before+2 {
+		t.Fatalf("件数与称重都不同、都已采用：件数修订 %d 次 %+v，测量修订 %d 次，更正态 %q，委托交了 %d 份",
+			goodsAdopted.called, goodsAdopted.last, bothMeasure.called, bothState, commissioner.called-before)
+	}
+
+	// 件数的修订没被采用：哪怕测量的修订已采用，这个包裹也停在待复核。
+	goodsHeld := &scriptedGoodsAmender{outcome: ports.MeasurementDisallowedWord}
+	heldMeasure := &scriptedMeasurementAmender{outcome: ports.MeasurementAdoptedWord}
+	_, heldState := runPack("REQ-PRE-SPLIT-HOLD", "WAVE-PRE-SPLIT-HOLD", "6.250", heldMeasure, goodsHeld)
+	if goodsHeld.called != 1 || heldMeasure.called != 1 || heldState != "AWAITING_REVIEW" {
+		t.Fatalf("件数修订没被采用：件数修订 %d 次，测量修订 %d 次，更正态 %q", goodsHeld.called, heldMeasure.called, heldState)
+	}
+}
+
+type scriptedGoodsAmender struct {
+	outcome string
+	called  int
+	last    ports.GoodsAmendment
+}
+
+func (amender *scriptedGoodsAmender) AmendGoods(_ context.Context, amendment ports.GoodsAmendment) (ports.MeasurementAmendmentAnswer, error) {
+	amender.called++
+	amender.last = amendment
+	return ports.MeasurementAmendmentAnswer{Outcome: amender.outcome}, nil
 }
 
 func TestAShortPickKeepsTheUnpickedReservation(t *testing.T) {
@@ -703,6 +748,11 @@ func TestAnAcceptanceEnvelopeAdvancesTheMatchingParcel(t *testing.T) {
 	otherData := world.recordSourceData(t, follow, "SDV-2", "CUSTOMER_CHANNEL", "REQ-1", "ADOPTED")
 	if otherData != application.FollowUpPosted || correctionState(t, world, "OBR-SUP") != "AWAITING_REVIEW" {
 		t.Fatalf("别的资料版本 %s 更正 %s", otherData, correctionState(t, world, "OBR-SUP"))
+	}
+	// 同一个包裹的另一份修订（件数与测量各一份）已采用：先到的那份还在待复核，包裹仍是待复核，不被后到的「已采用」盖掉。
+	second := world.recordSourceData(t, follow, "SDV-3", domain.WarehouseOutboundSource, "OBR-SUP/1", "ADOPTED")
+	if second != application.FollowUpAdopted || correctionState(t, world, "OBR-SUP") != "AWAITING_REVIEW" {
+		t.Fatalf("另一份修订已采用 %s 更正 %s", second, correctionState(t, world, "OBR-SUP"))
 	}
 	cancelled := world.recordCancellation(t, follow, "cancel-sup", "DPCL-SUP")
 	if cancelled != application.FollowUpCancelled || commissionState(t, world, "OBR-SUP", 1) != "CANCELLED" {

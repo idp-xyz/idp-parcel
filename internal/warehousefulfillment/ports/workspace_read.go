@@ -538,6 +538,8 @@ type ReturnPreAdviceRow struct {
 	Operator         string
 	ReceivedAt       time.Time
 	Lines            []ReturnPreAdviceLineRow
+	// Status 只在按页取的预报列表上有值：待到仓、已到仓、已处置。整份总览不填。
+	Status string
 }
 
 type ReturnDispositionRow struct {

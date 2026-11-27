@@ -693,6 +693,22 @@ export function leaveOrder(state: PackState): PackStep {
   return step(toWaiting(state, { kind: 'waiting', text: leaveNote(state) }), undefined, [{ kind: 'refresh-queue' }]);
 }
 
+/**
+ * 按货配出来的单复核时答状态不符：多半是另一个工位同时扫了同一种货、配到了同一张单并先复核了——配单是读、不占单。
+ * 手里这一件还没有单，不让人再扫一次：离开这张单，用扫过的那个码再配一次，后端会给下一张等着的单。
+ * `matched` 是这张单当初是按哪个码配出来的；不是按货配的单、别的拒法都不管，交回 null。
+ */
+export function rematchAfterRefusal(state: PackState, verdict: WorkFactVerdict, matched: { requestId: string; code: string } | null): PackStep | null {
+  if (matched === null || state.phase !== 'check-refused' || verdict.verdict !== 'refused' || verdict.outcome !== 'STATUS_MISMATCH') return null;
+  if (state.order === null || state.order.requestId !== matched.requestId) return null;
+  const text = `出库单 ${matched.requestId} 已经不是「已拣货」了，多半是别的工位刚复核过它。手里这一件正在另配一张单…`;
+  return step(
+    { ...toWaiting(state, { kind: 'waiting', text, scanned: matched.code }), phase: 'finding', pending: matched.code },
+    undefined,
+    [{ kind: 'refresh-queue' }, { kind: 'find-order', code: matched.code }],
+  );
+}
+
 // —— 提交的结果 ——
 
 function withoutStop(reason: string): string {

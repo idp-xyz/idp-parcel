@@ -1,4 +1,5 @@
 import { Button } from '@idpxyz/ui-primitives';
+import { useEffect, useRef } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
 import { formatInstant } from '../catalogue-view';
 import { hiddenDecisionHint } from '../operator-grants';
@@ -19,9 +20,9 @@ import {
   returnReceiptWaitingSince,
   siblingReceipts,
 } from './return-flow';
+import { loadReturnReceipt } from './api';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { openDocument, useReturnToList } from './use-document';
-import { loadReturnsOverview } from './use-returns-overview';
 import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsTone } from './wms-ui';
 
@@ -29,15 +30,36 @@ const mutedText = 'type-caption text-idpxyz-textMuted';
 const noteBox = 'rounded-lg border border-idpxyz-border bg-idpxyz-sidebar px-4 py-3 type-body text-idpxyz-textBright';
 
 /**
- * 退货到仓页：一笔退件在作业台扫进暂存位之后留下的记录，认出了哪张预报、转没转待认领、记没记回库去向。退货只有概览一个读口，
- * 没有按号取一张的，所以这一页读整份概览，在里面按作业事实号认出这一笔（概览是租户全册，认不出就是没有）。
+ * 退货到仓页：一笔退件在作业台扫进暂存位之后留下的记录，认出了哪张预报、转没转待认领、记没记回库去向。按作业事实号取这一笔、
+ * 同一退件单号下的其他到仓记录和对上的预报，认不出就是没有。
  * 回库处置在头区做，只记去向、不改库存账；认不出货主的转待认领，处置不落在这一笔上，页头改指向待认领到货。
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一行留着上一笔，新的读到再换。
  */
-export function ReturnReceiptDocument({ factId }: { factId: string }) {
+export function ReturnReceiptDocument({
+  factId,
+  panel,
+}: {
+  factId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(receivingActionSpecs);
   const back = useReturnToList(moduleId);
   const complete = factId !== '';
-  const { answer, loading, reload } = useKeyedLoad(complete ? factId : null, loadReturnsOverview);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(complete ? factId : null, loadReturnReceipt, { holdPrevious: panel !== undefined });
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
+  const afterWrite = panel ? panel.onChanged : reload;
+  const shownId = useRef(factId);
+  useEffect(() => {
+    if (shownId.current === factId) return;
+    shownId.current = factId;
+    drawer.close();
+  }, [factId, drawer]);
   const overview = answer?.kind === 'outcome' ? answer.body : undefined;
   const receipt = overview ? findReturnReceipt(overview.receipts ?? [], factId) : undefined;
   const failure =
@@ -98,10 +120,13 @@ export function ReturnReceiptDocument({ factId }: { factId: string }) {
             : undefined
         }
         badge={receipt ? <ReceiptStatusBadge receipt={receipt} /> : undefined}
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [returnReceiptKind, factId]) } : undefined}
         stepper={
           track ? (
             <WmsStepper
@@ -252,7 +277,7 @@ export function ReturnReceiptDocument({ factId }: { factId: string }) {
           </>
         ) : null}
       </WmsDocumentPage>
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={afterWrite} />
     </>
   );
 }

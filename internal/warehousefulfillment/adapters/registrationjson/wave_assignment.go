@@ -11,6 +11,8 @@ import (
 type waveAssignmentDocument struct {
 	carriedIdentity
 	WaveID *string `json:"waveId"`
+	// ZoneCode 带了就只派这个波次里这一个库区的格；不带是派整个波次。空白不是「整个波次」的写法。
+	ZoneCode *string `json:"zoneCode"`
 	// Assignee 不带是取消指派；带了就得是一个操作者标识，空串不是「取消」的写法。
 	Assignee *string `json:"assignee"`
 }
@@ -30,6 +32,13 @@ func AssignWaveCommand(reader io.Reader) (application.AssignWaveCommand, error) 
 		return none, err
 	}
 	command := application.AssignWaveCommand{Wave: wave}
+	if document.ZoneCode != nil {
+		zone, err := domain.NewZoneCode(*document.ZoneCode)
+		if err != nil {
+			return none, malformed("zoneCode must not be blank")
+		}
+		command.Zone = zone
+	}
 	if document.Assignee != nil {
 		assignee := strings.TrimSpace(*document.Assignee)
 		if assignee == "" {

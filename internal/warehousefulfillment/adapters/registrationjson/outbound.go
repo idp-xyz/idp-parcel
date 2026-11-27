@@ -569,12 +569,16 @@ func PickCommand(reader io.Reader) (application.PickCommand, error) {
 	if err != nil {
 		return none, err
 	}
-	if document.Quantity == nil || *document.Quantity < 1 {
-		return none, malformed("quantity must be a positive integer")
+	// 0 是「到了库位、一件都没有」，照少拣办；没有货移进待出库，所以这时不要放货位，带了也不读。
+	if document.Quantity == nil || *document.Quantity < 0 {
+		return none, malformed("quantity must be a non-negative integer")
 	}
-	target, err := requiredText("targetLocation", document.Target, domain.NewLocationCode)
-	if err != nil {
-		return none, err
+	var target domain.LocationCode
+	if *document.Quantity > 0 || document.Target != nil {
+		target, err = requiredText("targetLocation", document.Target, domain.NewLocationCode)
+		if err != nil {
+			return none, err
+		}
 	}
 	var tote domain.ToteCode
 	if document.ToteCode != nil {

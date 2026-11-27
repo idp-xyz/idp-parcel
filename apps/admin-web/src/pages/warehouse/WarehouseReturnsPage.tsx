@@ -8,7 +8,6 @@ import { ReturnReceiptDocument } from './ReturnReceiptDocument';
 import { ReturnReceiptList } from './ReturnReceiptList';
 import { useDocumentParts, useReturnToList } from './use-document';
 import { useQueueFilters } from './use-queue-filters';
-import { useReturnsOverview } from './use-returns-overview';
 
 /**
  * 退货：退货预报与退货到仓两种单据各占自己的标签，同一个模块按地址里单据键的第一段（种类词）分派；没有单据键就是列表，
@@ -30,8 +29,7 @@ export function WarehouseReturnsPage() {
 
 function ReturnsHome() {
   const [tab, setTab] = useState('advices');
-  // 两张列表共读一份概览，持有它的是页签外面这一层：切走的那一张列表会卸载，数据与筛选态放在这里，换回来还在、不重取。
-  const overview = useReturnsOverview();
+  // 筛选放在页签外面：切走的那一张列表会卸载，放在列表里就丢了。每一张列表自己按页去读。
   const adviceFilters = useQueueFilters('ALL');
   const receiptFilters = useQueueFilters('AWAITING_DISPOSITION');
 
@@ -44,10 +42,10 @@ function ReturnsHome() {
         </TabsList>
 
         <TabsContent value="advices" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <ReturnAdviceList overview={overview} filters={adviceFilters} />
+          <ReturnAdviceList filters={adviceFilters} />
         </TabsContent>
         <TabsContent value="receipts" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <ReturnReceiptList overview={overview} filters={receiptFilters} />
+          <ReturnReceiptList filters={receiptFilters} />
         </TabsContent>
       </Tabs>
     </div>

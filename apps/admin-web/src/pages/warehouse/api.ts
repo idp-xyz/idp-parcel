@@ -601,6 +601,8 @@ export interface WaveTaskRecord {
   /** 这条任务所属出库单的货主。商品编码只在一位货主之内唯一，合并同一种货时要靠它分开。 */
   ownerAccount?: string;
   locationCode: string;
+  /** 这条任务所在库位此刻所属的库区；认不出不带。按库区派工靠它对上人。 */
+  zoneCode?: string;
   stagingLocation?: string;
   goodsCode: string;
   unit: string;
@@ -608,6 +610,12 @@ export interface WaveTaskRecord {
   quantity: number;
   picked: number;
   status: string;
+}
+
+export interface WaveZoneAssigneeRecord {
+  zoneCode: string;
+  /** 操作者标识「发行方#sub」。 */
+  assignee: string;
 }
 
 export interface WaveRecord {
@@ -626,6 +634,8 @@ export interface WaveRecord {
   ruleCode?: string;
   /** 这个波次派给了谁拣（操作者标识，「发行方#sub」）；没派、没人领不带。 */
   assignee?: string;
+  /** 单独派了人的库区；没单独派的库区照 `assignee` 走。一个都没有不带。 */
+  zoneAssignees?: WaveZoneAssigneeRecord[];
   requests: string[];
   /** `requests` 里已经撤出的那几张：它们在这个波次里的任务作废了，请求回到了已预占。 */
   withdrawnRequests: string[];
@@ -1511,6 +1521,8 @@ export interface ReturnPreAdviceRecord {
   operator?: string;
   receivedAt: string;
   lines: ReadonlyArray<{ goodsCode: string; unit: string; quantity: number }>;
+  /** 按页取的列表才带：待到仓、已到仓、已处置。按一张取时没有，状态由到仓记录对出来。 */
+  status?: 'AWAITING_ARRIVAL' | 'ARRIVED' | 'DISPOSED';
 }
 
 export interface ReturnReceiptRecord {
@@ -1545,6 +1557,63 @@ export interface ReturnsOverviewBody {
 
 export function getReturnsOverview(): Promise<ApiResult<ReturnsOverviewBody>> {
   return exchangeMasterData<ReturnsOverviewBody>('/warehouse-fulfillment-returns-overview');
+}
+
+export const returnsPageSizes = [20, 50, 100, 200] as const;
+export const returnsDefaultPageSize = 50;
+
+export interface ReturnsPageBody {
+  outcome: string;
+  view: 'advices' | 'receipts' | 'advice' | 'receipt';
+  preAdvices: ReturnPreAdviceRecord[];
+  receipts: ReturnReceiptRecord[];
+  page?: { page: number; pageSize: number; total: number };
+  counts?: Record<string, number>;
+}
+
+export interface ReturnsListQuery {
+  view: 'advices' | 'receipts';
+  page: number;
+  pageSize: number;
+  status: string;
+  q: string;
+  owner: string;
+  warehouse: string;
+  sort: 'newest' | 'oldest';
+}
+
+function returnsPath(params: Record<string, string | number>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== '') search.set(key, String(value));
+  }
+  return `/warehouse-fulfillment-returns-overview?${search.toString()}`;
+}
+
+/** 退货预报或到仓记录的一页。状态数量在 counts 里，不含状态这一维的筛选。 */
+export function listReturnsPage(query: ReturnsListQuery): Promise<ApiResult<ReturnsPageBody>> {
+  return exchangeMasterData<ReturnsPageBody>(
+    returnsPath({
+      view: query.view,
+      page: query.page,
+      pageSize: query.pageSize,
+      status: query.status,
+      q: query.q,
+      owner: query.owner,
+      warehouse: query.warehouse,
+      sort: query.sort,
+    }),
+  );
+}
+
+/** 按预报号或预报标识取一张，连同对上的到仓记录。认不出就是空数组。 */
+export function loadReturnAdvice(key: string): Promise<ApiResult<ReturnsOverviewBody>> {
+  return exchangeMasterData<ReturnsOverviewBody>(returnsPath({ view: 'advice', key }));
+}
+
+/** 按作业事实号取一笔，连同同一退件单号的其他到仓记录和对上的预报。 */
+export function loadReturnReceipt(key: string): Promise<ApiResult<ReturnsOverviewBody>> {
+  return exchangeMasterData<ReturnsOverviewBody>(returnsPath({ view: 'receipt', key }));
 }
 
 export interface AgentOverviewBody {

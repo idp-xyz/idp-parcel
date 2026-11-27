@@ -349,7 +349,7 @@ func waveRowBodyOf(row ports.WaveRow) waveRowBody {
 	for _, task := range row.Tasks {
 		tasks = append(tasks, waveTaskBody{
 			TaskID: task.TaskID, RequestID: task.RequestID, OwnerAccount: task.OwnerAccount, LocationCode: task.LocationCode,
-			StagingLocation: task.StagingLocation, GoodsCode: task.GoodsCode, Unit: task.Unit,
+			ZoneCode: task.ZoneCode, StagingLocation: task.StagingLocation, GoodsCode: task.GoodsCode, Unit: task.Unit,
 			StockState: task.StockState, Quantity: task.Quantity, Picked: task.Picked, Status: task.Status,
 		})
 	}
@@ -361,10 +361,14 @@ func waveRowBodyOf(row ports.WaveRow) waveRowBody {
 	if withdrawn == nil {
 		withdrawn = []string{}
 	}
+	var zones []waveZoneAssigneeBody
+	for _, zone := range row.ZoneAssignees {
+		zones = append(zones, waveZoneAssigneeBody{ZoneCode: zone.ZoneCode, Assignee: zone.Assignee})
+	}
 	return waveRowBody{
 		WaveID: row.WaveID, WarehouseCode: row.WarehouseCode, Operator: row.Operator,
 		Prefetch: row.Prefetch, Status: row.Status, ReleasedAt: rfc3339(row.ReleasedAt), SingleUnit: row.SingleUnit, BatchPick: row.BatchPick, RuleCode: row.RuleCode, Assignee: row.Assignee,
-		Requests: requests, WithdrawnRequests: withdrawn, Tasks: tasks,
+		ZoneAssignees: zones, Requests: requests, WithdrawnRequests: withdrawn, Tasks: tasks,
 	}
 }
 
@@ -597,19 +601,28 @@ type waveRowBody struct {
 	// RuleCode 是放出这个波次的成波规则；由人点单放的波次不带。
 	RuleCode string `json:"ruleCode,omitempty"`
 	// Assignee 是这个波次派给了谁拣（操作者标识）；没派不带。
-	Assignee string   `json:"assignee,omitempty"`
-	Requests []string `json:"requests"`
+	Assignee string `json:"assignee,omitempty"`
+	// ZoneAssignees 是单独派了人的库区；没单独派的库区照 assignee 走。一个都没有不带。
+	ZoneAssignees []waveZoneAssigneeBody `json:"zoneAssignees,omitempty"`
+	Requests      []string               `json:"requests"`
 	// WithdrawnRequests 是 requests 里已经撤出的那几张。
 	WithdrawnRequests []string       `json:"withdrawnRequests"`
 	Tasks             []waveTaskBody `json:"tasks"`
+}
+
+type waveZoneAssigneeBody struct {
+	ZoneCode string `json:"zoneCode"`
+	Assignee string `json:"assignee"`
 }
 
 type waveTaskBody struct {
 	TaskID    string `json:"taskId"`
 	RequestID string `json:"requestId"`
 	// OwnerAccount 是这条任务所属出库请求的货主。
-	OwnerAccount    string `json:"ownerAccount"`
-	LocationCode    string `json:"locationCode"`
+	OwnerAccount string `json:"ownerAccount"`
+	LocationCode string `json:"locationCode"`
+	// ZoneCode 是这条任务所在库位此刻所属的库区；认不出不带。
+	ZoneCode        string `json:"zoneCode,omitempty"`
 	StagingLocation string `json:"stagingLocation,omitempty"`
 	GoodsCode       string `json:"goodsCode"`
 	Unit            string `json:"unit"`

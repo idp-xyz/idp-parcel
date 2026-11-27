@@ -54,19 +54,17 @@ export function memberCell(cell: PickCell, member: PickMember): PickCell {
 }
 
 /**
- * 合成的一格拿到了 `quantity` 件，按任务的先后分下去：排在前面的任务记满，轮到的那一条不够就按剩下的记（它会成短拣），
- * 排在后面、一件都没分到的任务不在交回的名单里——一件都没拣到的任务后端不收，它们原样留着。
+ * 合成的一格拿到了 `quantity` 件，按任务的先后分下去：排在前面的任务记满，轮到的那一条不够就按剩下的记，
+ * 排在后面、一件都没分到的任务按 0 件记。后两种都是短拣，后端各自换别的库位补；每条任务都在交回的名单里，
+ * 这一格交完就没有留在队里的任务。
  */
 export function allotMembers(cell: PickCell, quantity: number): { cell: PickCell; quantity: number }[] {
-  const allotted: { cell: PickCell; quantity: number }[] = [];
-  let left = quantity;
-  for (const member of cell.members ?? []) {
-    if (left <= 0) break;
+  let left = Math.max(0, quantity);
+  return (cell.members ?? []).map((member) => {
     const given = Math.min(member.quantity, left);
-    allotted.push({ cell: memberCell(cell, member), quantity: given });
     left -= given;
-  }
-  return allotted;
+    return { cell: memberCell(cell, member), quantity: given };
+  });
 }
 
 /** 一次最多翻几页（每页读口最多 200 个波次）。 */
@@ -94,12 +92,24 @@ export interface PickScope {
   me?: string | null;
 }
 
+type Assigned = Pick<WaveRecord, 'assignee' | 'zoneAssignees'>;
+
 /**
- * 看本仓全部波次时，派给了别人的波次不摆：那是别人的活，拣了后端也不收。指名了波次就照摆——人是特意选的它，
+ * 一条任务此刻归谁拣，与后端 application.WaveHandler 的 pickAssignee 同一个口径：它所在库位的库区单独派了人就是那个人，
+ * 没有就是整个波次派给的人；都没派为 undefined，谁都可以拣。
+ */
+export function taskAssignee(wave: Assigned, task: { zoneCode?: string }): string | undefined {
+  const zoned = task.zoneCode ? wave.zoneAssignees?.find((entry) => entry.zoneCode === task.zoneCode)?.assignee : undefined;
+  return zoned || wave.assignee || undefined;
+}
+
+/**
+ * 看本仓全部波次时，派给了别人的格不摆：那是别人的活，拣了后端也不收。指名了波次就照摆——人是特意选的它，
  * 能不能拣由后端答。认不出自己是谁时不筛，免得把自己的活也藏起来。
  */
-export function assignedElsewhere(wave: { assignee?: string }, scope: PickScope): boolean {
-  return scope.wave === null && Boolean(scope.me) && Boolean(wave.assignee) && wave.assignee !== scope.me;
+export function assignedElsewhere(wave: Assigned, task: { zoneCode?: string }, scope: PickScope): boolean {
+  const assignee = taskAssignee(wave, task);
+  return scope.wave === null && Boolean(scope.me) && assignee !== undefined && assignee !== scope.me;
 }
 
 /**
@@ -113,9 +123,9 @@ export function cellsOfWaves(waves: readonly WaveRecord[], scope: PickScope): Pi
   for (const wave of waves) {
     if (wave.warehouseCode !== scope.warehouse) continue;
     if (scope.wave !== null && wave.waveId !== scope.wave) continue;
-    if (assignedElsewhere(wave, scope)) continue;
     for (const task of wave.tasks) {
       if (task.status !== 'OPEN') continue;
+      if (assignedElsewhere(wave, task, scope)) continue;
       if (!Number.isInteger(task.quantity) || task.quantity < 1) continue;
       const cell: PickCell = {
         taskId: task.taskId,
@@ -194,7 +204,7 @@ export interface PickQueue {
   waveMissing: boolean;
   /** 读到的波次里各还有几格没拣（只列还有的），新的在前；供「换波次」选。带着各自派给了谁。 */
   waves: Array<{ waveId: string; open: number; assignee?: string }>;
-  /** 还有格没拣、但派给了别人所以没摆进队列的波次数；只在看本仓全部波次时才会有。 */
+  /** 有没拣的格派给了别人（整个波次，或其中几个库区）、所以没摆进队列的波次数；只在看本仓全部波次时才会有。 */
   assignedElsewhere: number;
 }
 
@@ -224,7 +234,7 @@ function queueOf(waves: readonly WaveRecord[], scope: PickScope, read: Pick<Pick
         ...(candidate.assignee ? { assignee: candidate.assignee } : {}),
       }))
       .filter((entry) => entry.open > 0),
-    assignedElsewhere: scoped.filter((candidate) => assignedElsewhere(candidate, scope) && candidate.tasks.some((task) => task.status === 'OPEN')).length,
+    assignedElsewhere: scoped.filter((candidate) => candidate.tasks.some((task) => task.status === 'OPEN' && assignedElsewhere(candidate, task, scope))).length,
   };
 }
 

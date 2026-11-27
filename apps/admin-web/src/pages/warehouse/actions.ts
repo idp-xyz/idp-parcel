@@ -132,7 +132,7 @@ export const warehouseActionOutcomeLabels: Record<string, string> = {
   REMAINDER_SPLIT: '已拆出缺货部分：原单进已拣货、按已拣数量往下走，缺的另成一张出库单，在原单右栏能点过去',
   PARTIAL_SHIPMENT_NOT_CONFIGURED: '这张单没写明拣不齐时怎么发，货主也没登记默认，不能少发，也不能拆出缺货部分',
   PARTIAL_SHIPMENT_NOT_ALLOWED: '货主对这张单许的不是这一种发法，没有办',
-  PREFETCH_STANDS: '这张单放波次时已按全量预取过估算委托，委托上的申报件数改不了；等有货了再放波次，或截单',
+  PREFETCH_STANDS: '这张单是早先预取的面单，当时没留下申报了几件，打包时更正不了委托上的件数，所以不办；等有货了再放波次，或截单',
   // 这个词几个口都答，指的东西不一样：撤单是没有这个波次，放波次是点名的出库单找不到或不在这个仓，
   // 更正出库确认是没有这条确认。所以只说对不上，不说是哪一样。
   WAVE_NOT_FOUND: '查无此记录：波次、出库单或确认事实对不上',

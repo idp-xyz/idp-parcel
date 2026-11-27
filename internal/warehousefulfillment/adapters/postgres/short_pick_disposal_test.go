@@ -246,6 +246,19 @@ func TestAPrefetchedRequestIsNotShippedShort(t *testing.T) {
 	if world.requestStatus(t, request) != "RESERVED" || reservedQuantity(t, world) != 4 {
 		t.Fatalf("不办之后请求 %s，预占 %d", world.requestStatus(t, request), reservedQuantity(t, world))
 	}
+
+	// 留下了申报件数的预取照办少发：打包时按实际装的件数提货物明细修订，这里不再拦。
+	if _, err := world.pool.Exec(t.Context(),
+		`UPDATE warehouse_fulfillment.outbound_request SET prefetch_quantity = 10 WHERE tenant_id = 'SYN-TENANT-01' AND request_id = $1`,
+		request.String()); err != nil {
+		t.Fatal(err)
+	}
+	if got := world.shipPicked(t, handler, request).Outcome(); got != application.WaveShortShipped {
+		t.Fatalf("留下了申报件数的预取请求少发 = %s", got)
+	}
+	if world.requestStatus(t, request) != "PICKED" || reservedQuantity(t, world) != 0 {
+		t.Fatalf("少发之后请求 %s，预占 %d", world.requestStatus(t, request), reservedQuantity(t, world))
+	}
 }
 
 func TestSavingAShortPickDisposalRefusesToRunOutsideATransaction(t *testing.T) {

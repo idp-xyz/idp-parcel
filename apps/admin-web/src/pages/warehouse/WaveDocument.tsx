@@ -1,5 +1,5 @@
 import { Button } from '@idpxyz/ui-primitives';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
 import { formatInstant } from '../catalogue-view';
@@ -11,20 +11,47 @@ import { openPrint } from './print-sheet';
 import { pickListSheet } from './print-forms';
 import { packStationHash, pickStationHash, sortStationHash } from './station/stations';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
+import { waveZones } from './wave-assign';
 import { WaveAssignDialog } from './WaveAssignDialog';
 import { operatorLabel } from '../operator-access/operator-names';
 import { useOperatorNames } from '../operator-access/use-operator-names';
 import { wavePickingNote, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
 import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable } from './wms-ui';
 
-/** 波次页：一次放出去的那一批出库单，和它们的每一条拣货任务拣到哪了。 */
-export function WaveDocument({ waveId }: { waveId: string }) {
+/**
+ * 波次页：一次放出去的那一批出库单，和它们的每一条拣货任务拣到哪了。
+ *
+ * 同一张页也摆在波次列表的详情栏里（给了 `panel`）：点一行就在栏里看这个波次。栏里做完一个动作告诉列表重取，
+ * 列表重取一次 `revision` 加一，栏见它变了就重读——不然行上已经拣完了，栏里还摆着「去拣货」。
+ */
+export function WaveDocument({
+  waveId,
+  panel,
+}: {
+  waveId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
   const back = useReturnToList('warehouse-waves');
   const [assignOpen, setAssignOpen] = useState(false);
   const names = useOperatorNames();
-  const { answer, loading, reload } = useKeyedLoad(waveId, getWave);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(waveId, getWave, { holdPrevious: panel !== undefined });
+  const shownId = useRef(waveId);
+  useEffect(() => {
+    if (shownId.current === waveId) return;
+    shownId.current = waveId;
+    setAssignOpen(false);
+    drawer.close();
+  }, [waveId, drawer]);
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
+  const afterWrite = panel ? panel.onChanged : reload;
   const wave = answer?.kind === 'outcome' ? answer.body.wave : undefined;
   const failure = readFailureMessage(answer) ?? (answer?.kind === 'outcome' && !wave ? `没有 ${waveId} 这个波次。` : null);
 
@@ -60,10 +87,13 @@ export function WaveDocument({ waveId }: { waveId: string }) {
             />
           ) : undefined
         }
-        loading={loading}
+        loading={held ? false : loading}
+        reloading={reloading}
+        busy={held}
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument('warehouse-waves', [waveId]) } : undefined}
         actions={
           wave ? (
             <>
@@ -129,13 +159,21 @@ export function WaveDocument({ waveId }: { waveId: string }) {
                 <span className="break-all font-mono type-caption text-idpxyz-text" title={wave.assignee}>
                   {operatorLabel(wave.assignee, names) ?? '还没派，谁都可以拣'}
                 </span>
+                {/* 单独派了人的库区逐个列出；没列出的库区照上面整个波次的指派走。 */}
+                {(wave.zoneAssignees ?? []).map((entry) => (
+                  <span key={entry.zoneCode} className="break-all font-mono type-caption text-idpxyz-text" title={entry.assignee}>
+                    库区 {entry.zoneCode}：{operatorLabel(entry.assignee, names)}
+                  </span>
+                ))}
                 {/* 拣完或取消的波次没有可派的任务。 */}
                 {drawer.has('wave-assign') && (wave.status === 'RELEASED' || wave.status === 'PICKING') ? (
                   <Button type="button" size="sm" variant="outline" onClick={() => setAssignOpen(true)}>
                     {wave.assignee ? '改派或取消指派' : '指派拣货人'}
                   </Button>
                 ) : null}
-                <span className="type-caption text-idpxyz-textMuted">派了之后别人拣这个波次的任务后端不收；拣货的人也可以在拣货工位上自己领。</span>
+                <span className="type-caption text-idpxyz-textMuted">
+                  派了之后别人拣这个波次的任务后端不收；拣货的人也可以在拣货工位上自己领。任务分在几个库区时，可以按库区各派一个人。
+                </span>
               </WmsAsideBlock>
               <WmsAsideBlock title="放波次">
                 <span className="break-all font-mono type-caption text-idpxyz-textMuted" title={wave.operator}>
@@ -206,16 +244,18 @@ export function WaveDocument({ waveId }: { waveId: string }) {
         active={drawer.active}
         lookups={drawer.lookups}
         onClose={drawer.close}
-        onSubmitted={reload}
+        onSubmitted={afterWrite}
       />
       {wave ? (
         <WaveAssignDialog
           open={assignOpen}
           onClose={() => setAssignOpen(false)}
-          onAssigned={reload}
+          onAssigned={afterWrite}
           waveId={waveId}
           warehouse={wave.warehouseCode}
           assignee={wave.assignee}
+          zones={waveZones(wave.tasks)}
+          zoneAssignees={wave.zoneAssignees}
           names={names}
         />
       ) : null}

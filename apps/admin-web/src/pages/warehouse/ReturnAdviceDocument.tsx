@@ -1,8 +1,9 @@
 import { Button } from '@idpxyz/ui-primitives';
+import { useEffect, useRef } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
 import { formatInstant } from '../catalogue-view';
 import { DocumentLink, WmsAsideBlock, WmsDocumentPage } from './document-page';
-import { returnReceiptKind, returnsModule as moduleId } from './return-address';
+import { returnAdviceKind, returnReceiptKind, returnsModule as moduleId } from './return-address';
 import { ReceiptStatusBadge } from './return-badges';
 import {
   adviceLineNote,
@@ -18,22 +19,36 @@ import {
   returnAdviceTrack,
   type AdviceLineRow,
 } from './return-flow';
+import { loadReturnAdvice } from './api';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
-import { loadReturnsOverview } from './use-returns-overview';
+import { openDocument, useReturnToList } from './use-document';
 import { labelOf, WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable, type WmsSubColumn } from './wms-ui';
 
 const mutedText = 'type-caption text-idpxyz-textMuted';
 
 /**
- * 退货预报页：货主或运营事先说有什么要退回来、到仓了没有、到仓之后怎么处置。退货只有概览一个读口，没有按号取一张的，所以这一页
- * 读整份概览，在里面按预报号认出这一张（概览是租户全册，认不出就是没有）。预报自己没有状态，进度与状态都是拿到仓记录对出来的
- * （returnAdviceStatus）。收退件在作业台做，预报页只在还没到仓时指路；到仓之后的处置落在每一笔到仓记录上，从这里点进去做。
+ * 退货预报页：货主或运营事先说有什么要退回来、到仓了没有、到仓之后怎么处置。按预报号取这一张和对上的到仓记录，
+ * 认不出就是没有。预报自己没有状态，进度与状态都是拿到仓记录对出来的（returnAdviceStatus）。收退件在作业台做，
+ * 预报页只在还没到仓时指路；到仓之后的处置落在每一笔到仓记录上，从这里点进去做。
+ * 同一张页也摆在列表的详情栏里（给了 `panel`）：换一行留着上一张，新的读到再换。
  */
-export function ReturnAdviceDocument({ adviceKey }: { adviceKey: string }) {
+export function ReturnAdviceDocument({
+  adviceKey,
+  panel,
+}: {
+  adviceKey: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const back = useReturnToList(moduleId);
   const complete = adviceKey !== '';
-  const { answer, loading, reload } = useKeyedLoad(complete ? adviceKey : null, loadReturnsOverview);
+  const { answer, loading, reload, held, reloading } = useKeyedLoad(complete ? adviceKey : null, loadReturnAdvice, { holdPrevious: panel !== undefined });
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
   const overview = answer?.kind === 'outcome' ? answer.body : undefined;
   const advice = overview ? findReturnAdvice(overview.preAdvices ?? [], adviceKey) : undefined;
   const failure =
@@ -85,10 +100,13 @@ export function ReturnAdviceDocument({ adviceKey }: { adviceKey: string }) {
           </>
         ) : undefined
       }
-      loading={loading}
+      loading={held ? false : loading}
+      reloading={reloading}
+      busy={held}
       error={failure}
       onBack={back}
       onReload={reload}
+      panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument(moduleId, [returnAdviceKind, advice ? returnAdviceNumber(advice) : adviceKey]) } : undefined}
       stepper={
         track ? (
           <WmsStepper

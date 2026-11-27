@@ -9,7 +9,7 @@ import { clearSelection, selectedOnPage, toggleAllOnPage, toggleSelected } from 
 import { skeletonOf } from './loading-shape';
 import { PageSelectAllCheckbox, checkboxClass, stopRowEvent } from './selection-checkbox';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from './state-slot';
-import { stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
+import { listRatioCap, scrollDeltaToReveal, stepSelection, workbenchDetailMinWidth, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
 import { useTabViewRef } from './workspace-view-state';
 
 /** 命令头里的一格指标。可点即筛选，active 表示它正是当前筛选。custom 替换数值位（如进度条）。 */
@@ -98,6 +98,11 @@ export interface WorkbenchPageTemplateProps<Row> {
   rowAlign?: 'middle' | 'baseline';
   sort?: WorkbenchSort;
   onSort?: (key: string) => void;
+  /**
+   * 列表栏的底。翻页条放这里：它说的是左边这一栏的页，详情打开后也不伸到右边那一栏下面。
+   * 不给时列表栏底下什么也不加。
+   */
+  listFooter?: ReactNode;
   /** ready 态下筛没了时的那句话；与 viewState 的空态（册上本来就没有）是两件事。 */
   noMatchText: string;
   onClearFilters?: () => void;
@@ -159,6 +164,7 @@ export function WorkbenchPageTemplate<Row>({
   sort,
   onSort,
   noMatchText,
+  listFooter,
   onClearFilters,
   renderDetail,
   viewState,
@@ -191,6 +197,20 @@ export function WorkbenchPageTemplate<Row>({
     return () => observer.disconnect();
   }, [hasResponsiveColumns]);
   const split = useSplitResize('horizontal');
+  const [splitWidth, setSplitWidth] = useState(0);
+  useLayoutEffect(() => {
+    const container = split.containerRef.current;
+    if (!container) return;
+    const measure = () => {
+      if (container.clientWidth > 0) setSplitWidth(container.clientWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [split.containerRef]);
+  // 拖动条只把列表限在两成到八成。宽屏上八成仍会把右边压得很窄，这里再按详情栏的最小宽度封一次。
+  const listRatio = Math.min(split.ratio, listRatioCap(splitWidth, workbenchDetailMinWidth));
   const ready = viewState.kind === 'ready';
   const detailOpen = ready && selectedKey !== null && rows.some((row) => rowKey(row) === selectedKey);
   // 详情栏开合与分栏比例一变，列表宽就变，在绘制前重量一次。只靠 ResizeObserver 时，它回调里的 setState 排到下一帧，
@@ -286,8 +306,25 @@ export function WorkbenchPageTemplate<Row>({
     if (selectedKey === null) return;
     const list = listRef.current;
     const row = list?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(selectedKey)}"]`);
-    if (!row) return;
-    row.scrollIntoView({ block: 'nearest' });
+    if (!list || !row) return;
+    // 表头粘在顶上，横向滚动条占着底边。外框的底边含滚动条，用它当可视底，最后一行会停在滚动条后面。
+    const header = list.querySelector('thead')?.getBoundingClientRect().height ?? 0;
+    const listBox = list.getBoundingClientRect();
+    const rowBox = row.getBoundingClientRect();
+    const style = getComputedStyle(list);
+    const borderTop = Number.parseFloat(style.borderTopWidth) || 0;
+    const borderBottom = Number.parseFloat(style.borderBottomWidth) || 0;
+    const layoutBar = Math.max(0, list.offsetHeight - list.clientHeight - borderTop - borderBottom);
+    // 不占高度的覆盖式滚动条量不出来：内容比可视区宽时，底边仍按一条滚动条让出。
+    const overlayBar = layoutBar < 1 && list.scrollWidth > list.clientWidth + 1 ? 16 : 0;
+    list.scrollTop += scrollDeltaToReveal({
+      listTop: listBox.top + borderTop,
+      listBottom: listBox.bottom,
+      rowTop: rowBox.top,
+      rowBottom: rowBox.bottom,
+      header,
+      bottom: borderBottom + layoutBar + overlayBar,
+    });
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused !== row && focused.matches('tr[data-row-key]') && list?.contains(focused)) {
       row.focus({ preventScroll: true });
@@ -589,7 +626,7 @@ export function WorkbenchPageTemplate<Row>({
         <div
           data-pane="list"
           className="flex min-h-0 min-w-0 flex-col bg-idpxyz-panelBg"
-          style={detailOpen ? { flex: `0 0 ${split.ratio}%` } : { flex: '1 1 100%' }}
+          style={detailOpen ? { flex: `0 0 ${listRatio}%`, minWidth: 0 } : { flex: '1 1 100%' }}
         >
           <div
             ref={listRef}
@@ -614,6 +651,7 @@ export function WorkbenchPageTemplate<Row>({
               </div>
             )}
           </div>
+          {listFooter}
         </div>
         {detailOpen && selectedKey !== null && (
           <>
@@ -624,7 +662,7 @@ export function WorkbenchPageTemplate<Row>({
               aria-label="拖动调整列表与详情的宽度"
               onMouseDown={split.handleMouseDown}
             />
-            <div data-pane="detail" className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%' }}>
+            <div data-pane="detail" className="h-full min-h-0 overflow-hidden" style={{ flex: '1 1 0%', minWidth: workbenchDetailMinWidth }}>
               {renderDetail(selectedKey)}
             </div>
           </>

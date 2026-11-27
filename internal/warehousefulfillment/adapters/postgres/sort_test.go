@@ -168,6 +168,30 @@ func TestABatchPickedRequestIsSortedIntoItsToteBeforeItCanBeChecked(t *testing.T
 
 // Covers: 逐单拣的波次不分拣：投放不收，复核照旧不等分拣，读口答不用分拣。没有这个波次、没有这张请求答查无。
 // 放出来是单品单件波次的，选了合并拣货也不记成合并拣货——它到复核打包扫货配单，不用分拣。
+// Covers: 合并拣货的波次里一件都没拣到、也没有任务等着拣的请求不在分拣情况里：它的格按 0 件记了短拣，没有货要分；
+// 拣到了货的那一张照列。
+func TestARequestWithNothingPickedIsNotInTheSortPlan(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	picked, empty := reserve("REQ-SORT-PICKED", 6), reserve("REQ-SORT-EMPTY", 4)
+	released := world.releaseBatch(t, handler, "WAVE-SORT-EMPTY", picked, empty)
+	if released.Outcome() != application.WaveAllocated || len(released.Tasks()) != 2 {
+		t.Fatalf("放出 %s，任务 %d 条", released.Outcome(), len(released.Tasks()))
+	}
+	for _, task := range released.Tasks() {
+		quantity := task.Quantity
+		if task.Request == empty {
+			quantity = 0
+		}
+		if got := world.pick(t, handler, task.ID, quantity).Outcome(); got != application.WavePicked {
+			t.Fatalf("拣 %s %d 件 = %s", task.Request, quantity, got)
+		}
+	}
+	plan := world.sortPlan(t, "WAVE-SORT-EMPTY")
+	if len(plan.Requests) != 1 || plan.Requests[0].Request != picked.String() {
+		t.Fatalf("分拣情况里的请求 %+v，要只有拣到了货的那一张", plan.Requests)
+	}
+}
+
 func TestOnlyBatchPickWavesAreSorted(t *testing.T) {
 	world, handler, reserve := twoCellWorld(t)
 	if world.registerTotes(t, handler, "SYN-WH-01", "SYN-TOTE-01").Outcome() != application.WaveTotesRegistered {

@@ -2,6 +2,20 @@
 // （prism-web `shared/workbench/DocumentWorkbench.tsx`）：键盘优先、表头点排序。模板本体依赖 ESM-only 的
 // @idpxyz 原语，run-tests 的 CommonJS 发射加载不了它，要钉的规则抬到这里用 node:test 钉。
 
+/** 右边详情栏的最小宽度。再窄，单号和动作钮就挤到没法看。 */
+export const workbenchDetailMinWidth = 480;
+
+/**
+ * 左边列表分栏百分比的上限：右边至少留出详情栏的最小宽度。
+ * 分栏拖动本身只限制在两成到八成之间，宽屏上八成仍会把详情栏压得很窄。
+ * 容器还没量到（宽度为零）时不额外封顶。
+ */
+export function listRatioCap(containerWidth: number, detailMin: number): number {
+  if (containerWidth <= 0) return 80;
+  const listPx = Math.max(0, containerWidth - detailMin);
+  return Math.min(80, (listPx / containerWidth) * 100);
+}
+
 /** 表头排序态。dir 1 升序、-1 降序。 */
 export interface WorkbenchSort {
   key: string;
@@ -35,6 +49,28 @@ export function workbenchKeyAction(key: string, focus: WorkbenchFocus, detailOpe
   if (key === 'ArrowDown') return 'select-next';
   if (key === 'ArrowUp') return 'select-previous';
   return null;
+}
+
+/**
+ * 把一行滚进列表可视区，scrollTop 要加的量。
+ * 表头粘在滚动区顶上，横向滚动条占着底边：这两截都不算看得见。
+ * 不算顶上的，滚回第一行会停在表头底下；不算底下的，最后一行停在横向滚动条后面，滚动条也到不了头。
+ * listBottom 是滚动区外框的底。bottom 是从外框底边让出的高度（下边框加横向滚动条）。
+ * 只动这一层的 scrollTop，不带动外层能滚的容器。
+ */
+export function scrollDeltaToReveal(box: {
+  listTop: number;
+  listBottom: number;
+  rowTop: number;
+  rowBottom: number;
+  header: number;
+  bottom?: number;
+}): number {
+  const topLimit = box.listTop + box.header;
+  const bottomLimit = box.listBottom - (box.bottom ?? 0);
+  if (box.rowTop < topLimit) return box.rowTop - topLimit;
+  if (box.rowBottom > bottomLimit) return box.rowBottom - bottomLimit;
+  return 0;
 }
 
 /**

@@ -64,11 +64,12 @@ func (handler *WaveHandler) ShipPicked(ctx context.Context, command ShipPickedCo
 	if !AwaitsShortPickDisposal(request.Status(), tasks) {
 		return WaveResult{outcome: WaveStatusMismatch}, nil
 	}
-	// 放波次时预取过估算委托的请求不办：那份委托按全量申报了件数，少发之后没有更正件数的路，
+	// 放波次时预取过估算委托的请求照办：那份委托按全量申报了件数，少发之后打包时按实际装的件数提货物明细修订
+	// （CommissionHandler 的 revisePrefetch），面单号不变。只有早先预取、没留下申报件数的不办——比不出差了多少，
 	// 办了就是以货主名义交出去一份件数不对的委托。它等有货了再放，或截单（截单会把那份委托撤回）。
-	if _, prefetched, err := handler.waves.LoadPrefetch(ctx, command.Tenant, command.Request); err != nil {
+	if record, prefetched, err := handler.waves.LoadPrefetch(ctx, command.Tenant, command.Request); err != nil {
 		return WaveResult{}, fmt.Errorf("ship picked: %w", err)
-	} else if prefetched {
+	} else if prefetched && record.Quantity == 0 {
 		return WaveResult{outcome: WavePrefetchStands}, nil
 	}
 	rule, source, err := partialShipmentOf(ctx, handler.requests, command.Tenant, request)

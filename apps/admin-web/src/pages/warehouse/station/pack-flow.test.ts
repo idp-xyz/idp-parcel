@@ -16,6 +16,7 @@ import {
   goodsIdentified,
   judgeCounts,
   leaveOrder,
+  rematchAfterRefusal,
   mismatchLines,
   mismatchPlan,
   mismatchText,
@@ -709,6 +710,28 @@ test('复核没记成（单没了、状态变了、仓对不上、没配置）�
   const unconfigured = applyVerdict(checkSubmitting(), judgeWorkFactAnswer({ kind: 'unconfigured' }, checkOutcomeLabels));
   equal(unconfigured.state.phase, 'check-refused');
   ok(unconfigured.state.feedback.text.includes('未配置'));
+});
+
+// Covers: 按货配出来的单复核时答状态不符（别的工位同时扫了同一种货、先复核了它）：不让人再扫，离开这张单、
+// 用扫过的那个码另配一张；不是按货配的单、别的拒法、配的不是这张单，都照旧等「换一张单」。
+test('按货配的单被别的工位先复核了：用同一个码另配一张', () => {
+  const verdict = checkVerdict('STATUS_MISMATCH');
+  const refused = applyVerdict(checkSubmitting(), verdict).state;
+  const requestId = refused.order?.requestId ?? '';
+  const again = rematchAfterRefusal(refused, verdict, { requestId, code: 'SKU-SCANNED' });
+  ok(again !== null);
+  if (again === null) return;
+  equal(again.state.phase, 'finding');
+  equal(again.state.pending, 'SKU-SCANNED');
+  equal(again.state.order, null);
+  ok(again.state.feedback.text.includes('别的工位刚复核过') && again.state.feedback.text.includes('另配一张单'));
+  deepEqual(again.effects, [{ kind: 'refresh-queue' }, { kind: 'find-order', code: 'SKU-SCANNED' }]);
+
+  equal(rematchAfterRefusal(refused, verdict, null), null);
+  equal(rematchAfterRefusal(refused, verdict, { requestId: 'OBR-OTHER', code: 'SKU-SCANNED' }), null);
+  const invalid = checkVerdict('CONTENT_INVALID');
+  equal(rematchAfterRefusal(applyVerdict(checkSubmitting(), invalid).state, invalid, { requestId, code: 'SKU-SCANNED' }), null);
+  equal(rematchAfterRefusal(checkSubmitting(), verdict, { requestId, code: 'SKU-SCANNED' }), null);
 });
 
 test('复核没送到：停在没送到，等「再送一次」；再送是同一笔（接线的一方保留那一次），成了才进打包', () => {

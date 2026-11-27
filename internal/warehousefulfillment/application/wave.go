@@ -533,8 +533,9 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 		return WaveResult{outcome: WaveConflict}, nil
 	}
 	// 派工只管待执行的任务：作废之后才拣出来的（上面那一支）照记——货已经在手里了，要有回库任务接住它。
+	// 任务所在的库区单独派了人就认那个人，没有才认整个波次派给的人。
 	if command.Operator != "" {
-		assignee, err := handler.waves.WaveAssignee(ctx, command.Tenant, task.WaveID)
+		assignee, err := handler.pickAssignee(ctx, command.Tenant, owning.Warehouse(), task)
 		if err != nil {
 			return WaveResult{}, fmt.Errorf("pick: %w", err)
 		}
@@ -542,9 +543,12 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 			return WaveResult{outcome: WaveAssignedToOther, assignee: assignee}, nil
 		}
 	}
-	if command.Quantity <= 0 || command.Quantity > task.Quantity-task.Picked {
+	// 拣到 0 件也是一个结果：人到了库位、一件都没有。它照少拣办——记差异、换别的库位补、库位等盘点——只是没有货
+	// 移进待出库，所以下面放货位、周转箱、入账三步都不走。不收它，这条任务就只能一直留在队里。
+	if command.Quantity < 0 || command.Quantity > task.Quantity-task.Picked {
 		return WaveResult{outcome: WaveContentInvalid}, nil
 	}
+	empty := command.Quantity == 0
 	request, found, err := handler.requests.LoadByID(ctx, command.Tenant, task.Request)
 	if err != nil || !found {
 		return WaveResult{}, fmt.Errorf("pick: %w", err)
@@ -552,17 +556,22 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 	if command.Warehouse.String() != "" && command.Warehouse != request.Warehouse() {
 		return WaveResult{outcome: WaveContentInvalid}, nil
 	}
-	place, found, err := handler.locations.LoadLatestLocation(ctx, command.Tenant, request.Warehouse(), command.Target)
-	if err != nil || !found || place.Content().Deactivated() {
-		return WaveResult{outcome: WaveContentInvalid}, nil
-	}
-	zone, found, err := handler.zones.LoadLatestZone(ctx, command.Tenant, request.Warehouse(), place.Content().ZoneCode())
-	if err != nil || !found || zone.Content().Deactivated() || zone.Content().Usage() != domain.ZoneUsageOutboundStaging {
-		return WaveResult{outcome: WaveContentInvalid}, nil
+	if !empty {
+		place, found, err := handler.locations.LoadLatestLocation(ctx, command.Tenant, request.Warehouse(), command.Target)
+		if err != nil || !found || place.Content().Deactivated() {
+			return WaveResult{outcome: WaveContentInvalid}, nil
+		}
+		zone, found, err := handler.zones.LoadLatestZone(ctx, command.Tenant, request.Warehouse(), place.Content().ZoneCode())
+		if err != nil || !found || zone.Content().Deactivated() || zone.Content().Usage() != domain.ZoneUsageOutboundStaging {
+			return WaveResult{outcome: WaveContentInvalid}, nil
+		}
 	}
 	// 箱在拣货入账之前绑：认不得的箱、绑着别的单的箱，这一笔拣货整份不成立，货不记进待出库。
 	// 同一张单可以用几个箱，一个箱同一时刻只装一张单。
-	if command.Tote.String() != "" {
+	switch {
+	case empty:
+		// 一件都没拣到时不绑箱、也不要求箱：没有货放进去，绑了只是白占一个箱。
+	case command.Tote.String() != "":
 		refused, err := handler.bindTote(ctx, command.Tenant, request, command.Tote)
 		if err != nil {
 			return WaveResult{}, fmt.Errorf("pick: %w", err)
@@ -570,7 +579,7 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 		if refused != WaveOutcomeInvalid {
 			return WaveResult{outcome: refused}, nil
 		}
-	} else {
+	default:
 		// 租户给这个仓登记了「拣货必须用周转箱」时，不带箱的这一笔不成立。没登记这条规则就不要求。
 		// 货合在一起拿的波次不受这一条管：箱是用来把各张单的货分开的，而单品单件波次与合并拣货的波次，
 		// 拣货时一个容器里本来就装着好几张单的货，绑不到其中哪一张上——前者到复核打包扫货配单，后者到分拣才按单分箱。
@@ -588,11 +597,13 @@ func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (Wave
 			}
 		}
 	}
-	if err := handler.postPick(ctx, request, task, command); err != nil {
-		return WaveResult{}, fmt.Errorf("pick: %w", err)
+	if !empty {
+		if err := handler.postPick(ctx, request, task, command); err != nil {
+			return WaveResult{}, fmt.Errorf("pick: %w", err)
+		}
+		task.Staging = command.Target
 	}
 	task.Picked = command.Quantity
-	task.Staging = command.Target
 	task.Status = "DONE"
 	short := task.Quantity - command.Quantity
 	if short > 0 {

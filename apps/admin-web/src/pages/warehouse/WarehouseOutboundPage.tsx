@@ -74,7 +74,7 @@ export function WarehouseOutboundPage() {
 /**
  * 出库单列表，摆在单据工作台上：标题行上是各队还有几张、点了就看那一队，下面一行工具条（检索与筛选），点一行在右边开这张单——
  * 看它、做它的动作都在栏里，不必另开标签；单号仍是链接，点了开整页。勾选是另一件事：圈几张同仓、已预占的单合并放波次。
- * 翻页条在页底。
+ * 翻页条在左边列表的底：详情打开后不伸到右边那一栏下面。
  *
  * 各队的数量不摆在工具条里：十个带数的签平铺开要占两行，而它们说的是「哪一队积压了多少」，是这一页的概况，
  * 标题行右边本来空着。按哪一队筛在工具条的状态下拉里也能选，两处是同一个筛选。
@@ -412,12 +412,12 @@ function OutboundList() {
         noMatchText="当前筛选下没有出库单"
         onClearFilters={clearFilters}
         renderDetail={(key) => (
-          // 换一行就是换一张单：按键重挂，上一张单读到一半的答复与没关的表单不带过来。
-          <OutboundDocument key={key} requestId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }} />
+          // 不按行重挂：重挂会把整栏卸掉再从加载骨架画起。换行留着上一张，新的读到再换，见 useKeyedLoad 的 holdPrevious。
+          <OutboundDocument requestId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }} />
         )}
         viewState={viewState}
+        listFooter={shownPagination && viewState.kind === 'ready' ? <CursorPagerBar pagination={shownPagination} /> : undefined}
       />
-      {shownPagination && viewState.kind === 'ready' ? <CursorPagerBar pagination={shownPagination} /> : null}
       <ActionDrawer
         moduleId={moduleId}
         active={drawer.active}

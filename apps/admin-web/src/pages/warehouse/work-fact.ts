@@ -591,12 +591,13 @@ export const workFactSpecs: readonly WorkFactSpec[] = [
     endpoint: '/warehouse-fulfillment-picks',
     usesDeviceSequence: false,
     usesOccurredAt: false,
-    snapshotHint: '扫描拣货任务号与实拣数量，移入在用的出库暂存库位（OUTBOUND_STAGING）。少拣自动记短拣差异。',
+    snapshotHint: '扫描拣货任务号与实拣数量，移入在用的出库暂存库位（OUTBOUND_STAGING）。少拣自动记短拣差异；到了库位一件都没有填 0。',
     form: {
       fields: [
         ...commonHeaderFields(false, false),
         { path: 'taskId', label: '拣货任务号', kind: 'text', required: true, placeholder: 'PKT-01', hint: '可从「出库与波次」波次右栏复制' },
-        { path: 'quantity', label: '实拣数量', kind: 'integer', required: true, placeholder: '4' },
+        // 0 是「到了库位一件都没有」：后端照少拣办，没有货移进待出库。
+        { path: 'quantity', label: '实拣数量', kind: 'integer', required: true, allowZero: true, placeholder: '4', hint: '一件都没有填 0，照少拣办' },
         { path: 'targetLocation', label: '目标待出库库位', kind: 'text', required: true, lookup: 'outbound-staging-location', placeholder: 'SYN-LOC-OUT' },
         { path: 'toteCode', label: '周转箱号（用了箱才填）', kind: 'text', placeholder: 'TOTE-001', hint: '只认登记过的箱；箱上绑着别的出库单时这一笔不成立' },
       ],

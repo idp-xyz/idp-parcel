@@ -18,6 +18,7 @@ import {
   pickProgress,
   pickScreen,
   queueNotes,
+  reloadAfter,
   reloadQueue,
   resend,
   scanCode,
@@ -633,14 +634,14 @@ test('改数量填得不对：不改，说明为什么', () => {
   }
 });
 
-test('已经扫了数的格改成 0：不能退回去，指给「少拣」；一件没扫时指给「跳过这一格」', () => {
+test('已经扫了数的格改成 0：不能退回去，指给「少拣」；一件没扫时也指给「少拣」（按 0 件提交）', () => {
   const scanned = changeCount(counted(2), '0');
   equal(scanned.ok, false);
   if (!scanned.ok) ok(scanned.reason.includes('已经扫了 2 件') && scanned.reason.includes('少拣'), scanned.reason);
 
   const none = changeCount(atGoods(), '0');
   equal(none.ok, false);
-  if (!none.ok) ok(none.reason.includes('跳过这一格'), none.reason);
+  if (!none.ok) ok(none.reason.includes('少拣') && none.reason.includes('按 0 件提交'), none.reason);
 });
 
 test('改数量只在等商品时可以：还没扫库位、提交中都不行', () => {
@@ -651,8 +652,8 @@ test('改数量只在等商品时可以：还没扫库位、提交中都不行',
 
 // —— 少拣 ——
 
-test('少拣的前提：在等商品，已扫的数在 1 与应拣之间；一件都没扫、已够数都不行', () => {
-  equal(shortPickPlan(atGoods()), null);
+test('少拣的前提：已经到了这一格，已扫的数比应拣少；一件都没扫也行（按 0 件），还没扫库位、已够数不行', () => {
+  deepEqual(shortPickPlan(atGoods()), { cell: A, quantity: 0, short: 5, staging: STAGING });
   const plan = shortPickPlan(counted(3));
   deepEqual(plan, { cell: A, quantity: 3, short: 2, staging: STAGING });
   equal(shortPickPlan({ ...counted(1), counted: 5 }), null);
@@ -666,8 +667,21 @@ test('少拣：按当前已扫的数提交，这一格带着实拣数量', () =>
   deepEqual(step.effects, [{ kind: 'submit', cell: A, quantity: 3 }]);
 });
 
-test('一件都没扫的少拣提交不出去：0 件后端不收', () => {
-  const before = atGoods();
+test('一件都没扫的少拣按 0 件提交：到了库位一件都没有，后端照少拣办；记成之后要重读队列', () => {
+  const step = submitShortPick(atGoods());
+  equal(step.state.phase, 'submitting');
+  deepEqual(step.effects, [{ kind: 'submit', cell: A, quantity: 0 }]);
+  const text = shortPickLines({ cell: A, quantity: 0, short: 5, staging: STAGING }).join('');
+  for (const must of ['只记 0 件', '到了库位一件都没有', '差的 5 件', '换别的库位补']) ok(text.includes(must), must);
+  const answered = judgeWorkFactAnswer({ kind: 'outcome', status: 201, body: { outcome: 'PICKED' } }, pickOutcomeLabels);
+  equal(reloadAfter(step.state, answered), true);
+  const settled = applyVerdict(step.state, answered).state;
+  ok(settled.feedback.text.includes('按 0 件记成短拣'));
+  ok(!settled.feedback.text.includes('已放到'));
+});
+
+test('还没扫这一格的库位时不能少拣', () => {
+  const before = atLocation();
   unchanged(before, submitShortPick(before));
 });
 
@@ -1059,7 +1073,8 @@ test('各按钮此刻能不能点', () => {
   });
   const goods0 = pickActions(atGoods());
   equal(goods0.changeCount, true);
-  equal(goods0.shortPick, false);
+  // 一件都没扫也能点少拣：到了库位一件都没有，按 0 件提交
+  equal(goods0.shortPick, true);
   equal(goods0.skip, true);
   equal(goods0.refresh, true);
   const goods2 = pickActions(counted(2));
