@@ -194,20 +194,20 @@ export function usePickSession({ deviceId, warehouse, wave, cue }: PickSessionIn
     void currentOperatorId()
       .then((me) => loadPickQueue({ warehouse, wave, me, list: listWaves, one: getWave }))
       .then((answer) => {
-      if (cancelled) return;
-      setRefreshing(false);
-      if (answer.kind === 'failed') {
-        const message = describeReadFailure(answer.failure);
-        // 已经读成过的队列留着：刷新没读成不把屏上的格抹掉，只说这一次没读成
-        setLoad((previous) => (previous.phase === 'ready' ? previous : { phase: 'error', message }));
-        setRefreshError(message);
-        return;
-      }
-      setLoad({ phase: 'ready', queue: answer.queue });
-      if (answer.queue.cells.some((cell) => cell.batch === true)) setSorting(true);
-      const current = stateRef.current;
-      if (current !== null) apply(reloadQueue(current, answer.queue.cells));
-    });
+        if (cancelled) return;
+        setRefreshing(false);
+        if (answer.kind === 'failed') {
+          const message = describeReadFailure(answer.failure);
+          // 已经读成过的队列留着：刷新没读成不把屏上的格抹掉，只说这一次没读成
+          setLoad((previous) => (previous.phase === 'ready' ? previous : { phase: 'error', message }));
+          setRefreshError(message);
+          return;
+        }
+        setLoad({ phase: 'ready', queue: answer.queue });
+        if (answer.queue.cells.some((cell) => cell.batch === true)) setSorting(true);
+        const current = stateRef.current;
+        if (current !== null) apply(reloadQueue(current, answer.queue.cells));
+      });
     return () => {
       cancelled = true;
     };
