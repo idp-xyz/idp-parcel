@@ -1,4 +1,5 @@
 import { Button } from '@idpxyz/ui-primitives';
+import { useState } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
 import { formatInstant } from '../catalogue-view';
@@ -11,13 +12,15 @@ import { pickListSheet } from './print-forms';
 import { packStationHash, pickStationHash, sortStationHash } from './station/stations';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
 import { useReturnToList } from './use-document';
-import { wavePickingNote, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
+import { WaveAssignDialog } from './WaveAssignDialog';
+import { waveAssigneeName, wavePickingNote, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
 import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable } from './wms-ui';
 
 /** 波次页：一次放出去的那一批出库单，和它们的每一条拣货任务拣到哪了。 */
 export function WaveDocument({ waveId }: { waveId: string }) {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
   const back = useReturnToList('warehouse-waves');
+  const [assignOpen, setAssignOpen] = useState(false);
   const { answer, loading, reload } = useKeyedLoad(waveId, getWave);
   const wave = answer?.kind === 'outcome' ? answer.body.wave : undefined;
   const failure = readFailureMessage(answer) ?? (answer?.kind === 'outcome' && !wave ? `没有 ${waveId} 这个波次。` : null);
@@ -119,10 +122,12 @@ export function WaveDocument({ waveId }: { waveId: string }) {
                 ) : null}
               </WmsAsideBlock>
               <WmsAsideBlock title="拣货人">
-                <span className="break-all font-mono type-caption text-idpxyz-text">{wave.assignee ?? '还没派，谁都可以拣'}</span>
+                <span className="break-all font-mono type-caption text-idpxyz-text" title={wave.assignee}>
+                  {waveAssigneeName(wave.assignee) ?? '还没派，谁都可以拣'}
+                </span>
                 {/* 拣完或取消的波次没有可派的任务。 */}
                 {drawer.has('wave-assign') && (wave.status === 'RELEASED' || wave.status === 'PICKING') ? (
-                  <Button type="button" size="sm" variant="outline" onClick={() => drawer.open('wave-assign', { waveId, assignee: wave.assignee ?? '' })}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setAssignOpen(true)}>
                     {wave.assignee ? '改派或取消指派' : '指派拣货人'}
                   </Button>
                 ) : null}
@@ -197,6 +202,16 @@ export function WaveDocument({ waveId }: { waveId: string }) {
         onClose={drawer.close}
         onSubmitted={reload}
       />
+      {wave ? (
+        <WaveAssignDialog
+          open={assignOpen}
+          onClose={() => setAssignOpen(false)}
+          onAssigned={reload}
+          waveId={waveId}
+          warehouse={wave.warehouseCode}
+          assignee={wave.assignee}
+        />
+      ) : null}
     </>
   );
 }

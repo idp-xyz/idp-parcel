@@ -6,6 +6,7 @@ import { cartonMarkSheet, packListSheet } from './print-forms';
 import { openPrint, openPrintHtml } from './print-sheet';
 import { simulatedUspsLabelHtml } from './simulated-usps-label';
 import { formatInstant } from '../catalogue-view';
+import { allocationExceptionNote } from './wave-rule';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
 import { getOutboundRequestDetail, type OutboundRequestDetailBody } from './api';
@@ -100,6 +101,7 @@ export function OutboundDocument({
   const heldReservations = reservations.filter((line) => line.quantity > 0);
   const shipments = uniq([request?.prefetchShipmentId, ...parcels.map((parcel) => parcel.shipmentRequestId)]);
   const partial = partialShipmentSummary(body?.partialShipment);
+  const unallocatable = allocationExceptionNote(body?.allocationException ?? undefined);
   // 代录的同意只在它就是适用的那一层时摆依据：被后面的规则盖过的不在这里占地方。
   const consent = body?.partialShipment?.source === 'ORDER_CONSENT' ? body.partialShipment.consent : undefined;
   const disposal = body?.shortPickDisposal ?? undefined;
@@ -298,6 +300,12 @@ export function OutboundDocument({
                   <span className="text-idpxyz-textMuted">还没有波次，也没有提交运单委托。</span>
                 ) : null}
               </WmsAsideBlock>
+              {unallocatable ? (
+                <WmsAsideBlock title="上次放不出">
+                  <span>{unallocatable.detail}</span>
+                  <span className="type-caption text-idpxyz-textMuted">{formatInstant(body?.allocationException?.recordedAt ?? '')}</span>
+                </WmsAsideBlock>
+              ) : null}
               {partial ? (
                 <WmsAsideBlock title="拣不齐时怎么发">
                   <span className={partial.configured ? undefined : 'text-idpxyz-textMuted'}>{partial.headline}</span>

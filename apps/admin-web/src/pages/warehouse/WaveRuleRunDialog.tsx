@@ -36,9 +36,11 @@ export interface WaveRuleRunDialogProps {
   warehouseNames?: ReadonlyMap<string, string>;
   /** 进来时先选中的仓（列表上正筛着的那个）；它没有可用的规则时不选。 */
   defaultWarehouse?: string;
+  /** 进来时先选中的规则（从规则列表的某一行点进来）；它不在选中的仓里、或已停用时不选。 */
+  defaultRule?: string;
 }
 
-export function WaveRuleRunDialog({ open, onClose, onReleased, warehouseNames, defaultWarehouse }: WaveRuleRunDialogProps) {
+export function WaveRuleRunDialog({ open, onClose, onReleased, warehouseNames, defaultWarehouse, defaultRule }: WaveRuleRunDialogProps) {
   useCloseOnHashChange(open, onClose);
   const [rules, setRules] = useState<Rules>({ phase: 'loading' });
   const [warehouse, setWarehouse] = useState('');
@@ -67,12 +69,13 @@ export function WaveRuleRunDialog({ open, onClose, onReleased, warehouseNames, d
       const warehouses = warehousesWithWaveRules(listed);
       const first = defaultWarehouse && warehouses.includes(defaultWarehouse) ? defaultWarehouse : (warehouses[0] ?? '');
       setWarehouse(first);
-      setRuleCode(usableWaveRules(listed, first)[0]?.ruleCode ?? '');
+      const usableFirst = usableWaveRules(listed, first);
+      setRuleCode((usableFirst.find((candidate) => candidate.ruleCode === defaultRule) ?? usableFirst[0])?.ruleCode ?? '');
     });
     return () => {
       cancelled = true;
     };
-  }, [open, defaultWarehouse]);
+  }, [open, defaultWarehouse, defaultRule]);
 
   const listed = rules.phase === 'ready' ? rules.rules : [];
   const warehouses = warehousesWithWaveRules(listed);

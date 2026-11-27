@@ -4,7 +4,7 @@ import type { CatalogueConditions, CataloguePage } from '../catalogue-query';
 import { catalogueRequestPath } from '../catalogue-query';
 import { asCatalogueRegistration, asStockImportWrite, type CatalogueRegistrationBody, type StockImportWriteBody } from './answers';
 import type { PartialShipmentAnswer, ShortPickDisposalAnswer } from './partial-shipment';
-import type { AllocationExceptionRecord, WaveRuleRecord, WaveRuleRunBody } from './wave-rule';
+import type { AllocationExceptionRecord, DueWaveRulesBody, WaveRuleRecord, WaveRuleRunBody } from './wave-rule';
 import {
   catalogueReadPath,
   catalogueWritePaths,
@@ -585,7 +585,7 @@ export interface OutboundRequestRecord {
   lines: OutboundRequestLineRecord[];
   reservedQuantity: number;
   wantedQuantity: number;
-  /** 只在这张单仍是已预占、最近一次放波次时分配不出被跳过时带；只有列表读口带这一格。 */
+  /** 只在这张单仍是已预占、最近一次放波次时分配不出被跳过时带；列表读口带在这里，明细读口带在答复的 `allocationException`。 */
   allocationException?: AllocationExceptionRecord;
 }
 
@@ -1045,6 +1045,15 @@ export function runWaveRule(warehouse: string, ruleCode: string, runId: string):
   return postMasterData<WaveRuleRunBody>('/warehouse-fulfillment-wave-rule-runs', { warehouse, ruleCode, runId });
 }
 
+/**
+ * 放此刻已经到点的成波规则：今天（仓的业务日）已经过了、还没办过的时点各办一次。平常由部署方的定时任务来调；
+ * 这里是给人手动点的——定时任务没配、或想马上补办时用。同一个时点只办一次，点几次都不会放两遍。
+ * 不给仓是本租户各仓的规则都看。
+ */
+export function runDueWaveRules(warehouse?: string): Promise<ApiResult<DueWaveRulesBody>> {
+  return postMasterData<DueWaveRulesBody>('/warehouse-fulfillment-wave-rule-due-runs', warehouse ? { warehouse } : {});
+}
+
 export function getSettingsOverview(): Promise<ApiResult<SettingsOverviewBody>> {
   return exchangeMasterData<SettingsOverviewBody>('/warehouse-fulfillment-settings-overview');
 }
@@ -1052,6 +1061,8 @@ export function getSettingsOverview(): Promise<ApiResult<SettingsOverviewBody>> 
 export interface OutboundRequestDetailBody {
   outcome: string;
   request?: OutboundRequestRecord;
+  /** 这张单仍是已预占、最近一次放波次时分配不出被跳过的那一笔；没有是 null。 */
+  allocationException?: AllocationExceptionRecord | null;
   partialShipment?: PartialShipmentAnswer;
   /** 拣不齐之后照部分发货规则办过的那一次；没办过是 null。 */
   shortPickDisposal?: ShortPickDisposalAnswer | null;

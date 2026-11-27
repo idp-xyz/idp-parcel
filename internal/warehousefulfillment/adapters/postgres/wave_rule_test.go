@@ -483,6 +483,19 @@ func TestAPartialReleaseLetsThroughWhatCanBeAllocatedAndNamesTheRest(t *testing.
 		exception.Source != ports.AllocationExceptionFromWave || exception.Reference != "WAVE-PART" {
 		t.Fatalf("放不出的例外 %+v", listed)
 	}
+	// 明细读口对同一张请求带同一笔例外；放进了波次的那一张不带。
+	details, err := adapter.NewWorkspaceReads(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
+	stuckDetail, _, err := details.OutboundRequestDetail(t.Context(), tenant, stuck.String())
+	if exception := stuckDetail.Request.AllocationException; err != nil || exception == nil || exception.Reference != "WAVE-PART" {
+		t.Fatalf("明细上的例外 %+v：%v", exception, err)
+	}
+	if fitsDetail, _, err := details.OutboundRequestDetail(t.Context(), tenant, fits.String()); err != nil || fitsDetail.Request.AllocationException != nil {
+		t.Fatalf("放进波次的那一张明细上带了例外：%v", err)
+	}
 	if others := world.listedOutbound(t, "allocationException=false"); others[stuck.String()].RequestID != "" || others[fits.String()].RequestID == "" {
 		t.Fatalf("不是例外的那些 %+v", others)
 	}

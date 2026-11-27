@@ -5,14 +5,17 @@ import { allWarehouseGuidedForms } from './guided-schemas';
 import { asWarehouseAction } from './actions';
 import {
   allocationExceptionNote,
+  dueWaveRulesNote,
   maxRequestsPerWaveRuleRun,
   mintWaveRuleRunId,
   nextWaveRuleRevision,
   releaseExceptionsText,
   usableWaveRules,
   warehousesWithWaveRules,
+  waveRulePrefill,
   waveRulePreviewConditions,
   waveRulePreviewText,
+  waveRuleTimesLabel,
   waveRuleRunNote,
   waveRuleSummary,
   type WaveRuleRecord,
@@ -135,6 +138,67 @@ test('放行能放的：例外逐张说缘由，行上写明是哪一次跳过�
   ok(plain.ok && !('partial' in plain.payload));
   const partial = buildGuidedPayload(form, { waveId: 'W-1', warehouse: 'WH-1', requests: 'OBR-1', partial: true });
   ok(partial.ok && partial.payload.partial === true);
+});
+
+// Covers: 改一条规则时表单照它最新的一版预填、修订号是下一号，原样提交出来的就是同样内容的下一版；停用只盖那一格。
+test('改规则时照最新一版预填，原样提交是同样内容的下一版', () => {
+  const form = allWarehouseGuidedForms['wave-rule'];
+  const full = rule('A', {
+    revision: 3,
+    ownerAccount: 'OWNER-1',
+    dispatch: 'PICKUP',
+    profile: 'SINGLE_UNIT',
+    maxLines: 60,
+    maxUnits: 200,
+    releaseTimes: ['09:00', '14:00'],
+    batchPick: true,
+  });
+  const built = buildGuidedPayload(form, waveRulePrefill(full));
+  deepEqual(built.ok ? built.payload : null, {
+    warehouse: 'WH-1',
+    ruleCode: 'A',
+    revision: 4,
+    name: '规则 A',
+    maxRequests: 20,
+    maxLines: 60,
+    maxUnits: 200,
+    releaseTimes: ['09:00', '14:00'],
+    ownerAccount: 'OWNER-1',
+    dispatch: 'PICKUP',
+    profile: 'SINGLE_UNIT',
+    batchPick: true,
+  });
+  const retired = buildGuidedPayload(form, waveRulePrefill(rule('B'), { deactivated: true }));
+  deepEqual(retired.ok ? retired.payload : null, { warehouse: 'WH-1', ruleCode: 'B', revision: 2, name: '规则 B', maxRequests: 20, deactivated: true });
+  equal(waveRuleTimesLabel(full), '09:00、14:00');
+  equal(waveRuleTimesLabel(rule('B')), '只由人点');
+});
+
+// Covers: 「放到点的规则」答了之后的话：办了几个时点、各放出了什么；没有到点的；仓没登记业务时区的规则单列并转成提醒。
+test('放到点的规则之后的话', () => {
+  const ran = dueWaveRulesNote({
+    outcome: 'DUE_RULES_RUN',
+    runs: [
+      { warehouseCode: 'WH-1', ruleCode: 'A', date: '2026-11-27', slot: '09:00', runId: 'A-20261127-0900', outcome: 'ALLOCATED', waves: [{ waveId: 'A-20261127-0900-01', requests: 3 }], released: 3, skipped: 0, remaining: 0 },
+      { warehouseCode: 'WH-1', ruleCode: 'B', date: '2026-11-27', slot: '09:30', runId: 'B-20261127-0930', outcome: 'NOTHING_TO_RELEASE', waves: [], released: 0, skipped: 0, remaining: 0 },
+    ],
+    unscheduled: [],
+  });
+  ok(ran.released && ran.tone === 'warning' && ran.lines.length === 3);
+  ok(ran.lines[0].includes('办了 2 个到点的时点'));
+  ok(ran.lines[1].includes('WH-1 规则 A 09:00：放出了 1 个波次，共 3 张出库单'));
+  ok(ran.lines[2].includes('规则 B 09:30') && ran.lines[2].includes('一个波次也没放出'));
+  const clean = dueWaveRulesNote({
+    outcome: 'DUE_RULES_RUN',
+    runs: [{ warehouseCode: 'WH-1', ruleCode: 'A', date: '2026-11-27', slot: '09:00', runId: 'r', outcome: 'ALLOCATED', waves: [{ waveId: 'w', requests: 1 }], released: 1 }],
+  });
+  equal(clean.tone, 'success');
+  const idle = dueWaveRulesNote({ outcome: 'NOTHING_DUE', runs: [], unscheduled: [] });
+  ok(!idle.released && idle.tone === 'success' && idle.lines.length === 1 && idle.lines[0].includes('没有到点而还没办过的时点'));
+  const noZone = dueWaveRulesNote({ outcome: 'NOTHING_DUE', unscheduled: [{ warehouseCode: 'WH-9', ruleCode: 'Z' }] });
+  ok(noZone.tone === 'warning' && noZone.lines[1].includes('仓 WH-9 没有登记业务时区') && noZone.lines[1].includes('规则 Z'));
+  const refused = dueWaveRulesNote({ outcome: 'NOT_CONFIGURED' });
+  ok(!refused.released && refused.tone === 'danger' && refused.lines[0].includes('未配置'));
 });
 
 // Covers: 登记规则的表单装出来的报文：没填的圈单条件不带键（不带才是不限，空串后端不收），没勾的两格不带。

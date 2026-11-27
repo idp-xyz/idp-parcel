@@ -15,6 +15,7 @@ import { listWaves, type WaveRecord } from './api';
 import { DocumentLink } from './document-page';
 import { packStationHash, pickStationHash, sortStationHash } from './station/stations';
 import { ToteList } from './ToteList';
+import { WaveRuleList } from './WaveRuleList';
 import { WaveRuleRunDialog } from './WaveRuleRunDialog';
 import { openDocument, useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
@@ -68,12 +69,16 @@ function WavesHome() {
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="waves">波次</TabsTrigger>
           <TabsTrigger value="totes">周转箱</TabsTrigger>
+          <TabsTrigger value="rules">成波规则</TabsTrigger>
         </TabsList>
         <TabsContent value="waves" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <WaveList />
         </TabsContent>
         <TabsContent value="totes" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <ToteList />
+        </TabsContent>
+        <TabsContent value="rules" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <WaveRuleList />
         </TabsContent>
       </Tabs>
     </div>

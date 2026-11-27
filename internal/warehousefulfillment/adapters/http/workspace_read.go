@@ -324,7 +324,9 @@ func NewQueryOutboundRequestDetailEndpoint(intake CatalogueIntake, queries Works
 				"prefetchShipmentId": req.PrefetchShipmentID, "prefetchDeclaredParcelId": req.PrefetchDeclaredParcelID,
 				"receivedAt": rfc3339(req.ReceivedAt), "reservedQuantity": req.ReservedQuantity, "wantedQuantity": req.WantedQuantity,
 			},
-			"partialShipment": partialShipmentBodyOf(detail.PartialShipment),
+			// 只在这张请求仍是已预占、最近一次放波次时分配不出被跳过时有，否则是 null。
+			"allocationException": allocationExceptionBodyOf(req.AllocationException),
+			"partialShipment":     partialShipmentBodyOf(detail.PartialShipment),
 			// 没办过拣不齐的处置时这一格是 null。
 			"shortPickDisposal": shortPickDisposalBodyOf(detail.ShortPickDisposal),
 			"totes":             outboundTotesBodyOf(detail.Totes),

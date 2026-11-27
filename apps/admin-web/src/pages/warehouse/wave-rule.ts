@@ -182,6 +182,94 @@ export function releaseExceptionsText(exceptions: ReadonlyArray<{ requestId: str
   return `没放进波次的 ${exceptions.length} 张：${named.join('、')}。分配不出的留在已预占，出库单列表按「放不出」筛得出来`;
 }
 
+/**
+ * 改一条规则时表单里预填的值：照它最新的一版原样填好，修订号填下一号，人只改要改的那一格。
+ * 每一版是完整的一份——没填的格在新的一版里就是「不限」或「不勾」，所以原来有的都要带上。`change` 盖在上面（停用、启用）。
+ */
+export function waveRulePrefill(rule: WaveRuleRecord, change: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    warehouse: rule.warehouseCode,
+    ruleCode: rule.ruleCode,
+    revision: String(rule.revision + 1),
+    name: rule.name,
+    maxRequests: String(rule.maxRequests),
+    ...(rule.maxLines ? { maxLines: String(rule.maxLines) } : {}),
+    ...(rule.maxUnits ? { maxUnits: String(rule.maxUnits) } : {}),
+    ...(rule.releaseTimes && rule.releaseTimes.length > 0 ? { releaseTimes: rule.releaseTimes.join(', ') } : {}),
+    ...(rule.ownerAccount ? { ownerAccount: rule.ownerAccount } : {}),
+    ...(rule.dispatch ? { dispatch: rule.dispatch } : {}),
+    ...(rule.profile !== 'ANY' ? { profile: rule.profile } : {}),
+    batchPick: rule.batchPick,
+    deactivated: rule.deactivated,
+    ...change,
+  };
+}
+
+/** 规则的时点示成什么。 */
+export function waveRuleTimesLabel(rule: WaveRuleRecord): string {
+  return rule.releaseTimes && rule.releaseTimes.length > 0 ? rule.releaseTimes.join('、') : '只由人点';
+}
+
+export interface DueWaveRuleRunRecord extends WaveRuleRunBody {
+  warehouseCode: string;
+  ruleCode: string;
+  /** 这个时点所在的业务日（YYYY-MM-DD）与时点（HH:MM），按仓的业务时区。 */
+  date: string;
+  slot: string;
+  runId: string;
+}
+
+export interface DueWaveRulesBody {
+  /** DUE_RULES_RUN 办了至少一个时点；NOTHING_DUE 此刻没有到点而没办过的。 */
+  outcome: string;
+  runs?: readonly DueWaveRuleRunRecord[];
+  /** 登了时点、但仓的业务时区没登记所以算不出到没到点的规则。 */
+  unscheduled?: ReadonlyArray<{ warehouseCode: string; ruleCode: string }>;
+}
+
+export interface DueWaveRulesNote {
+  tone: 'success' | 'warning' | 'danger';
+  /** 第一句是总的，后面一个时点一句、没登记时区的规则一句。 */
+  lines: string[];
+  /** 放出了波次：列表该重读了。 */
+  released: boolean;
+}
+
+/** 「放到点的规则」答了之后屏上的话：办了哪几个时点、各放出了什么，哪些规则因为仓没登记业务时区到点不放。 */
+export function dueWaveRulesNote(body: DueWaveRulesBody): DueWaveRulesNote {
+  const runs = body.runs ?? [];
+  const unscheduled = body.unscheduled ?? [];
+  const unscheduledLines = unscheduled.map(
+    (rule) => `仓 ${rule.warehouseCode} 没有登记业务时区，规则 ${rule.ruleCode} 算不出到没到点，没有放。到「仓库与库位」给这个仓登业务时区。`,
+  );
+  if (body.outcome === 'NOTHING_DUE') {
+    return {
+      tone: unscheduled.length > 0 ? 'warning' : 'success',
+      lines: ['此刻没有到点而还没办过的时点：登了时点的规则，今天已经过了的时点都办过了，或者还没到点。', ...unscheduledLines],
+      released: false,
+    };
+  }
+  if (body.outcome !== 'DUE_RULES_RUN') {
+    return {
+      tone: 'danger',
+      lines: [refusalWords[body.outcome] ?? `后端答了一个这里不认识的结果（${body.outcome}），没有当成办过。`],
+      released: false,
+    };
+  }
+  const notes = runs.map((run) => ({ run, note: waveRuleRunNote(run) }));
+  const released = notes.some((entry) => entry.note.released);
+  const troubled = notes.some((entry) => entry.note.tone !== 'success') || unscheduled.length > 0;
+  return {
+    tone: notes.some((entry) => entry.note.tone === 'danger') ? 'danger' : troubled ? 'warning' : 'success',
+    lines: [
+      `办了 ${runs.length} 个到点的时点。`,
+      ...notes.map(({ run, note }) => `${run.warehouseCode} 规则 ${run.ruleCode} ${run.slot}：${note.text}`),
+      ...unscheduledLines,
+    ],
+    released,
+  };
+}
+
 /** 登记下一版时该填的修订号：这条规则没登过是 1。 */
 export function nextWaveRuleRevision(rules: readonly WaveRuleRecord[], warehouse: string, ruleCode: string): number {
   const current = rules.find((rule) => rule.warehouseCode === warehouse && rule.ruleCode === ruleCode);

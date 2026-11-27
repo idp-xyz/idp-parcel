@@ -352,6 +352,20 @@ func (store *WorkspaceReads) OutboundRequestDetail(
 	out.Request.PrefetchShipmentID = valueOrEmpty(prefetchShipment)
 	out.Request.PrefetchDeclaredParcelID = valueOrEmpty(prefetchDeclared)
 	out.Request.PartialShipment = valueOrEmpty(partial)
+	// 放不出的例外只认仍是已预占的请求，口径与列表那一格相同。
+	if out.Request.Status == "RESERVED" {
+		var exception ports.AllocationExceptionRow
+		err = querier.QueryRow(ctx,
+			`SELECT source, reference, recorded_at FROM warehouse_fulfillment.outbound_allocation_exception
+			  WHERE tenant_id = $1 AND request_id = $2`,
+			tenant.String(), requestID).Scan(&exception.Source, &exception.Reference, &exception.RecordedAt)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return out, false, fmt.Errorf("%s: allocation exception: %w", op, err)
+		}
+		if err == nil {
+			out.Request.AllocationException = &exception
+		}
+	}
 	if out.PartialShipment, err = partialShipmentDetail(ctx, querier, tenant, out.Request); err != nil {
 		return out, false, fmt.Errorf("%s: partial shipment: %w", op, err)
 	}
