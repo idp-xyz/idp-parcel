@@ -105,13 +105,15 @@ export function WmsDocumentPage({
               动作钮放得下就排在它们左边；排不下换行后仍靠右，不回到单号底下。小字在下一行，用满整行。 */}
           <div>
             <div className="flex items-start gap-2">
-              <div className={`flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-2 gap-y-2 ${busy ? 'pointer-events-none' : ''}`}>
-                <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
+              {/* 单号这一格吃掉本行余下的宽度，动作钮一个一个排在后面。折下去的那一行仍是靠右对齐：
+                  包成一个盒子再 justify-end，盒子被拉满整行时钮还是从左边排。 */}
+              <div className={`flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 ${busy ? 'pointer-events-none' : ''}`}>
+                <div className="flex min-w-0 grow items-center gap-2">
                   <span className="type-section font-semibold text-idpxyz-textBright">{kind}</span>
                   {title ? <CodeRef value={title} title={`${kind}号`} /> : null}
                   {ready ? badge : null}
                 </div>
-                {ready && actions ? <div className="flex max-w-full flex-wrap items-center justify-end gap-2">{actions}</div> : null}
+                {ready && actions ? <div className="contents">{actions}</div> : null}
               </div>
               <div className="flex shrink-0 items-center">
               {onReload ? (
