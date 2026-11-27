@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
 import { formatInstant } from '../catalogue-view';
+import { useOperatorNames } from '../operator-access/use-operator-names';
 import { hiddenDecisionHint } from '../operator-grants';
 import { receivingActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
@@ -19,6 +20,7 @@ import {
   returnReceiptStatus,
   returnReceiptTrack,
   returnReceiptWaitingSince,
+  dispositionActor,
   siblingReceipts,
 } from './return-flow';
 import { loadReturnReceipt } from './api';
@@ -45,6 +47,7 @@ export function ReturnReceiptDocument({
   panel?: { onClose: () => void; onChanged: () => void; revision: number };
 }) {
   const drawer = useActionDrawer(receivingActionSpecs);
+  const names = useOperatorNames();
   const back = useReturnToList(moduleId);
   const complete = factId !== '';
   const { answer, loading, reload, held, reloading } = useKeyedLoad(complete ? factId : null, loadReturnReceipt, { holdPrevious: panel !== undefined });
@@ -259,7 +262,7 @@ export function ReturnReceiptDocument({
                     items={[
                       { label: '处置去向', value: <ReceiptStatusBadge receipt={receipt} /> },
                       { label: '处置时刻', value: formatInstant(disposition.decidedAt), mono: true },
-                      { label: '处置人', value: disposition.operator || (disposition.origin === 'CUSTOMER' ? '货主自己提交' : '—'), mono: true },
+                      { label: '处置人', value: dispositionActor(disposition, names), mono: Boolean(disposition.operator) && !names.has(disposition.operator) },
                       { label: '来源', value: labelOf(disposition.origin) },
                       { label: '依据', value: disposition.basis || '—', mono: true },
                       { label: '处置决定号', value: disposition.decisionId, mono: true },

@@ -21,7 +21,8 @@ export type DispatchEffect =
   | { kind: 'find'; code: string }
   | { kind: 'open'; requestId: string }
   | { kind: 'submit'; spec: 'outbound-confirmation' | 'pickup-handover'; values: ReturnType<typeof handoffValues> }
-  | { kind: 'resend' };
+  | { kind: 'resend' }
+  | { kind: 'refresh-queue' };
 
 export interface DispatchFeedback {
   tone: 'waiting' | 'ok' | 'wrong' | 'unsent';
@@ -186,26 +187,34 @@ export function handoffVerdict(state: DispatchState, verdict: WorkFactVerdict): 
   const sheet = markParcelDone(state.sheet, state.pending.sequence);
   const handed = state.handed + 1;
   const next = nextParcel(sheet);
+  // 记下之后右边的队列仍是进工位时那一问。再向读口要一次，已发出的才从等交出里消失。
+  const effects: DispatchEffect[] = [{ kind: 'refresh-queue' }];
   if (next === null) {
-    return hold({
+    return {
+      state: {
+        ...state,
+        phase: 'waiting',
+        sheet: null,
+        pending: null,
+        handed,
+        feedback: { tone: 'ok', headline: '这张单的包裹都已交出', detail: verdict.headline },
+        cue: 'ok',
+      },
+      effects,
+    };
+  }
+  return {
+    state: {
       ...state,
-      phase: 'waiting',
-      sheet: null,
+      phase: 'handing',
+      sheet,
       pending: null,
       handed,
-      feedback: { tone: 'ok', headline: '这张单的包裹都已交出', detail: verdict.headline },
+      feedback: { tone: 'ok', headline: `包裹 ${state.pending.sequence} 已交出`, detail: `下一只是包裹 ${next.sequence}。` },
       cue: 'ok',
-    });
-  }
-  return hold({
-    ...state,
-    phase: 'handing',
-    sheet,
-    pending: null,
-    handed,
-    feedback: { tone: 'ok', headline: `包裹 ${state.pending.sequence} 已交出`, detail: `下一只是包裹 ${next.sequence}。` },
-    cue: 'ok',
-  });
+    },
+    effects,
+  };
 }
 
 export function resend(state: DispatchState): DispatchStep {

@@ -12,6 +12,7 @@
 // 预报自己没有状态字段，读口也不答：到仓与处置都记在到仓记录上，所以预报的状态是拿到仓记录对出来的。读口答不出的环节不编——
 // 预报之后只有「到仓」与「处置」两件事看得出来；认不出的退件转成待认领到货，它之后怎么了要去待认领页看，这里不替它说。
 
+import { operatorLabel, type OperatorNames, noOperatorNames } from '../operator-access/operator-names';
 import type { DocumentTrack, TrackStep } from './document-track';
 
 export interface ReturnAdviceFacts {
@@ -442,6 +443,15 @@ export function numberingAbsenceNote(absence: string | undefined): string {
 export function adviceRegistrant(advice: { origin: string; operator?: string }): string {
   if (advice.operator) return advice.operator;
   return advice.origin === 'CUSTOMER' ? '货主自己提交' : '—';
+}
+
+/** 处置人：登了姓名示姓名，没登只示 sub。库里仍是发行方加 sub，这里不改那一格。 */
+export function dispositionActor(
+  disposition: { origin: string; operator?: string },
+  names: OperatorNames = noOperatorNames,
+): string {
+  if (!disposition.operator) return disposition.origin === 'CUSTOMER' ? '货主自己提交' : '—';
+  return operatorLabel(disposition.operator, names) ?? '—';
 }
 
 /** 这笔到仓记录的处置情况，一句话：去向、待处置，或转待认领后另起一笔入库再处置。 */
