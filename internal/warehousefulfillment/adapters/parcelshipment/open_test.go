@@ -177,6 +177,49 @@ func TestOpenerAmendsDeclaredMeasurementUnderTheParcelScope(t *testing.T) {
 	}
 }
 
+// 件数的修订落在货物明细这一组上：范围是整份委托（不按包裹指），意图是更正，以接受基线为基准，
+// 内容是整组货物明细——这一行、装在预取的那一个包裹里。修订请求自己的来源请求键带着件数，两次更正成不同的件数不互为重放。
+// 代办没登记、修订口没接都答未配置，不交。
+func TestOpenerAmendsGoodsDetailsUnderTheShipmentScope(t *testing.T) {
+	amender := &amenderDouble{err: psapplication.ErrAmendedRequestNotAccepted}
+	at := frozenClock{at: time.Date(2026, 11, 27, 2, 0, 0, 0, time.UTC)}
+	amendment := ports.GoodsAmendment{
+		Tenant: "SYN-TENANT-01", Owner: "SYN-OWNER-01", Request: "OBR-1", Sequence: 1,
+		ShipmentRequest: "SHR-1", DeclaredParcelID: "DPCL-1", Goods: "SYN-GOODS-01", Unit: "件", Quantity: 6,
+	}
+	ungranted, err := NewOpener(allowanceDouble{}, &shipmentDouble{}, ownershipDouble{}, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ungranted.WithSourceDataAmender(amender)
+	if answer, err := ungranted.AmendGoods(t.Context(), amendment); err != nil || answer.Outcome != ports.MeasurementNotConfiguredWord || amender.called != 0 {
+		t.Fatalf("代办没登记 %s err %v called %d", answer.Outcome, err, amender.called)
+	}
+	unwired, err := NewOpener(allowanceDouble{granted: true}, &shipmentDouble{}, ownershipDouble{}, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer, err := unwired.AmendGoods(t.Context(), amendment); err != nil || answer.Outcome != ports.MeasurementNotConfiguredWord {
+		t.Fatalf("修订口没接 %s err %v", answer.Outcome, err)
+	}
+	unwired.WithSourceDataAmender(amender)
+	if answer, err := unwired.AmendGoods(t.Context(), amendment); err != nil || answer.Outcome != ports.MeasurementNotAcceptedWord || amender.called != 1 {
+		t.Fatalf("委托还没接受 %s err %v called %d", answer.Outcome, err, amender.called)
+	}
+	command := amender.command
+	if _, named := command.Scope.DeclaredParcelID(); named || command.Scope.DataGroup() != psdomain.GoodsDetailsDataGroup() ||
+		command.Scope.ShipmentRequestID().String() != "SHR-1" {
+		t.Fatalf("修订范围不对 %+v", command.Scope)
+	}
+	if command.Identity.RequestKey().String() != "OBR-1/1" || command.AmendmentIdentity.RequestKey().String() != "OBR-1/1/pack-goods/6" ||
+		command.Intent != psdomain.CorrectionIntent || !command.Basis.OnAcceptanceBaseline() {
+		t.Fatalf("修订命令不对 %+v", command)
+	}
+	if goods, ok := command.Content.Goods(); !ok || !goods.Declared() {
+		t.Fatalf("修订内容不是一份货物明细 %+v", command.Content)
+	}
+}
+
 type frozenClock struct{ at time.Time }
 
 func (clock frozenClock) Now() time.Time { return clock.at }

@@ -86,17 +86,35 @@ func (opener *Opener) WithSourceDataAmender(amender sourceDataAmender) *Opener {
 
 // AmendMeasurement 在预取委托打包后称重与估算不同时，以货主名义提出声明测量资料修订。
 func (opener *Opener) AmendMeasurement(ctx context.Context, amendment ports.MeasurementAmendment) (ports.MeasurementAmendmentAnswer, error) {
+	return opener.amend(ctx, amendment.Tenant, amendment.Owner, "amend warehouse measurement", func() (psapplication.AmendCustomerSourceDataCommand, error) {
+		return opener.measurementAmendment(amendment)
+	})
+}
+
+// AmendGoods 在预取委托的包裹打包后件数与申报的不同时，以货主名义提出货物明细资料修订。
+func (opener *Opener) AmendGoods(ctx context.Context, amendment ports.GoodsAmendment) (ports.MeasurementAmendmentAnswer, error) {
+	return opener.amend(ctx, amendment.Tenant, amendment.Owner, "amend warehouse goods", func() (psapplication.AmendCustomerSourceDataCommand, error) {
+		return opener.goodsAmendment(amendment)
+	})
+}
+
+// amend 是两种资料修订共同的那一段：没接修订口、代办没登记都答未配置；修订的各格答复按「谁来做下一步」折成同一组答案词。
+func (opener *Opener) amend(
+	ctx context.Context,
+	tenant, owner, operation string,
+	build func() (psapplication.AmendCustomerSourceDataCommand, error),
+) (ports.MeasurementAmendmentAnswer, error) {
 	if opener.amender == nil {
 		return ports.MeasurementAmendmentAnswer{Outcome: ports.MeasurementNotConfiguredWord}, nil
 	}
-	granted, err := opener.agency.Allow(ctx, amendment.Tenant, amendment.Owner)
+	granted, err := opener.agency.Allow(ctx, tenant, owner)
 	if err != nil {
 		return ports.MeasurementAmendmentAnswer{}, err
 	}
 	if !granted {
 		return ports.MeasurementAmendmentAnswer{Outcome: ports.MeasurementNotConfiguredWord}, nil
 	}
-	command, err := opener.measurementAmendment(amendment)
+	command, err := build()
 	if err != nil {
 		return ports.MeasurementAmendmentAnswer{}, err
 	}
@@ -118,8 +136,96 @@ func (opener *Opener) AmendMeasurement(ctx context.Context, amendment ports.Meas
 	case psapplication.AmendmentDisallowed, psapplication.AmendmentNotAuthorized, psapplication.AmendmentSourceConflict:
 		return ports.MeasurementAmendmentAnswer{Outcome: ports.MeasurementDisallowedWord}, nil
 	default:
-		return ports.MeasurementAmendmentAnswer{}, fmt.Errorf("amend warehouse measurement: unexpected outcome %s", result.Outcome())
+		return ports.MeasurementAmendmentAnswer{}, fmt.Errorf("%s: unexpected outcome %s", operation, result.Outcome())
 	}
+}
+
+// goodsAmendment 把打包后的实际件数写成货物明细范围上的一次更正。货物明细是委托级的一组，整组替换：
+// 这份委托只有预取的那一个包裹、一种货，所以交的就是这一行、装在这一个包裹里。修订请求自己的来源请求键带上件数——
+// 同一份委托先后两次更正成不同的件数是两次修订，不该被判成前一次的重放。
+func (opener *Opener) goodsAmendment(amendment ports.GoodsAmendment) (psapplication.AmendCustomerSourceDataCommand, error) {
+	var none psapplication.AmendCustomerSourceDataCommand
+	tenant, err := psdomain.NewTenantID(amendment.Tenant)
+	if err != nil {
+		return none, err
+	}
+	owner, err := psdomain.NewCustomerAccountID(amendment.Owner)
+	if err != nil {
+		return none, err
+	}
+	source, err := psdomain.NewSource(psdomain.SourceWarehouseOutbound)
+	if err != nil {
+		return none, err
+	}
+	originalKeyText := amendment.Request + "/" + strconv.Itoa(amendment.Sequence)
+	originalKey, err := psdomain.NewSourceRequestKey(originalKeyText)
+	if err != nil {
+		return none, err
+	}
+	identityValue, err := psdomain.NewSourceIdentity(tenant, owner, source, originalKey)
+	if err != nil {
+		return none, err
+	}
+	amendKey, err := psdomain.NewSourceRequestKey(originalKeyText + "/pack-goods/" + strconv.FormatInt(amendment.Quantity, 10))
+	if err != nil {
+		return none, err
+	}
+	amendIdentity, err := psdomain.NewSourceIdentity(tenant, owner, source, amendKey)
+	if err != nil {
+		return none, err
+	}
+	shipmentID, err := psdomain.NewShipmentRequestID(amendment.ShipmentRequest)
+	if err != nil {
+		return none, err
+	}
+	parcelID, err := psdomain.NewDeclaredParcelID(amendment.DeclaredParcelID)
+	if err != nil {
+		return none, err
+	}
+	scope, err := psdomain.NewShipmentScopedSourceData(shipmentID, psdomain.GoodsDetailsDataGroup())
+	if err != nil {
+		return none, err
+	}
+	reason, err := psdomain.NewAmendmentReasonReference("WAREHOUSE_PACK_QUANTITY")
+	if err != nil {
+		return none, err
+	}
+	requester, err := psdomain.NewRequesterReference(amendment.Owner)
+	if err != nil {
+		return none, err
+	}
+	goods, err := psdomain.NewGoodsDetails(goodsSpec(ports.CommissionParcel{
+		Sequence: amendment.Sequence, Goods: amendment.Goods, Unit: amendment.Unit, Quantity: amendment.Quantity,
+	}), []psdomain.DeclaredParcelID{parcelID})
+	if err != nil {
+		return none, err
+	}
+	basis := psdomain.NewSupplementOnAcceptanceBaseline()
+	canonical, err := psdomain.CanonicalizeCustomerSourceDataAmendment(psdomain.SourceDataAmendmentPayloadSpec{
+		OriginalAccessRequestID: originalKeyText,
+		Scope:                   scope,
+		Basis:                   basis,
+		Intent:                  psdomain.CorrectionIntent,
+		Reason:                  reason,
+		Goods:                   goods,
+	})
+	if err != nil {
+		return none, err
+	}
+	now := opener.clock.Now().UTC()
+	return psapplication.AmendCustomerSourceDataCommand{
+		Identity:          identityValue,
+		AmendmentIdentity: amendIdentity,
+		PayloadDigest:     canonical.Digest(),
+		OccurredAt:        now,
+		ReceivedAt:        now,
+		Scope:             scope,
+		Basis:             basis,
+		Intent:            psdomain.CorrectionIntent,
+		Reason:            reason,
+		Requester:         requester,
+		Content:           canonical.Content(),
+	}, nil
 }
 
 func (opener *Opener) Revise(ctx context.Context, revision ports.CommissionRevision) (ports.CommissionAnswer, error) {

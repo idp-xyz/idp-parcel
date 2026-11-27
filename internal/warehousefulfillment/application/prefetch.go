@@ -87,6 +87,7 @@ func (handler *WaveHandler) prefetchRequests(ctx context.Context, command Releas
 			ShipmentID: answer.ShipmentRequestID, DeclaredParcelID: answer.DeclaredParcelID,
 			Weight: parcel.Weight, WeightUnit: parcel.WeightUnit,
 			Length: parcel.Length, Width: parcel.Width, Height: parcel.Height, Dimension: parcel.Dimension,
+			Quantity: parcel.Quantity,
 		}); err != nil {
 			return fmt.Errorf("release wave: %w", err)
 		}

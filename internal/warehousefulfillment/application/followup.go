@@ -61,6 +61,8 @@ func (result FollowUpResult) Outcome() FollowUpOutcome { return result.outcome }
 type followUpStore interface {
 	LoadSourceData(ctx context.Context, tenant domain.TenantID, version string) (source, key, adoption string, found bool, err error)
 	SaveSourceData(ctx context.Context, tenant domain.TenantID, version, source, key, adoption string, at time.Time) error
+	// HasAwaitingSourceData 回答同一个来源请求键上，除了 except 这一版之外还有没有记成待复核的资料版本。
+	HasAwaitingSourceData(ctx context.Context, tenant domain.TenantID, source, key, except string) (bool, error)
 	SetCorrection(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, sequence int, state string) error
 	LoadCancellation(ctx context.Context, tenant domain.TenantID, requestKey, parcelID string) (matched bool, found bool, err error)
 	SaveCancellation(ctx context.Context, tenant domain.TenantID, requestKey, parcelID string, matched bool, at time.Time) error
@@ -119,7 +121,19 @@ func (handler *FollowUpHandler) RecordSourceData(ctx context.Context, command So
 		if err != nil {
 			return FollowUpResult{outcome: FollowUpContentInvalid}, nil
 		}
-		if err := handler.store.SetCorrection(ctx, command.Tenant, request, sequence, command.Adoption); err != nil {
+		// 一个包裹可以同时有两份修订在途（件数与测量各一份）。这一份已采用时，另一份还在待复核的话，包裹仍是待复核：
+		// 两样都采用了才算更正到位，后到的一份「已采用」不该把先到的那份「待复核」盖掉。
+		state := command.Adoption
+		if state == "ADOPTED" {
+			held, err := handler.store.HasAwaitingSourceData(ctx, command.Tenant, command.Source, command.SourceRequestKey, command.Version)
+			if err != nil {
+				return FollowUpResult{}, err
+			}
+			if held {
+				state = "AWAITING_REVIEW"
+			}
+		}
+		if err := handler.store.SetCorrection(ctx, command.Tenant, request, sequence, state); err != nil {
 			return FollowUpResult{}, err
 		}
 	}

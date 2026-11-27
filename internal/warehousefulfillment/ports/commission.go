@@ -101,6 +101,26 @@ type MeasurementAmendmentAnswer struct {
 	Outcome string
 }
 
+// GoodsAmendment 是预取委托的包裹打包后件数与申报的不同时，以货主名义提出的货物明细资料修订。
+// 预取时按分到的全量申报了件数；拣不齐照货主的规则少发、拆出了缺货部分，或一张单打成了几个包裹，
+// 那一个包裹里实际装的就不是申报的那么多。修订交的是整组货物明细：这份委托只有这一个包裹、一种货。
+type GoodsAmendment struct {
+	Tenant           string
+	Owner            string
+	Request          string
+	Sequence         int
+	ShipmentRequest  string
+	DeclaredParcelID string
+	Goods            string
+	Unit             string
+	Quantity         int64
+}
+
+// GoodsAmender 以货主名义把打包后的实际件数交成已接受委托上的资料修订。答案词与声明测量修订是同一组。
+type GoodsAmender interface {
+	AmendGoods(ctx context.Context, amendment GoodsAmendment) (MeasurementAmendmentAnswer, error)
+}
+
 // MeasurementAmender 以货主名义把打包后的实际测量交成已接受委托上的资料修订。
 type MeasurementAmender interface {
 	AmendMeasurement(ctx context.Context, amendment MeasurementAmendment) (MeasurementAmendmentAnswer, error)

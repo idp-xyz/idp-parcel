@@ -24,6 +24,9 @@ type PrefetchRecord struct {
 	Width            string
 	Height           string
 	Dimension        string
+	// Quantity 是那份估算委托上申报的件数：预取时按分到的全量报。打包后那一个包裹的件数与它不同时要提货物明细修订。
+	// 0 是早先预取的、没留下这一格。
+	Quantity int64
 }
 
 // PickTask 是一条已经落到库位的拣货任务。数量按基本单位。

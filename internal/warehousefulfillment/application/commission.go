@@ -108,12 +108,14 @@ type commissionParcels interface {
 
 // CommissionHandler 在出库请求打包之后提交委托。没标平台备货时每个包裹一份，来源请求键是（出库请求，包裹序号）。
 // 标了平台备货则等全部包裹都已打包，按（出库请求，提交轮次）交一份。代办授予没登记时答未配置，不建委托。
-// 预取过的包裹序号 1 沿用放波次交出去的那份委托，不再另交；打包称重与估算不同时提出声明测量修订，未采用前停在待复核。
+// 预取过的包裹序号 1 沿用放波次交出去的那份委托，不再另交；打包后件数与申报的不同提出货物明细修订，称重与估算不同
+// 提出声明测量修订，未采用前停在待复核。
 type CommissionHandler struct {
 	requests     commissionRequests
 	parcels      commissionParcels
 	commissioner ports.OutboundCommissioner
 	amender      ports.MeasurementAmender
+	goodsAmender ports.GoodsAmender
 	anyWarehouse ports.TenantWarehouseLookup
 }
 
@@ -129,6 +131,12 @@ func NewCommissionHandler(
 // WithMeasurementAmender 接上预取包裹打包称重不同时的资料修订口。没接时遇差异标待复核，不出库确认。
 func (handler *CommissionHandler) WithMeasurementAmender(amender ports.MeasurementAmender) *CommissionHandler {
 	handler.amender = amender
+	return handler
+}
+
+// WithGoodsAmender 接上预取包裹打包后件数与申报不同时的货物明细修订口。没接时遇差异标待复核，不出库确认。
+func (handler *CommissionHandler) WithGoodsAmender(amender ports.GoodsAmender) *CommissionHandler {
+	handler.goodsAmender = amender
 	return handler
 }
 
@@ -185,10 +193,8 @@ func (handler *CommissionHandler) Submit(ctx context.Context, tenant domain.Tena
 			if err := handler.parcels.MarkShipment(ctx, tenant, requestID, parcel.Sequence, prefetched.ShipmentID, prefetched.DeclaredParcelID); err != nil {
 				return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
 			}
-			if !samePrefetchMeasurement(prefetched, parcel) {
-				if err := handler.revisePrefetchMeasurement(ctx, tenant, request, requestID, prefetched, parcel); err != nil {
-					return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
-				}
+			if err := handler.revisePrefetch(ctx, tenant, request, requestID, prefetched, parcel); err != nil {
+				return CommissionResult{}, fmt.Errorf("submit outbound commission: %w", err)
 			}
 			continue
 		}
@@ -282,7 +288,11 @@ func commissionParcelOf(parcel ports.PackParcel) ports.CommissionParcel {
 	}
 }
 
-func (handler *CommissionHandler) revisePrefetchMeasurement(
+// revisePrefetch 把预取的那份委托更正成打包后的实际：件数与申报的不同提货物明细修订，称重、外廓与估算的不同提声明测量修订。
+// 两样都没差就什么都不交、不记更正状态。交了的每一样都已采用，这个包裹才算已采用；有一样没采用（待复核、不许、未配置，
+// 或那一个修订口没接、预取没留下包裹标识），就停在待复核，挡住在线出库确认——差异不能假装已经采用。
+// 件数先交：它没被采用时测量照交，两样各是一份独立的修订，后一样不因前一样没过而少交。
+func (handler *CommissionHandler) revisePrefetch(
 	ctx context.Context,
 	tenant domain.TenantID,
 	request domain.OutboundRequest,
@@ -290,21 +300,47 @@ func (handler *CommissionHandler) revisePrefetchMeasurement(
 	prefetched ports.PrefetchRecord,
 	parcel ports.PackParcel,
 ) error {
-	// 没接资料修订口或预取没留下包裹标识时，称重差异不能假装已采用，停在待复核挡住在线出库确认。
+	// 早先预取的没留下申报件数（Quantity 为 0）：比不出差没差，不交货物明细修订。
+	goodsDiffer := prefetched.Quantity > 0 && prefetched.Quantity != parcel.Quantity
+	measurementDiffers := !samePrefetchMeasurement(prefetched, parcel)
+	if !goodsDiffer && !measurementDiffers {
+		return nil
+	}
+	adopted := true
+	if goodsDiffer {
+		outcome := ""
+		if handler.goodsAmender != nil && prefetched.DeclaredParcelID != "" {
+			answer, err := handler.goodsAmender.AmendGoods(ctx, ports.GoodsAmendment{
+				Tenant: tenant.String(), Owner: request.Owner().String(), Request: requestID.String(), Sequence: parcel.Sequence,
+				ShipmentRequest: prefetched.ShipmentID, DeclaredParcelID: prefetched.DeclaredParcelID,
+				Goods: parcel.Goods.String(), Unit: parcel.Unit.String(), Quantity: parcel.Quantity,
+			})
+			if err != nil {
+				return err
+			}
+			outcome = answer.Outcome
+		}
+		adopted = adopted && outcome == ports.MeasurementAdoptedWord
+	}
+	if measurementDiffers {
+		outcome := ""
+		if handler.amender != nil && prefetched.DeclaredParcelID != "" {
+			answer, err := handler.amender.AmendMeasurement(ctx, ports.MeasurementAmendment{
+				Tenant: tenant.String(), Owner: request.Owner().String(), Request: requestID.String(), Sequence: parcel.Sequence,
+				ShipmentRequest: prefetched.ShipmentID, DeclaredParcelID: prefetched.DeclaredParcelID,
+				Weight: parcel.Weight, WeightUnit: parcel.WeightUnit,
+				Length: parcel.Length, Width: parcel.Width, Height: parcel.Height, Dimension: parcel.Dimension,
+			})
+			if err != nil {
+				return err
+			}
+			outcome = answer.Outcome
+		}
+		adopted = adopted && outcome == ports.MeasurementAdoptedWord
+	}
 	state := ports.MeasurementAwaitingReviewWord
-	if handler.amender != nil && prefetched.DeclaredParcelID != "" {
-		answer, err := handler.amender.AmendMeasurement(ctx, ports.MeasurementAmendment{
-			Tenant: tenant.String(), Owner: request.Owner().String(), Request: requestID.String(), Sequence: parcel.Sequence,
-			ShipmentRequest: prefetched.ShipmentID, DeclaredParcelID: prefetched.DeclaredParcelID,
-			Weight: parcel.Weight, WeightUnit: parcel.WeightUnit,
-			Length: parcel.Length, Width: parcel.Width, Height: parcel.Height, Dimension: parcel.Dimension,
-		})
-		if err != nil {
-			return err
-		}
-		if answer.Outcome == ports.MeasurementAdoptedWord {
-			state = ports.MeasurementAdoptedWord
-		}
+	if adopted {
+		state = ports.MeasurementAdoptedWord
 	}
 	return handler.parcels.SetCorrection(ctx, tenant, requestID, parcel.Sequence, state)
 }

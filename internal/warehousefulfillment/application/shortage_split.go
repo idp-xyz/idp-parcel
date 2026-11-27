@@ -87,10 +87,11 @@ func (handler *OutboundHandler) SplitShortage(ctx context.Context, command Split
 	if !AwaitsShortPickDisposal(parent.Status(), tasks) {
 		return SplitResult{outcome: OutboundStatusMismatch, parent: parent, has: true}, nil
 	}
-	// 预取过估算委托的请求不办，理由同 ShipPicked：原请求照样是少发，那份委托上按全量申报的件数没有更正的路。
-	if _, prefetched, err := handler.shortPicks.LoadPrefetch(ctx, command.Tenant, command.Request); err != nil {
+	// 预取过估算委托的请求照办，口径同 ShipPicked：原请求照样是少发，打包时按实际装的件数提货物明细修订。
+	// 只有早先预取、没留下申报件数的不办。
+	if record, prefetched, err := handler.shortPicks.LoadPrefetch(ctx, command.Tenant, command.Request); err != nil {
 		return SplitResult{}, fmt.Errorf("split shortage: %w", err)
-	} else if prefetched {
+	} else if prefetched && record.Quantity == 0 {
 		return SplitResult{outcome: OutboundPrefetchStands, parent: parent, has: true}, nil
 	}
 	rule, source, err := partialShipmentOf(ctx, handler.requests, command.Tenant, parent)

@@ -110,19 +110,18 @@ export function shortPickDisposalChoice(
   prefetched: boolean,
 ): { action: 'short-shipment' | 'shortage-split' | null; note: string } {
   const gap = `拣到 ${picked}，要发 ${wanted}，少的 ${Math.max(0, wanted - picked)} 换不出别的库位。`;
-  // 预取过估算委托的单不办：委托按全量申报了件数，少发之后没有更正件数的路。与后端 `PREFETCH_STANDS` 同一口径。
-  if (prefetched) {
-    return { action: null, note: `${gap}这张单放波次时已按全量预取过估算委托，不能少发也不能拆出缺货部分：等有货了再放波次，或截单。` };
-  }
+  // 预取过估算委托的单照办：委托按全量申报了件数，打包时后端按实际装的件数提货物明细修订，面单号不变。
+  // 早先预取、没留下申报件数的那几张后端不办，答 `PREFETCH_STANDS`，由答复说清——页面上分不出是哪一种，不先拦。
+  const amended = prefetched ? '这张单放波次时预取过面单：打包时会按实际装的件数更正委托上的申报件数，面单号不变。' : '';
   switch (answer?.configured ? answer.rule : undefined) {
     case 'SHORT_SHIP':
-      return { action: 'short-shipment', note: `${gap}货主许了少发，可以按已拣数量发货；也可以等有货了再放波次。` };
+      return { action: 'short-shipment', note: `${gap}货主许了少发，可以按已拣数量发货；也可以等有货了再放波次。${amended}` };
     case 'SHIP_COMPLETE':
       return { action: null, note: `${gap}货主要整单发：等有货了再放波次，或截单。` };
     case 'SPLIT_SHIP':
       return {
         action: 'shortage-split',
-        note: `${gap}货主许了拆单发，可以拆出缺货部分：拣到的先发，缺的另成一张单继续等货；也可以等有货了再放波次。`,
+        note: `${gap}货主许了拆单发，可以拆出缺货部分：拣到的先发，缺的另成一张单继续等货；也可以等有货了再放波次。${amended}`,
       };
     default:
       return {

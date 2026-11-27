@@ -96,11 +96,15 @@ test('拣不齐的处置只摆货主许了的那一个动作：少发摆按已�
   equal(unset.action, null);
   ok(unset.note.includes('没写明'));
   equal(shortPickDisposalChoice(undefined, 6, 10, false).action, null);
-  // 预取过估算委托的单，货主许了少发或拆单发也不摆。
-  equal(shortPickDisposalChoice({ configured: true, rule: 'SPLIT_SHIP', source: 'OWNER' }, 6, 10, true).action, null);
+  // 预取过估算委托的单照摆货主许了的那一个动作，并说明打包时会更正委托上的申报件数；货主不许时照旧不摆，也不提预取。
+  equal(shortPickDisposalChoice({ configured: true, rule: 'SPLIT_SHIP', source: 'OWNER' }, 6, 10, true).action, 'shortage-split');
   const prefetched = shortPickDisposalChoice({ configured: true, rule: 'SHORT_SHIP', source: 'OWNER' }, 6, 10, true);
-  equal(prefetched.action, null);
-  ok(prefetched.note.includes('预取'));
+  equal(prefetched.action, 'short-shipment');
+  ok(prefetched.note.includes('预取过面单') && prefetched.note.includes('面单号不变'));
+  ok(!shortPickDisposalChoice({ configured: true, rule: 'SHORT_SHIP', source: 'OWNER' }, 6, 10, false).note.includes('预取'));
+  const wholeOnly = shortPickDisposalChoice({ configured: true, rule: 'SHIP_COMPLETE', source: 'OWNER' }, 6, 10, true);
+  equal(wholeOnly.action, null);
+  ok(!wholeOnly.note.includes('预取'));
 });
 
 test('办过的处置说清要发、实发与照的是哪一层', () => {
