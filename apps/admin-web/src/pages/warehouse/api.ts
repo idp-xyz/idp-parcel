@@ -1521,6 +1521,8 @@ export interface ReturnPreAdviceRecord {
   operator?: string;
   receivedAt: string;
   lines: ReadonlyArray<{ goodsCode: string; unit: string; quantity: number }>;
+  /** 按页取的列表才带：待到仓、已到仓、已处置。按一张取时没有，状态由到仓记录对出来。 */
+  status?: 'AWAITING_ARRIVAL' | 'ARRIVED' | 'DISPOSED';
 }
 
 export interface ReturnReceiptRecord {
@@ -1555,6 +1557,63 @@ export interface ReturnsOverviewBody {
 
 export function getReturnsOverview(): Promise<ApiResult<ReturnsOverviewBody>> {
   return exchangeMasterData<ReturnsOverviewBody>('/warehouse-fulfillment-returns-overview');
+}
+
+export const returnsPageSizes = [20, 50, 100, 200] as const;
+export const returnsDefaultPageSize = 50;
+
+export interface ReturnsPageBody {
+  outcome: string;
+  view: 'advices' | 'receipts' | 'advice' | 'receipt';
+  preAdvices: ReturnPreAdviceRecord[];
+  receipts: ReturnReceiptRecord[];
+  page?: { page: number; pageSize: number; total: number };
+  counts?: Record<string, number>;
+}
+
+export interface ReturnsListQuery {
+  view: 'advices' | 'receipts';
+  page: number;
+  pageSize: number;
+  status: string;
+  q: string;
+  owner: string;
+  warehouse: string;
+  sort: 'newest' | 'oldest';
+}
+
+function returnsPath(params: Record<string, string | number>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== '') search.set(key, String(value));
+  }
+  return `/warehouse-fulfillment-returns-overview?${search.toString()}`;
+}
+
+/** 退货预报或到仓记录的一页。状态数量在 counts 里，不含状态这一维的筛选。 */
+export function listReturnsPage(query: ReturnsListQuery): Promise<ApiResult<ReturnsPageBody>> {
+  return exchangeMasterData<ReturnsPageBody>(
+    returnsPath({
+      view: query.view,
+      page: query.page,
+      pageSize: query.pageSize,
+      status: query.status,
+      q: query.q,
+      owner: query.owner,
+      warehouse: query.warehouse,
+      sort: query.sort,
+    }),
+  );
+}
+
+/** 按预报号或预报标识取一张，连同对上的到仓记录。认不出就是空数组。 */
+export function loadReturnAdvice(key: string): Promise<ApiResult<ReturnsOverviewBody>> {
+  return exchangeMasterData<ReturnsOverviewBody>(returnsPath({ view: 'advice', key }));
+}
+
+/** 按作业事实号取一笔，连同同一退件单号的其他到仓记录和对上的预报。 */
+export function loadReturnReceipt(key: string): Promise<ApiResult<ReturnsOverviewBody>> {
+  return exchangeMasterData<ReturnsOverviewBody>(returnsPath({ view: 'receipt', key }));
 }
 
 export interface AgentOverviewBody {

@@ -23,6 +23,7 @@ type WorkspaceQueries interface {
 	ListJobDiscrepancies(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.JobDiscrepancyRow], error)
 	ListInstructions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (cataloguepage.Result[ports.InstructionRow], error)
 	ReturnsOverview(ctx context.Context, tenant domain.TenantID) (ports.ReturnsOverview, error)
+	ReadReturns(ctx context.Context, tenant domain.TenantID, query ports.ReturnsQuery) (ports.ReturnsPage, error)
 	AgentOverview(ctx context.Context, tenant domain.TenantID, now time.Time) (ports.AgentOverview, error)
 }
 
@@ -664,6 +665,21 @@ func NewQueryReturnsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQu
 			writeIntakeProblem(response, err)
 			return
 		}
+		asked, err := ports.ParseReturnsQuery(request.URL.Query())
+		if err != nil {
+			writeMalformed(response, err.Error())
+			return
+		}
+		if asked.Paged() || asked.Keyed() {
+			page, err := queries.ReadReturns(request.Context(), query.Tenant, asked)
+			if err != nil {
+				slog.ErrorContext(request.Context(), "returns page did not form an answer")
+				writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+				return
+			}
+			writeReturnsPage(response, page)
+			return
+		}
 		overview, err := queries.ReturnsOverview(request.Context(), query.Tenant)
 		if err != nil {
 			slog.ErrorContext(request.Context(), "returns overview did not form an answer")
@@ -706,6 +722,62 @@ func NewQueryReturnsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQu
 			"receipts":   receipts,
 		})
 	})
+}
+
+func writeReturnsPage(response http.ResponseWriter, page ports.ReturnsPage) {
+	advices := make([]map[string]any, 0, len(page.PreAdvices))
+	for _, advice := range page.PreAdvices {
+		item := adviceJSON(advice)
+		if advice.Status != "" {
+			item["status"] = advice.Status
+		}
+		advices = append(advices, item)
+	}
+	receipts := make([]map[string]any, 0, len(page.Receipts))
+	for _, receipt := range page.Receipts {
+		receipts = append(receipts, receiptJSON(receipt))
+	}
+	body := map[string]any{
+		"outcome":    "RETURNS_PAGE_LOADED",
+		"view":       page.View,
+		"preAdvices": advices,
+		"receipts":   receipts,
+	}
+	if page.View == ports.ReturnsViewAdvices || page.View == ports.ReturnsViewReceipts {
+		body["page"] = map[string]any{"page": page.Page, "pageSize": page.PageSize, "total": page.Total}
+		body["counts"] = page.Counts
+	}
+	writeJSON(response, http.StatusOK, body)
+}
+
+func adviceJSON(advice ports.ReturnPreAdviceRow) map[string]any {
+	lines := make([]map[string]any, 0, len(advice.Lines))
+	for _, line := range advice.Lines {
+		lines = append(lines, map[string]any{"goodsCode": line.GoodsCode, "unit": line.Unit, "quantity": line.Quantity})
+	}
+	return map[string]any{
+		"adviceId": advice.AdviceID, "documentNumber": advice.DocumentNumber, "numberingAbsence": advice.NumberingAbsence,
+		"ownerAccount": advice.OwnerAccount, "warehouseCode": advice.WarehouseCode, "origin": advice.Origin,
+		"trackingNumber": advice.TrackingNumber, "basis": advice.Basis, "operator": advice.Operator,
+		"receivedAt": rfc3339(advice.ReceivedAt), "lines": lines,
+	}
+}
+
+func receiptJSON(receipt ports.ReturnReceiptRow) map[string]any {
+	item := map[string]any{
+		"factId": receipt.FactID, "warehouseCode": receipt.WarehouseCode, "locationCode": receipt.LocationCode,
+		"trackingNumber": receipt.TrackingNumber, "ownerAccount": receipt.OwnerAccount, "adviceId": receipt.AdviceID,
+		"arrivalId": receipt.ArrivalID, "goodsCode": receipt.GoodsCode, "unit": receipt.Unit, "stockState": receipt.StockState,
+		"quantity": receipt.Quantity, "outcome": receipt.Outcome, "occurredAt": rfc3339(receipt.OccurredAt),
+	}
+	if receipt.Disposition != nil {
+		item["disposition"] = map[string]any{
+			"decisionId": receipt.Disposition.DecisionID, "destination": receipt.Disposition.Destination,
+			"basis": receipt.Disposition.Basis, "operator": receipt.Disposition.Operator,
+			"origin": receipt.Disposition.Origin, "decidedAt": rfc3339(receipt.Disposition.DecidedAt),
+		}
+	}
+	return item
 }
 
 // NewQueryAgentOverviewEndpoint 返回代理仓连接器、库存声明与回执记录（GET /warehouse-fulfillment-agent-overview）。

@@ -265,6 +265,9 @@ func (unwiredWorkspaceQueries) ListInstructions(context.Context, warehousedomain
 func (unwiredWorkspaceQueries) ReturnsOverview(context.Context, warehousedomain.TenantID) (warehouseports.ReturnsOverview, error) {
 	return warehouseports.ReturnsOverview{}, errOrchestrationNotWired
 }
+func (unwiredWorkspaceQueries) ReadReturns(context.Context, warehousedomain.TenantID, warehouseports.ReturnsQuery) (warehouseports.ReturnsPage, error) {
+	return warehouseports.ReturnsPage{}, errOrchestrationNotWired
+}
 func (unwiredWorkspaceQueries) AgentOverview(context.Context, warehousedomain.TenantID, time.Time) (warehouseports.AgentOverview, error) {
 	return warehouseports.AgentOverview{}, errOrchestrationNotWired
 }

@@ -9,25 +9,15 @@ import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { receivingActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer, type ActionDrawerControl } from './ActionDrawer';
-import type { ReturnReceiptRecord } from './api';
+import { returnsDefaultPageSize, returnsPageSizes, type ReturnReceiptRecord } from './api';
 import { DocumentLink } from './document-page';
 import { fitColumnWidth, nameOf } from './list-cells';
 import { returnReceiptKind, returnsModule as moduleId } from './return-address';
 import { ReceiptStatusBadge } from './return-badges';
-import {
-  countByStatus,
-  isReturnOrder,
-  receiptInFilter,
-  returnReceiptNextStep,
-  returnReceiptStatus,
-  returnReceiptWaitingSince,
-  sortReceipts,
-  type ReturnReceiptStatus,
-} from './return-flow';
+import { isReturnOrder, returnReceiptNextStep, returnReceiptStatus, returnReceiptWaitingSince, type ReturnReceiptStatus } from './return-flow';
 import { ReturnReceiptDocument } from './ReturnReceiptDocument';
-import { stockPageClamp, stockPageCount, stockPageSlice, stockPageSummary } from './stock-page';
 import type { QueueFilters } from './use-queue-filters';
-import type { ReturnsOverviewState, ReturnsPanel } from './use-returns-overview';
+import { useReturnsPage } from './use-returns-overview';
 import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsFilterSelect, WmsPagerBar, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
@@ -36,37 +26,45 @@ const occurredKey = 'occurredAt';
 const allQueues = 'ALL';
 const homeQueue = 'AWAITING_DISPOSITION';
 
-// 签的先后：待处置是要人动手的一队，排第一；已处置、转待认领各是一个终点。概览整份都在手里，每个签都如实写数。
+// 签的先后：待处置是要人动手的一队，排第一；已处置、转待认领各是一个终点。数量是这一页的检索、货主、仓之下各状态有几笔。
 const statusCodes: readonly ReturnReceiptStatus[] = ['AWAITING_DISPOSITION', 'DISPOSED', 'DIVERTED'];
 
 const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{content}</span>;
 
 /**
- * 退件到仓与回库处置：退件扫进暂存位后出现在这里。点一行在右边看这笔到仓，作业事实号仍进整页。概览读口不分页、不接筛选维，
- * 状态、数量、货主与仓的筛选都在已取回的整份概览上做；翻页是在这份上切的，行数多少都留着翻页条。
+ * 退件到仓与回库处置：退件扫进暂存位后出现在这里。点一行在右边看这笔到仓，作业事实号仍进整页。列表按页向读口要，
+ * 每页多少条在 20、50、100、200 里选；行数多少都留着翻页条。看全部时没处置的仍排在前面。
  */
-export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOverviewState; filters: QueueFilters }) {
+export function ReturnReceiptList({ filters }: { filters: QueueFilters }) {
   const drawer = useActionDrawer(receivingActionSpecs);
-  const { answer, reload, reloading } = overview;
   const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-returns.receipt.open', null);
-  const body = answer?.kind === 'outcome' ? answer.body : null;
-  const all = body?.receipts ?? [];
-  const loaded = body !== null;
-
-  // 数量是当前检索词、货主与仓之下各状态各有几笔；点哪一队只换看的那一队，不改数量。
-  const inScope = all.filter((row) => receiptInFilter(row, filters));
-  const counts = countByStatus(inScope, returnReceiptStatus);
-  const shown = filters.status === allQueues ? inScope : inScope.filter((row) => returnReceiptStatus(row) === filters.status);
-  // 选了待处置这一队，按到仓先后排，等得最久的在最上面；看别的，最新的在上面。看全部时没处置的排前。人点过表头就照他的。
+  const [storedSize, setPageSize] = useTabViewState('warehouse-returns.receipt.pageSize', returnsDefaultPageSize);
+  const pageSize = (returnsPageSizes as readonly number[]).includes(storedSize) ? storedSize : returnsDefaultPageSize;
+  // 选了待处置这一队，按到仓先后排，等得最久的在最上面；看别的，最新的在上面。人点过表头就照他的。
   const defaultOrder = filters.status === homeQueue ? 'oldest' : 'newest';
   const order = isReturnOrder(filters.sort) ? filters.sort : defaultOrder;
-  const rows = sortReceipts(shown, order);
-  // 一页多长与实时库存里整份答回的那几种看法相同。筛选或排序一换就回到第一页。
-  const sliceKey = `${filters.keyword}\n${filters.status}\n${filters.owner}\n${filters.warehouse}\n${filters.sort ?? ''}`;
+  const sliceKey = `${filters.keyword}\n${filters.status}\n${filters.owner}\n${filters.warehouse}\n${order}\n${pageSize}`;
   const [paging, setPaging] = useState({ key: sliceKey, page: 1 });
   if (paging.key !== sliceKey) setPaging({ key: sliceKey, page: 1 });
-  const page = stockPageClamp(paging.key === sliceKey ? paging.page : 1, rows.length);
-  const pageRows = stockPageSlice(rows, page);
+  const page = paging.key === sliceKey ? paging.page : 1;
+  const { answer, reload, reloading } = useReturnsPage({
+    view: 'receipts',
+    page,
+    pageSize,
+    status: filters.status === allQueues ? '' : filters.status,
+    q: filters.keyword.trim(),
+    owner: filters.owner,
+    warehouse: filters.warehouse,
+    sort: order,
+  });
+  const body = answer?.kind === 'outcome' ? answer.body : null;
+  const counts = body?.counts ?? {};
+  const rows = body?.receipts ?? [];
+  const loaded = body !== null;
+  const total = body?.page?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const bookEmpty =
+    loaded && total === 0 && statusCodes.every((code) => (counts[code] ?? 0) === 0) && filters.keyword.trim() === '' && filters.owner === '' && filters.warehouse === '';
   const sort: WorkbenchSort = { key: occurredKey, dir: order === 'oldest' ? 1 : -1 };
   const now = new Date();
   const ownerNames = useMemo(
@@ -148,13 +146,17 @@ export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOver
     filters.setStatus(homeQueue);
     filters.setSort(null);
   };
-  const viewState: TemplateViewState = catalogueViewState(answer, all.length, reload, {
+  const [revision, setRevision] = useState(0);
+  const refresh = () => {
+    reload();
+    setRevision((count) => count + 1);
+  };
+  const viewState: TemplateViewState = catalogueViewState(answer, bookEmpty ? 0 : 1, refresh, {
     module: info,
     endpoint: 'GET /warehouse-fulfillment-returns-overview',
     emptyTitle: '还没有退件到仓记录',
     emptyDescription: '在作业台扫描退件到仓后，记录会出现在这里。',
   });
-  const panel: ReturnsPanel = { onClose: () => setOpenKey(null), onChanged: reload, overview: answer, refreshing: reloading };
 
   return (
     <>
@@ -163,7 +165,7 @@ export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOver
         viewStateKey="warehouse-returns-receipts"
         subtitle="点一行在右边看这笔到仓、做它的下一步"
         titleAside={<WmsQueueStats items={queueStats} />}
-        onRefresh={reload}
+        onRefresh={refresh}
         refreshing={reloading}
         primaryAction={
           <>
@@ -217,7 +219,7 @@ export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOver
           </>
         }
         columns={columns}
-        rows={pageRows}
+        rows={rows}
         rowKey={(row) => row.factId}
         selectedKey={openKey}
         onSelect={setOpenKey}
@@ -229,21 +231,31 @@ export function ReturnReceiptList({ overview, filters }: { overview: ReturnsOver
         }}
         noMatchText="当前筛选下没有退件到仓记录"
         onClearFilters={clearFilters}
-        renderDetail={(key) => <ReturnReceiptDocument factId={key} panel={panel} />}
+        renderDetail={(key) => (
+          <ReturnReceiptDocument factId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision }} />
+        )}
         viewState={viewState}
         listFooter={
           viewState.kind === 'ready' ? (
             <WmsPagerBar
-              summary={stockPageSummary(page, rows.length)}
+              summary={`第 ${page} / ${pageCount} 页 · 共 ${total} 条`}
               canPrevious={page > 1}
-              canNext={page < stockPageCount(rows.length)}
+              canNext={page < pageCount}
               onPrevious={() => setPaging({ key: sliceKey, page: page - 1 })}
               onNext={() => setPaging({ key: sliceKey, page: page + 1 })}
+              pageSize={{
+                value: pageSize,
+                options: returnsPageSizes,
+                onChange: (next) => {
+                  setPageSize(next);
+                  setPaging({ key: sliceKey, page: 1 });
+                },
+              }}
             />
           ) : undefined
         }
       />
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
     </>
   );
 }

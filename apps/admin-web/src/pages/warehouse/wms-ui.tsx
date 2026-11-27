@@ -626,18 +626,37 @@ export function WmsPagerBar({
   canNext,
   onPrevious,
   onNext,
+  pageSize,
 }: {
   summary: string;
   canPrevious: boolean;
   canNext: boolean;
   onPrevious: () => void;
   onNext: () => void;
+  /** 给了就能改每页多少条。不给时翻页条与原来逐字节相同。 */
+  pageSize?: { value: number; options: readonly number[]; onChange: (next: number) => void };
 }) {
   return (
     <div className="shrink-0 border-t border-idpxyz-border px-4 py-1.5">
       <nav aria-label="翻页" className="flex items-center justify-between gap-4 type-caption text-idpxyz-textMuted">
         <span className="tabular-nums">{summary}</span>
         <div className="flex items-center gap-1">
+          {pageSize ? (
+            <label className="mr-2 inline-flex items-center gap-1.5">
+              <span className="whitespace-nowrap">每页</span>
+              <select
+                className="h-7 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-body text-idpxyz-text focus:border-idpxyz-accent focus:outline-none"
+                value={String(pageSize.value)}
+                onChange={(event) => pageSize.onChange(Number(event.target.value))}
+              >
+                {pageSize.options.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <Button type="button" variant="ghost" size="sm" disabled={!canPrevious} onClick={onPrevious}>
             <ChevronLeft className="h-3 w-3" aria-hidden="true" />
             上一页

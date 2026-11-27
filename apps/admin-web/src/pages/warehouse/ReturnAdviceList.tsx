@@ -9,26 +9,14 @@ import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import { receivingActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
-import type { ReturnPreAdviceRecord, ReturnReceiptRecord } from './api';
+import { returnsDefaultPageSize, returnsPageSizes, type ReturnPreAdviceRecord } from './api';
 import { DocumentLink } from './document-page';
 import { fitColumnWidth, nameOf, shortInstant } from './list-cells';
 import { returnAdviceKind, returnsModule as moduleId } from './return-address';
-import {
-  adviceInFilter,
-  adviceRows,
-  countByStatus,
-  isReturnOrder,
-  returnAdviceNextStep,
-  returnAdviceNumber,
-  returnAdviceWaitingSince,
-  sortAdviceRows,
-  type AdviceRow,
-  type ReturnAdviceStatus,
-} from './return-flow';
+import { isReturnOrder, returnAdviceNextStep, returnAdviceNumber, returnAdviceWaitingSince, type ReturnAdviceStatus } from './return-flow';
 import { ReturnAdviceDocument } from './ReturnAdviceDocument';
-import { stockPageClamp, stockPageCount, stockPageSlice, stockPageSummary } from './stock-page';
 import type { QueueFilters } from './use-queue-filters';
-import type { ReturnsOverviewState, ReturnsPanel } from './use-returns-overview';
+import { useReturnsPage } from './use-returns-overview';
 import { elapsedLabel } from './waiting';
 import { labelOf, WmsBadge, WmsFilterSelect, WmsPagerBar, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
@@ -36,40 +24,47 @@ const info = moduleInfoById[moduleId];
 const receivedKey = 'receivedAt';
 const allQueues = 'ALL';
 
-type Row = AdviceRow<ReturnPreAdviceRecord, ReturnReceiptRecord>;
+type Row = { advice: ReturnPreAdviceRecord; status: ReturnAdviceStatus };
 
-// 签的先后照一张预报往下走的先后。预报自己没有状态：状态是拿到仓记录对出来的，概览整份都在手里，所以每个签都如实写数，
-// 包括已处置——不像按状态问读口的列表，这里数一个签不多花一次请求。
+// 签的先后照一张预报往下走的先后。预报自己没有状态：状态是服务端拿到仓记录对出来的，数量跟这一页的检索、货主、仓走，不跟状态签走。
 const statusCodes: readonly ReturnAdviceStatus[] = ['AWAITING_ARRIVAL', 'ARRIVED', 'DISPOSED'];
 
 const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{content}</span>;
 
 /**
- * 退货预报：货主或运营事先登记的退回明细。点一行在右边看这张预报，预报号仍进整页。概览读口不分页、不接筛选维，
- * 状态、数量、货主与仓的筛选都在已取回的整份概览上做；翻页是在这份上切的，行数多少都留着翻页条。
+ * 退货预报：货主或运营事先登记的退回明细。点一行在右边看这张预报，预报号仍进整页。列表按页向读口要，
+ * 每页多少条在 20、50、100、200 里选；行数多少都留着翻页条。
  */
-export function ReturnAdviceList({ overview, filters }: { overview: ReturnsOverviewState; filters: QueueFilters }) {
+export function ReturnAdviceList({ filters }: { filters: QueueFilters }) {
   const drawer = useActionDrawer(receivingActionSpecs);
-  const { answer, reload, reloading } = overview;
   const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-returns.advice.open', null);
-  const body = answer?.kind === 'outcome' ? answer.body : null;
-  const all = useMemo(() => adviceRows(body?.preAdvices ?? [], body?.receipts ?? []), [body]);
-  const loaded = body !== null;
-
-  // 数量是当前检索词、货主与仓之下各状态各有几张；点哪一队只换看的那一队，不改数量。
-  const inScope = all.filter((row) => adviceInFilter(row.advice, filters));
-  const counts = countByStatus(inScope, (row) => row.status);
-  const shown = filters.status === allQueues ? inScope : inScope.filter((row) => row.status === filters.status);
+  const [storedSize, setPageSize] = useTabViewState('warehouse-returns.advice.pageSize', returnsDefaultPageSize);
+  const pageSize = (returnsPageSizes as readonly number[]).includes(storedSize) ? storedSize : returnsDefaultPageSize;
   // 选了待到仓这一队，按受理先后排，等得最久的在最上面；看别的，最新的在上面。人点过表头就照他的。
   const defaultOrder = filters.status === 'AWAITING_ARRIVAL' ? 'oldest' : 'newest';
   const order = isReturnOrder(filters.sort) ? filters.sort : defaultOrder;
-  const rows = sortAdviceRows(shown, order);
-  // 一页多长与实时库存里整份答回的那几种看法相同。筛选或排序一换就回到第一页。
-  const sliceKey = `${filters.keyword}\n${filters.status}\n${filters.owner}\n${filters.warehouse}\n${filters.sort ?? ''}`;
+  const sliceKey = `${filters.keyword}\n${filters.status}\n${filters.owner}\n${filters.warehouse}\n${order}\n${pageSize}`;
   const [paging, setPaging] = useState({ key: sliceKey, page: 1 });
   if (paging.key !== sliceKey) setPaging({ key: sliceKey, page: 1 });
-  const page = stockPageClamp(paging.key === sliceKey ? paging.page : 1, rows.length);
-  const pageRows = stockPageSlice(rows, page);
+  const page = paging.key === sliceKey ? paging.page : 1;
+  const { answer, reload, reloading } = useReturnsPage({
+    view: 'advices',
+    page,
+    pageSize,
+    status: filters.status === allQueues ? '' : filters.status,
+    q: filters.keyword.trim(),
+    owner: filters.owner,
+    warehouse: filters.warehouse,
+    sort: order,
+  });
+  const body = answer?.kind === 'outcome' ? answer.body : null;
+  const counts = body?.counts ?? {};
+  const rows: Row[] = (body?.preAdvices ?? []).flatMap((advice) => (advice.status ? [{ advice, status: advice.status }] : []));
+  const loaded = body !== null;
+  const total = body?.page?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const bookEmpty =
+    loaded && total === 0 && statusCodes.every((code) => (counts[code] ?? 0) === 0) && filters.keyword.trim() === '' && filters.owner === '' && filters.warehouse === '';
   const sort: WorkbenchSort = { key: receivedKey, dir: order === 'oldest' ? 1 : -1 };
   const now = new Date();
   const ownerNames = useMemo(
@@ -146,14 +141,18 @@ export function ReturnAdviceList({ overview, filters }: { overview: ReturnsOverv
     filters.setStatus(allQueues);
     filters.setSort(null);
   };
-  // 概览是整册：整册都没有预报才是空态。筛没了时行是空的、整册不是，模板改说「当前筛选下没有」。
-  const viewState: TemplateViewState = catalogueViewState(answer, all.length, reload, {
+  const [revision, setRevision] = useState(0);
+  const refresh = () => {
+    reload();
+    setRevision((count) => count + 1);
+  };
+  // 一本都没有才是空态。筛没了仍是就绪，由「当前筛选下没有」来说。
+  const viewState: TemplateViewState = catalogueViewState(answer, bookEmpty ? 0 : 1, refresh, {
     module: info,
     endpoint: 'GET /warehouse-fulfillment-returns-overview',
     emptyTitle: '还没有退货预报',
     emptyDescription: '点右上角「代录退货预报」登记，或等货主经客户接口提交。退件到仓后，状态会跟着变。',
   });
-  const panel: ReturnsPanel = { onClose: () => setOpenKey(null), onChanged: reload, overview: answer, refreshing: reloading };
 
   return (
     <>
@@ -162,7 +161,7 @@ export function ReturnAdviceList({ overview, filters }: { overview: ReturnsOverv
         viewStateKey="warehouse-returns-advices"
         subtitle="点一行在右边看这张预报、做它的下一步"
         titleAside={<WmsQueueStats items={queueStats} />}
-        onRefresh={reload}
+        onRefresh={refresh}
         refreshing={reloading}
         primaryAction={
           drawer.has('return-pre-advice') ? (
@@ -211,7 +210,7 @@ export function ReturnAdviceList({ overview, filters }: { overview: ReturnsOverv
           </>
         }
         columns={columns}
-        rows={pageRows}
+        rows={rows}
         rowKey={(row) => row.advice.adviceId}
         selectedKey={openKey}
         onSelect={setOpenKey}
@@ -224,23 +223,36 @@ export function ReturnAdviceList({ overview, filters }: { overview: ReturnsOverv
         noMatchText="当前筛选下没有退货预报"
         onClearFilters={clearFilters}
         renderDetail={(key) => {
-          const row = all.find((item) => item.advice.adviceId === key);
-          return <ReturnAdviceDocument adviceKey={row ? returnAdviceNumber(row.advice) : key} panel={panel} />;
+          const row = rows.find((item) => item.advice.adviceId === key);
+          return (
+            <ReturnAdviceDocument
+              adviceKey={row ? returnAdviceNumber(row.advice) : key}
+              panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision }}
+            />
+          );
         }}
         viewState={viewState}
         listFooter={
           viewState.kind === 'ready' ? (
             <WmsPagerBar
-              summary={stockPageSummary(page, rows.length)}
+              summary={`第 ${page} / ${pageCount} 页 · 共 ${total} 条`}
               canPrevious={page > 1}
-              canNext={page < stockPageCount(rows.length)}
+              canNext={page < pageCount}
               onPrevious={() => setPaging({ key: sliceKey, page: page - 1 })}
               onNext={() => setPaging({ key: sliceKey, page: page + 1 })}
+              pageSize={{
+                value: pageSize,
+                options: returnsPageSizes,
+                onChange: (next) => {
+                  setPageSize(next);
+                  setPaging({ key: sliceKey, page: 1 });
+                },
+              }}
             />
           ) : undefined
         }
       />
-      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={reload} />
+      <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
     </>
   );
 }
