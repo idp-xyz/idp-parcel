@@ -1,5 +1,5 @@
 import { Button } from '@idpxyz/ui-primitives';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { primaryActionClass } from '../../components/primary-action';
 import { enterStation } from '../../shell/enter-station';
 import { formatInstant } from '../catalogue-view';
@@ -11,7 +11,7 @@ import { openPrint } from './print-sheet';
 import { pickListSheet } from './print-forms';
 import { packStationHash, pickStationHash, sortStationHash } from './station/stations';
 import { readFailureMessage, useKeyedLoad } from './use-detail';
-import { useReturnToList } from './use-document';
+import { openDocument, useReturnToList } from './use-document';
 import { waveZones } from './wave-assign';
 import { WaveAssignDialog } from './WaveAssignDialog';
 import { operatorLabel } from '../operator-access/operator-names';
@@ -19,13 +19,32 @@ import { useOperatorNames } from '../operator-access/use-operator-names';
 import { wavePickingNote, waveProgress, waveStatusLabel, waveTrack, withdrawableRequests } from './wave-flow';
 import { WmsBadge, WmsInfoGrid, WmsKpiStrip, WmsStepper, WmsSubTable } from './wms-ui';
 
-/** 波次页：一次放出去的那一批出库单，和它们的每一条拣货任务拣到哪了。 */
-export function WaveDocument({ waveId }: { waveId: string }) {
+/**
+ * 波次页：一次放出去的那一批出库单，和它们的每一条拣货任务拣到哪了。
+ *
+ * 同一张页也摆在波次列表的详情栏里（给了 `panel`）：点一行就在栏里看这个波次。栏里做完一个动作告诉列表重取，
+ * 列表重取一次 `revision` 加一，栏见它变了就重读——不然行上已经拣完了，栏里还摆着「去拣货」。
+ */
+export function WaveDocument({
+  waveId,
+  panel,
+}: {
+  waveId: string;
+  panel?: { onClose: () => void; onChanged: () => void; revision: number };
+}) {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
   const back = useReturnToList('warehouse-waves');
   const [assignOpen, setAssignOpen] = useState(false);
   const names = useOperatorNames();
   const { answer, loading, reload } = useKeyedLoad(waveId, getWave);
+  const revision = panel?.revision;
+  const readAt = useRef(revision);
+  useEffect(() => {
+    if (readAt.current === revision) return;
+    readAt.current = revision;
+    reload();
+  }, [revision, reload]);
+  const afterWrite = panel ? panel.onChanged : reload;
   const wave = answer?.kind === 'outcome' ? answer.body.wave : undefined;
   const failure = readFailureMessage(answer) ?? (answer?.kind === 'outcome' && !wave ? `没有 ${waveId} 这个波次。` : null);
 
@@ -65,6 +84,7 @@ export function WaveDocument({ waveId }: { waveId: string }) {
         error={failure}
         onBack={back}
         onReload={reload}
+        panel={panel ? { onClose: panel.onClose, onOpenPage: () => openDocument('warehouse-waves', [waveId]) } : undefined}
         actions={
           wave ? (
             <>
@@ -215,13 +235,13 @@ export function WaveDocument({ waveId }: { waveId: string }) {
         active={drawer.active}
         lookups={drawer.lookups}
         onClose={drawer.close}
-        onSubmitted={reload}
+        onSubmitted={afterWrite}
       />
       {wave ? (
         <WaveAssignDialog
           open={assignOpen}
           onClose={() => setAssignOpen(false)}
-          onAssigned={reload}
+          onAssigned={afterWrite}
           waveId={waveId}
           warehouse={wave.warehouseCode}
           assignee={wave.assignee}

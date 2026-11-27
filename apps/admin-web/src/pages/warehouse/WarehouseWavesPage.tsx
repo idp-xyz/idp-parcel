@@ -1,62 +1,45 @@
-import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Plus, Send } from 'lucide-react';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
-import type { InspectorAction, InspectorContent } from '../../templates/inspector';
+import { WorkbenchPageTemplate, toggleWorkbenchSort, type WorkbenchColumn, type WorkbenchSort } from '../../templates';
+import type { TemplateViewState } from '../../templates/state-slot';
+import { useTabViewState } from '../../templates/workspace-view-state';
 import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { enterStation } from '../../shell/enter-station';
 import type { CatalogueConditions } from '../catalogue-query';
-import { catalogueViewState, formatInstant } from '../catalogue-view';
+import { catalogueViewState } from '../catalogue-view';
+import { heldCataloguePage } from '../party/held-catalogue-page';
+import { CursorPagerBar, pastFirstPage } from '../shipment-request/cursor-pager';
 import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
+import { operatorLabel } from '../operator-access/operator-names';
+import { useOperatorNames } from '../operator-access/use-operator-names';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer } from './ActionDrawer';
 import { listWaves, type WaveRecord } from './api';
 import { DocumentLink } from './document-page';
+import { fitColumnWidth, nameOf, shortInstant } from './list-cells';
 import { packStationHash, pickStationHash, sortStationHash } from './station/stations';
 import { ToteList } from './ToteList';
 import { WaveRuleList } from './WaveRuleList';
 import { WaveRuleRunDialog } from './WaveRuleRunDialog';
-import { openDocument, useDocumentParts } from './use-document';
+import { useDocumentParts } from './use-document';
 import { useStatusCounts } from './use-status-counts';
-import { operatorLabel, type OperatorNames } from '../operator-access/operator-names';
-import { useOperatorNames } from '../operator-access/use-operator-names';
 import { activeWaveStatuses, settledWaveStatuses, wavePickingLabel, waveProgress, waveStatusLabel } from './wave-flow';
 import { WaveDocument } from './WaveDocument';
-import { WmsBadge, WmsFilterSelect, WmsProgress, WmsStatusTabs } from './wms-ui';
+import { WmsBadge, WmsFilterSelect, WmsProgress, WmsQueueStats, WmsTwoLine, type WmsQueueStat } from './wms-ui';
 
 const moduleId = 'warehouse-waves';
 const info = moduleInfoById[moduleId];
-const mono = 'whitespace-nowrap font-mono type-body leading-4';
+const allQueues = 'ALL';
+const releasedKey = 'releasedAt';
+const newestFirst: WorkbenchSort = { key: releasedKey, dir: -1 };
+const oldestFirst: WorkbenchSort = { key: releasedKey, dir: 1 };
 
-/** 拣货人与放波次人示姓名；没登姓名的，拣货人示 sub、放波次人示完整标识（与登姓名之前一样）。 */
-const waveColumns = (names: OperatorNames): ListColumn<WaveRecord>[] => [
-  { id: 'wave', header: '波次号', className: 'whitespace-nowrap', render: (row) => <DocumentLink moduleId={moduleId} parts={[row.waveId]} /> },
-  { id: 'state', header: '状态', render: (row) => <WmsBadge code={row.status} label={waveStatusLabel(row.status)} /> },
-  { id: 'warehouse', header: '仓', className: mono, render: (row) => row.warehouseCode },
-  { id: 'profile', header: '件型', className: 'whitespace-nowrap', render: (row) => (row.singleUnit ? '单品单件' : '—') },
-  { id: 'picking', header: '拣货方式', className: 'whitespace-nowrap', render: (row) => wavePickingLabel(row) },
-  { id: 'rule', header: '成波规则', className: mono, render: (row) => row.ruleCode ?? '—' },
-  { id: 'assignee', header: '拣货人', className: mono, render: (row) => operatorLabel(row.assignee, names) ?? '—' },
-  {
-    id: 'requests',
-    header: '出库单',
-    align: 'right',
-    className: mono,
-    render: (row) => (row.withdrawnRequests.length > 0 ? `${row.requests.length} 张（撤出 ${row.withdrawnRequests.length}）` : `${row.requests.length} 张`),
-  },
-  {
-    id: 'progress',
-    header: '已拣 / 任务',
-    render: (row) => {
-      const progress = waveProgress(row.tasks);
-      return <WmsProgress done={progress.done + progress.short} total={progress.tasks} flagged={progress.short} flaggedLabel="少拣 " />;
-    },
-  },
-  { id: 'prefetch', header: '预取面单', render: (row) => (row.prefetch ? '是' : '否') },
-  { id: 'operator', header: '放波次人', className: mono, render: (row) => names.get(row.operator) ?? row.operator },
-  { id: 'at', header: '放出时刻', className: mono, render: (row) => formatInstant(row.releasedAt) },
-];
+const nowrap = (content: ReactNode) => <span className="whitespace-nowrap">{content}</span>;
+
+const knownStatus = (value: string) =>
+  (activeWaveStatuses as readonly string[]).includes(value) || (settledWaveStatuses as readonly string[]).includes(value) ? value : allQueues;
 
 /** 波次：列表与每一个波次各占自己的标签。周转箱名册只有列表，与波次列表并排成两个页签。 */
 export function WarehouseWavesPage() {
@@ -90,18 +73,27 @@ function WavesHome() {
 
 function WaveList() {
   const drawer = useActionDrawer(outboundWaveActionSpecs);
-  const [keyword, setKeyword] = useState('');
-  const [warehouse, setWarehouse] = useState('');
-  const [status, setStatus] = useState('ALL');
+  const [keyword, setKeyword] = useTabViewState('warehouse-waves.keyword', '');
+  const [warehouse, setWarehouse] = useTabViewState('warehouse-waves.warehouse', '');
+  const [storedStatus, setStatus] = useTabViewState('warehouse-waves.status', allQueues);
+  const status = knownStatus(storedStatus);
+  const [chosenSort, setChosenSort] = useTabViewState<WorkbenchSort | null>('warehouse-waves.sort', null);
+  const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-waves.open', null);
   const [ruleRunOpen, setRuleRunOpen] = useState(false);
   const [refreshes, setRefreshes] = useState(0);
   const names = useOperatorNames();
-  const columns = useMemo(() => waveColumns(names), [names]);
   const settled = useSettledKeyword(keyword);
+  // 看还有任务等着拣的那两队时，先放出的在上面：放得越早的越该先拣。看全部或已了结的，最新放出的在上面。人点过表头就照他的。
+  const working = (activeWaveStatuses as readonly string[]).includes(status);
+  const sort = chosenSort ?? (working ? oldestFirst : newestFirst);
+  const filters: Record<string, string[]> = {};
+  if (warehouse) filters.warehouseCode = [warehouse];
+  if (status !== allQueues) filters.status = [status];
+  const conditions: CatalogueConditions = { q: settled, filters, sort: sort.dir === -1 ? '-releasedAt' : 'releasedAt' };
   const base: CatalogueConditions = { q: settled, filters: warehouse ? { warehouseCode: [warehouse] } : {} };
-  const conditions: CatalogueConditions = status === 'ALL' ? base : { ...base, filters: { ...base.filters, status: [status] } };
-  const { answer, pagination, retry } = useCatalogueCursor(conditions, listWaves);
-  const rows = answer?.kind === 'outcome' ? answer.body.waves : [];
+  const { answer, previous, pagination, retry } = useCatalogueCursor(conditions, listWaves);
+  const held = heldCataloguePage(answer, previous, (body) => body.waves.length > 0);
+  const rows = answer?.kind === 'outcome' ? answer.body.waves : (held?.body.waves ?? []);
   // 只数还有任务等着拣的两种：已完成与已取消只增不减，数出来的不是待办。
   const counts = useStatusCounts(listWaves, base, 'status', activeWaveStatuses, refreshes);
   const refresh = () => {
@@ -109,65 +101,128 @@ function WaveList() {
     setRefreshes((count) => count + 1);
   };
 
-  const inspectorOf = (row: WaveRecord): InspectorContent => {
-    const open = row.tasks.filter((task) => task.status === 'OPEN');
-    const progress = waveProgress(row.tasks);
-    const actions: InspectorAction[] = [
-      { label: '打开波次', onRun: () => openDocument(moduleId, [row.waveId]) },
-    ];
-    // 已取消的波次没有下一步：任务都作废了。
-    if (row.status !== 'CANCELLED') {
-      actions.push({
-        label: open.length > 0 ? `去拣货（还有 ${open.length} 格）` : row.batchPick ? '去分拣' : '去复核打包',
-        onRun: () => {
-          // 还有没拣的格去全屏的拣货工位，只做这个波次；拣完了，合并拣货的波次去分拣，别的去复核打包
-          if (open.length > 0) enterStation(pickStationHash(row.waveId));
-          else if (row.batchPick) enterStation(sortStationHash(row.waveId));
-          else enterStation(packStationHash());
-        },
-      });
-    }
-    return {
-      title: row.waveId,
-      subtitle: `${row.warehouseCode} · ${row.requests.length} 张出库单`,
-      sections: [
-        {
-          kind: 'summary',
-          fields: [
-            { label: '出库单', value: row.requests.join('、') || '没有出库单', mono: true },
-            ...(row.withdrawnRequests.length > 0 ? [{ label: '其中已撤出', value: row.withdrawnRequests.join('、'), mono: true }] : []),
-            { label: '状态', value: waveStatusLabel(row.status) },
-            {
-              label: '已拣 / 任务',
-              value: `${progress.done + progress.short} / ${progress.tasks}${progress.short > 0 ? `（少拣 ${progress.short}）` : ''}${progress.cancelled > 0 ? `，另有 ${progress.cancelled} 条已作废` : ''}`,
-              mono: true,
-            },
-            {
-              label: '还没拣的格',
-              value:
-                open
-                  .slice(0, 6)
-                  .map((task) => `${task.locationCode} ${task.goodsCode}×${task.quantity}`)
-                  .join('；') || '都拣完了',
-              mono: true,
-            },
-            { label: '预取面单', value: row.prefetch ? '是' : '否' },
-          ],
-        },
-        { kind: 'actions', actions },
-        { kind: 'audit', fields: [{ label: '放波次人 / 时刻', value: `${names.get(row.operator) ?? row.operator} · ${formatInstant(row.releasedAt)}`, mono: true }] },
-      ],
-    };
+  const warehouseNames = useMemo(
+    () => new Map(drawer.lookups.warehouses.map((w) => [w.warehouseCode, w.name ?? ''])),
+    [drawer.lookups.warehouses],
+  );
+  const now = new Date();
+  const named = (code: string) => {
+    const name = nameOf(warehouseNames, code);
+    return name ? <WmsTwoLine primary={name} secondary={code} code title={`${name} · ${code}`} /> : <span className="whitespace-nowrap font-mono">{code}</span>;
   };
+  // 开了详情栏之后列表变窄，次要的列收起：波次号、状态、进度与下一步一直在。
+  const columns: WorkbenchColumn<WaveRecord>[] = [
+    {
+      key: 'wave',
+      header: '波次',
+      width: fitColumnWidth,
+      render: (row) => <DocumentLink moduleId={moduleId} parts={[row.waveId]}>{row.waveId}</DocumentLink>,
+    },
+    { key: 'status', header: '状态', width: fitColumnWidth, render: (row) => <WmsBadge code={row.status} label={waveStatusLabel(row.status)} /> },
+    { key: 'warehouse', header: '仓', width: fitColumnWidth, minListWidth: 980, render: (row) => named(row.warehouseCode) },
+    {
+      key: 'profile',
+      header: '件型',
+      width: fitColumnWidth,
+      minListWidth: 1120,
+      hideWhenDetailOpen: true,
+      render: (row) => nowrap(row.singleUnit ? '单品单件' : '—'),
+    },
+    { key: 'picking', header: '拣货方式', width: fitColumnWidth, minListWidth: 820, render: (row) => nowrap(wavePickingLabel(row)) },
+    {
+      key: 'rule',
+      header: '成波规则',
+      width: fitColumnWidth,
+      minListWidth: 1240,
+      hideWhenDetailOpen: true,
+      render: (row) => nowrap(row.ruleCode ?? '—'),
+    },
+    {
+      key: 'assignee',
+      header: '拣货人',
+      width: fitColumnWidth,
+      minListWidth: 900,
+      render: (row) => nowrap(operatorLabel(row.assignee, names) ?? '—'),
+    },
+    {
+      key: 'requests',
+      header: nowrap('出库单'),
+      right: true,
+      width: fitColumnWidth,
+      minListWidth: 1060,
+      render: (row) =>
+        nowrap(row.withdrawnRequests.length > 0 ? `${row.requests.length} 张（撤出 ${row.withdrawnRequests.length}）` : `${row.requests.length} 张`),
+    },
+    {
+      key: 'progress',
+      header: '已拣 / 任务',
+      render: (row) => {
+        const progress = waveProgress(row.tasks);
+        return <WmsProgress done={progress.done + progress.short} total={progress.tasks} flagged={progress.short} flaggedLabel="少拣 " />;
+      },
+    },
+    {
+      key: 'prefetch',
+      header: '预取面单',
+      width: fitColumnWidth,
+      minListWidth: 1360,
+      hideWhenDetailOpen: true,
+      render: (row) => (row.prefetch ? '是' : '否'),
+    },
+    {
+      key: 'operator',
+      header: '放波次人',
+      width: fitColumnWidth,
+      minListWidth: 1480,
+      hideWhenDetailOpen: true,
+      render: (row) => nowrap(names.get(row.operator) ?? row.operator),
+    },
+    {
+      key: 'at',
+      header: nowrap('放出时刻'),
+      width: fitColumnWidth,
+      sortKey: releasedKey,
+      minListWidth: 760,
+      render: (row) => nowrap(shortInstant(row.releasedAt, now) || '—'),
+    },
+    { key: 'next', header: nowrap('下一步'), width: fitColumnWidth, render: (row) => <WaveNextStep row={row} /> },
+  ];
+
+  const queueStats: WmsQueueStat[] = activeWaveStatuses.map((code) => ({
+    id: code,
+    label: waveStatusLabel(code),
+    count: counts[code] ?? null,
+    active: status === code,
+    onClick: () => setStatus(status === code ? allQueues : code),
+  }));
+  const narrowed = settled.trim() !== '' || warehouse !== '' || status !== allQueues;
+  const clearFilters = () => {
+    setKeyword('');
+    setWarehouse('');
+    setStatus(allQueues);
+  };
+  const viewState: TemplateViewState = held
+    ? { kind: 'ready' }
+    : catalogueViewState(answer, rows.length, refresh, {
+        module: info,
+        endpoint: 'GET /warehouse-fulfillment-wave-list',
+        emptyTitle: '还没有放过波次',
+        emptyDescription: '在「出库单」里勾选已预占的出库单合并放波次，或点右上角「放波次」。',
+        narrowed: narrowed || pastFirstPage(pagination),
+      });
+  const shownPagination = pagination ?? held?.pagination;
 
   return (
     <>
-      <ListPageTemplate<WaveRecord>
-        moduleId={moduleId}
+      <WorkbenchPageTemplate<WaveRecord>
         title={info.title}
-        description="放出去的每一个波次，和它拣到哪了。点波次号看每一条拣货任务；拣货本身在作业台做。"
-        headerActions={
-          <div className="flex flex-wrap gap-2">
+        viewStateKey={moduleId}
+        subtitle="点一行在右边看这个波次、做它的下一步"
+        titleAside={<WmsQueueStats items={queueStats} />}
+        onRefresh={refresh}
+        refreshing={answer === null}
+        primaryAction={
+          <>
             {drawer.has('confirmation-correction') ? (
               <Button type="button" variant="outline" onClick={() => drawer.open('confirmation-correction')}>
                 更正出库确认
@@ -180,6 +235,7 @@ function WaveList() {
             ) : null}
             {drawer.has('wave-release') ? (
               <Button type="button" variant="outline" onClick={() => setRuleRunOpen(true)}>
+                <Send className="mr-1 h-3.5 w-3.5" />
                 按规则成波
               </Button>
             ) : null}
@@ -189,51 +245,79 @@ function WaveList() {
                 放波次
               </Button>
             ) : null}
-          </div>
+          </>
         }
         search={{ value: keyword, onChange: setKeyword, placeholder: '搜波次号、仓、放波次人' }}
-        filters={
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <WmsStatusTabs
-              value={status}
-              onChange={setStatus}
-              tabs={[
-                ...activeWaveStatuses.map((code) => ({ value: code, label: waveStatusLabel(code), count: counts[code] })),
-                ...settledWaveStatuses.map((code) => ({ value: code, label: waveStatusLabel(code) })),
-                { value: 'ALL', label: '全部' },
-              ]}
+        extraFilters={
+          <>
+            <WmsFilterSelect
+              label="状态"
+              value={status === allQueues ? '' : status}
+              onChange={(next) => setStatus(next === '' ? allQueues : next)}
+              options={[...activeWaveStatuses, ...settledWaveStatuses].map((code) => ({ value: code, label: waveStatusLabel(code) }))}
             />
             <WmsFilterSelect
               label="仓库"
               value={warehouse}
               onChange={setWarehouse}
-              options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: `${w.warehouseCode} · ${w.name}` }))}
+              options={drawer.lookups.warehouses.map((w) => ({ value: w.warehouseCode, label: w.name ? `${w.name} · ${w.warehouseCode}` : w.warehouseCode }))}
             />
-          </div>
+            {narrowed ? (
+              <button
+                type="button"
+                className="whitespace-nowrap type-body text-idpxyz-textMuted hover:text-idpxyz-textBright focus-visible:underline focus-visible:outline-none"
+                onClick={clearFilters}
+              >
+                清除
+              </button>
+            ) : null}
+          </>
         }
         columns={columns}
         rows={rows}
         rowKey={(row) => row.waveId}
-        inspector={inspectorOf}
-        onRowOpen={(row) => openDocument(moduleId, [row.waveId])}
-        pagination={pagination}
-        emptyRowsNote="当前筛选下没有波次"
-        viewState={catalogueViewState(answer, rows.length, refresh, {
-          module: info,
-          endpoint: 'GET /warehouse-fulfillment-wave-list',
-          emptyTitle: '还没有放过波次',
-          emptyDescription: '在「出库单」里勾选已预占的出库单合并放波次，或点右上角「放波次」。',
-          narrowed: settled.trim() !== '' || warehouse !== '' || status !== 'ALL',
-        })}
+        selectedKey={openKey}
+        onSelect={setOpenKey}
+        rowAlign="baseline"
+        sort={sort}
+        onSort={(key) => setChosenSort(toggleWorkbenchSort(sort, key))}
+        noMatchText="当前筛选下没有波次"
+        onClearFilters={clearFilters}
+        renderDetail={(key) => <WaveDocument key={key} waveId={key} panel={{ onClose: () => setOpenKey(null), onChanged: refresh, revision: refreshes }} />}
+        viewState={viewState}
       />
+      {shownPagination && viewState.kind === 'ready' ? <CursorPagerBar pagination={shownPagination} /> : null}
       <ActionDrawer moduleId={moduleId} active={drawer.active} lookups={drawer.lookups} onClose={drawer.close} onSubmitted={refresh} />
       <WaveRuleRunDialog
         open={ruleRunOpen}
         onClose={() => setRuleRunOpen(false)}
         onReleased={refresh}
-        warehouseNames={new Map(drawer.lookups.warehouses.map((w) => [w.warehouseCode, w.name ?? '']))}
+        warehouseNames={warehouseNames}
         defaultWarehouse={warehouse || undefined}
       />
     </>
+  );
+}
+
+/** 这一行此刻该做的一步。已取消没有下一步。点这一下只去工位，不把详情栏开合一次。 */
+function WaveNextStep({ row }: { row: WaveRecord }) {
+  const open = row.tasks.some((task) => task.status === 'OPEN');
+  if (row.status === 'CANCELLED') return <span className="text-idpxyz-textMuted">—</span>;
+  const label = open ? '去拣货' : row.batchPick ? '去分拣' : '去复核打包';
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="whitespace-nowrap text-[color:var(--ds-text-link-hover)] hover:text-[color:var(--ds-text-link-hover)]"
+      onClick={(event) => {
+        event.stopPropagation();
+        if (open) enterStation(pickStationHash(row.waveId));
+        else if (row.batchPick) enterStation(sortStationHash(row.waveId));
+        else enterStation(packStationHash());
+      }}
+    >
+      {label}
+    </Button>
   );
 }
