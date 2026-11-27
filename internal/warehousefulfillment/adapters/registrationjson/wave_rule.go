@@ -21,8 +21,11 @@ type waveRuleDocument struct {
 	// Profile 不带是不限件型。
 	Profile     *string `json:"profile"`
 	MaxRequests *int    `json:"maxRequests"`
-	BatchPick   *bool   `json:"batchPick"`
-	Deactivated *bool   `json:"deactivated"`
+	// MaxLines 与 MaxUnits 不带是不限；带了就得是正整数。
+	MaxLines    *int   `json:"maxLines"`
+	MaxUnits    *int64 `json:"maxUnits"`
+	BatchPick   *bool  `json:"batchPick"`
+	Deactivated *bool  `json:"deactivated"`
 }
 
 // RegisterWaveRuleCommand 把成波规则的登记译成命令。一个波次最多几张（maxRequests）必须带：
@@ -59,6 +62,18 @@ func RegisterWaveRuleCommand(reader io.Reader, tenant domain.TenantID, operator 
 		BatchPick:   document.BatchPick != nil && *document.BatchPick,
 		Deactivated: document.Deactivated != nil && *document.Deactivated,
 		Operator:    operator,
+	}
+	if document.MaxLines != nil {
+		if *document.MaxLines < 1 {
+			return none, malformed("maxLines must be a positive integer")
+		}
+		command.MaxLines = *document.MaxLines
+	}
+	if document.MaxUnits != nil {
+		if *document.MaxUnits < 1 {
+			return none, malformed("maxUnits must be a positive integer")
+		}
+		command.MaxUnits = *document.MaxUnits
 	}
 	if document.OwnerAccount != nil {
 		owner, err := domain.NewOwnerAccountID(*document.OwnerAccount)

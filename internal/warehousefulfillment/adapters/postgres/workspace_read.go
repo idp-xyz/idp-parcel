@@ -122,7 +122,7 @@ func (store *WorkspaceReads) SettingsOverview(ctx context.Context, tenant domain
 		rows, err := querier.Query(ctx,
 			`SELECT DISTINCT ON (warehouse_code, rule_code) warehouse_code, rule_code, revision, rule_name,
 			        coalesce(owner_account_id, ''), coalesce(dispatch, ''), profile, max_requests, batch_pick, deactivated,
-			        operator_id, registered_at
+			        operator_id, registered_at, coalesce(max_lines, 0), coalesce(max_units, 0)
 			   FROM warehouse_fulfillment.wave_rule
 			  WHERE tenant_id = $1
 			  ORDER BY warehouse_code, rule_code, revision DESC`,
@@ -134,7 +134,8 @@ func (store *WorkspaceReads) SettingsOverview(ctx context.Context, tenant domain
 		for rows.Next() {
 			var item ports.WaveRuleOverview
 			if err := rows.Scan(&item.WarehouseCode, &item.RuleCode, &item.Revision, &item.Name, &item.OwnerAccount, &item.Dispatch,
-				&item.Profile, &item.MaxRequests, &item.BatchPick, &item.Deactivated, &item.Operator, &item.RegisteredAt); err != nil {
+				&item.Profile, &item.MaxRequests, &item.BatchPick, &item.Deactivated, &item.Operator, &item.RegisteredAt,
+				&item.MaxLines, &item.MaxUnits); err != nil {
 				rows.Close()
 				return out, fmt.Errorf("%s: wave rules: %w", op, err)
 			}

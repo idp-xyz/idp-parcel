@@ -31,6 +31,9 @@ type RegisterWaveRuleCommand struct {
 	Dispatch    string
 	Profile     string
 	MaxRequests int
+	// MaxLines 与 MaxUnits 是一个波次最多几行、最多几件；0 是不限。
+	MaxLines    int
+	MaxUnits    int64
 	BatchPick   bool
 	Deactivated bool
 	Operator    domain.Registrant
@@ -44,7 +47,8 @@ func (handler *WaveHandler) RegisterWaveRule(ctx context.Context, command Regist
 	}
 	name := strings.TrimSpace(command.Name)
 	if command.Operator.String() == "" || command.Warehouse.String() == "" || command.Code.String() == "" || command.Revision < 1 ||
-		name == "" || command.MaxRequests < 1 || command.MaxRequests > maxRequestsPerRuleWave || !knownWaveRuleProfile(command.Profile) {
+		name == "" || command.MaxRequests < 1 || command.MaxRequests > maxRequestsPerRuleWave || command.MaxLines < 0 || command.MaxUnits < 0 ||
+		!knownWaveRuleProfile(command.Profile) {
 		return WaveResult{outcome: WaveContentInvalid}, nil
 	}
 	warehouse, found, err := handler.toteWarehouses.LoadLatestWarehouse(ctx, command.Tenant, command.Warehouse)
@@ -59,8 +63,8 @@ func (handler *WaveHandler) RegisterWaveRule(ctx context.Context, command Regist
 	}
 	rule := ports.WaveRule{
 		Warehouse: command.Warehouse, Code: command.Code, Revision: command.Revision, Name: name, Owner: command.Owner,
-		Dispatch: command.Dispatch, Profile: command.Profile, MaxRequests: command.MaxRequests, BatchPick: command.BatchPick,
-		Deactivated: command.Deactivated,
+		Dispatch: command.Dispatch, Profile: command.Profile, MaxRequests: command.MaxRequests, MaxLines: command.MaxLines,
+		MaxUnits: command.MaxUnits, BatchPick: command.BatchPick, Deactivated: command.Deactivated,
 	}
 	current, found, err := handler.waves.LoadWaveRule(ctx, command.Tenant, command.Warehouse, command.Code)
 	if err != nil {
@@ -89,7 +93,8 @@ func knownWaveRuleProfile(profile string) bool {
 // sameWaveRule 比的是规则说了什么，不比是谁在什么时候登的。
 func sameWaveRule(left, right ports.WaveRule) bool {
 	return left.Name == right.Name && left.Owner == right.Owner && left.Dispatch == right.Dispatch && left.Profile == right.Profile &&
-		left.MaxRequests == right.MaxRequests && left.BatchPick == right.BatchPick && left.Deactivated == right.Deactivated
+		left.MaxRequests == right.MaxRequests && left.MaxLines == right.MaxLines && left.MaxUnits == right.MaxUnits &&
+		left.BatchPick == right.BatchPick && left.Deactivated == right.Deactivated
 }
 
 // RunWaveRuleCommand 按一条成波规则把这个仓里圈得到的已预占请求放成波次。RunID 是这一次执行的号，
@@ -182,16 +187,11 @@ func (handler *WaveHandler) RunWaveRule(ctx context.Context, command RunWaveRule
 			Tenant: command.Tenant, ID: id, Warehouse: command.Warehouse, Operator: command.Operator, BatchPick: rule.BatchPick,
 		}, err
 	}
-	for index := 1; index <= (len(candidates)+rule.MaxRequests-1)/rule.MaxRequests; index++ {
-		wave, err := waveCommand(index)
-		if err != nil {
-			return WaveRuleRunResult{}, fmt.Errorf("run wave rule: %w", err)
-		}
-		if _, taken, err := handler.waves.LoadWave(ctx, command.Tenant, wave.ID); err != nil {
-			return WaveRuleRunResult{}, fmt.Errorf("run wave rule: %w", err)
-		} else if taken {
-			return WaveRuleRunResult{outcome: WaveConflict, revision: rule.Revision}, nil
-		}
+	// 会放出几个波次要分配完才知道（行数、件数的上限会提前切波次），所以核的是「有没有以这个执行号开头的波次」。
+	if clash, err := handler.waves.AnyWaveStartingWith(ctx, command.Tenant, command.RunID.String()+"-"); err != nil {
+		return WaveRuleRunResult{}, fmt.Errorf("run wave rule: %w", err)
+	} else if clash {
+		return WaveRuleRunResult{outcome: WaveConflict, revision: rule.Revision}, nil
 	}
 	at := handler.clock.Now()
 	current, err := waveCommand(1)
@@ -202,6 +202,8 @@ func (handler *WaveHandler) RunWaveRule(ctx context.Context, command RunWaveRule
 	var tasks []ports.PickTask
 	// 同一个波次里先分走的数量还没落成拣货任务，后一张请求读占用账看不见；波次存下之后就看得见了，从头再记。
 	taken := map[string]int64{}
+	// 当前这个波次已经有几行、几件：行数按预占行数，件数按预占的基本单位数量。
+	lines, units := 0, int64(0)
 	flush := func() error {
 		if len(members) == 0 {
 			return nil
@@ -215,6 +217,7 @@ func (handler *WaveHandler) RunWaveRule(ctx context.Context, command RunWaveRule
 		result.waves = append(result.waves, ports.RuleWave{Wave: current.ID.String(), Requests: len(members)})
 		result.released += len(members)
 		members, tasks, taken = nil, nil, map[string]int64{}
+		lines, units = 0, 0
 		current, err = waveCommand(len(result.waves) + 1)
 		return err
 	}
@@ -248,6 +251,17 @@ func (handler *WaveHandler) RunWaveRule(ctx context.Context, command RunWaveRule
 		if !found || request.Status() != domain.OutboundReserved || request.Warehouse() != command.Warehouse {
 			continue
 		}
+		// 加上这一张会超过规则登的行数或件数时，先把手上这个波次放出去、另起一个。波次里还没有单时不切：
+		// 一张请求自己就超了的单独成一个波次，一张请求拆不开。
+		requestLines, requestUnits := len(request.Reservations()), int64(0)
+		for _, reserved := range request.Reservations() {
+			requestUnits += reserved.Quantity
+		}
+		if len(members) > 0 && ((rule.MaxLines > 0 && lines+requestLines > rule.MaxLines) || (rule.MaxUnits > 0 && units+requestUnits > rule.MaxUnits)) {
+			if err := flush(); err != nil {
+				return WaveRuleRunResult{}, fmt.Errorf("run wave rule: %w", err)
+			}
+		}
 		// 分配不出时 allocate 已经往 taken 里记了一半，照分配之前的那一份还原。
 		before := maps.Clone(taken)
 		allocated, err := handler.allocate(ctx, current, request, taken)
@@ -265,6 +279,7 @@ func (handler *WaveHandler) RunWaveRule(ctx context.Context, command RunWaveRule
 		}
 		members = append(members, id)
 		tasks = append(tasks, allocated...)
+		lines, units = lines+requestLines, units+requestUnits
 		if len(members) == rule.MaxRequests {
 			if err := flush(); err != nil {
 				return WaveRuleRunResult{}, fmt.Errorf("run wave rule: %w", err)

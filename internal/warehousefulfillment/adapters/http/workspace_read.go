@@ -187,6 +187,12 @@ func NewQuerySettingsOverviewEndpoint(intake CatalogueIntake, queries WorkspaceQ
 			if item.Dispatch != "" {
 				rule["dispatch"] = item.Dispatch
 			}
+			if item.MaxLines > 0 {
+				rule["maxLines"] = item.MaxLines
+			}
+			if item.MaxUnits > 0 {
+				rule["maxUnits"] = item.MaxUnits
+			}
 			waveRules = append(waveRules, rule)
 		}
 		writeJSON(response, http.StatusOK, map[string]any{

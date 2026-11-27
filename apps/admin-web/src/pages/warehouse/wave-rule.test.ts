@@ -40,6 +40,9 @@ test('规则说成一句话：不带的条件不提，都不带就是都圈', ()
     '货主 OWNER-1，到仓自提，只圈单品单件，一个波次最多 50 张，逐单拣',
   );
   equal(waveRuleSummary(rule('C', { profile: 'MULTI_UNIT', batchPick: true })), '只圈不是单品单件的，一个波次最多 20 张，合并拣货');
+  equal(waveRuleSummary(rule('D', { maxLines: 60, maxUnits: 200 })), '这个仓已预占的出库单都圈，一个波次最多 20 张、60 行、200 件，逐单拣');
+  // 限了行数或件数时波次会切得更碎，估计只说得出至少几个
+  ok(waveRulePreviewText(rule('D', { maxUnits: 200 }), 45).includes('放成至少 3 个波次'));
 });
 
 // Covers: 一个仓能用的规则不含停用的、不含别的仓的；有可用规则的仓才进下拉。
@@ -143,6 +146,8 @@ test('登记规则的报文：不限的条件不带键', () => {
     revision: '2',
     name: '早班小件',
     maxRequests: '20',
+    maxLines: '60',
+    maxUnits: '200',
     ownerAccount: 'OWNER-1',
     dispatch: 'PICKUP',
     profile: 'SINGLE_UNIT',
@@ -155,6 +160,8 @@ test('登记规则的报文：不限的条件不带键', () => {
     revision: 2,
     name: '早班小件',
     maxRequests: 20,
+    maxLines: 60,
+    maxUnits: 200,
     ownerAccount: 'OWNER-1',
     dispatch: 'PICKUP',
     profile: 'SINGLE_UNIT',

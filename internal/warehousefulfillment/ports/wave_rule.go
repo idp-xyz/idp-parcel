@@ -17,14 +17,17 @@ const (
 // WaveRule 是一条成波规则的一版：圈哪些已预占的出库请求、一个波次最多几张、怎么拣。
 // Owner 与 Dispatch 为空是不限。规则是租户按仓登记的取值，产品不带默认的规则。
 type WaveRule struct {
-	Warehouse    domain.WarehouseCode
-	Code         domain.WaveRuleCode
-	Revision     int
-	Name         string
-	Owner        string
-	Dispatch     string
-	Profile      string
-	MaxRequests  int
+	Warehouse   domain.WarehouseCode
+	Code        domain.WaveRuleCode
+	Revision    int
+	Name        string
+	Owner       string
+	Dispatch    string
+	Profile     string
+	MaxRequests int
+	// MaxLines 与 MaxUnits 是一个波次最多几行、最多几件（基本单位）；0 是不限。
+	MaxLines     int
+	MaxUnits     int64
 	BatchPick    bool
 	Deactivated  bool
 	Operator     string
@@ -61,6 +64,9 @@ type WaveRuleStore interface {
 	WaveRuleCandidates(ctx context.Context, tenant domain.TenantID, rule WaveRule, limit int) (requests []domain.OutboundRequestID, total int, err error)
 	LoadWaveRuleRun(ctx context.Context, tenant domain.TenantID, runID string) (WaveRuleRun, bool, error)
 	SaveWaveRuleRun(ctx context.Context, tenant domain.TenantID, run WaveRuleRun) error
+	// AnyWaveStartingWith 回答有没有波次号以这个前缀开头的波次。按规则成波放出的波次号是执行号加序号，
+	// 动手之前用它核有没有撞号。
+	AnyWaveStartingWith(ctx context.Context, tenant domain.TenantID, prefix string) (bool, error)
 	// TagWaveRun 在波次上记下它是哪条规则的哪一次执行放出来的。
 	TagWaveRun(ctx context.Context, tenant domain.TenantID, wave domain.WaveID, rule domain.WaveRuleCode, runID string) error
 	WavesOfRun(ctx context.Context, tenant domain.TenantID, runID string) ([]RuleWave, error)
@@ -89,6 +95,8 @@ type WaveRuleOverview struct {
 	Dispatch      string
 	Profile       string
 	MaxRequests   int
+	MaxLines      int
+	MaxUnits      int64
 	BatchPick     bool
 	Deactivated   bool
 	Operator      string

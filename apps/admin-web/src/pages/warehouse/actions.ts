@@ -547,7 +547,8 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     grant: 'registry',
     snapshotHint:
       '填 warehouse、ruleCode、revision（从 1 起连续，要改或停用就登下一号）、name、maxRequests（一个波次最多几张，必填），' +
-      '可选 ownerAccount、dispatch、profile（SINGLE_UNIT / MULTI_UNIT，不填是不限）、batchPick、deactivated。三个圈单条件不填就是不限。' +
+      '可选 maxLines、maxUnits（一个波次最多几行、几件，不填是不限）、ownerAccount、dispatch、profile（SINGLE_UNIT / MULTI_UNIT，不填是不限）、' +
+      'batchPick、deactivated。三个圈单条件不填就是不限。' +
       noActorNote,
   },
   {

@@ -20,14 +20,15 @@ func (store *Waves) LoadWaveRule(ctx context.Context, tenant domain.TenantID, wa
 	rule := ports.WaveRule{Warehouse: warehouse, Code: code}
 	var owner, dispatch *string
 	err = querier.QueryRow(ctx,
-		`SELECT revision, rule_name, owner_account_id, dispatch, profile, max_requests, batch_pick, deactivated, operator_id, registered_at
+		`SELECT revision, rule_name, owner_account_id, dispatch, profile, max_requests, coalesce(max_lines, 0), coalesce(max_units, 0),
+		        batch_pick, deactivated, operator_id, registered_at
 		   FROM warehouse_fulfillment.wave_rule
 		  WHERE tenant_id = $1 AND warehouse_code = $2 AND rule_code = $3
 		  ORDER BY revision DESC
 		  LIMIT 1`,
 		tenant.String(), warehouse.String(), code.String()).Scan(
-		&rule.Revision, &rule.Name, &owner, &dispatch, &rule.Profile, &rule.MaxRequests, &rule.BatchPick, &rule.Deactivated,
-		&rule.Operator, &rule.RegisteredAt)
+		&rule.Revision, &rule.Name, &owner, &dispatch, &rule.Profile, &rule.MaxRequests, &rule.MaxLines, &rule.MaxUnits,
+		&rule.BatchPick, &rule.Deactivated, &rule.Operator, &rule.RegisteredAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.WaveRule{}, false, nil
 	}
@@ -46,14 +47,29 @@ func (store *Waves) SaveWaveRule(ctx context.Context, tenant domain.TenantID, ru
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO warehouse_fulfillment.wave_rule (
 		    tenant_id, warehouse_code, rule_code, revision, rule_name, owner_account_id, dispatch, profile,
-		    max_requests, batch_pick, deactivated, operator_id, registered_at
-		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		    max_requests, batch_pick, deactivated, operator_id, registered_at, max_lines, max_units
+		 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14, 0),NULLIF($15, 0))`,
 		tenant.String(), rule.Warehouse.String(), rule.Code.String(), rule.Revision, rule.Name,
 		optionalText(rule.Owner, rule.Owner != ""), optionalText(rule.Dispatch, rule.Dispatch != ""), rule.Profile,
-		rule.MaxRequests, rule.BatchPick, rule.Deactivated, rule.Operator, rule.RegisteredAt.UTC()); err != nil {
+		rule.MaxRequests, rule.BatchPick, rule.Deactivated, rule.Operator, rule.RegisteredAt.UTC(),
+		int64(rule.MaxLines), rule.MaxUnits); err != nil {
 		return fmt.Errorf("save wave rule: %w", err)
 	}
 	return nil
+}
+
+func (store *Waves) AnyWaveStartingWith(ctx context.Context, tenant domain.TenantID, prefix string) (bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, err
+	}
+	var exists bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM warehouse_fulfillment.wave WHERE tenant_id = $1 AND starts_with(wave_id, $2))`,
+		tenant.String(), prefix).Scan(&exists); err != nil {
+		return false, fmt.Errorf("any wave starting with: %w", err)
+	}
+	return exists, nil
 }
 
 // waveRuleMatches 是「这张已预占的请求归不归这条规则圈」的那一句。$1 租户，$2 仓，$3 货主（空是不限），

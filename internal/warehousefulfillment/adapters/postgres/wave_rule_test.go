@@ -261,6 +261,68 @@ func TestAWaveRuleSkipsARequestThatCannotBeAllocated(t *testing.T) {
 	}
 }
 
+// Covers: 规则登了一个波次最多几件、最多几行时，加上下一张会超就先把手上的波次放出去、另起一个；
+// 一张请求自己就超了的单独成一个波次。负数的上限不收。
+func TestAWaveRuleCutsWavesByUnitsAndLines(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	byUnits := func(command *application.RegisterWaveRuleCommand) { command.MaxRequests, command.MaxUnits = 10, 3 }
+	if got := world.registerWaveRule(t, handler, waveRuleCommand(t, "SYN-RULE-UNITS", 1, byUnits)); got != application.WaveStrategyRegistered {
+		t.Fatalf("登记按件数切的规则 = %s", got)
+	}
+	negative := func(command *application.RegisterWaveRuleCommand) { command.MaxLines = -1 }
+	if got := world.registerWaveRule(t, handler, waveRuleCommand(t, "SYN-RULE-NEGATIVE", 1, negative)); got != application.WaveContentInvalid {
+		t.Fatalf("负数的行数上限 = %s", got)
+	}
+	reserve("REQ-CAP-1", 2)
+	reserve("REQ-CAP-2", 2)
+	reserve("REQ-CAP-3", 1)
+	reserve("REQ-CAP-4", 4)
+	ran := world.runWaveRule(t, handler, "SYN-RULE-UNITS", "SYN-RUN-UNITS")
+	// 四张同一刻受理，先后按请求号定，这里不认次序，只认：九件、上限三件、有一张四件的，至少要三个波次；
+	// 不止一张请求的波次不超过三件；超过三件的波次只有那一张自己就超了的请求。
+	if ran.Outcome() != application.WaveAllocated || ran.Released() != 4 || len(ran.Waves()) < 3 {
+		t.Fatalf("按件数切 %s：放 %d，波次 %+v", ran.Outcome(), ran.Released(), ran.Waves())
+	}
+	alone := 0
+	for _, wave := range ran.Waves() {
+		row := world.waveRow(t, wave.Wave)
+		var units int64
+		for _, task := range row.Tasks {
+			units += task.Quantity
+		}
+		if units > 3 {
+			alone++
+			if len(row.Requests) != 1 || units != 4 {
+				t.Fatalf("波次 %s 有 %d 张请求、%d 件，超了上限", wave.Wave, len(row.Requests), units)
+			}
+		}
+	}
+	if alone != 1 {
+		t.Fatalf("自己就超了的那一张该单独成一个波次，实际有 %d 个超上限的波次", alone)
+	}
+
+	other, otherHandler, otherReserve := twoCellWorld(t)
+	byLines := func(command *application.RegisterWaveRuleCommand) { command.MaxRequests, command.MaxLines = 10, 2 }
+	if got := other.registerWaveRule(t, otherHandler, waveRuleCommand(t, "SYN-RULE-LINES", 1, byLines)); got != application.WaveStrategyRegistered {
+		t.Fatalf("登记按行数切的规则 = %s", got)
+	}
+	for _, key := range []string{"REQ-LINE-1", "REQ-LINE-2", "REQ-LINE-3"} {
+		otherReserve(key, 1)
+	}
+	lined := other.runWaveRule(t, otherHandler, "SYN-RULE-LINES", "SYN-RUN-LINES")
+	if lined.Outcome() != application.WaveAllocated || len(lined.Waves()) != 2 || lined.Waves()[0].Requests != 2 || lined.Waves()[1].Requests != 1 {
+		t.Fatalf("按行数切 %s：%+v", lined.Outcome(), lined.Waves())
+	}
+	reads, err := adapter.NewWorkspaceReads(other.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overview, err := reads.SettingsOverview(t.Context(), valueOf(t, domain.NewTenantID, "SYN-TENANT-01"))
+	if err != nil || len(overview.WaveRules) != 1 || overview.WaveRules[0].MaxLines != 2 || overview.WaveRules[0].MaxUnits != 0 {
+		t.Fatalf("设置总览里的容量 %+v：%v", overview.WaveRules, err)
+	}
+}
+
 func (world receiptWorld) releasePartial(t *testing.T, handler *application.WaveHandler, id string, requests ...domain.OutboundRequestID) application.WaveResult {
 	t.Helper()
 	var result application.WaveResult

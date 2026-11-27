@@ -19,6 +19,9 @@ export interface WaveRuleRecord {
   profile: string;
   /** 一个波次最多几张出库单。 */
   maxRequests: number;
+  /** 一个波次最多几行、最多几件（基本单位）；不带是不限。 */
+  maxLines?: number;
+  maxUnits?: number;
   batchPick: boolean;
   deactivated: boolean;
   operator: string;
@@ -41,7 +44,10 @@ export function waveRuleSummary(rule: WaveRuleRecord): string {
   if (rule.profile === 'SINGLE_UNIT') parts.push('只圈单品单件');
   else if (rule.profile === 'MULTI_UNIT') parts.push('只圈不是单品单件的');
   if (parts.length === 0) parts.push('这个仓已预占的出库单都圈');
-  parts.push(`一个波次最多 ${rule.maxRequests} 张`);
+  const caps = [`${rule.maxRequests} 张`];
+  if (rule.maxLines) caps.push(`${rule.maxLines} 行`);
+  if (rule.maxUnits) caps.push(`${rule.maxUnits} 件`);
+  parts.push(`一个波次最多 ${caps.join('、')}`);
   parts.push(rule.batchPick ? '合并拣货' : '逐单拣');
   return parts.join('，');
 }
@@ -78,7 +84,9 @@ export function waveRulePreviewText(rule: WaveRuleRecord, total: number | null):
   const handled = Math.min(total, maxRequestsPerWaveRuleRun);
   const waves = Math.ceil(handled / rule.maxRequests);
   const more = total > handled ? `一次最多处理 ${maxRequestsPerWaveRuleRun} 张，剩下的 ${total - handled} 张要再点一次。` : '';
-  return `此刻圈得到 ${total} 张已预占的出库单，全都分配得出的话放成 ${waves} 个波次。${more}分配不出的单会跳过、留在已预占。`;
+  // 规则还限了行数或件数时，波次会切得更碎，切成几个要分配完才知道：只说得出至少几个。
+  const capped = Boolean(rule.maxLines || rule.maxUnits);
+  return `此刻圈得到 ${total} 张已预占的出库单，全都分配得出的话放成${capped ? '至少' : ''} ${waves} 个波次。${more}分配不出的单会跳过、留在已预占。`;
 }
 
 /** 一次执行的号：规则码加到秒的时刻。放出的波次按它依次取号，同一个号只成立一次。 */
