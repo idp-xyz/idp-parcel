@@ -64,7 +64,7 @@ Status: in-progress
 
 | 站 | 页面 | 卡 | 状态 |
 |---|---|---|---|
-| 1 进门 | 登录、外壳、工作台、最近打开、保存的视图、没有授予时各页怎么说 | [01](./stations/01-entry.md) | 待验 |
+| 1 进门 | 登录、外壳、工作台、最近打开、保存的视图、没有授予时各页怎么说 | [01](./stations/01-entry.md) | 未过：15 通过 / 5 不通过 |
 | 2 账号与基础 | 操作者与授予、基础数据、单据编号；授予到位后各页空态巡一遍 | 待出 | — |
 | 3 公司主体 | 公司主体 | 待出 | — |
 | 4 往来单位 | 往来单位 | 待出 | — |
@@ -88,8 +88,13 @@ Status: in-progress
 
 | 票 | 题 | 出自 | 状态 |
 |---|---|---|---|
-| — | — | — | — |
+| [01](./issues/01-command-palette-speaks-english.md) | 命令面板的提示是英文 | 第 1 站 1.7 | ready-for-agent |
+| [02](./issues/02-shipment-views-still-on-the-isolated-read.md) | 运单三个读口仍挂隔离读 | 第 1 站 1.13、1.19 | ready-for-human |
+| [03](./issues/03-saved-views-has-an-entry-before-the-feature.md) | 保存的视图未开放已有入口 | 第 1 站 1.16 | ready-for-human |
+| [04](./issues/04-no-grant-copy-and-the-write-form-still-opens.md) | 没有授予的说明与仍可点开的写表单 | 第 1 站 1.18 | ready-for-agent |
+| [05](./issues/05-workbench-does-not-say-what-a-new-admin-does-first.md) | 工作台不告诉新管理员先去授权 | 第 1 站 1.13 | ready-for-agent |
 
 ## Comments
 
 - 2026-11-27：立项。环境搭好并实测：后端取证（首个管理员读 `GET /operators` 答 200，读 `GET /network-catalog?family=node` 答 403 `OPERATOR_NOT_GRANTED`，不带令牌答 401）；会话在 Cursor 自带浏览器里用首个管理员走通一次登录，落到工作台。搭建脚本 `10-backend.sh`、`20-frontend.sh` 在运行目录。
+- 2026-11-27：第 1 站由本会话代走。15 通过、5 不通过，五张票见上表。02、03 等裁定，不改代码。
