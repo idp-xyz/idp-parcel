@@ -246,9 +246,123 @@ func TestAWaveRuleSkipsARequestThatCannotBeAllocated(t *testing.T) {
 	if row := world.waveRow(t, "SYN-RUN-SKIP-01"); len(row.Requests) != 1 || row.Requests[0] != fits.String() || len(row.Tasks) != 1 || row.Tasks[0].Quantity != 1 {
 		t.Fatalf("放出的波次 %+v", row)
 	}
+	// 跳过的那一张记成放不出的例外，出库请求列表按它筛得出来，写明是哪一次执行跳过的。
+	listed := world.listedOutbound(t, "allocationException=true")
+	if exception := listed[stuck.String()].AllocationException; len(listed) != 1 || exception == nil ||
+		exception.Source != ports.AllocationExceptionFromRule || exception.Reference != "SYN-RUN-SKIP" {
+		t.Fatalf("放不出的例外 %+v", listed)
+	}
 	none := world.runWaveRule(t, handler, "SYN-RULE-SKIP", "SYN-RUN-SKIP-2")
 	if none.Outcome() != application.WaveNothingToRelease || none.Skipped() != 1 || none.Released() != 0 {
 		t.Fatalf("全都分配不出 %s：跳 %d", none.Outcome(), none.Skipped())
+	}
+	if again := world.listedOutbound(t, "allocationException=true")[stuck.String()].AllocationException; again == nil || again.Reference != "SYN-RUN-SKIP-2" {
+		t.Fatalf("再跳过一次之后的例外 %+v", again)
+	}
+}
+
+func (world receiptWorld) releasePartial(t *testing.T, handler *application.WaveHandler, id string, requests ...domain.OutboundRequestID) application.WaveResult {
+	t.Helper()
+	var result application.WaveResult
+	err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		var releaseErr error
+		result, releaseErr = handler.Release(ctx, application.ReleaseWaveCommand{
+			Tenant: valueOf(t, domain.NewTenantID, "SYN-TENANT-01"), ID: valueOf(t, domain.NewWaveID, id),
+			Warehouse: valueOf(t, domain.NewWarehouseCode, "SYN-WH-01"), Operator: valueOf(t, domain.NewRegistrant, "operator-1"),
+			Requests: requests, Partial: true,
+		})
+		return releaseErr
+	})
+	if err != nil {
+		t.Fatalf("放行能放的 %s：%v", id, err)
+	}
+	return result
+}
+
+// Covers: 放波次不选「放行能放的」时有一张不行整个波次不放，什么都不记。选了，分配不出、不是已预占、找不到的各自
+// 带着缘由跳过，其余的放进波次；分配不出的那一张记成放不出的例外，列表筛得出来。同一份重放答已有结果并带着同样的例外，
+// 换一批单用同一个波次号是冲突。点名的全都不行时一个波次也不放。
+func TestAPartialReleaseLetsThroughWhatCanBeAllocatedAndNamesTheRest(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	blocker := reserve("REQ-PART-BLOCKER", 4)
+	released := world.releaseRequests(t, handler, "WAVE-PART-BLOCKER", blocker)
+	if released.Outcome() != application.WaveAllocated || world.pick(t, handler, released.Tasks()[0].ID, 1).Outcome() != application.WavePicked {
+		t.Fatal("没能备出一格少拣的库位")
+	}
+	stuck, fits := reserve("REQ-PART-A-STUCK", 2), reserve("REQ-PART-B-FITS", 1)
+	ghost := valueOf(t, domain.NewOutboundRequestID, "OBR-NOT-THERE")
+	if got := world.releaseRequests(t, handler, "WAVE-PART-ALL", stuck, fits).Outcome(); got != application.WaveContentInvalid {
+		t.Fatalf("不选放行能放的 = %s", got)
+	}
+	if len(world.listedOutbound(t, "allocationException=true")) != 0 || world.requestStatus(t, fits) != "RESERVED" {
+		t.Fatal("整个不放的那一次记下了东西")
+	}
+	reasons := func(result application.WaveResult) map[string]string {
+		named := map[string]string{}
+		for _, exception := range result.Exceptions() {
+			named[exception.Request.String()] = exception.Reason
+		}
+		return named
+	}
+	want := map[string]string{
+		stuck.String(): application.ReleaseNotAllocatable, blocker.String(): application.ReleaseNotReserved, ghost.String(): application.ReleaseNotFound,
+	}
+	partial := world.releasePartial(t, handler, "WAVE-PART", stuck, fits, blocker, ghost)
+	if got := reasons(partial); partial.Outcome() != application.WaveAllocated || len(partial.Tasks()) != 1 || len(got) != 3 ||
+		got[stuck.String()] != want[stuck.String()] || got[blocker.String()] != want[blocker.String()] || got[ghost.String()] != want[ghost.String()] {
+		t.Fatalf("放行能放的 %s：任务 %d 条，例外 %+v", partial.Outcome(), len(partial.Tasks()), got)
+	}
+	if row := world.waveRow(t, "WAVE-PART"); len(row.Requests) != 1 || row.Requests[0] != fits.String() {
+		t.Fatalf("放出的波次 %+v", row.Requests)
+	}
+	if world.requestStatus(t, stuck) != "RESERVED" || world.requestStatus(t, fits) != "ALLOCATED" {
+		t.Fatalf("放行之后 %s / %s", world.requestStatus(t, stuck), world.requestStatus(t, fits))
+	}
+	listed := world.listedOutbound(t, "allocationException=true")
+	if exception := listed[stuck.String()].AllocationException; len(listed) != 1 || exception == nil ||
+		exception.Source != ports.AllocationExceptionFromWave || exception.Reference != "WAVE-PART" {
+		t.Fatalf("放不出的例外 %+v", listed)
+	}
+	if others := world.listedOutbound(t, "allocationException=false"); others[stuck.String()].RequestID != "" || others[fits.String()].RequestID == "" {
+		t.Fatalf("不是例外的那些 %+v", others)
+	}
+	again := world.releasePartial(t, handler, "WAVE-PART", stuck, fits, blocker, ghost)
+	if got := reasons(again); again.Outcome() != application.WaveExisting || len(got) != 3 || got[stuck.String()] != want[stuck.String()] ||
+		got[blocker.String()] != want[blocker.String()] || got[ghost.String()] != want[ghost.String()] {
+		t.Fatalf("同一份重放 %s：%+v", again.Outcome(), got)
+	}
+	if got := world.releasePartial(t, handler, "WAVE-PART", stuck).Outcome(); got != application.WaveConflict {
+		t.Fatalf("同一个波次号换一批单 = %s", got)
+	}
+	nothing := world.releasePartial(t, handler, "WAVE-PART-NONE", stuck, ghost)
+	if nothing.Outcome() != application.WaveNothingToRelease || len(nothing.Exceptions()) != 2 {
+		t.Fatalf("点名的全都不行 %s：%+v", nothing.Outcome(), nothing.Exceptions())
+	}
+}
+
+// Covers: 记着放不出的例外的请求之后放进了波次，那一笔例外就了结了，列表不再把它筛成放不出。
+func TestAnAllocationExceptionEndsWhenTheRequestIsReleased(t *testing.T) {
+	world, handler, reserve := twoCellWorld(t)
+	request := reserve("REQ-EXCEPTION-CLEARED", 1)
+	waves, err := adapter.NewWaves(world.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := valueOf(t, domain.NewTenantID, "SYN-TENANT-01")
+	if err := world.transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		return waves.SaveAllocationException(ctx, tenant, request, ports.AllocationExceptionFromWave, "WAVE-EARLIER", preAdviceNumberingInstant)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if listed := world.listedOutbound(t, "allocationException=true"); len(listed) != 1 || listed[request.String()].AllocationException == nil {
+		t.Fatalf("记下的例外 %+v", listed)
+	}
+	if world.releaseRequests(t, handler, "WAVE-EXCEPTION-CLEARED", request).Outcome() != application.WaveAllocated {
+		t.Fatal("没有放出")
+	}
+	has, err := waves.HasAllocationException(t.Context(), tenant, request)
+	if err != nil || has || len(world.listedOutbound(t, "allocationException=true")) != 0 {
+		t.Fatalf("放进波次之后例外还在：%v %v", has, err)
 	}
 }
 
@@ -275,5 +389,10 @@ func TestWritingWaveRulesRefusesToRunOutsideATransaction(t *testing.T) {
 	}
 	if err := waves.TagWaveRun(context.Background(), tenant, valueOf(t, domain.NewWaveID, "WAVE-1"), rule, "SYN-RUN-1"); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("TagWaveRun：%v", err)
+	}
+	err = waves.SaveAllocationException(context.Background(), tenant, valueOf(t, domain.NewOutboundRequestID, "OBR-1"),
+		ports.AllocationExceptionFromWave, "WAVE-1", preAdviceNumberingInstant)
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("SaveAllocationException：%v", err)
 	}
 }

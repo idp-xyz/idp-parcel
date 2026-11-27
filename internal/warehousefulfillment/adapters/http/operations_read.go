@@ -151,6 +151,7 @@ func NewQueryOutboundRequestsEndpoint(intake CatalogueIntake, queries OutboundRe
 				Lines:                    lines,
 				ReservedQuantity:         row.ReservedQuantity,
 				WantedQuantity:           row.WantedQuantity,
+				AllocationException:      allocationExceptionBodyOf(row.AllocationException),
 			})
 		}
 		writeJSON(response, http.StatusOK, outboundRequestListResponse{
@@ -546,6 +547,22 @@ type outboundRequestRowBody struct {
 	Lines                    []outboundRequestLineBody `json:"lines"`
 	ReservedQuantity         int64                     `json:"reservedQuantity"`
 	WantedQuantity           int64                     `json:"wantedQuantity"`
+	// AllocationException 只在这张请求仍是已预占、最近一次放波次时分配不出被跳过时带。
+	AllocationException *allocationExceptionBody `json:"allocationException,omitempty"`
+}
+
+type allocationExceptionBody struct {
+	// Source 是 WAVE（由人放的波次）或 RULE（按规则成波的一次执行），Reference 是波次号或执行号。
+	Source     string `json:"source"`
+	Reference  string `json:"reference"`
+	RecordedAt string `json:"recordedAt"`
+}
+
+func allocationExceptionBodyOf(row *ports.AllocationExceptionRow) *allocationExceptionBody {
+	if row == nil {
+		return nil
+	}
+	return &allocationExceptionBody{Source: row.Source, Reference: row.Reference, RecordedAt: rfc3339(row.RecordedAt)}
 }
 
 type outboundRequestLineBody struct {

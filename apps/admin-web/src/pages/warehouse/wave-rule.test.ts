@@ -2,10 +2,13 @@ import { deepEqual, equal, ok } from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildGuidedPayload } from './guided-forms';
 import { allWarehouseGuidedForms } from './guided-schemas';
+import { asWarehouseAction } from './actions';
 import {
+  allocationExceptionNote,
   maxRequestsPerWaveRuleRun,
   mintWaveRuleRunId,
   nextWaveRuleRevision,
+  releaseExceptionsText,
   usableWaveRules,
   warehousesWithWaveRules,
   waveRulePreviewConditions,
@@ -98,6 +101,33 @@ test('成波之后的话', () => {
   }
   const strange = waveRuleRunNote({ outcome: 'SOMETHING_NEW' });
   ok(!strange.released && strange.tone === 'danger' && strange.text.includes('SOMETHING_NEW'));
+});
+
+// Covers: 放波次勾了「放行能放的」之后没放进波次的那几张各说缘由；行上「放不出」那一句写明是哪一次跳过的；
+// 放波次表单勾了才带 partial。
+test('放行能放的：例外逐张说缘由，行上写明是哪一次跳过的', () => {
+  equal(releaseExceptionsText(undefined), '');
+  equal(releaseExceptionsText([]), '');
+  const text = releaseExceptionsText([
+    { requestId: 'OBR-1', reason: 'NOT_ALLOCATABLE' },
+    { requestId: 'OBR-2', reason: 'NOT_RESERVED' },
+    { requestId: 'OBR-3', reason: 'NOT_FOUND' },
+    { requestId: 'OBR-4', reason: 'NEW_WORD' },
+  ]);
+  ok(text.startsWith('没放进波次的 4 张：OBR-1（分配不出）、OBR-2（不是已预占）、OBR-3（没有这张单，或不属于这个仓）、OBR-4（NEW_WORD）'));
+  equal(asWarehouseAction({ outcome: 'ALLOCATED', exceptions: [{ requestId: 'OBR-1', reason: 'NOT_ALLOCATABLE' }] }).cause?.includes('OBR-1（分配不出）'), true);
+  equal(asWarehouseAction({ outcome: 'ALLOCATED' }).cause, undefined);
+
+  equal(allocationExceptionNote(undefined), null);
+  const byRule = allocationExceptionNote({ source: 'RULE', reference: 'RUN-1', recordedAt: '2026-11-27T00:00:00Z' });
+  ok(byRule?.label === '上次放不出' && byRule.detail.includes('按规则成波（RUN-1）'));
+  ok(allocationExceptionNote({ source: 'WAVE', reference: 'WAVE-9', recordedAt: '2026-11-27T00:00:00Z' })?.detail.includes('放波次 WAVE-9'));
+
+  const form = allWarehouseGuidedForms['wave-release'];
+  const plain = buildGuidedPayload(form, { waveId: 'W-1', warehouse: 'WH-1', requests: 'OBR-1' });
+  ok(plain.ok && !('partial' in plain.payload));
+  const partial = buildGuidedPayload(form, { waveId: 'W-1', warehouse: 'WH-1', requests: 'OBR-1', partial: true });
+  ok(partial.ok && partial.payload.partial === true);
 });
 
 // Covers: 登记规则的表单装出来的报文：没填的圈单条件不带键（不带才是不限，空串后端不收），没勾的两格不带。

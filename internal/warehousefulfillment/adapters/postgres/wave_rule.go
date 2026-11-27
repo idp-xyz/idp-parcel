@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -163,6 +164,36 @@ func (store *Waves) TagWaveRun(ctx context.Context, tenant domain.TenantID, wave
 		return fmt.Errorf("tag wave run: wave %s is not there or already belongs to a run", wave.String())
 	}
 	return nil
+}
+
+func (store *Waves) SaveAllocationException(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, source, reference string, at time.Time) error {
+	executor, err := store.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("save allocation exception: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO warehouse_fulfillment.outbound_allocation_exception (tenant_id, request_id, source, reference, recorded_at)
+		 VALUES ($1,$2,$3,$4,$5)
+		 ON CONFLICT (tenant_id, request_id) DO UPDATE
+		    SET source = EXCLUDED.source, reference = EXCLUDED.reference, recorded_at = EXCLUDED.recorded_at`,
+		tenant.String(), request.String(), source, reference, at.UTC()); err != nil {
+		return fmt.Errorf("save allocation exception: %w", err)
+	}
+	return nil
+}
+
+func (store *Waves) HasAllocationException(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (bool, error) {
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, err
+	}
+	var has bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM warehouse_fulfillment.outbound_allocation_exception WHERE tenant_id = $1 AND request_id = $2)`,
+		tenant.String(), request.String()).Scan(&has); err != nil {
+		return false, fmt.Errorf("has allocation exception: %w", err)
+	}
+	return has, nil
 }
 
 func (store *Waves) WavesOfRun(ctx context.Context, tenant domain.TenantID, runID string) ([]ports.RuleWave, error) {

@@ -412,6 +412,8 @@ type waveDocument struct {
 	Packaging *string   `json:"packagingMaterial"`
 	// BatchPick 是合并拣货；不带就是逐单拣。
 	BatchPick *bool `json:"batchPick"`
+	// Partial 是放行能放的、跳过不行的；不带是有一张不行整个波次不放。
+	Partial *bool `json:"partial"`
 }
 
 // ReleaseWaveCommand 把放波次译成命令。
@@ -457,6 +459,7 @@ func ReleaseWaveCommand(reader io.Reader) (application.ReleaseWaveCommand, error
 	return application.ReleaseWaveCommand{
 		ID: id, Warehouse: warehouse, Requests: requests, Prefetch: prefetch, Packaging: packaging,
 		BatchPick: document.BatchPick != nil && *document.BatchPick,
+		Partial:   document.Partial != nil && *document.Partial,
 	}, nil
 }
 

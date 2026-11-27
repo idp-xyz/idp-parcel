@@ -203,8 +203,33 @@ func NewReleaseWaveEndpoint(intake WaveReleaseIntake, waves WaveService) http.Ha
 			httpapi.WriteProblem(response, request, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
-		writeWaveAnswer(response, request, result)
+		exceptions := result.Exceptions()
+		if len(exceptions) == 0 {
+			writeWaveAnswer(response, request, result)
+			return
+		}
+		// 选了「放行能放的」而有跳过的：答复逐张带出没放进波次的请求和缘由，人要照它去处理那几张。
+		status := http.StatusOK
+		if result.Outcome() == application.WaveAllocated {
+			status = http.StatusCreated
+		}
+		answer := waveReleaseAnswer{Outcome: result.Outcome().String(), Exceptions: make([]releaseExceptionBody, 0, len(exceptions))}
+		for _, exception := range exceptions {
+			answer.Exceptions = append(answer.Exceptions, releaseExceptionBody{RequestID: exception.Request.String(), Reason: exception.Reason})
+		}
+		writeJSON(response, status, answer)
 	})
+}
+
+type waveReleaseAnswer struct {
+	Outcome    string                 `json:"outcome"`
+	Exceptions []releaseExceptionBody `json:"exceptions"`
+}
+
+type releaseExceptionBody struct {
+	RequestID string `json:"requestId"`
+	// Reason 是 NOT_ALLOCATABLE（分配不出）、NOT_RESERVED（不是已预占）或 NOT_FOUND（没有这张请求，或不属于这个仓）。
+	Reason string `json:"reason"`
 }
 
 // NewShipPickedEndpoint 交回按已拣数量发货的入口（POST /warehouse-fulfillment-outbound-short-shipments）。

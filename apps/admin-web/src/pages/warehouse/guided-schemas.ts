@@ -622,6 +622,13 @@ export const outboundWaveGuidedForms: Record<string, GuidedFormDefinition> = {
         omitWhenFalse: true,
         hint: '勾上：拣货的人按库位、商品把几张单的货合在一起拿，拿回来再按出库单分开。不勾是逐单拣。',
       },
+      {
+        path: 'partial',
+        label: '放行能放的，放不出的跳过',
+        kind: 'boolean',
+        omitWhenFalse: true,
+        hint: '勾上：有的单分配不出时跳过它们、放行其余的，跳过的在答复里逐张列出。不勾：有一张不行，整个波次不放。',
+      },
       { path: 'prefetch', label: '预取估算委托（按包裹序号 1）', kind: 'boolean', omitWhenFalse: true },
       { path: 'packagingMaterial', label: '预取选用包材编码（可选）', kind: 'text', placeholder: 'SYN-BOX-01' },
     ],

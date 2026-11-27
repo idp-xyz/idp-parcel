@@ -66,6 +66,19 @@ type WaveRuleStore interface {
 	WavesOfRun(ctx context.Context, tenant domain.TenantID, runID string) ([]RuleWave, error)
 }
 
+// 放不出的例外是哪一种放波次记下的。
+const (
+	AllocationExceptionFromWave = "WAVE"
+	AllocationExceptionFromRule = "RULE"
+)
+
+// AllocationExceptionStore 记下放波次时分配不出、被跳过的已预占请求。写入在没有环境事务时拒绝。
+type AllocationExceptionStore interface {
+	// SaveAllocationException 记下这张请求最近一次被跳过：source 是哪一种放波次，reference 是波次号或执行号。
+	SaveAllocationException(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID, source, reference string, at time.Time) error
+	HasAllocationException(ctx context.Context, tenant domain.TenantID, request domain.OutboundRequestID) (bool, error)
+}
+
 // WaveRuleOverview 是设置总览里的一条成波规则：它最新的一版。
 type WaveRuleOverview struct {
 	WarehouseCode string

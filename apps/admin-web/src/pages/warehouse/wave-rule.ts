@@ -119,7 +119,8 @@ const refusalWords: Record<string, string> = {
 export function waveRuleRunNote(body: WaveRuleRunBody): WaveRuleRunNote {
   const skipped = body.skipped ?? 0;
   const remaining = body.remaining ?? 0;
-  const skippedText = skipped > 0 ? `有 ${skipped} 张圈到了但分配不出，留在已预占：多半是货不在可拣的库位，或少拣的库位还没盘过。` : '';
+  const skippedText =
+    skipped > 0 ? `有 ${skipped} 张圈到了但分配不出，留在已预占：多半是货不在可拣的库位，或少拣的库位还没盘过。出库单列表按「放不出」筛得出来。` : '';
   const remainingText = remaining > 0 ? `还有 ${remaining} 张这一次没轮到，再点一次接着放。` : '';
   if (body.outcome === 'ALLOCATED' || body.outcome === 'EXISTING_RESULT') {
     const waves = body.waves ?? [];
@@ -137,6 +138,37 @@ export function waveRuleRunNote(body: WaveRuleRunBody): WaveRuleRunNote {
     };
   }
   return { released: false, tone: 'danger', text: refusalWords[body.outcome] ?? `后端答了一个这里不认识的结果（${body.outcome}），没有当成成波。` };
+}
+
+export interface AllocationExceptionRecord {
+  /** WAVE 是由人放的波次（勾了「放行能放的」），RULE 是按规则成波的一次执行。 */
+  source: string;
+  /** 波次号或执行号。 */
+  reference: string;
+  recordedAt: string;
+}
+
+/** 出库单列表行上「放不出」那一句：短词摆在行上，整句悬停时看。没有例外为 null。 */
+export function allocationExceptionNote(exception: AllocationExceptionRecord | undefined): { label: string; detail: string } | null {
+  if (exception === undefined) return null;
+  const when = exception.source === 'RULE' ? `按规则成波（${exception.reference}）` : `放波次 ${exception.reference}`;
+  return {
+    label: '上次放不出',
+    detail: `${when}时这张单分配不出，被跳过了：多半是货不在可拣的库位，或少拣的库位还没盘过。先看它的货在哪个库位，补货或盘点之后再放。`,
+  };
+}
+
+const releaseExceptionWords: Record<string, string> = {
+  NOT_ALLOCATABLE: '分配不出',
+  NOT_RESERVED: '不是已预占',
+  NOT_FOUND: '没有这张单，或不属于这个仓',
+};
+
+/** 放波次勾了「放行能放的」之后，答复里没放进波次的那几张，说成一句。没有就是空串。 */
+export function releaseExceptionsText(exceptions: ReadonlyArray<{ requestId: string; reason: string }> | undefined): string {
+  if (exceptions === undefined || exceptions.length === 0) return '';
+  const named = exceptions.map((exception) => `${exception.requestId}（${releaseExceptionWords[exception.reason] ?? exception.reason}）`);
+  return `没放进波次的 ${exceptions.length} 张：${named.join('、')}。分配不出的留在已预占，出库单列表按「放不出」筛得出来`;
 }
 
 /** 登记下一版时该填的修订号：这条规则没登过是 1。 */

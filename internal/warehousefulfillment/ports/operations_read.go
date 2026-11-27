@@ -27,8 +27,18 @@ var OutboundRequestPages = cataloguepage.MustCatalogue(cataloguepage.Spec{
 		}},
 		// singleUnit 是「单品单件」：这张请求要拣的只有一件（预占需求合计是 1 个基本单位）。
 		{Name: "singleUnit", Vocabulary: cataloguepage.BooleanVocabulary()},
+		// allocationException 是「放不出」：仍是已预占，最近一次放波次时分配不出、被跳过了。
+		{Name: "allocationException", Vocabulary: cataloguepage.BooleanVocabulary()},
 	},
 })
+
+// AllocationExceptionRow 是一张已预占的请求最近一次放波次时分配不出、被跳过的那一笔。
+// Source 是 WAVE（由人放的波次）或 RULE（按规则成波的一次执行），Reference 是波次号或执行号。
+type AllocationExceptionRow struct {
+	Source     string
+	Reference  string
+	RecordedAt time.Time
+}
 
 // OutboundRequestLineRow 是出库请求列表项带出的一条商品明细。
 type OutboundRequestLineRow struct {
@@ -64,6 +74,8 @@ type OutboundRequestRow struct {
 	Lines                    []OutboundRequestLineRow
 	ReservedQuantity         int64
 	WantedQuantity           int64
+	// AllocationException 只在这张请求仍是已预占、最近一次放波次时分配不出被跳过时有。
+	AllocationException *AllocationExceptionRow
 }
 
 // 波次的状态存在波次上，只由一条规则从它的拣货任务算：任务的状态每变一次，写任务的那一笔事务里重算所属的波次。

@@ -136,6 +136,12 @@ func (store *Waves) SaveWave(ctx context.Context, tenant domain.TenantID, id dom
 		if tag.RowsAffected() != 1 {
 			return fmt.Errorf("allocate outbound request: %s was not reserved", request.String())
 		}
+		// 放进了波次，之前「放不出」的那一笔例外就了结了。
+		if _, err := executor.Exec(ctx,
+			`DELETE FROM warehouse_fulfillment.outbound_allocation_exception WHERE tenant_id = $1 AND request_id = $2`,
+			tenant.String(), request.String()); err != nil {
+			return fmt.Errorf("clear allocation exception: %w", err)
+		}
 	}
 	for _, task := range tasks {
 		if _, err := executor.Exec(ctx,

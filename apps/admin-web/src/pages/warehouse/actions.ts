@@ -1,5 +1,6 @@
 import { postMasterData, type ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
+import { releaseExceptionsText } from './wave-rule';
 
 /** 仓配其余各页写口的统一答复译法。把 reason、field、missing、status、documentNumber、occurrenceId 与 issues 折成登记面板能示出的原因。 */
 export interface WarehouseActionBody {
@@ -13,6 +14,8 @@ export interface WarehouseActionBody {
   occurrenceId?: string;
   version?: number;
   issues?: ReadonlyArray<{ side?: string; line?: number; carton?: number; kind?: string }>;
+  /** 放波次勾了「放行能放的」时，点名了而没放进波次的出库请求和缘由。 */
+  exceptions?: ReadonlyArray<{ requestId: string; reason: string }>;
 }
 
 export function asWarehouseAction(body: WarehouseActionBody): RegistrationResponseBody {
@@ -36,6 +39,8 @@ export function asWarehouseAction(body: WarehouseActionBody): RegistrationRespon
             : '条目';
     parts.push(`${place}：${issue.kind ?? '不合'}`);
   }
+  const skipped = releaseExceptionsText(body.exceptions);
+  if (skipped !== '') parts.push(skipped);
   return {
     outcome: body.outcome,
     ...(body.refusal ? { refusalReason: body.refusal } : {}),
@@ -471,7 +476,7 @@ export const outboundWaveActionSpecs: readonly WarehouseActionSpec[] = [
     endpoint: '/warehouse-fulfillment-waves',
     grant: 'WAVE_RELEASE',
     snapshotHint:
-      '填 waveId、warehouse、requests（出库请求标识数组），可选 batchPick（是否合并拣货）、prefetch（是否预取估算委托）与 packagingMaterial（预取时选用的包材编码）。未采用分配策略时答未配置。' +
+      '填 waveId、warehouse、requests（出库请求标识数组），可选 batchPick（是否合并拣货）、partial（放行能放的，跳过不行的）、prefetch（是否预取估算委托）与 packagingMaterial（预取时选用的包材编码）。未采用分配策略时答未配置。' +
       noActorNote,
   },
   {

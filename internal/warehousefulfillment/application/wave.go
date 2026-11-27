@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -162,6 +163,13 @@ func (outcome WaveOutcome) String() string {
 type WaveResult struct {
 	outcome WaveOutcome
 	tasks   []ports.PickTask
+	// exceptions 只在选了「放行能放的」的放波次里有：点名了而没放进波次的请求。
+	exceptions []ReleaseException
+}
+
+// Exceptions 是这一次放波次点名了而没放进波次的请求和各自的缘由。
+func (result WaveResult) Exceptions() []ReleaseException {
+	return append([]ReleaseException(nil), result.exceptions...)
 }
 
 func (result WaveResult) Outcome() WaveOutcome { return result.outcome }
@@ -181,6 +189,9 @@ type ReleaseWaveCommand struct {
 	// BatchPick 是合并拣货：拣货的人按库位、商品把几张请求的货合在一起拿，拿回来再按请求分拣。
 	// 不选是逐单拣。分配与任务不因它而变——一条任务仍是某张请求在某个库位取几件。
 	BatchPick bool
+	// Partial 是「放行能放的」：点名的请求里有分配不出、不是已预占或找不到的，跳过它们、放行其余的，
+	// 跳过的在答复里逐张带出缘由。不选时有一张不行整个波次不放。
+	Partial bool
 }
 
 // PickCommand 是一条拣货事实。实拣可以少于任务数量。
@@ -343,6 +354,9 @@ func (handler *WaveHandler) Release(ctx context.Context, command ReleaseWaveComm
 			}
 			return WaveResult{outcome: WaveExisting, tasks: tasks}, nil
 		}
+		if command.Partial {
+			return handler.replayPartialRelease(ctx, command, existing)
+		}
 		return WaveResult{outcome: WaveConflict}, nil
 	}
 	if _, adopted, err := handler.waves.LoadStrategy(ctx, command.Tenant); err != nil {
@@ -351,6 +365,10 @@ func (handler *WaveHandler) Release(ctx context.Context, command ReleaseWaveComm
 		return WaveResult{outcome: WaveNotConfigured}, nil
 	}
 	var tasks []ports.PickTask
+	// members 是放进这个波次的请求。不选「放行能放的」时它就是点名的全部：有一张不行整个波次不放。
+	// 选了，不行的那几张记进 exceptions、留在原处，放行其余的。
+	var members []domain.OutboundRequestID
+	var exceptions []ReleaseException
 	owners := map[string]domain.OwnerAccountID{}
 	// 同一波次里先分走的数量还没落成拣货任务，后一份请求再读占用账看不见。
 	taken := map[string]int64{}
@@ -360,33 +378,63 @@ func (handler *WaveHandler) Release(ctx context.Context, command ReleaseWaveComm
 			return WaveResult{}, fmt.Errorf("release wave: %w", err)
 		}
 		if !found || request.Warehouse() != command.Warehouse {
-			return WaveResult{outcome: WaveNotFound}, nil
+			if !command.Partial {
+				return WaveResult{outcome: WaveNotFound}, nil
+			}
+			exceptions = append(exceptions, ReleaseException{Request: id, Reason: ReleaseNotFound})
+			continue
 		}
 		if request.Status() != domain.OutboundReserved {
-			return WaveResult{outcome: WaveStatusMismatch}, nil
+			if !command.Partial {
+				return WaveResult{outcome: WaveStatusMismatch}, nil
+			}
+			exceptions = append(exceptions, ReleaseException{Request: id, Reason: ReleaseNotReserved})
+			continue
 		}
-		owners[request.Owner().String()] = request.Owner()
+		// 分配不出时 allocate 已经往 taken 里记了一半，放行其余的之前照分配之前的那一份还原。
+		before := maps.Clone(taken)
 		allocated, err := handler.allocate(ctx, command, request, taken)
 		if err != nil {
 			return WaveResult{}, fmt.Errorf("release wave: %w", err)
 		}
 		if allocated == nil {
-			return WaveResult{outcome: WaveContentInvalid}, nil
+			if !command.Partial {
+				return WaveResult{outcome: WaveContentInvalid}, nil
+			}
+			taken = before
+			exceptions = append(exceptions, ReleaseException{Request: id, Reason: ReleaseNotAllocatable})
+			continue
 		}
+		owners[request.Owner().String()] = request.Owner()
+		members = append(members, id)
 		tasks = append(tasks, allocated...)
+	}
+	at := handler.clock.Now()
+	for _, exception := range exceptions {
+		if exception.Reason != ReleaseNotAllocatable {
+			continue
+		}
+		if err := handler.waves.SaveAllocationException(ctx, command.Tenant, exception.Request, ports.AllocationExceptionFromWave, command.ID.String(), at); err != nil {
+			return WaveResult{}, fmt.Errorf("release wave: %w", err)
+		}
+	}
+	if len(members) == 0 {
+		return WaveResult{outcome: WaveNothingToRelease, exceptions: exceptions}, nil
 	}
 	for _, owner := range owners {
 		if err := handler.ledger.SerializePosting(ctx, command.Tenant, owner, command.Warehouse); err != nil {
 			return WaveResult{}, fmt.Errorf("release wave: %w", err)
 		}
 	}
-	if err := handler.waves.SaveWave(ctx, command.Tenant, command.ID, command.Warehouse, command.Operator, command.Prefetch, command.BatchPick, handler.clock.Now(), command.Requests, tasks); err != nil {
+	// 预取只对放进了波次的请求做：例外的那几张没有任务。
+	command.Requests = members
+	if err := handler.waves.SaveWave(ctx, command.Tenant, command.ID, command.Warehouse, command.Operator, command.Prefetch, command.BatchPick, at, members, tasks); err != nil {
 		return WaveResult{}, fmt.Errorf("release wave: %w", err)
 	}
 	if err := handler.prefetchRequests(ctx, command, tasks); err != nil {
 		return WaveResult{}, err
 	}
-	return WaveResult{outcome: WaveAllocated, tasks: tasks}, nil
+	return WaveResult{outcome: WaveAllocated, tasks: tasks, exceptions: exceptions}, nil
 }
 
 func (handler *WaveHandler) Pick(ctx context.Context, command PickCommand) (WaveResult, error) {

@@ -16,6 +16,7 @@ import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { outboundWaveActionSpecs } from './actions';
 import { ActionDrawer, useActionDrawer, type ActionDrawerControl } from './ActionDrawer';
 import { listOutboundRequests, type OutboundRequestRecord } from './api';
+import { allocationExceptionNote } from './wave-rule';
 import { WaveRuleRunDialog } from './WaveRuleRunDialog';
 import { DocumentLink } from './document-page';
 import { fitColumnWidth, linesSummary, nameOf, shortInstant, waitedSortParam } from './list-cells';
@@ -46,6 +47,8 @@ const queueLabel = (queue: string) => (queue === attentionQueue ? '待处理' : 
 const dispatchWords = ['PRODUCT_NETWORK', 'OWNER_LABEL', 'PICKUP'] as const;
 /** 件型筛选里「单品单件」的值；读口的筛选维是 singleUnit。 */
 const singleUnitProfile = 'SINGLE_UNIT';
+// 「放不出」：仍是已预占，最近一次放波次（勾了「放行能放的」，或按规则成波）时分配不出、被跳过的单。
+const unallocatableException = 'UNALLOCATABLE';
 
 // 「已等」是唯一能排的列（读口只按受理时刻排）。等得久的在前、刚受理的在前，各是它的降序与升序。
 const waitedKey = 'waited';
@@ -92,6 +95,7 @@ function OutboundList() {
   const [dispatch, setDispatch] = useTabViewState('warehouse-outbound.dispatch', '');
   // 件型：现在只有「单品单件」一种可筛——整张单要拣的只有一件。筛出来放成一个波次，拣货时同库位同商品合成一格拿。
   const [profile, setProfile] = useTabViewState('warehouse-outbound.profile', '');
+  const [exception, setException] = useTabViewState('warehouse-outbound.exception', '');
   const [chosenSort, setChosenSort] = useTabViewState<WorkbenchSort | null>('warehouse-outbound.sort', null);
   const [openKey, setOpenKey] = useTabViewState<string | null>('warehouse-outbound.open', null);
   const [basket, setBasket] = useState<ReadonlyMap<string, OutboundRequestRecord>>(() => new Map());
@@ -107,6 +111,7 @@ function OutboundList() {
   if (warehouse) baseFilters.warehouseCode = [warehouse];
   if (dispatch) baseFilters.dispatch = [dispatch];
   if (profile === singleUnitProfile) baseFilters.singleUnit = ['true'];
+  if (exception === unallocatableException) baseFilters.allocationException = ['true'];
   const base: CatalogueConditions = { q: settled, filters: baseFilters };
   // 选了某一队之后等得最久的在最上面；看全部或已了结的，最新受理的在上面。人点过表头就照他的。
   const sort = chosenSort ?? (isWorkingQueue(queue) ? longestWaitFirst : newestFirst);
@@ -255,7 +260,7 @@ function OutboundList() {
   }));
 
   const narrowed =
-    settled.trim() !== '' || queue !== allQueues || owner !== '' || warehouse !== '' || dispatch !== '' || profile !== '';
+    settled.trim() !== '' || queue !== allQueues || owner !== '' || warehouse !== '' || dispatch !== '' || profile !== '' || exception !== '';
   const clearFilters = () => {
     setKeyword('');
     setQueue(allQueues);
@@ -263,6 +268,7 @@ function OutboundList() {
     setWarehouse('');
     setDispatch('');
     setProfile('');
+    setException('');
     setOnlyBasket(false);
   };
   // 只看已选时摆的是篮里的行，读口这一问答成什么样都不改它：照就绪摆。
@@ -342,6 +348,12 @@ function OutboundList() {
               value={profile}
               onChange={narrowing(setProfile)}
               options={[{ value: singleUnitProfile, label: '单品单件' }]}
+            />
+            <WmsFilterSelect
+              label="例外"
+              value={exception}
+              onChange={narrowing(setException)}
+              options={[{ value: unallocatableException, label: '放不出' }]}
             />
             {narrowed ? (
               <button
@@ -450,7 +462,7 @@ function NextStepCell({
   if (next.kind === 'wave' && !drawer.has('wave-release')) return <span className="whitespace-nowrap text-idpxyz-textMuted">等放波次</span>;
   // 能做的一步在每一行上是同一个样子的钮，不论它是就地开表单还是去别的页：操作者要认的是「这一单现在该做什么」，
   // 不是这一步落在哪里。
-  return (
+  const step = (
     <Button
       type="button"
       size="sm"
@@ -467,5 +479,16 @@ function NextStepCell({
     >
       {next.label}
     </Button>
+  );
+  // 上一次放波次时这张单分配不出、被跳过了：再点「放波次」多半还是放不出，先说清为什么、该去看什么。
+  const exception = next.kind === 'wave' ? allocationExceptionNote(row.allocationException) : null;
+  if (exception === null) return step;
+  return (
+    <span className="inline-flex flex-col items-start gap-0.5">
+      {step}
+      <span className="whitespace-nowrap type-caption text-[color:var(--ds-status-warning-fg)]" title={exception.detail}>
+        {exception.label}
+      </span>
+    </span>
   );
 }

@@ -22,15 +22,31 @@ const outboundRequestListColumns = `
 
 // single_unit_word 是「单品单件」筛选用的那一列：这张请求要拣的只有一件，即预占需求合计是 1 个基本单位。
 // 口径与 waveIsSingleUnit 对每张请求问的是同一句；代理仓的请求不预占，合计是 0，不算。
-const outboundRequestListed = `WITH listed AS (
+var outboundRequestListed = `WITH listed AS (
 	SELECT ` + outboundRequestListColumns + `,
 	       ((SELECT coalesce(sum(reservation.wanted), 0)
 	           FROM warehouse_fulfillment.outbound_reservation reservation
 	          WHERE reservation.tenant_id = request.tenant_id
-	            AND reservation.request_id = request.request_id) = 1)::text AS single_unit_word
+	            AND reservation.request_id = request.request_id) = 1)::text AS single_unit_word,
+	       ` + allocationExceptionColumn("source") + ` AS exception_source,
+	       ` + allocationExceptionColumn("reference") + ` AS exception_reference,
+	       ` + allocationExceptionColumn("recorded_at") + ` AS exception_recorded_at,
+	       (` + allocationExceptionColumn("source") + ` IS NOT NULL)::text AS allocation_exception_word
 	  FROM warehouse_fulfillment.outbound_request request
 	 WHERE request.tenant_id = $1
 )`
+
+// allocationExceptionColumn 取这张请求记着的放不出的例外的一格。只认仍是已预占的请求：
+// 请求取消或拆开之后那一行还在表里，但它已经不是「等着放而放不出」的单了。
+func allocationExceptionColumn(column string) string {
+	return `(SELECT exception.` + column + `
+	           FROM warehouse_fulfillment.outbound_allocation_exception exception
+	          WHERE exception.tenant_id = request.tenant_id AND exception.request_id = request.request_id
+	            AND request.status = 'RESERVED')`
+}
+
+// outboundRequestListSelection 是列表从 listed 里取的列：请求自己的各格，再加放不出的例外那三格。
+const outboundRequestListSelection = outboundRequestListColumns + `, exception_source, exception_reference, exception_recorded_at`
 
 var outboundRequestListBinding = ports.OutboundRequestPages.MustBind(cataloguepage.Columns{
 	Sorts: map[string]string{
@@ -39,11 +55,12 @@ var outboundRequestListBinding = ports.OutboundRequestPages.MustBind(cataloguepa
 	},
 	Identity: []string{"request_id"},
 	Filters: map[string]string{
-		"ownerAccount":  "owner_account_id",
-		"warehouseCode": "warehouse_code",
-		"dispatch":      "dispatch",
-		"status":        "status",
-		"singleUnit":    "single_unit_word",
+		"ownerAccount":        "owner_account_id",
+		"warehouseCode":       "warehouse_code",
+		"dispatch":            "dispatch",
+		"status":              "status",
+		"singleUnit":          "single_unit_word",
+		"allocationException": "allocation_exception_word",
 	},
 	Keyword: []string{"request_id", "document_number", "owner_account_id", "warehouse_code", "recipient", "request_key"},
 })
@@ -74,7 +91,7 @@ func (store *OutboundRequests) List(
 	if err := querier.QueryRow(ctx, outboundRequestListed+" "+plan.CountSQL("listed"), plan.Args...).Scan(&total); err != nil {
 		return fail(err)
 	}
-	rows, err := querier.Query(ctx, outboundRequestListed+" "+plan.PageSQL(outboundRequestListColumns, "listed"), plan.PageArgs...)
+	rows, err := querier.Query(ctx, outboundRequestListed+" "+plan.PageSQL(outboundRequestListSelection, "listed"), plan.PageArgs...)
 	if err != nil {
 		return fail(err)
 	}
@@ -85,14 +102,20 @@ func (store *OutboundRequests) List(
 			item                                              ports.OutboundRequestRow
 			service, basis, operator, number, absence, parent *string
 			prefetchShipment, prefetchDeclared, partial       *string
+			exceptionSource, exceptionReference               *string
+			exceptionAt                                       *time.Time
 		)
 		if err := rows.Scan(
 			&item.RequestID, &item.OwnerAccount, &item.WarehouseCode, &item.Origin, &item.RequestKey, &item.Dispatch,
 			&service, &item.Recipient, &item.Address, &basis, &operator, &item.Status, &number,
 			&absence, &item.ReceivedAt, &parent, &item.PlatformStocking,
 			&prefetchShipment, &prefetchDeclared, &partial,
+			&exceptionSource, &exceptionReference, &exceptionAt,
 		); err != nil {
 			return fail(err)
+		}
+		if exceptionSource != nil && exceptionReference != nil && exceptionAt != nil {
+			item.AllocationException = &ports.AllocationExceptionRow{Source: *exceptionSource, Reference: *exceptionReference, RecordedAt: *exceptionAt}
 		}
 		item.PartialShipment = valueOrEmpty(partial)
 		item.Service = valueOrEmpty(service)

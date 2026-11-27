@@ -4,7 +4,7 @@ import type { CatalogueConditions, CataloguePage } from '../catalogue-query';
 import { catalogueRequestPath } from '../catalogue-query';
 import { asCatalogueRegistration, asStockImportWrite, type CatalogueRegistrationBody, type StockImportWriteBody } from './answers';
 import type { PartialShipmentAnswer, ShortPickDisposalAnswer } from './partial-shipment';
-import type { WaveRuleRecord, WaveRuleRunBody } from './wave-rule';
+import type { AllocationExceptionRecord, WaveRuleRecord, WaveRuleRunBody } from './wave-rule';
 import {
   catalogueReadPath,
   catalogueWritePaths,
@@ -585,6 +585,8 @@ export interface OutboundRequestRecord {
   lines: OutboundRequestLineRecord[];
   reservedQuantity: number;
   wantedQuantity: number;
+  /** 只在这张单仍是已预占、最近一次放波次时分配不出被跳过时带；只有列表读口带这一格。 */
+  allocationException?: AllocationExceptionRecord;
 }
 
 export interface OutboundRequestListBody {

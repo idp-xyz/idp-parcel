@@ -124,7 +124,8 @@ func (result WaveRuleRunResult) Remaining() int { return result.remaining }
 
 // RunWaveRule 照规则圈单，受理得早的在前，每满规则登的张数切成一个波次放出；分配照放波次的同一套办。
 // 圈到的请求里有分配不出的（库存不在可拣的库位、少拣的库位还没盘过），跳过它、留在已预占，不让一张单挡住整批。
-// 一个波次也没放出时什么都不记，答没有可放的。同一个执行号重放答已有结果，带着当时放出的波次。
+// 一个波次也没放出时不记这一次执行，答没有可放的；跳过的请求照样记成放不出的例外。
+// 同一个执行号重放答已有结果，带着当时放出的波次。
 //
 // 规则不带预取：估算委托要选包材，那是放某一个波次时人定的，不是规则圈单的条件。
 func (handler *WaveHandler) RunWaveRule(ctx context.Context, command RunWaveRuleCommand) (WaveRuleRunResult, error) {
@@ -256,6 +257,10 @@ func (handler *WaveHandler) RunWaveRule(ctx context.Context, command RunWaveRule
 		if allocated == nil {
 			taken = before
 			result.skipped++
+			// 跳过的这一张记成放不出的例外：人要在出库单列表里找得到它，不能只在这一次的答复里见一个数。
+			if err := handler.waves.SaveAllocationException(ctx, command.Tenant, id, ports.AllocationExceptionFromRule, command.RunID.String(), at); err != nil {
+				return WaveRuleRunResult{}, fmt.Errorf("run wave rule: %w", err)
+			}
 			continue
 		}
 		members = append(members, id)
