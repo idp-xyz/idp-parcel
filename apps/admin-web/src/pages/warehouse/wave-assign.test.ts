@@ -42,6 +42,10 @@ test('可选的拣货人：在这个仓有作业授予的在前，没有的写�
     ['decision-only', 'expired', 'not-yet', 'other-warehouse', 'revoked'].map((subject) => `${issuer}#${subject}`),
   );
   equal(options.find((option) => option.value.endsWith('#revoked'))?.label, 'revoked（在这个仓没有作业授予，派了也拣不了）');
+  // 登记时写的依据摆在 sub 后面帮人认，太长就截
+  const named = assigneeOptions([{ ...operator('sub-1', [grant()]), basis: '早班拣货员 小王' }, { ...operator('sub-2', [grant()]), basis: '一'.repeat(30) }], 'WH-1', now);
+  equal(named[0].label, 'sub-1 · 早班拣货员 小王');
+  equal(named[1].label, `sub-2 · ${'一'.repeat(24)}…`);
 });
 
 // Covers: 指派的报文：选了人带上他，不派不带 assignee（不带才是取消指派）。
