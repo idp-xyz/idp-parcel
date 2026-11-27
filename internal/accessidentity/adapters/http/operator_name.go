@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	"go.idp.xyz/idp-parcel/internal/accessidentity/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
@@ -37,16 +35,9 @@ func OperatorNameListHandler(wired http.Handler) http.Handler {
 	return wired
 }
 
-type operatorNamePayload struct {
-	Issuer  string `json:"issuer"`
-	Subject string `json:"subject"`
-	// Name 不带是删掉这位操作者的姓名；带了就得是一个名字，空白不是「删掉」的写法。
-	Name *string `json:"name"`
-}
-
-// NewRecordOperatorNameEndpoint 交回登操作者姓名的口。载荷是主体（issuer、subject）与姓名；不带 name 是删掉。
-// 租户只取自信封：只能给本租户册上的主体登，别的租户的主体与不存在的主体同答 OPERATOR_NOT_FOUND。
-// 登上或换了答 201，删掉与查无答 200。
+// NewRecordOperatorNameEndpoint 交回登操作者姓名的口。载荷是 registrationjson.OperatorNameItem，与受控命令行的单项同一份：
+// 主体（issuer、subject）与姓名，不带 name 是删掉。租户只取自信封：只能给本租户册上的主体登，别的租户的主体与不存在的
+// 主体同答 OPERATOR_NOT_FOUND。登的人记调用者的「发行方#sub」。登上或换了答 201，删掉与查无答 200。
 func NewRecordOperatorNameEndpoint(
 	authenticator OperatorAccessAdministrationAuthenticator,
 	transactor bentoapp.Transactor,
@@ -64,29 +55,21 @@ func NewRecordOperatorNameEndpoint(
 			writeCatalogueProblem(response, err)
 			return
 		}
-		var payload operatorNamePayload
+		var payload registrationjson.OperatorNameItem
 		if err := decodeClosedDocument(request, &payload); err != nil {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-		subject, err := accessidentity.NewOperatorSubject(payload.Issuer, payload.Subject)
+		subject, name, err := registrationjson.OperatorNameFrom(payload)
 		if err != nil {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
-		name := ""
-		if payload.Name != nil {
-			name = strings.TrimSpace(*payload.Name)
-			// 控制字符（含 NUL、换行）不是名字的一部分：NUL 库不收，换行会把列表上的一格撑成几行。
-			if name == "" || utf8.RuneCountInString(name) > accessidentity.MaxOperatorNameLength || strings.ContainsFunc(name, unicode.IsControl) {
-				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-				return
-			}
-		}
+		recordedBy := administrator.Subject.Issuer() + "#" + administrator.Subject.Subject()
 		var outcome accessidentity.OperatorNameOutcome
 		if err := transactor.WithinTransaction(request.Context(), func(txCtx context.Context) error {
 			var saveErr error
-			outcome, saveErr = book.SaveOperatorName(txCtx, administrator.TenantID, subject, name, administrator.Subject)
+			outcome, saveErr = book.SaveOperatorName(txCtx, administrator.TenantID, subject, name, recordedBy)
 			return saveErr
 		}); err != nil {
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)

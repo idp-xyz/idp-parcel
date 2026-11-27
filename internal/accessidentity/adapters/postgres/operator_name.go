@@ -15,8 +15,7 @@ func (registry *OperatorRegistry) SaveOperatorName(
 	ctx context.Context,
 	tenantID string,
 	subject accessidentity.OperatorSubject,
-	name string,
-	by accessidentity.OperatorSubject,
+	name, recordedBy string,
 ) (accessidentity.OperatorNameOutcome, error) {
 	const operation = "save operator name"
 	executor, err := registry.db.RequireExecutor(ctx)
@@ -40,12 +39,14 @@ func (registry *OperatorRegistry) SaveOperatorName(
 		}
 		return accessidentity.OperatorNameCleared, nil
 	}
+	// 姓名没变就不动那一行：受控命令行重跑同一批是重放，「谁登的、什么时候登的」留着头一次的。
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO access_identity.operator_name (issuer, subject, tenant_id, name, recorded_by)
 		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (issuer, subject) DO UPDATE
-		    SET name = EXCLUDED.name, recorded_by = EXCLUDED.recorded_by, recorded_at = now()`,
-		subject.Issuer(), subject.Subject(), tenantID, name, by.Issuer()+"#"+by.Subject()); err != nil {
+		    SET name = EXCLUDED.name, recorded_by = EXCLUDED.recorded_by, recorded_at = now()
+		  WHERE access_identity.operator_name.name IS DISTINCT FROM EXCLUDED.name`,
+		subject.Issuer(), subject.Subject(), tenantID, name, recordedBy); err != nil {
 		return "", fmt.Errorf("%s: %w", operation, err)
 	}
 	return accessidentity.OperatorNameRecorded, nil

@@ -1,5 +1,5 @@
 // parcel-access-register 是 accessidentity 各本册的受控登记口：操作者册（票 operator-channel/01）登记操作者主体、
-// 按能力面授予（「作业事实登记」一格带作业范围，票 operator-channel/10）、撤销授予；集成客户端册（票 operator-channel/11）
+// 按能力面授予（「作业事实登记」一格带作业范围，票 operator-channel/10）、撤销授予、登改删操作者姓名；集成客户端册（票 operator-channel/11）
 // 登记客户端主体、按事实类型授予、撤销授予；作业设备册（票 operator-channel/10）登记设备、停用设备；准入范围对照册
 // （票 operator-channel/19，ADR-0180）登记对照、结束对照；推送源册（票 operator-channel/12）登记推送源、签名密钥与停用；
 // 客户渠道册（票 first-party-api/00，ADR-0139）登记首方客户端主体、按客户面能力授予、撤销授予。
@@ -39,7 +39,7 @@ const (
 	exitAttention = 2
 )
 
-const usage = "用法：parcel-access-register <operator-register|operator-grant|operator-revoke|" +
+const usage = "用法：parcel-access-register <operator-register|operator-grant|operator-revoke|operator-name|" +
 	"integration-client-register|integration-client-grant|integration-client-revoke|" +
 	"device-register|device-deactivate|admission-scope-mapping-register|admission-scope-mapping-end|" +
 	"push-source-register|push-signing-key-register|push-signing-key-retire|" +
@@ -71,6 +71,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 		translate = grantBatchFromJSON
 	case "operator-revoke":
 		translate = revocationBatchFromJSON
+	case "operator-name":
+		translate = operatorNameBatchFromJSON
 	case "integration-client-register":
 		translate = integrationClientBatchFromJSON
 	case "integration-client-grant":
@@ -107,6 +109,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 // registers 是一批里各项可能要落的各本册的登记口；每一项只用它那一本。
 type registers struct {
 	operators   accessidentity.OperatorRegistrar
+	names       accessidentity.OperatorNameBook
 	clients     accessidentity.IntegrationClientRegistrar
 	devices     accessidentity.DeviceRegistrar
 	mappings    accessidentity.AdmissionScopeMappingRegistrar
@@ -191,7 +194,8 @@ func runBatch(
 		fmt.Fprintf(errOut, "构造客户渠道册：%v\n", err)
 		return exitTechnical
 	}
-	books := registers{operators: operators, clients: clients, devices: devices, mappings: mappings, pushSources: pushSources,
+	// 姓名与操作者册是同一只适配器：姓名行回指操作者的绑定。
+	books := registers{operators: operators, names: operators, clients: clients, devices: devices, mappings: mappings, pushSources: pushSources,
 		customers: customers}
 
 	// 批不是聚合：逐项各起事务，某项被拒不撤已落的前项，重跑同一批已落项以重放回答

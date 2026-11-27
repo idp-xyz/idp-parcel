@@ -44,6 +44,30 @@ type RevocationItem struct {
 	Basis     string    `json:"basis"`
 }
 
+// OperatorNameItem 是登、改或删一位操作者姓名的单项。Name 不带是删掉这位操作者的姓名；带了就得是一个名字。
+type OperatorNameItem struct {
+	Issuer  string  `json:"issuer"`
+	Subject string  `json:"subject"`
+	Name    *string `json:"name"`
+}
+
+// OperatorNameFrom 译一项姓名：交回主体与要登的姓名，姓名为空串即删掉。带了 name 就过 accessidentity.NewOperatorName，
+// 空白不当成删掉——批文里一个写坏的姓名不该静静把人的姓名删了。
+func OperatorNameFrom(entry OperatorNameItem) (accessidentity.OperatorSubject, string, error) {
+	subject, err := accessidentity.NewOperatorSubject(entry.Issuer, entry.Subject)
+	if err != nil {
+		return accessidentity.OperatorSubject{}, "", err
+	}
+	if entry.Name == nil {
+		return subject, "", nil
+	}
+	name, err := accessidentity.NewOperatorName(*entry.Name)
+	if err != nil {
+		return accessidentity.OperatorSubject{}, "", err
+	}
+	return subject, name, nil
+}
+
 // BindingFrom 译一个操作者主体的绑定：逐字段过 accessidentity 的构造门，一格不代填。
 func BindingFrom(tenantID string, entry OperatorItem) (accessidentity.OperatorBinding, error) {
 	subject, err := accessidentity.NewOperatorSubject(entry.Issuer, entry.Subject)

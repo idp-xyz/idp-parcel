@@ -149,7 +149,7 @@
 
 - **绑定**（操作者、集成客户端、首方客户端、推送源）：登记后不变。
 - **授予**：已登记 → 区间内生效 →（区间到期，或另登一笔撤销）不再生效。记录只增不改。
-- **操作者姓名**：可登、可改、可删，库里只留此刻这一个，不留改过的历史；行上记是谁登的。只能给本租户册上的主体登，别的租户的主体与不存在的主体同答 `OPERATOR_NOT_FOUND`。为什么姓名进库见 [decisions.md「接入与身份」](../decisions.md#接入与身份)。
+- **操作者姓名**：可登、可改、可删，库里只留此刻这一个，不留改过的历史；行上记是谁登的（在线口记调用者，离线批记批头的 `recordedBy`），同一个姓名再登一遍不动那一行。只能给本租户册上的主体登，别的租户的主体与不存在的主体同答 `OPERATOR_NOT_FOUND`。为什么姓名进库见 [decisions.md「接入与身份」](../decisions.md#接入与身份)。
 - **作业设备**：已登记 → 停用（另登一行，带时刻与依据）。
 - **推送签名密钥**：已登记 → 区间内生效 → 停用。
 - **准入范围对照**：已登记 → 结束（另登一行）。换试点范围版本时先在切换时刻结束旧行，再自同一时刻登新行。
@@ -172,7 +172,7 @@
 
 部署参数：`IDP_PARCEL_OPERATOR_OIDC_*`、`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_*`、`IDP_PARCEL_CUSTOMER_API_OIDC_*`（各含 `ISSUER` `JWKS_URL` `AUDIENCE`），以及 `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY`（本产品在治理登记册里的权威串）。
 
-离线口 `cmd/parcel-access-register`（受控批量登记，批文每一格来自输入文件，不内置默认；退出码 0 全部落定、1 技术失败、2 有冲突或被拒）：`operator-register` `operator-grant` `operator-revoke` `integration-client-register` `integration-client-grant` `integration-client-revoke` `device-register` `device-deactivate` `admission-scope-mapping-register` `admission-scope-mapping-end` `push-source-register` `push-signing-key-register` `push-signing-key-retire` `customer-client-register` `customer-client-grant` `customer-client-revoke`。
+离线口 `cmd/parcel-access-register`（受控批量登记，批文每一格来自输入文件，不内置默认；退出码 0 全部落定、1 技术失败、2 有冲突或被拒）：`operator-register` `operator-grant` `operator-revoke` `operator-name` `integration-client-register` `integration-client-grant` `integration-client-revoke` `device-register` `device-deactivate` `admission-scope-mapping-register` `admission-scope-mapping-end` `push-source-register` `push-signing-key-register` `push-signing-key-retire` `customer-client-register` `customer-client-grant` `customer-client-revoke`。
 
 集成客户端、首方客户端、推送源、准入范围对照只有离线登记口，没有在线登记口。作业设备既有离线口也有在线登记与停用口。
 

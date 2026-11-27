@@ -156,7 +156,7 @@ func TestOperatorAccessAdministrationAnswersFromTheOperatorChannel(t *testing.T)
 
 type unusedNameBook struct{}
 
-func (unusedNameBook) SaveOperatorName(context.Context, string, accessidentity.OperatorSubject, string, accessidentity.OperatorSubject) (accessidentity.OperatorNameOutcome, error) {
+func (unusedNameBook) SaveOperatorName(context.Context, string, accessidentity.OperatorSubject, string, string) (accessidentity.OperatorNameOutcome, error) {
 	return "", errors.New("unused")
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"testing"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -18,7 +19,7 @@ func (register operatorRegister) saveName(
 	var outcome accessidentity.OperatorNameOutcome
 	if err := register.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
 		var saveErr error
-		outcome, saveErr = register.registry.SaveOperatorName(txCtx, tenant, subject, name, by)
+		outcome, saveErr = register.registry.SaveOperatorName(txCtx, tenant, subject, name, by.Issuer()+"#"+by.Subject())
 		return saveErr
 	}); err != nil {
 		t.Fatalf("登姓名事务：%v", err)
@@ -59,14 +60,25 @@ func TestOperatorNameIsRecordedReplacedAndClearedWithinItsTenant(t *testing.T) {
 	if got := register.names(t, tenantOne); len(got) != 1 || got["SYN-OPERATOR-02"] != "合成乙" {
 		t.Fatalf("改过之后读到 %v，要只有改后的那一个", got)
 	}
-	var recordedBy string
-	if err := register.pool.QueryRow(t.Context(),
-		`SELECT recorded_by FROM access_identity.operator_name WHERE issuer = $1 AND subject = $2`,
-		syntheticIssuer, "SYN-OPERATOR-02").Scan(&recordedBy); err != nil {
-		t.Fatal(err)
+	recorded := func() (by string, at time.Time) {
+		t.Helper()
+		if err := register.pool.QueryRow(t.Context(),
+			`SELECT recorded_by, recorded_at FROM access_identity.operator_name WHERE issuer = $1 AND subject = $2`,
+			syntheticIssuer, "SYN-OPERATOR-02").Scan(&by, &at); err != nil {
+			t.Fatal(err)
+		}
+		return by, at
 	}
-	if recordedBy != syntheticIssuer+"#SYN-OPERATOR-01" {
-		t.Fatalf("登的人 = %s", recordedBy)
+	firstBy, firstAt := recorded()
+	if firstBy != syntheticIssuer+"#SYN-OPERATOR-01" {
+		t.Fatalf("登的人 = %s", firstBy)
+	}
+	// 同一个姓名再登一遍是重放：答复照旧是登上了，但那一行不动——谁登的、什么时候登的留着头一次的。
+	if got := register.saveName(t, tenantOne, picker, "合成乙", picker); got != accessidentity.OperatorNameRecorded {
+		t.Fatalf("重放 = %s", got)
+	}
+	if by, at := recorded(); by != firstBy || !at.Equal(firstAt) {
+		t.Fatalf("重放之后登的人 %s、时刻 %s，要仍是 %s、%s", by, at, firstBy, firstAt)
 	}
 
 	// 别的租户：给这个主体登不上，也读不到它的姓名；不存在的主体同答。
@@ -118,7 +130,7 @@ func TestOperatorCatalogueCarriesAndSearchesTheName(t *testing.T) {
 func TestOperatorNameWriteRefusesToRunOutsideATransaction(t *testing.T) {
 	register := newOperatorRegister(t)
 	subject := subjectOf(t, syntheticIssuer, "SYN-OPERATOR-01")
-	if _, err := register.registry.SaveOperatorName(t.Context(), tenantOne, subject, "合成甲", subject); !errors.Is(err, bentopg.ErrTransactionRequired) {
+	if _, err := register.registry.SaveOperatorName(t.Context(), tenantOne, subject, "合成甲", "SYN-RECORDER"); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务登姓名：err = %v, want ErrTransactionRequired", err)
 	}
 }

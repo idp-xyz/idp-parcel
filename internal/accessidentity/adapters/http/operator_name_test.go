@@ -22,11 +22,11 @@ type nameBookFake struct {
 	tenant  string
 	subject accessidentity.OperatorSubject
 	name    string
-	by      accessidentity.OperatorSubject
+	by      string
 }
 
 func (fake *nameBookFake) SaveOperatorName(
-	_ context.Context, tenantID string, subject accessidentity.OperatorSubject, name string, by accessidentity.OperatorSubject,
+	_ context.Context, tenantID string, subject accessidentity.OperatorSubject, name, by string,
 ) (accessidentity.OperatorNameOutcome, error) {
 	fake.saves++
 	fake.tenant, fake.subject, fake.name, fake.by = tenantID, subject, name, by
@@ -82,8 +82,9 @@ func TestOperatorNameIsRecordedForTheEnvelopeTenant(t *testing.T) {
 			if transactor.opened != 1 || book.saves != 1 {
 				t.Fatalf("事务 %d 笔、写 %d 次，各要一", transactor.opened, book.saves)
 			}
-			if book.tenant != catalogueTenant || book.subject != anotherSubject(t) || book.name != testCase.name || book.by != catalogueSubject(t) {
-				t.Fatalf("落的是 租户 %s 主体 %v 姓名 %q 登的人 %v", book.tenant, book.subject, book.name, book.by)
+			if book.tenant != catalogueTenant || book.subject != anotherSubject(t) || book.name != testCase.name ||
+				book.by != "https://id.syn.example/dex#SYN-OPERATOR-01" {
+				t.Fatalf("落的是 租户 %s 主体 %v 姓名 %q 登的人 %s", book.tenant, book.subject, book.name, book.by)
 			}
 		})
 	}

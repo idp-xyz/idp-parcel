@@ -1,0 +1,16 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "recordedBy": "SYN-DEMO-SEED",
+  "names": [
+    {
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "name": "演示主管"
+    },
+    {
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItVklFV0VSLTAxEgVsb2NhbA",
+      "name": "演示查阅员"
+    }
+  ]
+}

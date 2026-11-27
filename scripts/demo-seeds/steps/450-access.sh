@@ -13,6 +13,9 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 # 授予号与依据也另起。
 "$BIN/parcel-access-register" operator-register -input "$SEEDS/access/01-operators.json"
 "$BIN/parcel-access-register" operator-grant -input "$SEEDS/access/02-grants.json"
+# 两位合成操作者的姓名：波次的拣货人、放波次人这些格示姓名，没登的示 sub。写的是角色名，不是任何真人的名字——
+# 真实姓名只在租户自己的库里，由租户在管理台或用这同一个子命令登，不进仓库。
+"$BIN/parcel-access-register" operator-name -input "$SEEDS/access/50-operator-names.json"
 # 作业事实各口（收寄、揽收、交接、移动、派送、交付）要「操作者 × 设备 × 作业范围」三样都对上（ADR-0149 决定二）：
 # 配置员的作业事实登记授予按作业范围给，每个范围登一台合成设备（票 product-strategy-boundary/30）。收寄只认节点
 # 范围，给在演示网络的各节点上；运输履约各口只认场外范围，给在华东场外揽收与新加坡尾程派送两个范围上。场外范围是
