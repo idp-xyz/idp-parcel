@@ -3,6 +3,8 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Inbox, RefreshCw, Search } from 'lucid
 import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { useSplitResize, useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
+import { pageTitleById } from '../navigation';
+import { useAddressSavedViews } from './saved-address-view';
 import { clearSelection, selectedOnPage, toggleAllOnPage, toggleSelected } from './list-selection';
 import { skeletonOf } from './loading-shape';
 import { PageSelectAllCheckbox, checkboxClass, stopRowEvent } from './selection-checkbox';
@@ -55,6 +57,11 @@ export interface WorkbenchPageTemplateProps<Row> {
   title: string;
   /** 页面内工作台的稳定键；给出时在工作区标签往返中恢复分栏与滚动，多个工作台分别命名。 */
   viewStateKey?: string;
+  /**
+   * 保存视图记在哪个页面下。不传时用 viewStateKey：它本身是页面 id，或用点、冒号前的那一段是页面 id。
+   * 键与页面 id 对不上时（公司主体的键是 legal-entities）由页面传这个。
+   */
+  savedModuleId?: string;
   subtitle?: string;
   /**
    * 标题旁的插槽（票 business-party-ux/07）：一页几本读册之间的切换签放这里，与标题同一行，不再在模板上面另占一条。
@@ -134,6 +141,7 @@ function focusOf(target: EventTarget | null): WorkbenchFocus {
 export function WorkbenchPageTemplate<Row>({
   title,
   viewStateKey,
+  savedModuleId,
   subtitle,
   titleAside,
   kpis,
@@ -162,6 +170,15 @@ export function WorkbenchPageTemplate<Row>({
   viewState,
   stateOverride,
 }: WorkbenchPageTemplateProps<Row>) {
+  const savedKeyHead = viewStateKey?.split(/[.:]/)[0];
+  const savedModule =
+    savedModuleId ??
+    (viewStateKey !== undefined && pageTitleById[viewStateKey] !== undefined
+      ? viewStateKey
+      : savedKeyHead !== undefined && pageTitleById[savedKeyHead] !== undefined
+        ? savedKeyHead
+        : undefined);
+  const addressSaved = useAddressSavedViews(savedModule, true);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [listWidth, setListWidth] = useState<number | null>(null);
@@ -455,6 +472,7 @@ export function WorkbenchPageTemplate<Row>({
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
+      {addressSaved.dialog}
       {/* 命令头可换行（票 group-legal-entities-uiux/10）：指标组在 2xl 以下独占第二行、组内再按需换行，不横向裁切——
           此前是一行 overflow-x-auto，窄一点就把后面几格裁掉、不给任何提示，md 以下更是整组藏起。 */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-2 border-b border-idpxyz-border px-6 py-3">
@@ -523,7 +541,29 @@ export function WorkbenchPageTemplate<Row>({
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
             </Button>
           )}
-          {primaryAction}
+          {addressSaved.props && (
+            <span className="flex shrink-0 items-center gap-1">
+              <select
+                aria-label="保存视图"
+                className="h-8 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 type-caption text-idpxyz-text"
+                value={addressSaved.props.current ?? ''}
+                onChange={(event) => {
+                  if (event.target.value !== '') addressSaved.props?.onSelect(event.target.value);
+                }}
+              >
+                <option value="">保存视图</option>
+                {addressSaved.props.list.map((view) => (
+                  <option key={view.id} value={view.id}>
+                    {view.label}
+                  </option>
+                ))}
+              </select>
+              <Button variant="outline" size="sm" onClick={addressSaved.props.onSave}>
+                保存当前视图
+              </Button>
+            </span>
+          )}
+          {viewState.kind !== 'notGranted' && primaryAction}
         </div>
       </div>
 

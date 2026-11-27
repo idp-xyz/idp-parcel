@@ -1817,20 +1817,20 @@ type ShipmentRequestDetailRecord struct {
 type ShipmentRequestViews interface {
 	ListVisible(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[ShipmentRequestSummaryRecord], error)
 	FindVisibleByID(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		requestID domain.ShipmentRequestID,
 	) (ShipmentRequestDetailRecord, bool, error)
 	// ListVisibleByDocumentNumber 按单据号（界面上的运单号）在作用域内找委托，逐字比对（ADR-0355 决定十一「可按单据号检索」）。
 	// 交回列表而不是单份：调用方要分得出「没有」与「不止一份」，而后者由（租户，单据号）唯一约束担保不出现、不由本签名担保。
 	ListVisibleByDocumentNumber(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		number domain.ShipmentDocumentNumber,
 	) ([]ShipmentRequestSummaryRecord, error)
 	// ListVisibleByIDs 按一组委托标识在作用域内取回概要：别的上下文的页面上出现委托标识时，管理台经它取回运单号
@@ -1838,7 +1838,7 @@ type ShipmentRequestViews interface {
 	// 交回的行因此不说明缺的那几份是哪一种。
 	ListVisibleByIDs(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		requestIDs []domain.ShipmentRequestID,
 	) ([]ShipmentRequestSummaryRecord, error)
 }
@@ -1873,13 +1873,13 @@ type AcceptanceReviewQueueRecord struct {
 type AcceptanceReviewQueue interface {
 	ListAwaitingManualReview(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[AcceptanceReviewQueueRecord], error)
 	FindVisibleByID(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		requestID domain.ShipmentRequestID,
 	) (ShipmentRequestDetailRecord, bool, error)
 }
@@ -1911,7 +1911,7 @@ type CustomerSupplementQueueRecord struct {
 type CustomerSupplementQueue interface {
 	ListWaitingOnCustomerSupplement(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		limit int,
 	) ([]CustomerSupplementQueueRecord, error)
 }
@@ -1953,7 +1953,7 @@ type AuthorizedDispositionQueueRecord struct {
 type AuthorizedDispositionQueue interface {
 	ListAwaitingAuthorizedDisposition(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[AuthorizedDispositionQueueRecord], error)

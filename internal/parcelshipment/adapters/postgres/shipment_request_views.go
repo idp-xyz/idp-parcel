@@ -57,7 +57,7 @@ const visibleRequests = "tenant_id = $1 AND customer_account_id = ANY($2)"
 // 会把「忘了传」变成一个没人决定过的页大小。
 func (views *ShipmentRequestViews) ListVisible(
 	ctx context.Context,
-	scope domain.AuthorizedQueryScope,
+	scope domain.ShipmentReadScope,
 	limit int,
 	query cataloguepage.Query,
 ) (cataloguepage.Result[ports.ShipmentRequestSummaryRecord], error) {
@@ -67,8 +67,8 @@ func (views *ShipmentRequestViews) ListVisible(
 	if limit < 1 {
 		return fail(fmt.Errorf("limit must be positive, got %d", limit))
 	}
-	plan, err := shipmentRequestViewPages.Plan(query, visibleRequests,
-		[]any{scope.TenantID().String(), visibleAccounts(scope)}, limit)
+	where, args, _ := readScopeSQL(scope)
+	plan, err := shipmentRequestViewPages.Plan(query, where, args, limit)
 	if err != nil {
 		return fail(err)
 	}
@@ -111,23 +111,21 @@ func summaryPosition(summary ports.ShipmentRequestSummaryRecord, sortField strin
 // 作用域过滤同在 WHERE 上，作用域外的同号委托与没有同一个答案。
 func (views *ShipmentRequestViews) ListVisibleByDocumentNumber(
 	ctx context.Context,
-	scope domain.AuthorizedQueryScope,
+	scope domain.ShipmentReadScope,
 	number domain.ShipmentDocumentNumber,
 ) ([]ports.ShipmentRequestSummaryRecord, error) {
 	querier, err := views.db.ReadExecutor(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list shipment request views by document number: %w", err)
 	}
+	where, args, next := readScopeSQL(scope)
 	rows, err := querier.Query(ctx,
-		`SELECT `+summaryColumns+`
+		fmt.Sprintf(`SELECT `+summaryColumns+`
 		   FROM parcel_shipment.shipment_request
-		  WHERE tenant_id = $1
-		    AND customer_account_id = ANY($2)
-		    AND document_number = $3
-		  ORDER BY submitted_at DESC, shipment_request_id DESC`,
-		scope.TenantID().String(),
-		visibleAccounts(scope),
-		number.String(),
+		  WHERE %s
+		    AND document_number = $%d
+		  ORDER BY submitted_at DESC, shipment_request_id DESC`, where, next),
+		append(args, number.String())...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list shipment request views by document number: %w", err)
@@ -143,7 +141,7 @@ func (views *ShipmentRequestViews) ListVisibleByDocumentNumber(
 // 读口答不出缺的那一份是哪一种。重复的标识只命中一行。一组多大由接入面按渠道契约裁决；空组不发查询。
 func (views *ShipmentRequestViews) ListVisibleByIDs(
 	ctx context.Context,
-	scope domain.AuthorizedQueryScope,
+	scope domain.ShipmentReadScope,
 	requestIDs []domain.ShipmentRequestID,
 ) ([]ports.ShipmentRequestSummaryRecord, error) {
 	if len(requestIDs) == 0 {
@@ -157,16 +155,14 @@ func (views *ShipmentRequestViews) ListVisibleByIDs(
 	if err != nil {
 		return nil, fmt.Errorf("list shipment request views by ids: %w", err)
 	}
+	where, args, next := readScopeSQL(scope)
 	rows, err := querier.Query(ctx,
-		`SELECT `+summaryColumns+`
+		fmt.Sprintf(`SELECT `+summaryColumns+`
 		   FROM parcel_shipment.shipment_request
-		  WHERE tenant_id = $1
-		    AND customer_account_id = ANY($2)
-		    AND shipment_request_id = ANY($3)
-		  ORDER BY submitted_at DESC, shipment_request_id DESC`,
-		scope.TenantID().String(),
-		visibleAccounts(scope),
-		ids,
+		  WHERE %s
+		    AND shipment_request_id = ANY($%d)
+		  ORDER BY submitted_at DESC, shipment_request_id DESC`, where, next),
+		append(args, ids)...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list shipment request views by ids: %w", err)
@@ -203,7 +199,7 @@ func collectSummaries(rows pgx.Rows) ([]ports.ShipmentRequestSummaryRecord, erro
 // 零行即不可见——「不存在」与「属别的作用域」在这条 SQL 里天然同答。
 func (views *ShipmentRequestViews) FindVisibleByID(
 	ctx context.Context,
-	scope domain.AuthorizedQueryScope,
+	scope domain.ShipmentReadScope,
 	requestID domain.ShipmentRequestID,
 ) (ports.ShipmentRequestDetailRecord, bool, error) {
 	querier, err := views.db.ReadExecutor(ctx)
@@ -213,16 +209,14 @@ func (views *ShipmentRequestViews) FindVisibleByID(
 
 	var row summaryRow
 	var raw []byte
+	where, args, next := readScopeSQL(scope)
 	err = querier.QueryRow(ctx,
-		`SELECT `+summaryColumns+`,
+		fmt.Sprintf(`SELECT `+summaryColumns+`,
 		        snapshot
 		   FROM parcel_shipment.shipment_request
-		  WHERE tenant_id = $1
-		    AND customer_account_id = ANY($2)
-		    AND shipment_request_id = $3`,
-		scope.TenantID().String(),
-		visibleAccounts(scope),
-		requestID.String(),
+		  WHERE %s
+		    AND shipment_request_id = $%d`, where, next),
+		append(args, requestID.String())...,
 	).Scan(append(row.targets(), &raw)...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ShipmentRequestDetailRecord{}, false, nil
@@ -312,13 +306,19 @@ func attachTrackingNumbers(
 	return rows.Err()
 }
 
-func visibleAccounts(scope domain.AuthorizedQueryScope) []string {
-	accounts := scope.CustomerAccountIDs()
+// readScopeSQL 把作用域折成 WHERE 的前半与参数。restricted 为假时只有租户，下一个占位从 $2 起；
+// 为真时再加上客户账户集，下一个占位从 $3 起。账户集来自作用域自己交回的副本。
+func readScopeSQL(scope domain.ShipmentReadScope) (where string, args []any, next int) {
+	args = []any{scope.TenantID().String()}
+	accounts, restricted := scope.RestrictedAccounts()
+	if !restricted {
+		return "tenant_id = $1", args, 2
+	}
 	values := make([]string, len(accounts))
 	for index, account := range accounts {
 		values[index] = account.String()
 	}
-	return values
+	return visibleRequests, append(args, values), 3
 }
 
 // summaryColumns 是委托概要的列面，查阅列表、单份与各队列共用；扫描目标由 summaryRow.targets 按同一顺序给出，两处一起改。

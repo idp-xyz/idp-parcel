@@ -21,7 +21,7 @@ import (
 // 任何授权输入；运营查阅也不铸来源信封、零持久化，不存在事后与真实认证结果相混的
 // 产物。启用与否、合成标识门禁与启动日志都在 cmd/parcel-api（ADR-0078 Decision 三）。
 type IsolatedOperationsReadIntake struct {
-	scope domain.AuthorizedQueryScope
+	scope domain.ShipmentReadScope
 	limit int
 }
 

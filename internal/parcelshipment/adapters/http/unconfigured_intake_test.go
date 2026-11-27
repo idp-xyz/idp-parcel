@@ -212,7 +212,7 @@ type unreachableViewsReader struct{ t *testing.T }
 
 func (reader unreachableViewsReader) ListVisible(
 	context.Context,
-	domain.AuthorizedQueryScope,
+	domain.ShipmentReadScope,
 	int,
 	cataloguepage.Query,
 ) (cataloguepage.Result[ports.ShipmentRequestSummaryRecord], error) {
@@ -222,7 +222,7 @@ func (reader unreachableViewsReader) ListVisible(
 
 func (reader unreachableViewsReader) ListVisibleByDocumentNumber(
 	context.Context,
-	domain.AuthorizedQueryScope,
+	domain.ShipmentReadScope,
 	domain.ShipmentDocumentNumber,
 ) ([]ports.ShipmentRequestSummaryRecord, error) {
 	reader.t.Fatal("a request passed the unconfigured intake and reached the read side")
@@ -231,7 +231,7 @@ func (reader unreachableViewsReader) ListVisibleByDocumentNumber(
 
 func (reader unreachableViewsReader) ListVisibleByIDs(
 	context.Context,
-	domain.AuthorizedQueryScope,
+	domain.ShipmentReadScope,
 	[]domain.ShipmentRequestID,
 ) ([]ports.ShipmentRequestSummaryRecord, error) {
 	reader.t.Fatal("a request passed the unconfigured intake and reached the read side")
@@ -240,7 +240,7 @@ func (reader unreachableViewsReader) ListVisibleByIDs(
 
 func (reader unreachableViewsReader) FindVisibleByID(
 	context.Context,
-	domain.AuthorizedQueryScope,
+	domain.ShipmentReadScope,
 	domain.ShipmentRequestID,
 ) (ports.ShipmentRequestDetailRecord, bool, error) {
 	reader.t.Fatal("a request passed the unconfigured intake and reached the read side")

@@ -72,11 +72,8 @@ func isolatedReadAdmittedPatterns() map[string]bool {
 // shipmentViews，放行面就跟着长，TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines 照绿；而隔离形态是逐口退场的
 // 过渡（ADR-0150 决定三），每多放一口就是日后要随真渠道撤下的一行，扩面得是一次有意的改动。声明里多出一口，下面的用例红，
 // 改的人得在这里写上那一行。某一口换上真渠道时，照 ADR-0150 决定三同笔删掉这里那一行；漏删不红，只是上界松了一格。
-var isolatedReadAdmissionCeiling = map[string]bool{
-	"/shipment-request-views":       true,
-	"/acceptance-review-queue":      true,
-	"/authorized-disposition-queue": true,
-}
+// 委托查阅三口已换操作者查阅读，隔离读放行面因此是空的。再声明一行隔离读，下面的用例会红。
+var isolatedReadAdmissionCeiling = map[string]bool{}
 
 // Covers: ADR-0078 Decision 一、ADR-0150 决定三 — 声明为隔离读的行不越出上界。
 func TestIsolatedReadAdmissionStaysWithinItsCeiling(t *testing.T) {
@@ -127,9 +124,8 @@ func TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0078 Decision 二 — 放行答复与自报身份无关：作用域来自注入，带不带
-// 冒充头答案一致（与未配置面的同名测试同款，证的是启用态）。
-func TestIsolatedReadAdmissionIgnoresSelfReportedIdentity(t *testing.T) {
+// Covers: 委托查阅已不走隔离读。只开隔离读开关、不接操作者渠道时，自报租户与自带令牌都开不了这口。
+func TestShipmentViewsStayClosedWhenOnlyTheIsolatedReadSwitchIsSet(t *testing.T) {
 	intakes, err := buildIsolatedReadIntakes(fakeGetenv(map[string]string{
 		isolatedReadTenantEnv: "SYN-TENANT-01",
 	}))
@@ -140,8 +136,8 @@ func TestIsolatedReadAdmissionIgnoresSelfReportedIdentity(t *testing.T) {
 
 	baseline := httptest.NewRecorder()
 	router.ServeHTTP(baseline, httptest.NewRequest(http.MethodGet, "/shipment-request-views", nil))
-	if baseline.Code != http.StatusInternalServerError {
-		t.Fatalf("baseline = %d %s, want the admitted face to reach the unwired reader", baseline.Code, baseline.Body.String())
+	if baseline.Code != http.StatusForbidden || problemCode(t, baseline) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+		t.Fatalf("baseline = %d %s, want 403 ACCESS_CHANNEL_NOT_CONFIGURED", baseline.Code, baseline.Body.String())
 	}
 
 	reported := httptest.NewRequest(http.MethodGet, "/shipment-request-views", nil)
@@ -149,7 +145,6 @@ func TestIsolatedReadAdmissionIgnoresSelfReportedIdentity(t *testing.T) {
 	reported.Header.Set("Authorization", "Bearer whatever")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, reported)
-
 	if response.Code != baseline.Code || response.Body.String() != baseline.Body.String() {
 		t.Fatalf("answer differs from baseline: %d %s vs %d %s",
 			response.Code, response.Body.String(), baseline.Code, baseline.Body.String())

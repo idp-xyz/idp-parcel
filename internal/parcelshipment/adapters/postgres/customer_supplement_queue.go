@@ -26,7 +26,7 @@ var _ ports.CustomerSupplementQueue = (*ShipmentRequestViews)(nil)
 // 先催），同刻按委托标识正序保证分页可重复。limit 非正是调用方编程错误，判据同 ListVisible。
 func (views *ShipmentRequestViews) ListWaitingOnCustomerSupplement(
 	ctx context.Context,
-	scope domain.AuthorizedQueryScope,
+	scope domain.ShipmentReadScope,
 	limit int,
 ) ([]ports.CustomerSupplementQueueRecord, error) {
 	if limit < 1 {
@@ -37,21 +37,20 @@ func (views *ShipmentRequestViews) ListWaitingOnCustomerSupplement(
 		return nil, fmt.Errorf("list customer supplement queue: %w", err)
 	}
 
+	where, args, next := readScopeSQL(scope)
 	rows, err := querier.Query(ctx,
-		`SELECT `+summaryColumns+`,
+		fmt.Sprintf(`SELECT `+summaryColumns+`,
 		        snapshot->'acceptanceTask'
 		   FROM parcel_shipment.shipment_request
-		  WHERE tenant_id = $1
-		    AND customer_account_id = ANY($2)
-		    AND task_waiting_on = $3
-		    AND state = $4
+		  WHERE %s
+		    AND task_waiting_on = $%d
+		    AND state = $%d
 		  ORDER BY submitted_at ASC, shipment_request_id ASC
-		  LIMIT $5`,
-		scope.TenantID().String(),
-		visibleAccounts(scope),
-		uint8(domain.ResumeByCustomerSupplement),
-		uint8(domain.ShipmentRequestSubmitted),
-		limit,
+		  LIMIT $%d`, where, next, next+1, next+2),
+		append(args,
+			uint8(domain.ResumeByCustomerSupplement),
+			uint8(domain.ShipmentRequestSubmitted),
+			limit)...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list customer supplement queue: %w", err)

@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { CommandPalette } from '@idpxyz/ui-workspace';
+import { CommandPalette } from './command-palette';
 import { useDensity, useTheme } from '@idpxyz/ui-theme-runtime';
 import { pageTitleById } from '../navigation';
 import { buildCommandActions, type RecentEntry } from './command-actions';

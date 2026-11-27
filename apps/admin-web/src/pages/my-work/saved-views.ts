@@ -1,14 +1,17 @@
 // 保存视图（票 admin-web-ux-alignment/02 第 3 条）：某张列表页的筛选 / 排序态，存本机、起个名字、下次一键回到。
 //
-// `state` 是**不透明的 JSON**：各列表页自己决定存什么、怎么读回（票 03 的 Saved View 控件那头消费），本模块不解释它、
-// 不校验它的形状——解释权在页面，这里只保管。跳转地址是 `#/<moduleId>?view=<id>`，模块页按 `?view=` 取 id 再来这里查 state。
+// `state` 是不透明的 JSON：各列表页自己决定存什么、怎么读回，本模块不校验形状。
+// 一种形状例外：`{ query: string }` 是列表地址上的筛选。跳转时把它写进地址，而不只留 `?view=`。
+// 列表标签保活，只带视图 id 的话，听地址的筛选会按空地址重算，页面不重挂就写不回。
 //
 // 隐私边界：存的是本机浏览器的 localStorage（键带产品名，与 shell/preferences.ts 同一前缀约定），换机、换浏览器不带，
 // 不上服务端；删除只有 removeSavedView 一个入口，页面上的「删除」就是它。保存视图存的是筛选条件，不是数据——
 // 条件里若有人写进了对象标识，那也只是本机的一条书签。
 //
-// 为什么零依赖：与 recent-objects.ts 同款，不 import 任何 @idpxyz/* 的东西；存储与「现在几点」「新 id」都可注入，
-// 测试不碰真 localStorage、不依赖时钟与随机数。
+// 不 import 任何 @idpxyz/*。地址拼装用 templates/address-query，它同样不碰浏览器。
+// 存储与「现在几点」「新 id」都可注入，测试不碰真 localStorage、不依赖时钟与随机数。
+
+import { hashForSavedView } from '../../templates/address-query';
 
 export const SAVED_VIEWS_STORAGE_KEY = 'parcel-admin-web:saved-views';
 
@@ -157,9 +160,18 @@ export function defaultSavedViewFor(storage: SavedViewsStorage, moduleId: string
   return listSavedViewsFor(storage, moduleId).find((view) => view.isDefault) ?? null;
 }
 
-/** 跳转地址：模块页按 `?view=` 取 id。查询串挂在第一段上，外壳认模块时要先把它剥掉。 */
-export function savedViewHash(view: Pick<SavedView, 'moduleId' | 'id'>): string {
-  return `#/${view.moduleId}?view=${encodeURIComponent(view.id)}`;
+/** 地址筛选存在 `state.query` 里；不是这个形状就答 null，跳转仍只带视图 id。 */
+function addressQueryOf(state: unknown): string | null {
+  if (typeof state !== 'object' || state === null || !('query' in state)) return null;
+  const query = (state as { query: unknown }).query;
+  return typeof query === 'string' ? query : null;
+}
+
+/** 跳转地址。地址筛选一并写上；别的形状只带 `?view=`。查询串挂在第一段上，外壳认模块时要先把它剥掉。 */
+export function savedViewHash(view: Pick<SavedView, 'moduleId' | 'id'> & { state?: unknown }): string {
+  const query = addressQueryOf(view.state);
+  if (query === null) return `#/${view.moduleId}?view=${encodeURIComponent(view.id)}`;
+  return hashForSavedView(view.moduleId, query, view.id);
 }
 
 /** 从 hash 里取 `?view=` 的 id；没有返回 null。给模块页用，本票只提供、不消费。 */

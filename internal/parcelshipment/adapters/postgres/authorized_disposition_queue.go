@@ -26,7 +26,7 @@ var authorizedDispositionQueuePages = ports.AuthorizedDispositionQueuePages.Must
 // 标识正序。受限项只对本页的委托点读。limit 非正是调用方编程错误，判据同 ListVisible。
 func (views *ShipmentRequestViews) ListAwaitingAuthorizedDisposition(
 	ctx context.Context,
-	scope domain.AuthorizedQueryScope,
+	scope domain.ShipmentReadScope,
 	limit int,
 	query cataloguepage.Query,
 ) (cataloguepage.Result[ports.AuthorizedDispositionQueueRecord], error) {
@@ -36,10 +36,10 @@ func (views *ShipmentRequestViews) ListAwaitingAuthorizedDisposition(
 	if limit < 1 {
 		return fail(fmt.Errorf("limit must be positive, got %d", limit))
 	}
-	plan, err := authorizedDispositionQueuePages.Plan(query, waitingRequests, []any{
-		scope.TenantID().String(), visibleAccounts(scope),
-		uint8(domain.ResumeByAuthorizedDisposition), uint8(domain.ShipmentRequestSubmitted),
-	}, limit)
+	where, args, next := readScopeSQL(scope)
+	plan, err := authorizedDispositionQueuePages.Plan(query,
+		fmt.Sprintf("%s AND task_waiting_on = $%d AND state = $%d", where, next, next+1),
+		append(args, uint8(domain.ResumeByAuthorizedDisposition), uint8(domain.ShipmentRequestSubmitted)), limit)
 	if err != nil {
 		return fail(err)
 	}

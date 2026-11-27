@@ -131,8 +131,10 @@ export function SuggestInput<Body>({
   const hint =
     answer === null
       ? `正在读取${readFace}…`
-      : answer.kind !== 'outcome'
-        ? `暂时读不到${readFace}，直接输入标识。`
+      : answer.kind === 'notGranted'
+        ? `没有查看${readFace}的权限，不能从名册里选。请管理员在「操作者与授予」里加上查阅权限。`
+        : answer.kind !== 'outcome'
+          ? `暂时读不到${readFace}，直接输入标识。`
         : options.length === 0
           ? `${readFace}里还没有内容，直接输入标识。`
           : '可以从输入提示里选，也可以直接输入标识。';
@@ -140,7 +142,7 @@ export function SuggestInput<Body>({
     <Field label={label} path={path} alsoPaths={alsoPaths} problems={problems}>
       <Input
         value={value}
-        readOnly={locked}
+        readOnly={locked || answer?.kind === 'notGranted'}
         list={options.length > 0 ? listId : undefined}
         className="font-mono type-value"
         placeholder={placeholder}

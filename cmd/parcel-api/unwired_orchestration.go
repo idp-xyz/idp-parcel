@@ -608,7 +608,7 @@ type unwiredRequestViews struct{}
 
 func (unwiredRequestViews) ListVisible(
 	context.Context,
-	shipmentdomain.AuthorizedQueryScope,
+	shipmentdomain.ShipmentReadScope,
 	int,
 	cataloguepage.Query,
 ) (cataloguepage.Result[shipmentports.ShipmentRequestSummaryRecord], error) {
@@ -617,7 +617,7 @@ func (unwiredRequestViews) ListVisible(
 
 func (unwiredRequestViews) FindVisibleByID(
 	context.Context,
-	shipmentdomain.AuthorizedQueryScope,
+	shipmentdomain.ShipmentReadScope,
 	shipmentdomain.ShipmentRequestID,
 ) (shipmentports.ShipmentRequestDetailRecord, bool, error) {
 	return shipmentports.ShipmentRequestDetailRecord{}, false, errOrchestrationNotWired
@@ -625,7 +625,7 @@ func (unwiredRequestViews) FindVisibleByID(
 
 func (unwiredRequestViews) ListVisibleByDocumentNumber(
 	context.Context,
-	shipmentdomain.AuthorizedQueryScope,
+	shipmentdomain.ShipmentReadScope,
 	shipmentdomain.ShipmentDocumentNumber,
 ) ([]shipmentports.ShipmentRequestSummaryRecord, error) {
 	return nil, errOrchestrationNotWired
@@ -633,7 +633,7 @@ func (unwiredRequestViews) ListVisibleByDocumentNumber(
 
 func (unwiredRequestViews) ListVisibleByIDs(
 	context.Context,
-	shipmentdomain.AuthorizedQueryScope,
+	shipmentdomain.ShipmentReadScope,
 	[]shipmentdomain.ShipmentRequestID,
 ) ([]shipmentports.ShipmentRequestSummaryRecord, error) {
 	return nil, errOrchestrationNotWired
@@ -701,7 +701,7 @@ type unwiredReviewQueue struct{}
 
 func (unwiredReviewQueue) ListAwaitingManualReview(
 	context.Context,
-	shipmentdomain.AuthorizedQueryScope,
+	shipmentdomain.ShipmentReadScope,
 	int,
 	cataloguepage.Query,
 ) (cataloguepage.Result[shipmentports.AcceptanceReviewQueueRecord], error) {
@@ -710,7 +710,7 @@ func (unwiredReviewQueue) ListAwaitingManualReview(
 
 func (unwiredReviewQueue) FindVisibleByID(
 	context.Context,
-	shipmentdomain.AuthorizedQueryScope,
+	shipmentdomain.ShipmentReadScope,
 	shipmentdomain.ShipmentRequestID,
 ) (shipmentports.ShipmentRequestDetailRecord, bool, error) {
 	return shipmentports.ShipmentRequestDetailRecord{}, false, errOrchestrationNotWired
@@ -761,7 +761,7 @@ type unwiredDispositionQueue struct{}
 
 func (unwiredDispositionQueue) ListAwaitingAuthorizedDisposition(
 	context.Context,
-	shipmentdomain.AuthorizedQueryScope,
+	shipmentdomain.ShipmentReadScope,
 	int,
 	cataloguepage.Query,
 ) (cataloguepage.Result[shipmentports.AuthorizedDispositionQueueRecord], error) {

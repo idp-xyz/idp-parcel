@@ -18,7 +18,7 @@ import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 // 页面标题与出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['saved-views'];
 
-// 保存视图页（票 admin-web-ux-alignment/02 第 3 条）：列本机存下的全部列表筛选态，行点跳 `#/<moduleId>?view=<id>`。
+// 保存视图页（票 admin-web-ux-alignment/02 第 3 条）：列本机存下的全部列表筛选态。行点用 savedViewHash，地址筛选会连查询串一起跳过去。
 //
 // 本页只管保管与跳转，不解释 state：它是各列表页自己的不透明 JSON，怎么读回归那张页（模板的保存视图位，票 03）。
 // 也不在这里新建视图——「保存当前视图」只能在有筛选态的那张列表页上按，这里没有筛选态可存。
@@ -114,8 +114,7 @@ export function SavedViewsPage() {
             ? {
                 kind: 'empty',
                 title: '还没有保存过视图',
-                // 列表页的「保存视图」位今天还没接通（只有模板演示页接了），空态不指一个点不动的按钮。
-                description: '列表页的「保存视图」还没开放；开放后，筛好的条件可以存下来，列在这里一键回去。',
+                description: '在列表页点「保存当前视图」。存下的是那张列表地址上的筛选，点一行就能回去。',
               }
             : { kind: 'ready' }
         }

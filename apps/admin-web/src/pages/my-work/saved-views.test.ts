@@ -167,6 +167,20 @@ test('跳转地址与解析', () => {
   equal(savedViewIdFromHash('#/shipment-request-inquiry?view='), null);
 });
 
+// Covers: 地址筛选 `{ query }` 写进跳转地址，列表还挂着时听地址的检索词也能读到；别的形状仍只带 view id。
+test('地址筛选的跳转带上查询串', () => {
+  equal(
+    savedViewHash({
+      moduleId: 'party-contracts',
+      id: 'abc',
+      state: { query: 'tab=accounts&q=%E6%98%9F' },
+    }),
+    '#/party-contracts?q=%E6%98%9F&tab=accounts&view=abc',
+  );
+  equal(savedViewHash({ moduleId: 'a', id: 'b', state: { other: 1 } }), '#/a?view=b');
+  equal(savedViewHash({ moduleId: 'a', id: 'b', state: { query: 1 } }), '#/a?view=b');
+});
+
 // Covers: 页面过滤——名字包含不分大小写、按模块、可叠；模块列表按首次出现。
 test('过滤与模块列表', () => {
   const storage = storageOf();

@@ -15,14 +15,14 @@ import (
 // ShipmentRequestViewsQuery 是一次已授权的委托查阅列表查询。作用域来自认证与授权结果
 // （CONTEXT「授权查询作用域」），页大小由接入面按渠道契约裁决——两样都不采信客户自报。
 type ShipmentRequestViewsQuery struct {
-	Scope domain.AuthorizedQueryScope
+	Scope domain.ShipmentReadScope
 	Limit int
 }
 
 // ShipmentRequestViewQuery 是一次已授权的单份委托查阅。标识只定位候选对象，不单独证明
 // 查询权限——权限在作用域上。
 type ShipmentRequestViewQuery struct {
-	Scope     domain.AuthorizedQueryScope
+	Scope     domain.ShipmentReadScope
 	RequestID domain.ShipmentRequestID
 }
 
@@ -41,23 +41,23 @@ type ShipmentRequestViewsIntake interface {
 type ShipmentRequestViewsReader interface {
 	ListVisible(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[ports.ShipmentRequestSummaryRecord], error)
 	FindVisibleByID(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		requestID domain.ShipmentRequestID,
 	) (ports.ShipmentRequestDetailRecord, bool, error)
 	ListVisibleByDocumentNumber(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		number domain.ShipmentDocumentNumber,
 	) ([]ports.ShipmentRequestSummaryRecord, error)
 	ListVisibleByIDs(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		requestIDs []domain.ShipmentRequestID,
 	) ([]ports.ShipmentRequestSummaryRecord, error)
 }

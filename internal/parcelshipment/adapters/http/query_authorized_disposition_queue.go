@@ -25,7 +25,7 @@ import (
 type AuthorizedDispositionQueueReader interface {
 	ListAwaitingAuthorizedDisposition(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[ports.AuthorizedDispositionQueueRecord], error)

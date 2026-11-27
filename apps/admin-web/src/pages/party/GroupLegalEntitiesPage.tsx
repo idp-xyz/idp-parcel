@@ -547,6 +547,7 @@ function LegalEntityListView({
       <WorkbenchPageTemplate<GroupLegalEntityRecord>
       title={info.title}
       viewStateKey="legal-entities"
+      savedModuleId="group-legal-entities"
       subtitle="我们自己签约、开票、结算用的公司"
       onRefresh={() => {
         retry();

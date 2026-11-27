@@ -37,7 +37,7 @@ test('没有授予：标题、码名与续办，没有按钮', () => {
   const html = renderToStaticMarkup(createElement(OperatorRefusalState, { kind: 'notGranted' }));
   match(html, /没有授予/);
   match(html, /OPERATOR_NOT_GRANTED/);
-  match(html, /要管授予的人去登记授予/);
+  match(html, /操作者与授予/);
   equal(buttons(html), 0);
 });
 

@@ -24,13 +24,13 @@ import (
 type AcceptanceReviewQueueReader interface {
 	ListAwaitingManualReview(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		limit int,
 		query cataloguepage.Query,
 	) (cataloguepage.Result[ports.AcceptanceReviewQueueRecord], error)
 	FindVisibleByID(
 		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
+		scope domain.ShipmentReadScope,
 		requestID domain.ShipmentRequestID,
 	) (ports.ShipmentRequestDetailRecord, bool, error)
 }

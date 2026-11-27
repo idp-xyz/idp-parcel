@@ -16,6 +16,14 @@ export interface OperatorGrantsResponseBody {
 /** 登记册配置写：ADR-0085 那一族登记与发布端点的能力面，原词取自 accessidentity.CapabilityRegistryConfigurationWrite。 */
 export const registryWriteFace = 'REGISTRY_CONFIGURATION_WRITE';
 
+/** 主数据与运营查阅读，原词取自 accessidentity.CapabilityMasterDataAndOperationsRead。 */
+export const operationsReadFace = 'MASTER_DATA_AND_OPERATIONS_READ';
+
+/** 明确知道没有主数据与运营查阅读才是 false；还不知道时不当成没有。 */
+export function mayReadOperations(held: HeldGrants | undefined): boolean {
+  return held === undefined || held.faces.has(operationsReadFace);
+}
+
 /** 操作者接入管理：操作者册的写面与本租户操作者册查阅的能力面（ADR-0363），原词取自 accessidentity.CapabilityOperatorAccessAdministration。 */
 export const operatorAccessAdministrationFace = 'OPERATOR_ACCESS_ADMINISTRATION';
 

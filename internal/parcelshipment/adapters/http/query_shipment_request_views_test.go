@@ -137,12 +137,12 @@ type viewsReaderDouble struct {
 	// byIDs 是按标识集合查到的行；askedIDs 记下被问的那一组（没问过为 nil），askedScope 记下随它递来的作用域。
 	byIDs      []ports.ShipmentRequestSummaryRecord
 	askedIDs   []string
-	askedScope domain.AuthorizedQueryScope
+	askedScope domain.ShipmentReadScope
 }
 
 func (double *viewsReaderDouble) ListVisibleByIDs(
 	_ context.Context,
-	scope domain.AuthorizedQueryScope,
+	scope domain.ShipmentReadScope,
 	requestIDs []domain.ShipmentRequestID,
 ) ([]ports.ShipmentRequestSummaryRecord, error) {
 	double.askedIDs = []string{}
@@ -158,7 +158,7 @@ func (double *viewsReaderDouble) ListVisibleByIDs(
 
 func (double *viewsReaderDouble) ListVisibleByDocumentNumber(
 	_ context.Context,
-	_ domain.AuthorizedQueryScope,
+	_ domain.ShipmentReadScope,
 	number domain.ShipmentDocumentNumber,
 ) ([]ports.ShipmentRequestSummaryRecord, error) {
 	double.asked = number.String()
@@ -170,7 +170,7 @@ func (double *viewsReaderDouble) ListVisibleByDocumentNumber(
 
 func (double *viewsReaderDouble) ListVisible(
 	_ context.Context,
-	_ domain.AuthorizedQueryScope,
+	_ domain.ShipmentReadScope,
 	_ int,
 	_ cataloguepage.Query,
 ) (cataloguepage.Result[ports.ShipmentRequestSummaryRecord], error) {
@@ -182,7 +182,7 @@ func (double *viewsReaderDouble) ListVisible(
 
 func (double *viewsReaderDouble) FindVisibleByID(
 	_ context.Context,
-	_ domain.AuthorizedQueryScope,
+	_ domain.ShipmentReadScope,
 	_ domain.ShipmentRequestID,
 ) (ports.ShipmentRequestDetailRecord, bool, error) {
 	if double.findErr != nil {

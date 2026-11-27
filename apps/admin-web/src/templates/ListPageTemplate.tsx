@@ -23,6 +23,7 @@ import {
   Tooltip,
 } from '@idpxyz/ui-primitives';
 import { useDensity } from '@idpxyz/ui-theme-runtime';
+import { useAddressSavedViews } from './saved-address-view';
 import { navigationSections, pageTitleById } from '../navigation';
 import { resolveBreadcrumb, type TemplateBreadcrumb } from './breadcrumb';
 import {
@@ -323,6 +324,9 @@ export function ListPageTemplate<Row>({
   viewState,
   stateOverride,
 }: ListPageTemplateProps<Row>) {
+  // 调用方自己接了保存视图（模板演示页）就用那一份；其余列表页存地址上的筛选。
+  const addressSaved = useAddressSavedViews(moduleId, savedViews === undefined);
+  const savedViewsLive = savedViews ?? addressSaved.props;
   const alignClass = (align?: 'left' | 'center' | 'right') =>
     align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
 
@@ -420,7 +424,7 @@ export function ListPageTemplate<Row>({
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const slots = filterBarSlots({
     sort: sort !== undefined,
-    savedViews: savedViews !== undefined,
+    savedViews: savedViewsLive !== undefined,
     moreFilters: moreFilters !== undefined,
   });
 
@@ -446,25 +450,25 @@ export function ListPageTemplate<Row>({
         </select>
       );
     }
-    if (slot.id === 'saved-view' && savedViews) {
+    if (slot.id === 'saved-view' && savedViewsLive) {
       return (
         <span key={slot.id} className="flex shrink-0 items-center gap-1">
           <select
             aria-label={slot.label}
             className={filterControlClass}
-            value={savedViews.current ?? ''}
+            value={savedViewsLive.current ?? ''}
             onChange={(event) => {
-              if (event.target.value !== '') savedViews.onSelect(event.target.value);
+              if (event.target.value !== '') savedViewsLive.onSelect(event.target.value);
             }}
           >
             <option value="">{slot.label}</option>
-            {savedViews.list.map((view) => (
+            {savedViewsLive.list.map((view) => (
               <option key={view.id} value={view.id}>
                 {view.label}
               </option>
             ))}
           </select>
-          <Button variant="outline" size="sm" className="shrink-0" onClick={savedViews.onSave}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={savedViewsLive.onSave}>
             保存当前视图
           </Button>
         </span>
@@ -489,6 +493,7 @@ export function ListPageTemplate<Row>({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      {addressSaved.dialog}
       {/* 22px 面包屑条，照 loms-web OrderList 的尺寸；分区不是页，所以只是文字、不给链接。 */}
       {crumb && (
         <div className="flex h-[22px] shrink-0 select-none items-center border-b border-idpxyz-border px-4">
@@ -500,7 +505,9 @@ export function ListPageTemplate<Row>({
           <PageHeaderTitle>{title}</PageHeaderTitle>
           {description && <PageHeaderDescription>{description}</PageHeaderDescription>}
         </PageHeaderContent>
-        {headerActions && <PageHeaderActions>{headerActions}</PageHeaderActions>}
+        {headerActions && viewState.kind !== 'notGranted' && (
+          <PageHeaderActions>{headerActions}</PageHeaderActions>
+        )}
       </PageHeader>
 
       {/* 黄金标准 9.2 顺序：搜索 → 主筛选 → 排序 → 视图 → 保存视图 → 更多筛选 → 右端计数。位不够宽时横向滚，不换行。 */}
